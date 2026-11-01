@@ -30,6 +30,7 @@ describe('migrate', () => {
         '20261101133303_aiur_events.sql',
         '20261101135125_notify.sql',
         '20261101145358_analytics.sql',
+        '20261101160824_rooms.sql',
       ],
     });
     expect(migrate({ sqlite })).toEqual({ applied: [] });
@@ -46,6 +47,7 @@ describe('migrate', () => {
       'migration:20261101133303_aiur_events.sql',
       'migration:20261101135125_notify.sql',
       'migration:20261101145358_analytics.sql',
+      'migration:20261101160824_rooms.sql',
     ]);
     sqlite.close();
   });

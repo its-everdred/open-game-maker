@@ -43,6 +43,13 @@
       "when": 1793544838018,
       "tag": "20261101145358_analytics",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793549304235,
+      "tag": "20261101160824_rooms",
+      "breakpoints": true
     }
   ]
 }
