@@ -1,0 +1,33 @@
+.join-screen {
+  display: grid;
+  min-height: 100svh;
+  place-items: center;
+  padding: max(24px, var(--safe-t)) max(24px, var(--safe-r)) max(24px, var(--safe-b)) max(24px, var(--safe-l));
+  background:
+    radial-gradient(circle at 50% 25%, rgba(131, 165, 152, 0.24), transparent 40%),
+    var(--night);
+}
+
+.join-card {
+  width: min(100%, 28rem);
+  padding: 36px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: var(--pop);
+  text-align: center;
+  backdrop-filter: var(--glass);
+}
+
+.join-card h1 {
+  margin: 0 0 12px;
+  color: var(--cream);
+  font-family: var(--display);
+  font-size: clamp(2rem, 8vw, 3rem);
+}
+
+.join-card p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 1.1rem;
+}
