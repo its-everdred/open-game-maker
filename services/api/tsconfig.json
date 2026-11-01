@@ -12,6 +12,7 @@
     { "path": "../../packages/db" },
     { "path": "../../packages/game-repo-template" },
     { "path": "../../packages/health" },
-    { "path": "../../packages/policy" }
+    { "path": "../../packages/policy" },
+    { "path": "../../packages/room-protocol" }
   ]
 }

@@ -6,7 +6,7 @@ describe('OGM_ENV_NAMES', () => {
   it('contains unique uppercase names with documentation', () => {
     const names = OGM_ENV_NAMES.map(({ name }) => name);
 
-    expect(OGM_ENV_NAMES).toHaveLength(38);
+    expect(OGM_ENV_NAMES).toHaveLength(39);
     expect(new Set(names).size).toBe(names.length);
     expect(names).toEqual(names.map((name) => name.toUpperCase()));
     expect(names.every((name) => /^[A-Z][A-Z0-9_]*$/.test(name))).toBe(true);

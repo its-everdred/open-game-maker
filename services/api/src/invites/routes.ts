@@ -26,7 +26,8 @@ const routes = new Hono<ApiBindings>()
   .post('/invites', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     const body = await parseBody(c, createBody);
-    return c.json(await createInvitation(c.get('deps'), actorFromPrincipal(principal), body), 201);
+    const created = await createInvitation(c.get('deps'), actorFromPrincipal(principal), body);
+    return c.json({ id: created.id, expiresAt: created.expiresAt }, 201);
   })
   .get('/invites', (c) => {
     const principal = requirePrincipal(c, ['user']);

@@ -15,26 +15,26 @@ const INVITE_LIMIT = 10;
 export type CreateInvitationInput =
   | { kind: 'member'; email: string; capability: 'creator' | 'player' }
   | { kind: 'play'; email: string; gameId: string }
-  | { kind: 'room'; email: string; gameId: string; roomId: string };
+  | { kind: 'room'; email?: string; gameId: string; roomId: string };
+
+export type CreateInvitationOptions = {
+  nowMs?: number;
+  ttlMs?: number;
+  delivery?: 'email' | 'link';
+};
 
 export type AcceptResult =
   | { kind: 'member'; familyId: string; capability: 'creator' | 'player' }
   | { kind: 'play'; gameId: string }
   | { kind: 'room'; gameId: string; roomId: string };
 
-function requireInvitationServices(deps: AppDeps) {
-  if (!deps.registry.mailSender) throw new HttpError(503, 'mail_sender_unavailable');
-  if (!deps.registry.userDirectory) throw new HttpError(503, 'user_directory_unavailable');
-  return { mail: deps.registry.mailSender, users: deps.registry.userDirectory };
-}
-
 export async function createInvitation(
   deps: AppDeps,
   actor: Actor,
   input: CreateInvitationInput,
-  nowMs = Date.now(),
-): Promise<{ id: string; expiresAt: string }> {
-  const { mail, users } = requireInvitationServices(deps);
+  options: CreateInvitationOptions = {},
+): Promise<{ id: string; expiresAt: string; token: string }> {
+  const { nowMs = Date.now(), ttlMs = INVITE_TTL_MS, delivery = 'email' } = options;
   requireAuthorization(authorize(actor, 'member.invite', { familyId: actor.familyId, inviteKind: input.kind }));
 
   const family = deps.db.select().from(schema.families).where(eq(schema.families.id, actor.familyId)).get();
@@ -48,8 +48,11 @@ export async function createInvitation(
     if (!game) throw new HttpError(404, 'game_not_found');
   }
 
-  const email = input.email.trim().toLowerCase();
-  if (input.kind !== 'member') {
+  const email = input.email?.trim().toLowerCase() ?? '';
+  if (delivery === 'email' && !email) throw new HttpError(400, 'invite_email_required');
+  if (input.kind !== 'member' && email) {
+    const users = deps.registry.userDirectory;
+    if (!users) throw new HttpError(503, 'user_directory_unavailable');
     const recipientId = await users.userIdForEmail(email);
     const isMember = recipientId
       ? Boolean(
@@ -73,7 +76,7 @@ export async function createInvitation(
 
   const id = `i_${randomUUID()}`;
   const createdAt = new Date(nowMs).toISOString();
-  const expiresAt = new Date(nowMs + INVITE_TTL_MS).toISOString();
+  const expiresAt = new Date(nowMs + ttlMs).toISOString();
   const token = mint();
   deps.db
     .insert(schema.invitations)
@@ -92,18 +95,25 @@ export async function createInvitation(
     })
     .run();
 
-  try {
-    await mail.send({
-      to: email,
-      subject: 'Your Open Game Maker 2000 invitation',
-      text: `Open this invitation before it expires: ${deps.config.appOrigin}/join/${token.token}`,
-    });
-  } catch {
-    deps.db.delete(schema.invitations).where(eq(schema.invitations.id, id)).run();
-    deps.log({ event: 'invite-mail-failed', inviteId: id, reason: 'send_failed' });
-    throw new HttpError(502, 'mail_failed');
+  if (delivery === 'email') {
+    const mail = deps.registry.mailSender;
+    if (!mail) {
+      deps.db.delete(schema.invitations).where(eq(schema.invitations.id, id)).run();
+      throw new HttpError(503, 'mail_sender_unavailable');
+    }
+    try {
+      await mail.send({
+        to: email,
+        subject: 'Your Open Game Maker 2000 invitation',
+        text: `Open this invitation before it expires: ${deps.config.appOrigin}/join/${token.token}`,
+      });
+    } catch {
+      deps.db.delete(schema.invitations).where(eq(schema.invitations.id, id)).run();
+      deps.log({ event: 'invite-mail-failed', inviteId: id, reason: 'send_failed' });
+      throw new HttpError(502, 'mail_failed');
+    }
   }
-  return { id, expiresAt };
+  return { id, expiresAt, token: token.token };
 }
 
 export async function acceptInvitation(
@@ -112,11 +122,6 @@ export async function acceptInvitation(
   userId: string,
   nowMs = Date.now(),
 ): Promise<AcceptResult> {
-  const directory = deps.registry.userDirectory;
-  if (!directory) throw new HttpError(503, 'user_directory_unavailable');
-  const email = await directory.emailForUser(userId);
-  if (!email) throw new HttpError(503, 'user_directory_unavailable');
-
   const invitation = deps.db
     .select()
     .from(schema.invitations)
@@ -126,7 +131,13 @@ export async function acceptInvitation(
   if (invitation.acceptedAt || invitation.revokedAt || Date.parse(invitation.expiresAt) <= nowMs) {
     throw new HttpError(410, 'invite_gone');
   }
-  if (invitation.email.toLowerCase() !== email.toLowerCase()) throw new HttpError(403, 'invite_email_mismatch');
+  if (invitation.email) {
+    const directory = deps.registry.userDirectory;
+    if (!directory) throw new HttpError(503, 'user_directory_unavailable');
+    const email = await directory.emailForUser(userId);
+    if (!email) throw new HttpError(503, 'user_directory_unavailable');
+    if (invitation.email.toLowerCase() !== email.toLowerCase()) throw new HttpError(403, 'invite_email_mismatch');
+  }
 
   return deps.db.transaction((tx) => {
     const fresh = tx

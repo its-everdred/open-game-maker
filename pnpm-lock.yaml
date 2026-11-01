@@ -304,6 +304,9 @@ importers:
       '@ogm/policy':
         specifier: workspace:*
         version: link:../../packages/policy
+      '@ogm/room-protocol':
+        specifier: workspace:*
+        version: link:../../packages/room-protocol
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)

@@ -60,6 +60,7 @@ describe('error envelope', () => {
       { method: 'GET', path: '/api/v1/invites/get-secret' },
       { method: 'POST', path: '/api/v1/invites/extra-secret/accept/extra' },
       { method: 'POST', path: '//api/v1/invites/double-slash-secret/accept' },
+      { method: 'GET', path: '/api/v1/join/join-secret' },
     ];
 
     for (const request of requests) {
@@ -73,9 +74,10 @@ describe('error envelope', () => {
       '/api/v1/invites/:token',
       '/api/v1/invites/:token/accept/extra',
       '//api/v1/invites/:token/accept',
+      '/api/v1/join/:token',
     ]);
     for (const { path } of requests) {
-      const token = path.split('/invites/')[1]?.split('/')[0];
+      const token = path.split(/\/(?:invites|join)\//)[1]?.split('/')[0];
       expect(JSON.stringify(deps.lines)).not.toContain(token);
     }
   });

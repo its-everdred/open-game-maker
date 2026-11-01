@@ -28,6 +28,7 @@
     "@ogm/game-repo-template": "workspace:*",
     "@ogm/health": "workspace:*",
     "@ogm/policy": "workspace:*",
+    "@ogm/room-protocol": "workspace:*",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.16",
     "web-push": "3.6.7",
