@@ -15,6 +15,13 @@ export { EXIT, UsageError } from './command.js';
 export { postChat, type PostChatOptions } from './commands/chat/post.js';
 export { printJson, requireAssetsRoot } from './context.js';
 export { loadCommands } from './registry.js';
+export {
+  checkSkill,
+  extractCommands,
+  extractSdkNames,
+  type SkillReferenceCatalog,
+  type SkillReferenceMisses,
+} from './skills/lint.js';
 
 export const COMMANDS_DIR = fileURLToPath(new URL('./commands/', import.meta.url));
 
