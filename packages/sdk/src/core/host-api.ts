@@ -81,6 +81,10 @@ export class SdkHostApi implements HostApi {
     this.send('input.rawKey', payload);
   }
 
+  sendRawKey(payload: { code: string; down: boolean }): void {
+    this.send('input.rawKey', payload);
+  }
+
   dispatchInput(frames: ActionFrame[]): void {
     for (const frame of frames) {
       for (const [action, value] of Object.entries(frame.actions)) {
