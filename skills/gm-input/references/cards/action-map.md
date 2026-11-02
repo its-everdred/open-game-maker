@@ -24,6 +24,11 @@ replays see the same edges.
 
 ```ts
 type Edges = { held: boolean; justPressed: boolean; justReleased: boolean };
+export const tunableRanges = { deadzone: [0.15, 0.3], repeatDelayMs: [150, 300] } as const;
+export const tunables = {
+  deadzone: /* pick from the brief range */ 0,
+  repeatDelayMs: /* pick from the brief range */ 0,
+};
 export function buttonEdges(now: ActionFrame, before: ActionFrame, id: string): Edges {
   const held = now.actions[id] === true;
   const wasHeld = before.actions[id] === true;
@@ -47,7 +52,7 @@ each tick. Buffer a press only when the mechanic needs a grace window, and consu
 Use this card for every player-controlled mechanic and any menu driven by declared actions. Do not use it for host
 hotkeys, text entry, pointer coordinates, or editor gestures. Those stay in the host surface.
 
-## No extras
+## No obvious extras
 
 An action map does not add moves, alternate inputs, aim assist, or control schemes absent from the scope. It only
 normalizes the actions the scope already names.
