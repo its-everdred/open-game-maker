@@ -4,7 +4,7 @@ import { ulid } from 'ulid';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { checkOptions, readLedger } from '../../ledger/index.js';
 import { provenancePairs, strings } from '../../ledger/provenance.js';
-import { appendOutboxLine, jobContext, knownChatMessageIds } from '../../outbox.js';
+import { appendOutboxLine, gameDir, jobContext, knownChatMessageIds } from '../../outbox.js';
 
 const OPTION_ID = /^[a-z0-9_-]{1,32}$/;
 
@@ -126,7 +126,7 @@ export const command: GmCommand = {
     // The ledger gate: an option the game's rejections already invalidated never reaches the creator.
     const verdict = checkOptions(
       options.map((option) => ({ ...option, command: checkpointId })),
-      readLedger(root),
+      readLedger(gameDir(ctx.cwd, root)),
     );
     if (!verdict.ok) {
       for (const violation of verdict.violations)
