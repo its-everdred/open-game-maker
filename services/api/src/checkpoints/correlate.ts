@@ -16,6 +16,12 @@ export function checkpointMarker(decision: Decision): string | null {
   return null;
 }
 
+// aiur marks a decision that takes several answers with `multi_select`; a review deck's answer is the likes and
+// dislikes rather than one card. Everything else asks for one pick.
+export function pickOf(decision: Decision): 'one' | 'many' {
+  return decision.questions?.[0]?.multi_select === true ? 'many' : 'one';
+}
+
 export function answeredOption(decision: Decision): string | undefined {
   const answer = decision.active_answer ?? decision.answer;
   if (answer === null || answer === undefined) return undefined;
@@ -87,6 +93,7 @@ export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPl
         decision_id: decision.decision_id,
         version: decision.version,
         blocking: decision.blocking,
+        pick: pickOf(decision),
         status,
         ...(optionId === undefined ? {} : { option_id: optionId }),
       },

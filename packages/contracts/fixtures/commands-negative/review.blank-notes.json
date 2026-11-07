@@ -1,0 +1,5 @@
+{
+  "likes": ["v2", "v5"],
+  "dislikes": [{ "option_id": "v1", "reason": "Too robotic; the sibilants hiss" }],
+  "notes": "   "
+}

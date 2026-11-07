@@ -1,0 +1,12 @@
+{
+  "kind": "question_answers",
+  "answers": [
+    { "option_id": "v2", "verdict": "like" },
+    { "option_id": "v5", "verdict": "like" },
+    { "option_id": "v1", "verdict": "dislike", "reason": "Too robotic; the sibilants hiss" },
+    { "option_id": "v3", "verdict": "dislike" },
+    { "option_id": "v4", "verdict": "dislike", "reason": "Reads the line too fast" },
+    { "option_id": "v6", "verdict": "dislike" }
+  ],
+  "notes": "All six read too young for the Blobs; keep the two warm ones and pitch them down."
+}

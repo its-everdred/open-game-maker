@@ -56,6 +56,7 @@ describe('migrate', () => {
         '20261106181658_daemons_by_game_slug.sql',
         '20261106213727_game_github_path.sql',
         '20261107003901_design_decisions.sql',
+        '20261107225942_command_reviews.sql',
       ],
     });
     expect(migrate({ sqlite })).toEqual({ applied: [] });
@@ -98,6 +99,7 @@ describe('migrate', () => {
       'migration:20261106181658_daemons_by_game_slug.sql',
       'migration:20261106213727_game_github_path.sql',
       'migration:20261107003901_design_decisions.sql',
+      'migration:20261107225942_command_reviews.sql',
     ]);
     sqlite.close();
   });

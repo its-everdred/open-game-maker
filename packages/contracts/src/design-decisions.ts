@@ -23,7 +23,7 @@ export const DesignDecision = z.object({
   checkpoint_id: z.string().min(1).max(200),
   decision_id: z.string().min(1).max(200),
   question: z.string().trim().min(1).max(8000),
-  options: z.array(DesignDecisionOption).min(2).max(5),
+  options: z.array(DesignDecisionOption).min(2).max(12),
   recommended: OptionId.nullable(),
   chosen: OptionId,
   origin: z.enum(['player', 'default']),

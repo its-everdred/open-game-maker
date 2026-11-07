@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
+          },
+          "game_id": {
+            "type": "string",
+            "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ticket": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "checkpoint_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "decision_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "option_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "likes": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "option_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "option_id",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "dislikes": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "option_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "reason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "option_id",
+                "label",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": [
+          "id",
+          "game_id",
+          "job_id",
+          "ticket",
+          "title",
+          "checkpoint_id",
+          "decision_id",
+          "question",
+          "option_id",
+          "likes",
+          "dislikes",
+          "notes",
+          "at"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "reviews"
+  ],
+  "additionalProperties": false,
+  "$id": "https://open-game-maker-2000.local/schemas/commands.review-ledger.v1.json"
+}

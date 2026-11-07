@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
-import { z } from 'zod';
+
+import { CommandAnswerBody } from '@ogm/contracts';
 
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
@@ -14,7 +15,8 @@ import { getChatRuntime } from '../build-chat/routes.js';
 import { allowAnswer, checkpointRuntime, setupCheckpointRuntime } from './runtime.js';
 
 export const prefix = '/api/v1/jobs';
-const AnswerBody = z.object({ option_id: z.string().regex(/^[a-z0-9_-]{1,32}$/) }).strict();
+// A plain answer is `{ option_id }`; a review deck's answer also carries the whole like/dislike map (A3).
+const AnswerBody = CommandAnswerBody;
 
 export function setup(deps: AppDeps): void {
   const runtime = setupCheckpointRuntime(deps);
@@ -39,6 +41,8 @@ export function answerResponse(c: Context<ApiBindings>, outcome: AnswerOutcome) 
       return c.json({ status: 'not_linked' as const }, 425);
     case 'invalid_option':
       throw new HttpError(400, 'checkpoint_option_invalid');
+    case 'review_invalid':
+      throw new HttpError(400, 'checkpoint_review_invalid', outcome.reason);
     case 'client_unavailable':
       throw new HttpError(503, 'daemon_credentials_unavailable');
     case 'answered':
@@ -67,10 +71,13 @@ export default new Hono<ApiBindings>()
     const job = await authorizedChatJob(c, 'job.create', true);
     const deps = c.get('deps');
     if (!allowAnswer(checkpointRuntime(deps), job.jobId)) throw new HttpError(429, 'rate_limited');
-    const { option_id } = await parseBody(c, AnswerBody);
+    const { option_id, review } = await parseBody(c, AnswerBody);
     const row = findCheckpoint(deps.sqlite, job.jobId, c.req.param('checkpointId'));
     if (!row) throw new HttpError(404, 'checkpoint_not_found');
-    return answerResponse(c, await answerCheckpoint({ deps, job, row, optionId: option_id, source: 'player' }));
+    return answerResponse(
+      c,
+      await answerCheckpoint({ deps, job, row, optionId: option_id, source: 'player', ...(review ? { review } : {}) }),
+    );
   })
   // Skipping a question takes the recommendation, which is an answer like any other: dependent tickets unblock and the
   // decision history records that the player delegated rather than chose.

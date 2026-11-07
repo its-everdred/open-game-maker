@@ -24,3 +24,4 @@ export * from './game-abuse-flags.js';
 export * from './releases.js';
 export * from './allow-list.js';
 export * from './design-decisions.js';
+export * from './command-reviews.js';

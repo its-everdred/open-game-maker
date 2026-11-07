@@ -1,0 +1,13 @@
+{
+  "option_id": "v2",
+  "review": {
+    "likes": ["v2", "v5"],
+    "dislikes": [
+      { "option_id": "v1", "reason": "Too robotic; the sibilants hiss" },
+      { "option_id": "v3" },
+      { "option_id": "v4", "reason": "Reads the line too fast" },
+      { "option_id": "v6" }
+    ],
+    "notes": "All six read too young for the Blobs; keep the two warm ones and pitch them down."
+  }
+}

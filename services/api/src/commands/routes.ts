@@ -2,7 +2,7 @@ import { AiurHttpError } from '@ogm/aiur-client';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { GameCommand, type GameCommandsPage } from '@ogm/contracts';
+import { CommandAnswerBody, GameCommand, type GameCommandsPage } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import { parseBody } from '../app/validate.js';
@@ -11,7 +11,9 @@ import { authorizedGame } from '../games/authorize.js';
 import { getChatRuntime } from '../build-chat/routes.js';
 import { getChatRow, listCheckpoints, parseCheckpoint, toMessage, type MediaSigner } from '../build-chat/store.js';
 import { listJobs } from '../jobs/repo.js';
-import { gameCommandsFromAiur } from './aiur.js';
+import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
+import { tryRecordReview } from '../reviews/store.js';
+import { gameCommandsFromAiur, toGameCommand } from './aiur.js';
 
 export const prefix = '/api/v1';
 
@@ -19,13 +21,10 @@ export const prefix = '/api/v1';
 // `<aiur-commands>` component consumes (aiur#7487). A job's Commands answer through the job's checkpoint route; a
 // registered game's Commands have no job and answer through this route, which calls aiur's Decision API directly.
 
-const AnswerCommandBody = z
-  .object({
-    option_id: z.string().regex(/^[a-z0-9_-]{1,32}$/),
-    // The version the player saw. Aiur refuses an answer to a newer version, so a stale inbox shows its conflict.
-    version: z.number().int().positive(),
-  })
-  .strict();
+const AnswerCommandBody = CommandAnswerBody.extend({
+  // The version the player saw. Aiur refuses an answer to a newer version, so a stale inbox shows its conflict.
+  version: z.number().int().positive(),
+});
 
 async function optionMedia(deps: AppDeps, jobId: string, mediaId: string, sign: MediaSigner) {
   const row = getChatRow(deps.sqlite, mediaId);
@@ -69,6 +68,8 @@ export default new Hono<ApiBindings>()
           options,
           ...(checkpoint.recommend === undefined ? {} : { recommend: checkpoint.recommend }),
           blocking: checkpoint.blocking ?? false,
+          // How the Command's answer is taken: a review deck's 'one' asks for a single pick from its likes.
+          pick: checkpoint.pick ?? 'one',
           opened_at: row.at,
         });
         if (command.success) commands.push(command.data);
@@ -99,14 +100,35 @@ export default new Hono<ApiBindings>()
       if (error instanceof HttpError) throw new HttpError(409, 'daemon_not_found');
       throw error;
     });
+    // A review answer is checked against the Command aiur holds before anything is answered, so a client cannot name a
+    // card the Command does not have. A registered game's Command has no job, so its review is recorded with no job id.
+    const review = body.review;
+    const command = review === undefined ? null : toGameCommand(await client.decision(decisionId));
+    if (review !== undefined) {
+      if (command === null) throw new HttpError(404, 'command_not_found');
+      const problem = reviewProblem(command.options, review);
+      if (problem !== null) throw new HttpError(400, 'command_review_invalid', problem);
+    }
+    const fields =
+      review === undefined || command === null
+        ? undefined
+        : reviewDecisionFields(command.options, review, body.option_id);
     try {
       await client.decide(decisionId, {
         option: body.option_id,
         expected_version: body.version,
         idempotency_key: `${decisionId}:${body.version}`,
-        rationale: 'Creator answered the Command in the game inbox',
+        rationale:
+          fields === undefined
+            ? 'Creator answered the Command in the game inbox'
+            : `Creator answered the Command in the game inbox. ${fields.rationale}`,
         confidence: 100,
-        alternatives_considered: [],
+        ...(fields === undefined
+          ? { alternatives_considered: [] }
+          : fields.alternatives_considered === undefined
+            ? {}
+            : { alternatives_considered: fields.alternatives_considered }),
+        ...(fields === undefined ? {} : { response: fields.response }),
         reversibility_belief: 'reversible',
       });
     } catch (error) {
@@ -116,6 +138,9 @@ export default new Hono<ApiBindings>()
       }
       deps.log({ event: 'game_command_answer_failed', gameId: game.id, decisionId, error: (error as Error).name });
       throw new HttpError(502, 'aiur_answer_failed');
+    }
+    if (review !== undefined && command !== null) {
+      tryRecordReview(deps.db, { gameId: game.id, command, optionId: body.option_id, review }, deps.log);
     }
     return c.json({ status: 'answered' as const, decision_id: decisionId, option_id: body.option_id }, 200);
   });

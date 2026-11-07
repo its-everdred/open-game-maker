@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../../src/app/errors.js';
 import { insertChatRow } from '../../src/build-chat/store.js';
+import { listReviews } from '../../src/reviews/store.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
 const ids = {
@@ -303,7 +304,13 @@ const decision = (overrides: Partial<Decision> = {}): Decision => ({
 
 async function appWithAiur(decisions: Decision[], decide = vi.fn(async () => undefined)) {
   const deps = seed();
-  deps.aiurClientForGame = async () => ({ decisions: async () => decisions, decide }) as unknown as AiurClient;
+  deps.aiurClientForGame = async () =>
+    ({
+      decisions: async () => decisions,
+      // A review answer validates its cards against the Command aiur holds, so the client serves one decision too.
+      decision: async (id: string) => decisions.find((candidate) => candidate.decision_id === id) ?? decisions[0]!,
+      decide,
+    }) as unknown as AiurClient;
   const { app } = await makeApp(deps);
   return { app, deps, decide };
 }
@@ -406,6 +413,67 @@ describe('a registered game’s own Commands', () => {
       'd_aiur_1',
       expect.objectContaining({ option: 'square', expected_version: 2, idempotency_key: 'd_aiur_1:2' }),
     );
+  });
+
+  it('carries a review deck’s map into aiur and the ledger when no job owns the Command', async () => {
+    const { app, deps, decide } = await appWithAiur([decision()]);
+    const review = {
+      likes: ['round'],
+      dislikes: [{ option_id: 'square', reason: 'Too boxy for blobs' }],
+      notes: 'Both read too sharp; round is closer.',
+    };
+
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(decide).toHaveBeenCalledWith(
+      'd_aiur_1',
+      expect.objectContaining({
+        option: 'round',
+        response: JSON.stringify({
+          kind: 'question_answers',
+          answers: [
+            { option_id: 'round', verdict: 'like' },
+            { option_id: 'square', verdict: 'dislike', reason: 'Too boxy for blobs' },
+          ],
+          notes: 'Both read too sharp; round is closer.',
+        }),
+      }),
+    );
+    // A registered game's Command has no job, so the row records the review with a null job id and the game's title.
+    expect(listReviews(deps.db, ids.game)).toEqual([
+      expect.objectContaining({
+        game_id: ids.game,
+        job_id: null,
+        title: 'Blobs look',
+        checkpoint_id: 'd_aiur_1',
+        option_id: 'round',
+        likes: [{ option_id: 'round', label: 'Round blobs' }],
+        dislikes: [{ option_id: 'square', label: 'Square blobs', reason: 'Too boxy for blobs' }],
+        notes: 'Both read too sharp; round is closer.',
+      }),
+    ]);
+  });
+
+  it('refuses a review whose cards are not the Command’s and answers nothing', async () => {
+    const { app, decide } = await appWithAiur([decision()]);
+
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        option_id: 'round',
+        version: 2,
+        review: { likes: ['round', 'hexagon'], dislikes: [{ option_id: 'square' }] },
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(decide).not.toHaveBeenCalled();
   });
 
   it('reports another writer’s answer as a conflict', async () => {

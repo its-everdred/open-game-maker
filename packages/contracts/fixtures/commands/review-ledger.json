@@ -1,0 +1,40 @@
+{
+  "reviews": [
+    {
+      "id": "r_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e77",
+      "game_id": "g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01",
+      "job_id": "j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f",
+      "ticket": "570",
+      "title": "Pick the Blobs voices",
+      "checkpoint_id": "cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e72",
+      "decision_id": "d_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e73",
+      "question": "Which six voices should the Blobs use?",
+      "option_id": "v2",
+      "likes": [
+        { "option_id": "v2", "label": "Voice 2" },
+        { "option_id": "v5", "label": "Voice 5" }
+      ],
+      "dislikes": [
+        { "option_id": "v1", "label": "Voice 1", "reason": "Too robotic; the sibilants hiss" },
+        { "option_id": "v3", "label": "Voice 3", "reason": null }
+      ],
+      "notes": "All six read too young for the Blobs; keep the two warm ones and pitch them down.",
+      "at": "2026-11-07T17:45:00.000Z"
+    },
+    {
+      "id": "r_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e78",
+      "game_id": "g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01",
+      "job_id": "j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f",
+      "ticket": null,
+      "title": "Pick the Blobs look",
+      "checkpoint_id": "cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e75",
+      "decision_id": "d_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e76",
+      "question": "Which Blobs look should the mock matrix keep?",
+      "option_id": "m1",
+      "likes": [{ "option_id": "m1", "label": "Mock 1" }],
+      "dislikes": [{ "option_id": "m2", "label": "Mock 2", "reason": "The ears read as horns" }],
+      "notes": null,
+      "at": "2026-11-07T18:02:00.000Z"
+    }
+  ]
+}

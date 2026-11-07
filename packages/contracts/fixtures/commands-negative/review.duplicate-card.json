@@ -1,0 +1,4 @@
+{
+  "likes": ["v2", "v5"],
+  "dislikes": [{ "option_id": "v2", "reason": "Also disliked after all" }]
+}

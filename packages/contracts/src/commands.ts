@@ -14,6 +14,10 @@ export const CommandOption = z.object({
   media: ChatMedia.optional(),
 });
 
+// A review deck shows one card per option (A3), so a Command's option count is bounded by the deck, not by aiur's
+// 2-5 native-question rule.
+export const MAX_COMMAND_OPTIONS = 12;
+
 export const GameCommand = z.object({
   // Null when the Command belongs to no job: a game registered from a repository that already exists reads its
   // instance's open Commands, and its `checkpoint_id` is aiur's decision id.
@@ -25,9 +29,14 @@ export const GameCommand = z.object({
   decision_id: z.string().min(1),
   version: z.number().int().positive(),
   question: z.string().trim().min(1).max(8000),
-  options: z.array(CommandOption).min(2).max(5),
+  // 2-12: a review deck (A3) shows one card per option, so six voices or a 3x3 image mock must fit. aiur's own
+  // decision contract has no upper bound; 2-5 is only the native-question bridge's rule.
+  options: z.array(CommandOption).min(2).max(MAX_COMMAND_OPTIONS),
   recommend: z.string().optional(),
   blocking: z.boolean(),
+  // How the Command's answer is taken. 'one' asks for a single pick, so a review's likes become the shortlist;
+  // 'many' takes the likes and dislikes as the answer. Absent means 'one', which is what every older Command is.
+  pick: z.enum(['one', 'many']).optional(),
   opened_at: IsoTime,
 });
 

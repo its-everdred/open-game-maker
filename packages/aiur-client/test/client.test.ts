@@ -188,6 +188,26 @@ describe('createAiurClient', () => {
     });
   });
 
+  it('sends a review answer’s option and its like/dislike map together', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ status: 'accepted', decision }, 202));
+    const map = JSON.stringify({ kind: 'question_answers', answers: [{ option_id: 'v2', verdict: 'like' }] });
+
+    await createAiurClient(daemon, fetchImpl).decide('decision-1', {
+      option: 'v2',
+      response: map,
+      expected_version: 2,
+      idempotency_key: 'ogm:player:cp_1:2',
+      rationale: "Creator chose 'Voice 2' in the build chat. Reviewed the deck: liked Voice 2; disliked nothing",
+    });
+
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body))).toMatchObject({
+      option_id: 'v2',
+      custom_response: map,
+      expected_version: 2,
+      idempotency_key: 'ogm:player:cp_1:2',
+    });
+  });
+
   it('uses a comma-separated topics query for event pages', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(fixture('events-page')));
 

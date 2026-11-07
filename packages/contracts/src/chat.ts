@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { Id, IsoTime } from './api.js';
+import { CommandReview } from './review.js';
 
 // Build chat (D-BUILD-CHAT), transcribed from T06 §4. Agent rows carry the writer's ULID; rows the API mints carry `m_<uuid>`.
 export const Ulid = z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
@@ -40,14 +41,23 @@ export const ChatCheckpointOption = z.object({
 });
 
 // `decision_id` is "" until OGM-082 correlates it; `media_id` names a BuildChatMessage.id in the same job.
+// `pick` says how the answer is taken: 'one' asks for a single pick (a review's likes become the shortlist), 'many'
+// takes the likes and dislikes as the answer. Absent means 'one', which is what every older checkpoint is.
 export const ChatCheckpoint = z.object({
   decision_id: z.string(),
   question: z.string(),
-  options: z.array(ChatCheckpointOption),
+  options: z
+    .array(ChatCheckpointOption)
+    // A review deck (A3) needs room for six voices or a 3x3 image mock. No floor: a stored checkpoint from an older
+    // daemon may carry a single option, and dropping it would lose the Command.
+    .max(12),
   recommend: z.string().optional(),
   blocking: z.boolean().optional(),
+  pick: z.enum(['one', 'many']).optional(),
   status: z.enum(['open', 'answered', 'moot']),
   option_id: z.string().optional(),
+  // A review deck's answer: the likes and dislikes the creator chose, with their words on a dislike (A3).
+  review: CommandReview.optional(),
 });
 
 // Files a creator attaches to a chat message (#222). Images keep #214's 10 MiB cap and are re-encoded to WebP on upload;
@@ -108,12 +118,14 @@ export const CheckpointOpenPayload = z
         }),
       )
       .min(2)
-      .max(5),
+      .max(12),
     recommend: z
       .string()
       .regex(/^[a-z0-9_-]{1,32}$/)
       .optional(),
     blocking: z.boolean(),
+    // 'many' opens a review deck whose answer is the likes and dislikes, not one card. Absent means 'one'.
+    pick: z.enum(['one', 'many']).optional(),
   })
   .strict()
   .superRefine((payload, ctx) => {

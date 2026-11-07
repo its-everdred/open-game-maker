@@ -28,6 +28,7 @@ export async function handle(line: AgentOutboxLine, ctx: OutboxContext): Promise
     options,
     ...(payload.recommend === undefined ? {} : { recommend: payload.recommend }),
     blocking: payload.blocking,
+    ...(payload.pick === undefined ? {} : { pick: payload.pick }),
     status: 'open',
   };
   const { inserted } = insertChatRow(ctx.sqlite, {

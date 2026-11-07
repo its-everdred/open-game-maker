@@ -1,0 +1,415 @@
+/* The review deck (A3): one card at a time, full width on a phone, in the studio's Gruvbox dark look. The deck sits in
+   the Commands inbox or in its own deep-linked screen, so it uses the same glass card, rule and display type as the
+   rest of the studio and adds no chrome of its own. */
+.review-deck {
+  display: grid;
+  gap: 12px;
+  width: min(560px, 100%);
+  min-width: 0;
+  margin: 0 auto;
+}
+
+.review-deck:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 4px;
+  border-radius: calc(var(--r) + 6px);
+}
+
+.review-deck-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--r) + 2px);
+  background: var(--paper);
+  box-shadow: var(--pop-sm);
+  touch-action: pan-y;
+  transition: transform 0.12s ease-out;
+  user-select: none;
+}
+
+/* Every still, GIF and clip shows whole and uncropped: the box takes the sample's own shape and the media is contained
+   inside it, so nothing is ever cut off in a preview. Tapping the media opens it full screen. */
+.review-deck-media {
+  display: block;
+  width: 100%;
+  max-height: min(70svh, 620px);
+  object-fit: contain;
+  background: var(--night);
+  cursor: zoom-in;
+}
+
+.review-deck-audio {
+  display: grid;
+  place-items: center;
+  padding: 28px 16px;
+  background: color-mix(in srgb, var(--aqua-b) 12%, var(--night));
+}
+
+.review-deck-replay {
+  display: grid;
+  place-items: center;
+  width: var(--tap-primary);
+  height: var(--tap-primary);
+  padding: 0;
+  border-radius: 50%;
+}
+
+.review-deck-replay .icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.review-deck-label {
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--ink);
+  font: 700 15px/1.2 var(--display);
+}
+
+.review-deck-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.review-deck-thumb {
+  display: grid;
+  place-items: center;
+  width: var(--tap-primary);
+  height: var(--tap-primary);
+  padding: 0;
+  border-radius: 50%;
+}
+
+.review-deck-thumb .icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.review-deck-undo {
+  display: grid;
+  place-items: center;
+  width: var(--tap-secondary);
+  height: var(--tap-secondary);
+  padding: 0;
+  border-radius: 50%;
+}
+
+.review-deck-undo .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.review-deck-progress {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.review-deck-heading {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font: 800 12px/1 var(--display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.review-deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-deck-grid > li {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The whole sample in the ending grid too, never a cropped preview: the thumbnail opens the same full-screen view. */
+.review-deck-thumb-media {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--night);
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.review-deck-thumb-media img,
+.review-deck-thumb-media video {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 168px;
+  object-fit: contain;
+}
+
+.review-deck-chip {
+  display: grid;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.review-deck-chip:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.review-deck-chip-dislike {
+  border-color: color-mix(in srgb, var(--red-b) 45%, var(--rule));
+}
+
+.review-deck-chip-label {
+  font: 700 14px/1.2 var(--display);
+}
+
+.review-deck-chip-reason {
+  justify-self: start;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-deck-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.review-deck-send {
+  justify-self: center;
+  min-height: var(--tap-primary);
+  padding: 0 28px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--green-b);
+  color: var(--dark);
+  font: 800 16px/1 var(--display);
+  box-shadow: var(--pop-sm);
+  cursor: pointer;
+}
+
+.review-deck-send:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.review-deck-error {
+  margin: 0;
+  color: var(--text-danger);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* The reason sheet uses the studio's `.modal` + `.sheet-card` pattern from the versioning dialog. */
+.review-deck-reason-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: max(16px, var(--safe-t)) max(16px, var(--safe-r)) max(16px, var(--safe-b)) max(16px, var(--safe-l));
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--night) 76%, transparent);
+}
+
+.review-deck-reason {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  width: min(420px, 100%);
+  padding: 18px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: var(--pop);
+}
+
+.review-deck-reason h2 {
+  margin: 0;
+  font: 700 18px/1.2 var(--display);
+}
+
+.review-deck-reason textarea {
+  width: 100%;
+  min-height: calc(var(--tap-secondary) * 2);
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--night);
+  color: var(--ink);
+  font: 600 15px/1.35 var(--body);
+  resize: vertical;
+}
+
+.review-deck-reason [role='status'] {
+  margin: 0;
+  color: var(--text-danger);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.review-deck-reason-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.review-deck-reason-actions button {
+  min-height: var(--tap-secondary);
+  padding: 0 18px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 700 14px/1 var(--display);
+  cursor: pointer;
+}
+
+.review-deck-reason-save {
+  border-color: transparent;
+  background: var(--green-b);
+  color: var(--dark);
+}
+
+/* The full-screen view a tap on any still, GIF or clip opens: the whole sample, contained in the phone, over the studio's
+   scrim. Escape or the close button returns to the deck. */
+.review-deck-fullscreen-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: max(12px, var(--safe-t)) max(12px, var(--safe-r)) max(12px, var(--safe-b)) max(12px, var(--safe-l));
+  background: color-mix(in srgb, var(--night) 88%, transparent);
+}
+
+.review-deck-fullscreen {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  width: min(100%, 1100px);
+  margin: 0;
+  color: var(--ink);
+}
+
+.review-deck-fullscreen h2 {
+  margin: 0;
+  font: 700 15px/1.2 var(--display);
+  text-align: center;
+}
+
+.review-deck-fullscreen img,
+.review-deck-fullscreen video {
+  display: block;
+  width: 100%;
+  max-height: calc(100svh - 140px);
+  object-fit: contain;
+}
+
+.review-deck-fullscreen-close {
+  justify-self: center;
+  min-height: var(--tap-secondary);
+  padding: 0 22px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 700 14px/1 var(--display);
+  cursor: pointer;
+}
+
+/* An audio sample's length, beside the replay control: the creator judges a long take without playing all of it. */
+.review-deck-length {
+  margin: 0;
+  padding: 0 14px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The whole-set notes: one optional field on the summary before Send, in the studio's own field look. The field and
+   the voice button keep the same tap targets as the rest of the studio. */
+.review-deck-notes {
+  display: grid;
+  gap: 6px;
+}
+
+.review-deck-notes-label {
+  color: var(--muted);
+  font: 800 12px/1 var(--display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.review-deck-notes textarea {
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 14px/1.4 var(--body);
+  resize: vertical;
+}
+
+.review-deck-voice {
+  display: grid;
+  gap: 4px;
+}
+
+.review-deck-voice-partial {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.review-deck-voice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  justify-self: start;
+  min-height: var(--tap-secondary);
+  padding: 0 16px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 700 14px/1 var(--display);
+  cursor: pointer;
+}
+
+.review-deck-voice-button .icon svg {
+  width: 20px;
+  height: 20px;
+}

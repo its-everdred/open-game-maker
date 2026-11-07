@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "option_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{1,32}$"
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "likes": {
+          "maxItems": 12,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]{1,32}$"
+          }
+        },
+        "dislikes": {
+          "maxItems": 12,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "option_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9_-]{1,32}$"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "option_id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "likes",
+        "dislikes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "option_id"
+  ],
+  "additionalProperties": false,
+  "$id": "https://open-game-maker-2000.local/schemas/commands.review-answer.v1.json"
+}

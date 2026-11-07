@@ -48,8 +48,11 @@ export type DecisionQuery = {
   cursor?: string;
 };
 
+// An answer takes either one option or free text, and a review deck's answer carries both: the option it picks and the
+// whole like/dislike map as JSON text in `custom_response`. aiur's decision record keeps the two beside each other
+// (`option_id` and `custom_response` on one answer object), so a caller may send them together.
 export type DecisionAnswer = DecisionReasoning &
-  ({ option: string; response?: never } | { option?: never; response: string });
+  ({ option: string; response?: string } | { option?: never; response: string });
 
 export interface AiurClient {
   readonly baseUrl: string;
@@ -243,7 +246,11 @@ export function createAiurClient(
     async decide(id, answer) {
       const { option, response, ...reasoning } = answer;
       const { body } = await fetchResponse('POST', `/api/v1/decisions/${encodeURIComponent(id)}/decide`, {
-        body: { ...reasoning, ...(option === undefined ? { custom_response: response } : { option_id: option }) },
+        body: {
+          ...reasoning,
+          ...(option === undefined ? {} : { option_id: option }),
+          ...(response === undefined ? {} : { custom_response: response }),
+        },
         write: true,
         supervisor: true,
       });

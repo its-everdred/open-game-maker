@@ -13,7 +13,7 @@ import {
   updateCheckpoint,
   type StoredCheckpoint,
 } from '../build-chat/store.js';
-import { correlate, recommendationOf, statusOf } from './correlate.js';
+import { correlate, pickOf, recommendationOf, statusOf } from './correlate.js';
 import type { InboxWriter } from './inbox.js';
 
 type PollerDeps = {
@@ -43,6 +43,7 @@ function nativeCheckpoint(decision: Decision): StoredCheckpoint {
     options: decision.options.map(({ id, label }) => ({ id, label })),
     ...(recommend === undefined ? {} : { recommend }),
     blocking: decision.blocking,
+    pick: pickOf(decision),
     status: statusOf(decision),
   };
 }
