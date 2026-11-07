@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   closeSync,
   constants,
+  existsSync,
   fstatSync,
   mkdirSync,
   openSync,
@@ -11,7 +12,7 @@ import {
   writeFileSync,
   writeSync,
 } from 'node:fs';
-import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { AgentOutboxLine, ChatPostPayload, Id, type AgentOutboxLine as AgentOutboxLineValue } from '@ogm/contracts';
 
@@ -26,6 +27,22 @@ export function workspaceRoot(cwd: string): string {
   } catch {
     throw new UsageError('not inside a git workspace', 'run gm from a game workspace');
   }
+}
+
+/**
+ * The game's own folder: the nearest directory from `cwd` up to the workspace root holding a `gm.manifest.json`.
+ * A one-game repository answers its root; a monorepo (Open-Games: `games/<slug>/`) answers the game's folder, so a
+ * game's ledger and rules never leak to its siblings.
+ */
+export function gameDir(cwd: string, root: string = workspaceRoot(cwd)): string {
+  let dir = resolve(cwd);
+  const top = resolve(root);
+  while (dir.startsWith(top)) {
+    if (existsSync(join(dir, 'gm.manifest.json'))) return dir;
+    if (dir === top) break;
+    dir = dirname(dir);
+  }
+  return top;
 }
 
 export function jobContext(options: { cwd: string; job?: string; environmentJob?: string | null }): {

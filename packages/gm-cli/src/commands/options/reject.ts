@@ -9,7 +9,7 @@ import {
   type RejectedOption,
 } from '../../ledger/index.js';
 import { OPTION_ID, pair, provenancePairs, strings } from '../../ledger/provenance.js';
-import { workspaceRoot } from '../../outbox.js';
+import { gameDir, workspaceRoot } from '../../outbox.js';
 
 const MUST_FLAG = '--must';
 
@@ -109,7 +109,7 @@ export const command: GmCommand = {
       if (!OPTION_ID.test(id)) throw new UsageError(`invalid withdrawn option id "${id}"`, 'use an option id');
     }
 
-    const { entry, ledger } = appendRejection(root, {
+    const { entry, ledger } = appendRejection(gameDir(ctx.cwd, root), {
       words,
       rule,
       scope: scope.data,

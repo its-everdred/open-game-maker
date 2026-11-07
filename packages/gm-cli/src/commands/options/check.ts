@@ -1,7 +1,7 @@
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { checkOptions, readLedger, type OptionUnderCheck, type OptionViolation } from '../../ledger/index.js';
 import { OPTION_ID, pair, provenancePairs, strings } from '../../ledger/provenance.js';
-import { workspaceRoot } from '../../outbox.js';
+import { gameDir, workspaceRoot } from '../../outbox.js';
 
 export const optionsFlags = {
   option: { type: 'string', multiple: true, help: 'candidate id and label; repeat 2-5 times' },
@@ -51,7 +51,7 @@ export const command: GmCommand = {
   async run(ctx, _args, flags) {
     const root = workspaceRoot(ctx.cwd);
     const options = readOptions(flags, root);
-    const ledger = readLedger(root);
+    const ledger = readLedger(gameDir(ctx.cwd, root));
     const result = checkOptions(options, ledger);
     if (ctx.json) ctx.out(JSON.stringify(result));
     else if (result.ok)
