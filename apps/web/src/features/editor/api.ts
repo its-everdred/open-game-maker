@@ -12,7 +12,7 @@ import type {
   SaveSlot,
   Transaction,
 } from '@ogm/contracts/browser';
-import { SaveRevisionSchema, savesPath } from '@ogm/contracts/browser';
+import { SaveRevisionSchema, savesListPath, savesPath, type SaveListQuery } from '@ogm/contracts/browser';
 import { PatchTooLargeError, validatePatches } from '@ogm/design-log/browser';
 
 import { api, ApiError, apiFetch, sse } from '../../lib/api/client';
@@ -143,8 +143,11 @@ export function listJobs(gameId: string): Promise<{ jobs: Job[] }> {
   return api(`/jobs?gameId=${encodeURIComponent(gameId)}`);
 }
 
-export function getOptionalSaves(gameId: string): Promise<OptionalCapability<{ slots: SaveSlot[] }>> {
-  return optionalApi(savesPath(gameId));
+export function getOptionalSaves(
+  gameId: string,
+  query?: SaveListQuery,
+): Promise<OptionalCapability<{ slots: SaveSlot[] }>> {
+  return optionalApi(query === undefined ? savesPath(gameId) : savesListPath(gameId, query));
 }
 
 /** The branch (`main` or a branch id) and build the player is running; the API records both on each save. */

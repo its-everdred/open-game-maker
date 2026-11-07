@@ -9,9 +9,14 @@ import { PlatformHud } from './PlatformHud';
 function frameHarness() {
   let saveWrite: ((payload: { saveSchemaVersion: number; data: unknown }) => void) | undefined;
   let event: ((kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown) => void) | undefined;
+  let saveLoadError: ((message: string) => void) | undefined;
   const frame = {
     onEvent: vi.fn((callback) => {
       event = callback;
+      return vi.fn();
+    }),
+    onSaveLoadError: vi.fn((callback) => {
+      saveLoadError = callback;
       return vi.fn();
     }),
     onSaveWrite: vi.fn((callback) => {
@@ -26,6 +31,7 @@ function frameHarness() {
   return {
     event: (kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown) => event?.(kind, payload),
     frame,
+    saveLoadError: (message: string) => saveLoadError?.(message),
     saveWrite: (payload: { saveSchemaVersion: number; data: unknown }) => saveWrite?.(payload),
   };
 }
@@ -86,6 +92,109 @@ describe('PlatformHud', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
 
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Save slots' })).not.toBeInTheDocument());
+  });
+
+  // A slot the running build cannot read must not offer Load: the SDK would refuse the restore and the host used to
+  // swap the game for the Try again screen.
+  it('offers Load only for a slot this build reads or migrates', async () => {
+    const test = frameHarness();
+    const slots = [
+      { slotId: 'auto', headRevision: 3, status: 'ok' },
+      { slotId: '1', headRevision: 4, status: 'needs_migration' },
+      { slotId: '2', headRevision: 5, status: 'unsupported_old' },
+      { slotId: '3', headRevision: 6, status: 'incompatible_after_rollback' },
+    ] as SaveSlot[];
+    const read = vi.fn();
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        saveContext={saveContext}
+        saves
+        saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read, write: vi.fn() }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    const load = await screen.findByRole('button', { name: 'Load' });
+
+    expect(load).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save slot 1' }));
+    expect(load).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save slot 2' }));
+    expect(load).toBeDisabled();
+    fireEvent.click(load);
+    expect(read).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save slot 3' }));
+    expect(load).toBeDisabled();
+  });
+
+  it('sends the running build save facts on the list request', async () => {
+    const test = frameHarness();
+    const list = vi.fn().mockResolvedValue({ available: true, value: { slots: [] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        saveContext={saveContext}
+        saves
+        saveSchema={3}
+        migratesFrom={2}
+        saveApi={{ list, read: vi.fn(), write: vi.fn() }}
+      />,
+    );
+
+    await waitFor(() => expect(list).toHaveBeenCalledWith('game', { schema: 3, migratesFrom: 2 }));
+  });
+
+  it('lists without facts when the build reported no save schema', async () => {
+    const test = frameHarness();
+    const list = vi.fn().mockResolvedValue({ available: true, value: { slots: [] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        saveContext={saveContext}
+        saves
+        saveApi={{ list, read: vi.fn(), write: vi.fn() }}
+      />,
+    );
+
+    await waitFor(() => expect(list).toHaveBeenCalledWith('game', undefined));
+  });
+
+  it('reports a save the build refused as a failed load while the game keeps running', async () => {
+    const test = frameHarness();
+    const toast = vi.fn();
+    const slots = [{ slotId: 'auto', headRevision: 2, status: 'ok' }] as SaveSlot[];
+    const save = { saveSchemaVersion: 4, data: { room: 'crypt' } };
+    const saveApi = {
+      list: vi.fn().mockResolvedValue({ available: true, value: { slots } }),
+      read: vi.fn().mockResolvedValue(save),
+      write: vi.fn(),
+    };
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        saveContext={saveContext}
+        saves
+        saveApi={saveApi}
+        toast={toast}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Load' }));
+
+    await waitFor(() => expect(test.frame.restoreSave).toHaveBeenCalledWith(save));
+    expect(test.frame.resume).toHaveBeenCalledOnce();
+    expect(toast).not.toHaveBeenCalledWith('Load failed');
+
+    test.saveLoadError('save version is not supported');
+    expect(toast).toHaveBeenCalledWith('Load failed');
   });
 
   it('renders all contract slots and writes game saves into the selected host slot', async () => {

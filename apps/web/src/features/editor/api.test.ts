@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { savesPath, type DesignDoc } from '@ogm/contracts/browser';
+import { savesListPath, savesPath, type DesignDoc } from '@ogm/contracts/browser';
 
 import {
   getOptionalPublished,
@@ -95,6 +95,26 @@ describe('editor API classifications', () => {
 
     await expect(getOptionalSaves(gameId)).resolves.toEqual({ available: false });
     await expect(getOptionalSaves(gameId)).rejects.toMatchObject({ status: 500 });
+  });
+
+  // The API judges each slot against the build that is playing; without these facts every slot reports `ok`.
+  it('lists saves with the running build schema and the version it migrates from', async () => {
+    const fetch = vi.fn().mockResolvedValue(response(200, { slots: [] }));
+    vi.stubGlobal('fetch', fetch);
+
+    await getOptionalSaves(gameId, { schema: 3, migratesFrom: 2 });
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(`/api/v1${savesListPath(gameId, { schema: 3, migratesFrom: 2 })}`);
+    expect(fetch.mock.calls[0]?.[0]).toBe(`/api/v1/games/${gameId}/saves?schema=3&migratesFrom=2`);
+  });
+
+  it('omits the migration the build does not implement', async () => {
+    const fetch = vi.fn().mockResolvedValue(response(200, { slots: [] }));
+    vi.stubGlobal('fetch', fetch);
+
+    await getOptionalSaves(gameId, { schema: 3 });
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(`/api/v1/games/${gameId}/saves?schema=3`);
   });
 
   it('takes the play lease, then writes a gzipped save in the API wire format', async () => {

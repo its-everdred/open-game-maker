@@ -1,5 +1,12 @@
 import { SDK_PROTOCOL, hostToGameSchema, type Envelope, type HostToGame } from '@ogm/contracts/bridge';
-import type { GameModule, PlayerSettings, SaveData, Viewport } from '@ogm/contracts/game';
+import type {
+  GameInstance,
+  GameManifest,
+  GameModule,
+  PlayerSettings,
+  SaveData,
+  Viewport,
+} from '@ogm/contracts/game';
 import type { ActionFrame } from '@ogm/contracts/input';
 import { openGameBridge } from '@ogm/iframe-bridge';
 
@@ -34,6 +41,20 @@ function markNow(): number {
 
 function compiledBuild(): BuildKind {
   return typeof __GM_BUILD__ === 'undefined' ? 'draft' : __GM_BUILD__;
+}
+
+/**
+ * The manifest a build reports once mounted: the game's own manifest plus the save facts the host needs to judge a
+ * stored slot before it offers Load. Both come from the running instance, so a static `manifest.json` cannot drift
+ * from the code that actually writes saves.
+ */
+function readyManifest<D, S>(manifest: GameManifest, instance: GameInstance<D, S>): GameManifest {
+  if (!manifest.saves) return manifest;
+  const saveSchema = instance.serialize().saveSchemaVersion;
+  if (typeof instance.migrate === 'function' && saveSchema > 0) {
+    return { ...manifest, saveSchema, migratesFrom: saveSchema - 1 };
+  }
+  return { ...manifest, saveSchema };
 }
 
 export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions = {}): Promise<Runtime<D, S>> {
@@ -162,7 +183,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
 
     marks.push(['frame0', markNow()]);
     hooks.ready = true;
-    send('ready', { protocol: SDK_PROTOCOL, manifest: module.manifest, marks });
+    send('ready', { protocol: SDK_PROTOCOL, manifest: readyManifest(module.manifest, instance), marks });
     for (const envelope of queued.splice(0)) dispatchRuntime(envelope);
     if (!options.headless) runtime.startLiveLoop();
     return runtime;

@@ -136,6 +136,13 @@ export const gameManifestSchema = z.looseObject({
   grid: z.looseObject({ size: z.number().positive(), units: z.string().max(16) }).optional(),
   playLabel: z.string().min(1).max(80).optional(),
   saves: z.boolean(),
+  /**
+   * The save schema version this build writes and, when the game migrates, the one older version it still reads.
+   * The SDK fills both from the mounted instance in its `ready` handshake, so a build's `manifest.json` need not
+   * declare them; the host reads them to judge stored slots before it offers Load.
+   */
+  saveSchema: z.number().int().nonnegative().optional(),
+  migratesFrom: z.number().int().nonnegative().optional(),
   /** Netcode v2 (`net.ts`). Absent means host authority, which is every build written before v2. */
   net: netManifestSchema.optional(),
   overrides: z.looseObject({

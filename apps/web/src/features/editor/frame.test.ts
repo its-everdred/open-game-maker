@@ -202,6 +202,45 @@ describe('game frame adapter', () => {
     });
   });
 
+  // The SDK answers a `save.restore` it cannot read with `save_unsupported`; that is a failed Load in the pause
+  // dialog, not a reason to swap the running game for the Try again screen.
+  it('reports a refused save restore as a load error and leaves the game running', () => {
+    let frameOptions: GameFrameOptions | undefined;
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 0, doc: {} as DesignDoc },
+      create: (options) => {
+        frameOptions = options;
+        return {
+          bridge: { dropped: 0 },
+          on: vi.fn(() => vi.fn()),
+          setMode: vi.fn(),
+          setSettings: vi.fn(),
+          send: vi.fn(),
+          dispose: vi.fn(),
+        };
+      },
+    });
+    frameOptions?.onReady?.(manifest, []);
+    const loadErrors: string[] = [];
+    const stop = controller.onSaveLoadError((message) => loadErrors.push(message));
+    const before = controller.state();
+
+    frameOptions?.onError?.({ code: 'save_unsupported', message: 'save version is not supported' });
+
+    expect(loadErrors).toEqual(['save version is not supported']);
+    expect(controller.state()).toEqual(before);
+    expect(controller.state().bridgeState).toBe('ready');
+
+    stop();
+    frameOptions?.onError?.({ code: 'save_unsupported', message: 'save version is not supported' });
+    expect(loadErrors).toEqual(['save version is not supported']);
+  });
+
   it('tracks load progress and fails only after twenty seconds without progress', async () => {
     vi.useFakeTimers();
     let frameOptions: GameFrameOptions | undefined;

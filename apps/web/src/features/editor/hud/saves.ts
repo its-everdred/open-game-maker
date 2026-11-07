@@ -32,3 +32,8 @@ export function storeSaveWrite(
 export function saveSlotLabel(slotId: SaveSlotId): string {
   return slotId === 'auto' ? 'Auto save' : `Save slot ${slotId}`;
 }
+
+/** A slot the running build can read: written by this build, or the one version older that its `migrate` upgrades. */
+export function saveSlotLoadable(slot: SaveSlot | undefined): boolean {
+  return slot !== undefined && (slot.status === 'ok' || slot.status === 'needs_migration');
+}

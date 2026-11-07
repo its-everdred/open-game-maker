@@ -90,7 +90,20 @@ export const savesSchemas = {
 /** Saves live under their game: `/games/:gameId/saves[/:slotId]`, relative to the `/api/v1` prefix. */
 export const SAVES_ROUTE = '/games/:gameId/saves';
 
+/**
+ * The running build's save facts. The API judges each stored slot against the build that is playing, so a slot the
+ * build cannot read is reported as such instead of comparing the slot with its own head schema.
+ */
+export type SaveListQuery = { schema: number; migratesFrom?: number };
+
 export function savesPath(gameId: string, slotId?: SaveSlot['slotId']): string {
   const base = `/games/${encodeURIComponent(gameId)}/saves`;
   return slotId === undefined ? base : `${base}/${encodeURIComponent(slotId)}`;
+}
+
+/** `savesPath` plus the build's schema, as the list route reads it. */
+export function savesListPath(gameId: string, query: SaveListQuery): string {
+  const params = new URLSearchParams({ schema: String(query.schema) });
+  if (query.migratesFrom !== undefined) params.set('migratesFrom', String(query.migratesFrom));
+  return `${savesPath(gameId)}?${params.toString()}`;
 }

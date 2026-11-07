@@ -96,4 +96,23 @@ describe('web save client against the API', () => {
       .get();
     expect(stored).toEqual({ branch_id: mainBranch?.id, build_id: ids.build });
   });
+
+  // The HUD must not offer Load for a slot this build cannot read; the list request carries the build's own schema.
+  it('judges a stored slot against the build that is playing', async () => {
+    const { app } = await setup();
+    vi.stubGlobal('fetch', browserFetch(app));
+    const context = { branch: 'main', buildId: ids.build };
+    await putSave(ids.game, '2', { saveSchemaVersion: 3, data: { room: 'crypt' } }, undefined, context);
+
+    const listed = (status: string) => ({
+      available: true,
+      value: { slots: [expect.objectContaining({ slotId: '2', status })] },
+    });
+
+    await expect(getOptionalSaves(ids.game, { schema: 3 })).resolves.toEqual(listed('ok'));
+    await expect(getOptionalSaves(ids.game, { schema: 4, migratesFrom: 3 })).resolves.toEqual(
+      listed('needs_migration'),
+    );
+    await expect(getOptionalSaves(ids.game, { schema: 2 })).resolves.toEqual(listed('incompatible_after_rollback'));
+  });
 });

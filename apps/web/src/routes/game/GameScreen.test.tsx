@@ -46,6 +46,7 @@ const host = vi.hoisted(() => {
     dispose: vi.fn(),
     onEvent: vi.fn(() => vi.fn()),
     onPicked: vi.fn(() => vi.fn()),
+    onSaveLoadError: vi.fn(() => vi.fn()),
     onSaveWrite: vi.fn((callback: (save: unknown) => void) => {
       void callback;
       return vi.fn();
@@ -459,6 +460,8 @@ describe('GameScreen', () => {
             tools: [],
             gizmos: {},
             saves: true,
+            saveSchema: 1,
+            migratesFrom: 0,
             overrides: { aliases: {}, retired: [] },
           },
         }),
@@ -468,7 +471,9 @@ describe('GameScreen', () => {
     renderGame();
 
     await waitFor(() => expect(host.controller.onSaveWrite).toHaveBeenCalled());
-    await waitFor(() => expect(editorApi.getOptionalSaves).toHaveBeenCalledWith('game'));
+    await waitFor(() =>
+      expect(editorApi.getOptionalSaves).toHaveBeenCalledWith('game', { schema: 1, migratesFrom: 0 }),
+    );
     const save = { saveSchemaVersion: 1, data: { room: 'crypt' } };
     host.controller.onSaveWrite.mock.calls.at(-1)![0](save);
 

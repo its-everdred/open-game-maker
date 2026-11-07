@@ -34,6 +34,13 @@ describe('game contract', () => {
     }
   });
 
+  it('accepts the running build save facts and rejects a negative schema', () => {
+    const facts = { ...manifest(), saveSchema: 3, migratesFrom: 2 };
+    expect(gameManifestSchema.safeParse(facts).success).toBe(true);
+    expect(gameJson(facts)).toBe(true);
+    expect(gameManifestSchema.safeParse({ ...manifest(), saveSchema: -1 }).success).toBe(false);
+  });
+
   it('rejects editor tools outside the host vocabulary', () => {
     const doc = { ...manifest(), tools: ['select', 'lasso'] };
     expect(gameManifestSchema.safeParse(doc).error?.issues[0]?.path).toEqual(['tools', 1]);

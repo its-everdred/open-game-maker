@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { CreditsDocument, PlayerSettings, SaveData, SaveSlot } from '@ogm/contracts/browser';
+import type { CreditsDocument, PlayerSettings, SaveData, SaveListQuery, SaveSlot } from '@ogm/contracts/browser';
 
 import {
   getOptionalSaves,
@@ -13,6 +13,7 @@ import type { GameFrameController } from '../../features/editor/frame';
 import { handleGameEvent } from '../../features/editor/hud/achievements';
 import {
   saveSlotLabel,
+  saveSlotLoadable,
   saveSlotOptions,
   storeSaveWrite,
   type SaveSlotId,
@@ -24,7 +25,7 @@ import { CreditsList } from '../settings/CreditsList';
 import { getCredits } from '../settings/credits';
 
 export type PlatformSaveApi = {
-  list(gameId: string): Promise<OptionalCapability<{ slots: SaveSlot[] }>>;
+  list(gameId: string, query?: SaveListQuery): Promise<OptionalCapability<{ slots: SaveSlot[] }>>;
   read(gameId: string, slotId: SaveSlotId): Promise<SaveData<unknown>>;
   write: SaveWrite;
 };
@@ -35,6 +36,10 @@ type PlatformHudProps = {
   gameId: string;
   saveContext: SaveContext;
   saves: boolean;
+  /** The running build's save schema; absent when the build did not report one. */
+  saveSchema?: number;
+  /** The one older schema the build still migrates; absent when it cannot migrate. */
+  migratesFrom?: number;
   saveApi?: PlatformSaveApi;
   toast?: (message: string) => void;
   creditsApi?: (gameId: string, buildId: string) => Promise<CreditsDocument>;
@@ -44,12 +49,20 @@ type PlatformHudProps = {
 const defaultSaveApi: PlatformSaveApi = { list: getOptionalSaves, read: getSave, write: putSave };
 const defaultCreditsApi = (gameId: string, buildId: string) => getCredits(gameId, buildId);
 
+/** The list request facts for the running build; without its schema the API compares each slot with its own head. */
+function listQuery(saveSchema: number | undefined, migratesFrom: number | undefined): SaveListQuery | undefined {
+  if (saveSchema === undefined) return undefined;
+  return migratesFrom === undefined ? { schema: saveSchema } : { schema: saveSchema, migratesFrom };
+}
+
 export function PlatformHud({
   build,
   frame,
   gameId,
   saveContext,
   saves,
+  saveSchema,
+  migratesFrom,
   saveApi = defaultSaveApi,
   toast = pushToast,
   creditsApi = defaultCreditsApi,
@@ -83,7 +96,7 @@ export function PlatformHud({
     }
     let active = true;
     void saveApi
-      .list(gameId)
+      .list(gameId, listQuery(saveSchema, migratesFrom))
       .then((result) => {
         if (!active) return;
         setSavesAvailable(result.available);
@@ -95,7 +108,7 @@ export function PlatformHud({
     return () => {
       active = false;
     };
-  }, [gameId, saveApi, saves, toast]);
+  }, [gameId, migratesFrom, saveApi, saveSchema, saves, toast]);
 
   useEffect(() => {
     const normalized = saveSettings(settings);
@@ -119,7 +132,7 @@ export function PlatformHud({
             );
           } finally {
             // A write whose response was lost may still have landed: reread the heads either way.
-            const result = await saveApi.list(gameId);
+            const result = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
             if (active) {
               setSavesAvailable(result.available);
               const nextSlots = result.available ? result.value.slots : undefined;
@@ -131,12 +144,14 @@ export function PlatformHud({
         .catch(() => toast('Save failed'));
     });
     const stopEvent = frame.onEvent((kind, payload) => handleGameEvent(kind, payload, build, toast));
+    const stopLoadError = frame.onSaveLoadError(() => toast('Load failed'));
     return () => {
       active = false;
       stopSave();
       stopEvent();
+      stopLoadError();
     };
-  }, [build, frame, gameId, saveApi, savesAvailable, toast]);
+  }, [build, frame, gameId, migratesFrom, saveApi, saveSchema, savesAvailable, toast]);
 
   useEffect(() => {
     if (paused) {
@@ -179,7 +194,7 @@ export function PlatformHud({
   };
   const load = async () => {
     const slot = slots?.find((candidate) => candidate.slotId === selectedSlot);
-    if (slot === undefined) return;
+    if (!saveSlotLoadable(slot)) return;
     try {
       frame.restoreSave(await saveApi.read(gameId, selectedSlot));
       resume();
@@ -234,7 +249,7 @@ export function PlatformHud({
                     <button
                       className="tap-secondary"
                       type="button"
-                      disabled={!slots.some((slot) => slot.slotId === selectedSlot)}
+                      disabled={!saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))}
                       onClick={() => void load()}
                     >
                       Load

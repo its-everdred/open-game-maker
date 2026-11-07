@@ -49,6 +49,10 @@ export type GameFrameController = {
   pause(): void;
   resume(): void;
   restoreSave(save: SaveData<unknown>): void;
+  /**
+   * A `save.restore` the running build refused, as a failed Load rather than a frame error. The game keeps running.
+   */
+  onSaveLoadError(callback: (message: string) => void): () => void;
   sendRoomMessage(envelope: Envelope<string, unknown>): void;
   onSaveWrite(callback: (save: SaveData<unknown>) => void): () => void;
   onEvent(callback: (kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown) => void): () => void;
@@ -97,6 +101,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   const placementQueue: PlacementRequest[] = [];
   let activePlacement: (PlacementRequest & { timer: ReturnType<typeof setTimeout>; settled: boolean }) | undefined;
   let stopPlacement: () => void = () => undefined;
+  const saveLoadErrors = new Set<(message: string) => void>();
   let roomMessageSequence = 0;
   const emitRoomMessage = (type: GameToHost['t'], payload: unknown) => {
     roomMessageSequence += 1;
@@ -187,6 +192,14 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       onError: (failure) => {
         /* The game declined an optional command (a camera mode, selection) and keeps running. */
         if (failure.code === 'unsupported') return;
+        /*
+         * Only a `save.restore` dispatch answers `save_unsupported`, so this is a Load the build cannot read, not a
+         * broken frame: report it to the pause dialog and leave the game running.
+         */
+        if (failure.code === 'save_unsupported') {
+          for (const callback of saveLoadErrors) callback(failure.message);
+          return;
+        }
         clearLoadStall();
         current = { ...current, bridgeState: 'error', error: failure.message, errorCode: failure.code };
         publish();
@@ -254,6 +267,10 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     restoreSave: (save) => {
       frame.send('save.restore', save);
     },
+    onSaveLoadError: (callback) => {
+      saveLoadErrors.add(callback);
+      return () => saveLoadErrors.delete(callback);
+    },
     sendRoomMessage: (envelope) => {
       const parsed = hostToGameSchema.safeParse(envelope);
       if (!parsed.success || parsed.data.t === 'hello') return;
@@ -289,6 +306,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       if (disposed) return;
       disposed = true;
       clearLoadStall();
+      saveLoadErrors.clear();
       window.removeEventListener('message', observeOrigin);
       stopPlacement();
       for (const stop of stopRoomMessages) stop();

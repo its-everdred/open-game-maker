@@ -384,16 +384,16 @@ export function GameScreen() {
         frameRef.current !== undefined &&
         frameState.manifest !== undefined &&
         activeSnapshot !== undefined ? (
-          <>
-            <PlatformHud
-              build={build}
-              frame={frameRef.current}
-              gameId={gameId}
-              saveContext={{ branch, buildId: activeSnapshot.buildId }}
-              saves={frameState.manifest.saves}
-              onLeave={() => void leaveRoom()}
-            />
-          </>
+          <PlatformHud
+            build={build}
+            frame={frameRef.current}
+            gameId={gameId}
+            saveContext={{ branch, buildId: activeSnapshot.buildId }}
+            saves={frameState.manifest.saves}
+            saveSchema={frameState.manifest.saveSchema}
+            migratesFrom={frameState.manifest.migratesFrom}
+            onLeave={() => void leaveRoom()}
+          />
         ) : null}
         <GameExtras placement="hud" {...extraProps} />
         {activeSnapshot ? (

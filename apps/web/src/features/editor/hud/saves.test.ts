@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { SaveSlot } from '@ogm/contracts/browser';
 
-import { saveSlotOptions, storeSaveWrite } from './saves';
+import { saveSlotLoadable, saveSlotOptions, storeSaveWrite } from './saves';
 
 const gameId = 'g_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+const slot = (status: SaveSlot['status']) => ({ slotId: 'auto', headRevision: 1, status }) as SaveSlot;
 
 describe('platform saves', () => {
   it('keeps auto and manual slots in contract order even when only some have revisions', () => {
@@ -19,6 +20,14 @@ describe('platform saves', () => {
       ['2', undefined],
       ['3', 8],
     ]);
+  });
+
+  it('offers Load only for a slot this build reads itself or migrates', () => {
+    expect(saveSlotLoadable(slot('ok'))).toBe(true);
+    expect(saveSlotLoadable(slot('needs_migration'))).toBe(true);
+    expect(saveSlotLoadable(slot('unsupported_old'))).toBe(false);
+    expect(saveSlotLoadable(slot('incompatible_after_rollback'))).toBe(false);
+    expect(saveSlotLoadable(undefined)).toBe(false);
   });
 
   it('stores an identity-free game payload in the host-selected slot with a concurrency revision', async () => {
