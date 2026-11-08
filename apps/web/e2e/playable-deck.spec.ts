@@ -118,7 +118,8 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await expect
     .poll(() => page.evaluate(() => window.__tags), { timeout: 3 * (SECONDS * 1000 + 5_000) })
     .toEqual(['Slow', 'Medium', 'Fast']);
-  expect(loaded).toEqual(['slow', 'medium', 'fast']);
+  // The tag can read Fast a moment before the fast frame navigates.
+  await expect.poll(() => loaded).toEqual(['slow', 'medium', 'fast']);
   await expect(page.getByRole('button', { name: 'Play Medium again' })).toBeVisible({
     timeout: SECONDS * 1000 + 5_000,
   });
