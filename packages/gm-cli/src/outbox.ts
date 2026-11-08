@@ -49,6 +49,21 @@ export function jobContext(options: { cwd: string; job?: string; environmentJob?
   root: string;
   jobId: string;
 } {
+  const { root, jobId } = optionalJobContext(options);
+  if (!jobId)
+    throw new UsageError(
+      'no job id: pass --job or run inside a build workspace',
+      'gm chat post --job <id> --text "<one line>"',
+    );
+  return { root, jobId };
+}
+
+// The job when one is named (by flag, `GM_JOB` or `.gm/context/job.json`), else null: a host checkout or an aiur
+// workspace has no build job.
+export function optionalJobContext(options: { cwd: string; job?: string; environmentJob?: string | null }): {
+  root: string;
+  jobId: string | null;
+} {
   const root = workspaceRoot(options.cwd);
   let jobId = options.job?.trim() || options.environmentJob?.trim();
   const contextFile = join(root, '.gm', 'context', 'job.json');
@@ -58,7 +73,7 @@ export function jobContext(options: { cwd: string; job?: string; environmentJob?
       contents = readFileSync(contextFile, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        // The missing-context refusal below includes both supported ways to supply the job id.
+        // No context file: no job, which `jobContext` refuses with both supported ways to supply one.
       } else {
         throw new CommandError(`cannot read ${contextFile}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -70,13 +85,11 @@ export function jobContext(options: { cwd: string; job?: string; environmentJob?
       } catch {
         throw new UsageError(`${contextFile} is not valid JSON`, 'gm chat post --job <id> --text "<one line>"');
       }
+      // A build workspace whose context names no job is broken, not a host checkout.
+      if (!jobId) throw new UsageError(`${contextFile} has no job_id`, 'pass --job <id>');
     }
   }
-  if (!jobId)
-    throw new UsageError(
-      'no job id: pass --job or run inside a build workspace',
-      'gm chat post --job <id> --text "<one line>"',
-    );
+  if (!jobId) return { root, jobId: null };
   if (!Id.safeParse(jobId).success)
     throw new UsageError(`invalid job id "${jobId}"`, 'use the job id from .gm/context/job.json');
   return { root, jobId };
