@@ -49,7 +49,7 @@ export function Spotlight({ game, branches, job, onPlay, onEdit, onClose }: Spot
           </ul>
         )}
         {job && <p className="games-spotlight-job">{jobLabel(job)}</p>}
-        <CommandsInbox gameId={game.id} onOpenJob={openConversation} />
+        <CommandsInbox gameId={game.id} slug={game.slug} onOpenJob={openConversation} />
         <div className="games-versions">
           <ul aria-label="Versions">
             {branches.map((branch) => (

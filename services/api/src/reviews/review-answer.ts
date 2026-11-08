@@ -12,7 +12,8 @@ export type ReviewDecisionFields = {
   response: string;
 };
 
-// A review judges every card of its Command exactly once. A partial or invented map is refused before aiur is called.
+// A review judges each card of its Command at most once. Send is always on (#614), so a half-judged deck sends the
+// cards it has; an invented or doubled card is refused before aiur is called.
 export function reviewProblem(cards: readonly { id: string }[], review: CommandReview): string | null {
   const known = new Set(cards.map(({ id }) => id));
   const seen = new Set<string>();
@@ -26,7 +27,6 @@ export function reviewProblem(cards: readonly { id: string }[], review: CommandR
     if (seen.has(id)) return `card ${id} is judged twice`;
     seen.add(id);
   }
-  for (const { id } of cards) if (!seen.has(id)) return `card ${id} is not judged`;
   return null;
 }
 

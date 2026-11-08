@@ -62,6 +62,10 @@ describe('gm-ui-hud skill', () => {
     expect(text).toContain('at most 25% of the screen');
     expect(text).toMatch(/Pause button sits in the\s+top-right corner/);
     expect(text).toContain('at least 16 CSS px');
+    /* On-screen buttons must never hide what the player needs (#600); the zone covers the host overlay's footprint. */
+    expect(text).toContain('must never cover important content');
+    expect(text).toContain('140 × 200 CSS px');
+    expect(text).toContain('qa/journeys/hud-clear.json');
     expect(text).toMatch(/title, play, paused, won, and lost/);
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
   }, 30_000);

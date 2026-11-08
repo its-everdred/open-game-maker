@@ -25,7 +25,7 @@ export function hasFfmpeg(binary = 'ffmpeg'): boolean {
   return probe.error === undefined && probe.status === 0;
 }
 
-function ffmpeg(binary: string, args: string[]): void {
+export function ffmpeg(binary: string, args: string[]): void {
   if (!hasFfmpeg(binary)) throw new FfmpegMissingError(binary);
   execFileSync(binary, ['-loglevel', 'error', '-y', ...args], { timeout: FFMPEG_TIMEOUT_MS, killSignal: 'SIGKILL' });
 }

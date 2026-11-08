@@ -89,6 +89,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm chat post` sends the current still or clip to the build chat.
 - `gm decide` asks the creator a product question; `gm checkpoint wait` waits for the answer.
 - `gm changes` summarizes the current game-repo diff.
+- `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 - `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.
 
 ## Load when…
@@ -102,6 +103,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |
 | gm-build | Installing or building in the network-off sandbox. |
 | gm-verify | Checking behavior, visuals, accessibility, performance, or evidence. |
+| gm-qa | QA-ing a hosted build like a player: phone and desktop, journeys, rooms across devices, report. |
 | gm-genre-platformer | Building or tuning a platformer. |
 | gm-input | Adding input actions, buffering, rebinding, or accessibility. |
 | gm-ui-hud | Building menus, HUD, layout, or readable game text. |
