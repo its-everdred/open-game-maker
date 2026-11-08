@@ -315,7 +315,16 @@ describe('StudioMenu', () => {
     expect(screen.getByText('3', { selector: '.studio-menu-badge' })).toBeVisible();
     expect(document.getElementById('studio-menu-requests')).toHaveTextContent('3 requests need your attention');
 
+    // Kevin (2026-11-08, #632/#596): open decisions are one of the circles, first in the row, and lead to the work
+    // waiting on an answer.
     fireEvent.click(trigger);
+    expect(circleNames()[0]).toBe('Decisions: 3');
+    expect(trigger.querySelector('.studio-menu-badge')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Decisions: 3' }));
+    expect(screen.getByRole('button', { name: /Choose the moon gate/ })).toHaveAttribute('data-action-needed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Decisions: 3' }));
+    expect(screen.queryByRole('list', { name: 'Build progress' })).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
     const moon = screen.getByRole('group', { name: 'Moon Vault builds' });
     expect(moon).toHaveTextContent('Choose the moon gatePausedWaiting for your answer');

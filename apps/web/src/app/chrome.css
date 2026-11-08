@@ -164,6 +164,10 @@
   opacity: 0.6;
 }
 
+.menu-circle[data-action-needed='true'] {
+  --ring-color: var(--red-b);
+}
+
 .menu-circle[data-done='true'] {
   --ring-color: var(--green-b);
 }

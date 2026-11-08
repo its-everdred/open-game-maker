@@ -116,6 +116,26 @@ export function StudioMenu() {
 
   // Nearest the menu button first; the row runs right to left.
   const circles: ReactElement[] = [];
+  if (outstandingRequests > 0) {
+    circles.push(
+      <button
+        key="decisions"
+        type="button"
+        className="menu-circle"
+        data-action-needed="true"
+        aria-label={`Decisions: ${outstandingRequests}`}
+        aria-expanded={sheet === 'builds'}
+        aria-controls="studio-menu-builds"
+        onClick={() => toggleSheet('builds')}
+      >
+        <MenuRing percent={100} />
+        <Icon name="decisions" />
+        <span className="studio-menu-badge" aria-hidden="true">
+          {outstandingRequests}
+        </span>
+      </button>,
+    );
+  }
   if (buildGroups.length > 0) {
     circles.push(
       <button
@@ -275,7 +295,7 @@ export function StudioMenu() {
       >
         <span className="studio-menu-ring" aria-hidden="true" />
         <Icon name="menu" />
-        {outstandingRequests > 0 ? (
+        {outstandingRequests > 0 && !open ? (
           <span className="studio-menu-badge" aria-hidden="true">
             {outstandingRequests}
           </span>

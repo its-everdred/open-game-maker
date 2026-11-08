@@ -1,5 +1,6 @@
 // Icons: Phosphor duotone (MIT, phosphoricons.com), inlined from prototypes/studio-v0/icons.js plus close, paperclip, carets
-// and send. The line icons (menu circles: volume, bug, energy, build, credits, sign out, admin, game actions) are drawn here.
+// and send. The line icons (menu circles: volume, bug, energy, build, decisions, credits, sign out, admin, game actions)
+// are drawn here.
 // They draw in currentColor; the soft fill is the duotone layer.
 const svg = (body: string) => `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">${body}</svg>`;
 const line = (body: string) =>
@@ -213,6 +214,9 @@ export const ICONS: Record<string, string> = {
   ),
   volume: line('<path d="M40 100h36l52-44v144l-52-44H40ZM168 100a40 40 0 0 1 0 56M196 76a76 76 0 0 1 0 104"/>'),
   volumeOff: line('<path d="M40 100h36l52-44v144l-52-44H40ZM172 104l48 48M220 104l-48 48"/>'),
+  decisions: line(
+    '<path d="M44 56h168v112H120l-48 40v-40H44Z"/><path d="M108 96a20 20 0 1 1 28 18c-6 3-8 7-8 14M128 148v2"/>',
+  ),
   build: line('<g transform="rotate(35 128 136)"><path d="M68 52h104v48H68ZM120 100v128M172 64h20v24h-20"/></g>'),
   caretLeft: line('<path d="M160 208 80 128l80-80"/>'),
   caretRight: line('<path d="m96 48 80 80-80 80"/>'),

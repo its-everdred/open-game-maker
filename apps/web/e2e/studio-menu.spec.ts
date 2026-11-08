@@ -145,7 +145,8 @@ for (const [orientation, viewport] of [
 
     await trigger.click();
     const circles = page.getByRole('group', { name: 'Menu' }).locator('.menu-circle');
-    await expect(circles.first()).toHaveAttribute('aria-label', 'Builds: 42%');
+    await expect(circles.first()).toHaveAttribute('aria-label', 'Decisions: 2');
+    await expect(circles.nth(1)).toHaveAttribute('aria-label', 'Builds: 42%');
     await page.waitForTimeout(500);
     const menuBox = (await trigger.boundingBox())!;
     const first = (await circles.first().boundingBox())!;
