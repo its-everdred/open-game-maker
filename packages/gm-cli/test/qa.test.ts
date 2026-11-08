@@ -8,7 +8,7 @@ import { journeySchema } from '@ogm/gm-verify';
 import { describe, expect, it } from 'vitest';
 
 import { COMMANDS_DIR, loadCommands } from '../src/cli.js';
-import { scenarioScript } from '../src/commands/qa/room.js';
+import { localRoomBlocker, scenarioScript } from '../src/commands/qa/room.js';
 import { extractCommands } from '../src/skills/lint.js';
 import { gm, tempDir } from './helpers.js';
 
@@ -73,6 +73,16 @@ describe('gm qa usage', () => {
   it('runs --local through the gm-verify four-client scenario that exists beside the package', () => {
     expect(existsSync(scenarioScript())).toBe(true);
     expect(readFileSync(scenarioScript(), 'utf8')).toContain("'multi-client'");
+    expect(localRoomBlocker(scenarioScript())).toBeUndefined();
+  });
+
+  it('says --local is core-only from a game instance instead of letting Node refuse the scenario', () => {
+    /* An instance installs gm-verify from its vendored tarball; Node will not strip types under node_modules. */
+    const vendored = '/srv/blobs/node_modules/.pnpm/@ogm+gm-verify@file+vendor/node_modules/@ogm/gm-verify/scenarios/scenario.ts';
+    expect(localRoomBlocker(vendored)).toBe(
+      '--local runs only from an Open Game Maker core checkout, not a game instance',
+    );
+    expect(localRoomBlocker('C:\\blobs\\node_modules\\@ogm\\gm-verify\\scenarios\\scenario.ts')).toBeDefined();
   });
 });
 
