@@ -5,6 +5,7 @@ import { basename, join, relative, sep } from 'node:path';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
+import { reviewScreens, sheetPath } from '../../look/screens.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 import { STILL } from '../shot/index.js';
 
@@ -100,9 +101,35 @@ function judge(root: string, still: { path: string; blob: string }, looks: Look[
   return { path, status: 'fail', detail: `${newest.answer} does not end in a VERDICT line` };
 }
 
+/**
+ * Each screen with an approved target in review/decisions.json needs its sheet (`gm look sheet`), judged like a still:
+ * a passing look answer for the sheet's bytes on disk, so a look that reads a mismatch with the target fails the check.
+ */
+function sheets(root: string, game: string, looks: Look[]): StillResult[] {
+  let screens;
+  try {
+    screens = reviewScreens(game);
+  } catch (error) {
+    return [
+      { path: 'review/decisions.json', status: 'fail', detail: error instanceof Error ? error.message : String(error) },
+    ];
+  }
+  return screens.map((screen) => {
+    const file = join(game, sheetPath(screen.name));
+    const path = relative(root, file).split(sep).join('/');
+    if (!existsSync(file))
+      return {
+        path,
+        status: 'missing' as const,
+        detail: `no sheet of "${screen.name}" beside its target: gm look sheet ${screen.name} --still <png>`,
+      };
+    return judge(root, { path, blob: blobId(readFileSync(file)) }, looks);
+  });
+}
+
 export const command: GmCommand = {
   name: 'look check',
-  summary: 'fail unless every committed (else rendered) still has a passing look answer for its bytes',
+  summary: 'fail unless every still, and every screen sheet beside its approved target, has a passing look answer',
   example: 'look check',
   flags: {},
   async run(ctx, args) {
@@ -112,7 +139,7 @@ export const command: GmCommand = {
     const game = gameDir(ctx.cwd, root);
     const committed = committedStills(game);
     const stills = committed.length > 0 ? committed : renderedStills(root, game);
-    const results = stills.map((still) => judge(root, still, looks));
+    const results = [...stills.map((still) => judge(root, still, looks)), ...sheets(root, game, looks)];
     const blocked = results.some((result) => result.status === 'blocked');
     // Nothing judged is not a pass: the gate is green only when at least one still was looked at.
     const ok = results.length > 0 && results.every((result) => result.status === 'pass');
