@@ -303,6 +303,7 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
   await Promise.all([neutralizeAppAssets(app), neutralizeReferenceAssets(reference)]);
   await installAuthRoutes(app, { signedIn: true });
   await installGameApi(app);
+  await app.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
   await app.route('**/api/v1/me', (route) => route.fulfill({ json: { platformRole: 'none' } }));
   await app.route('**/api/v1/games/game/branches', (route) => route.fulfill({ json: { branches: [] } }));
   await app.route('**/api/v1/games', (route) => route.fulfill({ json: { games: [] } }));
