@@ -24,11 +24,26 @@ for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page);
+    /* Hold the game's files until the bar has settled (fonts, invite button), so only Pause mounting could move it. */
+    const appOrigin = new URL(String(testInfo.project.use.baseURL)).origin;
+    let releaseGame = () => {};
+    const gameHeld = new Promise<void>((resolve) => (releaseGame = resolve));
+    await page.route(
+      (url) => url.origin !== appOrigin && url.pathname.startsWith('/g/'),
+      async (route) => {
+        await gameHeld;
+        await route.fallback();
+      },
+    );
     await page.goto('/g/game?test');
     /* Pause mounts when the game loads; its space is held from the start so the bar's buttons never jump under a tap. */
     const ask = page.getByRole('button', { name: 'Ask for a change' });
     await expect(ask).toBeVisible();
+    await expect(page.locator('.room-invite-control')).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    expect(await page.getByRole('button', { name: 'Pause' }).count()).toBe(0);
     const askBefore = await ask.boundingBox();
+    releaseGame();
     await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 30_000 }).toBe('ready');
     await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
     expect(await ask.boundingBox()).toEqual(askBefore);
