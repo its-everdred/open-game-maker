@@ -34,27 +34,10 @@
             ],
             "additionalProperties": false
           }
-        },
-        "notes": {
-          "type": "string",
-          "maxLength": 2000
-        },
-        "picked": {
-          "anyOf": [
-            {
-              "type": "string",
-              "pattern": "^[a-z0-9_-]{1,32}$"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "required": [
-        "cards",
-        "notes",
-        "picked"
+        "cards"
       ],
       "additionalProperties": false
     }
