@@ -1,15 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { GameCommand, VoiceTarget } from '@ogm/contracts';
+import type { GameCommand, ReviewDraftsPage } from '@ogm/contracts';
 
 import { resetReviewDrafts, useIsSent } from './drafts';
 import { ReviewDeck } from './ReviewDeck';
-import type { DictationPort } from './voice-note';
 
 const calls: Array<{ url: string; method: string; body: unknown }> = [];
 let answerStatus = 200;
+let serverDrafts: ReviewDraftsPage['drafts'] = [];
 
 function deckCommand(overrides: Partial<GameCommand> = {}): GameCommand {
   return {
@@ -44,25 +44,42 @@ function deckCommand(overrides: Partial<GameCommand> = {}): GameCommand {
   };
 }
 
-function renderDeck(
-  command = deckCommand(),
-  onAnswered = vi.fn(),
-  props: { dictation?: DictationPort; voiceTarget?: VoiceTarget } = {},
-) {
+// The Blobs character voices deck (#631): each card is a portrait with the character's voice beside it.
+function characterCommand(): GameCommand {
+  return deckCommand({
+    job_id: null,
+    checkpoint_id: 'd_blobs',
+    decision_id: 'd_blobs',
+    version: 1,
+    title: 'Blobs character voices',
+    options: ['pip', 'mo'].map((id) => ({
+      id,
+      label: `${id} voice`,
+      media: { url: `https://media.example.test/${id}.png`, width: 400, height: 600, kind: 'image' as const },
+      audio: { url: `https://media.example.test/${id}.mp3`, width: 640, height: 360, duration_ms: 3000 },
+    })),
+  });
+}
+
+function renderDeck(command = deckCommand(), onAnswered = vi.fn()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
     onAnswered,
     ...render(
       <QueryClientProvider client={client}>
-        <ReviewDeck gameId="g_1" command={command} onAnswered={onAnswered} {...props} />
+        <ReviewDeck gameId="g_1" command={command} onAnswered={onAnswered} />
       </QueryClientProvider>,
     ),
   };
 }
 
+const answers = () => calls.filter(({ url }) => url.endsWith('/answer'));
+const draftSaves = () => calls.filter(({ method, url }) => method === 'PUT' && url.includes('/review-drafts/'));
+
 beforeEach(() => {
   calls.length = 0;
   answerStatus = 200;
+  serverDrafts = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -70,13 +87,16 @@ beforeEach(() => {
       const method = init?.method ?? 'GET';
       const body = init?.body === undefined ? undefined : JSON.parse(String(init.body));
       calls.push({ url, method, body });
-      if (url.includes('/checkpoints/')) {
-        return new Response(JSON.stringify(answerStatus === 200 ? { status: 'answered' } : { error: 'no' }), {
-          status: answerStatus,
+      const json = (value: unknown, status = 200) =>
+        new Response(status === 204 ? null : JSON.stringify(value), {
+          status,
           headers: { 'content-type': 'application/json' },
         });
-      }
-      return new Response(JSON.stringify({ error: 'unexpected' }), { status: 500 });
+      if (url.endsWith('/answer'))
+        return json(answerStatus === 200 ? { status: 'answered' } : { error: 'no' }, answerStatus);
+      if (url.endsWith('/review-drafts') && method === 'GET') return json({ drafts: serverDrafts });
+      if (url.includes('/review-drafts/') && method === 'PUT') return json(null, 204);
+      return json({ error: 'unexpected' }, 500);
     }),
   );
 });
@@ -84,9 +104,17 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   resetReviewDrafts();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+function vote(name: 'Like' | 'Dislike') {
+  fireEvent.click(screen.getByRole('button', { name }));
+  // A dislike opens its reason sheet; these votes skip it.
+  const skip = screen.queryByRole('button', { name: 'Skip' });
+  if (skip !== null) fireEvent.click(skip);
+}
 
 describe('ReviewDeck', () => {
   it('shows one card at a time and moves on when the creator likes it', () => {
@@ -102,30 +130,113 @@ describe('ReviewDeck', () => {
     expect(screen.getByText('2 of 3')).toBeVisible();
   });
 
-  it('opens a reason note on a dislike and keeps the words in the answer', async () => {
+  // Kevin (#631): no Send. The three votes are the only controls, undo first, then thumbs down, then thumbs up.
+  it('offers undo, thumbs down and thumbs up, in that order, and nothing else', () => {
     renderDeck();
 
+    const deck = screen.getByRole('region', { name: 'Review Pick the voices' });
+    expect(
+      within(deck)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Undo the last swipe', 'Dislike', 'Like']);
+  });
+
+  // The deck answers the Command itself once every card has a vote, with the whole map, and marks it sent.
+  it('answers the Command once every card has a vote, and not before', async () => {
+    const { onAnswered } = renderDeck();
+
+    vote('Like');
+    vote('Dislike');
+    expect(answers()).toEqual([]);
+    vote('Like');
+
+    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
+    expect(answers()).toEqual([
+      {
+        url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
+        method: 'POST',
+        body: { option_id: 'v1', review: { likes: ['v1', 'v3'], dislikes: [{ option_id: 'v2' }] } },
+      },
+    ]);
+    // The rows and the arrows read the sent mark from the drafts, so the question shows as sent everywhere.
+    expect(renderHook(() => useIsSent(deckCommand())).result.current).toBe(true);
+  });
+
+  it('waits for a dislike’s reason before it answers, and carries the words', async () => {
+    renderDeck();
+
+    vote('Like');
+    vote('Like');
     fireEvent.click(screen.getByRole('button', { name: 'Dislike' }));
-    const reason = await screen.findByRole('textbox', { name: 'Reason for disliking Voice one' });
+    const reason = await screen.findByRole('textbox', { name: 'Reason for disliking Voice three' });
+    expect(answers()).toEqual([]);
     fireEvent.change(reason, { target: { value: 'too robotic' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add the reason' }));
 
-    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Choose Voice two' }));
-
     await waitFor(() =>
-      expect(calls).toContainEqual({
-        url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
-        method: 'POST',
-        body: {
-          option_id: 'v2',
-          review: { likes: ['v2', 'v3'], dislikes: [{ option_id: 'v1', reason: 'too robotic' }] },
-        },
+      expect(answers()[0]?.body).toEqual({
+        option_id: 'v1',
+        review: { likes: ['v1', 'v2'], dislikes: [{ option_id: 'v3', reason: 'too robotic' }] },
       }),
     );
+  });
+
+  // A Command no job owns answers through the game's own route.
+  it('answers a Command no job owns through the game’s route', async () => {
+    renderDeck(characterCommand());
+
+    vote('Like');
+    vote('Like');
+
+    await waitFor(() =>
+      expect(answers()).toEqual([
+        {
+          url: '/api/v1/games/g_1/commands/d_blobs/answer',
+          method: 'POST',
+          body: { option_id: 'pip', version: 1, review: { likes: ['pip', 'mo'], dislikes: [] } },
+        },
+      ]),
+    );
+  });
+
+  // Each vote is saved on the server as it is cast, so leaving midway, a reload or another device keeps it.
+  it('saves each vote as a draft on the server', async () => {
+    renderDeck();
+
+    vote('Like');
+    await waitFor(() => expect(draftSaves()).toHaveLength(1));
+    vote('Dislike');
+
+    await waitFor(() => expect(draftSaves()).toHaveLength(2));
+    expect(draftSaves().map(({ url }) => url)).toEqual([
+      '/api/v1/games/g_1/review-drafts/cp_1%3A3',
+      '/api/v1/games/g_1/review-drafts/cp_1%3A3',
+    ]);
+    expect(draftSaves().at(-1)!.body).toEqual({
+      deck: {
+        cards: [
+          { option_id: 'v1', verdict: 'like' },
+          { option_id: 'v2', verdict: 'dislike' },
+        ],
+      },
+    });
+  });
+
+  it('picks up the votes saved on the server', async () => {
+    serverDrafts = [
+      {
+        key: 'cp_1:3',
+        deck: { cards: [{ option_id: 'v1', verdict: 'like' }] },
+        updated_at: '2026-11-08T10:00:00.000Z',
+      },
+    ];
+    renderDeck();
+
+    expect(await screen.findByText('2 of 3')).toBeVisible();
+    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
+    // What came from the server is not sent back to it.
+    expect(draftSaves()).toEqual([]);
   });
 
   // Few words on a card: its letter shows, and the option's label names the sample for assistive tech.
@@ -139,52 +250,11 @@ describe('ReviewDeck', () => {
     expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
   });
 
-  // Send is always on: a creator who has heard enough sends a half-judged deck, and the answer carries what was judged.
-  it('sends a half-judged deck from the card view', async () => {
-    const { onAnswered } = renderDeck();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    const send = screen.getByRole('button', { name: 'Send the review' });
-    expect(send).toBeEnabled();
-    fireEvent.click(send);
-
-    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
-    expect(calls).toContainEqual({
-      url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
-      method: 'POST',
-      body: { option_id: 'v1', review: { likes: ['v1'], dislikes: [] } },
-    });
-    // The rows and the arrows read the sent mark from the drafts, so the question shows as sent everywhere.
-    expect(renderHook(() => useIsSent(deckCommand())).result.current).toBe(true);
-  });
-
-  // A one-pick Command answers with the card the creator chose. With two likes and no choice, Send must not guess the
-  // first like: it opens the ending grid, and tapping a like there chooses and sends it.
-  it('asks a one-pick deck with several likes to choose before it sends', async () => {
-    const { onAnswered } = renderDeck();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send the review' }));
-
-    expect(calls).toEqual([]);
-    expect(screen.queryByRole('button', { name: 'Send the review' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Voice two' }));
-
-    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
-    expect(calls).toContainEqual({
-      url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
-      method: 'POST',
-      body: { option_id: 'v2', review: { likes: ['v1', 'v2'], dislikes: [] } },
-    });
-  });
-
-  // Moving to another question unmounts the deck; coming back must find the same votes, not a fresh deck, or the
-  // creator loses work by looking at the next question.
-  it('keeps the answer as a draft when the deck closes and reopens', () => {
+  // Moving to another question unmounts the deck; coming back must find the same votes, not a fresh deck.
+  it('keeps the votes when the deck closes and reopens', () => {
     const first = renderDeck();
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    vote('Like');
+    vote('Like');
     first.unmount();
 
     renderDeck();
@@ -195,17 +265,17 @@ describe('ReviewDeck', () => {
   // A Command reopened at a new version is a new question: an old draft never answers it.
   it('starts a fresh draft for a new version of the Command', () => {
     const first = renderDeck();
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    vote('Like');
     first.unmount();
 
     renderDeck(deckCommand({ version: 4 }));
     expect(screen.getByText('1 of 3')).toBeVisible();
   });
 
-  it('undoes the last swipe', () => {
+  it('undoes the last vote', () => {
     renderDeck();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    vote('Like');
     expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo the last swipe' }));
@@ -223,149 +293,102 @@ describe('ReviewDeck', () => {
     expect(screen.getByRole('textbox', { name: 'Reason for disliking Voice two' })).toBeVisible();
   });
 
-  it('judges with a swipe', () => {
+  it('judges with a swipe past the threshold and springs back short of it', () => {
     renderDeck();
 
-    const card = screen.getByLabelText('Voice one').closest('.review-deck-card')!;
-    fireEvent.pointerDown(card, { clientX: 100, pointerId: 1 });
-    fireEvent.pointerMove(card, { clientX: 180, pointerId: 1 });
-    fireEvent.pointerUp(card, { clientX: 180, pointerId: 1 });
+    const card = () => screen.getByText(/^[A-C]$/).closest('.review-deck-card')!;
+    fireEvent.pointerDown(card(), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(card(), { clientX: 120, clientY: 104, pointerId: 1 });
+    fireEvent.pointerUp(card(), { clientX: 120, clientY: 104, pointerId: 1 });
+    expect(screen.getByText('1 of 3')).toBeVisible();
 
+    fireEvent.pointerDown(card(), { clientX: 100, clientY: 100, pointerId: 2 });
+    fireEvent.pointerMove(card(), { clientX: 200, clientY: 110, pointerId: 2 });
+    fireEvent.pointerUp(card(), { clientX: 200, clientY: 110, pointerId: 2 });
     expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
   });
 
-  it('flips a card in the ending grid and sends the review', async () => {
-    renderDeck(deckCommand({ pick: 'many' }));
-
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Dislike' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Dislike Voice one' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send the review' }));
-
-    await waitFor(() =>
-      expect(calls).toContainEqual({
-        url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
-        method: 'POST',
-        body: {
-          option_id: 'v3',
-          review: { likes: ['v3'], dislikes: [{ option_id: 'v1' }, { option_id: 'v2' }] },
-        },
-      }),
-    );
-  });
-
-  it('leaves the deck in place when the answer is refused', async () => {
-    answerStatus = 409;
-    renderDeck(deckCommand({ pick: 'many' }));
-
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Send the review' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('The review did not send. Try again.');
-  });
-
-  // The creator's set-level words: one optional note that applies to every card, sent beside the per-card votes.
-  it('sends the whole-set notes beside the per-card votes', async () => {
-    renderDeck(deckCommand({ pick: 'many' }));
-
-    for (const label of ['Like', 'Like', 'Like']) fireEvent.click(screen.getByRole('button', { name: label }));
-    fireEvent.change(await screen.findByLabelText('Anything else about the set?'), {
-      target: { value: 'All too young for the Blobs.' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Send the review' }));
-
-    await waitFor(() =>
-      expect(calls).toContainEqual({
-        url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
-        method: 'POST',
-        body: {
-          option_id: 'v1',
-          review: { likes: ['v1', 'v2', 'v3'], dislikes: [], notes: 'All too young for the Blobs.' },
-        },
-      }),
-    );
-  });
-
-  it('leaves the whole-set notes out of the answer when the creator said nothing extra', async () => {
-    renderDeck(deckCommand({ pick: 'many' }));
-
-    for (const label of ['Like', 'Like', 'Like']) fireEvent.click(screen.getByRole('button', { name: label }));
-    fireEvent.change(await screen.findByLabelText('Anything else about the set?'), { target: { value: '   ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send the review' }));
-
-    await waitFor(() =>
-      expect(calls).toContainEqual({
-        url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
-        method: 'POST',
-        body: { option_id: 'v1', review: { likes: ['v1', 'v2', 'v3'], dislikes: [] } },
-      }),
-    );
-  });
-
-  // Where the app has voice support the set-level note can be spoken: the app's dictation writes into the same field.
-  it('fills the whole-set notes from a voice note', async () => {
-    const transcripts: Array<(value: { kind: 'partial' | 'final'; text: string }) => void> = [];
-    const port: DictationPort = {
-      pressStart: vi.fn(),
-      pressEnd: vi.fn(),
-      on: (event, listener) => {
-        if (event === 'transcript')
-          transcripts.push(listener as (value: { kind: 'partial' | 'final'; text: string }) => void);
-        return () => {};
-      },
-    };
-    renderDeck(deckCommand({ pick: 'many' }), vi.fn(), { dictation: port });
-
-    for (const label of ['Like', 'Like', 'Like']) fireEvent.click(screen.getByRole('button', { name: label }));
-    const mic = await screen.findByRole('button', { name: 'Hold to talk your notes for the whole set' });
-    fireEvent.pointerDown(mic, { pointerId: 1 });
-    expect(port.pressStart).toHaveBeenCalled();
-
-    act(() => {
-      for (const listener of transcripts) listener({ kind: 'final', text: 'All too young for the Blobs.' });
-    });
-    expect(screen.getByLabelText('Anything else about the set?')).toHaveValue('All too young for the Blobs.');
-
-    fireEvent.pointerUp(mic, { pointerId: 1 });
-    expect(port.pressEnd).toHaveBeenCalled();
-  });
-
-  it('shows no voice control when the app has no voice support for the Command', async () => {
-    renderDeck(deckCommand({ pick: 'many' }));
-
-    for (const label of ['Like', 'Like', 'Like']) fireEvent.click(screen.getByRole('button', { name: label }));
-
-    expect(await screen.findByLabelText('Anything else about the set?')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Hold to talk your notes for the whole set' })).not.toBeInTheDocument();
-  });
-
-  it('offers a replay control on an audio card', () => {
+  // With motion on, a voted card flies off its side first and is judged once it has gone.
+  it('flies a voted card off before judging it', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
     renderDeck();
 
-    expect(screen.getByRole('button', { name: 'Replay Voice one' })).toBeVisible();
-    expect(document.querySelector('audio')).toHaveAttribute('src', 'https://media.example.test/v1.wav');
-    // The card says how long the sample runs, so a long take can be judged without playing all of it.
-    expect(screen.getByText('0:02')).toBeVisible();
+    const card = screen.getByText('A').closest<HTMLElement>('.review-deck-card')!;
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    expect(card.style.transform).toMatch(/^translate\(\d+px, 0px\) rotate\(27deg\)$/);
+    expect(screen.getByText('1 of 3')).toBeVisible();
+
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.getByText('2 of 3')).toBeVisible();
   });
 
-  it('plays an audio card on a tap as well as on its replay control', () => {
+  it('shows the failure when the answer is refused, and tries again once a vote is cast again', async () => {
+    answerStatus = 502;
+    renderDeck();
+
+    vote('Like');
+    vote('Like');
+    vote('Like');
+    expect(await screen.findByRole('alert')).toHaveTextContent('The review did not send.');
+    expect(answers()).toHaveLength(1);
+
+    answerStatus = 200;
+    fireEvent.click(screen.getByRole('button', { name: 'Undo the last swipe' }));
+    vote('Like');
+
+    await waitFor(() => expect(answers()).toHaveLength(2));
+  });
+
+  it('plays an audio card when it appears and again on a tap, and says how long it runs', () => {
+    const played = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     renderDeck();
 
     const audio = document.querySelector('audio')!;
-    const played = vi.spyOn(audio, 'play');
-    played.mockResolvedValue(undefined);
+    expect(audio).toHaveAttribute('src', 'https://media.example.test/v1.wav');
+    expect(played).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('0:02')).toBeVisible();
 
     const card = screen.getByLabelText('Voice one').closest('.review-deck-card')!;
     fireEvent.pointerDown(card, { clientX: 40, clientY: 40, pointerId: 1 });
     fireEvent.pointerUp(card, { clientX: 42, clientY: 41, pointerId: 1 });
 
-    expect(played).toHaveBeenCalled();
+    expect(played).toHaveBeenCalledTimes(2);
     // A tap on an audio card plays it; it never opens the full-screen viewer a still opens.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  // A phone only lets sound start from a gesture, so the next card's voice starts inside the vote itself.
+  it('starts the next card’s voice inside the vote', () => {
+    const played = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    renderDeck();
+    const audio = document.querySelector('audio')!;
+    let srcAtPlay: string | null = null;
+    played.mockImplementation(() => {
+      srcAtPlay = audio.getAttribute('src');
+      return Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+
+    expect(srcAtPlay).toBe('https://media.example.test/v2.wav');
+  });
+
+  // #631: the Blobs voices deck showed portraits and played nothing. A character card plays its voice and shows its
+  // portrait, and a tap replays the voice instead of opening the portrait.
+  it('plays a character card’s voice beside its portrait', () => {
+    const played = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    renderDeck(characterCommand());
+
+    expect(screen.getByAltText('pip voice')).toHaveAttribute('src', 'https://media.example.test/pip.png');
+    expect(document.querySelector('audio')).toHaveAttribute('src', 'https://media.example.test/pip.mp3');
+    expect(screen.getByText('0:03')).toBeVisible();
+
+    const card = screen.getByAltText('pip voice').closest('.review-deck-card')!;
+    fireEvent.pointerDown(card, { clientX: 40, clientY: 40, pointerId: 1 });
+    fireEvent.pointerUp(card, { clientX: 41, clientY: 41, pointerId: 1 });
+
+    expect(played).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -373,10 +396,10 @@ describe('ReviewDeck', () => {
     renderDeck(imageCommand());
 
     const still = screen.getByAltText('Mock one');
-    // The box takes the sample's own shape so nothing is cropped; the stylesheet contains the image inside it.
-    expect(still.style.aspectRatio).toBe('320 / 300');
+    // The card takes the sample's own shape so nothing is cropped; the stylesheet contains the image inside it.
+    const card = still.closest<HTMLElement>('.review-deck-card')!;
+    expect(card.style.getPropertyValue('--ar')).toBe(String(320 / 300));
 
-    const card = still.closest('.review-deck-card')!;
     fireEvent.pointerDown(card, { clientX: 40, clientY: 40, pointerId: 1 });
     fireEvent.pointerUp(card, { clientX: 42, clientY: 41, pointerId: 1 });
 
@@ -394,45 +417,11 @@ describe('ReviewDeck', () => {
 
     const card = screen.getByAltText('Mock one').closest('.review-deck-card')!;
     fireEvent.pointerDown(card, { clientX: 40, clientY: 40, pointerId: 1 });
-    fireEvent.pointerMove(card, { clientX: 120, clientY: 42, pointerId: 1 });
-    fireEvent.pointerUp(card, { clientX: 120, clientY: 42, pointerId: 1 });
+    fireEvent.pointerMove(card, { clientX: 140, clientY: 42, pointerId: 1 });
+    fireEvent.pointerUp(card, { clientX: 140, clientY: 42, pointerId: 1 });
 
     expect(screen.getByText('2 of 3')).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('shows whole thumbnails in the ending grid that open the same full-screen view', () => {
-    renderDeck(imageCommand({ pick: 'many' }));
-
-    for (const label of ['Like', 'Like', 'Like']) {
-      fireEvent.click(screen.getByRole('button', { name: label }));
-    }
-
-    const likes = screen.getByRole('list', { name: 'Likes' });
-    expect(likes.querySelectorAll('img')).toHaveLength(3);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open Mock two full screen' }));
-    expect(screen.getByRole('dialog', { name: 'Mock two' })).toBeVisible();
-  });
-
-  // An aiur Command's clip may come with no poster (#611): its grid thumbnail is the clip itself, never an image tag
-  // pointing at an mp4, which draws as a broken picture.
-  it('shows a poster-less clip in the ending grid as a clip', () => {
-    const command = imageCommand({ pick: 'many' });
-    command.options[0] = {
-      id: 'm1',
-      label: 'Mock one',
-      media: { url: 'https://media.example.test/m1.mp4', width: 320, height: 300, duration_ms: 1000, kind: 'video' },
-    };
-    renderDeck(command);
-
-    for (const label of ['Like', 'Like', 'Like']) {
-      fireEvent.click(screen.getByRole('button', { name: label }));
-    }
-
-    const likes = screen.getByRole('list', { name: 'Likes' });
-    expect(likes.querySelector('video')).toHaveAttribute('src', 'https://media.example.test/m1.mp4');
-    expect(likes.querySelectorAll('img')).toHaveLength(2);
   });
 });
 

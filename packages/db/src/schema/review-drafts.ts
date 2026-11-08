@@ -14,7 +14,7 @@ export const reviewDrafts = sqliteTable(
       .references(() => games.id, { onDelete: 'cascade' }),
     userId: text('user_id').notNull(),
     draftKey: text('draft_key').notNull(),
-    // The deck as JSON: `{ cards: [{ option_id, verdict, reason? }], notes, picked }`.
+    // The deck as JSON: `{ cards: [{ option_id, verdict, reason? }] }`.
     deck: text('deck').notNull(),
     updatedAt: text('updated_at').notNull(),
   },

@@ -73,14 +73,12 @@ async function setup() {
   return { put, list, deps };
 }
 
-const oneVote: ReviewDraftDeck = { cards: [{ option_id: 'pip', verdict: 'like' }], notes: '', picked: null };
+const oneVote: ReviewDraftDeck = { cards: [{ option_id: 'pip', verdict: 'like' }] };
 const twoVotes: ReviewDraftDeck = {
   cards: [
     { option_id: 'pip', verdict: 'like' },
     { option_id: 'mo', verdict: 'dislike', reason: 'Too squeaky' },
   ],
-  notes: '',
-  picked: null,
 };
 
 describe('review deck drafts', () => {
@@ -112,7 +110,7 @@ describe('review deck drafts', () => {
     const { put, list } = await setup();
 
     expect(
-      (await put(ids.owner, { cards: [{ option_id: 'pip', verdict: 'maybe' }], notes: '', picked: null })).status,
+      (await put(ids.owner, { cards: [{ option_id: 'pip', verdict: 'maybe' }] })).status,
     ).toBe(400);
     expect((await put(ids.owner, oneVote, 'not a key')).status).toBe(400);
 

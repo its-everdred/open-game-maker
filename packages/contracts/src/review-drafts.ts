@@ -20,8 +20,6 @@ export const ReviewDraftDeck = z
           .strict(),
       )
       .max(MAX_REVIEW_CARDS),
-    notes: z.string().max(2000),
-    picked: OptionId.nullable(),
   })
   .strict();
 

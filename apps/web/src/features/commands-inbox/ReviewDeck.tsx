@@ -1,274 +1,211 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { GameCommand, VoiceTarget } from '@ogm/contracts';
+import type { GameCommand } from '@ogm/contracts';
 
 import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
 import { answerCommand } from './commands';
-import { markSent, useDeckDraft } from './drafts';
+import { markSent, saveDraft, useDeckDraft, useServerDrafts } from './drafts';
 import { answerOf, clipLength, deckCards, deckFinished, letterOf, mediaKindOf, reviewOf, withoutLinks } from './review';
 import { PlayableCard } from './playable';
-import { VoiceNote, type DictationPort } from './voice-note';
 import './review-deck.css';
 import './review-glass.css';
 
 // The review deck (A3): a Command whose options carry media is judged one card at a time. Swiping right or tapping
 // thumbs up likes the card, left or thumbs down dislikes it, and arrows do the same from the keyboard. A dislike opens
-// a short reason note in the same tap. When the last card is judged the deck shows a compact grid of likes then
-// dislikes; each card flips, and a Command that asks for one pick turns the likes into the shortlist to choose from.
-// The answer goes back through the job's checkpoint route with the whole map, so aiur and the worker see it.
-const SWIPE_DISTANCE = 56;
+// a short reason note in the same tap. Each vote is saved on the server as it is cast, and once every card has one the
+// deck answers the Command with the whole map (#631): there is no Send. The answer goes back through the job's
+// checkpoint route, or the game's own route for a Command no job owns, so aiur and the worker see it.
+
+type Card = GameCommand['options'][number];
+type Verdict = 'like' | 'dislike';
 
 export function ReviewDeck({
   gameId,
   command,
-  voiceTarget,
-  dictation,
-  nav,
   onAnswered,
 }: {
   gameId: string;
   command: GameCommand;
-  // The Command's job gives the deck the app's voice support for the whole-set notes; without it the notes are typed.
-  voiceTarget?: VoiceTarget;
-  dictation?: DictationPort;
-  // The review screen's previous and next arrows, which flank Send so the title keeps the header to itself.
-  nav?: { prev: ReactNode; next: ReactNode };
   onAnswered?(): void;
 }) {
+  useServerDrafts(gameId);
   const [state, dispatch] = useDeckDraft(command);
   const [error, setError] = useState<string>();
-  const [drag, setDrag] = useState(0);
-  const notesId = useId();
-  // The card whose still, GIF or clip is open full screen. The operator asked for every sample to show whole, so a tap
-  // on the media opens it at the phone's full size over the deck.
+  // The card on its way off screen after a vote; it is judged once it has gone.
+  const [leaving, setLeaving] = useState<Verdict | null>(null);
+  // The card whose still, GIF or clip is open full screen.
   const [fullscreen, setFullscreen] = useState<string | null>(null);
+  const sound = useDeckSound();
+  const { play, stop } = sound;
 
   const cards = deckCards(command);
   const card = cards[state.cards.length];
-  const onePick = command.pick !== 'many';
-  // A one-pick deck with several likes and no pick has no answer yet: Send then opens the ending grid, where tapping a
-  // like chooses it and sends. Guessing the first like would answer with a card the creator never chose.
-  const mustChoose =
-    onePick && state.picked === null && state.cards.filter(({ verdict }) => verdict === 'like').length > 1;
-  const [choosing, setChoosing] = useState(false);
-  const finished = deckFinished(command, state) || choosing;
+  const next = cards[state.cards.length + 1];
+  const complete = deckFinished(command, state) && state.reason === null;
   const fullscreenCard = fullscreen === null ? undefined : cards.find(({ id }) => id === fullscreen);
-  const fullscreenView =
-    fullscreenCard === undefined ? null : <MediaFullscreen card={fullscreenCard} onClose={() => setFullscreen(null)} />;
 
-  const judge = useCallback(
-    (verdict: 'like' | 'dislike') => {
-      if (card === undefined) return;
-      dispatch({ type: 'judge', optionId: card.id, verdict });
-    },
-    [card, dispatch],
-  );
+  // Each vote, reason and undo is saved as it happens, so leaving midway keeps the votes.
+  useEffect(() => {
+    saveDraft(gameId, command, state);
+  }, [command, gameId, state]);
 
-  const answer = useCallback(
-    async (optionId: string) => {
-      dispatch({ type: 'sending' });
-      setError(undefined);
-      try {
-        await answerCommand(gameId, command, optionId, reviewOf(state));
+  // The card's voice starts when it appears. A browser that wants a gesture first refuses this play; the vote that
+  // brought the card in has already started it (see `vote`), and a tap on the card plays it again.
+  const cardSound = card === undefined ? undefined : soundOf(card);
+  useEffect(() => {
+    if (cardSound === undefined) stop();
+    else play(cardSound);
+  }, [cardSound, play, stop]);
+
+  // Once every card has a vote the Command is answered with the whole map. A failed answer is not retried on its own;
+  // undoing a vote and casting it again (or reloading) tries again.
+  const tried = useRef<string | null>(null);
+  useEffect(() => {
+    if (!complete || state.sending) return;
+    const { option_id, review } = answerOf(command, state);
+    const signature = JSON.stringify({ option_id, review });
+    if (tried.current === signature) return;
+    tried.current = signature;
+    dispatch({ type: 'sending' });
+    setError(undefined);
+    answerCommand(gameId, command, option_id, review).then(
+      () => {
         dispatch({ type: 'sent' });
         markSent(command);
         onAnswered?.();
-      } catch {
+      },
+      () => {
         // The Command stays in the inbox: the route's status (409 for a Command another writer answered) is final.
         dispatch({ type: 'sent' });
-        setError('The review did not send. Try again.');
-      }
-    },
-    [command, dispatch, gameId, onAnswered, state],
-  );
-  // Send is always on: a half-judged deck sends what it has, the same answer the ending grid would send. On the ending
-  // grid of a one-pick deck that still needs its choice, the likes' chips are the send.
-  const sendButton = (
-    <div className="review-deck-send-row">
-      {nav?.prev}
-      {finished && mustChoose ? null : (
-        <button
-          aria-label="Send the review"
-          className="review-deck-send"
-          disabled={state.sending}
-          onClick={() => (mustChoose ? setChoosing(true) : void answer(answerOf(command, state).option_id))}
-          type="button"
-        >
-          <Icon name="send" />
-        </button>
-      )}
-      {nav?.next}
-    </div>
-  );
-
-  if (state.reason !== null) {
-    const target = cards.find(({ id }) => id === state.reason!.optionId);
-    return (
-      <ReasonSheet
-        label={withoutLinks(target?.label ?? '')}
-        text={state.reason.text}
-        onChange={(text) => dispatch({ type: 'set-reason', text })}
-        onClose={() => dispatch({ type: 'close-reason' })}
-      />
+        setError('The review did not send. Undo a vote and cast it again to retry.');
+      },
     );
-  }
+  }, [command, complete, dispatch, gameId, onAnswered, state]);
 
-  if (!finished && card !== undefined) {
-    return (
-      <>
-        <section
-          aria-label={`Review ${command.title}`}
-          className="review-deck"
-          tabIndex={0}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowRight') {
-              event.preventDefault();
-              judge('like');
-            }
-            if (event.key === 'ArrowLeft') {
-              event.preventDefault();
-              judge('dislike');
-            }
-          }}
-        >
-          <DeckCard
-            gameId={gameId}
-            cards={cards}
-            card={card}
-            letter={letterOf(cards, card.id)}
-            drag={drag}
-            onDrag={setDrag}
-            onDragEnd={(dx) => {
-              setDrag(0);
-              if (dx >= SWIPE_DISTANCE) judge('like');
-              else if (dx <= -SWIPE_DISTANCE) judge('dislike');
-            }}
-            onTap={() => setFullscreen(card.id)}
-          />
+  // A vote from a button, a key or a swipe. The next card's voice starts here, inside the gesture, because a phone
+  // browser only lets sound start from one; the card then flies off and is judged once it has gone.
+  const vote = useCallback(
+    (verdict: Verdict) => {
+      if (card === undefined || leaving !== null || state.sending) return;
+      const nextSound = next === undefined ? undefined : soundOf(next);
+      if (nextSound === undefined) stop();
+      else play(nextSound);
+      if (prefersReducedMotion()) dispatch({ type: 'judge', optionId: card.id, verdict });
+      else setLeaving(verdict);
+    },
+    [card, dispatch, leaving, next, play, state.sending, stop],
+  );
+
+  const gone = useCallback(() => {
+    if (card === undefined || leaving === null) return;
+    setLeaving(null);
+    dispatch({ type: 'judge', optionId: card.id, verdict: leaving });
+  }, [card, dispatch, leaving]);
+
+  const reasonCard = state.reason === null ? undefined : cards.find(({ id }) => id === state.reason!.optionId);
+  return (
+    <>
+      <section
+        aria-label={`Review ${command.title}`}
+        className="review-deck"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            vote('like');
+          }
+          if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            vote('dislike');
+          }
+          if ((event.key === 'Enter' || event.key === ' ') && cardSound !== undefined) {
+            event.preventDefault();
+            sound.replay(cardSound);
+          }
+        }}
+      >
+        {sound.element}
+        <div className="review-deck-stage">
+          {card === undefined ? null : (
+            <DeckCard
+              key={card.id}
+              gameId={gameId}
+              cards={cards}
+              card={card}
+              letter={letterOf(cards, card.id)}
+              playing={sound.playing && cardSound !== undefined && sound.src === cardSound}
+              leaving={leaving}
+              onRelease={vote}
+              onGone={gone}
+              onTap={() => {
+                if (cardSound !== undefined) sound.replay(cardSound);
+                else setFullscreen(card.id);
+              }}
+            />
+          )}
+        </div>
+        <div className="review-deck-side">
           <div className="review-deck-actions">
-            <button
-              aria-label="Dislike"
-              className="review-deck-thumb tap-secondary"
-              disabled={state.sending}
-              onClick={() => judge('dislike')}
-              type="button"
-            >
-              <Icon name="thumbsDown" />
-            </button>
             <button
               aria-label="Undo the last swipe"
               className="review-deck-undo tap-secondary"
-              disabled={state.cards.length === 0 || state.sending}
-              onClick={() => dispatch({ type: 'undo' })}
+              disabled={state.cards.length === 0 || state.sending || leaving !== null}
+              onClick={() => {
+                const back = state.cards.at(-1);
+                const backCard = back === undefined ? undefined : cards.find(({ id }) => id === back.optionId);
+                const backSound = backCard === undefined ? undefined : soundOf(backCard);
+                if (backSound !== undefined) sound.play(backSound);
+                setError(undefined);
+                tried.current = null;
+                dispatch({ type: 'undo' });
+              }}
               type="button"
             >
               <Icon name="rollback" />
             </button>
             <button
+              aria-label="Dislike"
+              className="review-deck-thumb tap-secondary"
+              disabled={card === undefined || state.sending}
+              onClick={() => vote('dislike')}
+              type="button"
+            >
+              <Icon name="thumbsDown" />
+            </button>
+            <button
               aria-label="Like"
               className="review-deck-thumb tap-secondary"
-              disabled={state.sending}
-              onClick={() => judge('like')}
+              disabled={card === undefined || state.sending}
+              onClick={() => vote('like')}
               type="button"
             >
               <Icon name="thumbsUp" />
             </button>
           </div>
           <p aria-live="polite" className="review-deck-progress">
-            {state.cards.length + 1} of {cards.length}
+            {Math.min(state.cards.length + 1, cards.length)} of {cards.length}
           </p>
-          {sendButton}
-          {error === undefined ? null : (
-            <p className="review-deck-error" role="alert">
-              {error}
-            </p>
-          )}
-        </section>
-        {fullscreenView}
-      </>
-    );
-  }
-
-  const likes = state.cards.filter(({ verdict }) => verdict === 'like');
-  const dislikes = state.cards.filter(({ verdict }) => verdict === 'dislike');
-  return (
-    <>
-      <section aria-label={`Review ${command.title}`} className="review-deck review-deck-ended">
-        <h3 className="review-deck-heading">Likes</h3>
-        <ul aria-label="Likes" className="review-deck-grid">
-          {likes.length === 0 ? <li className="review-deck-empty">Nothing liked yet</li> : null}
-          {likes.map(({ optionId }) => (
-            <li key={optionId}>
-              <MediaThumb option={optionOf(cards, optionId)} onOpen={() => setFullscreen(optionId)} />
-              <button
-                aria-label={onePick ? `Choose ${labelOf(cards, optionId)}` : `Dislike ${labelOf(cards, optionId)}`}
-                className="review-deck-chip"
-                disabled={state.sending}
-                onClick={() => (onePick ? void answer(optionId) : dispatch({ type: 'flip', optionId }))}
-                type="button"
-              >
-                <span className="review-deck-chip-label">{letterOf(cards, optionId)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <h3 className="review-deck-heading">Dislikes</h3>
-        <ul aria-label="Dislikes" className="review-deck-grid">
-          {dislikes.length === 0 ? <li className="review-deck-empty">Nothing disliked yet</li> : null}
-          {dislikes.map(({ optionId, reason }) => (
-            <li key={optionId}>
-              <MediaThumb option={optionOf(cards, optionId)} onOpen={() => setFullscreen(optionId)} />
-              <button
-                aria-label={`Like ${labelOf(cards, optionId)}`}
-                className="review-deck-chip review-deck-chip-dislike"
-                disabled={state.sending}
-                onClick={() => dispatch({ type: 'flip', optionId })}
-                type="button"
-              >
-                <span className="review-deck-chip-label">{letterOf(cards, optionId)}</span>
-              </button>
-              <button
-                aria-label={`${reason === undefined ? 'Add' : 'Edit'} a reason for ${labelOf(cards, optionId)}`}
-                className="review-deck-chip-reason tap-secondary"
-                disabled={state.sending}
-                onClick={() => dispatch({ type: 'open-reason', optionId })}
-                type="button"
-              >
-                {reason === undefined ? 'Reason' : reason}
-              </button>
-            </li>
-          ))}
-        </ul>
-        {/* The creator's set-level words: one optional note that applies to every card, typed or spoken where the app
-            has voice support. It rides in the answer beside the per-card votes. */}
-        <div className="review-deck-notes">
-          <label className="review-deck-notes-label" htmlFor={notesId}>
-            Anything else about the set?
-          </label>
-          <textarea
-            id={notesId}
-            disabled={state.sending}
-            maxLength={2000}
-            onChange={(event) => dispatch({ type: 'set-notes', text: event.target.value })}
-            placeholder="Optional. This applies to all the cards."
-            rows={3}
-            value={state.notes}
-          />
-          <VoiceNote
-            target={voiceTarget}
-            dictation={dictation}
-            onText={(text) => dispatch({ type: 'set-notes', text })}
-          />
         </div>
-        {sendButton}
         {error === undefined ? null : (
           <p className="review-deck-error" role="alert">
             {error}
           </p>
         )}
       </section>
-      {fullscreenView}
+      {fullscreenCard === undefined ? null : (
+        <MediaFullscreen card={fullscreenCard} onClose={() => setFullscreen(null)} />
+      )}
+      {/* The reason sheet sits over the deck rather than replacing it, so the next card's voice keeps playing. */}
+      {state.reason === null ? null : (
+        <ReasonSheet
+          label={withoutLinks(reasonCard?.label ?? '')}
+          text={state.reason.text}
+          onChange={(text) => dispatch({ type: 'set-reason', text })}
+          onClose={() => dispatch({ type: 'close-reason' })}
+        />
+      )}
     </>
   );
 }
@@ -280,81 +217,203 @@ export function isReviewDeck(command: GameCommand): boolean {
   return command.options.every(({ media, playable }) => media !== undefined || playable !== undefined);
 }
 
-function labelOf(cards: GameCommand['options'], optionId: string): string {
-  return withoutLinks(optionOf(cards, optionId)?.label ?? optionId);
+// The sound a card plays: a character card's voice beside its portrait, or the card's own sample when it is a sound.
+function soundOf(card: Card): string | undefined {
+  if (card.playable !== undefined) return undefined;
+  if (card.audio !== undefined) return card.audio.url;
+  return card.media !== undefined && mediaKindOf(card.media) === 'audio' ? card.media.url : undefined;
 }
 
-function optionOf(cards: GameCommand['options'], optionId: string): GameCommand['options'][number] | undefined {
-  return cards.find(({ id }) => id === optionId);
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-// A swipe is a gesture; a tap is not. The card only opens the full-screen view when the pointer travelled less than a
-// few pixels, so judging a card by dragging never opens a viewer and a tap never judges the card.
-const TAP_SLOP = 4;
+// One audio element for the whole deck. A phone browser lets an element play from code once a gesture has played it,
+// so keeping the same element from card to card lets each voice start as its card appears. jsdom has no media engine
+// and a browser may refuse a play; either leaves the card's tap as the way in.
+function useDeckSound() {
+  const ref = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [src, setSrc] = useState<string>();
+  const load = useCallback((url: string): HTMLAudioElement | null => {
+    const element = ref.current;
+    if (element !== null && element.getAttribute('src') !== url) {
+      element.setAttribute('src', url);
+      setSrc(url);
+    }
+    return element;
+  }, []);
+  // Starts the sound unless it is already playing.
+  const play = useCallback(
+    (url: string) => {
+      const element = load(url);
+      if (element !== null && element.paused) start(element);
+    },
+    [load],
+  );
+  // Plays the sound again from its start.
+  const replay = useCallback(
+    (url: string) => {
+      const element = load(url);
+      if (element === null) return;
+      element.currentTime = 0;
+      start(element);
+    },
+    [load],
+  );
+  const stop = useCallback(() => ref.current?.pause(), []);
+  const element = (
+    <audio
+      onEnded={() => setPlaying(false)}
+      onPause={() => setPlaying(false)}
+      onPlay={() => setPlaying(true)}
+      preload="auto"
+      ref={ref}
+    />
+  );
+  return { element, playing, src, play, replay, stop };
+}
+
+function start(element: HTMLAudioElement): void {
+  try {
+    void element.play()?.catch(() => undefined);
+  } catch {
+    // jsdom has no media engine.
+  }
+}
+
+// A swipe is a gesture; a tap is not. The card only counts a tap when the pointer travelled less than a few pixels, so
+// judging a card by dragging never plays or opens it and a tap never judges it.
+const TAP_SLOP = 6;
+// Past this share of the card's width, or flicked faster than this, a released card flies off; otherwise it springs
+// back. The tilt follows the drag: a few degrees per hundred pixels, up to a limit.
+const SWIPE_SHARE = 0.28;
+const FLICK_SPEED = 0.6;
+const TILT_PER_PX = 0.06;
+const MAX_TILT = 18;
+const FLY_MS = 240;
 
 function DeckCard({
   gameId,
   cards,
   card,
   letter,
-  drag,
-  onDrag,
-  onDragEnd,
+  playing,
+  leaving,
+  onRelease,
+  onGone,
   onTap,
 }: {
   gameId: string;
   cards: GameCommand['options'];
-  card: GameCommand['options'][number];
+  card: Card;
   letter: string;
-  drag: number;
-  onDrag(dx: number): void;
-  onDragEnd(dx: number): void;
+  playing: boolean;
+  leaving: Verdict | null;
+  onRelease(verdict: Verdict): void;
+  onGone(): void;
   onTap(): void;
 }) {
-  const start = useRef<{ x: number; y: number } | undefined>(undefined);
-  const audio = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
+  const element = useRef<HTMLDivElement>(null);
+  const likeStamp = useRef<HTMLSpanElement>(null);
+  const dislikeStamp = useRef<HTMLSpanElement>(null);
+  const drag = useRef<{ id: number; x: number; y: number; t: number; dx: number; dy: number; moved: boolean }>(
+    undefined,
+  );
+  const frame = useRef(0);
   const media = card.media;
   const kind = media === undefined ? 'image' : mediaKindOf(media);
+  const sound = card.audio ?? (kind === 'audio' ? media : undefined);
 
-  // An audio card starts as soon as it appears, and a tap on the card hears it again. Browsers refuse a programmatic
-  // play without a gesture and jsdom has no media engine, so a refused play leaves the replay button as the way in.
+  // The drag writes the card's transform directly, once per frame, so following the finger never waits on a render.
+  const place = (dx: number, dy: number, animate: boolean) => {
+    const node = element.current;
+    if (node === null) return;
+    const tilt = Math.max(-MAX_TILT, Math.min(MAX_TILT, dx * TILT_PER_PX));
+    node.style.transition = animate ? '' : 'none';
+    node.style.transform = dx === 0 && dy === 0 ? '' : `translate(${dx}px, ${dy}px) rotate(${tilt}deg)`;
+    const reach = Math.min(1, Math.abs(dx) / threshold(node));
+    if (likeStamp.current !== null) likeStamp.current.style.opacity = dx > 0 ? String(reach) : '0';
+    if (dislikeStamp.current !== null) dislikeStamp.current.style.opacity = dx < 0 ? String(reach) : '0';
+  };
+
+  // A vote from a button, a key or a released swipe sends the card off the side it was voted to, stamped, and the deck
+  // judges it once it has gone.
   useEffect(() => {
-    if (kind !== 'audio') return;
-    setPlaying(false);
-    play(audio.current, setPlaying);
-  }, [kind, media?.url]);
+    const node = element.current;
+    if (leaving === null || node === null) return;
+    const away = (leaving === 'like' ? 1 : -1) * (window.innerWidth + node.offsetWidth);
+    const dy = drag.current?.dy ?? 0;
+    node.style.transition = `transform ${FLY_MS}ms ease-in`;
+    node.style.transform = `translate(${away}px, ${dy}px) rotate(${(leaving === 'like' ? 1 : -1) * MAX_TILT * 1.5}deg)`;
+    const stamp = leaving === 'like' ? likeStamp.current : dislikeStamp.current;
+    if (stamp !== null) stamp.style.opacity = '1';
+    const timer = window.setTimeout(onGone, FLY_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving, onGone]);
+
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
   return (
     <div
       className="review-deck-card"
-      style={{ transform: drag === 0 ? undefined : `translateX(${drag}px)` }}
+      data-kind={card.playable !== undefined ? 'playable' : media === undefined ? 'text' : kind}
+      ref={element}
+      style={
+        media !== undefined && kind !== 'audio' && card.playable === undefined
+          ? ({ '--ar': `${media.width / media.height}` } as React.CSSProperties)
+          : undefined
+      }
       onPointerDown={(event) => {
+        if (leaving !== null) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
-        // The replay control and the label keep their own taps, and a playable slice keeps every touch for the game;
-        // only the sample itself opens the viewer.
+        // A playable slice keeps every touch for the game.
         if ((event.target as HTMLElement).closest('button, .review-deck-playable') !== null) return;
-        start.current = { x: event.clientX, y: event.clientY };
+        drag.current = {
+          id: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          t: event.timeStamp,
+          dx: 0,
+          dy: 0,
+          moved: false,
+        };
         capturePointer(event.currentTarget, event.pointerId);
       }}
       onPointerMove={(event) => {
-        if (start.current === undefined) return;
-        onDrag(event.clientX - start.current.x);
+        const current = drag.current;
+        if (current === undefined || current.id !== event.pointerId) return;
+        current.dx = event.clientX - current.x;
+        current.dy = event.clientY - current.y;
+        if (!current.moved && Math.hypot(current.dx, current.dy) < TAP_SLOP) return;
+        current.moved = true;
+        cancelAnimationFrame(frame.current);
+        frame.current = requestAnimationFrame(() => place(current.dx, current.dy, false));
       }}
       onPointerUp={(event) => {
-        if (start.current === undefined) return;
-        const dx = event.clientX - start.current.x;
-        const dy = event.clientY - start.current.y;
-        start.current = undefined;
-        onDragEnd(dx);
-        if (Math.abs(dx) >= TAP_SLOP || Math.abs(dy) >= TAP_SLOP) return;
-        // A tap plays an audio card; a still, GIF or clip opens its whole sample full screen.
-        if (kind === 'audio') play(audio.current, setPlaying);
-        else onTap();
+        const current = drag.current;
+        if (current === undefined || current.id !== event.pointerId) return;
+        cancelAnimationFrame(frame.current);
+        const dx = event.clientX - current.x;
+        current.dy = event.clientY - current.y;
+        if (!current.moved && Math.hypot(dx, current.dy) < TAP_SLOP) {
+          drag.current = undefined;
+          onTap();
+          return;
+        }
+        const speed = Math.abs(dx) / Math.max(1, event.timeStamp - current.t);
+        const node = event.currentTarget;
+        if (Math.abs(dx) >= threshold(node) || (speed >= FLICK_SPEED && Math.abs(dx) >= TAP_SLOP * 4)) {
+          onRelease(dx > 0 ? 'like' : 'dislike');
+          return;
+        }
+        drag.current = undefined;
+        place(0, 0, true);
       }}
       onPointerCancel={() => {
-        start.current = undefined;
-        onDragEnd(0);
+        cancelAnimationFrame(frame.current);
+        drag.current = undefined;
+        place(0, 0, true);
       }}
     >
       {/* A playable option is played even when it also carries a still; keyed by the card so its slice, pause and
@@ -362,7 +421,9 @@ function DeckCard({
       {card.playable !== undefined ? (
         <PlayableCard key={card.id} gameId={gameId} card={card} options={cards} />
       ) : media === undefined ? null : kind === 'audio' ? (
-        <AudioCard audio={audio} label={card.label} playing={playing} setPlaying={setPlaying} src={media.url} />
+        <div aria-label={card.label} className="review-deck-audio" role="img">
+          <Icon name={playing ? 'soundOn' : 'soundOff'} />
+        </div>
       ) : kind === 'video' ? (
         <video
           aria-label={card.label}
@@ -372,58 +433,41 @@ function DeckCard({
           poster={media.poster}
           preload="metadata"
           src={media.url}
-          style={{ aspectRatio: `${media.width} / ${media.height}` }}
         />
       ) : (
-        <img
-          alt={card.label}
-          className="review-deck-media"
-          src={media.url}
-          style={{ aspectRatio: `${media.width} / ${media.height}` }}
-        />
+        <img alt={card.label} className="review-deck-media" draggable={false} src={media.url} />
       )}
       {/* Few words on a card: its letter, with the option's own label as the media's accessible name. A card
           with no media is its words, so it shows them. */}
       <p className="review-deck-label" aria-hidden={media === undefined ? undefined : 'true'}>
         {media === undefined ? withoutLinks(card.label) : letter}
       </p>
-      {/* An audio card has no still to show, so its card says how long the sample runs beside the replay control. */}
-      {card.playable === undefined && kind === 'audio' && media?.duration_ms !== undefined ? (
-        <p className="review-deck-length">{clipLength(media.duration_ms)}</p>
-      ) : null}
+      {/* A card with a sound says how long it runs, and shows whether it is playing when a picture fills the card. */}
+      {sound === undefined || card.playable !== undefined ? null : (
+        <p className="review-deck-length">
+          {kind === 'audio' ? null : <Icon name={playing ? 'soundOn' : 'soundOff'} />}
+          {sound.duration_ms === undefined ? null : clipLength(sound.duration_ms)}
+        </p>
+      )}
+      <span aria-hidden="true" className="review-deck-stamp review-deck-stamp-like" ref={likeStamp}>
+        <Icon name="thumbsUp" />
+      </span>
+      <span aria-hidden="true" className="review-deck-stamp review-deck-stamp-dislike" ref={dislikeStamp}>
+        <Icon name="thumbsDown" />
+      </span>
     </div>
   );
 }
 
-// The ending grid shows the whole sample too: a thumbnail that opens the same full-screen view. An audio card has no
-// still to show, so its grid entry is the label chip alone. A clip with no poster shows its own first frame.
-function MediaThumb({ option, onOpen }: { option: GameCommand['options'][number] | undefined; onOpen(): void }) {
-  const media = option?.media;
-  if (option === undefined || media === undefined || mediaKindOf(media) === 'audio') return null;
-  const style = { aspectRatio: `${media.width} / ${media.height}` };
-  return (
-    <button
-      aria-label={`Open ${option.label} full screen`}
-      className="review-deck-thumb-media"
-      onClick={onOpen}
-      type="button"
-    >
-      {mediaKindOf(media) === 'video' && media.poster === undefined ? (
-        <video aria-label={option.label} muted playsInline preload="metadata" src={media.url} style={style} />
-      ) : (
-        <img alt={option.label} src={media.poster ?? media.url} style={style} />
-      )}
-    </button>
-  );
+function threshold(node: HTMLElement): number {
+  return Math.max(72, node.offsetWidth * SWIPE_SHARE);
 }
 
 // The whole sample at the phone's full size, over the studio's scrim. A clip gets controls here; a still or GIF fills
 // the width and is contained, never cropped. Escape or Close returns to the deck.
-function MediaFullscreen({ card, onClose }: { card: GameCommand['options'][number]; onClose(): void }) {
+function MediaFullscreen({ card, onClose }: { card: Card; onClose(): void }) {
   const media = card.media;
-  if (media === undefined) return null;
-  // An audio sample has no still to fill the screen with; its card's tap replays it instead of opening this viewer.
-  if (mediaKindOf(media) === 'audio') return null;
+  if (media === undefined || mediaKindOf(media) === 'audio') return null;
   return (
     <Dialog
       title={withoutLinks(card.label)}
@@ -449,62 +493,6 @@ function capturePointer(element: HTMLElement, pointerId: number): void {
     element.setPointerCapture(pointerId);
   } catch {
     // Pointer capture is optional in embedded and test browsers.
-  }
-}
-
-// An audio card plays as soon as it appears and offers one tap to hear it again; the card's length sits beside the
-// replay control so a long take can be judged without playing all of it. Browsers refuse a programmatic play without a
-// gesture and jsdom has no media engine, so a refused or missing play leaves the replay button as the way in.
-function AudioCard({
-  audio,
-  label,
-  playing,
-  setPlaying,
-  src,
-}: {
-  audio: React.RefObject<HTMLAudioElement | null>;
-  label: string;
-  playing: boolean;
-  setPlaying(playing: boolean): void;
-  src: string;
-}) {
-  return (
-    <div className="review-deck-audio">
-      <audio
-        aria-label={label}
-        onEnded={() => setPlaying(false)}
-        onPlay={() => setPlaying(true)}
-        preload="auto"
-        ref={audio}
-        src={src}
-      />
-      <button
-        aria-label={`Replay ${label}`}
-        className="review-deck-replay tap-secondary"
-        onClick={() => {
-          const element = audio.current;
-          if (element === null) return;
-          element.currentTime = 0;
-          play(element, setPlaying);
-        }}
-        type="button"
-      >
-        <Icon name={playing ? 'soundOn' : 'soundOff'} />
-      </button>
-    </div>
-  );
-}
-
-function play(element: HTMLAudioElement | null, report: (playing: boolean) => void): void {
-  if (element === null) return;
-  try {
-    const started = element.play();
-    void started?.then(
-      () => report(true),
-      () => report(false),
-    );
-  } catch {
-    report(false);
   }
 }
 

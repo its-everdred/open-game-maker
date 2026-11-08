@@ -1,7 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 
-import type { VoiceTarget } from '@ogm/contracts';
 import { gamePath, reviewPath, type GameCommand } from '@ogm/contracts/browser';
 
 import { findCommand, findCommandByNumber } from '../../features/commands-inbox/review-route';
@@ -9,12 +8,11 @@ import { withoutLinks } from '../../features/commands-inbox/review';
 import { PlayLinkMessage } from '../play/PlayScreen';
 import { playLinkDenial, usePlayLink } from '../play/api';
 import { useGameCommands } from '../../features/commands-inbox/commands';
-import { useIsSent } from '../../features/commands-inbox/drafts';
+import { useIsSent, useServerDrafts } from '../../features/commands-inbox/drafts';
 import { GlowBackdrop } from '../../features/commands-inbox/GlowBackdrop';
 import { ReviewDeck } from '../../features/commands-inbox/ReviewDeck';
 import { ReviewRows } from '../../features/commands-inbox/ReviewRows';
 import { Icon } from '../../components/Icon';
-import { useMyJobs } from '../../features/build-chat/jobs';
 import { reviewTitle } from './title';
 import './review-screen.css';
 
@@ -81,6 +79,7 @@ function CloseButton({ onClose }: { onClose(): void }) {
 function ReviewList({ gameId, slug, title }: { gameId: string; slug: string; title: string }) {
   const navigate = useNavigate();
   const { commands, isPending } = useGameCommands(gameId);
+  useServerDrafts(gameId);
   const rows = numbered(commands);
   return (
     <ReviewFrame
@@ -173,21 +172,6 @@ function ReviewScreen({
         }
       : undefined;
 
-  // The Command's job is what gives the deck the app's voice support for its whole-set notes: the same build-chat
-  // voice target the composer uses. A Command without a job in hand keeps the typed field.
-  const { jobs } = useMyJobs();
-  const voiceTarget = useMemo<VoiceTarget | undefined>(() => {
-    const job = command === undefined ? undefined : jobs.find((candidate) => candidate.id === command.job_id);
-    if (job === undefined) return undefined;
-    return {
-      kind: 'build',
-      game_id: job.gameId,
-      job_id: job.id,
-      ticket: job.aiurIssueNumber === null ? '' : String(job.aiurIssueNumber),
-      creator_id: job.creatorId,
-    };
-  }, [command, jobs]);
-
   if (sent) {
     return (
       <ReviewFrame
@@ -234,14 +218,8 @@ function ReviewScreen({
         </>
       }
     >
-      <div className="review-screen-body">
-        <ReviewDeck
-          gameId={gameId}
-          command={command}
-          voiceTarget={voiceTarget}
-          nav={nav}
-          onAnswered={() => setSent(true)}
-        />
+      <div className="review-screen-body review-screen-deck">
+        <ReviewDeck gameId={gameId} command={command} onAnswered={() => setSent(true)} />
         <details className="review-screen-question">
           <summary>{withoutLinks(command.question)}</summary>
         </details>

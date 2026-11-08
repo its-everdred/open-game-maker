@@ -4,6 +4,8 @@
   position: fixed;
   inset: 0;
   z-index: 40;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   background: var(--glow-night);
   color: var(--ink);
@@ -93,7 +95,8 @@
 }
 
 .review-screen-question {
-  margin: 16px 0 0;
+  flex: none;
+  margin: 12px 0 0;
   color: var(--muted);
   font: 700 clamp(15px, 2vw, 17px) / 1.4 var(--display);
 }
@@ -127,4 +130,46 @@
   display: flex;
   justify-content: center;
   gap: 28px;
+}
+
+/* The deck's screen fits the phone it is on (#631): the header, the card at the largest size that fits, the controls
+   and the question line, with nothing to scroll in portrait or landscape. */
+.review-screen-deck {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding-block: clamp(8px, 2.5vh, 40px) max(12px, var(--safe-b));
+}
+
+.review-screen-deck .review-deck {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.review-screen-deck .review-deck-stage {
+  flex: 1 1 auto;
+}
+
+/* A phone on its side has height to spare only for the card: the controls stand beside it. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .review-screen-deck {
+    width: calc(100% - 2 * max(16px, var(--safe-l), var(--safe-r)));
+  }
+
+  .review-screen-deck .review-deck {
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .review-screen-deck .review-deck-side {
+    align-content: center;
+  }
+
+  .review-screen-deck .review-deck-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
 }
