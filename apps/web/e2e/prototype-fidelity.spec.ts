@@ -108,6 +108,7 @@ for (const scenario of scenarios) {
 
       try {
         await page.setViewportSize(viewport);
+        await page.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
         const masks = await test.step('prepare app and prototype', () => scenario.prepare(page, reference));
         await test.step('normalize pages', () => Promise.all([normalize(page), normalize(reference)]));
         // Capture through CDP after normalization. Playwright's screenshot helper waits
