@@ -57,9 +57,10 @@ a value just below the deadzone. Run `gm run --inputs inputs.json` and inspect t
 Check that the same action produces the same mechanic across keyboard, touch, gamepad, and network sources.
 
 Then demonstrate the devices on the hosted build with two gm-qa journeys in `games/<name>/qa/journeys/`:
-`phone-touch.json` plays from title to a won or lost screen with on-screen buttons on a phone viewport, and
-`laptop-keys-pad.json` does the same with the keyboard and then a gamepad on a desktop viewport. Report only the devices
-those journeys passed on.
+`phone-touch.json` plays with the on-screen buttons on a phone viewport, and `laptop-keys.json` plays from the title to a
+round end with the keyboard alone on a desktop viewport. Blobs' pair in gm-qa's `journeys/blobs/` are the ones to copy.
+A journey cannot drive a gamepad yet, so report the gamepad as unchecked unless someone played it on a real pad. Report
+only the devices those journeys passed on.
 
 ## Reference
 

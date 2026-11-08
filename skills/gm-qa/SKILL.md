@@ -51,8 +51,9 @@ sizes. `{name}` is a value a `read` step saved; room journeys also have `{client
 `timeoutMs`: a hosted build loads its assets first. A `look` is a player-facing question about that moment ("Did the
 piece land where the buttons sent it?"), answered from its still.
 
-Blobs' three journeys (`solo-cpu`, `online-2p`, `phone-touch`) are in `journeys/blobs/` beside this skill: the
-examples to copy, and the set to keep in `games/blobs/qa/journeys/`.
+Blobs' journeys (`solo-cpu`, `online-2p`, `phone-touch`, `laptop-keys`, `hud-clear`) are in `journeys/blobs/` beside
+this skill: the examples to copy, and the set to keep in `games/blobs/qa/journeys/`. `laptop-keys` and `phone-touch`
+prove gm-input's devices and `hud-clear` proves gm-ui-hud's clear corners. No step drives a gamepad: list it unchecked.
 
 ## Before reporting
 

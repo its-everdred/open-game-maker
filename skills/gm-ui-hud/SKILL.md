@@ -62,9 +62,10 @@ declared input.
 Look at every still: no clipped text, nothing under a notch, the centre clear, and the top-right corner and lower
 corners empty. The stills show the game alone, without the host's HUD, so an empty corner is the check.
 
-On the hosted build, the gm-qa journey `games/<name>/qa/journeys/hud-clear.json` reaches title, play, won, and lost on a
-phone with the on-screen buttons showing, and asks at each step whether a button covers the HUD, the player, or a goal.
-Name the devices it passed on; never claim every device.
+On the hosted build, the gm-qa journey `games/<name>/qa/journeys/hud-clear.json` reaches title, play, and a round end on
+a phone with the on-screen buttons showing, and asks at each step whether a button covers the HUD, the player, or a goal
+(Blobs' is in gm-qa's `journeys/blobs/`). Name the devices and screens it passed on; a won or lost screen it did not reach
+is unchecked. Never claim every device.
 
 ## Reference
 

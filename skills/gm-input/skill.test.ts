@@ -27,7 +27,8 @@ describe('gm-input skill', () => {
     expect(text).toContain('only when the game declares a `stick` action');
     expect(text).toContain('Never claim universal device support');
     expect(text).toContain('`phone-touch.json`');
-    expect(text).toContain('`laptop-keys-pad.json`');
+    expect(text).toContain('`laptop-keys.json`');
+    expect(text).toContain('report the gamepad as unchecked');
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
   }, 10_000);
 });
