@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommandsInbox } from './CommandsInbox';
@@ -9,13 +10,15 @@ const calls: Array<{ url: string; method: string; body: unknown }> = [];
 let commands = [commandFixture()];
 let answerStatus = 200;
 
-function renderInbox(onOpenJob = vi.fn()) {
+function renderInbox(onOpenJob = vi.fn(), slug?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
     onOpenJob,
     ...render(
       <QueryClientProvider client={client}>
-        <CommandsInbox gameId="g_1" onOpenJob={onOpenJob} />
+        <MemoryRouter>
+          <CommandsInbox gameId="g_1" slug={slug} onOpenJob={onOpenJob} />
+        </MemoryRouter>
       </QueryClientProvider>,
     ),
   };
@@ -112,6 +115,34 @@ describe('CommandsInbox', () => {
       }),
     );
     expect(screen.queryByRole('button', { name: 'Open Build the moon gate' })).not.toBeInTheDocument();
+  });
+
+  // A Command whose every option is a sample is a review: the inbox shows it as a row that opens its deck on the review
+  // screen (the short link when the game has a slug and the Command a number), not a deck squeezed into the spotlight.
+  it('shows a review Command as a row linking to its deck', async () => {
+    const image = { url: 'https://media.example.test/a.png', width: 320, height: 320 };
+    const review = commandFixture({
+      title: 'Pick the gate',
+      review_number: 4,
+      options: [
+        { id: 'a', label: 'Arch', media: image },
+        { id: 'b', label: 'Door', media: image },
+      ],
+    });
+    commands = [review];
+    const view = renderInbox(vi.fn(), 'moon');
+
+    const row = await screen.findByRole('link', { name: 'Pick the gate, open' });
+    expect(row).toHaveAttribute('href', '/moon/review/4');
+    expect(screen.queryByRole('region', { name: /^Review / })).not.toBeInTheDocument();
+    view.unmount();
+
+    // Without a slug the row falls back to the legacy link, which heals itself to the short form.
+    renderInbox();
+    expect(await screen.findByRole('link', { name: 'Pick the gate, open' })).toHaveAttribute(
+      'href',
+      '/game/g_1/review/m_3',
+    );
   });
 
   it('leaves the Command in place when the answer is refused', async () => {

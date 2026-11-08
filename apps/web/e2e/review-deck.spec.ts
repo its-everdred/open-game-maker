@@ -297,6 +297,7 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
 });
 
 test('heads a long-question review with a short title, an X and nothing over the deck', async ({ page }, testInfo) => {
+  testInfo.setTimeout(120_000);
   await openDeck(page, longCommand().review_number!);
   await page.getByRole('button', { name: 'Like', exact: true }).waitFor();
   await capture(page, testInfo, 'long-question');

@@ -8,6 +8,7 @@ import { findCommand, findCommandByNumber } from '../../features/commands-inbox/
 import { PlayLinkMessage } from '../play/PlayScreen';
 import { playLinkDenial, usePlayLink } from '../play/api';
 import { useGameCommands } from '../../features/commands-inbox/commands';
+import { useIsSent } from '../../features/commands-inbox/drafts';
 import { GlowBackdrop } from '../../features/commands-inbox/GlowBackdrop';
 import { ReviewDeck } from '../../features/commands-inbox/ReviewDeck';
 import { ReviewRows } from '../../features/commands-inbox/ReviewRows';
@@ -38,6 +39,7 @@ export function ShortReviewScreen() {
       key={`${link.data.id}:${number}`}
       gameId={link.data.id}
       slug={current}
+      number={Number(number)}
       find={(commands) => findCommandByNumber(commands, number)}
     />
   );
@@ -139,29 +141,34 @@ export function LegacyReviewScreen() {
 function ReviewScreen({
   gameId,
   slug,
+  number,
   find,
 }: {
   gameId: string;
   slug?: string;
+  // The review's number from a short link: the arrows walk from it even once an answered review leaves the list.
+  number?: number;
   find(commands: readonly GameCommand[]): GameCommand | undefined;
 }) {
   const navigate = useNavigate();
   const { commands, isPending } = useGameCommands(gameId);
   const command = find(commands);
-  const [sent, setSent] = useState(false);
+  const [sentHere, setSent] = useState(false);
+  // A review sent earlier (moved away from, then back to) stays sent: no second deck to answer it again.
+  const sent = useIsSent(command) || sentHere;
   // A short link closes to the game's rows; a legacy link, with no slug to build them from, closes to the game.
   const back = () => navigate(slug === undefined ? `/all?spotlight=${encodeURIComponent(gameId)}` : reviewsPath(slug));
-  const order = slug === undefined ? [] : numbered(commands);
-  const at = command === undefined ? -1 : order.indexOf(command);
-  const stepTo = (index: number) => {
-    const target = at < 0 ? undefined : order[index];
-    return target === undefined || slug === undefined ? undefined : reviewPath(slug, target.review_number!);
-  };
+  const here = command?.review_number ?? number;
+  const order = slug === undefined || here === undefined ? [] : numbered(commands);
+  const before = order.filter((other) => other.review_number! < here!).at(-1);
+  const after = order.find((other) => other.review_number! > here!);
+  const stepTo = (target: GameCommand | undefined) =>
+    target === undefined || slug === undefined ? undefined : reviewPath(slug, target.review_number!);
   const nav =
-    order.length > 1
+    before !== undefined || after !== undefined
       ? {
-          prev: <StepLink to={stepTo(at - 1)} label="Previous question" icon="caretLeft" />,
-          next: <StepLink to={stepTo(at + 1)} label="Next question" icon="caretRight" />,
+          prev: <StepLink to={stepTo(before)} label="Previous question" icon="caretLeft" />,
+          next: <StepLink to={stepTo(after)} label="Next question" icon="caretRight" />,
         }
       : undefined;
 

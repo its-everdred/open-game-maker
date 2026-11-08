@@ -40,6 +40,11 @@ export function useDeckDraft(command: GameCommand): [DeckState, (action: DeckAct
   return [deck, dispatch];
 }
 
+// Whether this question's answer already went out: the screen then shows it as sent instead of a deck to send again.
+export function useIsSent(command: GameCommand | undefined): boolean {
+  return useDraftStore((store) => (command === undefined ? false : (store.drafts[draftKey(command)]?.sent ?? false)));
+}
+
 export function markSent(command: GameCommand): void {
   const key = draftKey(command);
   useDraftStore.setState((store) => ({
@@ -53,6 +58,7 @@ export function draftState(draft: ReviewDraft): 'open' | 'draft' | 'sent' {
   return draft.deck.cards.length > 0 || draft.deck.notes.trim() !== '' ? 'draft' : 'open';
 }
 
+// Drafts are the signed-in creator's own: signing out clears them so the next person on the device starts clean.
 export function resetReviewDrafts(): void {
   useDraftStore.setState({ drafts: {} });
 }
