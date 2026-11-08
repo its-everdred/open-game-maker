@@ -2,8 +2,9 @@ import { readFile } from 'node:fs/promises';
 
 import type { AiurClient, Decision, DecisionMedia, DecisionMediaFile } from '@ogm/aiur-client';
 import { schema } from '@ogm/db';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { aiurMediaTiming, MAX_AIUR_IMAGE_BYTES } from '../../src/commands/aiur-media.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
 // A registered game's Commands have no job, so their option media lives on the aiur host (#611). The Blobs staging
@@ -83,13 +84,28 @@ const decision = (options: Decision['options']): Decision => ({
   decision_status: 'open',
 });
 
-async function setup(options: Decision['options'], files: Record<string, { mime: string; bytes: Uint8Array }>) {
-  const deps = seed();
-  const decisionMedia = vi.fn(async (_id: string, attachmentId: string): Promise<DecisionMediaFile> => {
-    const file = files[attachmentId];
-    if (file === undefined) throw new Error('not found');
-    return { mime: file.mime, body: new Response(file.bytes).body! };
+type File = { mime: string; bytes?: Uint8Array; body?: (signal?: AbortSignal) => ReadableStream<Uint8Array> };
+
+// A body that sends nothing until the request's signal aborts it, like a transfer that stalls.
+const stalled = (signal?: AbortSignal) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      signal?.addEventListener('abort', () => controller.error(signal.reason));
+    },
   });
+
+const defaults = { ...aiurMediaTiming };
+afterEach(() => Object.assign(aiurMediaTiming, defaults));
+
+async function setup(options: Decision['options'], files: Record<string, File>) {
+  const deps = seed();
+  const decisionMedia = vi.fn(
+    async (_id: string, attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile> => {
+      const file = files[attachmentId];
+      if (file === undefined) throw new Error('not found');
+      return { mime: file.mime, body: file.body ? file.body(signal) : new Response(file.bytes).body! };
+    },
+  );
   deps.aiurClientForGame = async () =>
     ({
       baseUrl: 'http://127.0.0.1:4100',
@@ -185,8 +201,9 @@ describe('a jobless Command’s option media', () => {
     expect(decisionMedia).toHaveBeenCalledTimes(1);
   });
 
-  it('lists an option whose media aiur cannot serve as text and retries it next time', async () => {
-    const files: Record<string, { mime: string; bytes: Uint8Array }> = {};
+  it('lists an option whose media aiur cannot serve as text and retries it only after a while', async () => {
+    aiurMediaTiming.retryAfterMs = 1_000;
+    const files: Record<string, File> = {};
     const { read, deps, decisionMedia } = await setup(
       [
         {
@@ -207,8 +224,146 @@ describe('a jobless Command’s option media', () => {
     ]);
     expect(deps.lines.some((line) => line.event === 'game_command_media_unavailable')).toBe(true);
 
+    // A file that just failed is not fetched again on the next poll.
     files.med_gone = { mime: 'image/png', bytes: new Uint8Array([1]) };
+    expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
+    expect(decisionMedia).toHaveBeenCalledTimes(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
     expect((await read())[0]!.media).toMatchObject({ kind: 'image', width: 8 });
     expect(decisionMedia).toHaveBeenCalledTimes(2);
+  });
+
+  // One slow file must not hold every Command back: the inbox answers without it and the copy finishes for later.
+  it('answers without a slow copy and shows it once the copy lands', async () => {
+    aiurMediaTiming.inboxWaitMs = 20;
+    let finish: () => void = () => undefined;
+    const { read, decisionMedia } = await setup(
+      [
+        {
+          id: 'flat',
+          label: 'Lie flat',
+          media: [attachment('med_slow', 'image', 'image/png', { width: 8, height: 8 })],
+        },
+        { id: 'stack', label: 'Stack up' },
+      ],
+      {
+        med_slow: {
+          mime: 'image/png',
+          body: () =>
+            new ReadableStream({
+              start(controller) {
+                finish = () => {
+                  controller.enqueue(new Uint8Array([1]));
+                  controller.close();
+                };
+              },
+            }),
+        },
+      },
+    );
+
+    expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
+    finish();
+    await vi.waitFor(async () => expect((await read())[0]!.media).toMatchObject({ kind: 'image' }));
+    expect(decisionMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts a stalled transfer and logs it', async () => {
+    Object.assign(aiurMediaTiming, { inboxWaitMs: 20, copyTimeoutMs: 100 });
+    const { read, deps, decisionMedia } = await setup(
+      [
+        {
+          id: 'flat',
+          label: 'Lie flat',
+          media: [attachment('med_stuck', 'video', 'video/mp4', { width: 8, height: 8 })],
+        },
+        { id: 'stack', label: 'Stack up' },
+      ],
+      { med_stuck: { mime: 'video/mp4', body: stalled } },
+    );
+
+    expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
+    await vi.waitFor(() => expect(decisionMedia.mock.calls[0]![2]?.aborted).toBe(true));
+    await vi.waitFor(() =>
+      expect(deps.lines.some((line) => line.event === 'game_command_media_copy_failed')).toBe(true),
+    );
+  });
+
+  // A still without a size is held in memory to be measured, so it may not be larger than aiur's largest still.
+  it('refuses a still to be measured that is larger than aiur allows', async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    const { read, deps } = await setup(
+      [
+        { id: 'flat', label: 'Lie flat', media: [attachment('med_huge', 'image', 'image/png')] },
+        { id: 'stack', label: 'Stack up' },
+      ],
+      {
+        med_huge: {
+          mime: 'image/png',
+          body: () => {
+            let sent = 0;
+            return new ReadableStream({
+              pull(controller) {
+                if (sent > MAX_AIUR_IMAGE_BYTES) return controller.close();
+                sent += chunk.byteLength;
+                controller.enqueue(chunk);
+              },
+            });
+          },
+        },
+      },
+    );
+
+    expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
+    expect(deps.lines.some((line) => line.event === 'game_command_media_unavailable')).toBe(true);
+  });
+
+  it('passes an https poster on, drops one only the aiur host holds, and skips media it cannot render', async () => {
+    const { read } = await setup(
+      [
+        {
+          id: 'roll',
+          label: 'Roll',
+          media: [
+            { kind: 'document', locator: { kind: 'url', value: 'https://media.example.test/notes.pdf' } },
+            {
+              kind: 'video',
+              width: 64,
+              height: 48,
+              duration_ms: 1000,
+              locator: { kind: 'url', value: 'https://media.example.test/roll.mp4' },
+              poster: { kind: 'url', value: 'https://media.example.test/roll.png' },
+            },
+          ],
+        },
+        {
+          id: 'spin',
+          label: 'Spin',
+          media: [
+            {
+              kind: 'video',
+              locator: { kind: 'url', value: 'https://media.example.test/spin.mp4' },
+              poster: { kind: 'attachment', attachment_id: 'med_poster' },
+            },
+          ],
+        },
+        { id: 'hop', label: 'Hop', media: [{ kind: 'image', locator: { kind: 'attachment' } }] },
+      ],
+      {},
+    );
+
+    const [roll, spin, hop] = await read();
+
+    expect(roll!.media).toEqual({
+      url: 'https://media.example.test/roll.mp4',
+      poster: 'https://media.example.test/roll.png',
+      width: 64,
+      height: 48,
+      duration_ms: 1000,
+      kind: 'video',
+    });
+    expect(spin!.media).toEqual({ url: 'https://media.example.test/spin.mp4', width: 640, height: 360, kind: 'video' });
+    expect(hop).toEqual({ id: 'hop', label: 'Hop' });
   });
 });

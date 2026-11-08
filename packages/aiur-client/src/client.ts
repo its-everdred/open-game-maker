@@ -54,7 +54,8 @@ export type DecisionQuery = {
 export type DecisionAnswer = DecisionReasoning &
   ({ option: string; response?: string } | { option?: never; response: string });
 
-// One Command media file as aiur serves it. `body` is the response stream; the caller must read or cancel it.
+// One Command media file as aiur serves it. `body` is the response stream; the caller must read or cancel it. The
+// request's `signal` also aborts the body read, so a stalled transfer ends when it fires.
 export type DecisionMediaFile = { mime: string; body: ReadableStream<Uint8Array> };
 
 export interface AiurClient {
@@ -79,7 +80,7 @@ export interface AiurClient {
   decisions(query?: DecisionQuery): Promise<Decision[]>;
   decision(id: string): Promise<Decision>;
   decide(id: string, answer: DecisionAnswer): Promise<Decision>;
-  decisionMedia(id: string, attachmentId: string): Promise<DecisionMediaFile>;
+  decisionMedia(id: string, attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile>;
   healthz(): Promise<boolean>;
 }
 
@@ -262,11 +263,11 @@ export function createAiurClient(
       });
       return DecisionMutationSchema.parse(body).decision;
     },
-    async decisionMedia(id, attachmentId) {
+    async decisionMedia(id, attachmentId, signal) {
       const { response } = await fetchResponse(
         'GET',
         `/api/v1/decisions/${encodeURIComponent(id)}/media/${encodeURIComponent(attachmentId)}`,
-        { supervisor: true, write: true, raw: true },
+        { supervisor: true, write: true, raw: true, signal },
       );
       if (response.body === null) throw new AiurUnavailableError(baseUrl, new Error('empty media response'));
       return { mime: response.headers.get('content-type') ?? 'application/octet-stream', body: response.body };

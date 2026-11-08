@@ -200,10 +200,13 @@ describe('createAiurClient', () => {
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } }));
 
-    const file = await createAiurClient(daemon, fetchImpl).decisionMedia('decision 1', 'med_abc');
+    const signal = AbortSignal.timeout(1000);
+    const file = await createAiurClient(daemon, fetchImpl).decisionMedia('decision 1', 'med_abc', signal);
 
     expect(fetchImpl.mock.calls[0]![0]).toBe('http://127.0.0.1:4000/api/v1/decisions/decision%201/media/med_abc');
     expect(new Headers(fetchImpl.mock.calls[0]![1]?.headers).get('authorization')).toBe('Bearer supervisor-secret');
+    // The caller's deadline reaches the request, so a stalled transfer can be aborted.
+    expect(fetchImpl.mock.calls[0]![1]?.signal).toBe(signal);
     expect(file.mime).toBe('image/png');
     expect(new Uint8Array(await new Response(file.body).arrayBuffer())).toEqual(new Uint8Array([137, 80, 78, 71]));
   });
