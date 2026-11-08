@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OGM fall-speed fixture</title>
+    <style>
+      html,
+      body,
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: #1d2021;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <script type="module">
+      /* A falling-blocks slice for the review deck's playable cards (#608): `speed` sets how fast blocks fall,
+         `lead_in=one-chain` stacks a chain first so the situation is ready, and the move stick, arrow keys or a gamepad
+         slide the catcher. It speaks the host bridge just enough to be played and paused. */
+      const HOST_ORIGIN = new URL(document.referrer).origin;
+      const manifest = await (await fetch('./manifest.json')).json();
+      const query = new URLSearchParams(location.search);
+      const SPEEDS = { slow: 70, medium: 150, fast: 280 };
+      const fall = SPEEDS[query.get('speed')] ?? SPEEDS.medium;
+      const colours = ['#fb4934', '#b8bb26', '#fabd2f', '#83a598', '#d3869b', '#8ec07c'];
+      const fixture = (window.__fixture = {
+        messages: [],
+        params: Object.fromEntries(query),
+        paused: false,
+        caught: 0,
+      });
+
+      const canvas = document.getElementById('canvas');
+      const context = canvas.getContext('2d');
+      let width = 0;
+      let height = 0;
+      const resize = () => {
+        width = canvas.width = canvas.clientWidth * devicePixelRatio;
+        height = canvas.height = canvas.clientHeight * devicePixelRatio;
+      };
+      addEventListener('resize', resize);
+      resize();
+
+      const size = () => Math.max(18, width / 14);
+      const blocks = [];
+      const stack = [];
+      let catcher = 0.5;
+      let move = 0;
+      const keys = new Set();
+      let seed = 7;
+      const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      const spawn = (y = -size()) => blocks.push({ x: 0.1 + random() * 0.8, y, colour: colours[blocks.length % 6] });
+      if (query.get('lead_in') === 'one-chain') for (let index = 0; index < 4; index += 1) stack.push(colours[index]);
+      for (let index = 0; index < 3; index += 1) spawn(-index * height * 0.35);
+
+      addEventListener('keydown', (event) => keys.add(event.key));
+      addEventListener('keyup', (event) => keys.delete(event.key));
+
+      let last = performance.now();
+      const frame = (now) => {
+        const dt = Math.min(0.05, (now - last) / 1000);
+        last = now;
+        if (!fixture.paused) {
+          const keyMove = (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0);
+          catcher = Math.min(0.95, Math.max(0.05, catcher + (keyMove || move) * dt * 0.9));
+          for (const block of blocks) block.y += fall * devicePixelRatio * dt;
+          for (let index = blocks.length - 1; index >= 0; index -= 1) {
+            const block = blocks[index];
+            if (block.y < height - size() * 2) continue;
+            if (Math.abs(block.x - catcher) < 0.09) {
+              stack.push(block.colour);
+              fixture.caught += 1;
+            }
+            blocks.splice(index, 1);
+            spawn();
+          }
+        }
+        context.fillStyle = '#1d2021';
+        context.fillRect(0, 0, width, height);
+        const s = size();
+        for (const block of blocks) {
+          context.fillStyle = block.colour;
+          context.fillRect(block.x * width - s / 2, block.y, s, s);
+        }
+        context.fillStyle = '#ebdbb2';
+        context.fillRect(catcher * width - s * 1.2, height - s * 1.4, s * 2.4, s * 0.4);
+        stack.slice(-8).forEach((colour, index) => {
+          context.fillStyle = colour;
+          context.fillRect(s * 0.4, height - s * 1.6 - index * s * 0.9, s * 0.8, s * 0.8);
+        });
+        if (fixture.paused) {
+          context.fillStyle = 'rgba(29, 32, 33, 0.4)';
+          context.fillRect(0, 0, width, height);
+        }
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+
+      let port;
+      let nextId = 0;
+      let ready = false;
+      const envelope = (t, payload, replyTo) => ({
+        v: 1,
+        id: `fall-${++nextId}`,
+        t,
+        payload,
+        ...(replyTo ? { replyTo } : {}),
+      });
+      const send = (t, payload, replyTo) => port?.postMessage(JSON.stringify(envelope(t, payload, replyTo)));
+      const receive = (message) => {
+        fixture.messages.push(message.t);
+        if (message.t === 'hello' && !ready) {
+          ready = true;
+          send('ready', { protocol: 1, manifest, marks: [['fixture-ready', performance.now()]] }, message.id);
+        } else if (message.t === 'design.apply') {
+          send('design.applied', { rev: message.payload.rev, result: 'live' }, message.id);
+        } else if (message.t === 'lifecycle.pause') {
+          fixture.paused = true;
+        } else if (message.t === 'lifecycle.resume') {
+          fixture.paused = false;
+        } else if (message.t === 'input.frame') {
+          const value = message.payload.actions.move;
+          move = typeof value === 'object' ? value.x : 0;
+        }
+      };
+
+      addEventListener('message', (event) => {
+        if (event.origin !== HOST_ORIGIN || !event.ports[0] || typeof event.data !== 'string') return;
+        const message = JSON.parse(event.data);
+        if (message.t !== 'hello') return;
+        port = event.ports[0];
+        port.onmessage = ({ data }) => {
+          if (typeof data === 'string') receive(JSON.parse(data));
+        };
+        port.start();
+        receive(message);
+      });
+      const hello = JSON.stringify(envelope('hello', { protocol: 1 }));
+      const timer = setInterval(() => {
+        if (port) clearInterval(timer);
+        else parent.postMessage(hello, HOST_ORIGIN);
+      }, 100);
+      parent.postMessage(hello, HOST_ORIGIN);
+    </script>
+  </body>
+</html>

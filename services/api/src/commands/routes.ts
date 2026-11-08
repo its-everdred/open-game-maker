@@ -54,7 +54,12 @@ export default new Hono<ApiBindings>()
           checkpoint.options.map(async (option) => {
             const media =
               option.media_id === undefined ? undefined : await optionMedia(deps, job.id, option.media_id, sign);
-            return { id: option.id, label: option.label, ...(media === undefined ? {} : { media }) };
+            return {
+              id: option.id,
+              label: option.label,
+              ...(media === undefined ? {} : { media }),
+              ...(option.playable === undefined ? {} : { playable: option.playable }),
+            };
           }),
         );
         // One malformed checkpoint row is left out of the inbox rather than failing every Command in the game.

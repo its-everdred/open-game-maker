@@ -11,9 +11,12 @@ import {
   deckReducer,
   initialDeck,
   mediaKindOf,
+  nextCompare,
+  playableParams,
   reviewOf,
   shortlist,
   type DeckState,
+  withoutLinks,
 } from './review';
 
 function deck(overrides: Partial<GameCommand> = {}): GameCommand {
@@ -206,5 +209,38 @@ describe('deck state readings', () => {
     expect(clipLength(59_400)).toBe('0:59');
     expect(clipLength(72_000)).toBe('1:12');
     expect(clipLength(600_000)).toBe('10:00');
+  });
+});
+
+// The deck never shows a link (#608): gameplay is tried in the card instead.
+describe('deck text', () => {
+  it('drops every link and keeps the words around it', () => {
+    expect(withoutLinks('Try it https://games.example.test/g/1?speed=slow then pick')).toBe('Try it then pick');
+    expect(withoutLinks('See www.example.test')).toBe('See');
+    expect(withoutLinks('Slow fall')).toBe('Slow fall');
+  });
+});
+
+describe('playable options', () => {
+  it('boots the game with the scenario and its lead-in move', () => {
+    expect(playableParams({ scenario: 'scenario=sandbox&speed=slow', seconds: 8 })).toEqual({
+      scenario: 'sandbox',
+      speed: 'slow',
+    });
+    expect(playableParams({ scenario: 'speed=fast', seconds: 8, lead_in: 'one-chain' })).toEqual({
+      speed: 'fast',
+      lead_in: 'one-chain',
+    });
+  });
+
+  it('compares only the playable options, in order, and stops after the last', () => {
+    const options: GameCommand['options'] = [
+      { id: 'a', label: 'A', playable: { scenario: 'speed=1', seconds: 8 } },
+      { id: 'b', label: 'B', media: { url: 'https://media.example.test/b.png', width: 1, height: 1 } },
+      { id: 'c', label: 'C', playable: { scenario: 'speed=3', seconds: 8 } },
+    ];
+    expect(nextCompare(options, -1)).toBe(0);
+    expect(nextCompare(options, 0)).toBe(2);
+    expect(nextCompare(options, 2)).toBeNull();
   });
 });
