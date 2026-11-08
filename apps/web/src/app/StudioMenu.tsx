@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, matchPath, useLocation } from 'react-router';
 
-import { JOB_STAGE_WORDS, type Job } from '@ogm/contracts/browser';
+import { JOB_STAGE_WORDS, type CreatorCommand, type Job } from '@ogm/contracts/browser';
 
 import { Icon } from '../components/Icon';
 import { BugButton } from '../features/bug-report';
 import { JobConversationModal } from '../features/build-chat/JobConversationModal';
 import { openConversation } from '../features/build-chat/conversation';
 import { isTerminal, useMyJobs } from '../features/build-chat/jobs';
+import { DecisionDeck } from '../features/commands-inbox/DecisionDeck';
+import { useCreatorCommands } from '../features/commands-inbox/commands';
 import { signOut } from '../lib/api/auth';
 import { useSession } from '../lib/api/session';
 import { getVolume, onChange, setMuted, setVolume, status } from '../lib/sound';
@@ -26,19 +28,23 @@ export function StudioMenu() {
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
   const builds = useMyJobs();
+  const decisions = useCreatorCommands(Boolean(session));
   const sound = useSyncExternalStore(onChange, status);
   const [open, setOpen] = useState(false);
   const [volume, setLocalVolume] = useState(getVolume);
   const [announcement, setAnnouncement] = useState('');
   const [buildClock, setBuildClock] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
+  const [deck, setDeck] = useState<CreatorCommand>();
   const game = matchPath('/g/:gameId/*', location.pathname);
   const gameId = game?.params.gameId;
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
   const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
-  const outstandingRequests = visibleBuilds.reduce((total, job) => total + (job.openRequestCount ?? 0), 0);
+  // The badge counts every open player-facing decision across the creator's games; red when one blocks its build.
+  const outstandingRequests = decisions.commands.length;
+  const blocked = decisions.commands.some((command) => command.blocking);
 
   useEffect(() => {
     if (!open) return;
@@ -98,6 +104,7 @@ export function StudioMenu() {
         type="button"
         className="studio-menu-button"
         data-building={buildingJobs.length > 0}
+        data-blocking={blocked}
         aria-label="Menu"
         aria-describedby={outstandingRequests > 0 ? 'studio-menu-requests' : undefined}
         aria-expanded={open}
@@ -114,7 +121,7 @@ export function StudioMenu() {
       </button>
       {outstandingRequests > 0 ? (
         <span id="studio-menu-requests" className="sr">
-          {outstandingRequests} {outstandingRequests === 1 ? 'request needs' : 'requests need'} your attention
+          {outstandingRequests} {outstandingRequests === 1 ? 'decision needs' : 'decisions need'} your answer
         </span>
       ) : null}
       <span className="sr" role="status" aria-live="polite">
@@ -122,6 +129,28 @@ export function StudioMenu() {
       </span>
       {open ? (
         <div id="studio-menu-panel" className="studio-menu-panel" role="dialog" aria-label="Menu">
+          {decisions.commands.length > 0 ? (
+            <ul className="studio-menu-decisions" aria-label="Decisions">
+              {decisions.commands.map((command) => (
+                <li key={`${command.game_id}:${command.decision_id}`}>
+                  <button
+                    className="studio-menu-job"
+                    data-action-needed="true"
+                    data-blocking={command.blocking}
+                    type="button"
+                    aria-label={`${command.summary ?? command.title}, ${command.game_title}`}
+                    onClick={() => {
+                      close();
+                      setDeck(command);
+                    }}
+                  >
+                    <strong>{command.summary ?? command.title}</strong>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
           <div className="studio-menu-volume">
             <button
               type="button"
@@ -220,6 +249,7 @@ export function StudioMenu() {
         </div>
       ) : null}
       <JobConversationModal />
+      {deck ? <DecisionDeck commands={decisions.commands} first={deck} onClose={() => setDeck(undefined)} /> : null}
     </div>
   );
 }

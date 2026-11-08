@@ -107,9 +107,13 @@
   padding: 0 6px;
   place-items: center;
   border-radius: 999px;
-  background: var(--red-b);
+  background: var(--orange-b);
   color: var(--night);
   font: 800 13px/1 var(--body);
+}
+
+.studio-menu-button[data-blocking='true'] .studio-menu-badge {
+  background: var(--red-b);
 }
 
 .studio-menu-button[data-building='true'] .studio-menu-ring {
@@ -153,6 +157,7 @@
   text-decoration: none;
 }
 
+.studio-menu-decisions,
 .studio-menu-builds {
   display: grid;
   gap: 8px;
@@ -216,6 +221,10 @@ button.studio-menu-job {
 
 .studio-menu-job[data-action-needed='true'] {
   background: color-mix(in srgb, var(--orange-b) 28%, var(--night-3));
+}
+
+.studio-menu-job[data-blocking='true'] {
+  background: color-mix(in srgb, var(--red-b) 28%, var(--night-3));
 }
 
 .studio-menu-job[data-status='finished'][data-success='true'] {

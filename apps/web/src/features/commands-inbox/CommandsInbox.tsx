@@ -4,6 +4,7 @@ import type { GameCommand } from '@ogm/contracts';
 
 import { Icon } from '../../components/Icon';
 import { AiurCommands, gameScope, type AiurCommandAnswer } from '../aiur/embed';
+import { CommandOptions } from './CommandOptions';
 import { answerCommand, useGameCommands } from './commands';
 import { isReviewDeck, ReviewDeck } from './ReviewDeck';
 import './commands-inbox.css';
@@ -53,38 +54,11 @@ export function CommandsInbox({ gameId, onOpenJob }: { gameId: string; onOpenJob
               {isReviewDeck(command) ? (
                 <ReviewDeck gameId={gameId} command={command} />
               ) : (
-                <div className="build-chat-options">
-                  {command.options.map((option) => (
-                    <button
-                      aria-label={option.label}
-                      className="build-chat-option"
-                      disabled={answering !== undefined}
-                      key={option.id}
-                      onClick={() => void answer(command, option.id)}
-                      type="button"
-                    >
-                      {option.media && (
-                        <span className="checkpoint-option-media" aria-hidden="true">
-                          {option.media.duration_ms === undefined ? (
-                            <img alt="" src={option.media.url} />
-                          ) : (
-                            <video
-                              muted
-                              playsInline
-                              poster={option.media.poster}
-                              preload="metadata"
-                              src={option.media.url}
-                            />
-                          )}
-                        </span>
-                      )}
-                      <span className="checkpoint-option-label">{option.label}</span>
-                      {option.id === command.recommend && (
-                        <span className="checkpoint-recommended">Builder&apos;s pick</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                <CommandOptions
+                  command={command}
+                  disabled={answering !== undefined}
+                  onAnswer={(optionId) => void answer(command, optionId)}
+                />
               )}
               {/* A Command read from the game's own aiur instance belongs to no job, so there is no conversation here
                 to open; the job's Commands keep the button. */}

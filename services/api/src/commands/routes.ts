@@ -7,7 +7,7 @@ import { CommandAnswerBody, type CreatorCommandsPage, type GameCommandsPage } fr
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
-import type { ApiBindings, AppDeps } from '../app/types.js';
+import type { ApiBindings } from '../app/types.js';
 import { authorizedGame } from '../games/authorize.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { tryRecordReview } from '../reviews/store.js';

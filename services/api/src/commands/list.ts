@@ -26,7 +26,9 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
   const { sign } = getChatRuntime(deps);
   const commands: GameCommand[] = [];
   const jobs = listJobs(deps.db, game.id);
-  const jobTickets = new Set(jobs.flatMap((job) => (job.aiurIssueNumber === null ? [] : [String(job.aiurIssueNumber)])));
+  const jobTickets = new Set(
+    jobs.flatMap((job) => (job.aiurIssueNumber === null ? [] : [String(job.aiurIssueNumber)])),
+  );
 
   for (const job of jobs) {
     for (const row of listCheckpoints(deps.sqlite, job.id)) {
