@@ -67,8 +67,8 @@ export type RunVerifyOptions = ActivityContext & {
 
 export type RunVerifyResult = { report: VerifyReport; reportPath: string; ffmpegMissing: boolean };
 
-/** dist/shell, beside this module once built. */
-const SHELL_DIR = join(dirname(fileURLToPath(import.meta.url)), 'shell');
+/** dist/shell, found from the package root so the tests' src/ build resolves it too. */
+const SHELL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'shell');
 
 export function newRunId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

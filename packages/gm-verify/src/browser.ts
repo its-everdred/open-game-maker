@@ -68,10 +68,10 @@ export type AppFrame = {
   localUrl?: string;
 };
 
-/** The host frame page for a local build served at `gamesUrl`. */
+/** The host frame page for a local build served at `gamesUrl`; the shell passes that URL's query on to the game. */
 export function hostFrameUrl(shellUrl: string, gamesUrl: string, tier: Tier, title: string): string {
   const url = new URL('host-shell.html', shellUrl);
-  url.searchParams.set('games', new URL(gamesUrl).origin);
+  url.searchParams.set('games', gamesUrl);
   url.searchParams.set('tier', tier);
   url.searchParams.set('title', title);
   return url.href;

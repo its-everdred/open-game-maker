@@ -15,13 +15,16 @@ const query = new URLSearchParams(location.search);
 const title = document.querySelector<HTMLElement>('.play-title');
 if (title) title.textContent = query.get('title') ?? '';
 
+/* The local build's URL: its origin stands in for the games origin and its query goes on to the game. */
+const games = new URL(query.get('games')!);
+
 createGameFrame({
   container: document.querySelector<HTMLElement>('#game')!,
-  gamesOrigin: query.get('games')!,
+  gamesOrigin: games.origin,
   gameId: 'local',
   buildId: 'local',
   build: 'test',
-  params: { capture: '1', tier: query.get('tier') ?? 'mobile' },
+  params: { ...Object.fromEntries(games.searchParams), capture: '1', tier: query.get('tier') ?? 'mobile' },
   mode: 'play',
   playerIndex: 0,
   capabilities: [],
