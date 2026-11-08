@@ -6,23 +6,39 @@ import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 
-// A media path the body names: in backticks, as a markdown link target, or bare. URLs are skipped (their host keeps them).
-const MEDIA = /(?:^|[\s`(<[])([^\s`()<>[\]"']+\.(?:png|jpe?g|gif|webp|mp4|webm))(?=$|[\s`)>\]:,;.])/gim;
+// A media path the body names: in backticks, bold or quotes, as a markdown or <img src> target, in a table cell, or bare.
+// A `?query` or `#fragment` after the extension is not part of the path. URLs are skipped (their host keeps them).
+const MEDIA =
+  /(?:^|[\s`(<[\]"'=*|:])([^\s`()<>[\]"'*|=?#]+?\.(?:png|jpe?g|gif|webp|mp4|webm))(?=$|[\s`)>\]"'*_|:,;.!?#])/gim;
+
+function decoded(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
 
 /** The media paths a pull request body links, in order, without duplicates or URLs. */
 export function linkedEvidence(body: string): string[] {
-  const found = [...body.matchAll(MEDIA)].map((match) => match[1]!).filter((path) => !path.includes('://'));
-  return [...new Set(found)];
+  const local = body.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"'<>)\]`]+/gi, ' ');
+  const found = [...local.matchAll(MEDIA)].map((match) => match[1]!);
+  return [...new Set(found.map(decoded))];
 }
 
+/** Regular files committed at HEAD; a symlink is left out, since its target may be a workspace file that goes away. */
 function committedFiles(root: string): Set<string> {
   try {
-    const listing = execFileSync('git', ['ls-tree', '-r', '--name-only', '--full-name', 'HEAD'], {
+    const listing = execFileSync('git', ['ls-tree', '-r', '-z', '--full-name', 'HEAD'], {
       cwd: root,
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
     });
-    return new Set(listing.split('\n').filter(Boolean));
+    const files = listing
+      .split('\0')
+      .map((line) => /^100(?:644|755) blob [0-9a-f]+\t(.+)$/.exec(line)?.[1])
+      .filter((path) => path !== undefined);
+    return new Set(files);
   } catch {
     throw new UsageError('HEAD has no commit to check', 'commit the evidence, then run gm look evidence');
   }

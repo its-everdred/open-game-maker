@@ -61,6 +61,7 @@ describe('renderInstanceTemplate', () => {
     };
     expect(ignored('games/blobs/review/208/sheet-390x844.png')).toBe(false);
     expect(ignored('games/blobs/shots/tablet/t2.png')).toBe(true);
+    expect(ignored('assets-local/review/blobs/208/sheet-390x844.png')).toBe(true);
   });
 
   it('runs only changed workspace packages on pull requests', () => {

@@ -22,4 +22,4 @@ dist/
 
 # Sheets, stills and clips a pull request links are review evidence, not game assets: commit them under
 # games/<game>/review/<ticket>/ so they outlive the worker's workspace (`gm look evidence`).
-!**/review/**
+!games/*/review/**

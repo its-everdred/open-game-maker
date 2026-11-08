@@ -138,6 +138,33 @@ describe('gm look check', { timeout: 60_000 }, () => {
     expect(result.err[0]).toBe(`blocked ${STILL}: look broker error: no answer from the mock broker in 1s`);
   });
 
+  // Evidence committed under review/<ticket>/ for a PR is an archive, not this run's render: an earlier ticket's still
+  // there must neither replace nor fail the current one.
+  it('ignores stills kept as review evidence under review/', async () => {
+    const root = game();
+    mkdirSync(join(root, 'review/208/stills'), { recursive: true });
+    writeFileSync(join(root, 'review/208/stills/t2.png'), 'an older ticket');
+    commit(root);
+    await look(root, 'first', { answer: 'VERDICT: pass' });
+
+    const result = await gm(['look', 'check'], { cwd: root });
+
+    expect(result.err).toEqual([]);
+    expect(result.out).toEqual(['look ok: 1 committed stills pass']);
+  });
+
+  it('ignores review/ stills in a repo that renders without committing', async () => {
+    const root = game({ commitStills: false });
+    mkdirSync(join(root, 'review/208'), { recursive: true });
+    writeFileSync(join(root, 'review/208/t2.png'), 'an older ticket');
+    await look(root, 'first', { answer: 'VERDICT: pass' });
+
+    const result = await gm(['look', 'check'], { cwd: root });
+
+    expect(result.err).toEqual([]);
+    expect(result.out).toEqual(['look ok: 1 rendered stills pass']);
+  });
+
   it('judges the bytes at HEAD: a pass on an older render does not cover a re-rendered still', async () => {
     const root = game({ stillBytes: 'frame-a' });
     await look(root, 'first', { answer: 'VERDICT: pass' });

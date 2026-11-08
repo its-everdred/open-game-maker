@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -87,6 +87,16 @@ describe('gm look evidence', () => {
     ]);
   });
 
+  // A symlink committed in place of the sheet keeps its name at HEAD but points at a workspace file that goes away.
+  it('fails a committed symlink to a workspace sheet', async () => {
+    const { root, game } = monorepo();
+    symlinkSync(join(root, 'assets-local/review/blobs/208/sheet-390x844.png'), join(game, 'review/210/linked.png'));
+    git(root, 'add', '-A');
+    git(root, 'commit', '-qm', 'link');
+    const file = body(root, '`review/210/linked.png`');
+    expect((await gm(['look', 'evidence', '--body', file], { cwd: game })).code).toBe(1);
+  });
+
   it('requires --body', async () => {
     const { game } = monorepo();
     expect((await gm(['look', 'evidence'], { cwd: game })).code).toBe(2);
@@ -103,5 +113,18 @@ describe('linkedEvidence', () => {
         ].join('\n'),
       ),
     ).toEqual(['a/sheet.png', 'review/x.jpg', 'a/run.mp4']);
+  });
+
+  // Each of these forms named the #214 sheet and slipped past the first version of the gate.
+  it('reads <img src>, bold, quoted, table and ?raw links, decoding %-escapes', () => {
+    expect(
+      linkedEvidence(
+        [
+          '<img src="assets-local/a.png" width=300> <img src=b.png>',
+          '**c.png** "e.webp" | f.jpg | ![g](g.png?raw=true) [h](h%20i.mp4#t=1)',
+          'https://example.test/view?file=j.png <https://example.test/k.png>',
+        ].join('\n'),
+      ),
+    ).toEqual(['assets-local/a.png', 'b.png', 'c.png', 'e.webp', 'f.jpg', 'g.png', 'h i.mp4']);
   });
 });

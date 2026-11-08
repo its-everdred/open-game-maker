@@ -25,9 +25,11 @@ type StillResult = { path: string; status: Status; detail: string };
 // The whole last non-empty line of the answer: a verdict followed by more text (a retraction) is not a verdict.
 const VERDICT = /^[\s*_`>#-]*VERDICT:[\s*_`]*(pass|fail)[\s*_`.]*$/i;
 const LOOK_HINT = 'look at it with gm-image-mock request-mock.py --kind look (gm-verify step 6)';
-const SKIP_DIRS = new Set(['node_modules', '.git', '.gm', '.gm-mock', 'dist']);
+// review/ holds evidence copied for a PR (`gm look evidence`), not the current render: judging it would let an earlier
+// ticket's committed stills replace this run's.
+const SKIP_DIRS = new Set(['node_modules', '.git', '.gm', '.gm-mock', 'dist', 'review']);
 
-/** `tN.png` stills committed at HEAD inside the game folder, as repository paths with their blob ids. */
+/** `tN.png` stills committed at HEAD inside the game folder, outside review/, as repository paths with blob ids. */
 function committedStills(game: string): { path: string; blob: string }[] {
   let listing: string;
   try {
@@ -38,7 +40,7 @@ function committedStills(game: string): { path: string; blob: string }[] {
   return listing
     .split('\n')
     .map((line) => /^\d+ blob ([0-9a-f]+)\t(.+)$/.exec(line))
-    .filter((match) => match !== null && STILL.test(basename(match[2]!)))
+    .filter((match) => match !== null && STILL.test(basename(match[2]!)) && !/(^|\/)review\//.test(match[2]!))
     .map((match) => ({ path: match![2]!, blob: match![1]! }));
 }
 
