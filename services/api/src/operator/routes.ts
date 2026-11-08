@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { and, eq } from 'drizzle-orm';
 
+import { reviewPath } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 
 import { HttpError } from '../app/errors.js';
@@ -9,6 +10,7 @@ import { hasInternalCredential } from '../app/internal-auth.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { ARCHIVE_LIMITS } from '../builds/untar.js';
 import { findGameBySlugOrId } from '../games/slug.js';
+import { reviewNumber } from '../reviews/numbers.js';
 import { publishArchive } from './publish.js';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
@@ -79,6 +81,16 @@ const routes = new Hono<ApiBindings>()
     requireOperator(c);
     const deps = c.get('deps');
     return c.json(facts(deps, gameFor(deps, c.req.param('ref'))));
+  })
+  // The Executor's link builder (#591): the short `/<slug>/review/<n>` path for one of the game's aiur decisions. A
+  // decision not shown before takes the game's next number here, so the link it pushes is the one the inbox shows.
+  .get('/games/:ref/reviews/:decisionId', (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    if (game.slug === null) throw new HttpError(409, 'game_slug_missing');
+    const number = reviewNumber(deps.db, game.id, c.req.param('decisionId'));
+    return c.json({ number, path: reviewPath(game.slug, number) });
   })
   // The operator's host script builds the game and posts the same archive the daemon's hook uploads, so the publisher
   // reads one artifact shape. A second run with a newer SHA stages and publishes the next build.

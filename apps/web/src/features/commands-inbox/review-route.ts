@@ -1,12 +1,14 @@
 import type { GameCommand } from '@ogm/contracts';
 
-// The review deck's deep link (A3): the Executor pushes one link to the creator and it opens the same deck the game's
-// inbox renders. The last segment is the Command's checkpoint id, the identifier the inbox row already carries; a
-// decision id resolves too, so a link built from aiur's side lands as well.
-export function reviewPath(gameId: string, command: Pick<GameCommand, 'checkpoint_id'>): string {
-  return `/game/${encodeURIComponent(gameId)}/review/${encodeURIComponent(command.checkpoint_id)}`;
-}
+// The review deck's deep link (#591): `/<slug>/review/<n>`, the game's slug and the Command's short number inside the
+// game. The Executor and notifications build it with this one function, shared with the API.
+export { reviewPath } from '@ogm/contracts/browser';
 
+// The legacy link's last segment: the Command's checkpoint id, or its decision id for a link built from aiur's side.
 export function findCommand(commands: readonly GameCommand[], commandId: string): GameCommand | undefined {
   return commands.find((command) => command.checkpoint_id === commandId || command.decision_id === commandId);
+}
+
+export function findCommandByNumber(commands: readonly GameCommand[], number: string): GameCommand | undefined {
+  return commands.find((command) => command.review_number !== undefined && String(command.review_number) === number);
 }

@@ -41,6 +41,20 @@ const runningJob = {
   openRequestCount: 2,
 };
 
+const energyView = {
+  level: 'limited',
+  preference: 'balanced',
+  windows: [
+    { window: 'day', usedPercent: 40, resetsAt: '2026-11-09T08:00:00.000Z' },
+    { window: 'week', usedPercent: 80, resetsAt: '2026-11-09T08:00:00.000Z' },
+    { window: 'month', usedPercent: null, resetsAt: '2026-12-01T08:00:00.000Z' },
+  ],
+  services: [
+    { service: 'voice', usedPercent: null },
+    { service: 'images', usedPercent: null },
+  ],
+};
+
 test.use({ serviceWorkers: 'block' });
 
 test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
@@ -84,6 +98,26 @@ test('shows the active build ring and contextual build in the games menu', async
   await expect(page).toHaveURL(/\/all/);
   await expect(page.getByRole('dialog', { name: 'Add the moon gate' })).toBeVisible();
   await capturePhone(page, testInfo, 'games-menu-conversation');
+});
+
+test('rings Energy in the menu and opens its windows, then its settings', async ({ page }, testInfo) => {
+  testInfo.setTimeout(90_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await stubBrandArt(page);
+  await installGamesMenuApi(page);
+  await page.goto('/all');
+
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Energy: Limited' }).click();
+  const detail = page.getByRole('link', { name: 'Energy settings' });
+  await expect(detail).toContainText('20% left');
+  await capturePhone(page, testInfo, 'games-menu-energy');
+
+  await detail.click();
+  await expect(page).toHaveURL(/\/settings\/energy$/);
+  await expect(page.getByRole('heading', { name: 'Energy: Limited' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Balanced' })).toBeChecked();
+  await capturePhone(page, testInfo, 'settings-energy');
 });
 
 for (const mode of ['play', 'edit'] as const) {
@@ -152,6 +186,7 @@ async function installGamesMenuApi(page: Page) {
     if (url.pathname.endsWith('/chat')) return route.fulfill({ contentType: 'text/event-stream', body: ': open\n\n' });
     if (url.pathname.endsWith('/checkpoints/budget')) return json(route, { used: 0, max: 3 });
     if (url.pathname === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (url.pathname === '/api/v1/energy') return json(route, energyView);
     return json(route, { error: 'not_mocked', path: url.pathname }, 404);
   });
 }

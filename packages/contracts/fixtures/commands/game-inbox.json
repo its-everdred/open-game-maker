@@ -84,12 +84,57 @@
       "version": 1,
       "question": "Which gate should the courtyard use?",
       "options": [
-        { "id": "stone", "label": "Stone arch" },
-        { "id": "wood", "label": "Wooden door" }
+        {
+          "id": "stone",
+          "label": "Stone arch"
+        },
+        {
+          "id": "wood",
+          "label": "Wooden door"
+        }
       ],
       "recommend": "stone",
       "blocking": false,
       "opened_at": "2026-11-07T17:42:00.000Z"
+    },
+    {
+      "job_id": "j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e80",
+      "ticket": "608",
+      "title": "Fall speed",
+      "checkpoint_id": "cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e81",
+      "decision_id": "d_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e82",
+      "version": 1,
+      "question": "Which fall speed feels right?",
+      "options": [
+        {
+          "id": "slow",
+          "label": "Slow",
+          "playable": {
+            "scenario": "scenario=sandbox&speed=slow",
+            "seconds": 8
+          }
+        },
+        {
+          "id": "medium",
+          "label": "Medium",
+          "playable": {
+            "scenario": "scenario=sandbox&speed=medium",
+            "seconds": 8
+          }
+        },
+        {
+          "id": "fast",
+          "label": "Fast",
+          "playable": {
+            "scenario": "scenario=sandbox&speed=fast",
+            "seconds": 8
+          }
+        }
+      ],
+      "recommend": "medium",
+      "blocking": false,
+      "pick": "one",
+      "opened_at": "2026-11-07T18:10:00.000Z"
     }
   ]
 }

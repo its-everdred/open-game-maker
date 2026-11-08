@@ -77,6 +77,7 @@ function voiceCommand(): GameCommand {
     blocking: true,
     pick: 'one',
     opened_at: '2026-11-07T17:40:00.000Z',
+    review_number: 1,
   };
 }
 
@@ -102,10 +103,32 @@ function imageCommand(): GameCommand {
     blocking: true,
     pick: 'many',
     opened_at: '2026-11-07T17:41:00.000Z',
+    review_number: 2,
   };
 }
 
-test.use({ serviceWorkers: 'block', video: 'on' });
+// A Command opened with no short summary (#594): aiur's own Decision API then hands the whole question over as the
+// title, the way Kevin's phone showed it. The screen still heads it with a few words.
+const LONG_QUESTION =
+  'Which of these two voices should the Blobs use for their idle chatter, given that the narrator already sits ' +
+  'in the low register and the hub music leaves little room in the mids? Pick the one that reads as small and warm ' +
+  'on a phone speaker without getting lost under the music.';
+
+function longCommand(): GameCommand {
+  return {
+    ...voiceCommand(),
+    title: LONG_QUESTION,
+    checkpoint_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e77',
+    decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e78',
+    question: LONG_QUESTION,
+    options: voiceCommand().options.slice(0, 2),
+    review_number: 3,
+  };
+}
+
+// Reduced motion holds the review's drifting glows still: under CI's software renderer, repainting them every frame
+// starves screenshots and clicks past the test timeout.
+test.use({ serviceWorkers: 'block', video: 'on', reducedMotion: 'reduce' });
 
 test.beforeEach(() => {
   answerBodies.length = 0;
@@ -113,7 +136,7 @@ test.beforeEach(() => {
 
 test('judges the 6-card voice deck and sends the review with its reasons', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
-  await openDeck(page, voiceCommand().checkpoint_id);
+  await openDeck(page, voiceCommand().review_number!);
 
   const deck = page.getByRole('region', { name: 'Review Pick the Blobs voices' });
   await expect(deck).toBeVisible();
@@ -186,7 +209,7 @@ test('judges the 6-card voice deck and sends the review with its reasons', async
 
 test('judges the 9-card image deck with the arrow keys and sends the review', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
-  await openDeck(page, imageCommand().checkpoint_id);
+  await openDeck(page, imageCommand().review_number!);
 
   const deck = page.getByRole('region', { name: 'Review Pick the Blobs look' });
   await expect(deck).toBeVisible();
@@ -261,6 +284,7 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
   await page.getByRole('button', { name: 'Send the review' }).click();
 
   await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
       option_id: 'm1',
@@ -274,16 +298,142 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
   await capture(page, testInfo, 'image-deck-sent');
 });
 
-async function openDeck(page: Page, checkpointId: string) {
+test('heads a long-question review with a short title, an X and nothing over the deck', async ({ page }, testInfo) => {
+  testInfo.setTimeout(120_000);
+  await openDeck(page, longCommand().review_number!);
+  await page.getByRole('button', { name: 'Like', exact: true }).waitFor();
+  await capture(page, testInfo, 'long-question');
+
+  // The title is a few words of the question, never the question itself.
+  const heading = page.getByRole('heading', { level: 1 });
+  await expect(heading).toHaveText('Which of these two voices…');
+  await expect(page.getByRole('button', { name: 'Back to the game' })).toHaveCount(0);
+
+  // The whole question waits in a collapsed line under the options and opens with a tap.
+  const body = page.locator('.review-screen-question');
+  const deckBottom = await page.locator('.review-deck').evaluate((element) => element.getBoundingClientRect().bottom);
+  const bodyTop = await body.evaluate((element) => element.getBoundingClientRect().top);
+  expect(bodyTop).toBeGreaterThanOrEqual(deckBottom);
+  await expect(body).toHaveJSProperty('open', false);
+  const closedHeight = (await body.boundingBox())!.height;
+  await body.getByText(LONG_QUESTION, { exact: true }).click();
+  await expect(body).toHaveJSProperty('open', true);
+  expect((await body.boundingBox())!.height).toBeGreaterThan(closedHeight * 2);
+  await body.scrollIntoViewIfNeeded();
+  await capture(page, testInfo, 'long-question-open');
+
+  // The screen is the deck's alone: no app menu, logo or chat dock floats over it. Checked by style, not visibility, so
+  // an empty dock cannot pass for a hidden one.
+  for (const chrome of ['.studio-menu-control', '.studio-logo', '#chat-dock-slot']) {
+    await expect(page.locator(chrome)).toHaveCSS('display', 'none');
+  }
+  // Nothing sits over the X: the point at its centre hits the button itself.
+  const close = page.getByRole('button', { name: 'Close' });
+  const box = (await close.boundingBox())!;
+  const hit = await page.evaluate(
+    ([x, y]) => document.elementFromPoint(x!, y!)?.closest('button')?.getAttribute('aria-label'),
+    [box.x + box.width / 2, box.y + box.height / 2],
+  );
+  expect(hit).toBe('Close');
+  const viewport = page.viewportSize()!;
+  expect(box.x + box.width).toBeGreaterThan(viewport.width - 80);
+  // The X closes the deck onto the game's rows; the rows' X goes back to the game.
+  await close.click();
+  await expect(page).toHaveURL(/\/blobs\/review$/);
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page).toHaveURL(/\/all\?spotlight=/);
+});
+
+// The inbox as rows: every open question with its first sample, a short title and its state. A tap opens a deck, the
+// arrows walk the others without closing it, each question keeps its own draft, and a swipe answers.
+test('walks three questions from the rows, keeps each draft and answers one by swipe', async ({ page }, testInfo) => {
+  testInfo.setTimeout(120_000);
   await installAuthRoutes(page, { signedIn: true });
   await installReviewApi(page);
-  await page.goto(`/game/${gameId}/review/${checkpointId}`);
+  await page.goto('/blobs/review');
+
+  const rows = page.getByRole('list', { name: 'Reviews' });
+  await expect(rows.getByRole('link')).toHaveCount(3);
+  await expect(rows.getByRole('link', { name: 'Pick the Blobs voices, open' })).toBeVisible();
+  await expect(rows.getByRole('link', { name: 'Which of these two voices…, open' })).toBeVisible();
+  const lookThumb = rows.getByRole('link', { name: 'Pick the Blobs look, open' }).locator('img');
+  await expect.poll(() => lookThumb.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  // The review is the glossy surface: the glows sit behind it, not a flat panel.
+  await expect(page.locator('.glow-backdrop span')).toHaveCount(5);
+  await capture(page, testInfo, 'rows-open');
+
+  // Open the look and judge two of its cards.
+  await rows.getByRole('link', { name: 'Pick the Blobs look, open' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/2$/);
+  await judgeCard(page, 'like');
+  await judgeCard(page, 'like');
+  await expect(page.locator('.review-deck-progress')).toHaveText('3 of 9');
+  // A card shows its letter, not a sentence.
+  await expect(page.locator('.review-deck-label')).toHaveText('C');
+
+  // Next and previous move between questions without closing the deck, and the look's draft is still there.
+  await page.getByRole('link', { name: 'Next question' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/3$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Which of these two voices…');
+  await page.getByRole('link', { name: 'Previous question' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/2$/);
+  await expect(page.locator('.review-deck-progress')).toHaveText('3 of 9');
+  await page.getByRole('link', { name: 'Previous question' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/1$/);
+  // The first question has nothing before it.
+  await expect(page.getByRole('link', { name: 'Previous question' })).toHaveCount(0);
+  await capture(page, testInfo, 'deck-voices');
+
+  // Answer the third question by swiping: right likes A, left dislikes B, then Send.
+  await page.getByRole('link', { name: 'Next question' }).click();
+  await page.getByRole('link', { name: 'Next question' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/3$/);
+  await expect(page.getByRole('link', { name: 'Next question' })).toHaveCount(0);
+  await expect(page.locator('.review-deck-progress')).toHaveText('1 of 2');
+  await swipe(page, 'right');
+  await expect(page.locator('.review-deck-progress')).toHaveText('2 of 2');
+  await swipe(page, 'left');
+  await page
+    .getByRole('dialog', { name: /^Why did you dislike/ })
+    .getByRole('button', { name: 'Skip' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Likes', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Send the review' }).click();
+  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  expect(answerBodies).toEqual([{ option_id: 'v1', review: { likes: ['v1'], dislikes: [{ option_id: 'v2' }] } }]);
+
+  // Back on the rows: the swiped question is sent and the look is still a draft.
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review$/);
+  await expect(rows.getByRole('link', { name: 'Which of these two voices…, sent' })).toBeVisible();
+  await expect(rows.getByRole('link', { name: 'Pick the Blobs look, draft' })).toBeVisible();
+  await capture(page, testInfo, 'rows-after');
+});
+
+// A finger drag across the card on screen, far enough to count as a swipe.
+async function swipe(page: Page, direction: 'left' | 'right') {
+  // Start below the letter and away from an audio card's centred replay button, which keeps its own taps.
+  const box = (await page.locator('.review-deck-card').first().boundingBox())!;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height * 0.2;
+  const dx = direction === 'right' ? 140 : -140;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 8; step += 1) await page.mouse.move(x + (dx * step) / 8, y);
+  await page.mouse.up();
+}
+
+// The short link the Executor pushes (#591): the game's slug and the Command's number inside the game.
+async function openDeck(page: Page, reviewNumber: number) {
+  await installAuthRoutes(page, { signedIn: true });
+  await installReviewApi(page);
+  await page.goto(`/blobs/review/${reviewNumber}`);
 }
 
 // The two decks and the answer route the app's own client calls. Media is served from its own origin so the cards have
 // real audio and stills to draw.
 async function installReviewApi(page: Page) {
-  const commands = [voiceCommand(), imageCommand()];
+  const commands = [voiceCommand(), imageCommand(), longCommand()];
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -291,6 +441,19 @@ async function installReviewApi(page: Page) {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }
     if (path === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (path === '/api/v1/games/resolve/blobs') {
+      return json(route, {
+        game: {
+          id: gameId,
+          familyId: 'f_1',
+          ownerId: 'u_1',
+          title: 'Blobs',
+          slug: 'blobs',
+          repo: null,
+          createdAt: '2026-11-07T17:00:00.000Z',
+        },
+      });
+    }
     if (path === `/api/v1/games/${gameId}/commands`) return json(route, { commands });
     if (path === '/api/v1/jobs' || path === '/api/v1/jobs/active') return json(route, { jobs: [] });
     if (path.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });

@@ -1,5 +1,6 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
 import { schema } from '@ogm/db';
+import type { OptionPlayable } from '@ogm/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../../src/app/errors.js';
@@ -108,7 +109,7 @@ function checkpoint(
     status?: 'open' | 'answered' | 'moot';
     version?: number | undefined;
     at?: string;
-    options?: Array<{ id: string; label: string; media_id?: string }>;
+    options?: Array<{ id: string; label: string; media_id?: string; playable?: OptionPlayable }>;
   } = {},
 ) {
   insertChatRow(deps.sqlite, {
@@ -178,6 +179,48 @@ describe('game commands inbox', () => {
     ]);
   });
 
+  // The short link `/<slug>/review/<n>` (#591) must keep opening the same Command: a number is given once, in the
+  // order the Commands were first shown, and a later Command never takes a number an earlier one had.
+  it('numbers each Command once, oldest first, and never reuses a number', async () => {
+    const { app, deps } = await appWithJobs();
+    checkpoint(deps, ids.job, ULID, { at: '2026-11-04T10:00:00.000Z' });
+    checkpoint(deps, ids.linkedJob, MEDIA_ID, { at: '2026-11-04T12:00:00.000Z' });
+    const numbered = async () =>
+      (
+        (await (await get(app, ids.game)).json()) as {
+          commands: Array<{ checkpoint_id: string; review_number: number }>;
+        }
+      ).commands.map(({ checkpoint_id, review_number }) => [checkpoint_id, review_number]);
+
+    expect(await numbered()).toEqual([
+      [MEDIA_ID, 2],
+      [ULID, 1],
+    ]);
+    // Listing again changes nothing.
+    expect(await numbered()).toEqual([
+      [MEDIA_ID, 2],
+      [ULID, 1],
+    ]);
+
+    // The first Command is answered and leaves the inbox; the next one opened takes 3, not 1.
+    deps.sqlite
+      .prepare(
+        "UPDATE build_chat_messages SET checkpoint_json = json_set(checkpoint_json, '$.status', 'answered') WHERE id = ?",
+      )
+      .run(ULID);
+    const later = '01JBX2Q7M3K8V5N4R6T9W0YZAE';
+    checkpoint(deps, ids.job, later, { at: '2026-11-04T13:00:00.000Z' });
+    expect(await numbered()).toEqual([
+      [later, 3],
+      [MEDIA_ID, 2],
+    ]);
+
+    // Numbers belong to their game: the other game starts at 1.
+    checkpoint(deps, ids.otherJob, '01JBX2Q7M3K8V5N4R6T9W0YZAD');
+    const other = (await (await get(app, ids.otherGame)).json()) as { commands: Array<{ review_number: number }> };
+    expect(other.commands.map(({ review_number }) => review_number)).toEqual([1]);
+  });
+
   it('leaves out answered, moot, and uncorrelated Commands', async () => {
     const { app, deps } = await appWithJobs();
     checkpoint(deps, ids.job, ULID, { status: 'answered' });
@@ -217,6 +260,25 @@ describe('game commands inbox', () => {
     expect(body.commands[0]!.options[0]!.media?.url).toContain('/blobs/');
     // A media id that names no row in this job leaves the option without media.
     expect(body.commands[0]!.options[1]).toEqual({ id: 'iron', label: 'Iron door' });
+  });
+
+  // A gameplay-feel question (#608) is answered by playing each option, so the card needs the scenario the agent set.
+  it('carries an option’s playable slice to the deck', async () => {
+    const { app, deps } = await appWithJobs();
+    const slow = { scenario: 'scenario=sandbox&speed=slow', seconds: 6, lead_in: 'one-chain' };
+    checkpoint(deps, ids.job, ULID, {
+      options: [
+        { id: 'slow', label: 'Slow', playable: slow },
+        { id: 'fast', label: 'Fast', playable: { scenario: 'scenario=sandbox&speed=fast', seconds: 8 } },
+      ],
+    });
+
+    const body = (await (await get(app, ids.game)).json()) as {
+      commands: Array<{ options: Array<{ id: string; playable?: OptionPlayable }> }>;
+    };
+
+    expect(body.commands[0]!.options[0]).toEqual({ id: 'slow', label: 'Slow', playable: slow });
+    expect(body.commands[0]!.options[1]!.playable?.scenario).toBe('scenario=sandbox&speed=fast');
   });
 
   it('leaves out a malformed Command instead of failing the whole inbox', async () => {

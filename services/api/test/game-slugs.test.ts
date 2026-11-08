@@ -105,6 +105,25 @@ describe('game slugs', () => {
     ).resolves.toBe(second.id);
   });
 
+  // A slug is the game's top-level link (`/<slug>`), so a game titled like an app screen must not take that screen's
+  // address: `/new` has to keep opening the new-game screen.
+  it('never hands a game a slug an app route answers to', async () => {
+    const { app } = await setup();
+
+    const games = [await createGame(app, 'New'), await createGame(app, 'Settings'), await createGame(app, 'Play')];
+
+    expect(games.map((game) => game.slug)).toEqual(['new-2', 'settings-2', 'play-2']);
+  });
+
+  it('skips a reserved slug on rename too', async () => {
+    const { app } = await setup();
+    const game = await createGame(app, 'Castle Game');
+
+    const response = await rename(app, game.id, 'Admin');
+
+    expect(((await response.json()) as { slug: string }).slug).toBe('admin-2');
+  });
+
   it('keeps resolving a game by its id', async () => {
     const { app } = await setup();
 

@@ -37,6 +37,7 @@ gm check static [--json]
 gm check hooks [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--serve <dir>] [--out <dir>] [--json]
 gm run [--inputs <script.json>] [--frames <seconds,...>] [--timeline <from:to:step>] [--out <dir>]
+gm look check [--json]
 ```
 
 `gm check` runs TypeScript, deterministic simulation-source, test-hook, and registered asset gates. Use `static` or
@@ -53,6 +54,13 @@ logical-input script, checks a save-state round trip, writes a HUD still, runs `
 keys without exposing values. Use `gm help run` for viewport, recording, rig, and asset-tier flags. `--record-native`
 records the game canvas at its pixel size, scaled up only by a whole-number factor, rendering every frame through the
 game's deterministic hook so a clip holds exactly duration x fps frames.
+
+`gm look check` gates the PR on the vision look requests (`gm-image-mock`, `request-mock.py --kind look`), which log
+each answer or broker error to `.gm-mock/looks.jsonl` with the git blob id of every image they judged. It judges each
+`tN.png` still committed at HEAD in the game folder, or, when none is committed (an instance repository ignores
+`*.png`), each `tN.png` rendered there. The newest look on exactly those bytes decides: its answer's last line must be
+`VERDICT: pass`. A `VERDICT: fail`, an answer that does not end in a verdict, no look on those bytes, or no stills at all
+exits 1. A broker error or timeout (for example a 402) is reported as `blocked` and also exits 1; it is never a pass.
 
 ## Refresh the skill pack
 
@@ -123,6 +131,21 @@ it withdrew. `--must` adds the machine-checkable side of the rule as JSON, for e
 `gm options check` fails an option that breaks a ledger rule, matches a rejected option by id or provenance, or
 predates a rule that applies to its scope. It exits 1 and names each violation, or prints `options ok`. Run it on any
 option set before the options reach the creator; gm-verify runs it as a gate.
+
+## Sweep ticket premises
+
+```text
+gm plan premises --tickets <issues.json> --decisions <decisions.json>
+```
+
+`gm plan premises` checks each open ticket in `--tickets` (from
+`gh issue list --state open --limit 1000 --json number,title,body,state`) against the premises it names: `Decisions:`
+ids, `Spec:` and `Owns:` paths relative to the repository root, and `context-sha:`. `--decisions` is the game's
+decision history from `GET /internal/games/<id>/design-decisions`. A ticket is flagged when a cited decision was
+revised or superseded by a later one, mooted by a later `gm options reject` that rejected its answer or withdrew its
+Command, or is missing from the history, or when a spec or owned file changed between `context-sha` and HEAD. It
+prints one JSON report (`flagged` with each ticket's reasons, `clean`, and `unchecked` for tickets that name no
+premise) and exits 1 when any ticket is flagged. It needs no model; run it from the game's folder.
 
 ## Agree a scope session
 
