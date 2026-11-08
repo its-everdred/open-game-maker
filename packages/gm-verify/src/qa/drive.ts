@@ -1,0 +1,88 @@
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import type { Browser } from 'playwright';
+
+import { VIEWPORTS } from '../browser.js';
+import { FfmpegMissingError, hasFfmpeg } from '../capture.js';
+import { ConsoleCollector } from '../console.js';
+import type { ConsoleEntry, ViewportName } from '../report.js';
+import type { SoloJourney } from './journey.js';
+import { encodeClip } from './media.js';
+import { watchConsole } from './open.js';
+import { Player, type StepResult } from './player.js';
+
+export type DriveResult = {
+  journey: string;
+  url: string;
+  viewport: ViewportName;
+  verdict: 'pass' | 'fail';
+  steps: StepResult[];
+  /** Steps never run because an earlier one failed. */
+  skipped: number;
+  console: ConsoleEntry[];
+  clip: { mp4: string; gif: string } | null;
+  /** Why there is no clip (ffmpeg missing), so the report can list it as unchecked. */
+  unchecked: string[];
+};
+
+export const DRIVE_RESULT = 'journey-result.json';
+
+/**
+ * Plays a journey against the build in real time with real input, recording the page. Writes stills, `journey.mp4`,
+ * `journey.gif` and `journey-result.json` into `<outDir>/<journey name>/`; any failed step fails the journey.
+ */
+export async function driveJourney(
+  browser: Browser,
+  url: string,
+  journey: SoloJourney,
+  options: { outDir: string; viewport?: ViewportName; ffmpegBinary?: string },
+): Promise<DriveResult> {
+  const viewport = options.viewport ?? journey.viewport ?? 'desktop';
+  const dir = join(options.outDir, journey.name);
+  const videoDir = join(dir, '.video');
+  mkdirSync(videoDir, { recursive: true });
+  const size = VIEWPORTS[viewport].viewport ?? { width: 1280, height: 720 };
+  const context = await browser.newContext({ ...VIEWPORTS[viewport], recordVideo: { dir: videoDir, size } });
+  const collector = new ConsoleCollector();
+  let steps: StepResult[];
+  let webm: string | undefined;
+  try {
+    const page = await context.newPage();
+    watchConsole(page, collector);
+    const player = new Player(page, dir, { label: viewport, touch: VIEWPORTS[viewport].hasTouch === true });
+    await page.goto(url, { waitUntil: 'load' });
+    steps = await player.runAll(journey.steps);
+    webm = await page.video()?.path();
+  } finally {
+    await context.close();
+  }
+
+  const binary = options.ffmpegBinary ?? 'ffmpeg';
+  const unchecked: string[] = [];
+  let clip: DriveResult['clip'] = null;
+  try {
+    if (!webm) throw new Error('no recording');
+    if (!hasFfmpeg(binary)) throw new FfmpegMissingError(binary);
+    encodeClip(webm, join(dir, 'journey.mp4'), join(dir, 'journey.gif'), binary);
+    clip = { mp4: 'journey.mp4', gif: 'journey.gif' };
+  } catch (error) {
+    unchecked.push(`clip (${error instanceof Error ? error.message : String(error)})`);
+  } finally {
+    rmSync(videoDir, { recursive: true, force: true });
+  }
+
+  const result: DriveResult = {
+    journey: journey.name,
+    url,
+    viewport,
+    verdict: steps.length === journey.steps.length && steps.every((s) => s.ok) ? 'pass' : 'fail',
+    steps,
+    skipped: journey.steps.length - steps.length,
+    console: collector.list(),
+    clip,
+    unchecked,
+  };
+  writeFileSync(join(dir, DRIVE_RESULT), `${JSON.stringify(result, null, 2)}\n`);
+  return result;
+}
