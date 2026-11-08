@@ -30,6 +30,10 @@ while root != '/' and not os.path.isdir(os.path.join(root, '.git')):
 if root == '/':
     sys.exit('run inside the workspace')
 rid = a.name or uuid.uuid4().hex[:12]
+if a.kind == 'look':
+    # Every look gets its own id (so its own done and answer files): a reused --name can never pick up an earlier
+    # or late answer and log it against new bytes.
+    rid = (a.name + '-' if a.name else '') + uuid.uuid4().hex[:8]
 prompt = open(a.prompt_file, encoding='utf-8').read() if a.prompt_file else ''
 req = {
     'id': rid,
@@ -51,10 +55,8 @@ for ref in req['refs']:
     blobs.append(hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest())
 for d in ('requests', 'done'):
     os.makedirs(os.path.join(root, '.gm-mock', d), exist_ok=True)
-done = os.path.join(root, '.gm-mock', 'done', rid + '.json')
-if os.path.exists(done):
-    os.remove(done)  # a reused --name must wait for this answer, not read the last one
 tmp = os.path.join(root, '.gm-mock', 'requests', rid + '.tmp')
+done = os.path.join(root, '.gm-mock', 'done', rid + '.json')
 json.dump(req, open(tmp, 'w'))
 os.rename(tmp, tmp[:-4] + '.json')
 
@@ -74,7 +76,9 @@ while time.time() < end:
         if r.get('ok'):
             print(os.path.join(req['out'], r['file']))
             json.dump({**req, **r}, open(os.path.join(root, req['out'], rid + '.json'), 'w'), indent=1)  # the record: prompt, refs, model, cost, time
-            log_look({'ok': True, 'answer': os.path.join(req['out'], r['file'])})
+            answer = os.path.join(req['out'], r['file'])
+            digest = hashlib.sha256(open(os.path.join(root, answer), 'rb').read()).hexdigest()
+            log_look({'ok': True, 'answer': answer, 'answer_sha256': digest})
             sys.exit(0)
         log_look({'ok': False, 'error': r.get('error', 'unknown')})
         sys.exit('mock failed: ' + r.get('error', 'unknown'))

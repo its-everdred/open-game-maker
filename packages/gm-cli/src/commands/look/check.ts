@@ -14,6 +14,7 @@ type Look = {
   refs: { path: string; blob: string }[];
   ok: boolean;
   answer?: string;
+  answer_sha256?: string;
   error?: string;
 };
 
@@ -88,7 +89,10 @@ function judge(root: string, still: { path: string; blob: string }, looks: Look[
   const answer = newest.answer === undefined ? '' : join(root, newest.answer);
   if (answer === '' || !existsSync(answer))
     return { path, status: 'missing', detail: `look answer file is gone: ${newest.answer ?? '(none)'}` };
-  const last = readFileSync(answer, 'utf8').trimEnd().split('\n').at(-1) ?? '';
+  const text = readFileSync(answer);
+  if (createHash('sha256').update(text).digest('hex') !== newest.answer_sha256)
+    return { path, status: 'missing', detail: `${newest.answer} changed after the look; ${LOOK_HINT}` };
+  const last = text.toString('utf8').trimEnd().split('\n').at(-1) ?? '';
   const verdict = VERDICT.exec(last)?.[1]?.toLowerCase();
   if (verdict === 'pass') return { path, status: 'pass', detail: newest.answer! };
   if (verdict === 'fail')

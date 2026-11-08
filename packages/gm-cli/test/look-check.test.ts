@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,16 +58,23 @@ async function look(root: string, name: string, broker: Broker): Promise<string>
   );
   const exited = new Promise((resolve) => child.on('close', resolve));
   if (broker !== 'silent') {
-    const posted = join(root, '.gm-mock/requests', `${name}.json`);
-    while (!existsSync(posted)) await sleep(20);
-    // The host broker consumes each request it answers.
-    request = readFileSync(posted, 'utf8');
-    rmSync(posted);
-    const done = join(root, '.gm-mock/done', `${name}.json`);
+    const requests = join(root, '.gm-mock/requests');
+    let posted: string | undefined;
+    while (!posted) {
+      posted = existsSync(requests)
+        ? readdirSync(requests).find((file) => file.startsWith(`${name}-`) && file.endsWith('.json'))
+        : undefined;
+      if (!posted) await sleep(20);
+    }
+    // The host broker consumes each request it answers and names the answer after the request id.
+    request = readFileSync(join(requests, posted), 'utf8');
+    rmSync(join(requests, posted));
+    const id = (JSON.parse(request) as { id: string }).id;
+    const done = join(root, '.gm-mock/done', `${id}.json`);
     if ('answer' in broker) {
       mkdirSync(join(root, 'looks'), { recursive: true });
-      writeFileSync(join(root, 'looks', `${name}.look.md`), broker.answer);
-      writeFileSync(done, JSON.stringify({ ok: true, file: `${name}.look.md` }));
+      writeFileSync(join(root, 'looks', `${id}.look.md`), broker.answer);
+      writeFileSync(done, JSON.stringify({ ok: true, file: `${id}.look.md` }));
     } else writeFileSync(done, JSON.stringify({ ok: false, error: broker.error }));
   }
   await exited;
@@ -93,9 +100,12 @@ describe('gm look check', { timeout: 60_000 }, () => {
     const result = await gm(['look', 'check'], { cwd: root });
 
     expect(result.code).toBe(1);
-    expect(result.err).toEqual([
-      `fail ${STILL}: VERDICT: fail in looks/first.look.md; fix what it names, then look again`,
-    ]);
+    expect(result.err).toHaveLength(1);
+    expect(result.err[0]).toMatch(
+      new RegExp(
+        `^fail ${STILL}: VERDICT: fail in looks/first-[0-9a-f]{8}\\.look\\.md; fix what it names, then look again$`,
+      ),
+    );
   });
 
   it('reports a broker error such as 402 as blocked, never as a pass', async () => {
@@ -149,6 +159,19 @@ describe('gm look check', { timeout: 60_000 }, () => {
     expect(result.err[0]).toBe(`blocked ${STILL}: look broker error: no answer from the mock broker in 1s`);
   });
 
+  it('does not trust an answer file that changed after its look (a later look reusing the name overwrote it)', async () => {
+    const root = game();
+    const request = JSON.parse(await look(root, 'first', { answer: 'VERDICT: fail' })) as { id: string };
+    writeFileSync(join(root, 'looks', `${request.id}.look.md`), 'VERDICT: pass');
+
+    const result = await gm(['look', 'check'], { cwd: root });
+
+    expect(result.code).toBe(1);
+    expect(result.err[0]).toMatch(
+      new RegExp(`^missing ${STILL}: looks/${request.id}\\.look\\.md changed after the look; `),
+    );
+  });
+
   it('lets the newest look decide and fails an answer that does not end in a verdict', async () => {
     const root = game();
     await look(root, 'first', { answer: 'VERDICT: fail' });
@@ -159,7 +182,10 @@ describe('gm look check', { timeout: 60_000 }, () => {
     const result = await gm(['look', 'check'], { cwd: root });
 
     expect(result.code).toBe(1);
-    expect(result.err).toEqual([`fail ${STILL}: looks/second.look.md does not end in a VERDICT line`]);
+    expect(result.err).toHaveLength(1);
+    expect(result.err[0]).toMatch(
+      new RegExp(`^fail ${STILL}: looks/second-[0-9a-f]{8}\\.look\\.md does not end in a VERDICT line$`),
+    );
   });
 
   it('judges rendered stills in a repo that ignores *.png, and never passes with nothing to judge', async () => {
