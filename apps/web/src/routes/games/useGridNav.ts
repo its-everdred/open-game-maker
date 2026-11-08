@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 
 type GridNavOptions = {
   count: number;
@@ -21,8 +21,14 @@ export function useGridNav(options: GridNavOptions) {
     if (options.selectedIndex !== null) setFocused(options.selectedIndex);
   }, [options.selectedIndex]);
 
+  // Arriving focuses the selected tile without scrolling to it: on a short screen the scroll carried the spotlight's
+  // title and first decision off the top (#629). Moving between tiles afterwards still scrolls them into view.
+  const arrived = useRef(false);
   useEffect(() => {
-    options.containerRef?.current?.querySelectorAll<HTMLButtonElement>('.game-tile')[focused]?.focus();
+    const tile = options.containerRef?.current?.querySelectorAll<HTMLButtonElement>('.game-tile')[focused];
+    if (!tile) return;
+    tile.focus({ preventScroll: !arrived.current });
+    arrived.current = true;
   }, [focused, options.containerRef]);
 
   const focusAt = useCallback(

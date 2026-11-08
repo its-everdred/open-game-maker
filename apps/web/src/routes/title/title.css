@@ -10,8 +10,13 @@
 }
 
 .title-town {
-  position: absolute;
-  inset: 0;
+  /* the whole screen, under iOS Safari's toolbars and the home indicator too: the screen box is 100svh (so Start stays
+     above the toolbar), which stops short of the bottom once the toolbar floats or hides (#629) */
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 100lvh;
 }
 
 .title-town iframe,

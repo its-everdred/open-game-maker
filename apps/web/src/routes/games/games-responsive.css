@@ -125,23 +125,30 @@
 }
 
 @media (orientation: landscape) and (max-height: 540px) {
+  /* The spotlight fills the screen above the New game band; its decisions scroll inside the copy column, so the row
+     never outgrows the screen and pushes the cover off it (#629). */
   .games-spotlight {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
-    height: 74svh;
+    grid-template-rows: minmax(0, 1fr);
+    height: calc(100svh - 64px - var(--safe-b));
     padding: 12px max(12px, var(--safe-r)) 8px max(16px, var(--safe-l));
     gap: 16px;
   }
 
   .games-spotlight-media {
     order: 0;
-    width: min(100%, calc((74svh - 24px) * 16 / 9));
-    max-height: calc(74svh - 24px);
+    width: min(100%, calc((100svh - 84px - var(--safe-b)) * 16 / 9));
+    max-height: calc(100svh - 84px - var(--safe-b));
     justify-self: end;
   }
 
   .games-spotlight-copy {
+    max-height: 100%;
+    align-content: start;
     gap: 6px;
     padding-top: 34px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .games-spotlight h1 {
