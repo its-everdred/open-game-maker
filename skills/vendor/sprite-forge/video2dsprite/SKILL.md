@@ -1,10 +1,13 @@
 ---
 license: MIT
 source: 0x0funky/agent-sprite-forge@5324342fdfab72430f4e9604f3fe427009f8596d skills/video2dsprite/SKILL.md
-modified: false
+modified: true
 name: video2dsprite
 description: Turn one approved master still into a character's whole animated sprite set - one image-to-video clip per action (idle, walk, run, attack, jump, hurt, cast and so on), all from that still, generated through generate2dmedia route_media.py (the xAI API when a key is configured, else the local Grok CLI) - then gate each take, key it with a soft matte, register it to the master, pick loops or retime actions, finish (HD by default, pixel on request) and package fixed-canvas frames, alpha WebM, packed MP4 for iPhone and a PNG fallback with engine metadata and a JS runtime. Also processes a supplied clip. Use for character and creature animation, fluid motion and any video-to-sprite work. Not for FX, icon or prop sheets (generate2dsprite), maps or plate loops (generate2dmap), code-drawn animation (codeart2d, only on request) or calling a video API by itself (generate2dmedia).
 ---
+
+> Game Maker: before generating anything, follow the Sprite Forge rules in `.claude/skills/gm-asset-variants/SKILL.md`
+> (no provider key, `--route codex-cli` only, ask first); they win over this text.
 
 # Video to 2D Animation
 

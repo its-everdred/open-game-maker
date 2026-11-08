@@ -1,10 +1,13 @@
 ---
 license: MIT
 source: 0x0funky/agent-sprite-forge@5324342fdfab72430f4e9604f3fe427009f8596d skills/generate2dsprite/SKILL.md
-modified: false
+modified: true
 name: generate2dsprite
 description: Make game-ready 2D characters, creatures, props, icons and FX as master stills, sprite sheets or animation clips. Plan size, motion and finish; generate the art (image generation is the default, through generate2dmedia route_media.py - the API when a key is configured, else the local Codex or Grok CLI); approve one master still per character; then key, slice, register, scale, palette, QA and export frames for a game engine (Aseprite JSON, Godot SpriteFrames or Sprite3D). HD finish by default, pixel finish on request. Character animation is one image-to-video clip per action from the master (video2dsprite); sheets are for FX, icons and props. Use for sprites, masters, sheets, frame-by-frame animation and packaging frames from any source. Not for maps, tiles or backgrounds (generate2dmap), video clips (video2dsprite), code-drawn art (codeart2d, only on request) or calling an image or video API by itself (generate2dmedia).
 ---
+
+> Game Maker: before generating anything, follow the Sprite Forge rules in `.claude/skills/gm-asset-variants/SKILL.md`
+> (no provider key, `--route codex-cli` only, ask first); they win over this text.
 
 # Generate 2D Sprite
 

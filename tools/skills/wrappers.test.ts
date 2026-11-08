@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,10 +22,37 @@ describe('gm wrappers of the vendored tool sets', () => {
     }
     expect(existsSync(join(skills, 'vendor/sprite-forge/generate2dsprite/scripts/palette_tool.py'))).toBe(true);
     expect(variants).toContain('No fal and no provider key: never add, set or ask for one, and never spend.');
-    expect(variants).toContain('--route codex-cli');
-    expect(variants).toContain('never `--route auto`');
+    /* Sprite Forge's own default is "API key first"; master_still.py only forwards --route when given one. */
+    expect(variants).toContain('Every generating call passes `--route codex-cli`');
+    expect(variants).toContain("`generate2dmedia`'s `route_media.py image` and `master_still.py generate`");
+    expect(variants).toContain('never leave `--route` out, and never run `route_media.py video`');
+    expect(variants).toContain(
+      '`video2dsprite` turns a clip the creator supplies into frames and never generates video',
+    );
+    expect(variants).toContain("a configured key is the owner's consent");
     expect(variants).toContain('Ask the Executor before any generation');
     expect(variants).toContain('Never send a paid-pack asset to a cloud model as a reference');
+  });
+
+  it('the generating Sprite Forge skills point a worker who opens them directly at those rules', () => {
+    for (const tool of ['generate2dsprite', 'generate2dmap', 'generate2dmedia', 'video2dsprite']) {
+      const body = readFileSync(join(skills, 'vendor/sprite-forge', tool, 'SKILL.md'), 'utf8').split('\n---\n')[1]!;
+      expect(body.trimStart().replace(/\s+/g, ' '), tool).toMatch(
+        /^> Game Maker: before generating anything, follow the Sprite Forge rules in `\.claude\/skills\/gm-asset-variants\/SKILL\.md` > \(no provider key, `--route codex-cli` only, ask first\); they win over this text\./,
+      );
+    }
+  });
+
+  it('no gm skill or role row names a media route other than codex-cli, except to forbid it', () => {
+    const files = readdirSync(skills)
+      .filter((name) => name.startsWith('gm-') && existsSync(join(skills, name, 'SKILL.md')))
+      .map((name) => join(name, 'SKILL.md'))
+      .concat('gm-core/references/roles.md');
+    for (const file of files) {
+      const prose = readFileSync(join(skills, file), 'utf8').replace(/\s+/g, ' ');
+      for (const m of prose.matchAll(/(\S+ \S+ )?`--route (\S+?)`/g))
+        if (m[2] !== 'codex-cli') expect(m[1], `${file}: --route ${m[2]}`).toMatch(/\bnever\b/i);
+    }
   });
 
   it('gm-image-mock runs only the local video-to-game tools on a clip the creator supplies', () => {
@@ -58,7 +85,11 @@ describe('gm wrappers of the vendored tool sets', () => {
       return roles.slice(start, next === -1 ? undefined : next);
     };
     const expected: Record<string, string[]> = {
-      'role:assets': ['sprite-forge/generate2dsprite/SKILL.md', 'sprite-forge/generate2dmap/SKILL.md'],
+      'role:assets': [
+        'sprite-forge/generate2dsprite/SKILL.md',
+        'sprite-forge/generate2dmap/SKILL.md',
+        'sprite-forge/video2dsprite/SKILL.md',
+      ],
       'role:visual': [
         'sprite-forge/generate2dsprite/SKILL.md',
         'video-to-game/references/study-the-video.md',
@@ -73,7 +104,7 @@ describe('gm wrappers of the vendored tool sets', () => {
       }
     }
     expect(roles.replace(/\s+/g, ' ')).toContain(
-      'ask the Executor before any generation, images only through `--route codex-cli`, no provider key',
+      'ask the Executor before any generation, every generating call passes `--route codex-cli`, no provider key',
     );
   });
 });

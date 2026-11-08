@@ -1,10 +1,13 @@
 ---
 license: MIT
 source: 0x0funky/agent-sprite-forge@5324342fdfab72430f4e9604f3fe427009f8596d skills/generate2dmedia/SKILL.md
-modified: false
+modified: true
 name: generate2dmedia
 description: The art-route layer of the Forge skills. route_media.py is the one command that generates an image or an image-to-video clip - through the paid API of any provider whose key is configured (OpenAI, Google Gemini, xAI, BytePlus ModelArk, fal.ai; the configured key is the owner's consent), else through the user's own signed-in Codex or Grok CLI - and prints one JSON line with the route, artifact, sha256 and cost estimate; with no route it answers no-route (codeart2d is then the last resort). Also the capability check (forge_doctor), API key configuration, the spend ledger, resume and Codex image adoption. Use when a Forge skill sends a generation here, for the capability check, or when the user asks about keys, routes or spend. Not for planning, processing or QA of sprites, video frames or maps (generate2dsprite, video2dsprite, generate2dmap) or for code-drawn art (codeart2d).
 ---
+
+> Game Maker: before generating anything, follow the Sprite Forge rules in `.claude/skills/gm-asset-variants/SKILL.md`
+> (no provider key, `--route codex-cli` only, ask first); they win over this text.
 
 # Generate 2D Media
 

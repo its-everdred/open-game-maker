@@ -1,7 +1,15 @@
 # Changes from 0x0funky/agent-sprite-forge@5324342fdfab72430f4e9604f3fe427009f8596d (v0.4.0)
 
 The five skills (`codeart2d`, `generate2dmap`, `generate2dmedia`, `generate2dsprite`, `video2dsprite`) are copied
-whole. Every markdown file gains `license`, `source` and `modified` front-matter keys; no file is otherwise changed.
+whole. Every markdown file gains `license`, `source` and `modified` front-matter keys. Files with `modified: true`
+also gain a first line pointing at Game Maker's Sprite Forge rules in `gm-asset-variants`:
+
+- generate2dsprite/SKILL.md: the rules pointer.
+- generate2dmap/SKILL.md: the rules pointer.
+- generate2dmedia/SKILL.md: the rules pointer.
+- video2dsprite/SKILL.md: the rules pointer.
+
+No other file is changed.
 The repository's `docs/`, `shared/`, `src/`, `tests/` and `tools/` are not vendored (each skill ships its own copies
 of the shared scripts).
 

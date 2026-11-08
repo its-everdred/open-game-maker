@@ -1,10 +1,13 @@
 ---
 license: MIT
 source: 0x0funky/agent-sprite-forge@5324342fdfab72430f4e9604f3fe427009f8596d skills/generate2dmap/SKILL.md
-modified: false
+modified: true
 name: generate2dmap
 description: Plan and build 2D game maps and scenes - top-down and side-scrolling levels, tilemaps, prop packs, parallax backgrounds and HD-2D battle or story plates - with collision, navigation and reachability checks, environment motion, a playable HTML preview and export to Tiled, Godot 4 or LDtk. Map art (terrain, tiles, props, plates, parallax layers) is image generation by default, through generate2dmedia route_media.py (the API when a key is configured, else the local Codex or Grok CLI); map data (layout, collision, exits, spawns) is written as data. Use for any map, level, room, scene, background, terrain or prop-kit request. Not for characters, creatures, items or FX (generate2dsprite), character animation (video2dsprite), code-drawn tiles or maps (codeart2d, only on request) or calling an image or video API by itself (generate2dmedia).
 ---
+
+> Game Maker: before generating anything, follow the Sprite Forge rules in `.claude/skills/gm-asset-variants/SKILL.md`
+> (no provider key, `--route codex-cli` only, ask first); they win over this text.
 
 # Generate 2D Map
 
