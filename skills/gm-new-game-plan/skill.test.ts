@@ -40,3 +40,16 @@ describe('game flow diagram step', () => {
     expect(read('../gm-qa/SKILL.md')).toContain("follows a path of edges in the game's flow diagram");
   });
 });
+
+/* #656, Kevin 2026-11-08: roles assign the mandatory skills aiur inlines per ticket, so the planner stamps a game and a
+   role on every ticket and the plan check refuses one without. */
+describe('ticket roles', () => {
+  it('makes the planner stamp game and role labels from roles.md and run the plan check before queueing', () => {
+    const plan = read('./SKILL.md');
+    expect(plan).toContain('**Roles on every ticket.**');
+    expect(plan).toContain('`../gm-core/references/roles.md`');
+    expect(plan).toContain('`gm plan check --tickets <file> --game <slug>`');
+    expect(plan).toContain('`game:<slug>` and `role:*` labels');
+    expect(read('../gm-core/references/roles.md')).toContain('`game:<slug>` maps to `gm-core` and the set skill');
+  });
+});

@@ -82,6 +82,9 @@ judges every such sheet like a still: a screen with no sheet, or whose sheet's n
 ```text
 gm skills sync [--check] [--force]
 gm skills list
+gm skills search <words…>
+gm skills show <name>
+gm skills config
 ```
 
 `sync` installs the platform's shared `gm-*` runtime skills, the one `gm-set-<set>` skill recorded in `gm.lock.json`,
@@ -94,6 +97,17 @@ The command preserves an installed file whose hash no longer matches the previou
 missing, outdated, or locally edited file without writing; it exits 1 when drift exists. `--force` refreshes locally
 edited pack files but still preserves files the pack did not install. `list` prints the discovery names currently
 recorded in the lock.
+
+`search` and `show` are the on-demand catalog: they read the game repo's installed `.claude/skills/` (the platform
+pack when there is none). `search` lists skills whose name or description holds any of the words, most hits first (a hit in
+the name counts twice), and exits 1 when none match. `show` prints a skill's `SKILL.md`, preceded by the `role:*` labels that make it mandatory.
+Discovery never replaces the skills a ticket's labels inline.
+
+`config` prints aiur's `agent.skills` block from `skills/gm-core/references/roles.md`: `preload_max_bytes`, then
+`by_label` with one `game:<slug>` per `games/<slug>/gm.lock.json` under the current directory (`gm-core` plus
+`gm-set-<set>`), then every role label with its mandatory skills. Run it from the instance root and paste it into the
+instance's `.aiur/config`. The builder writes the role labels into each game daemon's config itself; it has no record
+of a game's set, so the `game:<slug>` label is not in a daemon's config.
 
 The optional `GM_SKILLS_DIR` path selects a platform skill-pack root. Normal installed use locates the pack beside
 `gm-cli`; tests and source checkouts can use the override without network access.
@@ -165,6 +179,19 @@ revised or superseded by a later one, mooted by a later `gm options reject` that
 Command, or is missing from the history, or when a spec or owned file changed between `context-sha` and HEAD. It
 prints one JSON report (`flagged` with each ticket's reasons, `clean`, and `unchecked` for tickets that name no
 premise) and exits 1 when any ticket is flagged. It needs no model; run it from the game's folder.
+
+## Check ticket roles
+
+```text
+gm plan check --tickets <issues.json> [--game <slug>]
+```
+
+`gm plan check` reads `--tickets` (from `gh issue list --json number,title,labels`) and fails each ticket that lacks
+exactly one `game:<slug>` label or one or more `role:*` labels from `skills/gm-core/references/roles.md`, or that
+carries a role the table does not list. The roles come from the platform skill pack (`GM_SKILLS_DIR` overrides it),
+the same table the builder uses. The new-game parent (`request:new-game`) is skipped, and with `--game` so is a ticket
+carrying exactly one other game's label. It prints one line per failing ticket (or `plan ok`), `--json` prints the
+report, and it exits 1 on any failure or when no ticket was left to check.
 
 ## Agree a scope session
 

@@ -13,6 +13,17 @@ export {
   type TemplateCtx,
   type TemplateFile,
 } from './repo.js';
+export {
+  gameLabelSkills,
+  parseRoles,
+  PRELOAD_MAX_BYTES,
+  readRoles,
+  ROLES_PATH,
+  skillsConfig,
+  type GameSkills,
+  type Role,
+  type SkillsConfig,
+} from './roles.js';
 export { skillPack, type SkillPack } from './skills.js';
 
 // OGM-035's `TemplateSource` for `game-<engine>@1` refs.
