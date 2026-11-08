@@ -27,9 +27,9 @@ safe insets. Lay out against the manifest's `presentation.minLogical` reference 
 anchor elements to corners and edges, never to absolute pixels of one device. Re-layout on every viewport change,
 including rotation.
 
-Budget the HUD to at most 25% of the screen and keep the centre clear for play. The host's Pause button sits in the
-top-right corner inside the safe insets (64 px plus margin), and on touch screens the host's overlay fills the
-lower-left and lower-right corners. Put status top-left, score top-centre, and prompts bottom-centre. Hide what does
+Budget the HUD to at most 25% of the screen and keep the centre clear for play. The host's Pause button sits in its play
+bar outside the game, so the top corners are the game's; on touch screens the host's overlay fills the lower-left
+and lower-right corners. Put status top-left, score top-centre, and prompts bottom-centre. Hide what does
 not matter in the current state.
 
 On phones the host's on-screen buttons must never cover important content. Keep a 140 × 200 CSS px zone clear in each
@@ -59,8 +59,8 @@ declared input.
 - Play, won, and lost: write one input script that reaches each, then `gm test --inputs won.json --ticks 900`
   replays it and saves `hud.png` on the phone viewport at that tick. Choose ticks past the script's last step.
 
-Look at every still: no clipped text, nothing under a notch, the centre clear, and the top-right corner and lower
-corners empty. The stills show the game alone, without the host's HUD, so an empty corner is the check.
+Look at every still: no clipped text, nothing under a notch, the centre clear, and the lower corners
+empty. The stills show the game alone, without the host's HUD, so an empty corner is the check.
 
 On the hosted build, the gm-qa journey `games/<name>/qa/journeys/hud-clear.json` reaches title, play, and a round end on
 a phone with the on-screen buttons showing, and asks at each step whether a button covers the HUD, the player, or a goal

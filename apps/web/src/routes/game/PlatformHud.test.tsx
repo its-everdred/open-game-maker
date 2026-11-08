@@ -38,16 +38,56 @@ function frameHarness() {
 
 const saveContext = { branch: 'main', buildId: 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ' };
 
-afterEach(cleanup);
+/** The host's play bar slot, outside the game stage. */
+function pauseSlot() {
+  const slot = document.createElement('span');
+  document.body.append(slot);
+  return slot;
+}
+
+afterEach(() => {
+  cleanup();
+  document.body.replaceChildren();
+});
 
 describe('PlatformHud', () => {
+  it('puts Pause in the host slot, never over the game stage, so it cannot cover game UI', () => {
+    const test = frameHarness();
+    const slot = pauseSlot();
+    const { container } = render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        pauseSlot={slot}
+        saveContext={saveContext}
+        saves={false}
+      />,
+    );
+
+    const pause = screen.getByRole('button', { name: 'Pause' });
+    expect(slot).toContainElement(pause);
+    expect(container).not.toContainElement(pause);
+  });
+
   it('pauses and resumes with one lifecycle message per action and restores focus', async () => {
     const test = frameHarness();
-    render(<PlatformHud build="draft" frame={test.frame} gameId="game" saveContext={saveContext} saves={false} />);
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        pauseSlot={pauseSlot()}
+        saveContext={saveContext}
+        saves={false}
+      />,
+    );
 
     const pause = screen.getByRole('button', { name: 'Pause' });
     fireEvent.click(pause);
     expect(screen.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+    /* Pause sits in the play bar, outside the dialog's shade, so a second press must not pause again. */
+    fireEvent.click(pause);
     expect(test.frame.pause).toHaveBeenCalledOnce();
     const resume = screen.getByRole('button', { name: 'Resume' });
     await waitFor(() => expect(resume).toHaveFocus());
@@ -65,6 +105,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves={false}
         onLeave={onLeave}
@@ -84,6 +125,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves
         saveApi={{ list: vi.fn().mockResolvedValue({ available: false }), read: vi.fn(), write: vi.fn() }}
@@ -110,6 +152,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves
         saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read, write: vi.fn() }}
@@ -137,6 +180,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves
         saveSchema={3}
@@ -156,6 +200,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves
         saveApi={{ list, read: vi.fn(), write: vi.fn() }}
@@ -180,6 +225,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves
         saveApi={saveApi}
@@ -206,6 +252,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves
         saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read: vi.fn(), write }}
@@ -244,6 +291,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves
         saveApi={{ list, read: vi.fn(), write }}
@@ -273,6 +321,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves
         saveApi={{ list, read: vi.fn(), write }}
@@ -297,6 +346,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves={false}
         toast={toast}
@@ -334,6 +384,7 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
+        pauseSlot={pauseSlot()}
         saveContext={saveContext}
         saves={false}
         creditsApi={credits}
