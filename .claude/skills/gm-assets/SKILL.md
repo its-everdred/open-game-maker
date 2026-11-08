@@ -16,6 +16,13 @@ Order: **installed packs → free online packs → variants of what we have → 
 - Choosing a library or style: show the creator **every** candidate first, not a shortlist. Thumbnails of every pack:
   `scripts/assets/pack_thumbnails.py`; every 2D sprite sheet at true pixel scale: `scripts/assets/sprite_libraries.py`.
 
+## Record what the game uses
+
+Use anything in the library. The moment the game's code names an asset, record it: `gm assets use <id>` (an asset you
+made: `gm assets register <path>`). That writes the game's asset list (`assets.lock.json`: id, licence, set) and its
+credits; the build ships only listed assets and fails naming any id the code uses that the list lacks. Before a
+release, `gm assets unused` lists entries the code no longer names: drop them or say why they stay.
+
 ## Show a lineup
 
 Never choose from filenames. Render the candidates side by side, labelled with pack and built-in animations:

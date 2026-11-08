@@ -241,6 +241,7 @@ of its `sprite.directions` list, in the order its sheet rows or per-direction fi
 
 ```text
 gm assets use <id...> [--vendor]
+gm assets unused [--json]
 gm assets vendor <id...>
 gm assets register <path> --made-by-agent [--from <id>...] --game <id>
 ```
@@ -248,7 +249,13 @@ gm assets register <path> --made-by-agent [--from <id>...] --game <id>
 `gm assets use` normally records library references in `assets.lock.json` without copying bytes into the game repo.
 It refuses a card whose pack cannot supply `license`, `license_source`, explicit `attribution`, and `source` metadata.
 Every accepted entry copies that metadata into the lock and regenerates `CREDITS.md`. `gm check assets` rejects older or
-hand-edited entries that omit it.
+hand-edited entries that omit it. Each entry also names the curated set its pack belongs to (`set`), when it has one.
+
+`assets.lock.json` is the game's asset list: the build ships only what it lists. `gm check assets`, and so
+`gm build assets` and `gm publish`, fail on an asset id that the game's `src/` or `index.html` names in a string
+literal but the list lacks, naming the id and the file. Test files (`*.test.*`, `*.spec.*`) are not read. `gm assets
+unused` lists entries whose id or path nothing there names any more; an id built at runtime in a template literal
+(`` `t3:${game}/voice/${line}` ``) counts as naming every entry it can match, but it never fails a build.
 Use `gm assets vendor` to materialise an already-locked asset under `assets/`; the command verifies every pinned hash
 and updates the lock source to `vendored`. Only assets whose effective rights allow free redistribution can be
 vendored. The command names each refused id and leaves that entry as a library or blob reference.
