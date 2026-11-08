@@ -153,6 +153,13 @@ describe('createAiurClient', () => {
     await expect(withoutSupervisor.decision('decision-1')).rejects.toBeInstanceOf(AiurConfigError);
   });
 
+  it('lets a caller abort a slow decisions read', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ decisions: [] }));
+    const controller = new AbortController();
+    await createAiurClient(daemon, fetchImpl).decisions({}, controller.signal);
+    expect(fetchImpl.mock.calls[0]![1]?.signal).toBe(controller.signal);
+  });
+
   it('parses the canonical public decision answer shape and nullable metadata', async () => {
     const canonical = {
       ...decision,

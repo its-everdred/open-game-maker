@@ -65,13 +65,18 @@ class AiurListTimeout extends Error {
   override name = 'AiurListTimeout';
 }
 
-async function withinListTimeout<T>(work: Promise<T>): Promise<T> {
+// The timer also aborts the request, so a wedged instance does not keep one open socket per menu poll.
+async function withinListTimeout<T>(start: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new AiurListTimeout()), AIUR_LIST_TIMEOUT_MS);
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new AiurListTimeout());
+    }, AIUR_LIST_TIMEOUT_MS);
   });
   try {
-    return await Promise.race([work, timeout]);
+    return await Promise.race([start(controller.signal), timeout]);
   } finally {
     clearTimeout(timer);
   }
@@ -87,7 +92,7 @@ export async function gameCommandsFromAiur(
   let decisions: Decision[];
   try {
     const client = await deps.aiurClientForGame(gameId);
-    decisions = await withinListTimeout(client.decisions());
+    decisions = await withinListTimeout((signal) => client.decisions({}, signal));
   } catch (error) {
     if (error instanceof HttpError) return [];
     if (error instanceof AiurHttpError) {

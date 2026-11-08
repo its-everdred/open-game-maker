@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,7 +29,7 @@ vi.mock('../features/build-chat/Chat', () => ({
 }));
 vi.mock('../features/commands-inbox/commands', () => ({
   answerCommand: vi.fn(async () => undefined),
-  useCreatorCommands: (enabled: boolean) => ({ commands: enabled ? state.decisions : [] }),
+  useCreatorCommands: (creatorId: string | undefined) => ({ commands: creatorId ? state.decisions : [] }),
 }));
 vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
@@ -326,6 +326,22 @@ describe('StudioMenu', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Sign out failed. Try again.'));
     expect(screen.getByRole('dialog', { name: 'Menu' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled();
+  });
+
+  // The decision row that opened the deck is gone once the menu closes, so closing the deck lands on the menu button.
+  it('returns focus to the hamburger when the deck opened from the menu closes', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1')];
+    renderMenu('/games');
+    const trigger = screen.getByRole('button', { name: 'Menu' });
+    fireEvent.click(trigger);
+    const row = screen.getByRole('button', { name: 'Topic d1, Blobs' });
+    row.focus();
+    fireEvent.click(row);
+
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Topic d1' })).getByRole('button', { name: 'Close' }));
+
+    expect(trigger).toHaveFocus();
   });
 
   it('closes on Escape and returns focus to the hamburger', () => {

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { CreatorCommand } from '@ogm/contracts';
@@ -10,11 +11,15 @@ vi.mock('./commands', () => answers);
 // The review deck is tested on its own; here it only has to report that its review was sent.
 vi.mock('./ReviewDeck', () => ({
   isReviewDeck: (command: CreatorCommand) => command.options.every(({ media }) => media !== undefined),
-  ReviewDeck: ({ onAnswered }: { onAnswered(): void }) => (
-    <button type="button" onClick={onAnswered}>
-      Send review
-    </button>
-  ),
+  // It keeps the game it was first shown for, as the real deck keeps its likes and notes.
+  ReviewDeck: function ReviewDeck({ command, onAnswered }: { command: CreatorCommand; onAnswered(): void }) {
+    const [shownFor] = useState(command.game_id);
+    return (
+      <button type="button" data-shown-for={shownFor} onClick={onAnswered}>
+        Send review
+      </button>
+    );
+  },
 }));
 
 const command = (id: string, gameId = 'g_blobs'): CreatorCommand => ({
@@ -45,6 +50,26 @@ afterEach(() => {
 // Kevin (2026-11-08): after answering one decision the deck offers the next and walks through the rest without going
 // back to the list.
 describe('DecisionDeck', () => {
+  // Two games' aiur instances can hold the same decision id; the next game's review must not start with the last one's
+  // likes and notes.
+  it('starts a fresh review deck for the next game even when the decision ids match', async () => {
+    const media = { url: 'https://media.example.test/a.png', width: 64, height: 64 };
+    const review = (gameId: string): CreatorCommand => ({
+      ...command('d1', gameId),
+      options: [
+        { id: 'a', label: 'Option A', media },
+        { id: 'b', label: 'Option B', media },
+      ],
+    });
+    const commands = [review('g_blobs'), review('g_castle')];
+    render(<DecisionDeck commands={commands} first={commands[0]!} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send review' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Next decision' }));
+
+    expect(screen.getByRole('button', { name: 'Send review' })).toHaveAttribute('data-shown-for', 'g_castle');
+  });
+
   it('answers through the decision’s own game, then walks to the next open decision', async () => {
     const commands = [command('d1'), command('d2', 'g_castle'), command('d3')];
     const onClose = vi.fn();

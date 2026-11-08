@@ -22,6 +22,8 @@ const ids = {
   castle: 'g_70000000-0000-4000-8000-000000000002',
   foreign: 'g_70000000-0000-4000-8000-000000000003',
   job: 'j_70000000-0000-4000-8000-000000000001',
+  shared: 'g_70000000-0000-4000-8000-000000000004',
+  member: 'u_70000000-0000-4000-8000-000000000004',
 };
 
 const AT = '2026-11-08T10:00:00.000Z';
@@ -167,6 +169,70 @@ describe('the creator’s decision inbox', () => {
     }
   });
 
+  // A game that fails to list (a bad row, a media signing error) must not empty the menu for every other game.
+  it('lists the other games’ decisions when one game fails to list', async () => {
+    const deps = seed();
+    serveAiur(deps, { [ids.blobs]: [decision('d_blobs')], [ids.castle]: [decision('d_castle')] });
+    // A stored job whose plan no longer reads back makes Blobs fail to list.
+    deps.db
+      .insert(schema.jobs)
+      .values({
+        id: ids.job,
+        gameId: ids.blobs,
+        branchId: 'main',
+        familyId: ids.family,
+        creatorId: ids.user,
+        kind: 'feature',
+        complexity: 2,
+        state: 'running',
+        start: 'now',
+        slot: 'edit',
+        plan: '{',
+        reservation: '{',
+        hardCapMicroUsd: 500_000,
+        usageMicroUsd: 0,
+        idempotencyKey: 'key-broken',
+        createdAt: AT,
+        updatedAt: AT,
+      })
+      .run();
+
+    const response = await read(deps, '/me/commands');
+    const body = (await response.json()) as { commands: Array<{ decision_id: string }> };
+
+    expect(response.status).toBe(200);
+    expect(body.commands.map((command) => command.decision_id)).toEqual(['d_castle']);
+    expect(deps.lines).toContainEqual(
+      expect.objectContaining({ event: 'creator_commands_game_failed', gameId: ids.blobs }),
+    );
+  });
+
+  // The menu lists only games the caller may edit: a family game another member owns stays out until it is shared.
+  it('leaves out a family game the caller may see but not edit', async () => {
+    const deps = seed();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId: ids.family, userId: ids.member, role: 'member', capability: 'creator', joinedAt: AT })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: ids.shared,
+        familyId: ids.family,
+        ownerId: ids.member,
+        title: 'Theirs',
+        visibility: 'listed',
+        repoVisibility: 'private',
+        createdAt: AT,
+      })
+      .run();
+    serveAiur(deps, { [ids.shared]: [decision('d_theirs')], [ids.blobs]: [decision('d_mine')] });
+
+    const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<{ decision_id: string }> };
+
+    expect(body.commands.map((command) => command.decision_id)).toEqual(['d_mine']);
+  });
+
   it('refuses an anonymous caller', async () => {
     const { app } = await makeApp(seed());
     expect((await app.request('/api/v1/me/commands')).status).toBe(401);
@@ -269,18 +335,21 @@ describe('a job’s Commands in the decision inbox', () => {
     expect(body.commands).toEqual([expect.objectContaining({ decision_id: 'd_legacy', summary: 'Door style' })]);
   });
 
-  it('gives a builder’s checkpoint the topic aiur holds for it', async () => {
+  // `gm checkpoint open` sends the same placeholder topic for every question; taking it would label every builder
+  // question in the menu alike, so a builder's checkpoint keeps its job's title.
+  it('keeps a builder’s checkpoint on its job’s title, not the builder’s placeholder topic', async () => {
     const deps = seed();
     serveAiur(deps, {});
     seedJob(deps);
     storeCheckpoint(deps, 'cp_builder', 'd_builder');
 
-    await pollerFor(deps, [decision('d_builder', { context: { short_summary: 'Door style' } })]).tick();
+    await pollerFor(deps, [
+      decision('d_builder', { context: { short_summary: 'Direction checkpoint for the creator' } }),
+    ]).tick();
     const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<Record<string, unknown>> };
 
-    expect(body.commands).toEqual([
-      expect.objectContaining({ decision_id: 'd_builder', title: 'Add the moon gate', summary: 'Door style' }),
-    ]);
+    expect(body.commands).toEqual([expect.objectContaining({ decision_id: 'd_builder', title: 'Add the moon gate' })]);
+    expect(body.commands[0]).not.toHaveProperty('summary');
   });
 
   // The poller mirrors the job ticket's aiur decisions into checkpoints; the creator audience and the short topic must

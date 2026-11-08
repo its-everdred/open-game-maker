@@ -97,14 +97,20 @@ export async function listCreatorCommands(deps: AppDeps, principal: UserPrincipa
         granted: hasGameGrant(deps.db, game.id, principal.userId),
       }).ok,
   );
+  // One game that fails to list is left out of this read, so it never hides the other games' decisions.
   const perGame = await Promise.all(
-    games.map(async (game) =>
-      (await listGameCommands(deps, game)).map((command) => ({
-        ...command,
-        game_id: game.id,
-        game_title: game.title.slice(0, 200),
-      })),
-    ),
+    games.map(async (game) => {
+      try {
+        return (await listGameCommands(deps, game)).map((command) => ({
+          ...command,
+          game_id: game.id,
+          game_title: game.title.slice(0, 200),
+        }));
+      } catch (error) {
+        deps.log({ event: 'creator_commands_game_failed', gameId: game.id, error: (error as Error).name });
+        return [];
+      }
+    }),
   );
   return perGame
     .flat()

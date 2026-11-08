@@ -28,7 +28,7 @@ export function StudioMenu() {
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
   const builds = useMyJobs();
-  const decisions = useCreatorCommands(Boolean(session));
+  const decisions = useCreatorCommands(creatorId);
   const sound = useSyncExternalStore(onChange, status);
   const [open, setOpen] = useState(false);
   const [volume, setLocalVolume] = useState(getVolume);
@@ -140,6 +140,8 @@ export function StudioMenu() {
                     type="button"
                     aria-label={`${command.summary ?? command.title}, ${command.game_title}`}
                     onClick={() => {
+                      // The deck returns focus to the menu button, not to this row, which closing the menu removes.
+                      trigger.current?.focus();
                       close();
                       setDeck(command);
                     }}

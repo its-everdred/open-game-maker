@@ -59,7 +59,7 @@ export function DecisionDeck({
       <div className="decision-deck-body">
         <p className="commands-inbox-question">{current.question}</p>
         {isReviewDeck(current) ? (
-          <ReviewDeck key={current.decision_id} gameId={current.game_id} command={current} onAnswered={markAnswered} />
+          <ReviewDeck key={keyOf(current)} gameId={current.game_id} command={current} onAnswered={markAnswered} />
         ) : (
           <CommandOptions command={current} disabled={sending || done} onAnswer={(optionId) => void answer(optionId)} />
         )}

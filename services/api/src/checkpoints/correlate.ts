@@ -99,9 +99,10 @@ export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPl
         status,
         ...(optionId === undefined ? {} : { option_id: optionId }),
         // Who the decision is for and its topic follow aiur on every poll, so a row stored before aiur set them (or
-        // before this app read them) catches up instead of staying hidden from the creator or topic-less.
+        // before this app read them) catches up instead of staying hidden from the creator or topic-less. A builder's
+        // checkpoint keeps its job's title: `gm checkpoint open` sends the same placeholder topic for every question.
         audience: creatorAudience(decision),
-        summary: summaryOf(decision),
+        summary: found.checkpoint.checkpoint_id === decision.decision_id ? summaryOf(decision) : undefined,
       },
     });
   }

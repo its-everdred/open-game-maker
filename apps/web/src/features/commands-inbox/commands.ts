@@ -28,9 +28,11 @@ const NO_DECISIONS: CreatorCommandsPage['commands'] = [];
 export const creatorCommandsQueryKey = ['creator-commands'] as const;
 
 // The menu's decision inbox: the signed-in creator's player-facing Commands across all their games, in priority order.
-export function useCreatorCommands(enabled: boolean) {
+// Keyed by the creator, so one account's decisions are never shown to the next one signed in on this device.
+export function useCreatorCommands(creatorId: string | undefined) {
+  const enabled = creatorId !== undefined;
   const query = useQuery({
-    queryKey: creatorCommandsQueryKey,
+    queryKey: [...creatorCommandsQueryKey, creatorId],
     enabled,
     queryFn: () => api<CreatorCommandsPage>('/me/commands'),
     refetchInterval: POLL_MS,
