@@ -36,6 +36,8 @@ use. Work here the way those agents will work: dogfood the skills.
   hand from its branch (body from the workpad), relabel `agent:ci-wait`, report the timeout to Aiur. GitHub's merge queue is not
   available on this user-owned repo (ruleset 26376924 = PR + green `required`, non-strict; merge on green without update-branch).
   Pausing a running worker: `aiur-main pause <id>` / `resume <id>` / `park <id>` (or the `agent:paused` label, which frees its slot); `message` does not stop it (#211 opened a PR after being told to stop). A ticket with an open PR sits in ci-wait and takes no turn: hold or close the PR, then `--todo`. Prove skill injection from the new session's first prompt (`Mapped skills (load first)`), excluding the old session file.
+  A multi-question Command (`3 questions: …`) can't be answered from the CLI (`question_answers :incomplete`): post the answers as a ticket comment plus `aiur-main message <ticket>`, then `executor-moot <id> --expected-version 1 --reason-class resolved_elsewhere`.
+  Dusk Helm hold: its root open-games #2 carries `agent:paused` with `agent:queued` removed (every other Dusk Helm ticket is blocked by it); each audit, check that no `game:dusk-helm` ticket is running.
   Every audit: `aiur-main commands --filter open`; a worker's "Needs you" question idles its ticket until Kevin answers, and the
   CLI refuses an Executor answer, so relay Kevin's standing words with `operator-relay-answer <id> --expected-version 1 --option
   <id> --quote "<his words>" --relayed-by nuc-ogm-executor --idempotency-key <k>` (three QA-path workers sat 40–75 min on 2026-11-02).
