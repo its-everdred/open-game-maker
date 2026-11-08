@@ -80,10 +80,9 @@ function ReviewScreen({
   const shown = command ?? (correcting > 0 ? seen : undefined);
 
   // A spoken choice is saved by the voice agent, not by this screen: once a call has run and the decision is no longer
-  // open on a fresh read, the answer landed.
-  useEffect(() => {
-    if (voiceUsed && seen !== undefined && command === undefined && !isFetching && correcting === 0) setSaved(true);
-  }, [command, correcting, isFetching, seen, voiceUsed]);
+  // open on a fresh read, the answer landed. Worked out during render, so the screen goes straight to Saved and the
+  // voice button stays mounted (an effect would render the "not open" state first and hang up the call).
+  const spokenSave = voiceUsed && seen !== undefined && command === undefined && !isFetching && correcting === 0;
 
   // The Command's job is what gives the screen the app's voice support: the same build-chat voice target the composer
   // uses, naming this decision so the agent is briefed on it first. A Command without a job in hand keeps typing only.
@@ -114,7 +113,7 @@ function ReviewScreen({
       />
     );
 
-  if (saved && seen !== undefined) {
+  if ((saved || spokenSave) && seen !== undefined) {
     return (
       <div className="review-screen">
         <header className="review-screen-head">

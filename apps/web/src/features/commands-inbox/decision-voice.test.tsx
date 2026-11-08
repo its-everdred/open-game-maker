@@ -72,6 +72,31 @@ describe('voice inside a decision', () => {
     expect(onLive).toHaveBeenLastCalledWith(false);
   });
 
+  // Leaving the decision while the token is still on its way must not open a microphone nobody can end.
+  it('opens no call when the screen closes before the token arrives', async () => {
+    let resolvePress: (value: unknown) => void = () => undefined;
+    const probe = vi
+      .fn()
+      .mockImplementationOnce(() => available())
+      .mockImplementationOnce(() => new Promise((resolve) => (resolvePress = resolve)));
+    const createVoiceClient = vi.fn();
+    const view = render(
+      <DecisionVoice
+        target={target}
+        onLive={vi.fn()}
+        onSpeaking={vi.fn()}
+        onHeard={vi.fn()}
+        probe={probe}
+        createVoiceClient={createVoiceClient}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Talk about this decision' }));
+    view.unmount();
+    await act(async () => resolvePress(await available()));
+
+    expect(createVoiceClient).not.toHaveBeenCalled();
+  });
+
   // The button is optional: where voice is not configured there is no dead control over the decision.
   it('shows no button where voice is unavailable', async () => {
     const probe = vi.fn().mockResolvedValue({ available: false });

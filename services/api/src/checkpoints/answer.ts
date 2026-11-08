@@ -10,6 +10,7 @@ import { isDesignJob, latestForCheckpoint, tryRecordDesignDecision } from '../de
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { jobTitle, tryRecordReview } from '../reviews/store.js';
 import { answeredOption, statusOf } from './correlate.js';
+import { correctAnswer } from './correction.js';
 import { checkpointRuntime } from './runtime.js';
 
 // How an answer reached the Command: the player chose it, the player skipped the question and took the recommendation,
@@ -150,6 +151,7 @@ function recordReviewOf(input: AnswerInput, checkpoint: StoredCheckpoint, option
 // Answers one aiur Command through aiur's canonical decision path and records the design decision behind it. A Command
 // that aiur already answered keeps that answer: for a design decision a later answer is recorded as a new decision
 // that supersedes the earlier one and the Executor re-plans, because an answered aiur decision cannot be re-answered.
+// Any other job's ticket is told of the change (correction.ts).
 export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcome> {
   const { deps, job, row, optionId } = input;
   const checkpoint = parseCheckpoint(row);
@@ -170,7 +172,13 @@ export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcom
   if (checkpoint.status === 'answered') {
     // The same answer again — a double click or a retry — is the answer already standing, not a conflict.
     if (checkpoint.option_id === optionId) return { kind: 'answered', decisionId: checkpoint.decision_id, optionId };
-    if (!design || checkpoint.option_id === undefined) return { kind: 'conflict', status: 'answered' };
+    if (checkpoint.option_id === undefined) return { kind: 'conflict', status: 'answered' };
+    if (!design) {
+      const job = input.job as typeof input.job & { aiur: NonNullable<typeof input.job.aiur> };
+      if (!(await correctAnswer(deps, job, row, checkpoint, optionId))) return { kind: 'client_unavailable' };
+      recordReviewOf(input, checkpoint, optionId);
+      return { kind: 'superseded', decisionId: checkpoint.decision_id, optionId, supersedes: null };
+    }
     await recordAnswer(input, checkpoint, optionId, previous, true);
     recordReviewOf(input, checkpoint, optionId);
     const latest = latestForCheckpoint(deps.db, job.gameId, checkpoint.checkpoint_id ?? row.id);

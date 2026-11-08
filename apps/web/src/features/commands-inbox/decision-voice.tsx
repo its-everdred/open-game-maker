@@ -58,14 +58,17 @@ export function DecisionVoice({
     };
   }, [probe, targetKey]);
 
-  // Leaving the decision ends the call.
-  useEffect(
-    () => () => {
+  // Leaving the decision ends the call, including one still starting: a press whose token or microphone arrives after
+  // the screen is gone must not open a call nobody can end.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       clientRef.current?.end();
       clientRef.current = undefined;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const stop = (ending: VoiceClient) => {
     if (clientRef.current !== ending) return;
@@ -81,6 +84,7 @@ export function DecisionVoice({
     setNotice('');
     try {
       const voice = await probe(target);
+      if (!mounted.current) return;
       if (!voice.available) {
         setNotice('Voice is not available right now.');
         return;
@@ -103,6 +107,10 @@ export function DecisionVoice({
       });
       setNotice('Voice chat uses ElevenLabs conversational-AI credits.');
       await created.startFromGesture();
+      if (!mounted.current) {
+        created.end();
+        return;
+      }
       if (clientRef.current !== created) return;
       setClient(created);
       callbacks.current.onLive(true);

@@ -365,6 +365,9 @@ async function installReviewApi(page: Page, options: { voice?: boolean } = {}) {
     if (path.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });
     if (/\/jobs\/[^/]+\/checkpoints\/[^/]+\/answer$/.test(path)) {
       answerBodies.push(JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>);
+      // An answered Command leaves the open list, as the API's does, so Change has to reopen it from the screen.
+      const answered = commands.findIndex(({ checkpoint_id }) => path.includes(`/checkpoints/${checkpoint_id}/`));
+      if (answered >= 0) commands.splice(answered, 1);
       return json(route, {
         status: 'answered',
         decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e73',
