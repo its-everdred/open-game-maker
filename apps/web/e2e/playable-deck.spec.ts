@@ -68,8 +68,8 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await expect.poll(() => slow.evaluate(() => window.__fixture.params)).toMatchObject({ scenario: 'sandbox' });
   await expect.poll(() => slow.evaluate(() => window.__fixture.messages.includes('design.apply'))).toBe(true);
   if (testInfo.project.name === 'phone') {
-    // On a phone the host's touch controls sit over the game, inside the card.
-    await expect(page.locator('.review-deck-playable [role="button"]').first()).toBeVisible();
+    // The deck asks for no touch mapping, so the host draws no controls over the game (the game draws its own).
+    await expect(page.locator('.review-deck-playable').locator('[data-stick], [data-action]')).toHaveCount(0);
   } else {
     // On desktop the keys go to the game while it plays, so the arrows move the catcher instead of judging the card.
     await page.keyboard.down('ArrowLeft');
@@ -118,7 +118,8 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await expect
     .poll(() => page.evaluate(() => window.__tags), { timeout: 3 * (SECONDS * 1000 + 5_000) })
     .toEqual(['Slow', 'Medium', 'Fast']);
-  expect(loaded).toEqual(['slow', 'medium', 'fast']);
+  // The tag can read Fast a moment before the fast frame navigates.
+  await expect.poll(() => loaded).toEqual(['slow', 'medium', 'fast']);
   await expect(page.getByRole('button', { name: 'Play Medium again' })).toBeVisible({
     timeout: SECONDS * 1000 + 5_000,
   });
