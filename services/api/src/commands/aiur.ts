@@ -3,6 +3,7 @@ import { GameCommand } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
+import { creatorAudience } from './audience.js';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
 // not in any job's checkpoints: they are read from the instance's own Decision API, whose scoped grant already limits
@@ -20,10 +21,13 @@ function isOpen(decision: Decision): boolean {
   return OPEN.has(decision.decision_status);
 }
 
-function titleOf(decision: Decision): string {
+function clip(text: string): string {
+  return text.length > 200 ? `${text.slice(0, 199)}…` : text;
+}
+
+function summaryOf(decision: Decision): string | undefined {
   const summary = decision.context?.short_summary?.trim() ?? '';
-  const title = summary === '' ? decision.question : summary;
-  return title.length > 200 ? `${title.slice(0, 199)}…` : title;
+  return summary === '' ? undefined : clip(summary);
 }
 
 function recommendOf(decision: Decision): string | undefined {
@@ -33,10 +37,12 @@ function recommendOf(decision: Decision): string | undefined {
 
 export function toGameCommand(decision: Decision): GameCommand | null {
   const recommend = recommendOf(decision);
+  const summary = summaryOf(decision);
   const command = GameCommand.safeParse({
     job_id: null,
     ticket: decision.ticket.identifier,
-    title: titleOf(decision),
+    title: summary ?? clip(decision.question),
+    ...(summary === undefined ? {} : { summary }),
     // Aiur's decision is the checkpoint: one Command, one decision id, one version to answer against.
     checkpoint_id: decision.decision_id,
     decision_id: decision.decision_id,
@@ -74,6 +80,8 @@ export async function gameCommandsFromAiur(
   for (const decision of decisions) {
     // A job's Command is already in its checkpoint, so the game's own read leaves those to the job.
     if (jobTickets.has(decision.ticket.identifier) || !isOpen(decision)) continue;
+    // An engineering or operations decision goes to the Executor, never to the creator.
+    if (creatorAudience(decision) === undefined) continue;
     const command = toGameCommand(decision);
     if (command) commands.push(command);
   }

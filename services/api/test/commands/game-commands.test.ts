@@ -336,7 +336,7 @@ const decision = (overrides: Partial<Decision> = {}): Decision => ({
     { id: 'square', label: 'Square blobs' },
   ],
   recommendation: { option_id: 'round' },
-  context: { short_summary: 'Blobs look' },
+  context: { short_summary: 'Blobs look', audience: 'creator' },
   answer: null,
   active_answer: null,
   created_at: '2026-11-04T12:00:00.000Z',

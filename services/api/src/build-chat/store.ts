@@ -46,6 +46,9 @@ export type NewChatRow = {
 export type StoredCheckpoint = ChatCheckpoint & {
   checkpoint_id?: string;
   version?: number;
+  // A decision mirrored from aiur: who it is for, and its short topic (see commands/audience.ts).
+  audience?: 'creator';
+  summary?: string;
 };
 
 // Mints a short-lived URL for a blob hash (the blob store's signed GET).

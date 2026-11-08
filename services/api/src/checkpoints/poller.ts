@@ -13,6 +13,7 @@ import {
   updateCheckpoint,
   type StoredCheckpoint,
 } from '../build-chat/store.js';
+import { creatorAudience } from '../commands/audience.js';
 import { correlate, pickOf, recommendationOf, statusOf } from './correlate.js';
 import type { InboxWriter } from './inbox.js';
 
@@ -35,6 +36,8 @@ function nativeMessageId(jobId: string, decisionId: string): string {
 
 function nativeCheckpoint(decision: Decision): StoredCheckpoint {
   const recommend = recommendationOf(decision);
+  const audience = creatorAudience(decision);
+  const summary = decision.context?.short_summary?.trim().slice(0, 200) ?? '';
   return {
     checkpoint_id: decision.decision_id,
     decision_id: decision.decision_id,
@@ -45,6 +48,8 @@ function nativeCheckpoint(decision: Decision): StoredCheckpoint {
     blocking: decision.blocking,
     pick: pickOf(decision),
     status: statusOf(decision),
+    ...(audience === undefined ? {} : { audience }),
+    ...(summary === '' ? {} : { summary }),
   };
 }
 
