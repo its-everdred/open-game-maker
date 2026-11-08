@@ -39,6 +39,7 @@ gm test [--inputs <script.json>] [--ticks <count>] [--serve <dir>] [--out <dir>]
 gm run [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
 gm look sheet <screen> --still <png> [--target <png>]
 gm look check [--json]
+gm look evidence --body <file> [--json]
 ```
 
 `gm check` runs TypeScript, deterministic simulation-source, test-hook, and registered asset gates. Use `static` or
@@ -76,6 +77,11 @@ A game records the render the creator approved for each screen in `review/decisi
 (`{"screens": {"select": {"target": "review/mock-matrix/select.png"}}}`). `gm look sheet <screen> --still <png>` puts the
 still beside that target (`--target` overrides it) at one height in `look/<screen>.sheet.png`, and `gm look check`
 judges every such sheet like a still: a screen with no sheet, or whose sheet's newest look reads a mismatch, exits 1.
+
+`gm look evidence --body <file>` reads a pull request body and exits 1 when it links a sheet, still or clip
+(`.png`, `.jpg`, `.gif`, `.webp`, `.mp4`, `.webm`) that is not committed at HEAD, from the repository root or the game
+folder. A worker's `assets-local/` and `shots/` are deleted after merge, so evidence goes in `review/<ticket>/` in the
+game folder. URLs are not checked.
 
 ## Refresh the skill pack
 

@@ -1,3 +1,8 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
@@ -39,6 +44,23 @@ describe('renderInstanceTemplate', () => {
     const ignore = file('.gitignore').split('\n');
     expect(ignore).toEqual(expect.arrayContaining(['*.glb', '*.mp3', '*.png', '!**/assets.lock.json']));
     expect(file('games/README.md')).toContain('assets.lock.json');
+  });
+
+  // Review evidence a PR links must be committable, or it lives only in the worker's workspace and dies with it.
+  it('lets review sheets be committed while other images stay ignored', () => {
+    const root = mkdtempSync(join(tmpdir(), 'instance-ignore-'));
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    writeFileSync(join(root, '.gitignore'), file('.gitignore'));
+    const ignored = (path: string) => {
+      try {
+        execFileSync('git', ['check-ignore', '-q', '--no-index', path], { cwd: root });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    expect(ignored('games/blobs/review/208/sheet-390x844.png')).toBe(false);
+    expect(ignored('games/blobs/shots/tablet/t2.png')).toBe(true);
   });
 
   it('runs only changed workspace packages on pull requests', () => {

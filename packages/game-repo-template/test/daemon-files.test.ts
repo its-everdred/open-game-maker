@@ -65,6 +65,9 @@ describe('renderDaemonFiles', () => {
     expect(rendered).not.toContain('Continuation context');
     // The pre-PR look gate: a failing or broker-errored look answer must stop the worker before it opens the PR.
     expect(rendered).toContain('run `gm look check`; it must pass');
+    // Evidence the PR links must outlive the worker's workspace (Open-Games #214 linked a deleted assets-local sheet).
+    expect(rendered).toContain('under `review/12/` in the game folder');
+    expect(rendered).toContain('run `gm look evidence --body <file>`');
     const retried = await engine.parseAndRender(renderDaemonFiles().prompt, { issue, attempt: 2 });
     expect(retried).toContain('Retry attempt #2.');
   });

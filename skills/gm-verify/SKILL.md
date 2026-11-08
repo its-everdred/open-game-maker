@@ -22,6 +22,9 @@ Never report a visual result you have not looked at. Code, logs, and a passing c
    (a 402, say): report the work as blocked, never as a pass.
 7. Each screen with an approved render in `review/decisions.json` needs `gm look sheet <screen> --still <png>` (the
    still beside its target), looked at like a still; `gm look check` fails on a missing sheet or a mismatch.
+8. Copy every sheet, still and clip the PR links into `review/<ticket>/` in the game folder, commit them and link
+   those paths; `assets-local/` and `shots/` are deleted with the workspace. Write the PR body to a file and run
+   `gm look evidence --body <file>`: it fails on any linked file not committed at HEAD.
 
 A report budget whose status is `over` blocks the PR. Name the tier and the measured value. `unknown` is not green:
 list it under unchecked.
@@ -60,7 +63,7 @@ Copy this into the PR and answer every line from the sheet:
 - Entity stuck, teleporting, or ice-skating? yes/no
 - Animation and movement speed disagree? yes/no
 - Worst visible defect: <one sentence>
-- Evidence sheet: <attached path>
+- Evidence sheet: <committed path under review/<ticket>/>
 - Unchecked: iPhone Safari, sound, <anything else not run>
 ```
 
