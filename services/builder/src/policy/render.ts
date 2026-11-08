@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 
+import { readRoles, skillsConfig } from '@ogm/game-repo-template';
 import { Scalar, stringify } from 'yaml';
 
 import { PolicyViolation, RenderInputSchema, type RenderInput, type ValidatedRenderInput } from './types.js';
@@ -74,6 +75,8 @@ export function renderAiurConfig(rawInput: RenderInput): string {
         [5, 20],
       ]),
       build_nice: 10,
+      // Role labels inline their mandatory skills at ticket start (skills/gm-core/references/roles.md).
+      skills: skillsConfig(readRoles()),
       codex: {
         approval_policy: policy.approvalPolicy,
         thread_sandbox: 'workspace-write',

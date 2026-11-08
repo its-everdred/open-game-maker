@@ -59,6 +59,46 @@ agent:
     4: 16
     5: 20
   build_nice: 10
+  skills:
+    preload_max_bytes: 49152
+    by_label:
+      role:visual:
+        - gm-core
+        - gm-verify
+        - gm-ui-hud
+        - gm-image-mock
+      role:3d:
+        - gm-core
+        - gm-3d
+        - gm-verify
+      role:gameplay:
+        - gm-core
+        - gm-input
+        - gm-verify
+        - gm-qa
+      role:audio:
+        - gm-core
+        - gm-audio
+        - gm-voiceover
+      role:qa:
+        - gm-core
+        - gm-qa
+        - gm-verify
+      role:multiplayer:
+        - gm-core
+        - gm-multiplayer-ready
+        - gm-qa
+      role:game-design:
+        - gm-core
+        - gm-new-game-design
+        - gm-new-game-plan
+        - gm-image-mock
+        - gm-scope-options
+      role:assets:
+        - gm-core
+        - gm-asset-variants
+        - gm-pack-adapter
+        - gm-asset-showcase
   codex:
     approval_policy: on-request
     thread_sandbox: workspace-write
