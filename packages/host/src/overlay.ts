@@ -3,6 +3,22 @@ import type { ActionFrame, ActionValue, RigInputMapping } from '@ogm/contracts/i
 
 type TouchMode = RigInputMapping['touch'];
 
+const EDGE = 24;
+const STICK_SIZE = 100;
+const BUTTON_PITCH = 76;
+
+/** `rotateCCW` → `Rotate CCW`, `soft_drop` → `Soft drop`: what a player hears, never the raw id. */
+export function actionLabel(action: string): string {
+  const words = action
+    .replace(/[_-]+/gu, ' ')
+    .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+    .trim()
+    .split(/\s+/u)
+    .map((word) => (word === word.toUpperCase() ? word : word.toLowerCase()));
+  const text = words.join(' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export interface TouchOverlayOptions {
   layer: HTMLElement;
   inputs: GameManifest['inputs'];
@@ -84,7 +100,8 @@ export class TouchOverlay {
     if (entries.filter(([, kind]) => kind === 'button').length > 5) {
       console.warn('TouchOverlay supports at most five button actions');
     }
-    buttons.forEach(([action], index) => layer.append(this.createButton(action, index)));
+    const base = EDGE + (this.touch === 'two-stick' && sticks.length > 1 ? STICK_SIZE + 12 : 0);
+    buttons.forEach(([action], index) => layer.append(this.createButton(action, index, base)));
     this.refreshVisibility();
   }
 
@@ -92,14 +109,14 @@ export class TouchOverlay {
     const stick = this.hostDocument.createElement('div');
     stick.dataset.stick = action;
     stick.setAttribute('role', 'button');
-    stick.setAttribute('aria-label', action);
+    stick.setAttribute('aria-label', actionLabel(action));
     Object.assign(stick.style, {
       position: 'absolute',
-      left: index === 0 ? '24px' : 'auto',
-      right: index === 1 ? '24px' : 'auto',
-      bottom: '24px',
-      width: '100px',
-      height: '100px',
+      left: index === 0 ? `${EDGE}px` : 'auto',
+      right: index === 1 ? `${EDGE}px` : 'auto',
+      bottom: `${EDGE}px`,
+      width: `${STICK_SIZE}px`,
+      height: `${STICK_SIZE}px`,
       borderRadius: '50%',
       pointerEvents: 'auto',
       touchAction: 'none',
@@ -156,18 +173,27 @@ export class TouchOverlay {
     return stick;
   }
 
-  private createButton(action: string, index: number): HTMLButtonElement {
+  private createButton(action: string, index: number, base: number): HTMLButtonElement {
     const button = this.hostDocument.createElement('button');
     button.type = 'button';
-    button.textContent = action;
-    button.setAttribute('aria-label', action);
+    button.dataset.action = action;
+    button.setAttribute('aria-label', actionLabel(action));
     const size = index === 0 ? 64 : 44;
+    const icon = this.hostDocument.createElement('span');
+    icon.setAttribute('aria-hidden', 'true');
+    const dot = `${Math.round(size * 0.4)}px`;
+    Object.assign(icon.style, { width: dot, height: dot, borderRadius: '50%', background: 'currentColor' });
+    button.append(icon);
+    const inset = (64 - size) / 2;
     Object.assign(button.style, {
       position: 'absolute',
-      right: `${24 + (index % 2) * 56}px`,
-      bottom: `${24 + Math.floor(index / 2) * 56}px`,
+      right: `${EDGE + (index % 2) * BUTTON_PITCH + inset}px`,
+      bottom: `${base + Math.floor(index / 2) * BUTTON_PITCH + inset}px`,
       width: `${size}px`,
       height: `${size}px`,
+      display: 'grid',
+      placeItems: 'center',
+      padding: '0',
       borderRadius: '50%',
       pointerEvents: 'auto',
       touchAction: 'none',

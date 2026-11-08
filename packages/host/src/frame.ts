@@ -144,7 +144,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
 
   bridge.on('ready', ({ manifest, marks }) => {
     gamepads.setMapping(options.inputMapping?.gamepad, manifest.inputs.actions);
-    overlay.setInputs(manifest.inputs, options.inputMapping?.touch ?? defaultTouchMode(manifest));
+    overlay.setInputs(manifest.inputs, options.inputMapping?.touch ?? 'tap');
     viewport.sendNow();
     settings.resend();
     options.onReady?.(manifest, marks);
@@ -179,8 +179,4 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     setSettings: (value) => settings.set(value),
     dispose,
   };
-}
-
-function defaultTouchMode(manifest: GameManifest): RigInputMapping['touch'] {
-  return Object.values(manifest.inputs.actions).some((kind) => kind === 'stick') ? 'stick' : 'tap';
 }
