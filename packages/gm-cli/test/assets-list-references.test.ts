@@ -78,6 +78,28 @@ describe("the game's asset list", () => {
     expect((await gm(['check', 'assets'], { cwd, env: { OGM_ASSETS_ROOT: root } })).code).toBe(0);
   });
 
+  it('ignores ids named only in comments, and keeps ids in strings that hold comment markers', async () => {
+    const cwd = tempDir();
+    const root = preparedLibrary();
+    await useOrc(cwd, root);
+    writeSource(
+      cwd,
+      'src/main.ts',
+      [
+        `// was '${WALL}'`,
+        `/** swapped for '${WALL}' */`,
+        `const url = 'https://example.test/a'; load('${ORC}'); // '${WALL}'`,
+        '',
+      ].join('\n'),
+    );
+    writeSource(cwd, 'index.html', `<!-- "${WALL}" -->\n`);
+    expect((await gm(['check', 'assets'], { cwd, env: { OGM_ASSETS_ROOT: root } })).code).toBe(0);
+    expect((await gm(['assets', 'unused'], { cwd })).out).toEqual([]);
+
+    writeSource(cwd, 'src/main.ts', `// load('${ORC}')\n`);
+    expect((await gm(['assets', 'unused'], { cwd })).out).toEqual([`${ORC}  Models/GLB format/character-orc.glb`]);
+  });
+
   it('lists entries the code no longer references, counting ids built at runtime and repo paths', async () => {
     const cwd = tempDir();
     const root = preparedLibrary();
@@ -86,10 +108,7 @@ describe("the game's asset list", () => {
       env: { OGM_ASSETS_ROOT: root },
     });
     const before = await gm(['assets', 'unused'], { cwd });
-    expect(before.out).toEqual([
-      `${ORC}  Models/GLB format/character-orc.glb`,
-      `${WALL}  Models/GLB format/wall.glb`,
-    ]);
+    expect(before.out).toEqual([`${ORC}  Models/GLB format/character-orc.glb`, `${WALL}  Models/GLB format/wall.glb`]);
 
     writeSource(cwd, 'src/main.ts', 'const id = (name: string) => `t1:kenney-mini-dungeon/${name}@2.0`;\n');
     expect((await gm(['assets', 'unused'], { cwd })).out).toEqual([]);
@@ -100,8 +119,8 @@ describe("the game's asset list", () => {
     expect(after).toEqual({ code: 0, out: [], err: [] });
 
     writeSource(cwd, 'src/data/walls.json', '{}\n');
-    expect((await gm(['assets', 'unused', '--json'], { cwd })).out.map((line) => JSON.parse(line) as unknown)).toEqual(
-      [{ id: WALL, path: 'Models/GLB format/wall.glb' }],
-    );
+    expect((await gm(['assets', 'unused', '--json'], { cwd })).out.map((line) => JSON.parse(line) as unknown)).toEqual([
+      { id: WALL, path: 'Models/GLB format/wall.glb' },
+    ]);
   });
 });

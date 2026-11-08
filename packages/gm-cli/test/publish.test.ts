@@ -23,6 +23,7 @@ let bin: string;
 let staleSha: string;
 let remoteSha: string;
 let brokenSha: string;
+let unlistedSha: string;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -74,6 +75,13 @@ beforeAll(async () => {
   writeFileSync(join(origin, 'games', 'blobs', 'build.sh'), 'echo "vite: cannot resolve ./src/main.ts" >&2\nexit 3\n');
   git(origin, 'commit', '-qam', 'broken');
   brokenSha = git(origin, 'rev-parse', 'HEAD');
+  // A commit whose code names an asset its list does not hold.
+  git(origin, 'switch', '-qc', 'unlisted', 'main');
+  mkdirSync(join(origin, 'games', 'blobs', 'src'));
+  writeFileSync(join(origin, 'games', 'blobs', 'src', 'main.ts'), "load('t1:kenney-mini-dungeon/wall@2.0');\n");
+  git(origin, 'add', '-A');
+  git(origin, 'commit', '-qm', 'unlisted');
+  unlistedSha = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'switch', '-q', 'main');
 
   // pnpm stand-in: the scratch repository has nothing to install, and its build is one shell script.
@@ -246,6 +254,16 @@ describe('gm publish', () => {
     expect(requests.map((r) => r.method)).toEqual(['GET']);
     expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  // #627: the asset list is what ships, so publish refuses code that names an unlisted asset before building it.
+  it('exits 1 naming an asset the code uses that assets.lock.json does not list, before building or uploading', async () => {
+    const run = await publish(['blobs', '--sha', unlistedSha, '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('t1:kenney-mini-dungeon/wall@2.0 (src/main.ts)');
+    expect(run.pnpm).toBe('');
+    expect(requests.map((r) => r.method)).toEqual(['GET']);
   });
 
   it('refuses with exit 2 and a next step: no slug outside a game, an unknown game, no token', async () => {

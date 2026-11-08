@@ -21,7 +21,7 @@ Order: **installed packs → free online packs → variants of what we have → 
 Use anything in the library. The moment the game's code names an asset, record it: `gm assets use <id>` (an asset you
 made: `gm assets register <path>`). That writes the game's asset list (`assets.lock.json`: id, licence, set) and its
 credits; the build ships only listed assets and fails naming any id the code uses that the list lacks. Before a
-release, `gm assets unused` lists entries the code no longer names: drop them or say why they stay.
+release, run `gm assets unused` (entries the code no longer names) and say in your report why each one stays.
 
 ## Show a lineup
 
