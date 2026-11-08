@@ -9,35 +9,65 @@
   margin: 0 auto;
 }
 
+.review-deck-side {
+  display: grid;
+  gap: 8px;
+}
+
 .review-deck:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 4px;
   border-radius: calc(var(--r) + 6px);
 }
 
+/* The card under the finger: it follows a drag with a tilt (set from the deck's script), springs back when let go
+   short of a vote, and flies off once voted. It takes both axes of a drag, so the page never scrolls under it. */
 .review-deck-card {
   position: relative;
   display: grid;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--rule);
   border-radius: calc(var(--r) + 2px);
   background: var(--paper);
   box-shadow: var(--pop-sm);
-  touch-action: pan-y;
-  transition: transform 0.12s ease-out;
+  cursor: grab;
+  touch-action: none;
+  transform-origin: 50% 90%;
+  transition: transform 0.32s cubic-bezier(0.2, 1.3, 0.4, 1);
   user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
 }
 
-/* Every still, GIF and clip shows whole and uncropped: the box takes the sample's own shape and the media is contained
-   inside it, so nothing is ever cut off in a preview. Tapping the media opens it full screen. */
+/* The space the card may take: whatever the screen leaves after the header and the controls. A still or clip card
+   takes its sample's own shape at the largest size that fits, so the sample is never cropped and the card never
+   needs scrolling. */
+.review-deck-stage {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+}
+
+.review-deck-card:is([data-kind='image'], [data-kind='video']) {
+  width: min(100cqw, 100cqh * var(--ar, 1));
+  height: auto;
+  aspect-ratio: var(--ar, 1);
+}
+
 .review-deck-media {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  max-height: min(70svh, 620px);
+  height: 100%;
   object-fit: contain;
   background: var(--night);
-  cursor: zoom-in;
+  pointer-events: none;
 }
 
 .review-deck-audio {
@@ -45,6 +75,45 @@
   place-items: center;
   padding: 28px 16px;
   background: color-mix(in srgb, var(--aqua-b) 12%, var(--night));
+}
+
+.review-deck-audio .icon svg {
+  width: 56px;
+  height: 56px;
+}
+
+/* The thumbs stamp on the card as it is dragged: it fades in with the distance, so the creator sees which vote a
+   release will cast. */
+.review-deck-stamp {
+  position: absolute;
+  top: 16px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border: 4px solid currentColor;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--night) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.review-deck-stamp .icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.review-deck-stamp-like {
+  left: 16px;
+  color: var(--gruvbox-aqua, var(--aqua-b));
+  transform: rotate(-14deg);
+}
+
+.review-deck-stamp-dislike {
+  right: 16px;
+  color: var(--gruvbox-red, var(--red-b));
+  transform: rotate(14deg);
 }
 
 .review-deck-replay {
@@ -109,116 +178,6 @@
   font-size: 13px;
   font-weight: 700;
   text-align: center;
-}
-
-.review-deck-heading {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font: 800 12px/1 var(--display);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.review-deck-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.review-deck-grid > li {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-/* The whole sample in the ending grid too, never a cropped preview: the thumbnail opens the same full-screen view. */
-.review-deck-thumb-media {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  background: var(--night);
-  overflow: hidden;
-  cursor: zoom-in;
-}
-
-.review-deck-thumb-media img,
-.review-deck-thumb-media video {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 168px;
-  object-fit: contain;
-}
-
-.review-deck-chip {
-  display: grid;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--paper) 82%, transparent);
-  color: var(--ink);
-  text-align: left;
-  cursor: pointer;
-}
-
-.review-deck-chip:disabled {
-  cursor: default;
-  opacity: 0.52;
-}
-
-.review-deck-chip-dislike {
-  border-color: color-mix(in srgb, var(--red-b) 45%, var(--rule));
-}
-
-.review-deck-chip-label {
-  font: 700 14px/1.2 var(--display);
-}
-
-.review-deck-chip-reason {
-  justify-self: start;
-  max-width: 100%;
-  padding: 4px 10px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.review-deck-empty {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.review-deck-send {
-  justify-self: center;
-  min-height: var(--tap-primary);
-  padding: 0 28px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--green-b);
-  color: var(--dark);
-  font: 800 16px/1 var(--display);
-  box-shadow: var(--pop-sm);
-  cursor: pointer;
-}
-
-.review-deck-send:disabled {
-  cursor: default;
-  opacity: 0.52;
 }
 
 .review-deck-error {
@@ -348,6 +307,9 @@
 
 /* An audio sample's length, beside the replay control: the creator judges a long take without playing all of it. */
 .review-deck-length {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   padding: 0 14px 12px;
   color: var(--muted);
@@ -356,70 +318,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The whole-set notes: one optional field on the summary before Send, in the studio's own field look. The field and
-   the voice button keep the same tap targets as the rest of the studio. */
-.review-deck-notes {
-  display: grid;
-  gap: 6px;
-}
-
-.review-deck-notes-label {
-  color: var(--muted);
-  font: 800 12px/1 var(--display);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.review-deck-notes textarea {
-  width: 100%;
-  min-height: 76px;
-  padding: 10px 12px;
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  background: var(--paper);
-  color: var(--ink);
-  font: 400 14px/1.4 var(--body);
-  resize: vertical;
-}
-
-.review-deck-voice {
-  display: grid;
-  gap: 4px;
-}
-
-.review-deck-voice-partial {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.review-deck-voice-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  justify-self: start;
-  min-height: var(--tap-secondary);
-  padding: 0 16px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: var(--paper-2);
-  color: var(--ink);
-  font: 700 14px/1 var(--display);
-  cursor: pointer;
-}
-
-.review-deck-voice-button .icon svg {
-  width: 20px;
-  height: 20px;
+.review-deck-length .icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* A playable card: the game's own frame in the card, sized like a clip. Touch buttons, keys and gamepad reach the
    game; once its slice ends the game pauses under a scrim with "play again" and "compare". */
 .review-deck-playable {
   position: relative;
-  aspect-ratio: 16 / 10;
-  max-height: min(70svh, 620px);
+  width: 100%;
+  height: 100%;
   background: var(--night);
   touch-action: none;
 }

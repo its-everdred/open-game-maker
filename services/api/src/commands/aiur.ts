@@ -1,11 +1,11 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
-import { GameCommand, playablesFromMarker, type CommandOption } from '@ogm/contracts';
+import { GameCommand, playablesFromMarker } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import type { MediaSigner } from '../build-chat/store.js';
 import { isForCreator } from '../checkpoints/correlate.js';
-import { optionMediaFromAiur } from './aiur-media.js';
+import { optionMediaFromAiur, type ResolvedOptionMedia } from './aiur-media.js';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
 // not in any job's checkpoints: they are read from the instance's own Decision API, whose scoped grant already limits
@@ -39,7 +39,7 @@ function recommendOf(decision: Decision): string | undefined {
 // option the context's playable marker names (`gm checkpoint open --playable`, #639) is a slice of the game to play.
 export function toGameCommand(
   decision: Decision,
-  media: ReadonlyMap<string, NonNullable<CommandOption['media']>> = new Map(),
+  media: ReadonlyMap<string, ResolvedOptionMedia> = new Map(),
 ): GameCommand | null {
   const recommend = recommendOf(decision);
   const playables = playablesFromMarker(decision.context?.long_context_markdown);
@@ -53,14 +53,8 @@ export function toGameCommand(
     version: decision.version,
     question: decision.question,
     options: decision.options.map(({ id, label }) => {
-      const optionMedia = media.get(id);
       const playable = playables.get(id);
-      return {
-        id,
-        label,
-        ...(optionMedia === undefined ? {} : { media: optionMedia }),
-        ...(playable === undefined ? {} : { playable }),
-      };
+      return { id, label, ...media.get(id), ...(playable === undefined ? {} : { playable }) };
     }),
     ...(recommend === undefined ? {} : { recommend }),
     blocking: decision.blocking,

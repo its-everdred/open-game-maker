@@ -15,23 +15,12 @@ vi.mock('../../lib/api/client', async (original) => {
   const actual = await original<typeof import('../../lib/api/client')>();
   return { ...actual, api: vi.fn() };
 });
-vi.mock('../../features/build-chat/jobs', () => ({ useMyJobs: () => ({ jobs: [] }) }));
 vi.mock('../../features/commands-inbox/ReviewDeck', async () => {
   const { markSent } = await import('../../features/commands-inbox/drafts');
   return {
-    ReviewDeck: ({
-      command,
-      nav,
-      onAnswered,
-    }: {
-      command: GameCommand;
-      nav?: { prev: React.ReactNode; next: React.ReactNode };
-      onAnswered?(): void;
-    }) => (
+    ReviewDeck: ({ command, onAnswered }: { command: GameCommand; onAnswered?(): void }) => (
       <>
         <p>Deck for {command.decision_id}</p>
-        {nav?.prev}
-        {nav?.next}
         <button
           type="button"
           onClick={() => {
@@ -87,6 +76,7 @@ function serve(commands: GameCommand[]) {
       throw new ApiError(404, { error: 'game_not_found' });
     }
     if (path === `/games/${game.id}/commands`) return { commands };
+    if (path === `/games/${game.id}/review-drafts`) return { drafts: [] };
     throw new Error(`unexpected ${path}`);
   });
 }
@@ -162,8 +152,8 @@ describe('short game links', () => {
     const router = renderAt('/blobs/review/2');
 
     expect(await screen.findByText('Deck for d_two')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Previous question' })).toHaveAttribute('href', '/blobs/review/1');
-    expect(screen.getByRole('link', { name: 'Next question' })).toHaveAttribute('href', '/blobs/review/3');
+    // The deck's only controls are its votes (#631); the arrows wait on the sent screen.
+    expect(screen.queryByRole('link', { name: 'Previous question' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
     serve([command('d_one', 1), command('d_three', 3)]);
@@ -178,12 +168,12 @@ describe('short game links', () => {
   // that would answer it a second time.
   it('shows a sent review as sent when the creator comes back to it', async () => {
     serve([command('d_one', 1), command('d_two', 2)]);
-    renderAt('/blobs/review/1');
+    const router = renderAt('/blobs/review/1');
 
     fireEvent.click(await screen.findByRole('button', { name: 'Answer' }));
     fireEvent.click(await screen.findByRole('link', { name: 'Next question' }));
     expect(await screen.findByText('Deck for d_two')).toBeVisible();
-    fireEvent.click(screen.getByRole('link', { name: 'Previous question' }));
+    await act(() => router.navigate('/blobs/review/1'));
 
     expect(await screen.findByRole('heading', { name: 'Saved' })).toBeVisible();
     expect(screen.queryByText('Deck for d_one')).not.toBeInTheDocument();

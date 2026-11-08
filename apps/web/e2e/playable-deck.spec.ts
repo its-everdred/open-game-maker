@@ -130,13 +130,11 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await expect(page.getByRole('button', { name: 'Play Fast again' })).toBeVisible({ timeout: SECONDS * 1000 + 5_000 });
   await page.getByRole('button', { name: 'Like', exact: true }).click();
 
-  // The likes become the shortlist; the pick goes back through the job's checkpoint route.
-  await expect(page.getByRole('list', { name: 'Likes', exact: true }).getByRole('button')).toHaveCount(2);
-  await capture(page, testInfo, 'playable-ended');
-  await page.getByRole('button', { name: 'Choose Fast' }).click();
+  // The last vote answers through the job's checkpoint route with the whole map.
   await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
+  await capture(page, testInfo, 'playable-sent');
   expect(answerBodies).toEqual([
-    { option_id: 'fast', review: { likes: ['slow', 'fast'], dislikes: [{ option_id: 'medium' }] } },
+    { option_id: 'slow', review: { likes: ['slow', 'fast'], dislikes: [{ option_id: 'medium' }] } },
   ]);
 });
 

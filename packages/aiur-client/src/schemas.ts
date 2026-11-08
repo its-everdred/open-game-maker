@@ -195,6 +195,9 @@ export const ControlResultSchema = z
   })
   .loose();
 
+// A minted Command scope grant (`POST /api/v1/commands/scope`): only the bearer token is read.
+export const CommandScopeSchema = z.object({ token: z.string().min(1) }).loose();
+
 export const EventsTokenSchema = z
   .object({
     token: z.string().min(1),

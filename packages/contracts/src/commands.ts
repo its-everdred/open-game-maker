@@ -13,6 +13,8 @@ export const CommandOption = z.object({
   // Present when the option carries media (A1 rich Commands). OGM signs the same blob URLs the chat uses. `kind` is set
   // when the media names its type (an aiur Command's media does): a clip with no poster is still a clip.
   media: ChatMedia.extend({ kind: z.enum(['image', 'video', 'audio']).optional() }).optional(),
+  // A sound that goes with a picture: a character card shows its portrait in `media` and plays its voice from here.
+  audio: ChatMedia.optional(),
   // Present when the option is a slice of the game to play (#608); the deck runs it in the card instead of a still.
   playable: OptionPlayable.optional(),
 });
