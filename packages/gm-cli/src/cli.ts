@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,6 +31,7 @@ export type RunOptions = {
   cwd?: string;
   env?: Record<string, string | undefined>;
   commandsDir?: string;
+  home?: string;
   out?: (line: string) => void;
   err?: (line: string) => void;
 };
@@ -114,6 +116,9 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
           ? { url: env.OGM_INTERNAL_URL, secretFile: env.OGM_HOOK_SECRET_FILE }
           : null,
       blocklistFile: env.OGM_BLOCKLIST_FILE ? resolve(cwd, env.OGM_BLOCKLIST_FILE) : null,
+      // eslint-disable-next-line no-restricted-properties -- a command's children (git, pnpm) inherit the caller's whole environment
+      env: options.env ?? process.env,
+      home: options.home ?? homedir(),
     };
     return await command.run(ctx, args, flags);
   } catch (error) {

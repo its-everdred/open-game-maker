@@ -78,6 +78,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm chat post` sends the current still or clip to the build chat.
 - `gm checkpoint open|wait` offers and waits on a creator-facing decision.
 - `gm changes` summarizes the current game-repo diff.
+- `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 
 ## Load when…
 
