@@ -54,6 +54,9 @@ export type DecisionQuery = {
 export type DecisionAnswer = DecisionReasoning &
   ({ option: string; response?: string } | { option?: never; response: string });
 
+// One Command media file as aiur serves it. `body` is the response stream; the caller must read or cancel it.
+export type DecisionMediaFile = { mime: string; body: ReadableStream<Uint8Array> };
+
 export interface AiurClient {
   readonly baseUrl: string;
   issue(id: string): Promise<IssueEntry>;
@@ -76,6 +79,7 @@ export interface AiurClient {
   decisions(query?: DecisionQuery): Promise<Decision[]>;
   decision(id: string): Promise<Decision>;
   decide(id: string, answer: DecisionAnswer): Promise<Decision>;
+  decisionMedia(id: string, attachmentId: string): Promise<DecisionMediaFile>;
   healthz(): Promise<boolean>;
 }
 
@@ -89,6 +93,8 @@ type RequestOptions = {
   supervisor?: boolean;
   allowStatuses?: number[];
   signal?: AbortSignal;
+  // Leave a successful response's body unread so the caller can stream it.
+  raw?: boolean;
 };
 
 const ISSUE_ID = /^[1-9][0-9]{0,18}$/;
@@ -126,7 +132,7 @@ export function createAiurClient(
         body: request.body === undefined ? undefined : JSON.stringify(request.body),
         signal: request.signal,
       });
-      body = await responseBody(response);
+      body = request.raw && response.ok ? undefined : await responseBody(response);
     } catch (cause) {
       throw new AiurUnavailableError(baseUrl, cause);
     }
@@ -255,6 +261,15 @@ export function createAiurClient(
         supervisor: true,
       });
       return DecisionMutationSchema.parse(body).decision;
+    },
+    async decisionMedia(id, attachmentId) {
+      const { response } = await fetchResponse(
+        'GET',
+        `/api/v1/decisions/${encodeURIComponent(id)}/media/${encodeURIComponent(attachmentId)}`,
+        { supervisor: true, write: true, raw: true },
+      );
+      if (response.body === null) throw new AiurUnavailableError(baseUrl, new Error('empty media response'));
+      return { mime: response.headers.get('content-type') ?? 'application/octet-stream', body: response.body };
     },
     async healthz() {
       try {

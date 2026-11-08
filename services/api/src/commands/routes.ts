@@ -80,7 +80,7 @@ export default new Hono<ApiBindings>()
     // A registered game's Commands belong to no job. A decision already listed from a job's checkpoint stays the
     // job's, so one Command never appears twice.
     const listed = new Set(commands.map((command) => command.decision_id));
-    for (const command of await gameCommandsFromAiur(deps, game.id, jobTickets)) {
+    for (const command of await gameCommandsFromAiur(deps, game.id, jobTickets, sign)) {
       if (!listed.has(command.decision_id)) commands.push(command);
     }
 
