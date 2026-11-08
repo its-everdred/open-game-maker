@@ -1,0 +1,6 @@
+{
+  "scenario": "scenario=sandbox&speed=slow",
+  "seconds": 8,
+  "lead_in": "one-chain",
+  "branch": "main"
+}

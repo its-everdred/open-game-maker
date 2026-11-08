@@ -1,0 +1,29 @@
+{
+  "name": "laptop-keys",
+  "viewport": "desktop",
+  "steps": [
+    { "do": "expect", "text": "Versus CPU", "timeoutMs": 90000 },
+    { "do": "press", "key": "ArrowDown", "times": 5 },
+    { "do": "press", "key": "Enter" },
+    {
+      "do": "expect",
+      "pixels": "changed",
+      "timeoutMs": 20000,
+      "look": "Did the keyboard alone start the match from the title, with no touch buttons showing?"
+    },
+    { "do": "wait", "ms": 3500 },
+    { "do": "press", "key": "ArrowLeft", "times": 2 },
+    { "do": "press", "key": "ArrowUp" },
+    { "do": "press", "key": "Space" },
+    {
+      "do": "expect",
+      "pixels": "changed",
+      "region": [0.42, 0.35, 0.16, 0.5],
+      "look": "Did the piece land moved left and turned?"
+    },
+    { "do": "press", "key": "Space", "times": 30, "holdMs": 60 },
+    { "do": "expect", "text": "Next round", "timeoutMs": 30000 },
+    { "do": "press", "key": "Enter" },
+    { "do": "expect", "pixels": "changed", "look": "Did Enter move on from the lost screen?" }
+  ]
+}

@@ -144,9 +144,19 @@ async function deliverScope(
   } catch (error) {
     if (!(error instanceof AdmissionRefused)) throw error;
     const reset = localTime(error.body.resetsAt, deps.config.resetZoneDefault);
-    setVoiceWaitingOn(target, `Doesn't fit today: trim, split, queue for ${reset}, or ask an admin`);
+    setVoiceWaitingOn(target, refusalText(error.body, reset));
     return 'needs_choice';
   }
+}
+
+const ENERGY_WINDOWS = { day: 'today', week: 'this week', month: 'this month' } as const;
+
+// An Energy block names its window and only the offers admission made (#598); the member allowance keeps its wording.
+function refusalText(body: AdmissionRefused['body'], reset: string): string {
+  if (body.error !== 'energy_limit_reached')
+    return `Doesn't fit today: trim, split, queue for ${reset}, or ask an admin`;
+  const left = `Needs more Energy than is left ${ENERGY_WINDOWS[body.window ?? 'day']}`;
+  return body.offers.includes('queue') ? `${left}: queue for ${reset}, or ask an admin` : `${left}: ask an admin`;
 }
 
 async function attempt(deps: AppDeps, request: InstructRequest): Promise<InstructResponse> {

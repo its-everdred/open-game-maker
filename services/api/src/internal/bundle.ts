@@ -6,9 +6,13 @@ import { Hono, type Context } from 'hono';
 
 import { JobBundle } from '@ogm/contracts';
 import { schema } from '@ogm/db';
+import { eq } from 'drizzle-orm';
 
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { getAttachment, jobAttachments, readBlob, workspacePath } from '../build-chat/attachments.js';
+import { energySource } from '../energy/source.js';
+import { readPreference } from '../energy/store.js';
+import { playerView } from '../energy/view.js';
 import { paidApisDuringGameplay } from '../gameplay/policy.js';
 import { scopeSessions } from '../scope/store.js';
 import { LEAKY } from './leaky.js';
@@ -67,6 +71,15 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           message_id: row.messageId!,
           path: workspacePath(row),
         }));
+        const creatorId = deps.db
+          .select({ creatorId: schema.jobs.creatorId })
+          .from(schema.jobs)
+          .where(eq(schema.jobs.id, job.jobId))
+          .get()?.creatorId;
+        const energy = playerView(
+          energySource({ db: deps.db, zone: deps.config.resetZoneDefault }).snapshot(new Date()),
+          creatorId === undefined ? 'balanced' : readPreference(deps.db, creatorId),
+        );
         const scopeSessionId = job.kind === 'scope' ? scopeSessions.getByJob(deps.db, job.jobId)?.id : undefined;
         const bundle = JobBundle.parse({
           v: 1,
@@ -85,6 +98,7 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           },
           ...(job.kind === 'repair' && job.diagnostics ? { diagnostics: job.diagnostics } : {}),
           ...(attachments.length === 0 ? {} : { attachments }),
+          energy,
         });
         if (LEAKY.test(JSON.stringify(bundle))) {
           deps.log({ event: 'bundle_refused', jobId: job.jobId, reason: 'secret- or email-shaped value' });
