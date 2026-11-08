@@ -1,24 +1,16 @@
-import { useCallback, useEffect, useId, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import type { GameCommand, VoiceTarget } from '@ogm/contracts';
 
 import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
 import { answerCommand } from './commands';
-import {
-  answerOf,
-  clipLength,
-  deckCards,
-  deckFinished,
-  deckReducer,
-  initialDeck,
-  mediaKindOf,
-  reviewOf,
-  withoutLinks,
-} from './review';
+import { markSent, useDeckDraft } from './drafts';
+import { answerOf, clipLength, deckCards, deckFinished, letterOf, mediaKindOf, reviewOf, withoutLinks } from './review';
 import { PlayableCard } from './playable';
 import { VoiceNote, type DictationPort } from './voice-note';
 import './review-deck.css';
+import './review-glass.css';
 
 // The review deck (A3): a Command whose options carry media is judged one card at a time. Swiping right or tapping
 // thumbs up likes the card, left or thumbs down dislikes it, and arrows do the same from the keyboard. A dislike opens
@@ -32,6 +24,7 @@ export function ReviewDeck({
   command,
   voiceTarget,
   dictation,
+  nav,
   onAnswered,
 }: {
   gameId: string;
@@ -39,9 +32,11 @@ export function ReviewDeck({
   // The Command's job gives the deck the app's voice support for the whole-set notes; without it the notes are typed.
   voiceTarget?: VoiceTarget;
   dictation?: DictationPort;
+  // The review screen's previous and next arrows, which flank Send so the title keeps the header to itself.
+  nav?: { prev: ReactNode; next: ReactNode };
   onAnswered?(): void;
 }) {
-  const [state, dispatch] = useReducer(deckReducer, undefined, initialDeck);
+  const [state, dispatch] = useDeckDraft(command);
   const [error, setError] = useState<string>();
   const [drag, setDrag] = useState(0);
   const notesId = useId();
@@ -51,8 +46,13 @@ export function ReviewDeck({
 
   const cards = deckCards(command);
   const card = cards[state.cards.length];
-  const finished = deckFinished(command, state);
   const onePick = command.pick !== 'many';
+  // A one-pick deck with several likes and no pick has no answer yet: Send then opens the ending grid, where tapping a
+  // like chooses it and sends. Guessing the first like would answer with a card the creator never chose.
+  const mustChoose =
+    onePick && state.picked === null && state.cards.filter(({ verdict }) => verdict === 'like').length > 1;
+  const [choosing, setChoosing] = useState(false);
+  const finished = deckFinished(command, state) || choosing;
   const fullscreenCard = fullscreen === null ? undefined : cards.find(({ id }) => id === fullscreen);
   const fullscreenView =
     fullscreenCard === undefined ? null : <MediaFullscreen card={fullscreenCard} onClose={() => setFullscreen(null)} />;
@@ -62,7 +62,7 @@ export function ReviewDeck({
       if (card === undefined) return;
       dispatch({ type: 'judge', optionId: card.id, verdict });
     },
-    [card],
+    [card, dispatch],
   );
 
   const answer = useCallback(
@@ -72,6 +72,7 @@ export function ReviewDeck({
       try {
         await answerCommand(gameId, command, optionId, reviewOf(state));
         dispatch({ type: 'sent' });
+        markSent(command);
         onAnswered?.();
       } catch {
         // The Command stays in the inbox: the route's status (409 for a Command another writer answered) is final.
@@ -79,7 +80,26 @@ export function ReviewDeck({
         setError('The review did not send. Try again.');
       }
     },
-    [command, gameId, onAnswered, state],
+    [command, dispatch, gameId, onAnswered, state],
+  );
+  // Send is always on: a half-judged deck sends what it has, the same answer the ending grid would send. On the ending
+  // grid of a one-pick deck that still needs its choice, the likes' chips are the send.
+  const sendButton = (
+    <div className="review-deck-send-row">
+      {nav?.prev}
+      {finished && mustChoose ? null : (
+        <button
+          aria-label="Send the review"
+          className="review-deck-send"
+          disabled={state.sending}
+          onClick={() => (mustChoose ? setChoosing(true) : void answer(answerOf(command, state).option_id))}
+          type="button"
+        >
+          <Icon name="send" />
+        </button>
+      )}
+      {nav?.next}
+    </div>
   );
 
   if (state.reason !== null) {
@@ -116,6 +136,7 @@ export function ReviewDeck({
             gameId={gameId}
             cards={cards}
             card={card}
+            letter={letterOf(cards, card.id)}
             drag={drag}
             onDrag={setDrag}
             onDragEnd={(dx) => {
@@ -157,6 +178,12 @@ export function ReviewDeck({
           <p aria-live="polite" className="review-deck-progress">
             {state.cards.length + 1} of {cards.length}
           </p>
+          {sendButton}
+          {error === undefined ? null : (
+            <p className="review-deck-error" role="alert">
+              {error}
+            </p>
+          )}
         </section>
         {fullscreenView}
       </>
@@ -181,7 +208,7 @@ export function ReviewDeck({
                 onClick={() => (onePick ? void answer(optionId) : dispatch({ type: 'flip', optionId }))}
                 type="button"
               >
-                <span className="review-deck-chip-label">{labelOf(cards, optionId)}</span>
+                <span className="review-deck-chip-label">{letterOf(cards, optionId)}</span>
               </button>
             </li>
           ))}
@@ -199,7 +226,7 @@ export function ReviewDeck({
                 onClick={() => dispatch({ type: 'flip', optionId })}
                 type="button"
               >
-                <span className="review-deck-chip-label">{labelOf(cards, optionId)}</span>
+                <span className="review-deck-chip-label">{letterOf(cards, optionId)}</span>
               </button>
               <button
                 aria-label={`${reason === undefined ? 'Add' : 'Edit'} a reason for ${labelOf(cards, optionId)}`}
@@ -234,17 +261,7 @@ export function ReviewDeck({
             onText={(text) => dispatch({ type: 'set-notes', text })}
           />
         </div>
-        {onePick ? null : (
-          <button
-            aria-label="Send the review"
-            className="review-deck-send"
-            disabled={state.sending}
-            onClick={() => void answer(answerOf(command, state).option_id)}
-            type="button"
-          >
-            Send the review
-          </button>
-        )}
+        {sendButton}
         {error === undefined ? null : (
           <p className="review-deck-error" role="alert">
             {error}
@@ -279,6 +296,7 @@ function DeckCard({
   gameId,
   cards,
   card,
+  letter,
   drag,
   onDrag,
   onDragEnd,
@@ -287,6 +305,7 @@ function DeckCard({
   gameId: string;
   cards: GameCommand['options'];
   card: GameCommand['options'][number];
+  letter: string;
   drag: number;
   onDrag(dx: number): void;
   onDragEnd(dx: number): void;
@@ -363,7 +382,11 @@ function DeckCard({
           style={{ aspectRatio: `${media.width} / ${media.height}` }}
         />
       )}
-      <p className="review-deck-label">{withoutLinks(card.label)}</p>
+      {/* Few words on a card: its letter, with the option's own label as the media's accessible name. A card
+          with no media is its words, so it shows them. */}
+      <p className="review-deck-label" aria-hidden={media === undefined ? undefined : 'true'}>
+        {media === undefined ? withoutLinks(card.label) : letter}
+      </p>
       {/* An audio card has no still to show, so its card says how long the sample runs beside the replay control. */}
       {card.playable === undefined && kind === 'audio' && media?.duration_ms !== undefined ? (
         <p className="review-deck-length">{clipLength(media.duration_ms)}</p>

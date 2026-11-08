@@ -180,16 +180,18 @@ describe('review deck answers', () => {
     });
   });
 
-  it('refuses a review that leaves a card unjudged and keeps the Command open', async () => {
-    const { app, deps } = await setup();
+  it('takes a half-judged review, since Send is always on, and records only the cards judged', async () => {
+    const { app, deps, answers } = await setup();
     insertOpenDesignCheckpoint(deps);
 
     const response = await answerReview(app, { option_id: 'wood', review: { likes: ['wood'], dislikes: [] } });
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ error: 'checkpoint_review_invalid' });
-    expect(parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({ status: 'open' });
-    expect(listReviews(deps.db, GAME)).toEqual([]);
+    expect(response.status).toBe(200);
+    expect(JSON.parse(answers[0]!.response ?? 'null')).toEqual({
+      kind: 'question_answers',
+      answers: [{ option_id: 'wood', verdict: 'like' }],
+    });
+    expect(listReviews(deps.db, GAME)[0]).toMatchObject({ likes: [{ option_id: 'wood' }], dislikes: [] });
   });
 
   it('refuses a review that names a card the Command does not have', async () => {

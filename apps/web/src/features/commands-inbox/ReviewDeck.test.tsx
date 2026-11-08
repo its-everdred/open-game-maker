@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameCommand, VoiceTarget } from '@ogm/contracts';
 
+import { resetReviewDrafts, useIsSent } from './drafts';
 import { ReviewDeck } from './ReviewDeck';
 import type { DictationPort } from './voice-note';
 
@@ -82,6 +83,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetReviewDrafts();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -90,13 +92,13 @@ describe('ReviewDeck', () => {
   it('shows one card at a time and moves on when the creator likes it', () => {
     renderDeck();
 
-    expect(screen.getByText('Voice one')).toBeVisible();
+    expect(screen.getByLabelText('Voice one')).toBeInTheDocument();
     expect(screen.getByText('1 of 3')).toBeVisible();
-    expect(screen.queryByText('Voice two')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Voice two')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Like' }));
 
-    expect(screen.getByText('Voice two')).toBeVisible();
+    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
     expect(screen.getByText('2 of 3')).toBeVisible();
   });
 
@@ -108,7 +110,7 @@ describe('ReviewDeck', () => {
     fireEvent.change(reason, { target: { value: 'too robotic' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add the reason' }));
 
-    expect(screen.getByText('Voice two')).toBeVisible();
+    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Like' }));
     fireEvent.click(screen.getByRole('button', { name: 'Like' }));
 
@@ -126,14 +128,88 @@ describe('ReviewDeck', () => {
     );
   });
 
+  // Few words on a card: its letter shows, and the option's label names the sample for assistive tech.
+  it('labels each card with a letter and keeps the option label as its name', () => {
+    renderDeck();
+
+    expect(screen.getByText('A')).toBeVisible();
+    expect(screen.queryByText('Voice one')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    expect(screen.getByText('B')).toBeVisible();
+    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
+  });
+
+  // Send is always on: a creator who has heard enough sends a half-judged deck, and the answer carries what was judged.
+  it('sends a half-judged deck from the card view', async () => {
+    const { onAnswered } = renderDeck();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    const send = screen.getByRole('button', { name: 'Send the review' });
+    expect(send).toBeEnabled();
+    fireEvent.click(send);
+
+    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
+    expect(calls).toContainEqual({
+      url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
+      method: 'POST',
+      body: { option_id: 'v1', review: { likes: ['v1'], dislikes: [] } },
+    });
+    // The rows and the arrows read the sent mark from the drafts, so the question shows as sent everywhere.
+    expect(renderHook(() => useIsSent(deckCommand())).result.current).toBe(true);
+  });
+
+  // A one-pick Command answers with the card the creator chose. With two likes and no choice, Send must not guess the
+  // first like: it opens the ending grid, and tapping a like there chooses and sends it.
+  it('asks a one-pick deck with several likes to choose before it sends', async () => {
+    const { onAnswered } = renderDeck();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send the review' }));
+
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Send the review' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Voice two' }));
+
+    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
+    expect(calls).toContainEqual({
+      url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
+      method: 'POST',
+      body: { option_id: 'v2', review: { likes: ['v1', 'v2'], dislikes: [] } },
+    });
+  });
+
+  // Moving to another question unmounts the deck; coming back must find the same votes, not a fresh deck, or the
+  // creator loses work by looking at the next question.
+  it('keeps the answer as a draft when the deck closes and reopens', () => {
+    const first = renderDeck();
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    first.unmount();
+
+    renderDeck();
+    expect(screen.getByText('3 of 3')).toBeVisible();
+    expect(screen.getByLabelText('Voice three')).toBeInTheDocument();
+  });
+
+  // A Command reopened at a new version is a new question: an old draft never answers it.
+  it('starts a fresh draft for a new version of the Command', () => {
+    const first = renderDeck();
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    first.unmount();
+
+    renderDeck(deckCommand({ version: 4 }));
+    expect(screen.getByText('1 of 3')).toBeVisible();
+  });
+
   it('undoes the last swipe', () => {
     renderDeck();
 
     fireEvent.click(screen.getByRole('button', { name: 'Like' }));
-    expect(screen.getByText('Voice two')).toBeVisible();
+    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo the last swipe' }));
-    expect(screen.getByText('Voice one')).toBeVisible();
+    expect(screen.getByLabelText('Voice one')).toBeInTheDocument();
     expect(screen.getByText('1 of 3')).toBeVisible();
   });
 
@@ -141,7 +217,7 @@ describe('ReviewDeck', () => {
     renderDeck();
 
     fireEvent.keyDown(screen.getByRole('region', { name: 'Review Pick the voices' }), { key: 'ArrowRight' });
-    expect(screen.getByText('Voice two')).toBeVisible();
+    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
 
     fireEvent.keyDown(screen.getByRole('region', { name: 'Review Pick the voices' }), { key: 'ArrowLeft' });
     expect(screen.getByRole('textbox', { name: 'Reason for disliking Voice two' })).toBeVisible();
@@ -150,12 +226,12 @@ describe('ReviewDeck', () => {
   it('judges with a swipe', () => {
     renderDeck();
 
-    const card = screen.getByText('Voice one').closest('.review-deck-card')!;
+    const card = screen.getByLabelText('Voice one').closest('.review-deck-card')!;
     fireEvent.pointerDown(card, { clientX: 100, pointerId: 1 });
     fireEvent.pointerMove(card, { clientX: 180, pointerId: 1 });
     fireEvent.pointerUp(card, { clientX: 180, pointerId: 1 });
 
-    expect(screen.getByText('Voice two')).toBeVisible();
+    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
   });
 
   it('flips a card in the ending grid and sends the review', async () => {
@@ -284,7 +360,7 @@ describe('ReviewDeck', () => {
     const played = vi.spyOn(audio, 'play');
     played.mockResolvedValue(undefined);
 
-    const card = screen.getByText('Voice one').closest('.review-deck-card')!;
+    const card = screen.getByLabelText('Voice one').closest('.review-deck-card')!;
     fireEvent.pointerDown(card, { clientX: 40, clientY: 40, pointerId: 1 });
     fireEvent.pointerUp(card, { clientX: 42, clientY: 41, pointerId: 1 });
 
