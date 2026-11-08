@@ -12,6 +12,7 @@ import { getChatRuntime } from '../build-chat/routes.js';
 import { getChatRow, listCheckpoints, parseCheckpoint, toMessage, type MediaSigner } from '../build-chat/store.js';
 import { listJobs } from '../jobs/repo.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
+import { reviewNumbers } from '../reviews/numbers.js';
 import { tryRecordReview } from '../reviews/store.js';
 import { gameCommandsFromAiur, toGameCommand } from './aiur.js';
 
@@ -83,8 +84,17 @@ export default new Hono<ApiBindings>()
       if (!listed.has(command.decision_id)) commands.push(command);
     }
 
+    // Each Command keeps the short number it got the first time it was listed; new ones are numbered oldest first.
+    const oldestFirst = [...commands].sort((left, right) => left.opened_at.localeCompare(right.opened_at));
+    const numbers = reviewNumbers(
+      deps.db,
+      game.id,
+      oldestFirst.map((command) => command.decision_id),
+    );
     const page: GameCommandsPage = {
-      commands: commands.sort((left, right) => right.opened_at.localeCompare(left.opened_at)),
+      commands: commands
+        .sort((left, right) => right.opened_at.localeCompare(left.opened_at))
+        .map((command) => ({ ...command, review_number: numbers.get(command.decision_id)! })),
     };
     return c.json(page);
   })

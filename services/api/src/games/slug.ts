@@ -1,3 +1,4 @@
+import { isReservedGameSlug } from '@ogm/contracts';
 import type { Db } from '@ogm/db';
 import { schema } from '@ogm/db';
 import { and, eq } from 'drizzle-orm';
@@ -22,9 +23,10 @@ export function slugify(title: string): string {
   return slug || FALLBACK_SLUG;
 }
 
-// A slug is free when neither a live game nor a retired one holds it. `gameId` is the game being (re)named, so reusing
-// a slug that is already its own never blocks the rename.
+// A slug is free when no app route answers to it (#591) and neither a live game nor a retired one holds it. `gameId` is
+// the game being (re)named, so reusing a slug that is already its own never blocks the rename.
 function isSlugAvailable(db: Db, slug: string, gameId?: string): boolean {
+  if (isReservedGameSlug(slug)) return false;
   const live = db.select({ id: schema.games.id }).from(schema.games).where(eq(schema.games.slug, slug)).get();
   if (live && live.id !== gameId) return false;
   const retired = db

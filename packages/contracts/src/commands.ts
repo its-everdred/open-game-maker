@@ -38,6 +38,9 @@ export const GameCommand = z.object({
   // 'many' takes the likes and dislikes as the answer. Absent means 'one', which is what every older Command is.
   pick: z.enum(['one', 'many']).optional(),
   opened_at: IsoTime,
+  // The Command's short number inside its game (#591), for the `/<slug>/review/<n>` link. Given the first time the
+  // Command is listed and never reused.
+  review_number: z.number().int().positive().optional(),
 });
 
 // GET /api/v1/games/:gameId/commands → the open Commands of every job the caller can edit in that game, plus the

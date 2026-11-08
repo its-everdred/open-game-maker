@@ -178,6 +178,48 @@ describe('game commands inbox', () => {
     ]);
   });
 
+  // The short link `/<slug>/review/<n>` (#591) must keep opening the same Command: a number is given once, in the
+  // order the Commands were first shown, and a later Command never takes a number an earlier one had.
+  it('numbers each Command once, oldest first, and never reuses a number', async () => {
+    const { app, deps } = await appWithJobs();
+    checkpoint(deps, ids.job, ULID, { at: '2026-11-04T10:00:00.000Z' });
+    checkpoint(deps, ids.linkedJob, MEDIA_ID, { at: '2026-11-04T12:00:00.000Z' });
+    const numbered = async () =>
+      (
+        (await (await get(app, ids.game)).json()) as {
+          commands: Array<{ checkpoint_id: string; review_number: number }>;
+        }
+      ).commands.map(({ checkpoint_id, review_number }) => [checkpoint_id, review_number]);
+
+    expect(await numbered()).toEqual([
+      [MEDIA_ID, 2],
+      [ULID, 1],
+    ]);
+    // Listing again changes nothing.
+    expect(await numbered()).toEqual([
+      [MEDIA_ID, 2],
+      [ULID, 1],
+    ]);
+
+    // The first Command is answered and leaves the inbox; the next one opened takes 3, not 1.
+    deps.sqlite
+      .prepare(
+        "UPDATE build_chat_messages SET checkpoint_json = json_set(checkpoint_json, '$.status', 'answered') WHERE id = ?",
+      )
+      .run(ULID);
+    const later = '01JBX2Q7M3K8V5N4R6T9W0YZAE';
+    checkpoint(deps, ids.job, later, { at: '2026-11-04T13:00:00.000Z' });
+    expect(await numbered()).toEqual([
+      [later, 3],
+      [MEDIA_ID, 2],
+    ]);
+
+    // Numbers belong to their game: the other game starts at 1.
+    checkpoint(deps, ids.otherJob, '01JBX2Q7M3K8V5N4R6T9W0YZAD');
+    const other = (await (await get(app, ids.otherGame)).json()) as { commands: Array<{ review_number: number }> };
+    expect(other.commands.map(({ review_number }) => review_number)).toEqual([1]);
+  });
+
   it('leaves out answered, moot, and uncorrelated Commands', async () => {
     const { app, deps } = await appWithJobs();
     checkpoint(deps, ids.job, ULID, { status: 'answered' });

@@ -77,6 +77,7 @@ function voiceCommand(): GameCommand {
     blocking: true,
     pick: 'one',
     opened_at: '2026-11-07T17:40:00.000Z',
+    review_number: 1,
   };
 }
 
@@ -102,6 +103,7 @@ function imageCommand(): GameCommand {
     blocking: true,
     pick: 'many',
     opened_at: '2026-11-07T17:41:00.000Z',
+    review_number: 2,
   };
 }
 
@@ -113,7 +115,7 @@ test.beforeEach(() => {
 
 test('judges the 6-card voice deck and sends the review with its reasons', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
-  await openDeck(page, voiceCommand().checkpoint_id);
+  await openDeck(page, voiceCommand().review_number!);
 
   const deck = page.getByRole('region', { name: 'Review Pick the Blobs voices' });
   await expect(deck).toBeVisible();
@@ -186,7 +188,7 @@ test('judges the 6-card voice deck and sends the review with its reasons', async
 
 test('judges the 9-card image deck with the arrow keys and sends the review', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
-  await openDeck(page, imageCommand().checkpoint_id);
+  await openDeck(page, imageCommand().review_number!);
 
   const deck = page.getByRole('region', { name: 'Review Pick the Blobs look' });
   await expect(deck).toBeVisible();
@@ -274,10 +276,11 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
   await capture(page, testInfo, 'image-deck-sent');
 });
 
-async function openDeck(page: Page, checkpointId: string) {
+// The short link the Executor pushes (#591): the game's slug and the Command's number inside the game.
+async function openDeck(page: Page, reviewNumber: number) {
   await installAuthRoutes(page, { signedIn: true });
   await installReviewApi(page);
-  await page.goto(`/game/${gameId}/review/${checkpointId}`);
+  await page.goto(`/blobs/review/${reviewNumber}`);
 }
 
 // The two decks and the answer route the app's own client calls. Media is served from its own origin so the cards have
@@ -291,6 +294,19 @@ async function installReviewApi(page: Page) {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }
     if (path === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (path === '/api/v1/games/resolve/blobs') {
+      return json(route, {
+        game: {
+          id: gameId,
+          familyId: 'f_1',
+          ownerId: 'u_1',
+          title: 'Blobs',
+          slug: 'blobs',
+          repo: null,
+          createdAt: '2026-11-07T17:00:00.000Z',
+        },
+      });
+    }
     if (path === `/api/v1/games/${gameId}/commands`) return json(route, { commands });
     if (path === '/api/v1/jobs' || path === '/api/v1/jobs/active') return json(route, { jobs: [] });
     if (path.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });

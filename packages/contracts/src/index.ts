@@ -38,3 +38,4 @@ export * from './design-decisions.js';
 export * from './thumbnail-scene-3d.js';
 export * from './style-showcase-3d.js';
 export * from './review.js';
+export * from './game-links.js';
