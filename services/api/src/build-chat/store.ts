@@ -49,6 +49,10 @@ export type StoredCheckpoint = ChatCheckpoint & {
   // A decision mirrored from aiur: who it is for, and its short topic (see commands/audience.ts).
   audience?: 'creator';
   summary?: string;
+  // A creator's change to a non-design Command after aiur took its answer (#597): the answer that now stands and how
+  // many changes there were. Kept apart from `option_id`, which the poller keeps equal to aiur's answer.
+  corrected_option_id?: string;
+  corrections?: number;
 };
 
 // Mints a short-lived URL for a blob hash (the blob store's signed GET).

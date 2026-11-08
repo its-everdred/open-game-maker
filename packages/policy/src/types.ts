@@ -16,6 +16,7 @@ export const ACTIONS = [
   'game.delist',
   'game.flag_abuse',
   'report.view',
+  'admin.gameplay.set',
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];

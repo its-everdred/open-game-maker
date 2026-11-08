@@ -26,6 +26,10 @@ defmodule OgmVoice.BudgetBriefingTest do
     assert role =~ "get_status"
     assert role =~ "every open Command"
     assert role =~ "answer_command"
+    # #597: a clear spoken choice is submitted with no confirm step; questions and maybes are not choices.
+    assert role =~ "no confirm step"
+    assert role =~ "are not choices"
+    assert role =~ "Open decision"
     assert role =~ "its own change"
     assert role =~ "record_summary"
   end
