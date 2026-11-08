@@ -23,12 +23,14 @@ describe('gm wrappers of the vendored tool sets', () => {
     expect(existsSync(join(skills, 'vendor/sprite-forge/generate2dsprite/scripts/palette_tool.py'))).toBe(true);
     expect(variants).toContain('No fal and no provider key: never add, set or ask for one, and never spend.');
     /* Sprite Forge's own default is "API key first"; master_still.py only forwards --route when given one. */
-    expect(variants).toContain('Every generating call passes `--route codex-cli`');
-    expect(variants).toContain("`generate2dmedia`'s `route_media.py image` and `master_still.py generate`");
-    expect(variants).toContain('never leave `--route` out, and never run `route_media.py video`');
+    expect(variants).toContain('Every command that generates an image passes `--route codex-cli`');
     expect(variants).toContain(
-      '`video2dsprite` turns a clip the creator supplies into frames and never generates video',
+      "`generate2dmedia`'s `route_media.py image`, `master_still.py generate` and `master_still.py edit`",
     );
+    expect(variants).toContain('never leave `--route` out, and skip any other command that would generate');
+    /* sprite_set.py run calls route_media.py video with no --route for every action without a supplied clip. */
+    expect(variants).toContain('never run `route_media.py video` or `sprite_set.py run`');
+    expect(variants).toContain('`video2dsprite` only runs `video2dsprite.py process` on a clip the creator supplies');
     expect(variants).toContain("a configured key is the owner's consent");
     expect(variants).toContain('Ask the Executor before any generation');
     expect(variants).toContain('Never send a paid-pack asset to a cloud model as a reference');
@@ -50,7 +52,7 @@ describe('gm wrappers of the vendored tool sets', () => {
       .concat('gm-core/references/roles.md');
     for (const file of files) {
       const prose = readFileSync(join(skills, file), 'utf8').replace(/\s+/g, ' ');
-      for (const m of prose.matchAll(/(\S+ \S+ )?`--route (\S+?)`/g))
+      for (const m of prose.matchAll(/(\S+ \S+ )?`?--route[ =]`?([\w-]+)/g))
         if (m[2] !== 'codex-cli') expect(m[1], `${file}: --route ${m[2]}`).toMatch(/\bnever\b/i);
     }
   });

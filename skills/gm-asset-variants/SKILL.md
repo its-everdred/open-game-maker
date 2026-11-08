@@ -52,16 +52,18 @@ order: try installed packs and mirrors first, then vary a selected source before
 ## 2D art: Sprite Forge
 
 2D games use the Sprite Forge skills in `.claude/skills/vendor/sprite-forge/`: open the named skill's `SKILL.md` and
-run its tools from the repo root with `python3` where it says `python` (`<skill-dir>` is that skill's folder). They
-need numpy, Pillow and scipy; if those are missing, tell the Executor and never install them. When no pack sprite or
-map fits (tier 4), `generate2dsprite` makes characters, props and FX and `generate2dmap` tilemaps, prop packs and
-parallax; `video2dsprite` turns a clip the creator supplies into frames and never generates video. These rules win
-over the vendored text, including its "a configured key is the owner's consent":
+run its tools from the repo root with the Python the Executor names (else `python3`) where it says `python`
+(`<skill-dir>` is that skill's folder). They need numpy, Pillow and scipy; if those are missing, tell the Executor and
+never install them. When no pack sprite or map fits (tier 4), `generate2dsprite` makes characters, props and FX and
+`generate2dmap` tilemaps, prop packs and parallax. These rules win over the vendored text, including its "a configured
+key is the owner's consent":
 
-- No fal and no provider key: never add, set or ask for one, and never spend. Every generating call passes
-  `--route codex-cli` (the signed-in Codex CLI): `generate2dmedia`'s `route_media.py image` and `master_still.py
-  generate`. Never use `--route auto`, `api`, `local` or a Grok route, never leave `--route` out, and never run
-  `route_media.py video`.
+- No fal and no provider key: never add, set or ask for one, and never spend. Every command that generates an image
+  passes `--route codex-cli` (the signed-in Codex CLI): `generate2dmedia`'s `route_media.py image`, `master_still.py
+  generate` and `master_still.py edit`. Never use `--route auto`, `api`, `local` or a Grok route, never leave
+  `--route` out, and skip any other command that would generate.
+- Video is never generated: never run `route_media.py video` or `sprite_set.py run`. `video2dsprite` only runs
+  `video2dsprite.py process` on a clip the creator supplies.
 - Ask the Executor before any generation; it is the operator's call. Processing what exists needs no ask.
 - Never send a paid-pack asset to a cloud model as a reference; only free-licence files may go.
 

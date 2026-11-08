@@ -91,7 +91,7 @@ Three.js games load the `threejs` rows, Phaser games the `phaser` rows; `gamedev
 |---|---|
 | `vendor/sprite-forge/generate2dsprite/SKILL.md` | a 2D character, prop or FX sheet no pack has |
 | `vendor/sprite-forge/generate2dmap/SKILL.md` | a 2D tilemap, prop pack or parallax background |
-| `vendor/sprite-forge/video2dsprite/SKILL.md` | turning a clip the creator supplies into 2D frames |
+| `vendor/sprite-forge/video2dsprite/SKILL.md` | turning a clip the creator supplies into 2D frames (`video2dsprite.py process` only) |
 
 Sprite Forge rows are for 2D games and follow gm-asset-variants' rules: ask the Executor before any generation, every
 generating call passes `--route codex-cli`, no provider key, no paid-pack references.
