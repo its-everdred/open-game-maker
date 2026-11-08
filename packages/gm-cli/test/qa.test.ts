@@ -158,12 +158,14 @@ describe('gm-qa skill', () => {
     expect(named.filter((name) => !registry.has(name))).toEqual([]);
   });
 
-  it("ships Blobs' three journeys, each one the schema accepts", () => {
+  it("ships Blobs' five journeys, each one the schema accepts", () => {
     const dir = join(SKILL, 'journeys', 'blobs');
     const journeys = readdirSync(dir).map((file) =>
       journeySchema.parse(JSON.parse(readFileSync(join(dir, file), 'utf8'))),
     );
     expect(journeys.map((j) => `${j.name}:${j.kind}`).sort()).toEqual([
+      'hud-clear:solo',
+      'laptop-keys:solo',
       'online-2p:room',
       'phone-touch:solo',
       'solo-cpu:solo',
