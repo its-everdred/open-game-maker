@@ -21,8 +21,17 @@ export function ShortReviewScreen() {
   if (link.isError) return <PlayLinkMessage denial={playLinkDenial(link.error)} />;
   if (!link.data) return null;
   const current = link.data.slug;
-  if (current && current !== slug) return <Navigate replace to={reviewPath(current, Number(number))} />;
-  return <ReviewScreen gameId={link.data.id} find={(commands) => findCommandByNumber(commands, number)} />;
+  if (current && current !== slug && /^[1-9]\d*$/.test(number)) {
+    return <Navigate replace to={reviewPath(current, Number(number))} />;
+  }
+  // Keyed by the review, so moving between two reviews never carries one deck's votes into the other.
+  return (
+    <ReviewScreen
+      key={`${link.data.id}:${number}`}
+      gameId={link.data.id}
+      find={(commands) => findCommandByNumber(commands, number)}
+    />
+  );
 }
 
 // The link before short links: `/game/<id>/review/<checkpoint or decision id>`. It moves to the short form once the
@@ -38,7 +47,7 @@ export function LegacyReviewScreen() {
   if (slug && command?.review_number !== undefined) {
     return <Navigate replace to={reviewPath(slug, command.review_number)} />;
   }
-  return <ReviewScreen gameId={gameId} find={(open) => findCommand(open, commandId)} />;
+  return <ReviewScreen key={`${gameId}:${commandId}`} gameId={gameId} find={(open) => findCommand(open, commandId)} />;
 }
 
 // The review deck on its own screen (A3). It renders the same deck the game's inbox renders, in the studio's own look

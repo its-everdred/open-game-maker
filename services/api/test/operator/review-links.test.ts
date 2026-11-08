@@ -1,3 +1,5 @@
+import { schema } from '@ogm/db';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import operatorRoutes, { prefix as operatorPrefix } from '../../src/operator/routes.js';
@@ -39,6 +41,18 @@ describe('operator review links', () => {
       number: 2,
       path: '/castle-game/review/2',
     });
+  });
+
+  // A game written before slugs existed has no short link; no number is spent on it.
+  it('refuses a game with no slug and numbers nothing', async () => {
+    const { app, deps } = operator();
+    deps.db.update(schema.games).set({ slug: null }).where(eq(schema.games.id, ids.game)).run();
+
+    const response = await link(app, ids.game, 'd_first');
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'game_slug_missing' });
+    expect(deps.db.select().from(schema.gameReviews).all()).toEqual([]);
   });
 
   it('refuses a caller without the internal token and an unknown game', async () => {

@@ -7,6 +7,7 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'admin',
   'all',
   'api',
+  'art',
   'assets',
   'auth',
   'connect',
