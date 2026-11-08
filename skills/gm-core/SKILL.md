@@ -88,6 +88,8 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm changes` summarizes the current game-repo diff.
 - `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 - `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.
+- `gm skills search <words>` finds an on-demand skill; `gm skills show <name>` prints it. The skills your ticket's
+  `role:*` labels make mandatory (`references/roles.md`) are already inlined; search is for the rest.
 
 ## Load when…
 
