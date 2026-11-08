@@ -60,7 +60,8 @@ describe('gm-ui-hud skill', () => {
     expect(text).toContain('MultiplayerHooks.hud');
     expect(text).toContain('`safe` insets');
     expect(text).toContain('at most 25% of the screen');
-    expect(text).toMatch(/Pause button sits in the\s+top-right corner/);
+    /* The host's Pause lives in its play bar, never over the game (#641), so games may use the top corners. */
+    expect(text).toMatch(/Pause button sits in its play\s+bar outside the game/);
     expect(text).toContain('at least 16 CSS px');
     /* On-screen buttons must never hide what the player needs (#600); the zone covers the host overlay's footprint. */
     expect(text).toContain('must never cover important content');

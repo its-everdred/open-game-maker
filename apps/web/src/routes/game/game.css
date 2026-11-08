@@ -384,11 +384,11 @@
   pointer-events: none;
 }
 
+.platform-pause-slot {
+  display: contents;
+}
+
 .platform-pause {
-  position: absolute;
-  top: max(8px, var(--safe-t));
-  right: max(8px, var(--safe-r));
-  z-index: 3;
   min-width: 64px;
   min-height: 64px;
   border: 3px solid var(--ink);
@@ -396,7 +396,7 @@
   background: var(--paper-2);
   color: var(--ink);
   box-shadow: var(--pop-sm);
-  pointer-events: auto;
+  padding-inline: 14px;
 }
 
 .platform-pause-shade {

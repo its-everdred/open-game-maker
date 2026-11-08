@@ -101,6 +101,7 @@ export function GameScreen() {
   const [frameController, setFrameController] = useState<GameFrameController>();
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
+  const [pauseSlot, setPauseSlot] = useState<HTMLSpanElement | null>(null);
   const [sessionStore, setSessionStore] = useState<StoreApi<EditorSessionState>>();
   const [sessionView, setSessionView] = useState<EditorSessionState>();
   const [editStartup, setEditStartup] = useState<EditorSessionState['saved']>();
@@ -352,6 +353,7 @@ export function GameScreen() {
         }}
       >
         <GameExtras placement="topbar" {...extraProps} />
+        {mode === 'play' ? <span className="platform-pause-slot" ref={setPauseSlot} /> : null}
       </PlayEditBar>
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
@@ -388,6 +390,7 @@ export function GameScreen() {
             build={build}
             frame={frameRef.current}
             gameId={gameId}
+            pauseSlot={pauseSlot}
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
             saves={frameState.manifest.saves}
             saveSchema={frameState.manifest.saveSchema}
