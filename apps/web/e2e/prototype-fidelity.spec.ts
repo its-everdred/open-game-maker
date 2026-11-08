@@ -108,6 +108,7 @@ for (const scenario of scenarios) {
 
       try {
         await page.setViewportSize(viewport);
+        await page.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
         const masks = await test.step('prepare app and prototype', () => scenario.prepare(page, reference));
         await test.step('normalize pages', () => Promise.all([normalize(page), normalize(reference)]));
         // Capture through CDP after normalization. Playwright's screenshot helper waits
@@ -302,6 +303,7 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
   await Promise.all([neutralizeAppAssets(app), neutralizeReferenceAssets(reference)]);
   await installAuthRoutes(app, { signedIn: true });
   await installGameApi(app);
+  await app.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
   await app.route('**/api/v1/me', (route) => route.fulfill({ json: { platformRole: 'none' } }));
   await app.route('**/api/v1/games/game/branches', (route) => route.fulfill({ json: { branches: [] } }));
   await app.route('**/api/v1/games', (route) => route.fulfill({ json: { games: [] } }));

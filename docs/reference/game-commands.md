@@ -32,8 +32,25 @@ game to its ticket identifiers and never receives aiur supervisor credentials.
 ```
 
 Commands are newest first. A Command appears only once aiur's decision is correlated, so `decision_id` and `version`
-are always present; answered, moot and uncorrelated checkpoints are left out. `media` is a signed blob URL, the same
-one the build chat renders for an option that carries an image, GIF, video or audio.
+are always present; answered, moot and uncorrelated checkpoints are left out. `summary` is the decision's short topic (aiur's
+`short_summary`) when it has one; a builder's checkpoint keeps its job's title instead, since `gm checkpoint open` sends
+the same placeholder topic for every question. `media` is a signed blob URL, the same one the build chat renders for an
+option that carries an image, GIF, video or audio.
+
+### Player-facing only
+
+The inbox lists only Commands meant for the player. Engineering and operations questions go to the Executor and never
+reach a creator view. Aiur has no audience field yet, so a decision aiur holds counts as the player's only when it
+carries Game Maker's creator marker (`CREATOR_AUDIENCE_MARKER`, which `gm decide` writes) or a gm checkpoint marker;
+any other decision is left out. A builder's own `checkpoint.open` question is the player's by construction.
+
+## The menu's decision inbox
+
+`GET /api/v1/me/commands` returns the signed-in creator's open player-facing Commands across every game they may edit,
+in the same shape plus `game_id` and `game_title`. Commands that block their build come first, then the longest
+waiting. The top-right menu badge counts them, lists their topics, and opens each in a decision modal that offers
+the next one after an answer. Each answer goes through its game's route, as below. A game whose aiur instance does not
+answer within 5 seconds, or that fails to list, is left out of that read rather than failing the others.
 
 ## Answering
 

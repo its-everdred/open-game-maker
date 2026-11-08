@@ -90,7 +90,7 @@ export interface AiurClient {
   accounts(): Promise<UsageAccounts>;
   events(after: number, limit: number, patterns: string[]): Promise<EventPage>;
   eventsToken(): Promise<{ token: string; expires_in_seconds: number }>;
-  decisions(query?: DecisionQuery): Promise<Decision[]>;
+  decisions(query?: DecisionQuery, signal?: AbortSignal): Promise<Decision[]>;
   decision(id: string): Promise<Decision>;
   decide(id: string, answer: DecisionAnswer): Promise<Decision>;
   answerAsCreator(id: string, answer: CreatorAnswer): Promise<void>;
@@ -247,7 +247,7 @@ export function createAiurClient(
       const { body } = await fetchResponse('POST', '/api/v1/events/token', { write: true });
       return EventsTokenSchema.parse(body);
     },
-    async decisions(query = {}) {
+    async decisions(query = {}, signal) {
       const params = new URLSearchParams();
       if (query.ticket !== undefined) params.set('ticket', query.ticket);
       if (query.kind !== undefined) params.set('kind', query.kind);
@@ -256,7 +256,11 @@ export function createAiurClient(
       if (query.limit !== undefined) params.set('limit', String(query.limit));
       if (query.cursor !== undefined) params.set('cursor', query.cursor);
       const suffix = params.size === 0 ? '' : `?${params.toString()}`;
-      const { body } = await fetchResponse('GET', `/api/v1/decisions${suffix}`, { supervisor: true, write: true });
+      const { body } = await fetchResponse('GET', `/api/v1/decisions${suffix}`, {
+        supervisor: true,
+        write: true,
+        signal,
+      });
       return DecisionPageSchema.parse(body).decisions;
     },
     async decision(id) {

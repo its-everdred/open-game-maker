@@ -13,6 +13,8 @@ import {
   updateCheckpoint,
   type StoredCheckpoint,
 } from '../build-chat/store.js';
+import { summaryOf } from '../commands/aiur.js';
+import { creatorAudience } from '../commands/audience.js';
 import { correlate, pickOf, recommendationOf, statusOf } from './correlate.js';
 import type { InboxWriter } from './inbox.js';
 
@@ -35,10 +37,12 @@ function nativeMessageId(jobId: string, decisionId: string): string {
 
 function nativeCheckpoint(decision: Decision): StoredCheckpoint {
   const recommend = recommendationOf(decision);
+  const audience = creatorAudience(decision);
+  const summary = summaryOf(decision);
   // A short summary only titles the Command when it is topic-sized (as `gm decide` writes it); a longer one would not
   // fit the inbox title, so the job's title stays.
-  const summary = decision.context?.short_summary?.trim();
-  const topic = summary && summary.length <= 80 ? summary : undefined;
+  const shortSummary = decision.context?.short_summary?.trim();
+  const topic = shortSummary && shortSummary.length <= 80 ? shortSummary : undefined;
   return {
     checkpoint_id: decision.decision_id,
     decision_id: decision.decision_id,
@@ -50,6 +54,8 @@ function nativeCheckpoint(decision: Decision): StoredCheckpoint {
     pick: pickOf(decision),
     ...(topic ? { topic } : {}),
     status: statusOf(decision),
+    ...(audience === undefined ? {} : { audience }),
+    ...(summary === undefined ? {} : { summary }),
   };
 }
 

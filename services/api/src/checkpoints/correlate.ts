@@ -2,6 +2,8 @@ import type { Decision } from '@ogm/aiur-client';
 import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
 
 import { parseCheckpoint, type ChatRow, type StoredCheckpoint } from '../build-chat/store.js';
+import { summaryOf } from '../commands/aiur.js';
+import { creatorAudience } from '../commands/audience.js';
 
 const marker = /gm-checkpoint:(cp_[0-7][0-9A-HJKMNP-TV-Z]{25})/;
 const openStatuses = new Set(['open', 'pending', 'deferred']);
@@ -109,6 +111,11 @@ export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPl
         pick: pickOf(decision),
         status,
         ...(optionId === undefined ? {} : { option_id: optionId }),
+        // Who the decision is for and its topic follow aiur on every poll, so a row stored before aiur set them (or
+        // before this app read them) catches up instead of staying hidden from the creator or topic-less. A builder's
+        // checkpoint keeps its job's title: `gm checkpoint open` sends the same placeholder topic for every question.
+        audience: creatorAudience(decision),
+        summary: found.checkpoint.checkpoint_id === decision.decision_id ? summaryOf(decision) : undefined,
       },
     });
   }

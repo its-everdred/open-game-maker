@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   admin: { data: undefined as { platformRole: 'maintainer' | 'admin' | 'none' } | undefined },
   jobs: { jobs: [] as TestJob[], active: [] as TestJob[], games: [] as Array<{ id: string; title: string }> },
   session: { data: null as { user: { id: string } } | null },
+  decisions: [] as TestDecision[],
   energy: { data: undefined as EnergyView | undefined },
 }));
 
@@ -31,6 +32,10 @@ vi.mock('../features/build-chat/jobs', () => ({
 vi.mock('../features/build-chat/Chat', () => ({
   Chat: ({ jobId }: { jobId?: string }) => <p>conversation {jobId}</p>,
 }));
+vi.mock('../features/commands-inbox/commands', () => ({
+  answerCommand: vi.fn(async () => undefined),
+  useCreatorCommands: (creatorId: string | undefined) => ({ commands: creatorId ? state.decisions : [] }),
+}));
 vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
 vi.mock('../lib/sound', () => sound);
@@ -39,6 +44,36 @@ vi.mock('../features/energy/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/energy/api')>()),
   useEnergy: () => state.energy,
 }));
+
+type TestDecision = {
+  game_id: string;
+  game_title: string;
+  decision_id: string;
+  checkpoint_id: string;
+  job_id: string | null;
+  title: string;
+  summary?: string;
+  question: string;
+  blocking: boolean;
+  options: Array<{ id: string; label: string }>;
+};
+
+const decision = (id: string, overrides: Partial<TestDecision> = {}): TestDecision => ({
+  game_id: 'game-blobs',
+  game_title: 'Blobs',
+  decision_id: id,
+  checkpoint_id: id,
+  job_id: null,
+  title: `Question ${id}`,
+  summary: `Topic ${id}`,
+  question: `Which ${id}?`,
+  blocking: false,
+  options: [
+    { id: 'a', label: 'A' },
+    { id: 'b', label: 'B' },
+  ],
+  ...overrides,
+});
 
 type TestJob = {
   id: string;
@@ -76,6 +111,7 @@ afterEach(() => {
   state.admin = { data: undefined };
   state.jobs = { jobs: [], active: [], games: [] };
   state.session = { data: null };
+  state.decisions = [];
   state.energy = { data: undefined };
   sound.setMuted.mockReset();
   sound.setVolume.mockReset();
@@ -206,7 +242,78 @@ describe('StudioMenu', () => {
     expect(screen.queryByRole('group', { name: /Moon Vault builds/ })).not.toBeInTheDocument();
   });
 
-  it('groups jobs by game, badges open requests, and distinguishes paused, parked, and playable work', () => {
+  // Kevin (2026-11-08): the top-right button says how many decisions are open, across every game, including a
+  // registered game's Commands that no build job owns; a build's request count alone showed Blobs as 0.
+  it('badges every open decision across games, red only when one blocks its build', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1'), decision('d2', { game_id: 'game-castle', game_title: 'Castle' })];
+
+    const view = renderMenu('/games');
+    const trigger = screen.getByRole('button', { name: 'Menu' });
+
+    expect(screen.getByText('2', { selector: '.studio-menu-badge' })).toBeVisible();
+    expect(trigger).toHaveAttribute('data-blocking', 'false');
+    expect(trigger).toHaveAttribute('aria-describedby', 'studio-menu-requests');
+    expect(document.getElementById('studio-menu-requests')).toHaveTextContent('2 decisions need your answer');
+
+    view.unmount();
+    state.decisions = [decision('d1'), decision('d3', { blocking: true })];
+    renderMenu('/games');
+    expect(screen.getByRole('button', { name: 'Menu' })).toHaveAttribute('data-blocking', 'true');
+  });
+
+  it('shows no badge to a visitor who is not signed in', () => {
+    state.decisions = [decision('d1')];
+    renderMenu('/');
+    expect(document.querySelector('.studio-menu-badge')).toBeNull();
+  });
+
+  it('lists the decisions first by topic, in the order given, and opens the one chosen in the deck', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1', { blocking: true }), decision('d2', { summary: undefined, title: 'Gate' })];
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    const list = screen.getByRole('list', { name: 'Decisions' });
+    expect([...list.querySelectorAll('strong')].map((topic) => topic.textContent)).toEqual(['Topic d1', 'Gate']);
+    expect(screen.getByRole('button', { name: 'Topic d1, Blobs' })).toHaveAttribute('data-blocking', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gate, Blobs' }));
+
+    expect(screen.getByRole('dialog', { name: 'Gate' })).toBeVisible();
+    expect(screen.getByText('Which d2?')).toBeVisible();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  // On a shared device, a decision one creator opened must not stay on screen, answerable, for the next account.
+  it('closes the open decision when another creator signs in', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1')];
+    const view = renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Topic d1, Blobs' }));
+    expect(screen.getByRole('dialog', { name: 'Topic d1' })).toBeVisible();
+
+    state.session = { data: { user: { id: 'user-2' } } };
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <StudioMenu />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('dialog', { name: 'Topic d1' })).not.toBeInTheDocument();
+
+    // Nor does it come back when the first creator signs in again.
+    state.session = { data: { user: { id: 'user-1' } } };
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <StudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('dialog', { name: 'Topic d1' })).not.toBeInTheDocument();
+  });
+
+  it('groups jobs by game and distinguishes paused, parked, and playable work', () => {
     const paused = runningJob({
       id: 'job-paused',
       openRequestCount: 2,
@@ -245,9 +352,6 @@ describe('StudioMenu', () => {
 
     const trigger = screen.getByRole('button', { name: 'Menu' });
     expect(trigger).toHaveAttribute('data-building', 'false');
-    expect(trigger).toHaveAttribute('aria-describedby', 'studio-menu-requests');
-    expect(screen.getByText('3', { selector: '.studio-menu-badge' })).toBeVisible();
-    expect(document.getElementById('studio-menu-requests')).toHaveTextContent('3 requests need your attention');
 
     fireEvent.click(trigger);
     const moon = screen.getByRole('group', { name: 'Moon Vault builds' });
@@ -306,6 +410,22 @@ describe('StudioMenu', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Sign out failed. Try again.'));
     expect(screen.getByRole('dialog', { name: 'Menu' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled();
+  });
+
+  // The decision row that opened the deck is gone once the menu closes, so closing the deck lands on the menu button.
+  it('returns focus to the hamburger when the deck opened from the menu closes', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1')];
+    renderMenu('/games');
+    const trigger = screen.getByRole('button', { name: 'Menu' });
+    fireEvent.click(trigger);
+    const row = screen.getByRole('button', { name: 'Topic d1, Blobs' });
+    row.focus();
+    fireEvent.click(row);
+
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Topic d1' })).getByRole('button', { name: 'Close' }));
+
+    expect(trigger).toHaveFocus();
   });
 
   it('closes on Escape and returns focus to the hamburger', () => {

@@ -24,10 +24,14 @@ function isOpen(decision: Decision): boolean {
   return OPEN.has(decision.decision_status);
 }
 
-function titleOf(decision: Decision): string {
+function clip(text: string): string {
+  return text.length > 200 ? `${text.slice(0, 199)}…` : text;
+}
+
+// The decision's short topic (aiur's `short_summary`), the line the menu's decision list shows.
+export function summaryOf(decision: Decision): string | undefined {
   const summary = decision.context?.short_summary?.trim() ?? '';
-  const title = summary === '' ? decision.question : summary;
-  return title.length > 200 ? `${title.slice(0, 199)}…` : title;
+  return summary === '' ? undefined : clip(summary);
 }
 
 function recommendOf(decision: Decision): string | undefined {
@@ -42,11 +46,13 @@ export function toGameCommand(
   media: ReadonlyMap<string, ResolvedOptionMedia> = new Map(),
 ): GameCommand | null {
   const recommend = recommendOf(decision);
+  const summary = summaryOf(decision);
   const playables = playablesFromMarker(decision.context?.long_context_markdown);
   const command = GameCommand.safeParse({
     job_id: null,
     ticket: decision.ticket.identifier,
-    title: titleOf(decision),
+    title: summary ?? clip(decision.question),
+    ...(summary === undefined ? {} : { summary }),
     // Aiur's decision is the checkpoint: one Command, one decision id, one version to answer against.
     checkpoint_id: decision.decision_id,
     decision_id: decision.decision_id,
@@ -63,6 +69,31 @@ export function toGameCommand(
   return command.success ? command.data : null;
 }
 
+// The menu reads every game's instance at once, so one that hangs must not stall the others: past this wait the game
+// is treated as unreachable for this read.
+export const AIUR_LIST_TIMEOUT_MS = 5_000;
+
+class AiurListTimeout extends Error {
+  override name = 'AiurListTimeout';
+}
+
+// The timer also aborts the request, so a wedged instance does not keep one open socket per menu poll.
+async function withinListTimeout<T>(start: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new AiurListTimeout());
+    }, AIUR_LIST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([start(controller.signal), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // The game's own open Commands. A game whose daemon row is missing or whose instance cannot be reached has none:
 // the inbox still lists its jobs' Commands, and the failure is logged rather than failing the whole page.
 export async function gameCommandsFromAiur(
@@ -74,8 +105,9 @@ export async function gameCommandsFromAiur(
   let client: AiurClient;
   let decisions: Decision[];
   try {
-    client = await deps.aiurClientForGame(gameId);
-    decisions = await client.decisions();
+    const reader = await deps.aiurClientForGame(gameId);
+    client = reader;
+    decisions = await withinListTimeout((signal) => reader.decisions({}, signal));
   } catch (error) {
     if (error instanceof HttpError) return [];
     if (error instanceof AiurHttpError) {
@@ -85,8 +117,9 @@ export async function gameCommandsFromAiur(
     deps.log({ event: 'game_commands_unavailable', gameId, error: (error as Error).name });
     return [];
   }
-  // A job's Command is already in its checkpoint, so the game's own read leaves those to the job. A Command the inbox
-  // would drop anyway is dropped before its media is copied.
+  // A job's Command is already in its checkpoint, so the game's own read leaves those to the job. An engineering or
+  // operations decision goes to the Executor, never to the creator. A Command the inbox would drop anyway is dropped
+  // before its media is copied.
   const open = decisions.filter(
     (decision) =>
       !jobTickets.has(decision.ticket.identifier) &&

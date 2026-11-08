@@ -36,6 +36,8 @@ export const GameCommand = z.object({
   // The aiur ticket the Command belongs to; null until the job is linked to a ticket.
   ticket: z.string().nullable(),
   title: z.string().trim().min(1).max(200),
+  // The decision's short topic (aiur's `short_summary`) when it has one: the line the menu's decision list shows.
+  summary: z.string().trim().min(1).max(200).optional(),
   checkpoint_id: z.string(),
   decision_id: z.string().min(1),
   version: z.number().int().positive(),
@@ -58,10 +60,21 @@ export const GameCommand = z.object({
 // Commands its own aiur instance holds for it when no job owns them.
 export const GameCommandsPage = z.object({ commands: z.array(GameCommand) });
 
+// GET /api/v1/me/commands → the open player-facing Commands of every game the caller can edit, for the menu's decision
+// inbox: blocking first, then the longest waiting. Each names its game so the deck answers through that game's route.
+export const CreatorCommand = GameCommand.extend({
+  game_id: Id,
+  game_title: z.string().trim().min(1).max(200),
+});
+export const CreatorCommandsPage = z.object({ commands: z.array(CreatorCommand) });
+
 export type CommandOption = z.infer<typeof CommandOption>;
 export type GameCommand = z.infer<typeof GameCommand>;
 export type GameCommandsPage = z.infer<typeof GameCommandsPage>;
+export type CreatorCommand = z.infer<typeof CreatorCommand>;
+export type CreatorCommandsPage = z.infer<typeof CreatorCommandsPage>;
 
 export const commandsSchemas = {
   'commands.game-inbox.v1': GameCommandsPage,
+  'commands.creator-inbox.v1': CreatorCommandsPage,
 } satisfies Record<string, z.ZodType>;

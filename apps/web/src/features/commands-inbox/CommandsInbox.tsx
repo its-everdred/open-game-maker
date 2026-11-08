@@ -5,8 +5,9 @@ import { reviewPath } from '@ogm/contracts/browser';
 
 import { Icon } from '../../components/Icon';
 import { AiurCommands, gameScope, type AiurCommandAnswer } from '../aiur/embed';
+import { CommandOptions } from './CommandOptions';
 import { answerCommand, useGameCommands } from './commands';
-import { mediaKindOf, withoutLinks } from './review';
+import { withoutLinks } from './review';
 import { isReviewDeck } from './ReviewDeck';
 import { ReviewRowLink } from './ReviewRows';
 import './commands-inbox.css';
@@ -65,38 +66,11 @@ export function CommandsInbox({
               ) : (
                 <>
                   <p className="commands-inbox-question">{withoutLinks(command.question)}</p>
-                  <div className="build-chat-options">
-                    {command.options.map((option) => (
-                      <button
-                        aria-label={withoutLinks(option.label)}
-                        className="build-chat-option"
-                        disabled={answering !== undefined}
-                        key={option.id}
-                        onClick={() => void answer(command, option.id)}
-                        type="button"
-                      >
-                        {option.media && (
-                          <span className="checkpoint-option-media" aria-hidden="true">
-                            {mediaKindOf(option.media) === 'image' ? (
-                              <img alt="" src={option.media.url} />
-                            ) : (
-                              <video
-                                muted
-                                playsInline
-                                poster={option.media.poster}
-                                preload="metadata"
-                                src={option.media.url}
-                              />
-                            )}
-                          </span>
-                        )}
-                        <span className="checkpoint-option-label">{withoutLinks(option.label)}</span>
-                        {option.id === command.recommend && (
-                          <span className="checkpoint-recommended">Builder&apos;s pick</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                  <CommandOptions
+                    command={command}
+                    disabled={answering !== undefined}
+                    onAnswer={(optionId) => void answer(command, optionId)}
+                  />
                 </>
               )}
               {/* A Command read from the game's own aiur instance belongs to no job, so there is no conversation here
