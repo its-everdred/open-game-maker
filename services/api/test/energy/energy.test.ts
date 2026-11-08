@@ -8,11 +8,13 @@ import { writeLimits } from '../../src/energy/store.js';
 import { energyLevel } from '../../src/energy/view.js';
 import { admit } from '../../src/jobs/admission.js';
 import { asUser, makeApp } from '../helpers.js';
-import { ids, NOW, plan, RESETS_AT, worked, ZONE } from '../budget/fixture.js';
+import { reserve } from '../../src/budget/ledger.js';
+import { ids, insertJob, NOW, plan, RESETS_AT, worked, ZONE } from '../budget/fixture.js';
 
 beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: NOW }));
 afterEach(() => vi.useRealTimers());
 
+const QUEUED = 'j_18000000-0000-4000-8000-000000000002';
 const NONE: EnergyLimits = { day: null, week: null, month: null, voice: null, images: null };
 const json = (as: string, body: unknown) => ({
   headers: { ...asUser(as), 'content-type': 'application/json' },
@@ -40,6 +42,35 @@ describe('local resource-policy source', () => {
     const { resetsAt } = energySource({ db: worked().db, zone: ZONE }).snapshot(NOW);
     // Daylight time ends on Nov 1, so Monday's midnight is 08:00Z while Nov 1's is 07:00Z.
     expect(resetsAt).toEqual({ day: RESETS_AT, week: '2026-11-02T08:00:00.000Z', month: RESETS_AT });
+  });
+
+  it('counts a build queued for tomorrow in this week but not in today or, at month end, this month', () => {
+    const deps = worked();
+    insertJob(deps, { id: QUEUED, state: 'queued', start: 'at_reset' });
+    reserve({ db: deps.db, jobId: QUEUED, at: NOW, zone: ZONE, amountMicroUsd: 2_000_000, forDay: '2026-11-01' });
+    const snapshot = energySource({ db: deps.db, zone: ZONE }).snapshot(NOW);
+    expect(snapshot.usage).toMatchObject({ day: 3_000_000, week: 5_000_000, month: 3_000_000 });
+  });
+
+  it("places each family's spend by that family's own calendar", () => {
+    const deps = worked();
+    // Kiritimati is a day ahead: its family's reservation made now is keyed Nov 1, while Los Angeles is on Oct 31.
+    deps.db
+      .insert(schema.familyBudgetSettings)
+      .values({
+        familyId: ids.family,
+        resetZone: 'Pacific/Kiritimati',
+        unitLabel: 'energy',
+        microUsdPerUnit: 100_000,
+        slotsNewGame: 1,
+        slotsEdit: 3,
+        hardCapMultiplier: 1,
+      })
+      .run();
+    insertJob(deps, { id: QUEUED });
+    reserve({ db: deps.db, jobId: QUEUED, at: NOW, zone: 'Pacific/Kiritimati', amountMicroUsd: 2_000_000 });
+    const snapshot = energySource({ db: deps.db, zone: ZONE }).snapshot(NOW);
+    expect(snapshot.usage).toMatchObject({ day: 2_000_000, week: 5_000_000, month: 2_000_000 });
   });
 
   it('does not count last month in this month', () => {
@@ -140,10 +171,10 @@ describe('admission against Energy', () => {
     capability: 'creator' as const,
   };
 
-  function run(limits: Partial<EnergyLimits>, overrides: Partial<CreateJobRequest> = {}) {
+  function run(limits: Partial<EnergyLimits>, overrides: Partial<CreateJobRequest> = {}, dailyMicroUsd = 1e9) {
     const deps = worked();
-    // Room in the member allowance and family cap, so only Energy can refuse.
-    deps.db.insert(schema.allowances).values({ familyId: ids.family, userId: ids.creator, dailyMicroUsd: 1e9 }).run();
+    // Room in the member allowance and family cap by default, so only Energy can refuse.
+    deps.db.insert(schema.allowances).values({ familyId: ids.family, userId: ids.creator, dailyMicroUsd }).run();
     writeLimits(deps.db, { ...NONE, ...limits }, NOW);
     return admit(
       {
@@ -162,12 +193,13 @@ describe('admission against Energy', () => {
     await expect(run({ day: 1e9, week: 1e9, month: 1e9 })).resolves.toMatchObject({ state: 'admitted' });
   });
 
-  it('names the week a build does not fit and offers no queue, since tomorrow will not help', async () => {
+  it('names the week a build does not fit, without dollars, and offers no queue since tomorrow is the same week', async () => {
     await expect(run({ day: 1e9, week: 3_100_000 })).rejects.toMatchObject({
       body: {
         error: 'energy_limit_reached',
         window: 'week',
-        remainingMicroUsd: 100_000,
+        // Players never see dollars; the instance's headroom stays with admins.
+        remainingMicroUsd: 0,
         resetsAt: '2026-11-02T08:00:00.000Z',
         offers: ['ask_admin'],
       },
@@ -179,5 +211,21 @@ describe('admission against Energy', () => {
       body: { error: 'energy_limit_reached', window: 'day', offers: ['queue', 'ask_admin'] },
     });
     await expect(run({ day: 3_000_000 }, { start: 'at_reset' })).resolves.toMatchObject({ state: 'queued' });
+  });
+
+  it('offers the queue on the last day of the month, since the build fits once the month resets', async () => {
+    await expect(run({ month: 3_100_000 })).rejects.toMatchObject({
+      body: { error: 'energy_limit_reached', window: 'month', resetsAt: RESETS_AT, offers: ['queue', 'ask_admin'] },
+    });
+  });
+
+  it('refuses a build queued for the reset when that day is still in a spent week', async () => {
+    await expect(run({ week: 3_000_000 }, { start: 'at_reset' })).rejects.toMatchObject({
+      body: { error: 'energy_limit_reached', window: 'week', offers: ['ask_admin'] },
+    });
+  });
+
+  it("keeps the member's own allowance refusal ahead of Energy", async () => {
+    await expect(run({ day: 0 }, {}, 3_000_000)).rejects.toMatchObject({ body: { error: 'allowance_exceeded' } });
   });
 });

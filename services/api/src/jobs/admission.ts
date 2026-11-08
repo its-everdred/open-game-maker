@@ -127,15 +127,20 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
         refusal('platform_cap_reached', platformLeft, resetsAt);
       }
       // The instance's Energy ceilings overlap: the build must fit every window an admin set (#598).
-      const energy = energyBlock(
-        energySource({ db: deps.db, zone: deps.defaults.resetZone }).snapshot(targetAt),
-        reservation.amountMicroUsd,
-      );
-      if (energy) {
-        // Only a day window frees up at the next reset, so only it offers the queue.
-        const offers: AllowanceExceeded['offers'] =
-          energy.window === 'day' && request.start !== 'at_reset' ? ['queue', 'ask_admin'] : ['ask_admin'];
-        refusal('energy_limit_reached', energy.remainingMicroUsd, energy.resetsAt, offers, energy.window);
+      const energy = energySource({ db: deps.db, zone: deps.defaults.resetZone });
+      const block = energyBlock(energy.snapshot(targetAt), reservation.amountMicroUsd);
+      if (block) {
+        // Queue only when the build would fit at the next reset, the moment a queued build starts.
+        const fitsAtReset =
+          request.start !== 'at_reset' && energyBlock(energy.snapshot(resetAt), reservation.amountMicroUsd) === null;
+        // The 402 reaches players, who never see dollars: the window and its reset say what they need.
+        refusal(
+          'energy_limit_reached',
+          0,
+          block.resetsAt,
+          fitsAtReset ? ['queue', 'ask_admin'] : ['ask_admin'],
+          block.window,
+        );
       }
 
       const slot = request.kind === 'new_game' ? 'new_game' : 'edit';

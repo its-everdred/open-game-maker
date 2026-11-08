@@ -176,14 +176,23 @@ export function AllowanceStatus({
   slot?: keyof BudgetStatus['freeSlots'];
   onTry(): void;
 }) {
-  const reset = budget?.resetsAt ?? fallback?.resetsAt;
+  // An Energy block is the instance's, not the member allowance: keep its reason and reset, and let the player retry
+  // once an admin has raised the limit (admission re-checks).
+  const energy = fallback?.error === 'energy_limit_reached' ? fallback : undefined;
+  const reset = energy ? energy.resetsAt : (budget?.resetsAt ?? fallback?.resetsAt);
   const canTry =
-    budget !== undefined &&
-    (budget.freeSlots[slot] > 0 ||
-      budget.remainingMicroUsd > (fallback?.remainingMicroUsd ?? budget.remainingMicroUsd));
+    energy !== undefined ||
+    (budget !== undefined &&
+      (budget.freeSlots[slot] > 0 ||
+        budget.remainingMicroUsd > (fallback?.remainingMicroUsd ?? budget.remainingMicroUsd)));
+  const status = energy
+    ? energyRefusalText(energy.window)
+    : budget
+      ? `${formatUnits(budget.remainingMicroUsd, budget.unitLabel)} remain`
+      : 'Checking your allowance…';
   return (
     <section className="scope-allowance" aria-label="Allowance status">
-      <b>{budget ? `${formatUnits(budget.remainingMicroUsd, budget.unitLabel)} remain` : 'Checking your allowance…'}</b>
+      <b>{status}</b>
       {reset ? <span>Resets {new Date(reset).toLocaleString()}</span> : null}
       <button className="tap-secondary" disabled={disabled || !canTry} type="button" onClick={onTry}>
         Try again

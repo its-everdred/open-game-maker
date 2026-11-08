@@ -59,7 +59,8 @@ evidence sheet. Looking is part of verification: inspect the rendered game befor
 
 Run `gm energy` at the start. `save` means a cheaper model, lower effort, and optional work deferred. `best` means the
 strongest model and effort. `balanced` is in between. When Energy is `limited` or `critical`, propose any scope cut as a
-`gm checkpoint open` decision; never cut scope silently. The preference never lowers a quality gate.
+`gm checkpoint open` decision; never cut scope silently. The preference never lowers a quality gate. When Energy is
+`unknown` or `gm energy` fails, work as `balanced`.
 
 ## Activity markers
 

@@ -52,17 +52,15 @@ export function adminView(snapshot: EnergySnapshot, preference: EnergyPreference
   };
 }
 
-// The first window a build of `amountMicroUsd` would overrun, with what that window has left; null when it fits all.
+// The first window a build of `amountMicroUsd` would overrun, and when it resets; null when it fits them all.
 export function energyBlock(
   snapshot: EnergySnapshot,
   amountMicroUsd: number,
-): { window: EnergyWindowName; remainingMicroUsd: number; resetsAt: string } | null {
+): { window: EnergyWindowName; resetsAt: string } | null {
   for (const window of WINDOWS) {
     const limit = snapshot.limits[window];
-    if (limit === null) continue;
-    const used = snapshot.usage[window];
-    if (used + amountMicroUsd > limit) {
-      return { window, remainingMicroUsd: Math.max(0, limit - used), resetsAt: snapshot.resetsAt[window] };
+    if (limit !== null && snapshot.usage[window] + amountMicroUsd > limit) {
+      return { window, resetsAt: snapshot.resetsAt[window] };
     }
   }
   return null;
