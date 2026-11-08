@@ -7,8 +7,8 @@ import { CommandError } from '../command.js';
 
 /**
  * The game's decision record (#595): every product question an agent has put to the creator, by topic, versioned with
- * the game beside the feedback ledger so the next agent sees what was already asked. A topic in the record is asked
- * once; asking it again needs the creator to have reopened it. `design/decisions.json` is not a design doc; the build's
+ * the game beside the feedback ledger so the next agent sees what was already asked. Related questions share a topic;
+ * a question already in the record is asked once, and asking it again needs the creator to have reopened it. `design/decisions.json` is not a design doc; the build's
  * design fold skips it (`packages/sdk/src/vite/index.ts`).
  */
 export const DECISIONS_FILE = 'design/decisions.json';
@@ -38,9 +38,9 @@ export const DecisionRecord = z
   .strict();
 export type DecisionRecord = z.infer<typeof DecisionRecord>;
 
-/** Case and spacing never make a new topic: "Hero Jump" and "hero  jump" are one question. */
-export function topicKey(topic: string): string {
-  return topic.trim().toLowerCase().replace(/\s+/g, ' ');
+/** Case and spacing never make a new topic or question: "Hero Jump" and "hero  jump" are one. */
+function key(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /** Read the record; a game that has asked nothing yet reads as empty rather than failing. */
@@ -66,10 +66,11 @@ export function readDecisions(gameDir: string): DecisionRecord {
   return parsed.data;
 }
 
-/** The latest Command asked under this topic, if any. */
-export function askedUnder(record: DecisionRecord, topic: string): DecisionEntry | undefined {
-  const key = topicKey(topic);
-  return [...record.decisions].reverse().find((entry) => topicKey(entry.topic) === key);
+/** The latest Command that put this question to the creator under this topic, if any. */
+export function alreadyAsked(record: DecisionRecord, topic: string, question: string): DecisionEntry | undefined {
+  return [...record.decisions]
+    .reverse()
+    .find((entry) => key(entry.topic) === key(topic) && key(entry.question) === key(question));
 }
 
 export function appendDecision(gameDir: string, entry: DecisionEntry): void {

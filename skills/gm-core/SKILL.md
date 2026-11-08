@@ -51,10 +51,10 @@ creator's choice; a choice shown with stand-ins is not a choice.
 **Ask, don't assume.** Before deciding anything a player would notice (how it looks, sounds, feels, plays), at any stage
 (a prototype, a failed review, a spec gap), ask with `gm decide`: a 2-5 word `--topic`, as many options as needed, the
 thing itself on each (`--media` or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic;
-`design/decisions.json` refuses one already asked (`--revisit` only when the creator reopens it). At most three per
-edit; new games follow gm-new-game-design. Engineering and operations questions (tooling, CI, providers, credits) never
-go to the creator: decide them or tell the Executor. Wait for the choice, build the selected slice, run it, and look at
-the result. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked.
+`design/decisions.json` refuses a question already asked (`--revisit` only when the creator reopens it). At most
+three per edit; new games follow gm-new-game-design. Engineering and operations questions (tooling, CI, providers,
+credits) never go to the creator: decide them or tell the Executor. Wait for the choice, build the selected slice, run
+it, and look at the result. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked.
 
 Done means `gm check`, `gm test`, and `gm run` are green and the PR's binary checklist is answered from the evidence
 sheet. Looking is part of verification: inspect the rendered game before sending it.

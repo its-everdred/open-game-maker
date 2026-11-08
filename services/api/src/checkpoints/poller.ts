@@ -35,7 +35,10 @@ function nativeMessageId(jobId: string, decisionId: string): string {
 
 function nativeCheckpoint(decision: Decision): StoredCheckpoint {
   const recommend = recommendationOf(decision);
-  const topic = decision.context?.short_summary?.trim();
+  // A short summary only titles the Command when it is topic-sized (as `gm decide` writes it); a longer one would not
+  // fit the inbox title, so the job's title stays.
+  const summary = decision.context?.short_summary?.trim();
+  const topic = summary && summary.length <= 80 ? summary : undefined;
   return {
     checkpoint_id: decision.decision_id,
     decision_id: decision.decision_id,

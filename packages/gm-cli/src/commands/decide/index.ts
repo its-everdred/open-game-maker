@@ -1,7 +1,7 @@
 import { MAX_COMMAND_OPTIONS } from '@ogm/contracts';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
-import { appendDecision, askedUnder, DECISIONS_FILE, readDecisions } from '../../ledger/decisions.js';
+import { alreadyAsked, appendDecision, DECISIONS_FILE, readDecisions } from '../../ledger/decisions.js';
 import { gameDir } from '../../outbox.js';
 import { openCheckpoint, printEmitEvent } from '../checkpoint/open.js';
 
@@ -51,7 +51,7 @@ export const command: GmCommand = {
     branch: { type: 'string', help: 'game branch whose build the playable slices run (defaults to main)' },
     recommend: { type: 'string', help: 'option id you recommend' },
     reason: { type: 'string', help: 'one line: why the recommended option' },
-    revisit: { type: 'boolean', default: false, help: 'ask a recorded topic again because the creator reopened it' },
+    revisit: { type: 'boolean', default: false, help: 'ask a recorded question again because the creator reopened it' },
     blocking: { type: 'boolean', default: false, help: 'hold this worker until the creator answers' },
   },
   async run(ctx, _args, flags) {
@@ -65,13 +65,13 @@ export const command: GmCommand = {
     if (!reason) throw new UsageError('--reason is required', 'say in one line why with --reason "<why>"');
     if (reason.length > 500) throw new UsageError('--reason exceeds 500 characters', 'keep the reason to one line');
 
-    // No duplicates: a topic already put to the creator is open or settled, so it is not asked again unless they
-    // reopened it. Related questions share the topic, so a second question on it is refused the same way.
+    // No duplicates: a question already put to the creator is open or settled, so it is not asked again unless they
+    // reopened it. Related questions share a topic, so a new question under a recorded topic is fine.
     const dir = gameDir(ctx.cwd);
-    const earlier = askedUnder(readDecisions(dir), topic);
+    const earlier = alreadyAsked(readDecisions(dir), topic, text(flags, 'question'));
     if (earlier && flags.revisit !== true)
       throw new UsageError(
-        `topic "${earlier.topic}" was already asked (${earlier.command}) and is in ${DECISIONS_FILE}`,
+        `"${earlier.question}" was already asked under "${earlier.topic}" (${earlier.command}) and is in ${DECISIONS_FILE}`,
         `use its answer (gm checkpoint wait ${earlier.command}); pass --revisit only when the creator reopened it`,
       );
 

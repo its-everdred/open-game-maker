@@ -195,6 +195,15 @@ describe('checkpoint poller', () => {
       context: { short_summary: 'Vision broker 402' },
       blocking: false,
     });
+    // A creator question whose summary is a sentence, not a topic: the inbox keeps the job's title.
+    const longSummary = decision({
+      decision_id: 'long-summary-1',
+      kind: 'native_question',
+      question: 'Which door?',
+      questions: [{ question: 'Which door?', multi_select: false }],
+      context: { short_summary: 'Door '.repeat(30).trim(), long_context_markdown: CREATOR_AUDIENCE_MARKER },
+      blocking: false,
+    });
     const unrelated = decision({
       decision_id: 'unrelated-1',
       kind: null,
@@ -211,7 +220,7 @@ describe('checkpoint poller', () => {
     });
     const decisions = vi
       .fn()
-      .mockResolvedValueOnce([decision(), native, unrelated, multiSelect, engineering])
+      .mockResolvedValueOnce([decision(), native, unrelated, multiSelect, engineering, longSummary])
       .mockResolvedValueOnce([]);
     const client = { decisions } as unknown as AiurClient;
     deps.registry.aiurClientFor = () => client;
@@ -248,6 +257,9 @@ describe('checkpoint poller', () => {
     expect(checkpoints.map(parseCheckpoint)).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ decision_id: 'engineering-1' })]),
     );
+    const door = checkpoints.map(parseCheckpoint).find(({ decision_id }) => decision_id === 'long-summary-1');
+    expect(door).toMatchObject({ question: 'Which door?' });
+    expect(door).not.toHaveProperty('topic');
 
     await poller.tick();
     checkpoints = listSince(deps.sqlite, JOB_ID, 0).filter(({ kind }) => kind === 'checkpoint');

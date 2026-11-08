@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AgentOutboxLine, CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
@@ -18,7 +18,11 @@ function workspace(): string {
 async function media(root: string, count: number): Promise<string[]> {
   const ids: string[] = [];
   for (let index = 0; index < count; index += 1) {
-    const post = await gm(['chat', 'post', '--job', JOB_ID, '--text', `preview ${index}`], { cwd: root });
+    const image = join(root, `preview-${index}.png`);
+    writeFileSync(image, `preview ${index}`);
+    const post = await gm(['chat', 'post', '--job', JOB_ID, '--text', `preview ${index}`, '--image', image], {
+      cwd: root,
+    });
     ids.push(post.out[0]!);
   }
   return ids;
@@ -39,7 +43,13 @@ function record(root: string) {
   };
 }
 
-async function decide(root: string, ids: string[], extra: string[] = [], topic = 'Hero jump feel') {
+async function decide(
+  root: string,
+  ids: string[],
+  extra: string[] = [],
+  topic = 'Hero jump feel',
+  question = 'How should the hero jump?',
+) {
   const options = ids.flatMap((id, index) => ['--option', `o${index}=Option ${index}`, '--media', `o${index}=${id}`]);
   return gm(
     [
@@ -49,7 +59,7 @@ async function decide(root: string, ids: string[], extra: string[] = [], topic =
       '--topic',
       topic,
       '--question',
-      'How should the hero jump?',
+      question,
       ...options,
       '--recommend',
       'o0',
@@ -87,22 +97,48 @@ describe('gm decide', () => {
     ]);
   });
 
-  it('never asks a recorded topic again unless the creator reopened it', async () => {
+  it('never asks a recorded question again unless the creator reopened it', async () => {
     const root = workspace();
     const ids = await media(root, 2);
     const first = await decide(root, ids);
     const firstId = (JSON.parse(first.out[0]!) as { checkpoint_id: string }).checkpoint_id;
 
-    // Case and spacing do not make a new topic.
-    const again = await decide(root, ids, [], 'hero  JUMP feel');
+    // Case and spacing do not make a new topic or question.
+    const again = await decide(root, ids, [], 'hero  JUMP feel', 'how should the  hero jump?');
     expect(again.code).toBe(2);
-    expect(again.err.join('\n')).toContain(`already asked (${firstId})`);
+    expect(again.err.join('\n')).toContain(`already asked under "Hero jump feel" (${firstId})`);
     expect(outboxLines(root)).toHaveLength(1);
 
     const reopened = await decide(root, ids, ['--revisit']);
     expect(reopened.code).toBe(0);
     expect(outboxLines(root)).toHaveLength(2);
     expect(record(root).decisions[1]).toMatchObject({ topic: 'Hero jump feel', revisits: firstId });
+  });
+
+  it('lets related questions share a topic', async () => {
+    const root = workspace();
+    const ids = await media(root, 2);
+    expect((await decide(root, ids)).code).toBe(0);
+
+    const related = await decide(root, ids, [], 'Hero jump feel', 'How high should the hero jump?');
+    expect(related.code).toBe(0);
+    expect(outboxLines(root).map((line) => (line.payload as { topic?: string }).topic)).toEqual([
+      'Hero jump feel',
+      'Hero jump feel',
+    ]);
+    expect(record(root).decisions).toHaveLength(2);
+  });
+
+  it('stops before asking when the decision record cannot be read', async () => {
+    const root = workspace();
+    const ids = await media(root, 2);
+    mkdirSync(join(root, 'design'), { recursive: true });
+    writeFileSync(join(root, 'design', 'decisions.json'), '{ not json');
+
+    const result = await decide(root, ids);
+    expect(result.code).not.toBe(0);
+    expect(result.err.join('\n')).toContain('design/decisions.json is not valid JSON');
+    expect(outboxLines(root)).toHaveLength(0);
   });
 
   it('refuses a topic that is not two to five words', async () => {
@@ -146,6 +182,40 @@ describe('gm decide', () => {
     expect(result.err.join('\n')).toContain('option "b" has no media');
     expect(outboxLines(root)).toHaveLength(0);
     expect(existsSync(join(root, 'design', 'decisions.json'))).toBe(false);
+  });
+
+  it("refuses a text-only post as an option's media", async () => {
+    const root = workspace();
+    const [image] = await media(root, 1);
+    const text = (await gm(['chat', 'post', '--job', JOB_ID, '--text', 'a floaty jump'], { cwd: root })).out[0]!;
+    const result = await gm(
+      [
+        'decide',
+        '--job',
+        JOB_ID,
+        '--topic',
+        'Hero jump feel',
+        '--question',
+        'How should the hero jump?',
+        '--option',
+        'a=Tight',
+        '--option',
+        'b=Floaty',
+        '--media',
+        `a=${image}`,
+        '--media',
+        `b=${text}`,
+        '--recommend',
+        'a',
+        '--reason',
+        'The tower is vertical',
+      ],
+      { cwd: root },
+    );
+
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('media for option "b" is a text post');
+    expect(outboxLines(root)).toHaveLength(0);
   });
 
   it('accepts a playable slice as the thing the creator tries on an option', async () => {

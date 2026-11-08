@@ -116,8 +116,15 @@ export function openCheckpoint(
     const [optionId, messageId] = pair(raw, 'media');
     if (!ids.includes(optionId))
       throw new UsageError(`media option "${optionId}" does not exist`, 'use an id from --option');
-    if (!knownMedia.has(messageId))
-      throw new UsageError(`unknown chat message id "${messageId}"`, 'run gm chat post before checkpoint open');
+    const kind = knownMedia.get(messageId);
+    if (kind === undefined)
+      throw new UsageError(`unknown chat message id "${messageId}"`, `run gm chat post before gm ${rules.name}`);
+    // Show, don't tell: a text-only post is words, not the thing itself.
+    if (rules.mediaOnEveryOption && kind === 'text')
+      throw new UsageError(
+        `media for option "${optionId}" is a text post`,
+        'gm chat post --image <png> or --clip <mp4> --poster <png>, then pass its id',
+      );
     if (media.has(optionId))
       throw new UsageError(`option "${optionId}" has more than one media id`, 'pass one --media per option');
     media.set(optionId, messageId);
