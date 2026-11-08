@@ -194,6 +194,14 @@ describe('deck state readings', () => {
     expect(mediaKindOf({ url: 'https://media.example.test/a.gif', width: 1, height: 1 })).toBe('image');
   });
 
+  // An aiur Command's clip often has no servable poster, and it still has a duration: without its named kind it would
+  // be played as an audio sample with no picture (#611).
+  it('trusts the kind a card names over its poster and duration', () => {
+    expect(
+      mediaKindOf({ url: 'https://media.example.test/a.mp4', width: 1, height: 1, duration_ms: 1200, kind: 'video' }),
+    ).toBe('video');
+  });
+
   // Audio cards show how long the sample runs, so a long take can be judged without playing all of it.
   it('shows an audio sample’s length as minutes and seconds', () => {
     expect(clipLength(0)).toBe('0:00');

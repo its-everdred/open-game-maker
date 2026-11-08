@@ -373,10 +373,11 @@ function DeckCard({
 }
 
 // The ending grid shows the whole sample too: a thumbnail that opens the same full-screen view. An audio card has no
-// still to show, so its grid entry is the label chip alone.
+// still to show, so its grid entry is the label chip alone. A clip with no poster shows its own first frame.
 function MediaThumb({ option, onOpen }: { option: GameCommand['options'][number] | undefined; onOpen(): void }) {
   const media = option?.media;
   if (option === undefined || media === undefined || mediaKindOf(media) === 'audio') return null;
+  const style = { aspectRatio: `${media.width} / ${media.height}` };
   return (
     <button
       aria-label={`Open ${option.label} full screen`}
@@ -384,11 +385,11 @@ function MediaThumb({ option, onOpen }: { option: GameCommand['options'][number]
       onClick={onOpen}
       type="button"
     >
-      <img
-        alt={option.label}
-        src={media.poster ?? media.url}
-        style={{ aspectRatio: `${media.width} / ${media.height}` }}
-      />
+      {mediaKindOf(media) === 'video' && media.poster === undefined ? (
+        <video aria-label={option.label} muted playsInline preload="metadata" src={media.url} style={style} />
+      ) : (
+        <img alt={option.label} src={media.poster ?? media.url} style={style} />
+      )}
     </button>
   );
 }
