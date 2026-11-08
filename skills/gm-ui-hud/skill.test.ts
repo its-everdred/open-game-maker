@@ -65,7 +65,7 @@ describe('gm-ui-hud skill', () => {
     /* On-screen buttons must never hide what the player needs (#600); the zone covers the host overlay's footprint. */
     expect(text).toContain('must never cover important content');
     expect(text).toContain('140 × 200 CSS px');
-    expect(text).toContain('`hud-clear.json`');
+    expect(text).toContain('qa/journeys/hud-clear.json');
     expect(text).toMatch(/title, play, paused, won, and lost/);
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
   }, 30_000);
