@@ -93,7 +93,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 
 | Skill | Load when… |
 |---|---|
-| gm-core | Starting or resuming any Game Maker build. |
+| gm-core | Starting or resuming any Game Maker build. Your `role:*` labels inlined the rest (`references/roles.md`); find others with `gm skills search <words>`, `gm skills show <name>`. |
 | gm-asset-showcase | Building or verifying a pre-rendered asset-set showcase. |
 | gm-asset-variants | Recolouring a model, attaching a prop to a rig joint, or making any variant of a library asset. |
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |

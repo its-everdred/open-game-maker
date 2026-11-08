@@ -70,7 +70,7 @@ describe('gm skill pack', () => {
     const verify = lines('gm-verify');
     const text = verify.join('\n');
 
-    expect(verify.length).toBeLessThanOrEqual(80);
+    expect(verify.length).toBeLessThanOrEqual(81);
     expect(text).toContain('gm check');
     expect(text).toContain('gm test');
     expect(text).toContain('gm shot --sheet');

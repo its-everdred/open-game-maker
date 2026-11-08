@@ -75,6 +75,15 @@ the resource packs first (`gm assets search`); generation (voices) is samples on
   checks, skills to load, assets chosen, the decisions it relies on (by id) and its flow node or loop. No raw player text: summaries only.
 - `aiur-main feature create` for the game (once) and `aiur-main epic set` per lane; GitHub native blocked-by edges for
   dependencies; priority labels (prototype tickets `priority:1`).
+- **Roles on every ticket.** Each child carries `game:<slug>` and one or more `role:*` labels chosen by its work type
+  from `../gm-core/references/roles.md` (a HUD ticket `role:visual`, a combat ticket `role:gameplay`, a ticket that
+  does both gets both). aiur inlines each label's mandatory skills when the ticket starts, so a ticket without a role
+  starts without the skills its work needs. Before queueing, and again after filing more children, run
+  `gm plan check --tickets <file> --game <slug>` on the children you filed (each links the parent:
+  `gh issue list --state open --limit 1000 --search "#<parent> in:body" --json number,title,labels`); other games'
+  tickets are skipped, and it exits 1 naming each ticket with no game, two games, no known role or an unknown role.
+  Fix the labels, never the check. The instance's aiur config maps the labels to skills: paste `gm skills config`
+  (run from the instance root) into its `agent.skills`.
 - Build Order: the parent issue is its root; confirm with `aiur-main build-orders <root>` that every child appears with
   the right edges, then queue the unblocked children (`aiur-main --todo`).
 - Post the plan summary on the parent: architecture sketch, ticket list by lane, prototype set, open decisions.
@@ -85,7 +94,7 @@ Once the high-level plan and the proposed Build Order exist, do not dispatch imp
 from the general `research-spike` skill (steps 3–5: one research agent per ticket, brainstorm → plan, woven specs,
 tickets rewritten for a weaker implementer). Game specifics on top of it:
 
-- Research tickets carry `kind:research`, the game's feature, epic and `game:<slug>` labels, and block their
+- Research tickets carry `kind:research`, the game's feature, epic, `game:<slug>` and `role:*` labels, and block their
   implementation tickets; library and asset tickets are already research and get no extra spike.
 - Research docs go to `games/<name>/docs/research/<ticket>.md` and woven specs to `games/<name>/docs/spec/<area>.md`;
   private detail stays in the game's private context and is referenced, never copied.
