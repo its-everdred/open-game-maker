@@ -14,5 +14,6 @@ export {
   type Turns,
   type Vec3,
 } from './kit-placer.js';
+export { kitPiece } from './kit-piece.js';
 export { parseKitMap, writeKitMap, type KitMap, type KitPlacement } from './map.js';
 export { kitPalette, type PaletteEntry } from './palette.js';

@@ -9,7 +9,9 @@ import { PlayLinkMessage } from '../play/PlayScreen';
 import { playLinkDenial, usePlayLink } from '../play/api';
 import { useGameCommands } from '../../features/commands-inbox/commands';
 import { ReviewDeck } from '../../features/commands-inbox/ReviewDeck';
+import { Icon } from '../../components/Icon';
 import { useMyJobs } from '../../features/build-chat/jobs';
+import { reviewTitle } from './title';
 import './review-screen.css';
 
 // The short link the Executor pushes to the creator (#591): `/<slug>/review/<n>`, the game's slug and the Command's
@@ -85,10 +87,10 @@ function ReviewScreen({
     return (
       <div className="review-screen">
         <header className="review-screen-head">
-          <button className="review-screen-back tap-primary" onClick={back} type="button">
-            Back to the game
-          </button>
           <h1>Review sent</h1>
+          <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+            <Icon name="close" />
+          </button>
         </header>
       </div>
     );
@@ -98,10 +100,10 @@ function ReviewScreen({
     return (
       <div className="review-screen">
         <header className="review-screen-head">
-          <button className="review-screen-back tap-primary" onClick={back} type="button">
-            Back to the game
-          </button>
           <h1>Review</h1>
+          <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+            <Icon name="close" />
+          </button>
         </header>
         <p className="review-screen-state" role="status">
           {isPending ? 'Loading the review…' : 'That review is not open. It may already be answered.'}
@@ -113,14 +115,16 @@ function ReviewScreen({
   return (
     <div className="review-screen">
       <header className="review-screen-head">
-        <button className="review-screen-back tap-primary" onClick={back} type="button">
-          Back to the game
+        <h1>{reviewTitle(command.title)}</h1>
+        <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+          <Icon name="close" />
         </button>
-        <h1>{command.title}</h1>
       </header>
       <div className="review-screen-body">
-        <p className="review-screen-question">{command.question}</p>
         <ReviewDeck gameId={gameId} command={command} voiceTarget={voiceTarget} onAnswered={() => setSent(true)} />
+        <details className="review-screen-question">
+          <summary>{command.question}</summary>
+        </details>
       </div>
     </div>
   );
