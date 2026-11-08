@@ -1,0 +1,13 @@
+{
+  "level": "limited",
+  "preference": "balanced",
+  "windows": [
+    { "window": "day", "usedPercent": 80, "resetsAt": "2026-11-09T00:00:00Z" },
+    { "window": "week", "usedPercent": 40, "resetsAt": "2026-11-09T00:00:00Z" },
+    { "window": "month", "usedPercent": null, "resetsAt": "2026-12-01T00:00:00Z" }
+  ],
+  "services": [
+    { "service": "voice", "usedPercent": null },
+    { "service": "images", "usedPercent": null }
+  ]
+}
