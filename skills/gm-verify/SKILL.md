@@ -14,6 +14,8 @@ Never report a visual result you have not looked at. Code, logs, and a passing c
 3. Fix the first new console error before investigating anything after it.
 4. Run `gm options check` on any option set before it reaches the creator; a rejection in `design/feedback.json` blocks it.
 5. Only then run `gm run --viewport both --frames 0,2,5` and make the sheet with `gm shot --sheet shots/`.
+6. Before opening or updating the PR, run `gm look check`; every committed still needs a passing look answer for its
+   current bytes. If it says `blocked`, the look broker failed (a 402, say): report the work as blocked, never as a pass.
 
 A report budget whose status is `over` blocks the PR. Name the tier and the measured value. `unknown` is not green:
 list it under unchecked.
@@ -68,4 +70,4 @@ Visual findings advise; `gm check`, `gm test`, console errors, and budgets block
 
 **Seeing your own output.** Numeric checks (luminance, colour counts, magenta) never prove a frame looks right. If
 you cannot view images yourself, run the `gm-image-mock` look request on each still beside its target mock and put
-its answers in the evidence; fix every defect it names before the PR.
+its answers in the evidence; fix every defect it names and look again until it answers `VERDICT: pass`.

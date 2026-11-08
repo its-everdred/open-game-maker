@@ -37,6 +37,7 @@ gm check static [--json]
 gm check hooks [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--serve <dir>] [--out <dir>] [--json]
 gm run [--inputs <script.json>] [--frames <seconds,...>] [--timeline <from:to:step>] [--out <dir>]
+gm look check [--json]
 ```
 
 `gm check` runs TypeScript, deterministic simulation-source, test-hook, and registered asset gates. Use `static` or
@@ -53,6 +54,12 @@ logical-input script, checks a save-state round trip, writes a HUD still, runs `
 keys without exposing values. Use `gm help run` for viewport, recording, rig, and asset-tier flags. `--record-native`
 records the game canvas at its pixel size, scaled up only by a whole-number factor, rendering every frame through the
 game's deterministic hook so a clip holds exactly duration x fps frames.
+
+`gm look check` gates the PR on the vision look requests (`gm-image-mock`, `request-mock.py --kind look`), which log
+each answer or broker error to `.gm-mock/looks.jsonl` with the git blob id of every image they judged. For each `tN.png`
+still committed at HEAD in the game folder, the newest look on exactly those bytes decides: its answer must end in
+`VERDICT: pass`. A `VERDICT: fail`, an answer without a verdict, or no look on the committed bytes exits 1. A broker
+error (for example a 402) is reported as `blocked` and also exits 1; it is never a pass.
 
 ## Refresh the skill pack
 
