@@ -158,13 +158,15 @@ describe('gm run in the app shell', () => {
     expect(() => appFrame(ctx, {})).toThrow(/no signed-in storage state.*ogm-qa-signin/);
   });
 
-  it('defaults to the app shell, so a run without a signed-in state fails instead of capturing the bare game', async () => {
+  it('signs in only when asked: the default host frame needs no account, --frame app needs the QA state', async () => {
     const home = tempDir();
-    const result = await gm(['run'], { home });
-    expect(result.code).toBe(2);
-    expect(result.err.join('\n')).toMatch(/no app origin|no signed-in storage state/);
-    const queued = await gm(['run'], { home, env: { GM_VERIFY_QUEUE: '1' } });
-    expect(queued.err.join('\n')).toMatch(/--frame bare/);
+    const hostFrame = await gm(['run'], { home });
+    expect(hostFrame.err.join('\n')).toMatch(/no built game in \.\/dist/);
+    const app = await gm(['run', '--frame', 'app'], { home });
+    expect(app.code).toBe(2);
+    expect(app.err.join('\n')).toMatch(/no app origin|no signed-in storage state/);
+    const queued = await gm(['run', '--frame', 'app'], { home, env: { GM_VERIFY_QUEUE: '1' } });
+    expect(queued.err.join('\n')).toMatch(/queue mode cannot sign in/);
   });
 });
 

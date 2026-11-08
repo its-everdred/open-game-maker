@@ -21,8 +21,8 @@ const VIEWPORTS = [
   'tablet-landscape',
   'both',
 ] as const;
-const FRAMES = ['app', 'bare'] as const;
-const SIGNIN_HINT = 'on the host: ops/bin/ogm-qa-signin (or gm run --frame bare for the game alone)';
+const FRAMES = ['host', 'app', 'bare'] as const;
+const SIGNIN_HINT = 'on the host: ops/bin/ogm-qa-signin (or gm run without --frame app)';
 const TIERS = ['mobile', 'desktop', 'low'] as const;
 const RIGS = ['iso', 'topdown', 'side', 'follow', 'fps', 'orbit', 'fixed'] as const;
 const FFMPEG_HINT = 'sudo apt install ffmpeg';
@@ -100,6 +100,18 @@ function loadInputs(
   }
 }
 
+/** A string field of the game's gm.manifest.json, when there is one. */
+function manifestField(ctx: GmContext, field: 'id' | 'title'): string | undefined {
+  try {
+    const value = (
+      JSON.parse(readFileSync(join(gameDir(ctx.cwd), 'gm.manifest.json'), 'utf8')) as Record<string, unknown>
+    )[field];
+    return typeof value === 'string' && value !== '' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The signed-in app shell to capture in: `--app`, else `/play/<manifest id>` on OGM_APP_ORIGIN (the environment, then
  * the host's api.env), with the QA account's storage state (`--storage`, OGM_QA_STORAGE, ~/.config/ogm/qa/storage.json).
@@ -112,13 +124,8 @@ export function appFrame(ctx: GmContext, flags: Record<string, unknown>): { url:
     const origin = ctx.env?.OGM_APP_ORIGIN || readEnvFile(join(envDir, 'api.env')).OGM_APP_ORIGIN;
     if (!origin)
       throw new UsageError('no app origin to capture the app shell from', 'gm run --app https://<app>/play/<slug>');
-    let id: unknown;
-    try {
-      id = (JSON.parse(readFileSync(join(gameDir(ctx.cwd), 'gm.manifest.json'), 'utf8')) as { id?: unknown }).id;
-    } catch {
-      id = undefined;
-    }
-    if (typeof id !== 'string' || id === '')
+    const id = manifestField(ctx, 'id');
+    if (id === undefined)
       throw new UsageError(
         'no gm.manifest.json id to open /play/<slug> with',
         'gm run --app https://<app>/play/<slug>',
@@ -189,8 +196,8 @@ export const command: GmCommand = {
     url: { type: 'string', help: 'loopback game URL; otherwise serve ./dist' },
     frame: {
       type: 'string',
-      default: 'app',
-      help: 'app: the signed-in app shell (top bar, Pause, touch overlay) around the local build; bare: the game alone',
+      default: 'host',
+      help: 'host: the game in the host frame (top bar, Pause, touch overlay); app: the signed-in app; bare: the game alone',
     },
     app: { type: 'string', help: 'app play URL (default OGM_APP_ORIGIN/play/<gm.manifest.json id>)' },
     storage: { type: 'string', help: 'signed-in storage state (default ~/.config/ogm/qa/storage.json)' },
@@ -233,7 +240,7 @@ export const command: GmCommand = {
 
     if (ctx.config.verifyQueue) {
       if (url) throw new UsageError('queue mode serves ./dist and does not accept --url', 'omit --url');
-      if (frame === 'app') throw new UsageError('queue mode captures the game alone', 'gm run --frame bare');
+      if (frame === 'app') throw new UsageError('queue mode cannot sign in to the app', 'gm run --frame host');
       const runId = verify.newRunId();
       const dir = verify.submitRequest(ctx.cwd, {
         v: 1,
@@ -244,6 +251,7 @@ export const command: GmCommand = {
         serveDir: 'dist',
         args: {
           viewport,
+          frame,
           tier,
           ...(rig ? { rig } : {}),
           ...(frames ? { frames } : {}),
@@ -279,7 +287,9 @@ export const command: GmCommand = {
         url: target,
         outDir: resolve(ctx.cwd, flags.out as string),
         viewport,
+        frame,
         ...(app ? { app } : {}),
+        title: manifestField(ctx, 'title') ?? '',
         tier,
         ...(rig ? { rig } : {}),
         ...(frames ? { frames } : {}),

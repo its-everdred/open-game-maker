@@ -53,18 +53,29 @@ export function gameUrl(url: string, tier: Tier): string {
 }
 
 /**
- * The app shell a run captures the game in: the signed-in `/play/<slug>` page, with every request the app makes for a
- * game build (`/g/<gameId>/<buildId>/<file>` on the games origin) answered from `localUrl`, the local build. So the
- * stills show the app's own top bar, Pause and touch overlay around the build under test, not the hosted one.
+ * The shell a run captures the game in: a page that mounts the game in an iframe on another origin. Either the host
+ * frame (`hostFrameUrl`, the build served as its own games origin), or the signed-in app's `/play/<slug>` page with
+ * `storageState`, where every request the app makes for a game build (`/g/<gameId>/<buildId>/<file>` on the games
+ * origin) is answered from `localUrl`, the local build. Either way the stills show the top bar, Pause and touch overlay
+ * around the build under test.
  */
 export type AppFrame = {
-  /** `https://<app origin>/play/<slug>`. */
+  /** The shell page: the host frame, or `https://<app origin>/play/<slug>`. */
   url: string;
-  /** A Playwright storage state of a signed-in account (ops/bin/ogm-qa-signin on the host). */
-  storageState: string;
-  /** The loopback server of the local build. */
-  localUrl: string;
+  /** The real app only: a Playwright storage state of a signed-in account (ops/bin/ogm-qa-signin on the host). */
+  storageState?: string;
+  /** The real app only: the loopback server of the local build, which stands in for the games origin. */
+  localUrl?: string;
 };
+
+/** The host frame page for a local build served at `gamesUrl`. */
+export function hostFrameUrl(shellUrl: string, gamesUrl: string, tier: Tier, title: string): string {
+  const url = new URL('host-shell.html', shellUrl);
+  url.searchParams.set('games', new URL(gamesUrl).origin);
+  url.searchParams.set('tier', tier);
+  url.searchParams.set('title', title);
+  return url.href;
+}
 
 /** A game build file on the games origin: `/g/<gameId>/<buildId>/<file>`. The app's own `/g/<gameId>` page has no file. */
 export const GAME_FILE = /^\/g\/[^/]+\/[^/]+\/(.*)$/;
@@ -73,7 +84,7 @@ export const GAME_FILE = /^\/g\/[^/]+\/[^/]+\/(.*)$/;
  * Serves the games origin from the local build: `/g/<gameId>/<buildId>/<file>` is `<file>`, and once that origin is
  * known any other path on it (a test build loads `/assets/...` from the root) is the same path in the local build.
  */
-async function routeGameToLocal(context: BrowserContext, app: AppFrame): Promise<void> {
+async function routeGameToLocal(context: BrowserContext, app: AppFrame & { localUrl: string }): Promise<void> {
   const appOrigin = new URL(app.url).origin;
   let gamesOrigin: string | undefined;
   await context.route(
@@ -170,10 +181,11 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
     ...VIEWPORTS[options.viewport],
     ...options.contextOptions,
     /* A service worker would answer game requests before the local-build route sees them. */
-    ...(app ? { storageState: app.storageState, serviceWorkers: 'block' as const } : {}),
+    ...(app?.storageState ? { storageState: app.storageState } : {}),
+    ...(app?.localUrl ? { serviceWorkers: 'block' as const } : {}),
   });
-  if (app) {
-    await routeGameToLocal(context, app);
+  if (app?.localUrl) {
+    await routeGameToLocal(context, { ...app, localUrl: app.localUrl });
     await context.addInitScript(captureParams, { appOrigin: new URL(app.url).origin, tier: options.tier });
   }
   const page = await context.newPage();
@@ -191,7 +203,7 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
   page.on('console', (message) => {
     const type = message.type();
     /* Our own doing: the app shell's service worker is blocked so the local-build route sees every request. */
-    if (app && message.text() === 'Service Worker registration blocked by Playwright') return;
+    if (app?.localUrl && message.text() === 'Service Worker registration blocked by Playwright') return;
     if (type === 'error') collector.add('error', message.text());
     else if (type === 'warning') collector.add('warning', message.text());
   });

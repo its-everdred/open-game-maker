@@ -134,7 +134,7 @@ export const verifyReportSchema = z.object({
   renderer: z.string().min(1),
   software: z.boolean(),
   viewport: viewportSetSchema,
-  frame: z.enum(['app', 'bare']).optional(),
+  frame: z.enum(['host', 'app', 'bare']).optional(),
   tier: tierSchema,
   rig: viewIdSchema.optional(),
   frames: z.array(z.object({ t: z.number().min(0), path: relativePath, viewport: viewportSchema.optional() })),

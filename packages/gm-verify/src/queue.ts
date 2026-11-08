@@ -69,6 +69,8 @@ export const verifyRequestSchema = z.strictObject({
   serveDir: z.string().min(1),
   args: z.strictObject({
     viewport: viewportSetSchema,
+    /* The signed-in app frame needs a URL and a storage state, which a request never carries. */
+    frame: z.enum(['host', 'bare']).optional(),
     tier: tierSchema,
     rig: viewIdSchema.optional(),
     frames: z.array(z.number().min(0)).max(120).optional(),

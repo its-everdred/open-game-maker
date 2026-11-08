@@ -37,6 +37,7 @@
     "frame": {
       "type": "string",
       "enum": [
+        "host",
         "app",
         "bare"
       ]
