@@ -83,7 +83,7 @@ fallback when it is blank.
 
 | Unit file | Fill | Optional |
 | --- | --- | --- |
-| `api.env` | `OGM_API_PORT`, `OGM_PUBLIC_ORIGIN`, `OGM_APP_ORIGIN`, `OGM_GAMES_ORIGIN`, `OGM_DATA_DIR`, `OGM_BLOB_ROOT`, `OGM_ROOMS_INTERNAL_URL`, `OGM_COMMIT_INTERNAL_URL`, `OGM_INSTANCE_REPO` (`owner/repository` every game lives in), `OGM_BUILDER_BOT_LOGIN`, `OGM_INTAKE_BOT_LOGIN`, `OGM_VAPID_SUBJECT`; tokens you obtain: `OGM_BUILDER_BOT_TOKEN`, `OGM_INTAKE_GITHUB_TOKEN` | `OGM_GAMES_ROOT`, `OGM_ASSETS_ROOT`, `OGM_INTAKE_DIR`, `OGM_VOICE_HOST_INTERNAL_URL`, `OGM_VOICE_WS_URL`, `OGM_BUILDER_WORKSPACES_ROOT`, `OGM_VAPID_KEY_FILE`, `OGM_GAME_TEMPLATE_REF`, `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD`, `OGM_RESET_ZONE_DEFAULT`, `OGM_ANALYTICS_RETENTION_DAYS`, `OGM_REPORT_BUNDLE_MAX_BYTES`, `OGM_NARRATION_CONCURRENCY`, `OGM_INTAKE_SWEEP_SECONDS`, `OGM_CHAT_POLL_MS`, `OGM_CHECKPOINT_POLL_MS`, `OGM_DESIGN_DEFAULT_MS`, `OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `SMTP_URL`/`SMTP_FROM` |
+| `api.env` | `OGM_API_PORT`, `OGM_PUBLIC_ORIGIN`, `OGM_APP_ORIGIN`, `OGM_GAMES_ORIGIN`, `OGM_DATA_DIR`, `OGM_BLOB_ROOT`, `OGM_ROOMS_INTERNAL_URL`, `OGM_COMMIT_INTERNAL_URL`, `OGM_INSTANCE_REPO` (`owner/repository` every game lives in), `OGM_BUILDER_BOT_LOGIN`, `OGM_INTAKE_BOT_LOGIN`, `OGM_VAPID_SUBJECT`; tokens you obtain: `OGM_BUILDER_BOT_TOKEN`, `OGM_INTAKE_GITHUB_TOKEN` | `OGM_GAMES_ROOT`, `OGM_ASSETS_ROOT`, `OGM_INTAKE_DIR`, `OGM_VOICE_HOST_INTERNAL_URL`, `OGM_VOICE_WS_URL`, `OGM_BUILDER_WORKSPACES_ROOT`, `OGM_VAPID_KEY_FILE`, `OGM_GAME_TEMPLATE_REF`, `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD`, `OGM_RESET_ZONE_DEFAULT`, `OGM_ANALYTICS_RETENTION_DAYS`, `OGM_REPORT_BUNDLE_MAX_BYTES`, `OGM_NARRATION_CONCURRENCY`, `OGM_INTAKE_SWEEP_SECONDS`, `OGM_CHAT_POLL_MS`, `OGM_CHECKPOINT_POLL_MS`, `OGM_DESIGN_DEFAULT_MS`, `OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `SMTP_URL`/`SMTP_FROM`, `OGM_QA_EMAILS` |
 | `rooms.env` | `OGM_ROOMS_PORT`, `OGM_GAMES_ORIGIN`, `OGM_API_INTERNAL_URL` | |
 | `games.env` | `OGM_GAMES_PORT`, `OGM_GAMES_ROOT`, `OGM_APP_ORIGIN` | `OGM_GAMES_SW` (defaults to the workspace's built `packages/host/dist/game-cache.js`) |
 | `voice-host.env` | `OGM_VOICE_PORT`, `OGM_VOICE_INTERNAL_PORT`, `OGM_API_INTERNAL_URL`, `OGM_VOICE_PROVIDER` (`fake`) | Live ElevenLabs only: `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `OGM_VOICE_LLM`, `OGM_VOICE_CLEANUP_ROOT`; tuning: `OGM_VOICE_MAX_SESSIONS`, `OGM_VOICE_RENDER_DIR`, `OGM_VOICE_NARRATION_ENABLED` |
@@ -321,6 +321,23 @@ room journey in `<game>/qa/journeys/`, `gm qa look` and `gm qa look --report` fr
 checkout. The run lands in `~/.local/state/ogm/qa/<slug>/<buildId>/` (`OGM_QA_ROOT` moves it). Answer
 `look/answers.json` there after opening the stills, then `gm qa look --report --out <run>` again. Exit codes: 0 the
 report passed, 1 a step failed or a look is unanswered, 64 bad usage, 65 no game, build, origin or token.
+
+## Sign the QA account in
+
+Headless capture of the app shell (`gm run --frame app`, the Executor's `executor/shell-shots.mjs` with `STORAGE=…`)
+lands on the Sign in card unless it carries a signed-in Playwright storage state. The QA account is a member of the
+family like any player, and its state lives outside git at `~/.config/ogm/qa/storage.json` (directory 700, file 600):
+
+1. Put the QA address on the allow list (Admin › Users) and in `api.env`: `OGM_QA_EMAILS=<address>`, then restart the
+   API. Mail to that address stays in the admin inbox even with `SMTP_URL` set, so the host can read its links.
+2. Invite the address to the family once (Admin › Invites, member).
+3. Run `ops/bin/ogm-qa-signin`. It asks the app for a magic link, reads it from the admin inbox in the database, opens it
+   in Chromium, accepts the pending invitation while the account has no family, and saves the state. It prints the
+   account and its family, never the cookie.
+
+Sessions last 7 days: run it again when a capture shows Sign in. `--origin http://127.0.0.1:5173` signs in to the local
+stack instead of `OGM_APP_ORIGIN`; `--out` writes elsewhere. Exit codes: 0 saved, 1 sign-in failed, 64 bad usage, 65 no
+address, origin or database.
 
 ## Prove the instance monorepo flow
 

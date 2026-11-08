@@ -26,7 +26,20 @@
       "enum": [
         "desktop",
         "phone",
-        "both"
+        "phone-landscape",
+        "tablet",
+        "tablet-landscape",
+        "both",
+        "touch",
+        "all"
+      ]
+    },
+    "frame": {
+      "type": "string",
+      "enum": [
+        "host",
+        "app",
+        "bare"
       ]
     },
     "tier": {
@@ -67,7 +80,10 @@
             "type": "string",
             "enum": [
               "desktop",
-              "phone"
+              "phone",
+              "phone-landscape",
+              "tablet",
+              "tablet-landscape"
             ]
           }
         },

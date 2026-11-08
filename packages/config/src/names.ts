@@ -230,6 +230,12 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     doc: 'smtp(s)://user:pass@host:port (optional; admin inbox when unset)',
   },
   { name: 'SMTP_FROM', unit: 'api', kind: 'string', doc: 'From address for SMTP mail (optional)' },
+  {
+    name: 'OGM_QA_EMAILS',
+    unit: 'api',
+    kind: 'string',
+    doc: 'QA accounts whose mail stays in the admin inbox, for ops/bin/ogm-qa-signin (optional)',
+  },
   { name: 'OGM_ASSETS_ROOT', unit: 'shared', kind: 'path', doc: 'assets-local library root for gm and intake' },
   { name: 'OGM_STATE_DIR', unit: 'intake', kind: 'path', doc: '~/.local/state/ogm (intake status root)' },
   { name: 'GM_SKILLS_DIR', unit: 'gm', kind: 'path', doc: 'platform skill-pack root used by gm skills sync' },
