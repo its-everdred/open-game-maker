@@ -123,6 +123,45 @@
   font-weight: 700;
 }
 
+/* Two-way voice about the open decision. It lives in the header, so it never covers the cards or the options;
+   a live call keeps the button lit until it is pressed again. */
+.review-screen-voice {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--tap-secondary);
+  height: var(--tap-secondary);
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--paper-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.review-screen-voice .icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.review-screen-voice.is-live {
+  border-color: var(--ink);
+  background: var(--orange);
+  color: var(--night-2);
+}
+
+.review-screen-change {
+  min-height: var(--tap-secondary);
+  padding: 0 20px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 700 15px/1 var(--display);
+  cursor: pointer;
+}
+
 .review-screen-steps {
   display: flex;
   justify-content: center;

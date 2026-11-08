@@ -8,6 +8,7 @@ import type { BoundaryVerdict } from '@ogm/contracts';
 import { EXIT, type GmCommand } from '../../command.js';
 import { repoVisibility, requireAssetsRoot } from '../../context.js';
 import { readLock } from '../../lock.js';
+import { scanReferences, unlisted, type References } from '../../references.js';
 import { repoPaths, resolveEntry } from '../../resolve.js';
 import { refusalsForCheck, rightsForCard, type Refusal } from '../../rules.js';
 
@@ -19,6 +20,17 @@ async function assetFiles(cwd: string): Promise<string[]> {
     .filter((entry) => entry.isFile())
     .map((entry) => relative(cwd, join(entry.parentPath, entry.name)).replaceAll(sep, '/'))
     .sort();
+}
+
+/** Every asset id the game's code names must be on its list: the list is what the build ships. */
+function unlistedRefusals(listed: string[], references: References): Refusal[] {
+  return unlisted(listed, references).map(({ id, file }) => ({
+    code: 'rights',
+    rule: 'unlisted',
+    id,
+    path: file,
+    detail: `${file} uses it but assets.lock.json does not list it. Try: gm assets ${id.startsWith('t3:') ? 'register <path>' : `use ${id}`}`,
+  }));
 }
 
 function printRefusals(ctx: Parameters<GmCommand['run']>[0], refusals: Refusal[], json: boolean): void {
@@ -33,7 +45,7 @@ function printRefusals(ctx: Parameters<GmCommand['run']>[0], refusals: Refusal[]
 
 export const command: GmCommand = {
   name: 'check assets',
-  summary: 'verify asset files, lock integrity, and publish rights',
+  summary: 'verify asset files, lock integrity, publish rights, and that the code uses only listed assets',
   usage: '[--publish] [--repo-visibility public|private] [--json]',
   example: 'check assets --publish --repo-visibility public',
   flags: {
@@ -42,6 +54,7 @@ export const command: GmCommand = {
   },
   async run(ctx, _args, flags) {
     const files = await assetFiles(ctx.cwd);
+    const references = await scanReferences(ctx.cwd);
     let lock;
     try {
       lock = await readLock(ctx.cwd);
@@ -66,6 +79,7 @@ export const command: GmCommand = {
         path,
         detail: 'file is not represented in assets.lock.json',
       }));
+      refusals.push(...unlistedRefusals([], references));
       if (refusals.length === 0 && !ctx.json) ctx.out('no assets');
       printRefusals(ctx, refusals, ctx.json);
       ctx.emit('assets.check', { publish: flags.publish === true, violations: refusals.length });
@@ -124,6 +138,12 @@ export const command: GmCommand = {
         detail: 'file is not represented in assets.lock.json',
       });
     }
+    refusals.push(
+      ...unlistedRefusals(
+        lock.assets.map((entry) => entry.id),
+        references,
+      ),
+    );
     printRefusals(ctx, refusals, ctx.json);
     ctx.emit('assets.check', { publish, violations: refusals.length });
     return refusals.length === 0 ? EXIT.ok : EXIT.failed;

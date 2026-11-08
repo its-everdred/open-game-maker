@@ -35,11 +35,12 @@ For a vague creation brief, offer three clearly different takes in one question.
 core verb, short loop, and boundary; recommend one. Different palettes or names are not different takes.
 
 Record each option's provenance first (the packs and assets it used, its generator, and when it was built) as a JSON
-file per option, then run the ledger check and open one non-blocking checkpoint:
+file per option, post a still or clip of each with `gm chat post`, then run the ledger check and ask one non-blocking
+question:
 
 ```text
 gm options check --option "a=Gather and craft" --option "b=Race and deliver" --option "c=Defend and repair" --provenance a=@provenance/a.json --provenance b=@provenance/b.json --provenance c=@provenance/c.json
-gm checkpoint open --question "Which game loop should I build?" --option "a=Gather and craft" --option "b=Race and deliver" --option "c=Defend and repair" --recommend a --provenance a=@provenance/a.json --provenance b=@provenance/b.json --provenance c=@provenance/c.json
+gm decide --topic "Core game loop" --question "Which game loop should I build?" --option "a=Gather and craft" --option "b=Race and deliver" --option "c=Defend and repair" --media a=<msg> --media b=<msg> --media c=<msg> --recommend a --reason "Fits the cozy pitch" --provenance a=@provenance/a.json --provenance b=@provenance/b.json --provenance c=@provenance/c.json
 ```
 
 Open at most three checkpoints during an edit or a single-ticket build. A new game from the New Game flow follows `gm-new-game-design` instead (no cap). Do not add `--blocking` unless the next dependent step truly

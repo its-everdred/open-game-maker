@@ -226,6 +226,9 @@
                   "many"
                 ]
               },
+              "topic": {
+                "type": "string"
+              },
               "status": {
                 "type": "string",
                 "enum": [
