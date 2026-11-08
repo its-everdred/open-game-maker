@@ -35,12 +35,10 @@ Use this order and say when you move down a tier:
 
 Keep one style family per game. Use `gm assets sheet` for visual choices and record why the chosen items fit.
 
-**Never re-offer a rejected option.** `design/feedback.json` is the creator's rejection ledger: read it, keep the rule
-each entry carries, and run `gm options check` on an option set before it reaches the creator. An option that repeats a
-rejection is not an option. Record a rejection you hear first with `gm options reject`, which also names the open
-options and Commands it withdraws. Give every option its provenance when you offer it
-(`gm decide … --provenance <id>=@<file>.json`): packs, assets, generator, and build time are what the check reads, and a
-ledger-carrying game refuses an option nobody can check.
+**Never re-offer a rejected option.** `design/feedback.json` is the creator's rejection ledger and each entry's rule
+holds: run `gm options check` before the creator sees options; record a new rejection with `gm options reject`. Give
+each option its provenance (`gm decide … --provenance <id>=@<file>.json`): the check reads its packs, assets, generator
+and build time, and a ledger-carrying game refuses an option nobody can check.
 
 **A pack you cannot reach is a blocker, not a reason to drop a tier.** If `gm assets search` fails, the asset library is
 missing or unreadable, or a card's files will not load, stop asset work and tell the Executor (`Executor:` in the
@@ -49,14 +47,13 @@ creator's choice; a choice shown with stand-ins is not a choice.
 
 ## Build loop
 
-**Ask, don't assume.** Before deciding anything a player would notice (how it looks, sounds, feels, plays), at any stage
-(a prototype, a failed review, a spec gap), ask with `gm decide`: a 2-5 word `--topic`, as many options as needed, the
-thing itself on each (`--media` or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic;
-`design/decisions.json` refuses a question already asked (`--revisit` only when the creator reopens it). At most three
-per edit; new games follow gm-new-game-design. Engineering and operations questions (tooling, CI, providers, credits)
-never go to the creator: decide them or tell the Executor. Wait for the choice, build it, run it, and look. After every
-`gm run`, send exactly one still or clip with `gm chat post`, unasked. Done means `gm check`, `gm test`, and `gm run`
-are green and the PR's binary checklist is answered from the evidence sheet; look at the game before sending it.
+**Ask, don't assume.** At any stage (a prototype, a failed review, a spec gap), before deciding anything a player would
+notice, ask with `gm decide`: a 2-5 word `--topic`, as many options as needed, each showing the thing itself (`--media`
+or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic; `design/decisions.json` refuses
+one already asked unless the creator reopens it (`--revisit`). At most three per edit; new games follow
+gm-new-game-design. Engineering and operations questions never go to the creator: decide them or tell the Executor.
+Build the choice. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked. Done means
+`gm check`, `gm test`, and `gm run` are green and the PR's checklist is answered from the evidence sheet; look first.
 
 ## Energy
 
