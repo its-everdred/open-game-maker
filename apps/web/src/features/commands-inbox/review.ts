@@ -98,6 +98,13 @@ export function deckCards(command: GameCommand): GameCommand['options'] {
   return command.options;
 }
 
+// A card's short label: A, B, C… in the deck's order, so the cards carry letters instead of sentences.
+export function letterOf(cards: GameCommand['options'], optionId: string): string {
+  const index = cards.findIndex(({ id }) => id === optionId);
+  if (index < 0) return optionId;
+  return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
+}
+
 // Whether the creator has judged every card.
 export function deckFinished(command: GameCommand, state: DeckState): boolean {
   return state.cards.length >= deckCards(command).length;

@@ -1,4 +1,4 @@
-// Icons: Phosphor duotone (MIT, phosphoricons.com), inlined from prototypes/studio-v0/icons.js plus bug, close and paperclip.
+// Icons: Phosphor duotone (MIT, phosphoricons.com), inlined from prototypes/studio-v0/icons.js plus bug, close, paperclip, carets and send.
 // They draw in currentColor; the soft fill is the duotone layer.
 const svg = (body: string) => `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">${body}</svg>`;
 const line = (body: string) =>
@@ -207,6 +207,9 @@ export const ICONS: Record<string, string> = {
   paperclip: svg(
     '<path d="M180.75,104.75,204,128l-82.06,81.94a48,48,0,0,1-67.88-67.88L153.37,41.37a32,32,0,0,1,45.26,45.26Z" opacity="0.2"/><path d="M209.66,122.34a8,8,0,0,1,0,11.32l-82.05,82a56,56,0,0,1-79.2-79.21L147.67,35.73a40,40,0,1,1,56.61,56.55L105,193A24,24,0,1,1,71,159L154.3,74.38A8,8,0,1,1,165.7,85.6L82.39,170.31a8,8,0,1,0,11.27,11.36L192.93,81A24,24,0,1,0,159,47L59.76,147.68a40,40,0,1,0,56.53,56.62l82.06-82A8,8,0,0,1,209.66,122.34Z"/>',
   ),
+  caretLeft: line('<path d="M160 208 80 128l80-80"/>'),
+  caretRight: line('<path d="m96 48 80 80-80 80"/>'),
+  send: line('<path d="M224 32 112 144M224 32l-72 192-40-80-80-40Z"/>'),
   thumbsUp: svg(
     '<path d="M234,80.12A24,24,0,0,0,216,72H160V56a40,40,0,0,0-40-40,8,8,0,0,0-7.16,4.42L75.06,96H32a16,16,0,0,0-16,16v88a16,16,0,0,0,16,16H204a24,24,0,0,0,23.82-21l12-96A24,24,0,0,0,234,80.12ZM32,112H72v88H32ZM223.94,97l-12,96a8,8,0,0,1-7.94,7H88V105.89l36.71-73.43A24,24,0,0,1,144,56V80a8,8,0,0,0,8,8h64a8,8,0,0,1,7.94,9Z"/>',
   ),

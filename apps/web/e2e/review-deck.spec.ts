@@ -334,9 +334,91 @@ test('heads a long-question review with a short title, an X and nothing over the
   expect(hit).toBe('Close');
   const viewport = page.viewportSize()!;
   expect(box.x + box.width).toBeGreaterThan(viewport.width - 80);
+  // The X closes the deck onto the game's rows; the rows' X goes back to the game.
   await close.click();
+  await expect(page).toHaveURL(/\/blobs\/review$/);
+  await page.getByRole('button', { name: 'Close' }).click();
   await expect(page).toHaveURL(/\/all\?spotlight=/);
 });
+
+// The inbox as rows: every open question with its first sample, a short title and its state. A tap opens a deck, the
+// arrows walk the others without closing it, each question keeps its own draft, and a swipe answers.
+test('walks three questions from the rows, keeps each draft and answers one by swipe', async ({ page }, testInfo) => {
+  testInfo.setTimeout(120_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await installReviewApi(page);
+  await page.goto('/blobs/review');
+
+  const rows = page.getByRole('list', { name: 'Reviews' });
+  await expect(rows.getByRole('link')).toHaveCount(3);
+  await expect(rows.getByRole('link', { name: 'Pick the Blobs voices, open' })).toBeVisible();
+  await expect(rows.getByRole('link', { name: 'Which of these two voices…, open' })).toBeVisible();
+  const lookThumb = rows.getByRole('link', { name: 'Pick the Blobs look, open' }).locator('img');
+  await expect.poll(() => lookThumb.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  // The review is the glossy surface: the glows sit behind it, not a flat panel.
+  await expect(page.locator('.glow-backdrop span')).toHaveCount(5);
+  await capture(page, testInfo, 'rows-open');
+
+  // Open the look and judge two of its cards.
+  await rows.getByRole('link', { name: 'Pick the Blobs look, open' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/2$/);
+  await judgeCard(page, 'like');
+  await judgeCard(page, 'like');
+  await expect(page.locator('.review-deck-progress')).toHaveText('3 of 9');
+  // A card shows its letter, not a sentence.
+  await expect(page.locator('.review-deck-label')).toHaveText('C');
+
+  // Next and previous move between questions without closing the deck, and the look's draft is still there.
+  await page.getByRole('link', { name: 'Next question' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/3$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Which of these two voices…');
+  await page.getByRole('link', { name: 'Previous question' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/2$/);
+  await expect(page.locator('.review-deck-progress')).toHaveText('3 of 9');
+  await page.getByRole('link', { name: 'Previous question' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/1$/);
+  // The first question has nothing before it.
+  await expect(page.getByRole('link', { name: 'Previous question' })).toHaveCount(0);
+  await capture(page, testInfo, 'deck-voices');
+
+  // Answer the third question by swiping: right likes A, left dislikes B, then Send.
+  await page.getByRole('link', { name: 'Next question' }).click();
+  await page.getByRole('link', { name: 'Next question' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review\/3$/);
+  await expect(page.getByRole('link', { name: 'Next question' })).toHaveCount(0);
+  await expect(page.locator('.review-deck-progress')).toHaveText('1 of 2');
+  await swipe(page, 'right');
+  await expect(page.locator('.review-deck-progress')).toHaveText('2 of 2');
+  await swipe(page, 'left');
+  await page
+    .getByRole('dialog', { name: /^Why did you dislike/ })
+    .getByRole('button', { name: 'Skip' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Likes', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Send the review' }).click();
+  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  expect(answerBodies).toEqual([{ option_id: 'v1', review: { likes: ['v1'], dislikes: [{ option_id: 'v2' }] } }]);
+
+  // Back on the rows: the swiped question is sent and the look is still a draft.
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page).toHaveURL(/\/blobs\/review$/);
+  await expect(rows.getByRole('link', { name: 'Which of these two voices…, sent' })).toBeVisible();
+  await expect(rows.getByRole('link', { name: 'Pick the Blobs look, draft' })).toBeVisible();
+  await capture(page, testInfo, 'rows-after');
+});
+
+// A finger drag across the card on screen, far enough to count as a swipe.
+async function swipe(page: Page, direction: 'left' | 'right') {
+  // Start below the letter and away from an audio card's centred replay button, which keeps its own taps.
+  const box = (await page.locator('.review-deck-card').first().boundingBox())!;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height * 0.2;
+  const dx = direction === 'right' ? 140 : -140;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 8; step += 1) await page.mouse.move(x + (dx * step) / 8, y);
+  await page.mouse.up();
+}
 
 // The short link the Executor pushes (#591): the game's slug and the Command's number inside the game.
 async function openDeck(page: Page, reviewNumber: number) {

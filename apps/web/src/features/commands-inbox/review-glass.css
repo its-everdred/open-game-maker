@@ -1,0 +1,278 @@
+/* The review's glossy look: the games screen's living glows (GlowBackdrop) behind glass panes, after the studio
+   prototype (prototypes/studio-v0/index.html, "glass-pane edges" and "CTAs"). A pane is a tinted, blurred fill with an
+   edge in its colour (--k) and a highlight along its top. The header's arrows and X stay in the app's Gruvbox chrome.
+   Colours and glows are tokens (tokens.css). */
+.glow-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--glow-night);
+}
+
+.glow-backdrop::after {
+  position: absolute;
+  inset: 0;
+  background: var(--glow-sheen);
+  content: '';
+}
+
+/* Each glow is a soft disc about the screen's width, parked where the prototype parks it and drifting on its own
+   period (41, 53, 47, 61 and 37 seconds). */
+.glow-backdrop span {
+  position: absolute;
+  width: 100vmax;
+  height: 100vmax;
+  translate: -50% -50%;
+  will-change: transform;
+  animation: glow-drift var(--period) ease-in-out infinite alternate;
+}
+
+.glow-backdrop span:nth-child(1) {
+  --period: 41s;
+  top: 10%;
+  left: 10%;
+  background: var(--glow-1);
+}
+
+.glow-backdrop span:nth-child(2) {
+  --period: 53s;
+  top: 15%;
+  left: 90%;
+  background: var(--glow-2);
+  animation-direction: alternate-reverse;
+}
+
+.glow-backdrop span:nth-child(3) {
+  --period: 47s;
+  top: 95%;
+  left: 35%;
+  background: var(--glow-3);
+}
+
+.glow-backdrop span:nth-child(4) {
+  --period: 61s;
+  top: 90%;
+  left: 85%;
+  background: var(--glow-4);
+  animation-direction: alternate-reverse;
+}
+
+.glow-backdrop span:nth-child(5) {
+  --period: 37s;
+  top: 45%;
+  left: 55%;
+  background: var(--glow-5);
+}
+
+@keyframes glow-drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(16vw, 9vh) scale(1.15);
+  }
+
+  66% {
+    transform: translate(-10vw, 14vh) scale(0.9);
+  }
+
+  100% {
+    transform: translate(6vw, -12vh) scale(1.08);
+  }
+}
+
+/* A glass pane: a tinted, blurred fill, an edge in the pane's colour (--k) and a highlight along its top. */
+.review-screen .review-deck-card,
+.review-screen .review-deck-thumb,
+.review-screen .review-deck-undo,
+.review-screen .review-deck-send,
+.review-screen .review-deck-chip,
+.review-screen .review-deck-thumb-media,
+.review-screen .review-deck-notes textarea,
+.review-row-link {
+  --k: var(--glass-edge);
+  border: 1.5px solid color-mix(in srgb, var(--k) 70%, transparent);
+  background: color-mix(in srgb, var(--k) 14%, var(--glass-fill));
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    0 16px 40px -18px var(--shadow-color-strong);
+}
+
+.review-screen .review-deck-card {
+  border-radius: 24px;
+}
+
+/* Like and dislike carry the deck's two colours; Send is the bright CTA glass with dark text. */
+.review-screen .review-deck-thumb[aria-label='Like'] {
+  --k: var(--gruvbox-aqua);
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    0 10px 30px -10px var(--k);
+}
+
+.review-screen .review-deck-thumb[aria-label='Dislike'] {
+  --k: var(--gruvbox-red);
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    0 10px 30px -10px var(--k);
+}
+
+.review-screen .review-deck-send {
+  --cta: var(--gruvbox-green);
+  display: grid;
+  place-items: center;
+  width: var(--tap-primary);
+  padding: 0;
+  border-color: color-mix(in srgb, var(--cta) 60%, var(--gruvbox-fg));
+  background: color-mix(in srgb, var(--cta) 78%, var(--glass-shine));
+  color: var(--dark);
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    0 10px 30px -10px var(--cta);
+}
+
+.review-deck-send .icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.review-screen .review-deck-chip-dislike {
+  --k: var(--gruvbox-red);
+}
+
+.review-screen .review-deck-media {
+  max-height: min(58svh, 620px);
+  background: color-mix(in srgb, var(--glow-night) 50%, transparent);
+}
+
+.review-screen .review-deck-audio {
+  min-height: min(36svh, 280px);
+  background: color-mix(in srgb, var(--gruvbox-aqua) 10%, transparent);
+}
+
+/* A card with a sample shows only its letter, on a glass chip over the media. */
+.review-deck-card:has(.review-deck-media, .review-deck-audio) .review-deck-label {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--glass-fill);
+  font: 700 20px/1 var(--display);
+  pointer-events: none;
+}
+
+.review-deck-card:has(.review-deck-media, .review-deck-audio) .review-deck-length {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  padding: 0;
+}
+
+/* The inbox rows: one glass pane per question with its first sample, a few words and its state. */
+.review-rows {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-row-link {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 84px;
+  padding: 10px 16px 10px 10px;
+  border-radius: 20px;
+  text-decoration: none;
+}
+
+.review-row[data-state='draft'] .review-row-link {
+  --k: var(--gruvbox-yellow);
+}
+
+.review-row[data-state='sent'] .review-row-link {
+  --k: var(--gruvbox-green);
+}
+
+.review-row-link:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.review-row-thumb {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--glow-night) 55%, transparent);
+  color: var(--gruvbox-aqua);
+}
+
+.review-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.review-row-thumb .icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.review-row-title {
+  overflow: hidden;
+  font: 700 17px/1.2 var(--display);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Open or started: a ring that fills as cards are judged. Sent: a thumbs-up. */
+.review-row-progress {
+  width: 28px;
+  height: 28px;
+  rotate: -90deg;
+}
+
+.review-row-progress circle {
+  fill: none;
+  stroke-width: 4;
+}
+
+.review-row-progress circle:first-child {
+  stroke: var(--glass-edge);
+}
+
+.review-row-progress circle + circle {
+  stroke: var(--gruvbox-yellow);
+  stroke-linecap: round;
+}
+
+.review-row-mark {
+  color: var(--gruvbox-green);
+}
+
+.review-row-mark .icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* Send in the middle, the review screen's previous and next arrows either side of it. */
+.review-deck-send-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
