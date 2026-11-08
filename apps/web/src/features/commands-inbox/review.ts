@@ -1,4 +1,4 @@
-import type { ChatMedia, CommandReview, GameCommand } from '@ogm/contracts';
+import type { CommandOption, CommandReview, GameCommand } from '@ogm/contracts';
 
 // A review deck (A3): a Command whose options carry media is judged one card at a time. The deck's state is the order
 // the creator walked the cards in, so undo means "take the last judgement back" and the ending grid is the same list.
@@ -134,9 +134,10 @@ export function answerOf(command: GameCommand, state: DeckState): { option_id: s
   return { option_id, review };
 }
 
-// A card's media tells the deck how to render it: a clip carries a poster, an audio sample carries a duration without
-// one, and a still or GIF carries neither.
-export function mediaKindOf(media: ChatMedia): 'audio' | 'video' | 'image' {
+// A card's media tells the deck how to render it: its `kind` when it names one, else a clip carries a poster, an audio
+// sample carries a duration without one, and a still or GIF carries neither.
+export function mediaKindOf(media: NonNullable<CommandOption['media']>): 'audio' | 'video' | 'image' {
+  if (media.kind !== undefined) return media.kind;
   if (media.poster !== undefined) return 'video';
   if (media.duration_ms !== undefined) return 'audio';
   return 'image';

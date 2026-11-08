@@ -5,6 +5,7 @@ import type { GameCommand } from '@ogm/contracts';
 import { Icon } from '../../components/Icon';
 import { AiurCommands, gameScope, type AiurCommandAnswer } from '../aiur/embed';
 import { answerCommand, useGameCommands } from './commands';
+import { mediaKindOf } from './review';
 import { isReviewDeck, ReviewDeck } from './ReviewDeck';
 import './commands-inbox.css';
 
@@ -65,7 +66,7 @@ export function CommandsInbox({ gameId, onOpenJob }: { gameId: string; onOpenJob
                     >
                       {option.media && (
                         <span className="checkpoint-option-media" aria-hidden="true">
-                          {option.media.duration_ms === undefined ? (
+                          {mediaKindOf(option.media) === 'image' ? (
                             <img alt="" src={option.media.url} />
                           ) : (
                             <video
