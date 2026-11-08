@@ -22,6 +22,7 @@ const soundApi = vi.hoisted(() => ({
 vi.mock('../features/bug-report', () => ({
   BugButton: () => null,
   BugSheet: () => null,
+  useBugDraft: () => ({}),
   captureError,
 }));
 

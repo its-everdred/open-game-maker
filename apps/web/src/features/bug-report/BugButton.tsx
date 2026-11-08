@@ -21,9 +21,17 @@ export function BugButton({ open, onToggle }: { open: boolean; onToggle(): void 
   );
 }
 
-export function BugSheet({ close }: { close(): void }) {
+export type BugDraft = ReturnType<typeof useBugDraft>;
+
+// The draft lives with the menu, not the sheet, so switching to another circle mid-send keeps the text and the result.
+export function useBugDraft() {
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
+  return { text, setText, state, setState };
+}
+
+export function BugSheet({ draft, close }: { draft: BugDraft; close(): void }) {
+  const { text, setText, state, setState } = draft;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();

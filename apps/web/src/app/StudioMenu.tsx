@@ -13,7 +13,7 @@ import { JOB_STAGE_WORDS, type Job } from '@ogm/contracts/browser';
 
 import { Icon } from '../components/Icon';
 import { MenuRing } from '../components/MenuCircle';
-import { BugButton, BugSheet } from '../features/bug-report';
+import { BugButton, BugSheet, useBugDraft } from '../features/bug-report';
 import { EnergyButton, EnergyDetail } from '../features/energy/EnergyButton';
 import { JobConversationModal } from '../features/build-chat/JobConversationModal';
 import { openConversation } from '../features/build-chat/conversation';
@@ -31,7 +31,7 @@ const MAX_TRACKED_BUILDS = 100;
 const activeBuildsByCreator = new Map<string, Set<string>>();
 
 // The circle whose detail shows in the sheet under the row; one at a time.
-type Sheet = 'volume' | 'bug' | 'builds' | 'energy';
+type Sheet = 'volume' | 'bug' | 'builds' | 'decisions' | 'energy';
 
 export function StudioMenu() {
   const root = useRef<HTMLDivElement>(null);
@@ -48,6 +48,7 @@ export function StudioMenu() {
   const [buildClock, setBuildClock] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
   const [sheet, setSheet] = useState<Sheet>();
+  const bugDraft = useBugDraft();
   const game = matchPath('/g/:gameId/*', location.pathname);
   const gameId = game?.params.gameId;
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
@@ -124,9 +125,9 @@ export function StudioMenu() {
         className="menu-circle"
         data-action-needed="true"
         aria-label={`Decisions: ${outstandingRequests}`}
-        aria-expanded={sheet === 'builds'}
+        aria-expanded={sheet === 'decisions'}
         aria-controls="studio-menu-builds"
-        onClick={() => toggleSheet('builds')}
+        onClick={() => toggleSheet('decisions')}
       >
         <MenuRing percent={100} />
         <Icon name="decisions" />
@@ -224,10 +225,12 @@ export function StudioMenu() {
     );
   } else if (sheet === 'bug') {
     // A report that finishes after another circle was tapped must not close that circle's sheet.
-    sheetContent = <BugSheet close={() => setSheet((current) => (current === 'bug' ? undefined : current))} />;
+    sheetContent = (
+      <BugSheet draft={bugDraft} close={() => setSheet((current) => (current === 'bug' ? undefined : current))} />
+    );
   } else if (sheet === 'energy' && session) {
     sheetContent = <EnergyDetail close={close} />;
-  } else if (sheet === 'builds' && buildGroups.length > 0) {
+  } else if ((sheet === 'builds' || sheet === 'decisions') && buildGroups.length > 0) {
     sheetContent = (
       <ul id="studio-menu-builds" className="studio-menu-builds" aria-label="Build progress">
         {buildGroups.map((group) => (

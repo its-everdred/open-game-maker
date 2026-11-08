@@ -35,6 +35,8 @@ export function VolumeCircle({
 
   const down = (event: PointerEvent<HTMLButtonElement>) => {
     window.clearTimeout(gesture.current?.timer);
+    gesture.current = undefined;
+    if (event.button !== 0) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const current: Gesture = { x: event.clientX, y: event.clientY, from: volume, moved: false, held: false, timer: 0 };
     current.timer = window.setTimeout(() => {
@@ -45,7 +47,7 @@ export function VolumeCircle({
   };
   const move = (event: PointerEvent<HTMLButtonElement>) => {
     const current = gesture.current;
-    if (!current || current.held) return;
+    if (!current || current.held || (event.buttons & 1) === 0) return;
     const up = current.y - event.clientY;
     const right = event.clientX - current.x;
     const distance = Math.abs(up) >= Math.abs(right) ? up : right;

@@ -138,7 +138,7 @@ describe('StudioMenu', () => {
 
     sound.setMuted.mockReset();
     fireEvent.pointerDown(volume, { clientX: 100, clientY: 100 });
-    fireEvent.pointerMove(volume, { clientX: 100, clientY: 76 });
+    fireEvent.pointerMove(volume, { clientX: 100, clientY: 76, buttons: 1 });
     fireEvent.pointerUp(volume);
     fireEvent.click(volume);
     expect(sound.setVolume).toHaveBeenLastCalledWith(0.95);
@@ -154,6 +154,25 @@ describe('StudioMenu', () => {
     fireEvent.click(volume);
     expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.9');
     expect(sound.setMuted).not.toHaveBeenCalled();
+  });
+
+  // A press that never becomes a click (a right-click, a cancelled touch) must not leave the level following the
+  // mouse: only a held primary press drags.
+  it('changes the level only while the primary button is held', () => {
+    renderMenu('/');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    const volume = screen.getByRole('button', { name: 'Mute' });
+
+    fireEvent.pointerDown(volume, { clientX: 100, clientY: 100, button: 2 });
+    fireEvent.pointerMove(volume, { clientX: 100, clientY: 40, buttons: 2 });
+    fireEvent.pointerUp(volume, { button: 2 });
+    fireEvent.pointerMove(volume, { clientX: 100, clientY: 20 });
+
+    fireEvent.pointerDown(volume, { clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(volume);
+    fireEvent.pointerMove(volume, { clientX: 100, clientY: 40 });
+
+    expect(sound.setVolume).not.toHaveBeenCalled();
   });
 
   it('shows signed-in and game actions only in their relevant context', () => {
@@ -324,6 +343,13 @@ describe('StudioMenu', () => {
     expect(screen.getByRole('button', { name: /Choose the moon gate/ })).toHaveAttribute('data-action-needed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Decisions: 3' }));
     expect(screen.queryByRole('list', { name: 'Build progress' })).not.toBeInTheDocument();
+    // Each circle owns its sheet: going from Decisions to Builds switches, it does not fold the list away.
+    fireEvent.click(screen.getByRole('button', { name: 'Decisions: 3' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
+    expect(screen.getByRole('list', { name: 'Build progress' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Builds: / })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Decisions: 3' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
     const moon = screen.getByRole('group', { name: 'Moon Vault builds' });
@@ -392,6 +418,26 @@ describe('StudioMenu', () => {
     await act(async () => finish());
 
     expect(screen.getByRole('slider', { name: 'Volume' })).toBeVisible();
+  });
+
+  // Tapping another circle while a report is sending must not lose what was typed or that it failed.
+  it('keeps the report text and its failure across a switch to another circle', async () => {
+    let fail: () => void = () => undefined;
+    report.sendReport.mockReturnValueOnce(new Promise<void>((_, reject) => (fail = () => reject(new Error('down')))));
+    state.session = { data: { user: { id: 'user-1' } } };
+    renderMenu('/');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'What went wrong?' }), { target: { value: 'Gate stuck' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /^Energy/ }));
+    await act(async () => fail());
+    fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
+
+    const text = screen.getByRole('textbox', { name: 'What went wrong?' });
+    expect(text).toHaveValue('Gate stuck');
+    expect(text).toHaveAttribute('aria-invalid', 'true');
   });
 
   // Review drafts live in memory until sent; the next person signing in on the same device must not find them.
