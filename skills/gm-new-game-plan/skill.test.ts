@@ -25,7 +25,9 @@ describe('game flow diagram step', () => {
       expect(rules).toContain(level);
     expect(rules).toContain('screens/<id>.target.png');
     expect(rules).toContain('screens/<id>.live.png');
-    expect(rules).toContain('`gm decide`');
+    expect(rules).toContain('`decision.requested` Command');
+    expect(rules).toContain('`media[]`');
+    expect(rules).toContain('Run it from a host checkout');
     expect(rules).toContain('review deck');
     expect(rules).toContain('games/<name>/design/flow/flow.md');
     expect(rules).toContain('scripts/render-flow.ts');

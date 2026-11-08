@@ -4,11 +4,12 @@
  *
  *   node .claude/skills/gm-new-game-plan/scripts/render-flow.ts games/<name>/design/flow
  *
- * Fails, naming the file, when a block points at a screen image that does not exist.
+ * Run it from a host checkout: it fetches the pinned Mermaid CLI once, so the network-off build sandbox cannot render.
+ * Fails, naming the file, when a block points at a screen image that does not exist or a block is never closed. The
+ * render directory is replaced only after every block rendered, so a removed level leaves no stale image.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -44,6 +45,7 @@ export function flowBlocks(markdown: string): FlowBlock[] {
     } else if (line.trim() === '```mermaid') source = [];
     else if (line.startsWith('## ')) heading = line.slice(3);
   }
+  if (source) throw new Error(`unclosed mermaid block under "## ${heading}"`);
   return blocks;
 }
 
@@ -88,24 +90,30 @@ export function embedScreens(source: string, flowDir: string): string {
 export function renderFlow(flowDir: string): string[] {
   const blocks = flowBlocks(readFileSync(join(flowDir, 'flow.md'), 'utf8'));
   if (blocks.length === 0) throw new Error(`no mermaid blocks in ${join(flowDir, 'flow.md')}`);
+  const sources = blocks.map((block) => ({ name: block.name, source: embedScreens(block.source, flowDir) }));
   const outDir = join(flowDir, 'render');
-  mkdirSync(outDir, { recursive: true });
-  const scratch = mkdtempSync(join(tmpdir(), 'gm-flow-'));
-  const written: string[] = [];
+  const scratch = mkdtempSync(join(flowDir, '.render-'));
   try {
-    for (const block of blocks) {
-      const input = join(scratch, `${block.name}.mmd`);
-      writeFileSync(input, embedScreens(block.source, flowDir));
-      const output = join(outDir, `${block.name}.png`);
-      execFileSync('npx', ['-y', MERMAID_CLI, '-i', input, '-o', output, '-s', '2', '-b', 'white'], {
-        stdio: 'inherit',
-      });
-      written.push(output);
+    /* Embedded screenshots run to megabytes; Mermaid's default 50,000-character limit would draw an error box. */
+    const config = join(scratch, 'mermaid.json');
+    writeFileSync(config, JSON.stringify({ maxTextSize: 100_000_000 }));
+    for (const { name, source } of sources) {
+      const input = join(scratch, `${name}.mmd`);
+      writeFileSync(input, source);
+      execFileSync(
+        'npx',
+        ['-y', MERMAID_CLI, '-i', input, '-o', join(scratch, `${name}.png`), '-c', config, '-s', '2', '-b', 'white'],
+        { stdio: 'inherit' },
+      );
+      rmSync(input);
     }
+    rmSync(config);
+    rmSync(outDir, { recursive: true, force: true });
+    renameSync(scratch, outDir);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
-  return written;
+  return sources.map(({ name }) => join(outDir, `${name}.png`));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

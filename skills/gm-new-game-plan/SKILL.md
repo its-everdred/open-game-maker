@@ -26,7 +26,8 @@ this section adds what is specific to games.
 2. **Flow diagram before any screen ticket.** Map the core, session and meta loops and the full navigation graph
    (every screen, transition, back path and multiplayer addition), each screen node carrying its target image, and
    get the creator's answers on its open choices: `references/flow-diagram.md`, template `references/flow-template.md`.
-   Screen and gameplay tickets cite their node; until it is approved they may be cut but wait on its Command.
+   Screen and gameplay tickets cite their node; until it is approved they may be cut but wait on its approval Command
+   (visuals-track stages do not).
 3. **Skeleton ticket first.** One small ticket creates the folder, the template, the system stubs with their
    interfaces, data formats and test hooks, so every later ticket edits its own files.
 4. **Cut tickets by ownership.** Each ticket owns a clear set of files and one outcome a player can see or a test can

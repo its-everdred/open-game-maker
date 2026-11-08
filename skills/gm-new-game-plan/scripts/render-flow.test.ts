@@ -1,11 +1,11 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { embedScreens, flowBlocks } from './render-flow.js';
+import { embedScreens, flowBlocks, renderFlow } from './render-flow.js';
 
 const TEMPLATE = fileURLToPath(new URL('../references/flow-template.md', import.meta.url));
 
@@ -60,5 +60,22 @@ describe('render-flow', () => {
     const dir = flowDir();
     const source = `a["<img src='screens/a.target.png'/>"] --> b["<img src='screens/b.live.png'/>"]`;
     expect(() => embedScreens(source, dir)).toThrow('screens/a.target.png, screens/b.live.png');
+  });
+
+  it('fails on an unclosed block instead of dropping the level from the deck', () => {
+    expect(() => flowBlocks('## Core loop\n```mermaid\nflowchart LR\n  a --> b\n## Navigation\n')).toThrow(
+      'unclosed mermaid block under "## Core loop"',
+    );
+  });
+
+  it('keeps the approved renders when any screen image is missing, before anything is rendered', () => {
+    const dir = flowDir();
+    mkdirSync(join(dir, 'render'));
+    writeFileSync(join(dir, 'render/4-navigation.png'), 'approved');
+    writeFileSync(join(dir, 'flow.md'), "## Navigation\n```mermaid\nflowchart TD\n  a[\"<img src='screens/a.target.png'/>\"]\n```\n");
+
+    expect(() => renderFlow(dir)).toThrow('screens/a.target.png');
+    expect(readdirSync(join(dir, 'render'))).toEqual(['4-navigation.png']);
+    expect(readdirSync(dir).sort()).toEqual(['flow.md', 'render', 'screens']);
   });
 });
