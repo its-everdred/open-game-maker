@@ -27,11 +27,14 @@ the range in [the action-map card](references/cards/action-map.md), then choose 
 
 ## Every game, three devices
 
-By default every game plays on a phone with ordinary translucent on-screen buttons, and on a laptop with the keyboard
-and a connected gamepad. Design the action list so all three reach every mechanic and every screen's way forward:
+The default is that every game plays on a phone with ordinary translucent on-screen buttons, and on a laptop with the
+keyboard and a connected gamepad. The host draws and styles the buttons; the game never does. Design the action list
+so all three reach every mechanic and every screen's way forward:
 
-- Phone: the host's overlay draws one stick (two with `two-stick`, the second in the lower-right) and at most five
-  buttons; the first declared button is the 64 px primary. Keep button actions to five, most-used first.
+- Phone: the host's overlay draws on-screen buttons only when the game declares a `stick` action; without one the
+  phone gets no buttons at all. It draws one stick, for the first `stick`, and at most five buttons; the first
+  declared button is the 64 px primary. Declare a `move` stick and keep button actions to five, most-used first.
+- Use `stick` or `button` for anything a player must reach: `axis` actions get no touch or gamepad default.
 - Keyboard: the default map binds WASD and arrows to `move`, Space to `jump`, and E or Enter to `use`. Give every
   other action a key with the `keyboard` override where `src/main.ts` builds the input mapping.
 - Gamepad: the host's default map gives sticks to the left and right sticks and buttons to A, X, B, Y, LB, RB in

@@ -23,7 +23,8 @@ describe('gm-input skill', () => {
     /* The cross-device default (#600): phone buttons, laptop keyboard and gamepad, proven per game, never universal. */
     expect(text).toMatch(/phone with ordinary translucent on-screen buttons/);
     expect(text).toMatch(/keyboard\s+and a connected gamepad/);
-    expect(text).toContain('Keep button actions to five');
+    expect(text).toContain('keep button actions to five');
+    expect(text).toContain('only when the game declares a `stick` action');
     expect(text).toContain('Never claim universal device support');
     expect(text).toContain('`phone-touch.json`');
     expect(text).toContain('`laptop-keys-pad.json`');
