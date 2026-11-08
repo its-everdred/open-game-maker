@@ -21,6 +21,8 @@ const soundApi = vi.hoisted(() => ({
 
 vi.mock('../features/bug-report', () => ({
   BugButton: () => null,
+  BugSheet: () => null,
+  useBugDraft: () => ({}),
   captureError,
 }));
 
@@ -207,7 +209,7 @@ describe('screen route collection', () => {
     fireEvent.click(menu);
 
     expect(menu).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('slider', { name: 'Volume' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Unmute' })).toBeVisible();
   });
 
   it('retries a crashed screen', async () => {

@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 
 import { Icon } from '../../components/Icon';
+import { MenuRing } from '../../components/MenuCircle';
 import { energyLeftPercent, useEnergy } from './api';
 import { EnergyWindows, LEVEL_LABELS } from './EnergyWindows';
 import './energy.css';
@@ -14,17 +15,14 @@ export function EnergyButton({ open, onToggle }: { open: boolean; onToggle(): vo
   return (
     <button
       type="button"
-      className="studio-menu-action energy-button"
+      className="menu-circle energy-button"
       data-level={level}
       aria-label={`Energy: ${LEVEL_LABELS[level]}`}
       aria-expanded={open}
       aria-controls="energy-detail"
       onClick={onToggle}
     >
-      <svg className="energy-ring" viewBox="0 0 36 36" aria-hidden="true">
-        <circle cx="18" cy="18" r="16" pathLength={100} />
-        <circle cx="18" cy="18" r="16" pathLength={100} strokeDasharray={`${left ?? 0} 100`} />
-      </svg>
+      <MenuRing percent={left ?? 0} />
       <Icon name="energy" />
     </button>
   );
