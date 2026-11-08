@@ -29,10 +29,7 @@ describe('MailSender', () => {
     const { sqlite } = makeDeps();
     const sendMail = vi.fn().mockResolvedValue({ messageId: '<1@example.com>' });
     vi.spyOn(SmtpMailSender.prototype, 'send').mockImplementation(sendMail);
-    const { sender } = selectMailSender(
-      { SMTP_URL: 'smtp://127.0.0.1:2525', OGM_QA_EMAILS: 'QA@example.com' },
-      sqlite,
-    );
+    const { sender } = selectMailSender({ SMTP_URL: 'smtp://127.0.0.1:2525', OGM_QA_EMAILS: 'QA@example.com' }, sqlite);
     await sender.send({ ...message, to: 'qa@example.com' });
     await sender.send(message);
     expect(listOutbox(sqlite).map((row) => row.to)).toEqual(['qa@example.com']);

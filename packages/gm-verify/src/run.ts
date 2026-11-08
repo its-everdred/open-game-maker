@@ -5,7 +5,7 @@ import { assetManifestSchema, type Tier, type ViewId } from '@ogm/contracts';
 import type { Browser } from 'playwright';
 
 import { measureBudgets, manifestBytes, type Measured, type TierBudgetOverrides } from './budgets.js';
-import { launch, openGame, type OpenedGame } from './browser.js';
+import { launch, openGame, type AppFrame, type OpenedGame } from './browser.js';
 import {
   FfmpegMissingError,
   record,
@@ -25,9 +25,10 @@ import {
   GM_VERIFY_VERSION,
   unknownBudgets,
   verdictFor,
+  viewportsOf,
   writeReport,
   type VerifyReport,
-  type ViewportName,
+  type ViewportSet,
 } from './report.js';
 import { acquireSlot, type SemaphoreOptions } from './semaphore.js';
 
@@ -36,7 +37,9 @@ export const RUN_TIMEOUT_MS = 10 * 60_000;
 export type RunVerifyOptions = ActivityContext & {
   url: string;
   outDir: string;
-  viewport: ViewportName | 'both';
+  viewport: ViewportSet;
+  /** Capture inside the signed-in app shell, the local build standing in for the hosted one. */
+  app?: Omit<AppFrame, 'localUrl'>;
   tier: Tier;
   rig?: ViewId;
   frames?: number[];
@@ -74,8 +77,8 @@ async function downloadBytes(game: OpenedGame, url: string, tier: Tier): Promise
 }
 
 /**
- * One verify run: opens the game per viewport (desktop first), writes stills under `<out>/<viewport>/`, the timeline
- * and clip once (on the phone when `both`), replays `--inputs`, measures budgets and probes, and always writes
+ * One verify run: opens the game per viewport, writes stills under `<out>/<viewport>/`, the timeline and clip once
+ * (on the phone when the set has it, else the last), replays `--inputs`, measures budgets and probes, and always writes
  * `<out>/report.json` — with `verdict: "error"` and `error` when anything failed. Holds one host capture slot.
  */
 export async function runVerify(options: RunVerifyOptions): Promise<RunVerifyResult> {
@@ -108,15 +111,17 @@ export async function runVerify(options: RunVerifyOptions): Promise<RunVerifyRes
       void browser?.close();
     }, options.timeoutMs ?? RUN_TIMEOUT_MS);
     browser = await launch(options.software);
-    const viewports: ViewportName[] = options.viewport === 'both' ? ['desktop', 'phone'] : [options.viewport];
-    for (const [index, viewport] of viewports.entries()) {
-      const last = index === viewports.length - 1;
+    const viewports = viewportsOf(options.viewport);
+    const primary = viewports.includes('phone') ? 'phone' : viewports.at(-1);
+    for (const viewport of viewports) {
+      const last = viewport === primary;
       const game = await openGame(browser, options.url, {
         viewport,
         tier: options.tier,
         rig: options.rig,
         console: collector,
         readyTimeoutMs: options.readyTimeoutMs,
+        ...(options.app ? { app: { ...options.app, localUrl: options.url } } : {}),
       });
       try {
         renderer = game.renderer;
@@ -194,6 +199,7 @@ export async function runVerify(options: RunVerifyOptions): Promise<RunVerifyRes
     renderer,
     software,
     viewport: options.viewport,
+    frame: options.app ? 'app' : 'bare',
     tier: options.tier,
     ...(options.rig ? { rig: options.rig } : {}),
     frames,

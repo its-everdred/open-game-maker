@@ -1,5 +1,6 @@
-import { setPriority } from 'node:os';
-import { relative, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir, setPriority } from 'node:os';
+import { join, relative, resolve } from 'node:path';
 
 import type { Tier, ViewId } from '@ogm/contracts';
 import type { InputScript, VerifyReport } from '@ogm/gm-verify';
@@ -7,8 +8,21 @@ import { isLoopbackUrl } from '@ogm/gm-verify/server';
 
 import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { printJson } from '../../context.js';
+import { gameDir } from '../../outbox.js';
+import { readEnvFile } from '../publish/index.js';
 
-const VIEWPORTS = ['desktop', 'phone', 'both'] as const;
+const VIEWPORTS = [
+  'touch',
+  'all',
+  'desktop',
+  'phone',
+  'phone-landscape',
+  'tablet',
+  'tablet-landscape',
+  'both',
+] as const;
+const FRAMES = ['app', 'bare'] as const;
+const SIGNIN_HINT = 'on the host: ops/bin/ogm-qa-signin (or gm run --frame bare for the game alone)';
 const TIERS = ['mobile', 'desktop', 'low'] as const;
 const RIGS = ['iso', 'topdown', 'side', 'follow', 'fps', 'orbit', 'fixed'] as const;
 const FFMPEG_HINT = 'sudo apt install ffmpeg';
@@ -86,6 +100,49 @@ function loadInputs(
   }
 }
 
+/**
+ * The signed-in app shell to capture in: `--app`, else `/play/<manifest id>` on OGM_APP_ORIGIN (the environment, then
+ * the host's api.env), with the QA account's storage state (`--storage`, OGM_QA_STORAGE, ~/.config/ogm/qa/storage.json).
+ */
+export function appFrame(ctx: GmContext, flags: Record<string, unknown>): { url: string; storageState: string } {
+  const home = ctx.home ?? homedir();
+  let url = typeof flags.app === 'string' ? flags.app : undefined;
+  if (url === undefined) {
+    const envDir = ctx.env?.OGM_ENV_DIR || join(home, '.config', 'ogm', 'env');
+    const origin = ctx.env?.OGM_APP_ORIGIN || readEnvFile(join(envDir, 'api.env')).OGM_APP_ORIGIN;
+    if (!origin)
+      throw new UsageError('no app origin to capture the app shell from', 'gm run --app https://<app>/play/<slug>');
+    let id: unknown;
+    try {
+      id = (JSON.parse(readFileSync(join(gameDir(ctx.cwd), 'gm.manifest.json'), 'utf8')) as { id?: unknown }).id;
+    } catch {
+      id = undefined;
+    }
+    if (typeof id !== 'string' || id === '')
+      throw new UsageError(
+        'no gm.manifest.json id to open /play/<slug> with',
+        'gm run --app https://<app>/play/<slug>',
+      );
+    url = `${origin.replace(/\/+$/, '')}/play/${encodeURIComponent(id)}`;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new UsageError(`--app ${url} is not a URL`, 'gm run --app https://<app>/play/<slug>');
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')
+    throw new UsageError('--app must be an http(s) URL', 'gm run --app https://<app>/play/<slug>');
+  const storage = resolve(
+    ctx.cwd,
+    typeof flags.storage === 'string'
+      ? flags.storage
+      : ctx.env?.OGM_QA_STORAGE || join(home, '.config', 'ogm', 'qa', 'storage.json'),
+  );
+  if (!existsSync(storage)) throw new UsageError(`no signed-in storage state at ${storage}`, SIGNIN_HINT);
+  return { url: parsed.href, storageState: storage };
+}
+
 export function loadBudgetOverrides<T>(
   ctx: GmContext,
   value: unknown,
@@ -125,12 +182,23 @@ export function finish(ctx: GmContext, report: VerifyReport, reportPath: string,
 export const command: GmCommand = {
   name: 'run',
   summary: 'capture deterministic stills, a timeline, a clip and report.json',
-  usage: '[--url loopback] [--viewport desktop|phone|both] [capture flags]',
-  example: 'run --headless --viewport both --frames 0,2,5 --record 10s --out shots/',
+  usage: '[--frame app|bare] [--app play-url] [--url loopback] [--viewport touch|all|<one>] [capture flags]',
+  example: 'run --frames 0,2,5 --record 10s --out shots/',
   flags: {
     headless: { type: 'boolean', default: true, help: 'run Chromium without a display server' },
     url: { type: 'string', help: 'loopback game URL; otherwise serve ./dist' },
-    viewport: { type: 'string', default: 'both', help: 'desktop, phone or both' },
+    frame: {
+      type: 'string',
+      default: 'app',
+      help: 'app: the signed-in app shell (top bar, Pause, touch overlay) around the local build; bare: the game alone',
+    },
+    app: { type: 'string', help: 'app play URL (default OGM_APP_ORIGIN/play/<gm.manifest.json id>)' },
+    storage: { type: 'string', help: 'signed-in storage state (default ~/.config/ogm/qa/storage.json)' },
+    viewport: {
+      type: 'string',
+      default: 'touch',
+      help: 'touch (390x844, 844x390, 820x1180, 1180x820 with touch), all (those and desktop), or one of them',
+    },
     tier: { type: 'string', default: 'mobile', help: 'mobile, desktop or low asset tier' },
     inputs: { type: 'string', help: 'logical input script JSON' },
     frames: { type: 'string', help: 'comma-separated capture times in seconds' },
@@ -155,6 +223,7 @@ export const command: GmCommand = {
     const timeline = parseTimeline(flags.timeline);
     const record = parseRecord(flags.record, flags['record-fps'], flags['record-native'] === true);
     const url = typeof flags.url === 'string' ? flags.url : undefined;
+    const frame = oneOf('frame', flags.frame, FRAMES);
 
     if (url && !isLoopbackUrl(url))
       throw new UsageError('--url is loopback only', 'gm run --url http://127.0.0.1:8000/');
@@ -164,6 +233,7 @@ export const command: GmCommand = {
 
     if (ctx.config.verifyQueue) {
       if (url) throw new UsageError('queue mode serves ./dist and does not accept --url', 'omit --url');
+      if (frame === 'app') throw new UsageError('queue mode captures the game alone', 'gm run --frame bare');
       const runId = verify.newRunId();
       const dir = verify.submitRequest(ctx.cwd, {
         v: 1,
@@ -192,6 +262,7 @@ export const command: GmCommand = {
       }
     }
 
+    const app = frame === 'app' ? appFrame(ctx, flags) : undefined;
     niceCapture();
     let server: Awaited<ReturnType<typeof verify.serveStatic>> | undefined;
     let target = url;
@@ -208,6 +279,7 @@ export const command: GmCommand = {
         url: target,
         outDir: resolve(ctx.cwd, flags.out as string),
         viewport,
+        ...(app ? { app } : {}),
         tier,
         ...(rig ? { rig } : {}),
         ...(frames ? { frames } : {}),

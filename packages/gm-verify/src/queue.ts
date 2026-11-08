@@ -32,6 +32,7 @@ import {
   GM_VERIFY_VERSION,
   unknownBudgets,
   verifyReportSchema,
+  viewportSetSchema,
   writeReport,
   type VerifyReport,
 } from './report.js';
@@ -67,7 +68,7 @@ export const verifyRequestSchema = z.strictObject({
   aiurRunId: z.string().min(1).max(200).optional(),
   serveDir: z.string().min(1),
   args: z.strictObject({
-    viewport: z.enum(['desktop', 'phone', 'both']),
+    viewport: viewportSetSchema,
     tier: tierSchema,
     rig: viewIdSchema.optional(),
     frames: z.array(z.number().min(0)).max(120).optional(),
