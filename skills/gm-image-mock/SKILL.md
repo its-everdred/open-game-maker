@@ -33,6 +33,24 @@ assets come in step 2, built toward the mock the creator picked.
 6. **Respect the creator's feedback.** Read the game's feedback ledger (`design/feedback.json`) when it exists; never
    show an option that breaks a rule there or repeats one the creator rejected.
 
+## A target clip
+
+When the creator wants the game to look like a video, the creator supplies the clip; never generate, download or
+ask a model for one. The vendored video-to-game tools read it locally with ffmpeg:
+
+1. **Study it.** `python3 .claude/skills/vendor/video-to-game/scripts/study_video.py <clip> -o study/` writes frames,
+   `sheet.jpg`, a palette and the cuts. Follow `.claude/skills/vendor/video-to-game/references/study-the-video.md`:
+   look at every frame and write the camera, hero, palette and light from named frames into each mock prompt.
+2. **Compare a build with it.** Shoot the same three spots each pass, run
+   `python3 .claude/skills/vendor/video-to-game/scripts/side_by_side.py <clip> <shot.png> -o pairs/ --times <s>`,
+   look at each pair and fix one difference at a time
+   (`.claude/skills/vendor/video-to-game/references/look-and-post.md`).
+   `python3 .claude/skills/vendor/video-to-game/scripts/best_window.py <take.mp4> --length 3` finds the liveliest
+   seconds of a recorded take.
+
+No fal and no provider key: never add or ask for one. Upstream's fal generation is not vendored; pictures come from
+the packs, gm-asset-variants and the mock broker below.
+
 ## Generate
 
 Run `python3 <this skill>/scripts/request-mock.py --prompt-file <file> --out <dir> [--ref <workspace path>]... [--aspect 9:16]`.

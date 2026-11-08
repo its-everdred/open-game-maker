@@ -5,7 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const vendor = join(dirname(fileURLToPath(import.meta.url)), '../../skills/vendor');
-const SETS = { phaser: 'MIT', threejs: 'MIT', gamedev: 'Apache-2.0' } as const;
+const SETS = {
+  phaser: 'MIT',
+  threejs: 'MIT',
+  gamedev: 'Apache-2.0',
+  'sprite-forge': 'MIT',
+  'video-to-game': 'MIT',
+  'frontend-design': 'Apache-2.0',
+} as const;
+/** Tool sets ship the scripts their gm wrappers run; the engine sets stay text only. */
+const TOOL_SETS = ['sprite-forge', 'video-to-game'];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -41,7 +50,7 @@ describe('vendored skill sets', () => {
   it('holds the expected skills per set', () => {
     const count = (set: string) =>
       skillFiles.filter((f) => rel(f).startsWith(`${set}/`) && f.endsWith('/SKILL.md')).length;
-    expect([count('phaser'), count('threejs'), count('gamedev')]).toEqual([28, 11, 17]);
+    expect(Object.keys(SETS).map(count)).toEqual([28, 11, 17, 5, 0, 1]);
     expect(existsSync(join(vendor, 'threejs/threejs-react-three-fiber'))).toBe(false);
   });
 
@@ -71,12 +80,18 @@ describe('vendored skill sets', () => {
     expect(read('threejs/LICENSE')).toContain('Copyright (c) 2026 CloudAI-X');
     expect(read('gamedev/LICENSE')).toContain('Apache License');
     expect(read('gamedev/NOTICE')).toContain('Copyright 2026 Abhishek Barali');
+    expect(read('sprite-forge/LICENSE')).toContain('Copyright (c) 2026 0x0funky');
+    expect(read('video-to-game/LICENSE')).toContain('Copyright (c) 2026 Lovis Odin');
+    expect(read('frontend-design/LICENSE.txt')).toContain('Apache License');
   });
 
   it('pins each set to a full commit in skills.lock', () => {
     expect(Object.keys(lock.sets).sort()).toEqual([
+      '0x0funky/agent-sprite-forge',
       'CloudAI-X/threejs-skills',
+      'anthropics/claude-plugins-official',
       'gamedev-skills/awesome-gamedev-agent-skills',
+      'lovisdotio/video-to-game',
       'phaserjs/phaser',
     ]);
     for (const set of Object.values(lock.sets)) {
@@ -88,9 +103,20 @@ describe('vendored skill sets', () => {
 });
 
 describe('vendored text runs nothing', () => {
-  it('holds no scripts or executables', () => {
-    const runnable = all.filter((f) => /\.(sh|py|js|mjs|cjs|ts)$/.test(f) || (statSync(f).mode & 0o111) !== 0);
+  it('holds no scripts outside the tool sets and no executables anywhere', () => {
+    const inToolSet = (f: string) => TOOL_SETS.includes(rel(f).split('/')[0]);
+    const runnable = all.filter((f) => !inToolSet(f) && /\.(sh|py|js|mjs|cjs|ts)$/.test(f));
     expect(runnable.map(rel)).toEqual([]);
+    expect(all.filter((f) => (statSync(f).mode & 0o111) !== 0).map(rel)).toEqual([]);
+  });
+
+  // Kevin's policy: no fal, no provider keys. Upstream video-to-game generates every asset with fal; only its local
+  // study and compare tools may be vendored.
+  it('vendors none of the video-to-game fal generation', () => {
+    const files = all.filter((f) => rel(f).startsWith('video-to-game/')).map(rel);
+    expect(files.filter((f) => /fal|SKILL\.md|record_play|templates\//.test(f))).toEqual([]);
+    for (const f of files.filter((f) => f.endsWith('.py')))
+      expect(read(f), f).not.toMatch(/\bfal\b|FAL_KEY|https?:\/\//);
   });
 
   it('fetches nothing from the network in code blocks', () => {
@@ -100,8 +126,10 @@ describe('vendored text runs nothing', () => {
       readFileSync(file, 'utf8')
         .split('\n')
         .forEach((line, index) => {
+          /* An XML namespace (`xmlns="http://www.w3.org/2000/svg"`) is a name, not a fetch. */
+          const fetched = line.replace(/xmlns(?::\w+)?="http:\/\/www\.w3\.org\/[^"]*"/g, '');
           if (/^\s*```/.test(line)) inCode = !inCode;
-          else if (inCode && /https?:\/\//.test(line) && !/\/\/ reference:.*https?:\/\//.test(line)) {
+          else if (inCode && /https?:\/\//.test(fetched) && !/\/\/ reference:.*https?:\/\//.test(fetched)) {
             hits.push(`${rel(file)}:${index + 1}`);
           }
           if (/jsdelivr|unpkg/.test(line)) hits.push(`${rel(file)}:${index + 1} cdn`);

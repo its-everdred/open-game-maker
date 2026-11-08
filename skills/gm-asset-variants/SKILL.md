@@ -32,6 +32,7 @@ order: try installed packs and mirrors first, then vary a selected source before
    | prop on a joint | `gm assets variant <id> --name <slug> --prop <prop-id>@<joint>` | a character holding a sword, a hat on a head |
    | stack, combine, mirror | a local script on a clone, then `gm assets register <path> --made-by-agent --from <id>` | new heights, merged parts, cheap asymmetry |
    | audio, sprite | trim, loop or palette-swap a copy, then register it with `--from` | SFX families, enemy palettes |
+   | 2D sprite palette | `generate2dsprite`'s `palette_tool.py variants` on a copy (Sprite Forge, below), then register it with `--from` | enemy families, team colours |
 
 4. **Make one variant per command.** `gm assets variant` clones the locked glb, multiplies each named material's base
    colour by the sRGB hex (`*` means every material), parents each prop at a rig joint (KayKit hands are
@@ -47,6 +48,19 @@ order: try installed packs and mirrors first, then vary a selected source before
    Never ship one you have not looked at (gm-verify).
 7. **Report.** One line per batch: how many variants, from which sources, by which operations, and anything that did
    not come out clean.
+
+## 2D art: Sprite Forge
+
+2D games use the Sprite Forge skills in `.claude/skills/vendor/sprite-forge/`; open the named skill's `SKILL.md`
+before running its tools. They need Python with numpy, Pillow and scipy; if those are missing, tell the Executor and
+never install them. When no pack sprite or map fits (tier 4), `generate2dsprite` makes characters, props and FX,
+`generate2dmap` makes tilemaps, prop packs and parallax, and `video2dsprite` animates an approved still. Their
+slicing, checks and engine exports run locally. These rules win over the vendored text:
+
+- No fal and no provider key: never add, set or ask for one, and never spend. Images come only from
+  `generate2dmedia`'s `route_media.py image ... --route codex-cli` (the signed-in Codex CLI), never `--route auto`.
+- Ask the Executor before any generation; it is the operator's call. Processing what exists needs no ask.
+- Never send a paid-pack asset to a cloud model as a reference; only free-licence files may go.
 
 ## Gotchas
 

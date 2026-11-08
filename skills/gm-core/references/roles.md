@@ -54,6 +54,9 @@ Three.js games load the `threejs` rows, Phaser games the `phaser` rows; `gamedev
 | `vendor/phaser/scale-and-responsive/SKILL.md` | scaling and aspect in a Phaser game |
 | `vendor/phaser/text-and-bitmaptext/SKILL.md` | readable text in a Phaser game |
 | `vendor/phaser/filters-and-postfx/SKILL.md` | a screen effect in a Phaser game |
+| `vendor/frontend-design/frontend-design/SKILL.md` | layout and type of menus, HUD and app screens; the approved targets and the Gruvbox palette win |
+| `vendor/sprite-forge/generate2dsprite/SKILL.md` | a 2D sprite no pack has (gm-asset-variants' rules: ask first, `--route codex-cli`) |
+| `vendor/video-to-game/references/study-the-video.md` | the creator's clip is the look to match, or a build is compared with it |
 
 ### role:gameplay
 
@@ -80,6 +83,18 @@ Three.js games load the `threejs` rows, Phaser games the `phaser` rows; `gamedev
 | `vendor/gamedev/prototype-fast/SKILL.md` | a timeboxed slice that answers one question |
 | `vendor/gamedev/level-design/SKILL.md` | blockout, pacing, gating, or encounters |
 | `vendor/phaser/tilemaps/SKILL.md` | a tile-based level in a Phaser game |
+| `vendor/video-to-game/references/study-the-video.md` | the creator's clip is the look to match |
+
+### role:assets
+
+| Skill | Load when |
+|---|---|
+| `vendor/sprite-forge/generate2dsprite/SKILL.md` | a 2D character, prop or FX sheet no pack has |
+| `vendor/sprite-forge/generate2dmap/SKILL.md` | a 2D tilemap, prop pack or parallax background |
+| `vendor/sprite-forge/video2dsprite/SKILL.md` | animating an approved 2D still |
+
+Sprite Forge rows are for 2D games and follow gm-asset-variants' rules: ask the Executor before any generation, images
+only through `--route codex-cli`, no provider key, no paid-pack references.
 
 ## Everything else is on demand
 
