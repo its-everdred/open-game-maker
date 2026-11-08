@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -139,6 +140,7 @@ describe('gm run in the app shell', () => {
       `OGM_APP_ORIGIN=${options.origin ?? 'https://app.example/'}\n`,
     );
     if (options.storage !== false) writeFileSync(join(home, '.config/ogm/qa/storage.json'), '{}');
+    execFileSync('git', ['init', '-q'], { cwd: game });
     writeFileSync(join(game, 'gm.manifest.json'), '{"id":"blobs"}');
     const ctx = { cwd: game, home, env: {} } as unknown as GmContext;
     return { home, game, ctx };
