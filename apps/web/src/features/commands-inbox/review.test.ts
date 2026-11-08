@@ -84,32 +84,10 @@ describe('deckReducer', () => {
     expect(state.reason).toBeNull();
   });
 
-  it('flips a card between like and dislike and clears its reason', () => {
-    let state = deckReducer(initialDeck(), { type: 'judge', optionId: 'v2', verdict: 'dislike' });
-    state = deckReducer(state, { type: 'set-reason', text: 'too robotic' });
-    state = deckReducer(state, { type: 'close-reason' });
-    state = deckReducer(state, { type: 'flip', optionId: 'v2' });
-    expect(state.cards).toEqual([{ optionId: 'v2', verdict: 'like' }]);
-    expect(state.picked).toBeNull();
-  });
-
   it('ignores a second judgement of the same card', () => {
     const once = deckReducer(initialDeck(), { type: 'judge', optionId: 'v1', verdict: 'like' });
     const twice = deckReducer(once, { type: 'judge', optionId: 'v1', verdict: 'dislike' });
     expect(twice).toBe(once);
-  });
-
-  it('reopens a dislike reason for editing', () => {
-    let state = deckReducer(initialDeck(), { type: 'judge', optionId: 'v2', verdict: 'dislike' });
-    state = deckReducer(state, { type: 'set-reason', text: 'too robotic' });
-    state = deckReducer(state, { type: 'close-reason' });
-    state = deckReducer(state, { type: 'open-reason', optionId: 'v2' });
-    expect(state.reason).toEqual({ optionId: 'v2', text: 'too robotic' });
-  });
-
-  it('keeps the whole-set notes the creator typed', () => {
-    const state = deckReducer(initialDeck(), { type: 'set-notes', text: 'All too young for the Blobs.' });
-    expect(state.notes).toBe('All too young for the Blobs.');
   });
 });
 
@@ -136,26 +114,6 @@ describe('deck state readings', () => {
       likes: ['v1'],
       dislikes: [{ option_id: 'v2', reason: 'too robotic' }, { option_id: 'v3' }],
     });
-  });
-
-  // The whole-set note is the creator's words about every card, so it travels beside the per-card votes and only when
-  // they wrote something.
-  it('carries the whole-set notes beside the per-card votes, and leaves them out when blank', () => {
-    let state = judge(initialDeck(), 'like', 'dislike', 'like');
-    expect(reviewOf(state).notes).toBeUndefined();
-
-    state = deckReducer(state, { type: 'set-notes', text: '   ' });
-    expect(reviewOf(state).notes).toBeUndefined();
-
-    state = deckReducer(state, { type: 'set-notes', text: '  All too young for the Blobs.  ' });
-    expect(reviewOf(state).notes).toBe('All too young for the Blobs.');
-  });
-
-  it('answers with the tapped shortlist card when the Command asks for one pick', () => {
-    const command = deck({ pick: 'one' });
-    let state = judge(initialDeck(), 'like', 'like', 'like');
-    state = deckReducer(state, { type: 'pick', optionId: 'v2' });
-    expect(answerOf(command, state).option_id).toBe('v2');
   });
 
   it('answers a one-pick Command with the first like when the creator picked nothing', () => {

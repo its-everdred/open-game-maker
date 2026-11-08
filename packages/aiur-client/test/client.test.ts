@@ -267,6 +267,57 @@ describe('createAiurClient', () => {
     });
   });
 
+  // #631: the supervisor `decide` route answered 403 to a creator's review, because aiur lets only a human take a
+  // human_required decision. The creator's answer must go out under a grant scoped to the Command's ticket, never under
+  // the supervisor token.
+  it('answers as the creator under a ticket-scoped grant minted with the supervisor token', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: 'scope-grant', expires_at: '2026-11-08T08:00:00Z' }, 201))
+      .mockResolvedValueOnce(jsonResponse({ command: {}, scope: {} }));
+    const map = JSON.stringify({ kind: 'question_answers', answers: [{ option_id: 'v2', verdict: 'like' }] });
+
+    await createAiurClient(daemon, fetchImpl).answerAsCreator('decision-1', {
+      ticket: '42',
+      principal: 'u_1',
+      response: map,
+      expected_version: 2,
+      idempotency_key: 'decision-1:2',
+      rationale: 'Reviewed the deck',
+    });
+
+    const [mint, answer] = fetchImpl.mock.calls;
+    expect(mint![0]).toBe(`${daemon.baseUrl}/api/v1/commands/scope`);
+    expect(new Headers(mint![1]?.headers).get('authorization')).toBe('Bearer supervisor-secret');
+    expect(JSON.parse(String(mint![1]?.body))).toEqual({ principal: 'u_1', tickets: ['42'], expires_in: 60 });
+    expect(answer![0]).toBe(`${daemon.baseUrl}/api/v1/commands/decision-1/answer`);
+    expect(new Headers(answer![1]?.headers).get('authorization')).toBe('Bearer scope-grant');
+    // aiur calls an option and a free-text response together ambiguous, so a review sends only the map.
+    expect(JSON.parse(String(answer![1]?.body))).toEqual({
+      custom_response: map,
+      expected_version: 2,
+      idempotency_key: 'decision-1:2',
+      rationale: 'Reviewed the deck',
+    });
+  });
+
+  it('surfaces a creator answer conflict as aiur’s status', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: 'scope-grant' }, 201))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'command_conflict' } }, 409));
+
+    await expect(
+      createAiurClient(daemon, fetchImpl).answerAsCreator('decision-1', {
+        ticket: '42',
+        principal: 'u_1',
+        option: 'v1',
+        expected_version: 2,
+        idempotency_key: 'decision-1:2',
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
   it('uses a comma-separated topics query for event pages', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(fixture('events-page')));
 

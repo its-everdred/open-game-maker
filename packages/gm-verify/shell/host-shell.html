@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>gm run</title>
+    <link rel="stylesheet" href="/host-shell.css" />
+  </head>
+  <body>
+    <div class="app-chrome">
+      <div class="studio-menu-control">
+        <button type="button" class="studio-menu-button" aria-label="Menu">
+          <span class="studio-menu-ring" aria-hidden="true"></span>☰
+        </button>
+      </div>
+      <main>
+        <section class="game-screen is-playing" aria-label="Play and edit">
+          <div class="play-bar">
+            <button class="back tap-primary" type="button">Games</button>
+            <span class="play-title"></span>
+            <span class="build-badge">Draft</span>
+            <div class="mode-segment" role="group" aria-label="Mode">
+              <button class="tap-primary" type="button" data-mode="play" aria-pressed="true">▶ Play</button>
+              <button class="tap-primary" type="button" data-mode="edit" aria-pressed="false">✎ Edit</button>
+            </div>
+            <button class="ask-change tap-primary" type="button">
+              <span class="ask-change-icon" aria-hidden="true"></span> Ask for a change
+            </button>
+          </div>
+          <div class="game-stage">
+            <div class="game-frame" id="game"></div>
+            <div class="platform-hud">
+              <button class="platform-pause tap-primary" type="button">Pause</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/host-shell.js"></script>
+  </body>
+</html>

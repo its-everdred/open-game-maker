@@ -96,10 +96,6 @@
 .review-screen .review-deck-card,
 .review-screen .review-deck-thumb,
 .review-screen .review-deck-undo,
-.review-screen .review-deck-send,
-.review-screen .review-deck-chip,
-.review-screen .review-deck-thumb-media,
-.review-screen .review-deck-notes textarea,
 .review-row-link {
   --k: var(--glass-edge);
   border: 1.5px solid color-mix(in srgb, var(--k) 70%, transparent);
@@ -114,7 +110,7 @@
   border-radius: 24px;
 }
 
-/* Like and dislike carry the deck's two colours; Send is the bright CTA glass with dark text. */
+/* Like and dislike carry the deck's two colours. */
 .review-screen .review-deck-thumb[aria-label='Like'] {
   --k: var(--gruvbox-aqua);
   box-shadow:
@@ -129,36 +125,11 @@
     0 10px 30px -10px var(--k);
 }
 
-.review-screen .review-deck-send {
-  --cta: var(--gruvbox-green);
-  display: grid;
-  place-items: center;
-  width: var(--tap-primary);
-  padding: 0;
-  border-color: color-mix(in srgb, var(--cta) 60%, var(--gruvbox-fg));
-  background: color-mix(in srgb, var(--cta) 78%, var(--glass-shine));
-  color: var(--dark);
-  box-shadow:
-    inset 0 1px 0 var(--glass-shine),
-    0 10px 30px -10px var(--cta);
-}
-
-.review-deck-send .icon svg {
-  width: 28px;
-  height: 28px;
-}
-
-.review-screen .review-deck-chip-dislike {
-  --k: var(--gruvbox-red);
-}
-
 .review-screen .review-deck-media {
-  max-height: min(58svh, 620px);
   background: color-mix(in srgb, var(--glow-night) 50%, transparent);
 }
 
 .review-screen .review-deck-audio {
-  min-height: min(36svh, 280px);
   background: color-mix(in srgb, var(--gruvbox-aqua) 10%, transparent);
 }
 
@@ -180,9 +151,12 @@
 
 .review-deck-card:has(.review-deck-media, .review-deck-audio) .review-deck-length {
   position: absolute;
-  right: 14px;
+  right: 12px;
   bottom: 12px;
-  padding: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--glass-fill);
+  color: var(--ink);
 }
 
 /* The inbox rows: one glass pane per question with its first sample, a few words and its state. */
@@ -276,12 +250,4 @@
 .review-row-mark .icon svg {
   width: 26px;
   height: 26px;
-}
-
-/* Send in the middle, the review screen's previous and next arrows either side of it. */
-.review-deck-send-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 28px;
 }

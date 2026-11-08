@@ -11,28 +11,19 @@ export type DeckState = {
   cards: DeckCard[];
   // The dislike whose reason sheet is open, with the words typed so far.
   reason: { optionId: string; text: string } | null;
-  // The shortlist card the creator picked, when the Command asks for one pick.
-  picked: string | null;
-  // Anything the creator wants to say about the set as a whole, beside the per-card votes. Optional: an empty field
-  // sends no notes at all.
-  notes: string;
   sending: boolean;
 };
 
 export type DeckAction =
   | { type: 'judge'; optionId: string; verdict: ReviewVerdict }
   | { type: 'undo' }
-  | { type: 'open-reason'; optionId: string }
   | { type: 'set-reason'; text: string }
   | { type: 'close-reason' }
-  | { type: 'set-notes'; text: string }
-  | { type: 'flip'; optionId: string }
-  | { type: 'pick'; optionId: string }
   | { type: 'sending' }
   | { type: 'sent' };
 
 export function initialDeck(): DeckState {
-  return { cards: [], reason: null, picked: null, notes: '', sending: false };
+  return { cards: [], reason: null, sending: false };
 }
 
 // A dislike opens its reason sheet in the same tap that records the verdict, so the creator can explain it without
@@ -50,15 +41,7 @@ export function deckReducer(state: DeckState, action: DeckAction): DeckState {
     }
     case 'undo': {
       if (state.cards.length === 0) return state;
-      const cards = state.cards.slice(0, -1);
-      const dropped = state.cards.at(-1)!;
-      const picked = state.picked === dropped.optionId ? null : state.picked;
-      return { ...state, cards, reason: null, picked };
-    }
-    case 'open-reason': {
-      const card = state.cards.find(({ optionId }) => optionId === action.optionId);
-      if (card === undefined || card.verdict !== 'dislike') return state;
-      return { ...state, reason: { optionId: action.optionId, text: card.reason ?? '' } };
+      return { ...state, cards: state.cards.slice(0, -1), reason: null };
     }
     case 'set-reason':
       return state.reason === null ? state : { ...state, reason: { ...state.reason, text: action.text } };
@@ -72,20 +55,6 @@ export function deckReducer(state: DeckState, action: DeckAction): DeckState {
       );
       return { ...state, cards, reason: null };
     }
-    case 'flip': {
-      const cards = state.cards.map((card) =>
-        card.optionId === action.optionId
-          ? { ...card, verdict: card.verdict === 'like' ? ('dislike' as const) : ('like' as const), reason: undefined }
-          : card,
-      );
-      const flipped = cards.find(({ optionId }) => optionId === action.optionId);
-      const picked = flipped?.verdict === 'dislike' && state.picked === action.optionId ? null : state.picked;
-      return { ...state, cards, picked };
-    }
-    case 'pick':
-      return { ...state, picked: action.optionId };
-    case 'set-notes':
-      return { ...state, notes: action.text };
     case 'sending':
       return { ...state, sending: true };
     case 'sent':
@@ -115,10 +84,8 @@ export function shortlist(state: DeckState): string[] {
   return state.cards.filter(({ verdict }) => verdict === 'like').map(({ optionId }) => optionId);
 }
 
-// The like/dislike map the answer carries. A dislike's reason travels only when the creator gave one, and the
-// whole-set notes travel only when the creator wrote any.
+// The like/dislike map the answer carries. A dislike's reason travels only when the creator gave one.
 export function reviewOf(state: DeckState): CommandReview {
-  const notes = state.notes.trim();
   return {
     likes: state.cards.filter(({ verdict }) => verdict === 'like').map(({ optionId }) => optionId),
     dislikes: state.cards.flatMap((card) =>
@@ -126,19 +93,14 @@ export function reviewOf(state: DeckState): CommandReview {
         ? [{ option_id: card.optionId, ...(card.reason === undefined ? {} : { reason: card.reason }) }]
         : [],
     ),
-    ...(notes === '' ? {} : { notes }),
   };
 }
 
-// The answer's option id: the shortlist card the creator picked when the Command asks for one, otherwise the first
-// like in the order they judged (the recommendation, or the first card, when they liked nothing).
+// The answer's option id: the first like in the order the creator judged (the recommendation, or the first card, when
+// they liked nothing). The whole map travels beside it, and is the answer itself for a Command no job owns.
 export function answerOf(command: GameCommand, state: DeckState): { option_id: string; review: CommandReview } {
   const review = reviewOf(state);
-  const option_id =
-    command.pick === 'many'
-      ? (review.likes[0] ?? command.recommend ?? command.options[0]!.id)
-      : (state.picked ?? review.likes[0] ?? command.recommend ?? command.options[0]!.id);
-  return { option_id, review };
+  return { option_id: review.likes[0] ?? command.recommend ?? command.options[0]!.id, review };
 }
 
 // A card's media tells the deck how to render it: its `kind` when it names one, else a clip carries a poster, an audio

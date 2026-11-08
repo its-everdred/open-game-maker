@@ -32,9 +32,13 @@ into one run directory (`--out`, default `shots/qa`) so `gm qa look` sees the wh
 
 The Executor runs all four against a game's newest build with `ops/bin/ogm-qa <slug>` on the host.
 
+A milestone gate (`qa/gate`) fails without a `gm look sheet` per approved screen for the build under test; capture
+the signed-in app with `gm run --frame app` (storage state from `ops/bin/ogm-qa-signin` on the host).
+
 ## Journeys
 
-A journey is JSON in `games/<name>/qa/journeys/`. Points and regions are viewport fractions, so one journey fits both
+A journey is JSON in `games/<name>/qa/journeys/`. It follows a path of edges in the game's flow diagram
+(`design/flow/flow.md`), and the journeys together cover every edge. Points and regions are viewport fractions, so one journey fits both
 sizes. `{name}` is a value a `read` step saved; room journeys also have `{clients}` and `{seat}`.
 
 | Step | Does |

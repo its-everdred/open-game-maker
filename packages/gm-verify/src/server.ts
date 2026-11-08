@@ -1,4 +1,4 @@
-import { createReadStream, realpathSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, realpathSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { extname, join, sep } from 'node:path';
@@ -25,13 +25,25 @@ const TYPES: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
-/** A static file server for a built game on `127.0.0.1` and an ephemeral port; never serves outside `dir`. */
+/**
+ * A static file server for a built game on `127.0.0.1` and an ephemeral port; never serves outside `dir`. It also
+ * answers the games host's `/g/<gameId>/<buildId>/<file>` paths with `<file>`, so the host frame mounts the build.
+ */
 export async function serveStatic(dir: string): Promise<{ url: string; close(): Promise<void> }> {
   const root = realpathSync(dir);
   const server = createServer((req, res) => {
     let path: string;
+    /* The games host's offline cache worker, which every build registers; a local capture caches nothing. */
+    if (
+      new URL(req.url ?? '/', 'http://127.0.0.1').pathname === '/game-cache.js' &&
+      !existsSync(join(root, 'game-cache.js'))
+    ) {
+      res.writeHead(200, { 'content-type': 'text/javascript' }).end('');
+      return;
+    }
     try {
-      const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://127.0.0.1').pathname);
+      const requested = decodeURIComponent(new URL(req.url ?? '/', 'http://127.0.0.1').pathname);
+      const pathname = requested.replace(/^\/g\/[^/]+\/[^/]+\//, '/');
       path = realpathSync(join(root, pathname));
       if (statSync(path).isDirectory()) path = realpathSync(join(path, 'index.html'));
     } catch {

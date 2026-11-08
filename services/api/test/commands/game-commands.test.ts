@@ -377,17 +377,21 @@ const decision = (overrides: Partial<Decision> = {}): Decision => ({
   ...overrides,
 });
 
-async function appWithAiur(decisions: Decision[], decide = vi.fn(async () => undefined)) {
+async function appWithAiur(decisions: Decision[], answerAsCreator = vi.fn(async () => undefined)) {
   const deps = seed();
   deps.aiurClientForGame = async () =>
     ({
       decisions: async () => decisions,
       // A review answer validates its cards against the Command aiur holds, so the client serves one decision too.
       decision: async (id: string) => decisions.find((candidate) => candidate.decision_id === id) ?? decisions[0]!,
-      decide,
+      // A supervisor answer is what aiur refused with 403 (#631); the inbox must never send one.
+      decide: vi.fn(async () => {
+        throw new AiurHttpError(403, 'supervisor_forbidden');
+      }),
+      answerAsCreator,
     }) as unknown as AiurClient;
   const { app } = await makeApp(deps);
-  return { app, deps, decide };
+  return { app, deps, answerAsCreator };
 }
 
 describe('a registered game’s own Commands', () => {
@@ -487,8 +491,8 @@ describe('a registered game’s own Commands', () => {
     expect(deps.lines.some((line) => line.event === 'game_commands_unavailable')).toBe(true);
   });
 
-  it('answers a Command with no job through aiur’s Decision API', async () => {
-    const { app, decide } = await appWithAiur([decision()]);
+  it('answers a Command with no job as the creator, under a grant for its ticket', async () => {
+    const { app, answerAsCreator } = await appWithAiur([decision()]);
 
     const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
       method: 'POST',
@@ -502,14 +506,20 @@ describe('a registered game’s own Commands', () => {
       decision_id: 'd_aiur_1',
       option_id: 'square',
     });
-    expect(decide).toHaveBeenCalledWith(
+    expect(answerAsCreator).toHaveBeenCalledWith(
       'd_aiur_1',
-      expect.objectContaining({ option: 'square', expected_version: 2, idempotency_key: 'd_aiur_1:2' }),
+      expect.objectContaining({
+        ticket: '478',
+        principal: ids.user,
+        option: 'square',
+        expected_version: 2,
+        idempotency_key: 'd_aiur_1:2',
+      }),
     );
   });
 
   it('carries a review deck’s map into aiur and the ledger when no job owns the Command', async () => {
-    const { app, deps, decide } = await appWithAiur([decision()]);
+    const { app, deps, answerAsCreator } = await appWithAiur([decision()]);
     const review = {
       likes: ['round'],
       dislikes: [{ option_id: 'square', reason: 'Too boxy for blobs' }],
@@ -523,10 +533,11 @@ describe('a registered game’s own Commands', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(decide).toHaveBeenCalledWith(
+    // aiur takes one of an option or a response: the review answers with its map alone.
+    expect(answerAsCreator.mock.calls[0]![1]).not.toHaveProperty('option');
+    expect(answerAsCreator).toHaveBeenCalledWith(
       'd_aiur_1',
       expect.objectContaining({
-        option: 'round',
         response: JSON.stringify({
           kind: 'question_answers',
           answers: [
@@ -553,7 +564,7 @@ describe('a registered game’s own Commands', () => {
   });
 
   it('refuses a review whose cards are not the Command’s and answers nothing', async () => {
-    const { app, decide } = await appWithAiur([decision()]);
+    const { app, answerAsCreator } = await appWithAiur([decision()]);
 
     const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
       method: 'POST',
@@ -566,7 +577,25 @@ describe('a registered game’s own Commands', () => {
     });
 
     expect(response.status).toBe(400);
-    expect(decide).not.toHaveBeenCalled();
+    expect(answerAsCreator).not.toHaveBeenCalled();
+  });
+
+  // The creator's answer grant is scoped to the Command's ticket (#631): a Command aiur cannot place on a ticket, or one
+  // outside the inbox contract, is refused before any grant is minted.
+  it('refuses an answer to a Command it cannot place on a ticket and answers nothing', async () => {
+    const { app, answerAsCreator } = await appWithAiur([
+      decision({ decision_id: 'd_aiur_1', options: [{ id: 'square', label: 'Square blobs' }] }),
+    ]);
+
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'square', version: 2 }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'command_not_found' });
+    expect(answerAsCreator).not.toHaveBeenCalled();
   });
 
   it('reports another writer’s answer as a conflict', async () => {

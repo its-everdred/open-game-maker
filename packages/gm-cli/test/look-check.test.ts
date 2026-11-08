@@ -43,14 +43,19 @@ type Broker = { answer: string } | { error: string } | 'silent';
  * Runs gm-image-mock's real look request and answers it the way the host broker does (once the request file
  * lands), so the test exercises the log format `request-mock.py` writes and `gm look check` reads.
  */
-async function look(root: string, name: string, broker: Broker): Promise<string> {
+async function look(
+  root: string,
+  name: string,
+  broker: Broker,
+  refs: string[] = [STILL, 'design/target.png'],
+): Promise<string> {
   let request = '';
   writeFileSync(join(root, 'questions.md'), 'Does the still match the target?');
   const args = ['--kind', 'look', '--name', name, '--out', 'looks', '--prompt-file', 'questions.md'];
   const wait = broker === 'silent' ? '1' : '30';
   const child = spawn(
     'python3',
-    ['-I', REQUEST_MOCK, ...args, '--ref', STILL, '--ref', 'design/target.png'].concat(['--wait', wait]),
+    ['-I', REQUEST_MOCK, ...args, ...refs.flatMap((ref) => ['--ref', ref])].concat(['--wait', wait]),
     {
       cwd: root,
       stdio: 'ignore',
@@ -207,5 +212,66 @@ describe('gm look check', { timeout: 60_000 }, () => {
     const request = JSON.parse(await look(root, 'first', { answer: 'VERDICT: pass' })) as { prompt: string };
 
     expect(request.prompt).toMatch(/VERDICT: pass` or `VERDICT: fail`\.$/);
+  });
+});
+
+describe('gm look check with approved targets', { timeout: 60_000 }, () => {
+  const SHEET = 'look/select.sheet.png';
+
+  // Kevin judged Blobs against its renders on an iPad (#642): a screen with an approved target is only checked when
+  // its still sits beside that target, so a look can say "this looks nothing like the render".
+  function approved(): string {
+    const root = game();
+    mkdirSync(join(root, 'review'), { recursive: true });
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"select":{"target":"design/target.png"}}}');
+    return root;
+  }
+
+  it('fails while a screen with an approved target has no sheet, naming the command that makes one', async () => {
+    const root = approved();
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+
+    const result = await gm(['look', 'check'], { cwd: root });
+
+    expect(result.code).toBe(1);
+    expect(result.err).toEqual([
+      `missing ${SHEET}: no sheet of "select" beside its target: gm look sheet select --still <png>`,
+    ]);
+  });
+
+  it('fails when the look at the sheet reads a mismatch with the target, and passes when it reads a match', async () => {
+    const root = approved();
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+    mkdirSync(join(root, 'look'));
+    writeFileSync(join(root, SHEET), 'still-beside-target');
+    await look(root, 'sheet', { answer: 'The board is missing; the render shows it.\n\nVERDICT: fail' }, [SHEET]);
+    const mismatch = await gm(['look', 'check'], { cwd: root });
+    await look(root, 'sheet-2', { answer: 'Matches the render.\n\nVERDICT: pass' }, [SHEET]);
+    const match = await gm(['look', 'check'], { cwd: root });
+
+    expect(mismatch.code).toBe(1);
+    expect(mismatch.err[0]).toMatch(new RegExp(`^fail ${SHEET}: VERDICT: fail in looks/sheet-`));
+    expect(match.code).toBe(0);
+  });
+
+  it('a new sheet needs a new look: an answer for the old bytes does not cover it', async () => {
+    const root = approved();
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+    mkdirSync(join(root, 'look'));
+    writeFileSync(join(root, SHEET), 'old-sheet');
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, [SHEET]);
+    writeFileSync(join(root, SHEET), 'new-sheet');
+
+    const result = await gm(['look', 'check'], { cwd: root });
+
+    expect(result.code).toBe(1);
+    expect(result.err[0]).toMatch(new RegExp(`^missing ${SHEET}: no look answer for this version`));
+  });
+
+  it('gm look sheet takes the target from review/decisions.json and refuses a screen it does not name', async () => {
+    const root = approved();
+    const unknown = await gm(['look', 'sheet', 'play', '--still', STILL], { cwd: root });
+    expect(unknown.code).toBe(2);
+    expect(unknown.err[0]).toMatch(/no approved target for "play"/);
   });
 });

@@ -40,3 +40,4 @@ export * from './style-showcase-3d.js';
 export * from './review.js';
 export * from './game-links.js';
 export * from './energy.js';
+export * from './review-drafts.js';

@@ -10,7 +10,7 @@ import { playLinkDenial, usePlayLink } from '../play/api';
 import { queryClient } from '../../app/query';
 import { gameCommandsQueryKey, useGameCommands } from '../../features/commands-inbox/commands';
 import { DecisionVoice, useDucking, type DecisionVoiceTarget } from '../../features/commands-inbox/decision-voice';
-import { reopenDraft, useIsSent } from '../../features/commands-inbox/drafts';
+import { reopenDraft, useIsSent, useServerDrafts } from '../../features/commands-inbox/drafts';
 import { GlowBackdrop } from '../../features/commands-inbox/GlowBackdrop';
 import { ReviewDeck } from '../../features/commands-inbox/ReviewDeck';
 import { ReviewRows } from '../../features/commands-inbox/ReviewRows';
@@ -82,6 +82,7 @@ function CloseButton({ onClose }: { onClose(): void }) {
 function ReviewList({ gameId, slug, title }: { gameId: string; slug: string; title: string }) {
   const navigate = useNavigate();
   const { commands, isPending } = useGameCommands(gameId);
+  useServerDrafts(gameId);
   const rows = numbered(commands);
   return (
     <ReviewFrame
@@ -285,13 +286,11 @@ function ReviewScreen({
         </>
       }
     >
-      <div className="review-screen-body">
+      <div className="review-screen-body review-screen-deck">
         <ReviewDeck
           key={correcting}
           gameId={gameId}
           command={shown}
-          voiceTarget={voiceTarget}
-          nav={nav}
           onAnswered={() => {
             setSaved(true);
             setCorrecting(0);

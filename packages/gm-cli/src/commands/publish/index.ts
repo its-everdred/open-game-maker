@@ -33,7 +33,7 @@ const FROM_REPO = ['manifest.json', 'design/design.json', 'achievements.json'];
 type Facts = { gameId: string; slug: string; repoPath: string; checkout: string };
 
 /** `NAME=value` lines of one env file, read without sourcing it (the files also hold secrets). */
-function readEnvFile(file: string): Record<string, string> {
+export function readEnvFile(file: string): Record<string, string> {
   let text: string;
   try {
     text = readFileSync(file, 'utf8');
