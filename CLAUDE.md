@@ -35,6 +35,7 @@ use. Work here the way those agents will work: dogfood the skills.
   A worker in `agent:human-review` whose workpad says the branch is pushed but governed `gh pr create` timed out: open the PR by
   hand from its branch (body from the workpad), relabel `agent:ci-wait`, report the timeout to Aiur. GitHub's merge queue is not
   available on this user-owned repo (ruleset 26376924 = PR + green `required`, non-strict; merge on green without update-branch).
+  Pausing a running worker: `aiur-main message` does not stop it (#211 opened a PR after being told to stop); kill its `provider_pid` (`aiur-main agents --json`), close or hold its PR, then `--todo` it (a ticket with an open PR sits in ci-wait and takes no turn). Prove skill injection from the new session's first prompt (`Mapped skills (load first)`), excluding the old session file.
   Every audit: `aiur-main commands --filter open`; a worker's "Needs you" question idles its ticket until Kevin answers, and the
   CLI refuses an Executor answer, so relay Kevin's standing words with `operator-relay-answer <id> --expected-version 1 --option
   <id> --quote "<his words>" --relayed-by nuc-ogm-executor --idempotency-key <k>` (three QA-path workers sat 40–75 min on 2026-11-02).
