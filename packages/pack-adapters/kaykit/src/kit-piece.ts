@@ -1,5 +1,6 @@
 import type { AssetLoader } from '@gm/sdk/assets';
-import type { Mesh, Object3D } from 'three';
+import { Mesh, type Material, type Object3D } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 function isMesh(object: Object3D): object is Mesh {
   return (object as Mesh).isMesh === true;
@@ -11,6 +12,27 @@ function meshesUnder(root: Object3D): Mesh[] {
     if (isMesh(object)) found.push(object);
   });
   return found;
+}
+
+/** One mesh per decoded card node, so every placement of a card shares its geometry. */
+const pieces = new WeakMap<Object3D, Mesh>();
+
+/**
+ * A card with several materials loads as one mesh per material; they become one mesh with a material per group, so
+ * the card is still a single mesh (an `InstancedMesh` can draw it too).
+ */
+function merged(meshes: Mesh[], cardId: string): Mesh {
+  if (meshes.length === 0) throw new Error(`Kit card ${cardId} has no mesh`);
+  if (meshes.length === 1) return meshes[0]!;
+  const geometry = mergeGeometries(
+    meshes.map((mesh) => mesh.geometry),
+    true,
+  );
+  if (!geometry) throw new Error(`Kit card ${cardId} has parts with different vertex attributes`);
+  return new Mesh(
+    geometry,
+    meshes.map((mesh) => mesh.material as Material),
+  );
 }
 
 /**
@@ -31,12 +53,20 @@ export async function kitPiece(loader: AssetLoader, cardId: string): Promise<Mes
   const wanted = name ?? cardId;
   let node: Object3D | undefined;
   root.traverse((object) => {
-    node ??= object.userData.name === wanted || object.name === wanted ? object : undefined;
+    node ??= object.userData.name === wanted ? object : undefined;
   });
-  const meshes = node ? meshesUnder(node) : name ? [] : meshesUnder(root);
+  if (node) {
+    let piece = pieces.get(node);
+    if (!piece) {
+      piece = merged(meshesUnder(node), cardId);
+      pieces.set(node, piece);
+    }
+    return piece.clone();
+  }
+  if (name) throw new Error(`Kit card ${cardId} has no node named ${name} in ${file}`);
+  const meshes = meshesUnder(root);
   if (meshes.length !== 1) {
-    const found = node || !name ? `${meshes.length} meshes` : `no node named ${name}`;
-    throw new Error(`Kit card ${cardId} needs exactly one mesh in ${file}, found ${found}`);
+    throw new Error(`Kit card ${cardId} needs exactly one mesh in ${file}, found ${meshes.length}`);
   }
   return meshes[0]!.clone();
 }

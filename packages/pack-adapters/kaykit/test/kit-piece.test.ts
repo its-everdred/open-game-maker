@@ -11,19 +11,23 @@ const ROCK = 't1:kaykit-forest/rock_1@1.0';
 
 /**
  * A glb laid out the way `gm build assets` packs a kit: one node per card, node and mesh named by the card id, each
- * piece a single triangle `height` metres tall so a test can tell which piece came back.
+ * piece made of triangles (one per material) whose tallest is `height` metres so a test can tell which piece came back.
  */
-async function glb(pieces: Record<string, number>): Promise<ArrayBuffer> {
+async function glb(pieces: Record<string, number | number[]>): Promise<ArrayBuffer> {
   const document = new Document();
   const buffer = document.createBuffer();
   const scene = document.createScene('Scene');
-  for (const [name, height] of Object.entries(pieces)) {
-    const position = document
-      .createAccessor()
-      .setType('VEC3')
-      .setArray(new Float32Array([0, 0, 0, 1, 0, 0, 0, height, 0]))
-      .setBuffer(buffer);
-    const mesh = document.createMesh(name).addPrimitive(document.createPrimitive().setAttribute('POSITION', position));
+  for (const [name, heights] of Object.entries(pieces)) {
+    const mesh = document.createMesh(name);
+    for (const [index, height] of [heights].flat().entries()) {
+      const position = document
+        .createAccessor()
+        .setType('VEC3')
+        .setArray(new Float32Array([0, 0, 0, 1, 0, 0, 0, height, 0]))
+        .setBuffer(buffer);
+      const material = document.createMaterial(`${name}-${index}`);
+      mesh.addPrimitive(document.createPrimitive().setAttribute('POSITION', position).setMaterial(material));
+    }
     scene.addChild(document.createNode(name).setMesh(mesh));
   }
   const bytes = await new NodeIO().writeBinary(document);
@@ -67,6 +71,20 @@ describe('kitPiece', () => {
     expect(second.geometry).toBe(first.geometry);
   });
 
+  it('draws a card with two materials as one mesh with a material per part', async () => {
+    const files = { 'weapons.glb': await glb({ [BUSH]: 0.5, [TREE]: [2, 3] }) };
+    const { loader } = await fixtureLoader(
+      { [BUSH]: { file: 'weapons.glb', mesh: BUSH }, [TREE]: { file: 'weapons.glb', mesh: TREE } },
+      files,
+    );
+    const piece = await kitPiece(loader, TREE);
+    expect(height(piece)).toBe(3);
+    expect(piece.geometry.getAttribute('position').count).toBe(6);
+    expect(piece.geometry.groups.map((group) => group.materialIndex)).toEqual([0, 1]);
+    expect((piece.material as { name: string }[]).map((material) => material.name)).toEqual([`${TREE}-0`, `${TREE}-1`]);
+    expect((await kitPiece(loader, TREE)).geometry).toBe(piece.geometry);
+  });
+
   it('takes the only mesh of a card that has its own file', async () => {
     const files = { 'tree.glb': await glb({ Tree_1: 4 }) };
     const { loader } = await fixtureLoader({ [TREE]: { file: 'tree.glb' } }, files);
@@ -76,12 +94,14 @@ describe('kitPiece', () => {
   it('refuses a packed file without the card rather than drawing another piece', async () => {
     const files = { 'forest.glb': await glb({ [BUSH]: 0.5, [ROCK]: 1 }) };
     const { loader } = await fixtureLoader({ [TREE]: { file: 'forest.glb', mesh: TREE } }, files);
-    await expect(kitPiece(loader, TREE)).rejects.toThrow(`Kit card ${TREE} needs exactly one mesh in forest.glb`);
+    await expect(kitPiece(loader, TREE)).rejects.toThrow(`Kit card ${TREE} has no node named ${TREE} in forest.glb`);
   });
 
   it('refuses a card of its own file that holds several meshes', async () => {
     const files = { 'pair.glb': await glb({ A: 1, B: 2 }) };
     const { loader } = await fixtureLoader({ [TREE]: { file: 'pair.glb' } }, files);
-    await expect(kitPiece(loader, TREE)).rejects.toThrow('found 2 meshes');
+    await expect(kitPiece(loader, TREE)).rejects.toThrow(
+      `Kit card ${TREE} needs exactly one mesh in pair.glb, found 2`,
+    );
   });
 });
