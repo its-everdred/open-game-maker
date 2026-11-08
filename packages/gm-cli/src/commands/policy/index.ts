@@ -12,6 +12,7 @@ async function live(ctx: GmContext): Promise<boolean | null> {
     const secret = (await readFile(ctx.blobApi.secretFile, 'utf8')).trim();
     const response = await fetch(new URL('/internal/gameplay', ctx.blobApi.url), {
       headers: { authorization: `Bearer ${secret}` },
+      signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) return null;
     const body = (await response.json()) as { paidApisDuringGameplay?: unknown };

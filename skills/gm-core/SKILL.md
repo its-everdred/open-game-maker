@@ -17,7 +17,8 @@ or mechanic from them.
 
 Playing a game spends no tokens and no paid API unless `gm policy` says paid APIs during gameplay are on (an instance
 admin setting, off by default). While it is off, design no live paid feature (LLM, voice or media API calls at play
-time): bake that content at build time, and never put a provider key in the game.
+time): bake that content at build time, and never put a provider key in the game. Publishing refuses a build that
+names a paid provider's host while it is off, and any build holding a provider key.
 
 ## Keep the layers honest
 

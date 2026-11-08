@@ -22,12 +22,16 @@ const PAID_HOSTS = [
   'api.perplexity.ai',
   'openrouter.ai',
 ];
+// Hostnames are case-insensitive, and `fetch` accepts them in any case.
 const PAID = new RegExp(
   `(?<![\\w.-])(?:[\\w-]+\\.)*(?:${PAID_HOSTS.map((host) => host.replaceAll('.', '\\.')).join('|')})(?![\\w-])`,
+  'i',
 );
-// Provider key shapes (OpenAI/Anthropic `sk-`, Google `AIza`, Replicate `r8_`, Groq `gsk_`). A game client never
-// holds one, whatever the setting.
-const CREDENTIAL = /(?<![\w-])(?:sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{35}|r8_[A-Za-z0-9]{30,}|gsk_[A-Za-z0-9]{30,})/;
+// Provider key shapes (OpenAI/Anthropic `sk-`, ElevenLabs `sk_`, Google `AIza`, Replicate `r8_`, Groq `gsk_`, fal
+// `<uuid>:<hex>`). A game client never holds one, whatever the setting. An `sk-` key needs a 20-character run after
+// its prefixes, so a hyphenated name such as a CSS class is not mistaken for one.
+const CREDENTIAL =
+  /(?<![\w-])(?:sk-(?:[A-Za-z0-9]+-){0,3}[A-Za-z0-9_]{20,}|sk_[0-9a-f]{40,}|AIza[0-9A-Za-z_-]{35}|r8_[A-Za-z0-9]{30,}|gsk_[A-Za-z0-9]{30,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{32})/;
 const TEXT = new Set(['.js', '.mjs', '.cjs', '.html', '.htm', '.json', '.css', '.svg', '.txt', '.webmanifest', '.map']);
 
 export type IntegrationScan = { paid: string[]; credentials: string[] };
