@@ -35,9 +35,10 @@ provenance (`--provenance <id>=@<file>.json`) when you offer it, so the check ca
   decided later, one stage at a time, from real media as the prototype ladder climbs
   (`../gm-new-game-plan/references/prototype-ladder.md`); here record only the direction the player already gave and
   any hard constraints. There is no question cap; stop asking about details a sensible default covers.
-- **Look starts with image mocks.** The first visual review is always generated mock-ups of the player's screen in the
-  chosen kit (`gm-image-mock`): four options that differ greatly, then real-asset dioramas toward the one picked. It is
-  the ladder's first visual stage, and may run during the conversation or right after the spec.
+- **Look starts with concepts.** The first visual review is always generated mock-ups of the player's screen in the
+  chosen kit (`gm-image-mock`): four options that differ greatly. That is stage 1 of the five-stage ladder (concepts,
+  dioramas, rendered gameplay clips, real gameplay, iterations), and may run during the conversation or right after the
+  spec.
 - **Show, don't only tell.** Offer options as concrete samples where they help: an asset lineup or mock-up still, a
   short GIF or clip, a music or sound clip from the library, a story beat in prose, a tiny playable sketch. Pick the
   format that best answers that decision; label mock-ups as mock-ups.
@@ -80,6 +81,6 @@ plans the whole game with `gm-new-game-plan`; you do not create tickets. The spe
 are the first draft of the game's flow diagram (`../gm-new-game-plan/references/flow-diagram.md`).
 
 A spec is complete when the Executor can plan without a second interview: core loop, controls, camera, world and
-levels, progression, win and loss, the prototype ladder's rungs (what each proves), acceptance criteria, and the open
-questions with their defaults. Characters, style picks, UI and audio may hold only a direction: their stages decide
+levels, progression, win and loss, the features that climb the prototype ladder (the screens and moments the creator
+reviews, each with its flow node), acceptance criteria, and the open questions with their defaults. Characters, style picks, UI and audio may hold only a direction: their stages decide
 them later.

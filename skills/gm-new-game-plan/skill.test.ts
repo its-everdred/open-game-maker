@@ -40,3 +40,40 @@ describe('game flow diagram step', () => {
     expect(read('../gm-qa/SKILL.md')).toContain("follows a path of edges in the game's flow diagram");
   });
 });
+
+/* #660, Kevin 2026-11-08: one five-stage ladder for every game, each stage closed by a creator review, replacing the
+   separate gameplay rungs and visuals, characters and audio tracks. */
+describe('five-stage prototype ladder', () => {
+  const STAGES = ['Concepts', 'Dioramas', 'Rendered gameplay clips', 'Video to real gameplay', 'Gameplay iterations'];
+
+  it('lists the five stages in order in the ladder reference, each with its review Command and roles', () => {
+    const ladder = read('./references/prototype-ladder.md');
+    const at = STAGES.map((stage) => ladder.indexOf(`**${stage}**`));
+    expect(at.every((index) => index >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    for (const review of [
+      'Pick or reject per concept',
+      '"Keep this diorama, or change one of these?"',
+      'Pick per clip (phone-ready MP4)',
+      'Play-then-vote cards beside the approved clip',
+      'Play-then-vote per variant, one feature at a time',
+    ])
+      expect(ladder).toContain(review);
+    expect(ladder).toContain('A rejection loops back within the same stage.');
+    expect(ladder).toContain('never against the stage 1 concept');
+    expect(ladder).not.toMatch(/\b(V[1-5]|C[1-5]|A[1-4]|P[1-9])\b/);
+  });
+
+  it('points the planning skill, design skill and spec template at the five stages', () => {
+    const plan = read('./SKILL.md');
+    expect(plan).toContain('`references/build-order-template.md`');
+    expect(plan).toContain('`references/examples/blobs-ladder.md`');
+    expect(plan).toContain('`scripts/check-ladder.ts`');
+    expect(plan).toContain(
+      '1 concepts, 2 dioramas, 3 rendered gameplay clips, 4 video to real gameplay, 5 gameplay iterations',
+    );
+    const stages = 'concepts, dioramas, rendered gameplay clips, real gameplay, iterations';
+    expect(read('../gm-new-game-design/SKILL.md')).toContain(stages);
+    expect(read('../gm-new-game-design/references/spec-template.md')).toContain(stages);
+  });
+});
