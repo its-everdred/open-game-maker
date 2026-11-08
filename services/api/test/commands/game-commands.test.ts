@@ -1,5 +1,5 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
-import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, type OptionPlayable } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -109,7 +109,7 @@ function checkpoint(
     status?: 'open' | 'answered' | 'moot';
     version?: number | undefined;
     at?: string;
-    options?: Array<{ id: string; label: string; media_id?: string }>;
+    options?: Array<{ id: string; label: string; media_id?: string; playable?: OptionPlayable }>;
     topic?: string;
   } = {},
 ) {
@@ -273,6 +273,25 @@ describe('game commands inbox', () => {
     expect(body.commands[0]!.options[0]!.media?.url).toContain('/blobs/');
     // A media id that names no row in this job leaves the option without media.
     expect(body.commands[0]!.options[1]).toEqual({ id: 'iron', label: 'Iron door' });
+  });
+
+  // A gameplay-feel question (#608) is answered by playing each option, so the card needs the scenario the agent set.
+  it('carries an option’s playable slice to the deck', async () => {
+    const { app, deps } = await appWithJobs();
+    const slow = { scenario: 'scenario=sandbox&speed=slow', seconds: 6, lead_in: 'one-chain' };
+    checkpoint(deps, ids.job, ULID, {
+      options: [
+        { id: 'slow', label: 'Slow', playable: slow },
+        { id: 'fast', label: 'Fast', playable: { scenario: 'scenario=sandbox&speed=fast', seconds: 8 } },
+      ],
+    });
+
+    const body = (await (await get(app, ids.game)).json()) as {
+      commands: Array<{ options: Array<{ id: string; playable?: OptionPlayable }> }>;
+    };
+
+    expect(body.commands[0]!.options[0]).toEqual({ id: 'slow', label: 'Slow', playable: slow });
+    expect(body.commands[0]!.options[1]!.playable?.scenario).toBe('scenario=sandbox&speed=fast');
   });
 
   it('leaves out a malformed Command instead of failing the whole inbox', async () => {

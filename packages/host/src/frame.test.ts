@@ -29,6 +29,34 @@ describe('createGameFrame', () => {
     frame.dispose();
   });
 
+  // A review deck's playable slice (#608) boots the game in a scenario; the host still owns build and protocol.
+  it('adds scenario parameters to the game URL without letting them replace the host’s own', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const frame = createGameFrame({
+      container,
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g1',
+      buildId: 'b1',
+      build: 'draft' as const,
+      params: { scenario: 'sandbox', speed: 'slow', build: 'published' },
+      mode: 'play' as const,
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+    });
+
+    const url = new URL(frame.iframe.src);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      scenario: 'sandbox',
+      speed: 'slow',
+      build: 'draft',
+      protocol: '1',
+    });
+    frame.dispose();
+  });
+
   it('refuses an app-origin games URL without appending an iframe', () => {
     const container = document.createElement('div');
     expect(() =>

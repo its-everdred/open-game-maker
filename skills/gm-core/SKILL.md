@@ -38,33 +38,33 @@ Keep one style family per game. Use `gm assets sheet` for visual choices and rec
 each entry carries, and run `gm options check` on an option set before it reaches the creator. An option that repeats a
 rejection is not an option. Record a rejection you hear first with `gm options reject`, which also names the open
 options and Commands it withdraws. Give every option its provenance when you offer it
-(`gm decide … --provenance <id>=@<file>.json`): packs, assets, generator, and build time are what the check
-reads, and a ledger-carrying game refuses an option nobody can check.
+(`gm decide … --provenance <id>=@<file>.json`): packs, assets, generator, and build time are what the check reads, and a
+ledger-carrying game refuses an option nobody can check.
 
 **A pack you cannot reach is a blocker, not a reason to drop a tier.** If `gm assets search` fails, the asset library is
-missing or unreadable, or a card's files will not load, stop asset work and raise it with the Executor (a plain
-`aiur command request`, or `Executor:` in the workpad) naming the path and the error. Never present procedural stand-ins, primitives or
-placeholders as options for a creator's choice; a choice shown with stand-ins is not a choice.
-
-## Ask, don't assume
-
-When you are about to decide something a player would notice (how the game looks, sounds, feels or plays), ask
-instead: at a planned stage, after a prototype, on a failed review, on a gap in the spec, or before you would assume it
-yourself. Ask with `gm decide`: a 2-5 word `--topic` (the inbox title), a plain-words question, as many options as the
-question needs, `--media` on every option, and `--recommend` with a one-line `--reason`. Related questions share one
-topic, and `design/decisions.json` refuses a topic already asked: use its answer, and pass `--revisit` only when the
-creator reopens it. Only `gm decide` puts a Command in the creator's inbox. Engineering and operations questions
-(tooling, checks, CI, providers, credits, budgets, file layout) never go to the creator: decide them yourself, or ask
-the Executor with a plain `aiur command request` or `Executor:` in the workpad.
+missing or unreadable, or a card's files will not load, stop asset work and tell the Executor (`Executor:` in the
+workpad) the path and the error. Never present procedural stand-ins, primitives or placeholders as options for a
+creator's choice; a choice shown with stand-ins is not a choice.
 
 ## Build loop
 
-Before a large visible choice, offer distinct options through `gm decide` (at most three checkpoints per
-edit; new games follow gm-new-game-design), then wait for the choice. Build the selected slice, run it, and look at the result. After every
-`gm run`, send exactly one still or clip with `gm chat post`; do not make the creator ask to see progress.
+**Ask, don't assume.** Before deciding anything a player would notice (how it looks, sounds, feels, plays), at any stage
+(a prototype, a failed review, a spec gap), ask with `gm decide`: a 2-5 word `--topic`, as many options as needed, the
+thing itself on each (`--media` or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic;
+`design/decisions.json` refuses one already asked (`--revisit` only when the creator reopens it). At most three per
+edit; new games follow gm-new-game-design. Engineering and operations questions (tooling, CI, providers, credits) never
+go to the creator: decide them or tell the Executor. Wait for the choice, build the selected slice, run it, and look at
+the result. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked.
 
-Done means `gm check`, `gm test`, and `gm run` are green and the PR's binary checklist is answered from the
-evidence sheet. Looking is part of verification: inspect the rendered game before sending it.
+Done means `gm check`, `gm test`, and `gm run` are green and the PR's binary checklist is answered from the evidence
+sheet. Looking is part of verification: inspect the rendered game before sending it.
+
+## Energy
+
+Run `gm energy` at the start. `save` means a cheaper model, lower effort, and optional work deferred. `best` means the
+strongest model and effort. `balanced` is in between. When Energy is `limited` or `critical`, propose any scope cut as a
+`gm decide` question; never cut scope silently. The preference never lowers a quality gate. When Energy is `unknown` or
+`gm energy` fails, work as `balanced`.
 
 ## Activity markers
 
@@ -89,6 +89,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm chat post` sends the current still or clip to the build chat.
 - `gm decide` asks the creator a product question; `gm checkpoint wait` waits for the answer.
 - `gm changes` summarizes the current game-repo diff.
+- `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.
 
 ## Load when…
 

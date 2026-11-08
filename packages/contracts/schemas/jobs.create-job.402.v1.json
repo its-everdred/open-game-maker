@@ -6,7 +6,8 @@
       "type": "string",
       "enum": [
         "allowance_exceeded",
-        "platform_cap_reached"
+        "platform_cap_reached",
+        "energy_limit_reached"
       ]
     },
     "remainingMicroUsd": {
@@ -30,6 +31,14 @@
           "ask_admin"
         ]
       }
+    },
+    "window": {
+      "type": "string",
+      "enum": [
+        "day",
+        "week",
+        "month"
+      ]
     }
   },
   "required": [

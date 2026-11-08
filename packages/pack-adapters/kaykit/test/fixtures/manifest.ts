@@ -5,6 +5,7 @@ export const BASE = 'https://game.test/assets/';
 
 export interface FixtureAsset {
   file?: string;
+  mesh?: string;
   meta?: Record<string, unknown>;
 }
 
@@ -23,6 +24,7 @@ export async function fixtureLoader(assets: Record<string, FixtureAsset>, files:
         id,
         {
           file: { '*': asset.file ?? `${id}.glb` },
+          ...(asset.mesh ? { mesh: asset.mesh } : {}),
           ...(asset.meta ? { meta: asset.meta } : {}),
           license: { id: 'CC0-1.0', use: 'any' },
         },

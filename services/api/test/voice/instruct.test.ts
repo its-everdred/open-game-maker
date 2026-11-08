@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listSince } from '../../src/build-chat/store.js';
+import { writeLimits } from '../../src/energy/store.js';
 import { buildBriefing, clearVoiceWaitingOn, type VoiceTarget } from '../../src/voice/briefing-push.js';
 import { ids, NOW, worked } from '../budget/fixture.js';
 import { makeApp } from '../helpers.js';
@@ -114,6 +115,19 @@ describe('POST /internal/voice/instruct', () => {
     expect(
       deps.db.select().from(schema.jobs).where(eq(schema.jobs.idempotencyKey, 'voice:voice-over-budget')).all(),
     ).toEqual([]);
+  });
+
+  it('says which Energy window a refused draft does not fit and offers only what admission offered', async () => {
+    const { deps, request } = await setup();
+    deps.db.insert(schema.allowances).values({ familyId: ids.family, userId: ids.creator, dailyMicroUsd: 1e9 }).run();
+    writeLimits(deps.db, { day: null, week: 3_000_000, month: null, voice: null, images: null }, NOW);
+
+    const response = await request(scope, 'Add lanterns', 'voice-over-energy');
+
+    expect(await response.json()).toEqual({ delivery_id: expect.any(String), status: 'needs_choice' });
+    const briefing = await buildBriefing({ db: deps.db, defaults, now: () => NOW }, scope);
+    // The draft alone outgrows the weekly ceiling, so queueing for the reset would not help.
+    expect(briefing.waiting_on).toBe('Needs more Energy than is left this week: ask an admin');
   });
 
   it('returns failed without caching it so confirmation can retry', async () => {

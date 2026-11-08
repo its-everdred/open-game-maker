@@ -6,6 +6,7 @@ import type { BudgetStatus, Job } from '@ogm/contracts';
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
 import { admitJob, type AdmissionResult, type SupportedOffer } from '../scope-chat/admit';
+import { energyRefusalText } from '../energy/api';
 import { Offers } from '../scope-chat/Offers';
 import { AllowanceStatus } from '../scope-chat/ScopeChat';
 import { Composer } from './Composer';
@@ -145,7 +146,12 @@ export function Chat({
       ) : null}
       <MessageList messages={messages} />
       {refusal && !waitingForAdmin ? (
-        <Offers offers={refusal.offers} disabled={submitting} onChoose={(offer) => void choose(offer)} />
+        <Offers
+          offers={refusal.offers}
+          message={energyRefusalText(refusal.window)}
+          disabled={submitting}
+          onChoose={(offer) => void choose(offer)}
+        />
       ) : null}
       {refusal && waitingForAdmin ? (
         <AllowanceStatus

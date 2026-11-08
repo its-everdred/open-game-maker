@@ -148,6 +148,41 @@ describe('gm decide', () => {
     expect(existsSync(join(root, 'design', 'decisions.json'))).toBe(false);
   });
 
+  it('accepts a playable slice as the thing the creator tries on an option', async () => {
+    const root = workspace();
+    const [only] = await media(root, 1);
+    const result = await gm(
+      [
+        'decide',
+        '--job',
+        JOB_ID,
+        '--topic',
+        'Hero jump feel',
+        '--question',
+        'How should the hero jump?',
+        '--option',
+        'a=Tight',
+        '--option',
+        'b=Floaty',
+        '--media',
+        `a=${only}`,
+        '--playable',
+        'b=scenario=sandbox&jump=floaty',
+        '--recommend',
+        'a',
+        '--reason',
+        'The tower is vertical',
+      ],
+      { cwd: root },
+    );
+
+    expect(result.code).toBe(0);
+    const [line] = outboxLines(root);
+    expect(line?.payload).toMatchObject({
+      options: [{ id: 'a' }, { id: 'b', playable: { scenario: 'scenario=sandbox&jump=floaty' } }],
+    });
+  });
+
   it('refuses a question without a recommendation and its reason', async () => {
     const root = workspace();
     const ids = await media(root, 2);

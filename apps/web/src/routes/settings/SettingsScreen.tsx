@@ -7,9 +7,14 @@ export function SettingsScreen() {
     <div className="settings-screen">
       <header>
         <h1>Settings</h1>
-        <Link className="tap-secondary" to="/settings/credits">
-          Credits
-        </Link>
+        <nav>
+          <Link className="tap-secondary" to="/settings/energy">
+            Energy
+          </Link>
+          <Link className="tap-secondary" to="/settings/credits">
+            Credits
+          </Link>
+        </nav>
       </header>
       <Outlet />
     </div>

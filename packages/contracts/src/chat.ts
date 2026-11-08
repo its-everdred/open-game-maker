@@ -33,11 +33,50 @@ export const OptionProvenance = z
   })
   .strict();
 
+// A playable option (#608): instead of a picture of the gameplay, the card runs a short slice of the game itself. The
+// deck plays the game's build on `branch` from the games host with `scenario` appended to the game's URL (for example
+// `scenario=sandbox&speed=slow`), for `seconds`, then pauses for a verdict. `lead_in` names a short scripted move the
+// game plays first so the situation is ready (it reaches the game as `lead_in=<name>`). The scenario is a bare query of
+// plain keys and values: no URL, no host, and none of the parameters the host itself sets.
+export const PLAYABLE_RESERVED_PARAMS = ['build', 'protocol', 'tier', 'lead_in'] as const;
+export const DEFAULT_PLAYABLE_SECONDS = 8;
+const SCENARIO_PAIR = /^[A-Za-z0-9_.-]{1,32}=[A-Za-z0-9_.~-]{0,64}$/;
+export const PlayableScenario = z
+  .string()
+  .trim()
+  .min(3)
+  .max(300)
+  .refine((scenario) => scenario.split('&').every((pair) => SCENARIO_PAIR.test(pair)), {
+    message: 'scenario must be key=value pairs joined by &, with plain keys and values',
+  })
+  .refine(
+    (scenario) =>
+      scenario
+        .split('&')
+        .every((pair) => !(PLAYABLE_RESERVED_PARAMS as readonly string[]).includes(pair.slice(0, pair.indexOf('=')))),
+    { message: `scenario must not set ${PLAYABLE_RESERVED_PARAMS.join(', ')}` },
+  );
+export const OptionPlayable = z
+  .object({
+    scenario: PlayableScenario,
+    seconds: z.number().int().min(2).max(30).default(DEFAULT_PLAYABLE_SECONDS),
+    lead_in: z
+      .string()
+      .regex(/^[a-z0-9_-]{1,32}$/)
+      .optional(),
+    branch: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,64}$/)
+      .optional(),
+  })
+  .strict();
+
 export const ChatCheckpointOption = z.object({
   id: z.string(),
   label: z.string(),
   media_id: z.string().optional(),
   provenance: OptionProvenance.optional(),
+  playable: OptionPlayable.optional(),
 });
 
 // `decision_id` is "" until OGM-082 correlates it; `media_id` names a BuildChatMessage.id in the same job.
@@ -117,6 +156,7 @@ export const CheckpointOpenPayload = z
           label: z.string().trim().min(1).max(200),
           media_id: ChatMessageId.optional(),
           provenance: OptionProvenance.optional(),
+          playable: OptionPlayable.optional(),
         }),
       )
       .min(2)
@@ -182,6 +222,7 @@ export type ChatCheckpoint = z.infer<typeof ChatCheckpoint>;
 export type ChatCheckpointOption = z.infer<typeof ChatCheckpointOption>;
 export type OptionAspect = z.infer<typeof OptionAspect>;
 export type OptionProvenance = z.infer<typeof OptionProvenance>;
+export type OptionPlayable = z.infer<typeof OptionPlayable>;
 export type ChatAttachment = z.infer<typeof ChatAttachment>;
 export type AgentOutboxLine = z.infer<typeof AgentOutboxLine>;
 export type CheckpointOpenPayload = z.infer<typeof CheckpointOpenPayload>;
@@ -194,6 +235,7 @@ export const chatSchemas = {
   'chat.outbox-line.v1': AgentOutboxLine,
   'chat.checkpoint-open-payload.v1': CheckpointOpenPayload,
   'chat.option-provenance.v1': OptionProvenance,
+  'chat.option-playable.v1': OptionPlayable,
   'chat.post-payload.v1': ChatPostPayload,
   'chat.post.v1': ChatPostBody,
   'chat.messages.v1': ChatMessagesPage,

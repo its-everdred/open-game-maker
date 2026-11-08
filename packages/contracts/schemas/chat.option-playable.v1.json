@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "scenario": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 300
+    },
+    "seconds": {
+      "default": 8,
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 30
+    },
+    "lead_in": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{1,32}$"
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    }
+  },
+  "required": [
+    "scenario",
+    "seconds"
+  ],
+  "additionalProperties": false,
+  "$id": "https://open-game-maker-2000.local/schemas/chat.option-playable.v1.json"
+}
