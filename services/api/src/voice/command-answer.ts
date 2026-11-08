@@ -4,6 +4,8 @@ import { schema } from '@ogm/db';
 import { and, eq } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
+import { findCheckpoint } from '../build-chat/store.js';
+import { answerCheckpoint } from '../checkpoints/answer.js';
 import { parseCommandOptions, type CommandOption } from '../checkpoints/options.js';
 import { jobFor } from './briefing-push.js';
 
@@ -57,6 +59,31 @@ export async function answerVoiceCommand(
   const option = available.length === 0 ? null : selectedOption(available, request.choice);
   if (available.length > 0 && option === null) return { status: 'failed' };
 
+  // A Command the build chat holds is answered through the same path a click takes, so a spoken answer and a clicked
+  // one leave one record: the chat row the inbox reads, the job's inbox, the design decision history and aiur.
+  const chatJob = option === null ? null : await deps.registry.chatJobs?.get(job.id);
+  const row = chatJob ? findCheckpoint(deps.sqlite, job.id, command.decisionId) : null;
+  if (chatJob && row && option) {
+    let outcome;
+    try {
+      outcome = await answerCheckpoint({
+        deps,
+        job: chatJob,
+        row,
+        optionId: option.id,
+        source: 'player',
+        channel: 'voice',
+      });
+    } catch (error) {
+      deps.log({ event: 'voice-command-answer-failed', jobId: job.id, error: (error as Error).name });
+      return { status: 'failed' };
+    }
+    if (outcome.kind === 'conflict') return { status: 'stale' };
+    if (outcome.kind !== 'answered' && outcome.kind !== 'superseded') return { status: 'failed' };
+    closeCommand(deps, command.decisionId);
+    return { status: 'answered' };
+  }
+
   try {
     const client = await deps.aiurClientForGame(job.gameId);
     await client.decide(command.decisionId, {
@@ -74,10 +101,14 @@ export async function answerVoiceCommand(
     return { status: 'failed' };
   }
 
+  closeCommand(deps, command.decisionId);
+  return { status: 'answered' };
+}
+
+function closeCommand(deps: AppDeps, decisionId: string): void {
   deps.db
     .update(schema.checkpoints)
     .set({ status: 'answered', answeredAt: new Date().toISOString() })
-    .where(and(eq(schema.checkpoints.decisionId, command.decisionId), eq(schema.checkpoints.status, 'open')))
+    .where(and(eq(schema.checkpoints.decisionId, decisionId), eq(schema.checkpoints.status, 'open')))
     .run();
-  return { status: 'answered' };
 }

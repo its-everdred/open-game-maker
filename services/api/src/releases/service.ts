@@ -6,6 +6,8 @@ import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { AppDeps } from '../app/types.js';
 import type { BaseDocSource } from '../design/base-doc.js';
 import { readChain, stableId } from '../design/store.js';
+import { scanBuild } from '../gameplay/paid-integrations.js';
+import { paidApisDuringGameplay } from '../gameplay/policy.js';
 import type { CommitClient } from './commit-client.js';
 import { ReleaseError } from './errors.js';
 import {
@@ -281,6 +283,14 @@ function appendRelease(
     .immediate();
 }
 
+// A release is what players run: it holds no provider credential, and names no paid provider while paid APIs during
+// gameplay are off (a build ingested while they were on is refused once they are off).
+async function requireGameplayCompliant(deps: AppDeps, artifactPath: string): Promise<void> {
+  const integrations = await scanBuild(artifactPath);
+  if (integrations.credentials.length > 0) throw new ReleaseError('provider_credential', 422);
+  if (integrations.paid.length > 0 && !paidApisDuringGameplay(deps.db)) throw new ReleaseError('paid_integration', 422);
+}
+
 export async function publish(
   deps: AppDeps,
   runtime: ReleaseRuntime,
@@ -288,6 +298,7 @@ export async function publish(
 ): Promise<Release> {
   const { build, game } = requireMainBuild(deps, input.gameId, input.buildId);
   const expected = game.publishedReleaseId;
+  await requireGameplayCompliant(deps, build.artifactPath);
   const rights = await runtime.checkRights(build.artifactPath, game.repoVisibility);
   if (rights.length) throw new ReleaseError('rights', 422, { rights });
   return withPublishLock(deps, input.gameId, async () => {
@@ -331,7 +342,8 @@ export async function rollback(
   input: { gameId: string; releaseId: string; actor: string },
 ): Promise<Release & { affectedSaves: number | null }> {
   const { game, target, snapshot, build } = requireRollbackTarget(deps, input.gameId, input.releaseId);
-  /* The repo may have gone public since the restored release was checked. */
+  /* Paid APIs may have been turned off, and the repo may have gone public, since the restored release was checked. */
+  await requireGameplayCompliant(deps, build.artifactPath);
   const rights = await runtime.checkRights(build.artifactPath, game.repoVisibility);
   if (rights.length) throw new ReleaseError('rights', 422, { rights });
   const foldSha = snapshot.foldSha;

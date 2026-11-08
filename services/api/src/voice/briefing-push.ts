@@ -1,5 +1,5 @@
 import type { BriefingPush, VoiceTarget } from '@ogm/contracts';
-import { schema, type Db } from '@ogm/db';
+import { schema, type Db, type Sqlite } from '@ogm/db';
 import { and, asc, eq } from 'drizzle-orm';
 
 import type { AppEvents } from '../app/events.js';
@@ -8,6 +8,7 @@ import { getBudgetSettings, type BudgetDefaults } from '../budget/settings.js';
 import { budgetStatus } from '../budget/status.js';
 import { toUnits } from '../budget/units.js';
 import { parseCommandOptions } from '../checkpoints/options.js';
+import { decisionFocus } from './decision-focus.js';
 
 export type { VoiceTarget } from '@ogm/contracts';
 
@@ -23,7 +24,9 @@ export type Briefing = BriefingPush & {
   observed_at: string;
 };
 
-export type BriefingDeps = { db: Db; defaults: BudgetDefaults; now?: () => Date };
+// `sqlite` reads the build chat's checkpoint rows, which carry each option's media; without it an open decision is
+// still named first, only without its cards' media.
+export type BriefingDeps = { db: Db; sqlite?: Sqlite; defaults: BudgetDefaults; now?: () => Date };
 
 export type PushDeps = BriefingDeps & {
   url: string;
@@ -140,11 +143,19 @@ export async function buildBriefing(deps: BriefingDeps, target: VoiceTarget): Pr
         .orderBy(asc(schema.checkpoints.openedAt))
         .all()
     : [];
-  const questions = commandRows.map(({ question }) => question);
-  const commands = commandRows.flatMap(({ id, version, question, options }) => {
+  // Voice started from a decision (#597) puts that decision first and tells the agent what its cards are.
+  const focusId = target.kind === 'build' ? target.command_id : undefined;
+  const ordered = [
+    ...commandRows.filter(({ id }) => id === focusId),
+    ...commandRows.filter(({ id }) => id !== focusId),
+  ];
+  const questions = ordered.map(({ question }) => question);
+  const commands = ordered.flatMap(({ id, version, question, options }) => {
     const parsed = parseCommandOptions(options);
     return parsed === null ? [] : [{ id, version, question, options: parsed.map(({ id, label }) => ({ id, label })) }];
   });
+  const focused = job && focusId !== undefined ? commands.find(({ id }) => id === focusId) : undefined;
+  const focus = job && focused ? decisionFocus(deps.sqlite, job.id, focused) : undefined;
   let budget: { remaining: string; sizes: string } | undefined;
   try {
     budget = budgetText(deps, familyId, target.creator_id, now);
@@ -171,7 +182,7 @@ export async function buildBriefing(deps: BriefingDeps, target: VoiceTarget): Pr
     ...(waitingOn ? { waiting_on: waitingOn } : {}),
     questions,
     commands,
-    extra: budgetSummary ? [{ title: 'Budget', text: budgetSummary }] : [],
+    extra: [...(focus ? [focus] : []), ...(budgetSummary ? [{ title: 'Budget', text: budgetSummary }] : [])],
     sections,
     observed_at: now.toISOString(),
   };
