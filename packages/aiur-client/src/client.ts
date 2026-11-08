@@ -1,6 +1,7 @@
 import { AiurConfigError, AiurHttpError, AiurUnavailableError } from './errors.js';
 import {
   CancelResultSchema,
+  CommandScopeSchema,
   ControlResultSchema,
   DecisionMutationSchema,
   DecisionPageSchema,
@@ -54,6 +55,18 @@ export type DecisionQuery = {
 export type DecisionAnswer = DecisionReasoning &
   ({ option: string; response?: string } | { option?: never; response: string });
 
+// A creator's own answer to a Command, sent as the creator rather than as the supervising agent: aiur refuses a
+// supervisor answer to a decision only a human may take (403 on `decide`). One of `option` or `response` (aiur calls
+// both together ambiguous); a review deck's like/dislike map is the `response`.
+export type CreatorAnswer = {
+  // The Command's ticket, which the short-lived grant is scoped to, and who the creator is in OGM.
+  ticket: string;
+  principal: string;
+  expected_version: number;
+  idempotency_key: string;
+  rationale?: string;
+} & ({ option: string; response?: never } | { option?: never; response: string });
+
 // One Command media file as aiur serves it. `body` is the response stream; the caller must read or cancel it. The
 // request's `signal` also aborts the body read, so a stalled transfer ends when it fires.
 export type DecisionMediaFile = { mime: string; body: ReadableStream<Uint8Array> };
@@ -77,9 +90,10 @@ export interface AiurClient {
   accounts(): Promise<UsageAccounts>;
   events(after: number, limit: number, patterns: string[]): Promise<EventPage>;
   eventsToken(): Promise<{ token: string; expires_in_seconds: number }>;
-  decisions(query?: DecisionQuery): Promise<Decision[]>;
+  decisions(query?: DecisionQuery, signal?: AbortSignal): Promise<Decision[]>;
   decision(id: string): Promise<Decision>;
   decide(id: string, answer: DecisionAnswer): Promise<Decision>;
+  answerAsCreator(id: string, answer: CreatorAnswer): Promise<void>;
   decisionMedia(id: string, attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile>;
   healthz(): Promise<boolean>;
 }
@@ -92,6 +106,8 @@ type RequestOptions = {
   body?: unknown;
   write?: boolean;
   supervisor?: boolean;
+  // A Command scope grant to send instead of the daemon's own tokens.
+  bearer?: string;
   allowStatuses?: number[];
   signal?: AbortSignal;
   // Leave a successful response's body unread so the caller can stream it.
@@ -114,7 +130,7 @@ export function createAiurClient(
     path: string,
     request: RequestOptions = {},
   ): Promise<{ response: Response; body: unknown }> {
-    const token = request.supervisor ? daemon.supervisorToken : daemon.token;
+    const token = request.bearer ?? (request.supervisor ? daemon.supervisorToken : daemon.token);
     if (!token) throw new AiurConfigError('A supervisor token is required for Decision API calls');
 
     const headers = new Headers({ authorization: `Bearer ${token}`, accept: 'application/json' });
@@ -231,7 +247,7 @@ export function createAiurClient(
       const { body } = await fetchResponse('POST', '/api/v1/events/token', { write: true });
       return EventsTokenSchema.parse(body);
     },
-    async decisions(query = {}) {
+    async decisions(query = {}, signal) {
       const params = new URLSearchParams();
       if (query.ticket !== undefined) params.set('ticket', query.ticket);
       if (query.kind !== undefined) params.set('kind', query.kind);
@@ -240,7 +256,11 @@ export function createAiurClient(
       if (query.limit !== undefined) params.set('limit', String(query.limit));
       if (query.cursor !== undefined) params.set('cursor', query.cursor);
       const suffix = params.size === 0 ? '' : `?${params.toString()}`;
-      const { body } = await fetchResponse('GET', `/api/v1/decisions${suffix}`, { supervisor: true, write: true });
+      const { body } = await fetchResponse('GET', `/api/v1/decisions${suffix}`, {
+        supervisor: true,
+        write: true,
+        signal,
+      });
       return DecisionPageSchema.parse(body).decisions;
     },
     async decision(id) {
@@ -262,6 +282,25 @@ export function createAiurClient(
         supervisor: true,
       });
       return DecisionMutationSchema.parse(body).decision;
+    },
+    // The creator answers through aiur's Commands host API: the supervisor credential mints a one-minute grant for the
+    // Command's ticket, and the answer goes out under that grant, so aiur records it as the creator's own.
+    async answerAsCreator(id, { ticket, principal, option, response, ...answer }) {
+      const { body } = await fetchResponse('POST', '/api/v1/commands/scope', {
+        body: { principal, tickets: [ticket], expires_in: 60 },
+        write: true,
+        supervisor: true,
+      });
+      const { token } = CommandScopeSchema.parse(body);
+      await fetchResponse('POST', `/api/v1/commands/${encodeURIComponent(id)}/answer`, {
+        body: {
+          ...answer,
+          ...(option === undefined ? {} : { option_id: option }),
+          ...(response === undefined ? {} : { custom_response: response }),
+        },
+        write: true,
+        bearer: token,
+      });
     },
     async decisionMedia(id, attachmentId, signal) {
       const { response } = await fetchResponse(

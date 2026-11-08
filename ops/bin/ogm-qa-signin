@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# OGM QA sign-in: mint a Playwright storage state for the QA test account, so headless capture of the app shell
+# (`gm run --app`, the Executor's shell-shots.mjs with STORAGE=…) plays signed in instead of landing on Sign in.
+#
+# usage: ogm-qa-signin [--email <address>] [--origin <app origin>] [--out <file>]
+#
+#   --email   the QA account (default: the first OGM_QA_EMAILS address in api.env)
+#   --origin  the app origin to sign in to (default: OGM_APP_ORIGIN in api.env)
+#   --out     the storage state (default: ~/.config/ogm/qa/storage.json; the directory is 700, the file 600)
+#
+# Asks the app for a magic link, reads it from the admin inbox (the API keeps OGM_QA_EMAILS mail there even with SMTP
+# on), opens it in Chromium and saves the signed-in state. A pending member invitation to the address is accepted on the
+# way, which is how the QA account joins the family: invite it once from Admin › Invites, then run this. Sessions last
+# 7 days; run it again when capture lands on Sign in. Prints the account and its family, never the cookie.
+#
+# exit 0 saved; 1 sign-in failed; 64 bad usage; 65 no address, origin or database.
+
+set -uo pipefail
+
+usage() {
+  printf 'usage: ogm-qa-signin [--email <address>] [--origin <app origin>] [--out <file>]\n' >&2
+  exit 64
+}
+
+email=
+origin=
+out=
+while (($#)); do
+  case $1 in
+    --email | --origin | --out)
+      [[ $# -ge 2 ]] || usage
+      declare "${1#--}=$2"
+      shift 2
+      ;;
+    *) usage ;;
+  esac
+done
+
+fail() {
+  printf 'ogm-qa-signin: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+env_dir=${OGM_ENV_DIR:-$HOME/.config/ogm/env}
+# Read one name out of api.env without sourcing it: the file also holds secrets.
+env_value() {
+  grep -E "^$1=" "$env_dir/api.env" 2> /dev/null | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true
+}
+
+qa_emails=${OGM_QA_EMAILS:-$(env_value OGM_QA_EMAILS)}
+email=${email:-${qa_emails%%,*}}
+origin=${origin:-${OGM_APP_ORIGIN:-$(env_value OGM_APP_ORIGIN)}}
+data_dir=${OGM_DATA_DIR:-$(env_value OGM_DATA_DIR)}
+db=$data_dir/ogm.sqlite3
+out=${out:-$HOME/.config/ogm/qa/storage.json}
+[[ -n $email ]] || fail "no QA address: set OGM_QA_EMAILS in $env_dir/api.env or pass --email" 65
+[[ -n $origin ]] || fail "no app origin: set OGM_APP_ORIGIN in $env_dir/api.env or pass --origin" 65
+[[ -n $data_dir && -f $db ]] || fail "no database at $db: set OGM_DATA_DIR in $env_dir/api.env" 65
+
+dir=$(dirname -- "$out")
+mkdir -p "$dir" && chmod 700 "$dir" || fail "cannot create $dir" 65
+
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+QA_EMAIL=$email QA_ORIGIN=${origin%/} QA_DB=$db QA_OUT=$out QA_REPO=$repo \
+  node --input-type=module - << 'NODE' || exit 1
+import { chmodSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const { QA_EMAIL: email, QA_ORIGIN: origin, QA_DB: dbPath, QA_OUT: out, QA_REPO: repo } = process.env;
+const { chromium } = createRequire(`${repo}/packages/gm-verify/package.json`)('playwright');
+const Database = createRequire(`${repo}/packages/db/package.json`)('better-sqlite3');
+
+const fail = (message) => {
+  console.error(`ogm-qa-signin: ${message}`);
+  process.exit(1);
+};
+const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+const unopened = db.prepare(
+  'SELECT id, text, created_at FROM mail_outbox WHERE lower("to") = lower(?) AND opened_at IS NULL ORDER BY created_at DESC',
+);
+const newest = (pattern, since) => {
+  for (const row of unopened.all(email)) {
+    const match = row.created_at >= since ? pattern.exec(row.text) : null;
+    if (match) return match[0];
+  }
+  return null;
+};
+
+const browser = await chromium.launch();
+try {
+  const context = await browser.newContext();
+  const headers = { origin, 'content-type': 'application/json' };
+  const asked = new Date().toISOString();
+  const sent = await context.request.post(`${origin}/auth/sign-in/magic-link`, {
+    headers,
+    data: { email, callbackURL: `${origin}/` },
+    failOnStatusCode: false,
+  });
+  if (!sent.ok()) fail(`the app refused a sign-in link for ${email} (${sent.status()})`);
+
+  // The API answers the same whether or not it sent a link, so the inbox is the only proof one went out.
+  const link = new RegExp(`${origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/auth/magic-link/verify\\?\\S+`);
+  let url = null;
+  for (let i = 0; i < 40 && url === null; i++) {
+    url = newest(link, asked);
+    if (url === null) await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (url === null)
+    fail(`no sign-in link for ${email} in the admin inbox: is it on the allow list and in OGM_QA_EMAILS (api.env)?`);
+
+  const page = await context.newPage();
+  await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
+
+  const whoami = async () => {
+    const me = await context.request.get(`${origin}/api/v1/me`, { failOnStatusCode: false });
+    if (!me.ok()) fail(`the sign-in link did not sign ${email} in (/api/v1/me answered ${me.status()})`);
+    return me.json();
+  };
+  let { user, family } = await whoami();
+  const invite = family ? null : newest(/\/join\/([A-Za-z0-9_-]+)/, '');
+  if (invite !== null) {
+    const token = invite.split('/').pop();
+    const accepted = await context.request.post(`${origin}/api/v1/invites/${encodeURIComponent(token)}/accept`, {
+      headers,
+      failOnStatusCode: false,
+    });
+    console.log(`invitation ${accepted.ok() ? 'accepted' : `not accepted (${accepted.status()})`}`);
+    ({ user, family } = await whoami());
+  }
+  writeFileSync(out, `${JSON.stringify(await context.storageState(), null, 1)}\n`, { mode: 0o600 });
+  chmodSync(out, 0o600);
+  console.log(`${user.email} signed in to ${origin}; family: ${family ? family.name : 'none (invite it from Admin › Invites, then run this again)'}`);
+  console.log(`storage state ${out}`);
+} finally {
+  await browser.close();
+  db.close();
+}
+NODE

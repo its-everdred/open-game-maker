@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { CreditsDocument, PlayerSettings, SaveData, SaveListQuery, SaveSlot } from '@ogm/contracts/browser';
 
@@ -34,6 +35,8 @@ type PlatformHudProps = {
   build: 'draft' | 'published';
   frame: GameFrameController;
   gameId: string;
+  /** Host space outside the game (the play bar) that holds the Pause button, so it never covers the game. */
+  pauseSlot: HTMLElement | null;
   saveContext: SaveContext;
   saves: boolean;
   /** The running build's save schema; absent when the build did not report one. */
@@ -59,6 +62,7 @@ export function PlatformHud({
   build,
   frame,
   gameId,
+  pauseSlot,
   saveContext,
   saves,
   saveSchema,
@@ -205,9 +209,20 @@ export function PlatformHud({
 
   return (
     <div className="platform-hud">
-      <button ref={pauseRef} className="platform-pause tap-primary" type="button" onClick={pause}>
-        Pause
-      </button>
+      {pauseSlot
+        ? createPortal(
+            <button
+              ref={pauseRef}
+              className="platform-pause tap-primary"
+              type="button"
+              disabled={paused}
+              onClick={pause}
+            >
+              Pause
+            </button>,
+            pauseSlot,
+          )
+        : null}
       {paused ? (
         <div className="platform-pause-shade">
           <div

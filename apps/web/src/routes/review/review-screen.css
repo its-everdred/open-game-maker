@@ -4,6 +4,8 @@
   position: fixed;
   inset: 0;
   z-index: 40;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   background: var(--glow-night);
   color: var(--ink);
@@ -93,7 +95,8 @@
 }
 
 .review-screen-question {
-  margin: 16px 0 0;
+  flex: none;
+  margin: 12px 0 0;
   color: var(--muted);
   font: 700 clamp(15px, 2vw, 17px) / 1.4 var(--display);
 }
@@ -123,8 +126,89 @@
   font-weight: 700;
 }
 
+/* Two-way voice about the open decision. It lives in the header, so it never covers the cards or the options;
+   a live call keeps the button lit until it is pressed again. */
+.review-screen-voice {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--tap-secondary);
+  height: var(--tap-secondary);
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--paper-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.review-screen-voice .icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.review-screen-voice.is-live {
+  border-color: var(--ink);
+  background: var(--orange);
+  color: var(--night-2);
+}
+
+.review-screen-change {
+  min-height: var(--tap-secondary);
+  padding: 0 20px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 700 15px/1 var(--display);
+  cursor: pointer;
+}
+
 .review-screen-steps {
   display: flex;
   justify-content: center;
   gap: 28px;
+}
+
+/* The deck's screen fits the phone it is on: the header, the card at the largest size that fits, the controls
+   and the question line, with nothing to scroll in portrait or landscape. */
+.review-screen-deck {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding-block: clamp(8px, 2.5vh, 40px) max(12px, var(--safe-b));
+}
+
+.review-screen-deck .review-deck {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.review-screen-deck .review-deck-stage {
+  flex: 1 1 auto;
+}
+
+/* A phone on its side has height to spare only for the card: the controls stand beside it. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .review-screen-deck {
+    width: calc(100% - 2 * max(16px, var(--safe-l), var(--safe-r)));
+  }
+
+  .review-screen-deck .review-deck {
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .review-screen-deck .review-deck-side {
+    align-content: center;
+  }
+
+  .review-screen-deck .review-deck-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
 }

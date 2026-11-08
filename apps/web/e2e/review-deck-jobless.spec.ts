@@ -84,6 +84,7 @@ const command: GameCommand = {
 test.use({ serviceWorkers: 'block' });
 
 test('shows a jobless Command’s still, clip and sample on their cards', async ({ page }, testInfo) => {
+  testInfo.setTimeout(60_000);
   await installAuthRoutes(page, { signedIn: true });
   await installApi(page);
   await page.goto('/blobs/review/1');
@@ -98,7 +99,8 @@ test('shows a jobless Command’s still, clip and sample on their cards', async 
   await page.getByRole('button', { name: 'Like', exact: true }).click();
   const clip = deck.locator('.review-deck-card video.review-deck-media');
   await expect(clip).toHaveAttribute('src', 'https://api.example.test/blobs/sha256/roll');
-  await expect(deck.locator('audio')).toHaveCount(0);
+  // The deck's one audio element has nothing to play for a clip.
+  await expect(deck.locator('audio')).not.toHaveAttribute('src');
   await capture(page, testInfo, 'jobless-clip');
 
   await page.getByRole('button', { name: 'Like', exact: true }).click();

@@ -36,7 +36,8 @@ gm check [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--serve <dir>] [--out <dir>] [--json]
-gm run [--inputs <script.json>] [--frames <seconds,...>] [--timeline <from:to:step>] [--out <dir>]
+gm run [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
+gm look sheet <screen> --still <png> [--target <png>]
 gm look check [--json]
 ```
 
@@ -55,12 +56,26 @@ keys without exposing values. Use `gm help run` for viewport, recording, rig, an
 records the game canvas at its pixel size, scaled up only by a whole-number factor, rendering every frame through the
 game's deterministic hook so a clip holds exactly duration x fps frames.
 
+By default `gm run` captures the play screen as a player sees it: the build mounted through `@gm/host` (the app's own
+touch overlay, viewport tracking and bridge) under a copy of the app's top bar and Pause, styled with the app's own
+stylesheets, at 390x844, 844x390, 820x1180 and 1180x820 with touch on (`--viewport touch`). `--viewport all` adds the
+1440x900 desktop, and one name (`phone`, `phone-landscape`, `tablet`, `tablet-landscape`, `desktop`) captures only it.
+`--frame app` captures inside the real signed-in app instead: it opens `/play/<gm.manifest.json id>` on
+`OGM_APP_ORIGIN` (or `--app <play url>`) with the QA account's Playwright storage state (`--storage`, `OGM_QA_STORAGE`,
+default `~/.config/ogm/qa/storage.json`, minted on the host by `ops/bin/ogm-qa-signin`) and answers the app's requests
+for the game build from `./dist`. `--frame bare` captures the game page alone, as before.
+
 `gm look check` gates the PR on the vision look requests (`gm-image-mock`, `request-mock.py --kind look`), which log
 each answer or broker error to `.gm-mock/looks.jsonl` with the git blob id of every image they judged. It judges each
 `tN.png` still committed at HEAD in the game folder, or, when none is committed (an instance repository ignores
 `*.png`), each `tN.png` rendered there. The newest look on exactly those bytes decides: its answer's last line must be
 `VERDICT: pass`. A `VERDICT: fail`, an answer that does not end in a verdict, no look on those bytes, or no stills at all
 exits 1. A broker error or timeout (for example a 402) is reported as `blocked` and also exits 1; it is never a pass.
+
+A game records the render the creator approved for each screen in `review/decisions.json`
+(`{"screens": {"select": {"target": "review/mock-matrix/select.png"}}}`). `gm look sheet <screen> --still <png>` puts the
+still beside that target (`--target` overrides it) at one height in `look/<screen>.sheet.png`, and `gm look check`
+judges every such sheet like a still: a screen with no sheet, or whose sheet's newest look reads a mismatch, exits 1.
 
 ## Refresh the skill pack
 
@@ -99,13 +114,17 @@ an unknown topic exits 2 with a list hint. Pattern retrieval is offline and neve
 ```text
 gm chat post --job <id> --text "<one line>" [--image <png>]
 gm chat post --job <id> --text "<one line>" --clip <mp4> --poster <png>
-gm checkpoint open --job <id> --question "<question>" --option <id>=<label> --option <id>=<label> [--media <id>=<chat-message-id>] [--provenance <id>=<json|@file>] [--recommend <id>] [--blocking]
+gm checkpoint open [--job <id>] --question "<question>" --option <id>=<label> --option <id>=<label> [--media <id>=<chat-message-id>] [--playable <id>=<scenario query>] [--seconds <id>=<n>] [--lead-in <id>=<move>] [--branch <name>] [--provenance <id>=<json|@file>] [--recommend <id>] [--blocking]
 gm checkpoint wait <checkpoint-id|decision-id> [--timeout <seconds>]
 ```
 
 `gm chat post` copies media into `.gm/outbox/media/` and prints the chat message id. `gm checkpoint open` prints
 the checkpoint id and the `decision.requested` `emit_event` call the agent must make. `gm checkpoint wait` prints
 the selected option id, exits 3 on timeout, and exits 4 when the checkpoint becomes moot.
+
+Without a build job (no `--job`, `GM_JOB` or `.gm/context/job.json`), `gm checkpoint open` writes nothing to the outbox
+and refuses `--media`; the printed call carries each `--playable` slice, so the Command shows as playable cards in the
+game's review deck (see `packages/gm-cli/src/commands/checkpoint/README.md`). `gm decide` does the same.
 
 `--provenance <id>=<json|@file>` records what an option was built from — the packs and assets it used, its generator,
 when it was built, and its design aspect, kind, and view. The ledger check reads it; a game that carries a ledger
@@ -241,6 +260,7 @@ of its `sprite.directions` list, in the order its sheet rows or per-direction fi
 
 ```text
 gm assets use <id...> [--vendor]
+gm assets unused [--json]
 gm assets vendor <id...>
 gm assets register <path> --made-by-agent [--from <id>...] --game <id>
 ```
@@ -248,7 +268,15 @@ gm assets register <path> --made-by-agent [--from <id>...] --game <id>
 `gm assets use` normally records library references in `assets.lock.json` without copying bytes into the game repo.
 It refuses a card whose pack cannot supply `license`, `license_source`, explicit `attribution`, and `source` metadata.
 Every accepted entry copies that metadata into the lock and regenerates `CREDITS.md`. `gm check assets` rejects older or
-hand-edited entries that omit it.
+hand-edited entries that omit it. Each entry also names the curated set its pack belongs to (`set`), when it has one.
+
+`assets.lock.json` is the game's asset list: the build ships only what it lists. `gm check assets`, and so
+`gm build assets` and `gm publish`, fail on an asset id that the game's `src/` or `index.html` names in a string
+literal but the list lacks, naming the id and the file; `gm publish` checks this before it builds. Comments and test
+files (`*.test.*`, `*.spec.*`) are not read. `gm assets unused` lists entries whose id or path nothing there names
+any more; an id built at runtime in a template literal (`` `t3:${game}/voice/${line}` ``) counts as naming every entry
+it can match, but it never fails a build.
+
 Use `gm assets vendor` to materialise an already-locked asset under `assets/`; the command verifies every pinned hash
 and updates the lock source to `vendored`. Only assets whose effective rights allow free redistribution can be
 vendored. The command names each refused id and leaves that entry as a library or blob reference.

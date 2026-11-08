@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { Link, matchPath, useLocation } from 'react-router';
 
-import { JOB_STAGE_WORDS, type Job } from '@ogm/contracts/browser';
+import { JOB_STAGE_WORDS, type CreatorCommand, type Job } from '@ogm/contracts/browser';
 
 import { Icon } from '../components/Icon';
 import { MenuRing } from '../components/MenuCircle';
@@ -19,6 +19,8 @@ import { JobConversationModal } from '../features/build-chat/JobConversationModa
 import { openConversation } from '../features/build-chat/conversation';
 import { resetReviewDrafts } from '../features/commands-inbox/drafts';
 import { isTerminal, useMyJobs } from '../features/build-chat/jobs';
+import { DecisionDeck } from '../features/commands-inbox/DecisionDeck';
+import { useCreatorCommands } from '../features/commands-inbox/commands';
 import { signOut } from '../lib/api/auth';
 import { useSession } from '../lib/api/session';
 import { getVolume, onChange, setMuted, setVolume, status } from '../lib/sound';
@@ -41,6 +43,7 @@ export function StudioMenu() {
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
   const builds = useMyJobs();
+  const decisions = useCreatorCommands(creatorId);
   const sound = useSyncExternalStore(onChange, status);
   const [open, setOpen] = useState(false);
   const [volume, setLocalVolume] = useState(getVolume);
@@ -49,13 +52,17 @@ export function StudioMenu() {
   const [signingOut, setSigningOut] = useState(false);
   const [sheet, setSheet] = useState<Sheet>();
   const bugDraft = useBugDraft();
+  // The deck belongs to the creator who opened it: another account signed in on this device never sees it.
+  const [deck, setDeck] = useState<{ creatorId: string; command: CreatorCommand }>();
   const game = matchPath('/g/:gameId/*', location.pathname);
   const gameId = game?.params.gameId;
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
   const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
-  const outstandingRequests = visibleBuilds.reduce((total, job) => total + (job.openRequestCount ?? 0), 0);
+  // The badge counts every open player-facing decision across the creator's games; red when one blocks its build.
+  const openDecisions = decisions.commands.length;
+  const blocked = decisions.commands.some((command) => command.blocking);
 
   useEffect(() => {
     if (!open) return;
@@ -74,6 +81,10 @@ export function StudioMenu() {
       document.removeEventListener('keydown', escape);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (deck && deck.creatorId !== creatorId) setDeck(undefined);
+  }, [creatorId, deck]);
 
   useEffect(() => {
     if (!creatorId) return;
@@ -117,22 +128,23 @@ export function StudioMenu() {
 
   // Nearest the menu button first; the row runs right to left.
   const circles: ReactElement[] = [];
-  if (outstandingRequests > 0) {
+  if (openDecisions > 0) {
     circles.push(
       <button
         key="decisions"
         type="button"
         className="menu-circle"
         data-action-needed="true"
-        aria-label={`Decisions: ${outstandingRequests}`}
+        data-blocking={blocked}
+        aria-label={`Decisions: ${openDecisions}`}
         aria-expanded={sheet === 'decisions'}
-        aria-controls="studio-menu-builds"
+        aria-controls="studio-menu-decisions"
         onClick={() => toggleSheet('decisions')}
       >
         <MenuRing percent={100} />
         <Icon name="decisions" />
         <span className="studio-menu-badge" aria-hidden="true">
-          {outstandingRequests}
+          {openDecisions}
         </span>
       </button>,
     );
@@ -230,7 +242,31 @@ export function StudioMenu() {
     );
   } else if (sheet === 'energy' && session) {
     sheetContent = <EnergyDetail close={close} />;
-  } else if ((sheet === 'builds' || sheet === 'decisions') && buildGroups.length > 0) {
+  } else if (sheet === 'decisions' && openDecisions > 0) {
+    sheetContent = (
+      <ul id="studio-menu-decisions" className="studio-menu-decisions" aria-label="Decisions">
+        {decisions.commands.map((command) => (
+          <li key={`${command.game_id}:${command.decision_id}`}>
+            <button
+              className="studio-menu-job"
+              data-action-needed="true"
+              data-blocking={command.blocking}
+              type="button"
+              aria-label={`${command.summary ?? command.title}, ${command.game_title}`}
+              onClick={() => {
+                /* The deck returns focus to the menu button, not to this row, which closing the menu removes. */
+                trigger.current?.focus();
+                close();
+                if (creatorId) setDeck({ creatorId, command });
+              }}
+            >
+              <strong>{command.summary ?? command.title}</strong>
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+  } else if (sheet === 'builds' && buildGroups.length > 0) {
     sheetContent = (
       <ul id="studio-menu-builds" className="studio-menu-builds" aria-label="Build progress">
         {buildGroups.map((group) => (
@@ -287,8 +323,9 @@ export function StudioMenu() {
         type="button"
         className="studio-menu-button"
         data-building={buildingJobs.length > 0}
+        data-blocking={blocked}
         aria-label="Menu"
-        aria-describedby={outstandingRequests > 0 ? 'studio-menu-requests' : undefined}
+        aria-describedby={openDecisions > 0 ? 'studio-menu-requests' : undefined}
         aria-expanded={open}
         aria-controls="studio-menu-panel"
         onClick={() => {
@@ -298,15 +335,15 @@ export function StudioMenu() {
       >
         <span className="studio-menu-ring" aria-hidden="true" />
         <Icon name="menu" />
-        {outstandingRequests > 0 && !open ? (
+        {openDecisions > 0 && !open ? (
           <span className="studio-menu-badge" aria-hidden="true">
-            {outstandingRequests}
+            {openDecisions}
           </span>
         ) : null}
       </button>
-      {outstandingRequests > 0 ? (
+      {openDecisions > 0 ? (
         <span id="studio-menu-requests" className="sr">
-          {outstandingRequests} {outstandingRequests === 1 ? 'request needs' : 'requests need'} your attention
+          {openDecisions} {openDecisions === 1 ? 'decision needs' : 'decisions need'} your answer
         </span>
       ) : null}
       <span className="sr" role="status" aria-live="polite">
@@ -325,6 +362,9 @@ export function StudioMenu() {
         </div>
       ) : null}
       <JobConversationModal />
+      {deck && deck.creatorId === creatorId ? (
+        <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />
+      ) : null}
     </div>
   );
 }

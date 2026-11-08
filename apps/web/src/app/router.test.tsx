@@ -35,6 +35,11 @@ vi.mock('../features/build-chat/jobs', () => ({
   useMyJobs: () => ({ jobs: [], active: [], games: [] }),
 }));
 
+vi.mock('../features/commands-inbox/commands', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/commands-inbox/commands')>()),
+  useCreatorCommands: () => ({ commands: [] }),
+}));
+
 vi.mock('../routes/admin/api', () => ({
   useAdminMe: () => ({ data: undefined }),
 }));

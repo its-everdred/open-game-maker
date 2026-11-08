@@ -1,0 +1,12 @@
+/* The menu's decision modal: the job conversation's card, holding one decision at a time. */
+.decision-deck .decision-deck-body {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+}
+
+.decision-deck-next {
+  justify-self: end;
+}

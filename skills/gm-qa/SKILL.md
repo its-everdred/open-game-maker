@@ -21,7 +21,8 @@ into one run directory (`--out`, default `shots/qa`) so `gm qa look` sees the wh
    (phone, desktop, phone) join with what it read. Checks seats, the countdown within `countdownSpreadMs` on every
    client, seat 0's move seen by the others, and the last seat dropping and rejoining. Writes `room.png` (tiled) and
    `room.mp4` (stacked). `gm qa room --local` runs this game's local build through the seeded network simulator
-   (four clients, `--link bad` adds latency, loss and a drop) instead.
+   (four clients, `--link bad` adds latency, loss and a drop) instead; it runs only from a core checkout, so a game
+   instance uses `--url`. Run `gm build assets` first so the build's asset manifest names every asset.
 4. `gm qa look`: writes `look/requests.json` (at most 6 images a request) from every expect that carries `look` and
    every rule in `design/feedback.json`. Open each request's images, answer each id in `look/answers.json` with
    `{"pass": true|false, "note": "..."}`, worst defect in the note. Never answer a still you did not open.
@@ -31,9 +32,13 @@ into one run directory (`--out`, default `shots/qa`) so `gm qa look` sees the wh
 
 The Executor runs all four against a game's newest build with `ops/bin/ogm-qa <slug>` on the host.
 
+A milestone gate (`qa/gate`) fails without a `gm look sheet` per approved screen for the build under test; capture
+the signed-in app with `gm run --frame app` (storage state from `ops/bin/ogm-qa-signin` on the host).
+
 ## Journeys
 
-A journey is JSON in `games/<name>/qa/journeys/`. Points and regions are viewport fractions, so one journey fits both
+A journey is JSON in `games/<name>/qa/journeys/`. It follows a path of edges in the game's flow diagram
+(`design/flow/flow.md`), and the journeys together cover every edge. Points and regions are viewport fractions, so one journey fits both
 sizes. `{name}` is a value a `read` step saved; room journeys also have `{clients}` and `{seat}`.
 
 | Step | Does |

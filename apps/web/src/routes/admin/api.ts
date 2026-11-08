@@ -25,6 +25,7 @@ export const adminKeys = {
   users: () => ['admin', 'users'] as const,
   settings: () => ['admin', 'settings'] as const,
   budget: () => ['admin', 'budget'] as const,
+  gameplay: () => ['admin', 'gameplay'] as const,
   games: () => ['admin', 'games'] as const,
   intake: () => ['admin', 'intake'] as const,
   builds: () => ['admin', 'builds'] as const,

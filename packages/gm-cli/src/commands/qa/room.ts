@@ -18,6 +18,16 @@ export function scenarioScript(): string {
   return fileURLToPath(new URL('../scenarios/scenario.ts', import.meta.resolve('@ogm/gm-verify')));
 }
 
+/**
+ * Why `--local` cannot run from here, or undefined in a core checkout. The scenario is TypeScript that Node will not strip
+ * under `node_modules`, and it needs the rooms service and gm-verify's dev dependencies, which a game instance's vendored
+ * packages do not carry.
+ */
+export function localRoomBlocker(script: string): string | undefined {
+  if (!script.split(/[\\/]/).includes('node_modules')) return undefined;
+  return '--local runs only from an Open Game Maker core checkout, not a game instance';
+}
+
 export const command: GmCommand = {
   name: 'qa room',
   summary: 'play one room with 2-4 phone and desktop clients: seats, synced countdown, moves, drop and rejoin',
@@ -42,11 +52,14 @@ export const command: GmCommand = {
         throw new UsageError(`--local always seats ${LOCAL_CLIENTS} clients`, 'gm qa room --local');
       if (!LINKS.includes(flags.link as (typeof LINKS)[number]))
         throw new UsageError('--link must be clean or bad', 'gm qa room --local --link bad');
+      const script = scenarioScript();
+      const blocker = localRoomBlocker(script);
+      if (blocker) throw new UsageError(blocker, 'gm qa room --url <build> --journey <room.json>');
       const game = gameDir(ctx.cwd, workspaceRoot(ctx.cwd));
       const out = resolve(dir, 'room-local');
       const child = spawnSync(
         process.execPath,
-        [scenarioScript(), 'multi-client', '--game', game, '--out', out, '--link', flags.link as string],
+        [script, 'multi-client', '--game', game, '--out', out, '--link', flags.link as string],
         { cwd: ctx.cwd, encoding: 'utf8', timeout: LOCAL_TIMEOUT_MS, killSignal: 'SIGKILL' },
       );
       for (const line of `${child.stdout ?? ''}`.split('\n').filter(Boolean)) ctx.out(line);

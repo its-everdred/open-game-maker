@@ -49,6 +49,21 @@ export function jobContext(options: { cwd: string; job?: string; environmentJob?
   root: string;
   jobId: string;
 } {
+  const { root, jobId } = optionalJobContext(options);
+  if (!jobId)
+    throw new UsageError(
+      'no job id: pass --job or run inside a build workspace',
+      'gm chat post --job <id> --text "<one line>"',
+    );
+  return { root, jobId };
+}
+
+// The job when one is named (by flag, `GM_JOB` or `.gm/context/job.json`), else null: a host checkout or an aiur
+// workspace has no build job.
+export function optionalJobContext(options: { cwd: string; job?: string; environmentJob?: string | null }): {
+  root: string;
+  jobId: string | null;
+} {
   const root = workspaceRoot(options.cwd);
   let jobId = options.job?.trim() || options.environmentJob?.trim();
   const contextFile = join(root, '.gm', 'context', 'job.json');
@@ -58,7 +73,7 @@ export function jobContext(options: { cwd: string; job?: string; environmentJob?
       contents = readFileSync(contextFile, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        // The missing-context refusal below includes both supported ways to supply the job id.
+        // No context file: no job, which `jobContext` refuses with both supported ways to supply one.
       } else {
         throw new CommandError(`cannot read ${contextFile}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -70,13 +85,11 @@ export function jobContext(options: { cwd: string; job?: string; environmentJob?
       } catch {
         throw new UsageError(`${contextFile} is not valid JSON`, 'gm chat post --job <id> --text "<one line>"');
       }
+      // A build workspace whose context names no job is broken, not a host checkout.
+      if (!jobId) throw new UsageError(`${contextFile} has no job_id`, 'pass --job <id>');
     }
   }
-  if (!jobId)
-    throw new UsageError(
-      'no job id: pass --job or run inside a build workspace',
-      'gm chat post --job <id> --text "<one line>"',
-    );
+  if (!jobId) return { root, jobId: null };
   if (!Id.safeParse(jobId).success)
     throw new UsageError(`invalid job id "${jobId}"`, 'use the job id from .gm/context/job.json');
   return { root, jobId };
@@ -162,27 +175,24 @@ export function copyOutboxMedia(root: string, source: string, kind: 'image' | 'c
   return relativePath;
 }
 
-export function knownChatMessageIds(root: string, jobId: string): Set<string> {
+/** The job's chat posts by id, with what each carries: a text line, or an image or clip the creator can see. */
+export function knownChatMessageIds(root: string, jobId: string): Map<string, ChatPostPayload['kind']> {
   const file = join(root, '.gm', 'outbox', 'chat.jsonl');
   let contents: string;
   try {
     contents = readFileSync(file, 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Set();
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Map();
     throw new CommandError(`cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const ids = new Set<string>();
+  const ids = new Map<string, ChatPostPayload['kind']>();
   for (const raw of contents.split('\n')) {
     if (!raw.trim()) continue;
     try {
       const parsed = AgentOutboxLine.safeParse(JSON.parse(raw));
-      if (
-        parsed.success &&
-        parsed.data.type === 'chat.post' &&
-        parsed.data.job_id === jobId &&
-        ChatPostPayload.safeParse(parsed.data.payload).success
-      )
-        ids.add(parsed.data.id);
+      if (!parsed.success || parsed.data.type !== 'chat.post' || parsed.data.job_id !== jobId) continue;
+      const post = ChatPostPayload.safeParse(parsed.data.payload);
+      if (post.success) ids.set(parsed.data.id, post.data.kind);
     } catch {
       // A malformed prior line is not a valid media candidate.
     }

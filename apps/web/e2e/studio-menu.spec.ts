@@ -41,6 +41,29 @@ const runningJob = {
   openRequestCount: 2,
 };
 
+// Blobs is a registered game: its decisions come from its own aiur instance and no build job owns them (#596).
+const blobsId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e70';
+const decision = (n: number, topic: string, question: string, labels: [string, string], blocking = false) => ({
+  game_id: blobsId,
+  game_title: 'Blobs',
+  job_id: null,
+  ticket: '570',
+  title: topic,
+  summary: topic,
+  checkpoint_id: `d_blobs_${n}`,
+  decision_id: `d_blobs_${n}`,
+  version: 1,
+  question,
+  options: labels.map((label, index) => ({ id: `o${index + 1}`, label })),
+  blocking,
+  opened_at: `2026-11-08T0${n}:00:00.000Z`,
+  review_number: n,
+});
+const blobsDecisions = () => [
+  decision(1, 'Blob colours', 'Which colours should the blobs be?', ['Bright', 'Pastel'], true),
+  decision(2, 'Jump feel', 'How should a jump feel?', ['Floaty', 'Snappy']),
+  decision(3, 'Level length', 'How long should a level be?', ['One minute', 'Three minutes']),
+];
 const energyView = {
   level: 'limited',
   preference: 'balanced',
@@ -77,7 +100,7 @@ test('shows the active build ring and contextual build in the games menu', async
   testInfo.setTimeout(90_000);
   await installAuthRoutes(page, { signedIn: true });
   await stubBrandArt(page);
-  await installGamesMenuApi(page);
+  await installGamesMenuApi(page, blobsDecisions().slice(1));
   await page.goto('/all');
 
   const trigger = page.getByRole('button', { name: 'Menu' });
@@ -100,6 +123,48 @@ test('shows the active build ring and contextual build in the games menu', async
   await expect(page).toHaveURL(/\/all/);
   await expect(page.getByRole('dialog', { name: 'Add the moon gate' })).toBeVisible();
   await capturePhone(page, testInfo, 'games-menu-conversation');
+});
+
+// Kevin (2026-11-08): sign in, see how many decisions are open on the top-right button, and click through each one.
+test('counts the open decisions and walks through each one from the menu', async ({ page }, testInfo) => {
+  testInfo.setTimeout(90_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await stubBrandArt(page);
+  const answered = await installGamesMenuApi(page, blobsDecisions());
+  await page.goto('/all');
+
+  const trigger = page.getByRole('button', { name: 'Menu' });
+  await expect(page.locator('.studio-menu-badge')).toHaveText('3');
+  await expect(trigger).toHaveAttribute('data-blocking', 'true');
+  await capturePhone(page, testInfo, 'decisions-badge');
+
+  await trigger.click();
+  await page.getByRole('button', { name: 'Decisions: 3' }).click();
+  const topics = page.getByRole('list', { name: 'Decisions' }).locator('strong');
+  await expect(topics).toHaveText(['Blob colours', 'Jump feel', 'Level length']);
+  await capturePhone(page, testInfo, 'decisions-menu');
+
+  await page.getByRole('button', { name: 'Blob colours, Blobs' }).click();
+  await expect(page.getByRole('dialog', { name: 'Blob colours' })).toBeVisible();
+  await capturePhone(page, testInfo, 'decisions-deck-1');
+  await page.getByRole('button', { name: 'Pastel' }).click();
+  await page.getByRole('button', { name: 'Next decision' }).click();
+
+  await expect(page.getByRole('dialog', { name: 'Jump feel' })).toBeVisible();
+  await page.getByRole('button', { name: 'Snappy' }).click();
+  await capturePhone(page, testInfo, 'decisions-deck-next');
+  await page.getByRole('button', { name: 'Next decision' }).click();
+
+  await expect(page.getByRole('dialog', { name: 'Level length' })).toBeVisible();
+  await page.getByRole('button', { name: 'One minute' }).click();
+  await expect(page.getByRole('dialog', { name: 'Level length' })).toHaveCount(0);
+  await expect(page.locator('.studio-menu-badge')).toHaveCount(0);
+  expect(answered).toEqual([
+    { decision: 'd_blobs_1', option: 'o2' },
+    { decision: 'd_blobs_2', option: 'o2' },
+    { decision: 'd_blobs_3', option: 'o1' },
+  ]);
+  await capturePhone(page, testInfo, 'decisions-done');
 });
 
 test('rings Energy in the menu and opens its windows, then its settings', async ({ page }, testInfo) => {
@@ -136,7 +201,7 @@ for (const [orientation, viewport] of [
     await page.setViewportSize(viewport);
     await installAuthRoutes(page, { signedIn: true });
     await stubBrandArt(page);
-    await installGamesMenuApi(page);
+    await installGamesMenuApi(page, blobsDecisions().slice(1));
     await page.goto('/all');
 
     const trigger = page.getByRole('button', { name: 'Menu' });
@@ -195,9 +260,22 @@ test('keeps the phone menu row clear of style media', async ({ page, isMobile },
   await capturePhone(page, testInfo, 'new-style-menu-row');
 });
 
-async function installGamesMenuApi(page: Page) {
+async function installGamesMenuApi(page: Page, decisions: ReturnType<typeof blobsDecisions> = []) {
+  const open = [...decisions];
+  const answered: Array<{ decision: string; option: string }> = [];
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === '/api/v1/me/commands') return json(route, { commands: open });
+    const answer = /^\/api\/v1\/games\/[^/]+\/commands\/([^/]+)\/answer$/.exec(url.pathname);
+    if (answer && route.request().method() === 'POST') {
+      const { option_id: option } = route.request().postDataJSON() as { option_id: string };
+      answered.push({ decision: answer[1]!, option });
+      open.splice(
+        open.findIndex((candidate) => candidate.decision_id === answer[1]),
+        1,
+      );
+      return json(route, { status: 'answered', decision_id: answer[1], option_id: option });
+    }
     if (url.pathname === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }
@@ -222,7 +300,7 @@ async function installGamesMenuApi(page: Page) {
     if (url.pathname.endsWith('/branches')) {
       return json(route, { branches: [{ id: 'main', name: 'main', latestBuildId: 'build-1' }] });
     }
-    if (url.pathname === `/api/v1/games/${gameId}/commands`) return json(route, { commands: [] });
+    if (/^\/api\/v1\/games\/[^/]+\/commands$/.test(url.pathname)) return json(route, { commands: [] });
     if (url.pathname.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });
     if (url.pathname.endsWith('/chat')) return route.fulfill({ contentType: 'text/event-stream', body: ': open\n\n' });
     if (url.pathname.endsWith('/checkpoints/budget')) return json(route, { used: 0, max: 3 });
@@ -230,6 +308,7 @@ async function installGamesMenuApi(page: Page) {
     if (url.pathname === '/api/v1/energy') return json(route, energyView);
     return json(route, { error: 'not_mocked', path: url.pathname }, 404);
   });
+  return answered;
 }
 
 async function stubTown(page: Page) {

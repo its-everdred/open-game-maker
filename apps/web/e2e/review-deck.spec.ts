@@ -6,16 +6,15 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 
 // The review deck's first real decks (A3): the Blobs' six voice samples (Open-Games #53) and the 3x3 image-mock matrix
 // (Open-Games games/blobs/review/mock-matrix). Each Command opens as one link on a phone and judges its cards one at a
-// time; the answer carries the whole like/dislike map with the creator's reasons.
+// time; once every card has a vote the deck answers with the whole like/dislike map and the creator's reasons (#631).
 const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01';
 
 const VOICE_DECK = 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e72';
 const IMAGE_DECK = 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e75';
 
 const answerBodies: Array<Record<string, unknown>> = [];
-
-// One set-level note the creator adds on the summary, beside the per-card votes and reasons.
-const SET_NOTES = 'All six read too young for the Blobs; keep the two warm ones and pitch them down.';
+// Every vote is saved on the server as it is cast (#631): the draft bodies in the order they were sent.
+const draftBodies: Array<{ cards: unknown[] }> = [];
 
 // A 16-bit PCM WAV of the given length, so the audio card has something real to play.
 function silentWav(seconds: number): Buffer {
@@ -132,23 +131,27 @@ test.use({ serviceWorkers: 'block', video: 'on', reducedMotion: 'reduce' });
 
 test.beforeEach(() => {
   answerBodies.length = 0;
+  draftBodies.length = 0;
 });
 
-test('judges the 6-card voice deck and sends the review with its reasons', async ({ page }, testInfo) => {
+test('judges the 6-card voice deck and answers once every card has a vote', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
-  await openDeck(page, voiceCommand().review_number!);
+  await openDeck(page, voiceCommand().review_number!, { dropAnswered: true });
 
   const deck = page.getByRole('region', { name: 'Review Pick the Blobs voices' });
   await expect(deck).toBeVisible();
   await expect(page.locator('.review-deck-progress')).toHaveText('1 of 6');
+  // No Send: the votes are the only controls, undo first, then thumbs down, then thumbs up.
+  expect(
+    await deck.getByRole('button').evaluateAll((buttons) => buttons.map((b) => b.getAttribute('aria-label'))),
+  ).toEqual(['Undo the last swipe', 'Dislike', 'Like']);
 
-  // The audio card plays as it appears and offers one tap to hear it again.
-  const audio = page.locator('audio').first();
+  // The audio card plays as it appears.
+  const audio = deck.locator('audio');
   await expect(audio).toHaveAttribute('src', 'https://media.example.test/voices/v1.wav');
-  await expect(page.getByRole('button', { name: 'Replay Voice 1' })).toBeVisible();
   // The card says how long the sample runs, so a long take can be judged without playing all of it.
   await expect(page.locator('.review-deck-length').first()).toHaveText('0:02');
-  // The sample really loaded and really played: a refused autoplay would leave the replay button as the only way in.
+  // The sample really loaded and really played.
   await expect.poll(() => audio.evaluate((element) => element.duration)).toBeGreaterThan(0.5);
   await expect(audio.evaluate((element) => element.paused)).resolves.toBe(false);
   // The card is the width of the phone it is judged on, not a thumbnail in a list.
@@ -157,57 +160,74 @@ test('judges the 6-card voice deck and sends the review with its reasons', async
   await capture(page, testInfo, 'voice-deck-card-1');
 
   // A tap on the card plays the sample again, and never opens the full-screen viewer a still opens.
-  const played = await audio.evaluate((element) => {
-    const media = element as HTMLAudioElement;
-    media.pause();
-    return media.paused;
-  });
-  expect(played).toBe(true);
+  await audio.evaluate((element) => (element as HTMLAudioElement).pause());
   await deck
     .locator('.review-deck-card')
     .first()
-    .click({ position: { x: 20, y: 20 } });
+    .click({ position: { x: 40, y: 40 } });
   await expect(audio.evaluate((element) => element.paused)).resolves.toBe(false);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // Like the first, dislike the second with the creator's words, then judge the rest.
   await judgeCard(page, 'like');
   await expect(page.locator('.review-deck-progress')).toHaveText('2 of 6');
-  await expect(page.getByRole('button', { name: 'Replay Voice 2' })).toBeVisible();
+  // The next card's voice is already playing: it started inside the vote.
+  await expect(audio).toHaveAttribute('src', 'https://media.example.test/voices/v2.wav');
   await judgeCard(page, 'dislike', 'Too robotic; the sibilants hiss');
   await expect(page.locator('.review-deck-progress')).toHaveText('3 of 6');
   await judgeCard(page, 'like');
   await judgeCard(page, 'dislike');
   await judgeCard(page, 'like');
+  expect(answerBodies).toEqual([]);
   await judgeCard(page, 'like');
 
-  // The deck ends on a grid of likes then dislikes; a one-pick Command turns the likes into the shortlist to choose from.
-  await expect(page.getByRole('heading', { name: 'Likes', exact: true })).toBeVisible();
-  await expect(page.getByRole('list', { name: 'Likes', exact: true }).getByRole('button')).toHaveCount(4);
-  await expect(
-    page.getByRole('list', { name: 'Dislikes', exact: true }).getByRole('button', { name: /^Like / }),
-  ).toHaveCount(2);
-  // The summary carries one optional note for the whole set, beside the per-card reasons.
-  await page.getByLabel('Anything else about the set?').fill(SET_NOTES);
-  await capture(page, testInfo, 'voice-deck-ended');
-
-  await page.getByRole('button', { name: 'Choose Voice 5' }).click();
-
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  // The last vote answers the Command with the whole map.
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
-      option_id: 'v5',
+      option_id: 'v1',
       review: {
         likes: ['v1', 'v3', 'v5', 'v6'],
         dislikes: [{ option_id: 'v2', reason: 'Too robotic; the sibilants hiss' }, { option_id: 'v4' }],
-        notes: SET_NOTES,
       },
     },
   ]);
+  // Each vote was saved as a draft on the way.
+  await expect.poll(() => draftBodies.at(-1)?.cards.length).toBe(6);
   await capture(page, testInfo, 'voice-deck-sent');
+
+  // A saved answer can be corrected (#597): Change reopens a fresh deck for the same decision.
+  await page.getByRole('button', { name: 'Change' }).click();
+  await expect(deck).toBeVisible();
+  await expect(page.locator('.review-deck-progress')).toHaveText('1 of 6');
 });
 
-test('judges the 9-card image deck with the arrow keys and sends the review', async ({ page }, testInfo) => {
+// Kevin (#597): an optional voice button inside the decision that never covers the media or the options.
+test('offers voice about the decision without covering the cards or the options', async ({ page }, testInfo) => {
+  testInfo.setTimeout(120_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await installReviewApi(page, { voice: true });
+  await page.goto(`/blobs/review/${imageCommand().review_number!}`);
+
+  const voice = page.getByRole('button', { name: 'Talk about this decision' });
+  await expect(voice).toBeVisible();
+  const button = (await voice.boundingBox())!;
+  const covered = [page.locator('.review-deck-card'), page.locator('.review-deck-actions')];
+  for (const target of covered) {
+    const box = (await target.boundingBox())!;
+    const overlaps =
+      button.x < box.x + box.width &&
+      box.x < button.x + button.width &&
+      button.y < box.y + box.height &&
+      box.y < button.y + button.height;
+    expect(overlaps).toBe(false);
+  }
+  // The token asked for names this decision, which is what the agent is briefed on first.
+  expect(voiceTokenTargets.at(-1)).toMatchObject({ command_id: imageCommand().decision_id, ticket: '570' });
+  await capture(page, testInfo, 'decision-voice-button');
+});
+
+test('judges the 9-card image deck with the arrow keys and answers on the last vote', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
   await openDeck(page, imageCommand().review_number!);
 
@@ -237,7 +257,7 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
   await capture(page, testInfo, 'image-deck-card-1');
 
   // Tapping the still opens it at the phone's full size, and Close returns to the same card.
-  await firstCard.click();
+  await page.locator('.review-deck-card').first().click();
   const viewer = page.getByRole('dialog', { name: 'Mock 1' });
   await expect(viewer).toBeVisible();
   await expect(viewer.locator('img')).toHaveAttribute('src', 'https://media.example.test/matrix/m1.svg');
@@ -261,29 +281,8 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
   for (let card = 6; card <= 8; card += 1) await judgeCard(page, 'like');
   await judgeCard(page, 'dislike');
 
-  await expect(page.getByRole('heading', { name: 'Likes', exact: true })).toBeVisible();
-  const likedGrid = page.getByRole('list', { name: 'Likes', exact: true });
-  await expect(likedGrid.getByRole('button', { name: /^Dislike / })).toHaveCount(7);
-  // The ending grid shows the whole sample too, never a cropped preview.
-  await expect(likedGrid.locator('img')).toHaveCount(7);
-  await expect(likedGrid.locator('img').first()).toHaveCSS('object-fit', 'contain');
-  // The summary carries one optional note for the whole set, beside the per-card reasons.
-  await page.getByLabel('Anything else about the set?').fill('The ears read as horns on all of these.');
-  await capture(page, testInfo, 'image-deck-ended');
-
-  // A grid thumbnail opens the same full-screen view.
-  await page.getByRole('button', { name: 'Open Mock 2 full screen' }).click();
-  const gridViewer = page.getByRole('dialog', { name: 'Mock 2' });
-  await expect(gridViewer).toBeVisible();
-  await expect(gridViewer.locator('img')).toHaveAttribute('src', 'https://media.example.test/matrix/m2.svg');
-  await gridViewer.getByRole('button', { name: 'Close' }).click();
-  await expect(gridViewer).toHaveCount(0);
-
-  // A Command that asks for many sends the likes and dislikes as the answer, so the shortlist stays a shortlist. The
-  // set-level note travels beside them.
-  await page.getByRole('button', { name: 'Send the review' }).click();
-
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  // A Command that asks for many answers with the likes and dislikes as soon as the last card has its vote.
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
@@ -291,7 +290,6 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
       review: {
         likes: ['m1', 'm2', 'm3', 'm4', 'm6', 'm7', 'm8'],
         dislikes: [{ option_id: 'm5', reason: 'The ears read as horns' }, { option_id: 'm9' }],
-        notes: 'The ears read as horns on all of these.',
       },
     },
   ]);
@@ -344,9 +342,9 @@ test('heads a long-question review with a short title, an X and nothing over the
   await expect(page).toHaveURL(/\/all\?spotlight=/);
 });
 
-// The inbox as rows: every open question with its first sample, a short title and its state. A tap opens a deck, the
-// arrows walk the others without closing it, each question keeps its own draft, and a swipe answers.
-test('walks three questions from the rows, keeps each draft and answers one by swipe', async ({ page }, testInfo) => {
+// The inbox as rows: every open question with its first sample, a short title and its state. A tap opens a deck, each
+// question keeps its own draft, and swiping the last card answers it.
+test('opens questions from the rows, keeps each draft and answers one by swipe', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
   await installAuthRoutes(page, { signedIn: true });
   await installReviewApi(page);
@@ -370,25 +368,12 @@ test('walks three questions from the rows, keeps each draft and answers one by s
   await expect(page.locator('.review-deck-progress')).toHaveText('3 of 9');
   // A card shows its letter, not a sentence.
   await expect(page.locator('.review-deck-label')).toHaveText('C');
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(rows.getByRole('link', { name: 'Pick the Blobs look, draft' })).toBeVisible();
 
-  // Next and previous move between questions without closing the deck, and the look's draft is still there.
-  await page.getByRole('link', { name: 'Next question' }).click();
+  // Answer the third question by swiping: right likes A, left dislikes B, and that last vote answers it.
+  await rows.getByRole('link', { name: 'Which of these two voices…, open' }).click();
   await expect(page).toHaveURL(/\/blobs\/review\/3$/);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Which of these two voices…');
-  await page.getByRole('link', { name: 'Previous question' }).click();
-  await expect(page).toHaveURL(/\/blobs\/review\/2$/);
-  await expect(page.locator('.review-deck-progress')).toHaveText('3 of 9');
-  await page.getByRole('link', { name: 'Previous question' }).click();
-  await expect(page).toHaveURL(/\/blobs\/review\/1$/);
-  // The first question has nothing before it.
-  await expect(page.getByRole('link', { name: 'Previous question' })).toHaveCount(0);
-  await capture(page, testInfo, 'deck-voices');
-
-  // Answer the third question by swiping: right likes A, left dislikes B, then Send.
-  await page.getByRole('link', { name: 'Next question' }).click();
-  await page.getByRole('link', { name: 'Next question' }).click();
-  await expect(page).toHaveURL(/\/blobs\/review\/3$/);
-  await expect(page.getByRole('link', { name: 'Next question' })).toHaveCount(0);
   await expect(page.locator('.review-deck-progress')).toHaveText('1 of 2');
   await swipe(page, 'right');
   await expect(page.locator('.review-deck-progress')).toHaveText('2 of 2');
@@ -397,9 +382,7 @@ test('walks three questions from the rows, keeps each draft and answers one by s
     .getByRole('dialog', { name: /^Why did you dislike/ })
     .getByRole('button', { name: 'Skip' })
     .click();
-  await expect(page.getByRole('heading', { name: 'Likes', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Send the review' }).click();
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   expect(answerBodies).toEqual([{ option_id: 'v1', review: { likes: ['v1'], dislikes: [{ option_id: 'v2' }] } }]);
 
   // Back on the rows: the swiped question is sent and the look is still a draft.
@@ -412,11 +395,11 @@ test('walks three questions from the rows, keeps each draft and answers one by s
 
 // A finger drag across the card on screen, far enough to count as a swipe.
 async function swipe(page: Page, direction: 'left' | 'right') {
-  // Start below the letter and away from an audio card's centred replay button, which keeps its own taps.
+  // Start below the letter, where a drag moves the card.
   const box = (await page.locator('.review-deck-card').first().boundingBox())!;
   const x = box.x + box.width / 2;
   const y = box.y + box.height * 0.2;
-  const dx = direction === 'right' ? 140 : -140;
+  const dx = direction === 'right' ? 240 : -240;
   await page.mouse.move(x, y);
   await page.mouse.down();
   for (let step = 1; step <= 8; step += 1) await page.mouse.move(x + (dx * step) / 8, y);
@@ -424,16 +407,30 @@ async function swipe(page: Page, direction: 'left' | 'right') {
 }
 
 // The short link the Executor pushes (#591): the game's slug and the Command's number inside the game.
-async function openDeck(page: Page, reviewNumber: number) {
+async function openDeck(page: Page, reviewNumber: number, options: ReviewApiOptions = {}) {
   await installAuthRoutes(page, { signedIn: true });
-  await installReviewApi(page);
+  await installReviewApi(page, options);
   await page.goto(`/blobs/review/${reviewNumber}`);
 }
 
 // The two decks and the answer route the app's own client calls. Media is served from its own origin so the cards have
 // real audio and stills to draw.
-async function installReviewApi(page: Page) {
+const voiceTokenTargets: Array<Record<string, unknown>> = [];
+
+// `voice` gives the Commands' job to the signed-in creator and a configured voice host, so the decision offers voice.
+// `dropAnswered` takes an answered Command off the open list, so Change has to reopen it from the screen.
+type ReviewApiOptions = { voice?: boolean; dropAnswered?: boolean };
+
+async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
   const commands = [voiceCommand(), imageCommand(), longCommand()];
+  const job = {
+    id: imageCommand().job_id!,
+    gameId,
+    creatorId: 'u1',
+    state: 'running',
+    aiurIssueNumber: 570,
+    updatedAt: '2026-11-07T17:40:00.000Z',
+  };
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -455,10 +452,29 @@ async function installReviewApi(page: Page) {
       });
     }
     if (path === `/api/v1/games/${gameId}/commands`) return json(route, { commands });
+    if (options.voice && path === '/api/v1/games') return json(route, { games: [{ id: gameId, title: 'Blobs' }] });
+    if (options.voice && path === '/api/v1/jobs') return json(route, { jobs: [job] });
+    if (options.voice && path === '/api/v1/voice/token') {
+      voiceTokenTargets.push(
+        (JSON.parse(route.request().postData() ?? '{}') as { target: Record<string, unknown> }).target,
+      );
+      return json(route, {
+        token: 'vct1.e2e.mac',
+        expires_at: '2026-11-08T10:00:00.000Z',
+        url: 'wss://voice.example.test/ws/voice',
+      });
+    }
     if (path === '/api/v1/jobs' || path === '/api/v1/jobs/active') return json(route, { jobs: [] });
+    if (path === `/api/v1/games/${gameId}/review-drafts`) return json(route, { drafts: [] });
+    if (path.startsWith(`/api/v1/games/${gameId}/review-drafts/`)) {
+      draftBodies.push((JSON.parse(route.request().postData() ?? '{}') as { deck: { cards: unknown[] } }).deck);
+      return route.fulfill({ status: 204 });
+    }
     if (path.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });
     if (/\/jobs\/[^/]+\/checkpoints\/[^/]+\/answer$/.test(path)) {
       answerBodies.push(JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>);
+      const answered = commands.findIndex(({ checkpoint_id }) => path.includes(`/checkpoints/${checkpoint_id}/`));
+      if (options.dropAnswered && answered >= 0) commands.splice(answered, 1);
       return json(route, {
         status: 'answered',
         decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e73',

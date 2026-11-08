@@ -22,7 +22,9 @@ function fakeHooks(passes = 1, dropOne = false) {
   const hooks = {
     passes,
     renderAt: vi.fn(async () => {}),
-    page: { screenshot, locator: vi.fn(() => ({ evaluate })), viewportSize: () => ({ width: 1440, height: 900 }) },
+    // Stills are of the page (the whole app shell); the canvas is read where the game runs (its frame in the shell).
+    page: { screenshot, viewportSize: () => ({ width: 1440, height: 900 }) },
+    game: { locator: vi.fn(() => ({ evaluate })) },
   };
   return { hooks: hooks as unknown as HookDriver, evaluate, screenshot };
 }

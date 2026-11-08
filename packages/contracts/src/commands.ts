@@ -13,6 +13,8 @@ export const CommandOption = z.object({
   // Present when the option carries media (A1 rich Commands). OGM signs the same blob URLs the chat uses. `kind` is set
   // when the media names its type (an aiur Command's media does): a clip with no poster is still a clip.
   media: ChatMedia.extend({ kind: z.enum(['image', 'video', 'audio']).optional() }).optional(),
+  // A sound that goes with a picture: a character card shows its portrait in `media` and plays its voice from here.
+  audio: ChatMedia.optional(),
   // Present when the option is a slice of the game to play (#608); the deck runs it in the card instead of a still.
   playable: OptionPlayable.optional(),
 });
@@ -21,6 +23,12 @@ export const CommandOption = z.object({
 // 2-5 native-question rule.
 export const MAX_COMMAND_OPTIONS = 12;
 
+// Marks a Command as a player-facing question (#595). Game Maker writes it into the decision's long context; the
+// creator's inbox, menu count and review deck show only Commands that carry it (or a gm checkpoint marker). Everything
+// else (engineering and operations questions) stays with the Executor. Until aiur exposes an audience field, this
+// marker is how a Command says who it is for.
+export const CREATOR_AUDIENCE_MARKER = '<!-- gm-audience:creator -->';
+
 export const GameCommand = z.object({
   // Null when the Command belongs to no job: a game registered from a repository that already exists reads its
   // instance's open Commands, and its `checkpoint_id` is aiur's decision id.
@@ -28,6 +36,8 @@ export const GameCommand = z.object({
   // The aiur ticket the Command belongs to; null until the job is linked to a ticket.
   ticket: z.string().nullable(),
   title: z.string().trim().min(1).max(200),
+  // The decision's short topic (aiur's `short_summary`) when it has one: the line the menu's decision list shows.
+  summary: z.string().trim().min(1).max(200).optional(),
   checkpoint_id: z.string(),
   decision_id: z.string().min(1),
   version: z.number().int().positive(),
@@ -50,10 +60,21 @@ export const GameCommand = z.object({
 // Commands its own aiur instance holds for it when no job owns them.
 export const GameCommandsPage = z.object({ commands: z.array(GameCommand) });
 
+// GET /api/v1/me/commands → the open player-facing Commands of every game the caller can edit, for the menu's decision
+// inbox: blocking first, then the longest waiting. Each names its game so the deck answers through that game's route.
+export const CreatorCommand = GameCommand.extend({
+  game_id: Id,
+  game_title: z.string().trim().min(1).max(200),
+});
+export const CreatorCommandsPage = z.object({ commands: z.array(CreatorCommand) });
+
 export type CommandOption = z.infer<typeof CommandOption>;
 export type GameCommand = z.infer<typeof GameCommand>;
 export type GameCommandsPage = z.infer<typeof GameCommandsPage>;
+export type CreatorCommand = z.infer<typeof CreatorCommand>;
+export type CreatorCommandsPage = z.infer<typeof CreatorCommandsPage>;
 
 export const commandsSchemas = {
   'commands.game-inbox.v1': GameCommandsPage,
+  'commands.creator-inbox.v1': CreatorCommandsPage,
 } satisfies Record<string, z.ZodType>;

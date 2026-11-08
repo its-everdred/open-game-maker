@@ -101,6 +101,7 @@ export function GameScreen() {
   const [frameController, setFrameController] = useState<GameFrameController>();
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
+  const [pauseSlot, setPauseSlot] = useState<HTMLSpanElement | null>(null);
   const [sessionStore, setSessionStore] = useState<StoreApi<EditorSessionState>>();
   const [sessionView, setSessionView] = useState<EditorSessionState>();
   const [editStartup, setEditStartup] = useState<EditorSessionState['saved']>();
@@ -335,6 +336,12 @@ export function GameScreen() {
     roomSnapshot: room.snapshot,
   };
 
+  const hudShown =
+    mode === 'play' &&
+    frameRef.current !== undefined &&
+    frameState.manifest !== undefined &&
+    activeSnapshot !== undefined;
+
   return (
     <section className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}`} aria-label="Play and edit">
       <PlayEditBar
@@ -352,6 +359,16 @@ export function GameScreen() {
         }}
       >
         <GameExtras placement="topbar" {...extraProps} />
+        {mode === 'play' ? (
+          <span className="platform-pause-slot" ref={setPauseSlot}>
+            {/* Holds Pause's space until the HUD mounts, so the bar's buttons do not shift when the game loads. */}
+            {hudShown ? null : (
+              <button className="platform-pause tap-primary" type="button" tabIndex={-1} aria-hidden="true" disabled>
+                Pause
+              </button>
+            )}
+          </span>
+        ) : null}
       </PlayEditBar>
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
@@ -380,7 +397,7 @@ export function GameScreen() {
             snap={canvasOptions.snap}
           />
         ) : null}
-        {mode === 'play' &&
+        {hudShown &&
         frameRef.current !== undefined &&
         frameState.manifest !== undefined &&
         activeSnapshot !== undefined ? (
@@ -388,6 +405,7 @@ export function GameScreen() {
             build={build}
             frame={frameRef.current}
             gameId={gameId}
+            pauseSlot={pauseSlot}
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
             saves={frameState.manifest.saves}
             saveSchema={frameState.manifest.saveSchema}

@@ -54,6 +54,11 @@
             "creator_id": {
               "type": "string",
               "minLength": 1
+            },
+            "command_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
             }
           },
           "required": [

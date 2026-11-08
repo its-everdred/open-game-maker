@@ -7,7 +7,9 @@ import { ConfigError, loadEnv } from '@ogm/config';
 
 import { CommandError, EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { printJson } from '../../context.js';
+import { readLock } from '../../lock.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
+import { scanReferences, unlisted } from '../../references.js';
 
 /*
  * The operator's publish for a game registered against a repository whose own tickets are not Game Maker jobs: no
@@ -31,7 +33,7 @@ const FROM_REPO = ['manifest.json', 'design/design.json', 'achievements.json'];
 type Facts = { gameId: string; slug: string; repoPath: string; checkout: string };
 
 /** `NAME=value` lines of one env file, read without sourcing it (the files also hold secrets). */
-function readEnvFile(file: string): Record<string, string> {
+export function readEnvFile(file: string): Record<string, string> {
   let text: string;
   try {
     text = readFileSync(file, 'utf8');
@@ -80,13 +82,35 @@ function tail(text: string, lines = 20): string {
   return text.trimEnd().split('\n').slice(-lines).join('\n');
 }
 
+/** fetch's own message is a bare "fetch failed"; the socket's reason sits on its cause. */
+function reason(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause instanceof Error ? error.cause : null;
+  if (!cause) return error.message;
+  const code = (cause as { code?: unknown }).code;
+  return `${error.message} (${typeof code === 'string' ? `${code}: ` : ''}${cause.message})`;
+}
+
+/*
+ * A connection that drops before an answer (#646: the first upload after a long build failed with "fetch failed" and
+ * an immediate rerun published) is tried once more. A timeout is not, as the API may still be working on the request,
+ * and nor is an answer that breaks off: the API has acted by then, and a second upload would publish a second build.
+ */
 async function request(url: string, init: RequestInit): Promise<{ status: number; body: string }> {
-  try {
-    const response = await fetch(url, init);
-    return { status: response.status, body: await response.text() };
-  } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
-    throw new CommandError(`no answer from ${url}: ${cause}`);
+  for (let attempt = 1; ; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (error) {
+      const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      if (attempt === 1 && !timedOut) continue;
+      throw new CommandError(`no answer from ${url}: ${reason(error)}`);
+    }
+    try {
+      return { status: response.status, body: await response.text() };
+    } catch (error) {
+      throw new CommandError(`the answer from ${url} broke off (HTTP ${response.status}): ${reason(error)}`);
+    }
   }
 }
 
@@ -208,6 +232,16 @@ export const command: GmCommand = {
 
       // The game's own build script is its production build; a script that already names a base or a mode keeps it.
       // The base stays relative because the games host serves every build under /g/<gameId>/<buildId>/.
+      // The asset list is what ships: refuse before building when the code names an asset the list lacks.
+      const listed = (await readLock(game))?.assets.map((entry) => entry.id) ?? [];
+      const missingAssets = unlisted(listed, await scanReferences(game));
+      if (missingAssets.length > 0) {
+        const lines = missingAssets.map(({ id, file }) => `${id} (${file})`).join('\n');
+        throw new CommandError(
+          `assets.lock.json does not list assets the code uses:\n${lines}\nTry: gm assets use <id>`,
+        );
+      }
+
       const pkg = JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')) as { scripts?: { build?: string } };
       const script = pkg.scripts?.build ?? '';
       if (!script) throw new CommandError(`${facts.repoPath} has no build script`);

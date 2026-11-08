@@ -23,24 +23,29 @@ this section adds what is specific to games.
    (input, player, world/map, entities, UI, audio, saves, progression), their interfaces and the seams where tickets
    meet. Prefer existing SDK modules, pack adapters and `packages/` code; note likely shared pieces, but do not promote
    anything that has not been built and proven yet.
-2. **Skeleton ticket first.** One small ticket creates the folder, the template, the system stubs with their
+2. **Flow diagram before any screen ticket.** Map the core, session and meta loops and the full navigation graph
+   (every screen, transition, back path and multiplayer addition), each screen node carrying its target image, and
+   get the creator's answers on its open choices: `references/flow-diagram.md`, template `references/flow-template.md`.
+   Screen and gameplay tickets cite their node; until it is approved they may be cut but wait on its approval Command
+   (visuals-track stages do not).
+3. **Skeleton ticket first.** One small ticket creates the folder, the template, the system stubs with their
    interfaces, data formats and test hooks, so every later ticket edits its own files.
-3. **Cut tickets by ownership.** Each ticket owns a clear set of files and one outcome a player can see or a test can
+4. **Cut tickets by ownership.** Each ticket owns a clear set of files and one outcome a player can see or a test can
    check. Use only the lanes this game needs (gameplay, controls, characters and animation, enemies, maps and levels,
    UI and HUD, story and text, music, sound, voice, saves and progression, multiplayer, polish, verification). No fixed
    count: as many as the game needs, each completable by one agent in a few hours.
-4. **Shallow dependencies.** Aim for depth 2–3: skeleton → parallel systems and content → integration and polish.
+5. **Shallow dependencies.** Aim for depth 2–3: skeleton → parallel systems and content → integration and polish.
    Depend on interfaces, not on finished features. Avoid two tickets editing the same file.
-5. **A prototype ladder, not a one-shot build.** Plan the game as gameplay rungs (P1..Pn, each a playable link with
+6. **A prototype ladder, not a one-shot build.** Plan the game as gameplay rungs (P1..Pn, each a playable link with
    scenarios that proves one thing) and domain tracks (visuals, characters, audio) that climb stages, each stage ending
    in a creator Command with media: read `references/prototype-ladder.md`. One ticket per stage per track, one or two
    per rung; stage n+1 is gated on stage n's decision. P1 and the first stage of each track are priority 1. A rung is a
    feedback chance, never a gate: keep building whether or not the player plays it.
-6. **Questions as tickets' blockers.** A ticket that needs an open decision depends on that Command; everything else
+7. **Questions as tickets' blockers.** A ticket that needs an open decision depends on that Command; everything else
    starts now. Content tickets that need a creative choice (music direction, character look) open their own option
    Commands with samples (see the design skill's question protocol). A gameplay-feel question (speed, chain pause,
-   controls) gives each option a playable slice (`gm checkpoint open --playable <id>=<scenario query>`, `gm decide
-   --playable` once #595 lands), never a link, and the question is one short line.
+   controls) gives each option a playable slice (`gm decide --playable <id>=<scenario query>`), never a link, and the
+   question is one short line.
 
 ## Always an audio track
 
@@ -67,7 +72,7 @@ the resource packs first (`gm assets search`); generation (voices) is samples on
 ## File it in aiur
 
 - Child issues in the instance repo, each linking the parent, with: goal, owned files, interface contract, acceptance
-  checks, skills to load, assets chosen, and the decisions it relies on (by id). No raw player text: summaries only.
+  checks, skills to load, assets chosen, the decisions it relies on (by id) and its flow node or loop. No raw player text: summaries only.
 - `aiur-main feature create` for the game (once) and `aiur-main epic set` per lane; GitHub native blocked-by edges for
   dependencies; priority labels (prototype tickets `priority:1`).
 - Build Order: the parent issue is its root; confirm with `aiur-main build-orders <root>` that every child appears with
@@ -101,5 +106,5 @@ tickets rewritten for a weaker implementer). Game specifics on top of it:
 
 ## Done
 
-All children merged, the game passes `gm check`, `gm test`, `gm run` and the spec's acceptance criteria, the parent
+All children merged, the flow diagram in `design/flow/` matches the game, the game passes `gm check`, `gm test`, `gm run` and the spec's acceptance criteria, the parent
 issue has the final summary, and reuse candidates are noted under `## Promote` for later.

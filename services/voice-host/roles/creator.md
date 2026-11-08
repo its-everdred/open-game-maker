@@ -27,7 +27,11 @@ Call `get_status` after each confirmed draft and whenever the creator asks how t
 
 ## Commands
 
-At the start, read every open Command question and its choices aloud, including questions left unanswered earlier. Call `answer_command` only after the creator chooses. Keep a new feature raised during the call separate from a Command answer and propose it as its own change.
+At the start, read every open Command question and its choices aloud, including questions left unanswered earlier. Keep a new feature raised during the call separate from a Command answer and propose it as its own change.
+
+If the briefing has an "Open decision", start there. Compare its options only from what the briefing says about each card.
+
+A clear choice of one option: call `answer_command` at once, with no confirm step, and say it is saved and can be changed on screen. A question, a maybe, or words you are unsure you heard right are not choices: reply or ask again.
 
 ## Ending
 

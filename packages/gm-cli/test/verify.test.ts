@@ -1,11 +1,12 @@
-import { mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
 import type { GmContext } from '../src/command.js';
 import { command as perfCommand } from '../src/commands/perf/index.js';
-import { finish, parseRecord } from '../src/commands/run/index.js';
+import { appFrame, finish, parseRecord } from '../src/commands/run/index.js';
 import type { VerifyReport } from '@ogm/gm-verify';
 import { gm, tempDir } from './helpers.js';
 
@@ -124,6 +125,50 @@ describe('gm run', () => {
     } finally {
       perfState.budgetError = false;
     }
+  });
+});
+
+describe('gm run in the app shell', () => {
+  // A game folder and a host home: api.env names the app, ~/.config/ogm/qa holds the QA account's storage state.
+  function host(options: { storage?: boolean; origin?: string } = {}) {
+    const home = tempDir();
+    const game = tempDir();
+    mkdirSync(join(home, '.config/ogm/env'), { recursive: true });
+    mkdirSync(join(home, '.config/ogm/qa'), { recursive: true });
+    writeFileSync(
+      join(home, '.config/ogm/env/api.env'),
+      `OGM_APP_ORIGIN=${options.origin ?? 'https://app.example/'}\n`,
+    );
+    if (options.storage !== false) writeFileSync(join(home, '.config/ogm/qa/storage.json'), '{}');
+    execFileSync('git', ['init', '-q'], { cwd: game });
+    writeFileSync(join(game, 'gm.manifest.json'), '{"id":"blobs"}');
+    const ctx = { cwd: game, home, env: {} } as unknown as GmContext;
+    return { home, game, ctx };
+  }
+
+  it('opens the game the way a player does, at /play/<id> on the host app, signed in as the QA account', () => {
+    const { home, ctx } = host();
+    expect(appFrame(ctx, {})).toEqual({
+      url: 'https://app.example/play/blobs',
+      storageState: join(home, '.config/ogm/qa/storage.json'),
+    });
+    expect(appFrame(ctx, { app: 'http://127.0.0.1:5173/play/blobs' }).url).toBe('http://127.0.0.1:5173/play/blobs');
+  });
+
+  it('refuses to capture without a signed-in state, naming the host command that mints one', () => {
+    const { ctx } = host({ storage: false });
+    expect(() => appFrame(ctx, {})).toThrow(/no signed-in storage state.*ogm-qa-signin/);
+  });
+
+  it('signs in only when asked: the default host frame needs no account, --frame app needs the QA state', async () => {
+    const home = tempDir();
+    const hostFrame = await gm(['run'], { home });
+    expect(hostFrame.err.join('\n')).toMatch(/no built game in \.\/dist/);
+    const app = await gm(['run', '--frame', 'app'], { home });
+    expect(app.code).toBe(2);
+    expect(app.err.join('\n')).toMatch(/no app origin|no signed-in storage state/);
+    const queued = await gm(['run', '--frame', 'app'], { home, env: { GM_VERIFY_QUEUE: '1' } });
+    expect(queued.err.join('\n')).toMatch(/queue mode cannot sign in/);
   });
 });
 

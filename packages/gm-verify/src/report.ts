@@ -28,8 +28,19 @@ const relativePath = z
     'paths are forward-slash relative paths under --out',
   );
 
-export const viewportSchema = z.enum(['desktop', 'phone']);
+export const viewportSchema = z.enum(['desktop', 'phone', 'phone-landscape', 'tablet', 'tablet-landscape']);
 export type ViewportName = z.infer<typeof viewportSchema>;
+/** A viewport, or a set of them: `touch` the four touch sizes, `all` those and desktop, `both` desktop and phone. */
+export const viewportSetSchema = z.enum([...viewportSchema.options, 'both', 'touch', 'all']);
+export type ViewportSet = z.infer<typeof viewportSetSchema>;
+
+export function viewportsOf(set: ViewportSet): ViewportName[] {
+  const touch: ViewportName[] = ['phone', 'phone-landscape', 'tablet', 'tablet-landscape'];
+  if (set === 'touch') return touch;
+  if (set === 'all') return [...touch, 'desktop'];
+  if (set === 'both') return ['desktop', 'phone'];
+  return [set];
+}
 
 export const consoleEntrySchema = z.object({
   level: z.enum(['error', 'warning']),
@@ -122,7 +133,8 @@ export const verifyReportSchema = z.object({
   aiurIssue: z.number().int().optional(),
   renderer: z.string().min(1),
   software: z.boolean(),
-  viewport: z.enum(['desktop', 'phone', 'both']),
+  viewport: viewportSetSchema,
+  frame: z.enum(['host', 'app', 'bare']).optional(),
   tier: tierSchema,
   rig: viewIdSchema.optional(),
   frames: z.array(z.object({ t: z.number().min(0), path: relativePath, viewport: viewportSchema.optional() })),

@@ -7,6 +7,7 @@ const adminActions = new Set<Action>([
   'admin.settings.set',
   'admin.analytics.read',
   'game.flag_abuse',
+  'admin.gameplay.set',
 ]);
 
 const allowed = (): Authorization => ({ ok: true });

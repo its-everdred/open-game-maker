@@ -69,7 +69,7 @@ async function canvasFrames(
   let size = { width: 0, height: 0 };
   for (let first = 0; first < total; first += CANVAS_FRAME_CHUNK) {
     const count = Math.min(CANVAS_FRAME_CHUNK, total - first);
-    const chunk = await h.page.locator('canvas').evaluate(
+    const chunk = await h.game.locator('canvas').evaluate(
       (element, capture) => {
         const source = element as HTMLCanvasElement;
         type BrowserHooks = { renderAt?: (ms: number) => void; advanceTime?: (ms: number) => void };

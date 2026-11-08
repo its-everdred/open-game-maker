@@ -13,6 +13,7 @@ import { getAttachment, jobAttachments, readBlob, workspacePath } from '../build
 import { energySource } from '../energy/source.js';
 import { readPreference } from '../energy/store.js';
 import { playerView } from '../energy/view.js';
+import { paidApisDuringGameplay } from '../gameplay/policy.js';
 import { scopeSessions } from '../scope/store.js';
 import { LEAKY } from './leaky.js';
 
@@ -89,7 +90,12 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           ...(scopeSessionId === undefined ? {} : { scope_session_id: scopeSessionId }),
           skillPackVersion: version,
           skillPackUrl: new URL(`/internal/skills/${encodeURIComponent(version)}.tgz`, c.req.url).href,
-          gameContext: { ...job.game, branch: 'main', lockfilePath: 'assets.lock.json' },
+          gameContext: {
+            ...job.game,
+            paidApisDuringGameplay: paidApisDuringGameplay(deps.db),
+            branch: 'main',
+            lockfilePath: 'assets.lock.json',
+          },
           ...(job.kind === 'repair' && job.diagnostics ? { diagnostics: job.diagnostics } : {}),
           ...(attachments.length === 0 ? {} : { attachments }),
           energy,
@@ -113,6 +119,11 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
         const bytes = await readBlob(deps.blobStore, row.blobHash);
         if (!bytes) return c.json({ error: { code: 'not_found' } }, 404);
         return c.body(new Uint8Array(bytes), 200, { 'content-type': row.mime });
+      })
+      // The live gameplay policy, for `gm policy` in any daemon workspace (the bundle holds it as of the job's start).
+      .get('/gameplay', async (c) => {
+        if (!(await daemonRepo(c))) return c.json({ error: { code: 'unauthenticated' } }, 401);
+        return c.json({ paidApisDuringGameplay: paidApisDuringGameplay(c.get('deps').db) });
       })
       .get('/skills/:file', async (c) => {
         if (!(await daemonRepo(c))) return c.json({ error: { code: 'unauthenticated' } }, 401);

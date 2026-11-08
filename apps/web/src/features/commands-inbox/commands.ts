@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { CommandReview, GameCommand, GameCommandsPage } from '@ogm/contracts';
+import type { CommandReview, CreatorCommandsPage, GameCommand, GameCommandsPage } from '@ogm/contracts';
 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
@@ -24,6 +24,23 @@ export function useGameCommands(gameId: string | null | undefined) {
   return { ...query, commands: query.data?.commands ?? EMPTY };
 }
 
+const NO_DECISIONS: CreatorCommandsPage['commands'] = [];
+export const creatorCommandsQueryKey = ['creator-commands'] as const;
+
+// The menu's decision inbox: the signed-in creator's player-facing Commands across all their games, in priority order.
+// Keyed by the creator, so one account's decisions are never shown to the next one signed in on this device.
+export function useCreatorCommands(creatorId: string | undefined) {
+  const enabled = creatorId !== undefined;
+  const query = useQuery({
+    queryKey: [...creatorCommandsQueryKey, creatorId],
+    enabled,
+    queryFn: () => api<CreatorCommandsPage>('/me/commands'),
+    refetchInterval: POLL_MS,
+    retry: false,
+  });
+  return { ...query, commands: enabled ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS };
+}
+
 // A Command a job owns answers through the job's checkpoint route. A Command with no job — a registered game's, read
 // from its own aiur instance — has no checkpoint to validate against, so it answers through the game's route with the
 // version the player saw. Both end at aiur's canonical Decision API, and a review deck's like/dislike map travels
@@ -43,5 +60,8 @@ export async function answerCommand(
   } else {
     await answerCheckpoint(command.job_id, command.checkpoint_id, optionId, review);
   }
-  await queryClient.invalidateQueries({ queryKey: gameCommandsQueryKey(gameId) });
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: gameCommandsQueryKey(gameId) }),
+    queryClient.invalidateQueries({ queryKey: creatorCommandsQueryKey }),
+  ]);
 }

@@ -184,4 +184,34 @@ describe('createGameFrame', () => {
     expect(onLoad).toHaveBeenNthCalledWith(2, { t: 'load.done', payload: done.payload });
     frame.dispose();
   });
+
+  // Blobs (#640) declares a stick but draws its own buttons; the host must not stack a second set over them.
+  it('draws no touch controls unless the mapping asks for them', () => {
+    const readyWith = (inputMapping?: { touch: 'stick' }) => {
+      const on = vi.spyOn(HostBridge.prototype, 'on');
+      const frame = createGameFrame({
+        container: document.createElement('div'),
+        gamesOrigin: 'https://games.test',
+        appOrigin: 'https://app.test',
+        gameId: 'g',
+        buildId: 'b',
+        build: 'draft' as const,
+        mode: 'play' as const,
+        playerIndex: 0,
+        capabilities: [],
+        role: () => 'owner' as const,
+        inputMapping,
+      });
+      const onReady = on.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
+      on.mockRestore();
+      onReady({ manifest: { inputs: { actions: { move: 'stick', rotateCCW: 'button' } } }, marks: [] });
+      const layer = frame.iframe.nextElementSibling as HTMLElement;
+      const count = layer.childElementCount;
+      frame.dispose();
+      return count;
+    };
+
+    expect(readyWith()).toBe(0);
+    expect(readyWith({ touch: 'stick' })).toBe(2);
+  });
 });

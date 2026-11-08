@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { gm, tempDir } from './helpers.js';
 
@@ -16,6 +16,10 @@ let server: Server;
 let api: string;
 let requests: Logged[] = [];
 let uploadAnswer: { status: number; body: string } = { status: 201, body: '' };
+// Uploads still to drop by closing the connection without an answer, as a reset keep-alive socket does.
+let dropUploads = 0;
+// Uploads to answer with headers and then cut off mid-body, after the API has acted on them.
+let breakUploads = 0;
 let root: string;
 let origin: string;
 let checkout: string;
@@ -23,6 +27,7 @@ let bin: string;
 let staleSha: string;
 let remoteSha: string;
 let brokenSha: string;
+let unlistedSha: string;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -74,6 +79,13 @@ beforeAll(async () => {
   writeFileSync(join(origin, 'games', 'blobs', 'build.sh'), 'echo "vite: cannot resolve ./src/main.ts" >&2\nexit 3\n');
   git(origin, 'commit', '-qam', 'broken');
   brokenSha = git(origin, 'rev-parse', 'HEAD');
+  // A commit whose code names an asset its list does not hold.
+  git(origin, 'switch', '-qc', 'unlisted', 'main');
+  mkdirSync(join(origin, 'games', 'blobs', 'src'));
+  writeFileSync(join(origin, 'games', 'blobs', 'src', 'main.ts'), "load('t1:kenney-mini-dungeon/wall@2.0');\n");
+  git(origin, 'add', '-A');
+  git(origin, 'commit', '-qm', 'unlisted');
+  unlistedSha = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'switch', '-q', 'main');
 
   // pnpm stand-in: the scratch repository has nothing to install, and its build is one shell script.
@@ -128,6 +140,16 @@ beforeAll(async () => {
         );
       }
       if (request.method === 'POST' && request.url === '/internal/operator/games/blobs/builds') {
+        if (dropUploads > 0) {
+          dropUploads -= 1;
+          return request.socket.destroy();
+        }
+        if (breakUploads > 0) {
+          breakUploads -= 1;
+          response.writeHead(201, { 'content-type': 'application/json', 'content-length': '100' });
+          response.write('{"state":');
+          return setTimeout(() => request.socket.destroy(), 20);
+        }
         return json(uploadAnswer.status, uploadAnswer.body);
       }
       return json(404, '{"error":{"code":"game_not_found"}}');
@@ -237,6 +259,67 @@ describe('gm publish', () => {
     expect(run.err).toEqual([`not published (${remoteSha}): {"error":{"code":"manifest_invalid"}}`]);
   });
 
+  // #646: the first upload after a long build failed with "fetch failed" and an immediate rerun published.
+  it('sends the upload once more when the connection drops before an answer, and publishes', async () => {
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_3","buildId":"build_3"}' };
+    dropUploads = 1;
+
+    const run = await publish(['blobs', '--api', api]);
+
+    expect(run.err).toEqual([]);
+    expect(run.code).toBe(0);
+    expect(run.out).toContain(`published games/blobs at ${remoteSha}: build build_3`);
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST']);
+  });
+
+  it('exits 1 naming the socket error when the upload drops twice, so a publish chain stops', async () => {
+    dropUploads = 2;
+
+    const run = await publish(['blobs', '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err).toHaveLength(1);
+    expect(run.err[0]).toMatch(
+      /^no answer from http:\/\/127\.0\.0\.1:\d+\/internal\/operator\/games\/blobs\/builds: fetch failed \(.+\)$/,
+    );
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST']);
+    expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
+  });
+
+  it('does not send the upload again when its answer breaks off, as the API has already acted on it', async () => {
+    breakUploads = 1;
+
+    const run = await publish(['blobs', '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err).toHaveLength(1);
+    expect(run.err[0]).toMatch(
+      /^the answer from http:\/\/127\.0\.0\.1:\d+\/internal\/operator\/games\/blobs\/builds broke off \(HTTP 201\): /,
+    );
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST']);
+  });
+
+  it('does not send the upload again when it times out, as the API may still be publishing it', async () => {
+    const real = globalThis.fetch;
+    let uploads = 0;
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      if (init?.method !== 'POST') return real(input, init);
+      uploads += 1;
+      return Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+    });
+    try {
+      const run = await publish(['blobs', '--api', api]);
+
+      expect(run.code).toBe(1);
+      expect(run.err).toEqual([
+        expect.stringMatching(/\/internal\/operator\/games\/blobs\/builds: The operation was aborted due to timeout$/),
+      ]);
+      expect(uploads).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('fetches a --sha only origin has, exits 1 with the build output when the build fails, and cleans up', async () => {
     const run = await publish(['blobs', '--sha', brokenSha, '--api', api]);
 
@@ -246,6 +329,16 @@ describe('gm publish', () => {
     expect(requests.map((r) => r.method)).toEqual(['GET']);
     expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  // #627: the asset list is what ships, so publish refuses code that names an unlisted asset before building it.
+  it('exits 1 naming an asset the code uses that assets.lock.json does not list, before building or uploading', async () => {
+    const run = await publish(['blobs', '--sha', unlistedSha, '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('t1:kenney-mini-dungeon/wall@2.0 (src/main.ts)');
+    expect(run.pnpm).toBe('');
+    expect(requests.map((r) => r.method)).toEqual(['GET']);
   });
 
   it('refuses with exit 2 and a next step: no slug outside a game, an unknown game, no token', async () => {

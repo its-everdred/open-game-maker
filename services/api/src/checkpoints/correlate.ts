@@ -1,6 +1,9 @@
 import type { Decision } from '@ogm/aiur-client';
+import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
 
 import { parseCheckpoint, type ChatRow, type StoredCheckpoint } from '../build-chat/store.js';
+import { summaryOf } from '../commands/aiur.js';
+import { creatorAudience } from '../commands/audience.js';
 
 const marker = /gm-checkpoint:(cp_[0-7][0-9A-HJKMNP-TV-Z]{25})/;
 const openStatuses = new Set(['open', 'pending', 'deferred']);
@@ -14,6 +17,17 @@ export function checkpointMarker(decision: Decision): string | null {
     if (match) return match[1] as string;
   }
   return null;
+}
+
+// Whether the creator sees this Command (#595). Only player-facing questions reach the creator's inbox, menu count and
+// review deck: a decision Game Maker marked for the creator, or one opened through a gm checkpoint. Any other decision
+// (an engineering or operations question an agent raised with plain `aiur command request`) stays with the Executor.
+// Aiur has no audience field yet, so a decision without the marker is treated as the Executor's.
+export function isForCreator(decision: Decision): boolean {
+  if (checkpointMarker(decision) !== null) return true;
+  return [decision.context?.long_context_markdown, decision.context?.short_summary, decision.question].some(
+    (source) => typeof source === 'string' && source.includes(CREATOR_AUDIENCE_MARKER),
+  );
 }
 
 // aiur marks a decision that takes several answers with `multi_select`; a review deck's answer is the likes and
@@ -80,7 +94,8 @@ export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPl
       : undefined;
     const found = linked ?? marked;
     if (!found) {
-      if (checkpointId === null && statusOf(decision) === 'open' && isNativeChoice(decision)) create.push(decision);
+      if (checkpointId === null && statusOf(decision) === 'open' && isNativeChoice(decision) && isForCreator(decision))
+        create.push(decision);
       continue;
     }
     seen.add(found.row.id);
@@ -96,6 +111,11 @@ export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPl
         pick: pickOf(decision),
         status,
         ...(optionId === undefined ? {} : { option_id: optionId }),
+        // Who the decision is for and its topic follow aiur on every poll, so a row stored before aiur set them (or
+        // before this app read them) catches up instead of staying hidden from the creator or topic-less. A builder's
+        // checkpoint keeps its job's title: `gm checkpoint open` sends the same placeholder topic for every question.
+        audience: creatorAudience(decision),
+        summary: found.checkpoint.checkpoint_id === decision.decision_id ? summaryOf(decision) : undefined,
       },
     });
   }

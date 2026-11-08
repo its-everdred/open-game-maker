@@ -68,6 +68,8 @@ const ROUTES: Row[] = [
     expect: ok(201, 404),
   },
   { method: 'GET', path: '/builds', expect: ok(200) },
+  { method: 'GET', path: '/gameplay', expect: ok(200) },
+  { method: 'PATCH', path: '/gameplay', body: { paidApisDuringGameplay: false }, expect: ok(200) },
   { method: 'GET', path: '/intake', expect: ok(200) },
   { method: 'GET', path: '/mail?unopened=1', expect: ok(200) },
   { method: 'POST', path: `/mail/${X.mail}/opened`, expect: ok(204, 404) },

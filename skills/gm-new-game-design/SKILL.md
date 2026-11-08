@@ -57,7 +57,7 @@ provenance (`--provenance <id>=@<file>.json`) when you offer it, so the check ca
   remain. Track deferred topics (naming, logo) and come back to them before you finish.
 - **Naming and logo are real steps.** Offer short names drawn from the conversation; only claim a name was searched if
   you actually searched; a web search is not clearance. Logo options come from the design skills after the build.
-- Ask questions as aiur Commands (`gm checkpoint open` wraps them) so the Executor, the app inbox and voice all see the
+- Ask questions as aiur Commands (`gm decide` wraps them) so the Executor, the app inbox and voice all see the
   same open questions. The three-checkpoint cap in `gm-scope-options` does not apply to new-game design.
 
 ## What to record
@@ -76,7 +76,8 @@ summary and an opaque reference.
 
 When the player says it's ready, or the important decisions are answered or defaulted, write the spec using
 `references/spec-template.md` and hand it to the Executor (the new-game parent issue's private context). The Executor
-plans the whole game with `gm-new-game-plan`; you do not create tickets.
+plans the whole game with `gm-new-game-plan`; you do not create tickets. The spec's loops and screens
+are the first draft of the game's flow diagram (`../gm-new-game-plan/references/flow-diagram.md`).
 
 A spec is complete when the Executor can plan without a second interview: core loop, controls, camera, world and
 levels, progression, win and loss, the prototype ladder's rungs (what each proves), acceptance criteria, and the open

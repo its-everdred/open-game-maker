@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import type { AiurClient, Decision, DecisionMedia, DecisionMediaFile } from '@ogm/aiur-client';
+import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -77,7 +78,7 @@ const decision = (options: Decision['options']): Decision => ({
   question: 'How should the blobs rest?',
   options,
   recommendation: null,
-  context: { short_summary: 'Blobs staging' },
+  context: { short_summary: 'Blobs staging', long_context_markdown: CREATOR_AUDIENCE_MARKER },
   answer: null,
   active_answer: null,
   created_at: AT,
@@ -166,6 +167,40 @@ describe('a jobless Command’s option media', () => {
     // The blob behind the signed URL is the aiur file's bytes.
     const hash = `sha256:${String(flat!.url).split('/blobs/sha256/')[1]!.split('?')[0]}` as const;
     expect((await deps.blobStore.head(hash))?.mime).toBe('image/png');
+  });
+
+  // #631: a character card carries its portrait and its voice. Keeping only the first item showed the portrait and
+  // dropped the voice, so the creator heard nothing on the Blobs voices deck.
+  it('keeps a character card’s voice beside its portrait', async () => {
+    const png = new Uint8Array(await readFile(PNG));
+    const { read } = await setup(
+      [
+        {
+          id: 'pip',
+          label: 'Pip',
+          // aiur lists the voice first here: the card still shows the portrait.
+          media: [
+            attachment('med_pip_voice', 'audio', 'audio/mpeg', { duration_ms: 2500 }),
+            attachment('med_pip', 'image', 'image/png'),
+          ],
+        },
+        { id: 'hum', label: 'Hum', media: [attachment('med_hum', 'audio', 'audio/mpeg', { duration_ms: 2000 })] },
+      ],
+      {
+        med_pip: { mime: 'image/png', bytes: png },
+        med_pip_voice: { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 51]) },
+        med_hum: { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 51]) },
+      },
+    );
+
+    const [pip, hum] = (await read()) as Array<{ media?: Record<string, unknown>; audio?: Record<string, unknown> }>;
+
+    expect(pip!.media).toMatchObject({ kind: 'image' });
+    expect(pip!.audio).toMatchObject({ duration_ms: 2500 });
+    expect(String(pip!.audio!.url)).toContain('/blobs/');
+    // A card whose only item is a sound already plays it as its media; it gets no second copy.
+    expect(hum!.media).toMatchObject({ kind: 'audio' });
+    expect(hum!).not.toHaveProperty('audio');
   });
 
   it('passes a vetted https file through and copies each attachment only once', async () => {

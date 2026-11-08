@@ -1,11 +1,12 @@
 import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { assetManifestSchema, type Tier, type ViewId } from '@ogm/contracts';
 import type { Browser } from 'playwright';
 
 import { measureBudgets, manifestBytes, type Measured, type TierBudgetOverrides } from './budgets.js';
-import { launch, openGame, type OpenedGame } from './browser.js';
+import { hostFrameUrl, launch, openGame, type AppFrame, type OpenedGame } from './browser.js';
 import {
   FfmpegMissingError,
   record,
@@ -25,18 +26,28 @@ import {
   GM_VERIFY_VERSION,
   unknownBudgets,
   verdictFor,
+  viewportsOf,
   writeReport,
   type VerifyReport,
-  type ViewportName,
+  type ViewportSet,
 } from './report.js';
 import { acquireSlot, type SemaphoreOptions } from './semaphore.js';
+import { serveStatic } from './server.js';
 
 export const RUN_TIMEOUT_MS = 10 * 60_000;
 
 export type RunVerifyOptions = ActivityContext & {
   url: string;
   outDir: string;
-  viewport: ViewportName | 'both';
+  viewport: ViewportSet;
+  /**
+   * `host` (the default): the game mounted through `@gm/host` under a copy of the play screen's top bar and Pause;
+   * `app`: the signed-in app (`app`), the local build standing in for the hosted one; `bare`: the game page alone.
+   */
+  frame?: 'host' | 'app' | 'bare';
+  app?: { url: string; storageState: string };
+  /** The title the host frame's top bar shows. */
+  title?: string;
   tier: Tier;
   rig?: ViewId;
   frames?: number[];
@@ -56,6 +67,9 @@ export type RunVerifyOptions = ActivityContext & {
 
 export type RunVerifyResult = { report: VerifyReport; reportPath: string; ffmpegMissing: boolean };
 
+/** dist/shell, found from the package root so the tests' src/ build resolves it too. */
+const SHELL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'shell');
+
 export function newRunId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -74,8 +88,8 @@ async function downloadBytes(game: OpenedGame, url: string, tier: Tier): Promise
 }
 
 /**
- * One verify run: opens the game per viewport (desktop first), writes stills under `<out>/<viewport>/`, the timeline
- * and clip once (on the phone when `both`), replays `--inputs`, measures budgets and probes, and always writes
+ * One verify run: opens the game per viewport, writes stills under `<out>/<viewport>/`, the timeline and clip once
+ * (on the phone when the set has it, else the last), replays `--inputs`, measures budgets and probes, and always writes
  * `<out>/report.json` — with `verdict: "error"` and `error` when anything failed. Holds one host capture slot.
  */
 export async function runVerify(options: RunVerifyOptions): Promise<RunVerifyResult> {
@@ -97,6 +111,8 @@ export async function runVerify(options: RunVerifyOptions): Promise<RunVerifyRes
   let ffmpegMissing = false;
   let browser: Browser | undefined;
   let timedOut = false;
+  let shellServer: Awaited<ReturnType<typeof serveStatic>> | undefined;
+  const frame = options.frame ?? 'host';
 
   playtesting(options, 'start');
   let slot: Awaited<ReturnType<typeof acquireSlot>> | undefined;
@@ -108,15 +124,25 @@ export async function runVerify(options: RunVerifyOptions): Promise<RunVerifyRes
       void browser?.close();
     }, options.timeoutMs ?? RUN_TIMEOUT_MS);
     browser = await launch(options.software);
-    const viewports: ViewportName[] = options.viewport === 'both' ? ['desktop', 'phone'] : [options.viewport];
-    for (const [index, viewport] of viewports.entries()) {
-      const last = index === viewports.length - 1;
+    let shell: AppFrame | undefined;
+    if (frame === 'host') {
+      shellServer = await serveStatic(SHELL_DIR);
+      shell = { url: hostFrameUrl(shellServer.url, options.url, options.tier, options.title ?? '') };
+    } else if (frame === 'app') {
+      if (!options.app) throw new Error('the app frame needs an app URL and a storage state');
+      shell = { ...options.app, localUrl: options.url };
+    }
+    const viewports = viewportsOf(options.viewport);
+    const primary = viewports.includes('phone') ? 'phone' : viewports.at(-1);
+    for (const viewport of viewports) {
+      const last = viewport === primary;
       const game = await openGame(browser, options.url, {
         viewport,
         tier: options.tier,
         rig: options.rig,
         console: collector,
         readyTimeoutMs: options.readyTimeoutMs,
+        ...(shell ? { app: shell } : {}),
       });
       try {
         renderer = game.renderer;
@@ -179,6 +205,7 @@ export async function runVerify(options: RunVerifyOptions): Promise<RunVerifyRes
   } finally {
     if (timer) clearTimeout(timer);
     await browser?.close().catch(() => {});
+    await shellServer?.close();
     slot?.release();
   }
 
@@ -194,6 +221,7 @@ export async function runVerify(options: RunVerifyOptions): Promise<RunVerifyRes
     renderer,
     software,
     viewport: options.viewport,
+    frame,
     tier: options.tier,
     ...(options.rig ? { rig: options.rig } : {}),
     frames,
