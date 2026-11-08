@@ -1,10 +1,15 @@
 # Ladder plan: <game>
 
 Copy to `games/<name>/design/ladder.md` and fill it in from the spec and the flow diagram (rules in
-`prototype-ladder.md`). Keep the five stage headings, their order and their Review and Roles lines; add one row per
-feature. Check it with `node .claude/skills/gm-new-game-plan/scripts/check-ladder.ts games/<name>/design/ladder.md`.
+`prototype-ladder.md`). Keep the five stage headings, their order and their Review and Roles lines; every stage table
+has one row per feature in Features, with its ticket title. Check it with
+`node .claude/skills/gm-new-game-plan/scripts/check-ladder.ts games/<name>/design/ladder.md`.
 
-Features (flow nodes): <feature>: `flow: <node>`; ...
+## Features
+
+| Feature   | Flow node |
+| --------- | --------- |
+| <feature> | `<node>`  |
 
 ## 1. Concepts
 
@@ -13,7 +18,7 @@ Roles: role:game-design, role:audio
 
 | Feature | Concepts | Ticket | Decision |
 |---|---|---|---|
-| <feature> | <looks, characters, music, sound effects, voices> | | |
+| <feature> | <looks, characters, music, sound effects, voices> | <ticket> |  |
 
 ## 2. Dioramas
 
@@ -22,7 +27,7 @@ Roles: role:3d, role:assets
 
 | Feature | Diorama (engine, camera) | Feasibility gaps | Ticket | Decision |
 |---|---|---|---|---|
-| <feature> | | | | |
+| <feature> |  |  | <ticket> |  |
 
 ## 3. Rendered gameplay clips
 
@@ -31,7 +36,7 @@ Roles: role:visual
 
 | Feature | Clips (a few seconds each) | Audio on them | Ticket | Decision |
 |---|---|---|---|---|
-| <feature> | | | | |
+| <feature> |  |  | <ticket> |  |
 
 ## 4. Video to real gameplay
 
@@ -40,7 +45,7 @@ Roles: role:gameplay, role:qa
 
 | Feature | Playable slice | Scenarios | Ticket | Decision |
 |---|---|---|---|---|
-| <feature> | | | | |
+| <feature> |  |  | <ticket> |  |
 
 ## 5. Gameplay iterations
 
@@ -49,7 +54,7 @@ Roles: role:gameplay, role:qa
 
 | Feature | Knob | Variants | Ticket | Decision |
 |---|---|---|---|---|
-| <feature> | | | | |
+| <feature> |  |  | <ticket> |  |
 
 ## Build Order
 

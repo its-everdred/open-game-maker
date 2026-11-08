@@ -18,7 +18,8 @@ build with it. A stage that is only judged against the stage before it can never
 | 4 | **Video to real gameplay** | The approved clips implemented as playable slices that look and sound like the clips; the video-to-game study and compare scripts make the side-by-side | Play-then-vote cards beside the approved clip (`gm decide --playable`) | role:gameplay, role:qa |
 | 5 | **Gameplay iterations** | Tuned snippets (feel, speed, difficulty, modes) as playable variants | Play-then-vote per variant, one feature at a time | role:gameplay, role:qa |
 
-The role labels stamp each stage ticket's skills (roles, #656); a stage ticket carries every role in its row.
+The role labels stamp each stage ticket's skills once roles land (#656); a stage ticket carries every role in its
+row.
 
 ## Rules
 
@@ -87,7 +88,8 @@ The role labels stamp each stage ticket's skills (roles, #656); a stage ticket c
   CPU difficulty, a mode), recommendation first.
 - The build reads each knob from its URL (`?scenario=sandbox&speed=slow`, plus `lead_in=<move>` when given), so the
   scenario loader exposes the knob before the Command opens.
-- Each variant still matches the stage 3 clip and stage 2 diorama; a tuning that breaks the look is a stage 4 fix.
+- Each variant keeps the approved stage 4 slice's scenarios and still matches the stage 3 clip and stage 2 diorama; a
+  tuning that breaks the look is a stage 4 fix.
 
 ## Tickets
 
@@ -101,7 +103,8 @@ The role labels stamp each stage ticket's skills (roles, #656); a stage ticket c
 - **Gates are decisions.** Stage n+1 of a feature is blocked by stage n's Command for that feature (the decision id is in
   its "relies on" list).
 - **Check the plan.** `node .claude/skills/gm-new-game-plan/scripts/check-ladder.ts games/<name>/design/ladder.md`
-  fails unless the plan holds the five stages in order, each with its review Command and roles.
+  fails unless the Features table is filled in and the plan holds the five stages in order, each with its review
+  Command and roles, a row for every feature (and none that is not in Features) and a ticket on every row.
 - **Skeleton first** (gm-new-game-plan): it adds the scenario loader and the stage evidence folders, so every later
   ticket owns its own files.
 
@@ -115,7 +118,7 @@ Worked example: `references/examples/blobs-ladder.md`, a falling-blob versus puz
 | 2 Dioramas | Every concept element mapped to card ids and engine features, or named as a gap in the Command; `request-mock.py --kind look --ref <shot> --ref <concept>` answered "matches" on every point; no primitive, placeholder or debug view |
 | 3 Clips | Rendered in the real renderer; look-checked against the diorama; audio peaks below -1 dBFS and lands on the event marks frame by frame; phone MP4 looked at |
 | 4 Real gameplay | `gm check`, `gm test`, `gm run` green; each scenario opens to its stated state; the compare script's side-by-side against the clip looked at; iPhone Safari and sound listed unchecked until the creator plays it |
-| 5 Iterations | Each variant opens from its scenario query with its knob applied; still matches the clip and diorama |
+| 5 Iterations | Each variant opens from its scenario query with its knob applied; keeps the stage 4 slice's scenarios; still matches the clip and diorama |
 
 Numeric checks (pixel counts, luminance, file sizes) never count as looking. A look check that fails is fixed, or the
 gap goes back to the creator as a question; it never ships as "close enough".
