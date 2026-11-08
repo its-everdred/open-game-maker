@@ -26,6 +26,7 @@
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@gltf-transform/core": "4.5.1",
     "@playwright/test": "1.64.1",
     "@types/three": "0.186.0",
     "esbuild": "0.28.2",
