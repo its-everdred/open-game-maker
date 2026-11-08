@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { actionLabel, TouchOverlay } from './overlay.js';
+import { actionIcon, actionLabel, TouchOverlay } from './overlay.js';
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -154,8 +154,9 @@ describe('TouchOverlay', () => {
     const buttons = [...layer.querySelectorAll<HTMLButtonElement>('button')];
     expect(buttons).toHaveLength(3);
     for (const button of buttons) {
-      expect(button.textContent).toBe('');
-      expect(button.querySelector('[aria-hidden="true"]')).not.toBeNull();
+      const icon = button.querySelector('[aria-hidden="true"]');
+      expect(icon?.textContent).toBe(button.textContent);
+      expect(icon?.textContent).toHaveLength(1);
     }
     for (const action of Object.keys(actions)) expect(layer.textContent).not.toContain(action);
     expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
@@ -174,9 +175,20 @@ describe('TouchOverlay', () => {
     expect(actionLabel('fire-2')).toBe('Fire 2');
   });
 
-  it.each(['stick', 'two-stick'] as const)('lays out five buttons and the %s controls without overlap', (touch) => {
-    const width = 320;
-    const height = 480;
+  // Identical marks would leave a player guessing which circle rotates and which drops.
+  it('gives each of a falling-block game’s actions its own icon', () => {
+    const actions = ['rotateCCW', 'rotateCW', 'softDrop', 'hardDrop', 'hold'];
+    const icons = actions.map(actionIcon);
+    expect(icons).toEqual(['\u21BA', '\u21BB', '\u2193', '\u2913', '\u21C4']);
+    expect(actionIcon('interact')).toBe('I');
+  });
+
+  it.each([
+    ['stick', 320, 480],
+    ['two-stick', 320, 480],
+    ['stick', 568, 320],
+    ['two-stick', 568, 320],
+  ] as const)('lays out five buttons and the %s controls on a %ix%i layer without overlap', (touch, width, height) => {
     const layer = document.createElement('div');
     const overlay = new TouchOverlay({
       layer,
@@ -193,6 +205,8 @@ describe('TouchOverlay', () => {
     for (const [i, first] of rects.entries()) {
       expect(first.left).toBeGreaterThanOrEqual(0);
       expect(first.top).toBeGreaterThanOrEqual(0);
+      expect(first.right).toBeLessThanOrEqual(width);
+      expect(first.bottom).toBeLessThanOrEqual(height);
       for (const second of rects.slice(i + 1)) expect(overlaps(first, second)).toBe(false);
     }
     overlay.dispose();

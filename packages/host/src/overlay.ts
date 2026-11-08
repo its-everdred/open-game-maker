@@ -19,6 +19,27 @@ export function actionLabel(action: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** First match wins, so the narrower words (counter-clockwise, hard drop) come before the broader ones. */
+const ICONS: [RegExp, string][] = [
+  [/\bccw\b|counter|anti/u, '\u21BA'],
+  [/rotate|turn|\bcw\b|spin/u, '\u21BB'],
+  [/hard drop|slam/u, '\u2913'],
+  [/drop|down|crouch/u, '\u2193'],
+  [/jump|\bup\b/u, '\u2191'],
+  [/\bleft\b/u, '\u2190'],
+  [/\bright\b/u, '\u2192'],
+  [/hold|swap/u, '\u21C4'],
+  [/fire|shoot|attack/u, '\u2726'],
+  [/pause/u, '\u23F8\uFE0E'],
+];
+
+/** A glyph for the action's own words, else the first letter of its spoken label; never the raw id. */
+export function actionIcon(action: string): string {
+  const label = actionLabel(action);
+  const words = label.toLowerCase();
+  return ICONS.find(([pattern]) => pattern.test(words))?.[1] ?? label.charAt(0);
+}
+
 export interface TouchOverlayOptions {
   layer: HTMLElement;
   inputs: GameManifest['inputs'];
@@ -100,8 +121,11 @@ export class TouchOverlay {
     if (entries.filter(([, kind]) => kind === 'button').length > 5) {
       console.warn('TouchOverlay supports at most five button actions');
     }
-    const base = EDGE + (this.touch === 'two-stick' && sticks.length > 1 ? STICK_SIZE + 12 : 0);
-    buttons.forEach(([action], index) => layer.append(this.createButton(action, index, base)));
+    /* With a stick in each corner the buttons sit above the right one, three across so they fit a landscape phone. */
+    const aboveStick = this.touch === 'two-stick' && sticks.length > 1;
+    const base = EDGE + (aboveStick ? STICK_SIZE + 12 : 0);
+    const columns = aboveStick ? 3 : 2;
+    buttons.forEach(([action], index) => layer.append(this.createButton(action, index, base, columns)));
     this.refreshVisibility();
   }
 
@@ -173,7 +197,7 @@ export class TouchOverlay {
     return stick;
   }
 
-  private createButton(action: string, index: number, base: number): HTMLButtonElement {
+  private createButton(action: string, index: number, base: number, columns: number): HTMLButtonElement {
     const button = this.hostDocument.createElement('button');
     button.type = 'button';
     button.dataset.action = action;
@@ -181,14 +205,15 @@ export class TouchOverlay {
     const size = index === 0 ? 64 : 44;
     const icon = this.hostDocument.createElement('span');
     icon.setAttribute('aria-hidden', 'true');
-    const dot = `${Math.round(size * 0.4)}px`;
-    Object.assign(icon.style, { width: dot, height: dot, borderRadius: '50%', background: 'currentColor' });
+    icon.textContent = actionIcon(action);
+    icon.style.fontSize = `${Math.round(size * 0.45)}px`;
+    icon.style.lineHeight = '1';
     button.append(icon);
     const inset = (64 - size) / 2;
     Object.assign(button.style, {
       position: 'absolute',
-      right: `${EDGE + (index % 2) * BUTTON_PITCH + inset}px`,
-      bottom: `${base + Math.floor(index / 2) * BUTTON_PITCH + inset}px`,
+      right: `${EDGE + (index % columns) * BUTTON_PITCH + inset}px`,
+      bottom: `${base + Math.floor(index / columns) * BUTTON_PITCH + inset}px`,
       width: `${size}px`,
       height: `${size}px`,
       display: 'grid',
