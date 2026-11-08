@@ -7,6 +7,7 @@ import { CommandAnswerBody, GameCommand, type GameCommandsPage } from '@ogm/cont
 import { HttpError } from '../app/errors.js';
 import { parseBody } from '../app/validate.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
+import { requirePrincipal } from '../app/principal.js';
 import { authorizedGame } from '../games/authorize.js';
 import { getChatRuntime } from '../build-chat/routes.js';
 import { getChatRow, listCheckpoints, parseCheckpoint, toMessage, type MediaSigner } from '../build-chat/store.js';
@@ -115,46 +116,46 @@ export default new Hono<ApiBindings>()
       if (error instanceof HttpError) throw new HttpError(409, 'daemon_not_found');
       throw error;
     });
-    // A review answer is checked against the Command aiur holds before anything is answered, so a client cannot name a
-    // card the Command does not have. A registered game's Command has no job, so its review is recorded with no job id.
+    // The Command aiur holds is read first: a review answer is checked against its cards, so a client cannot name a
+    // card the Command does not have, and its ticket scopes the creator's answer grant. A registered game's Command has
+    // no job, so its review is recorded with no job id.
     const review = body.review;
-    const command = review === undefined ? null : toGameCommand(await client.decision(decisionId));
+    const command = toGameCommand(await client.decision(decisionId));
+    if (command === null || command.ticket === null) throw new HttpError(404, 'command_not_found');
     if (review !== undefined) {
-      if (command === null) throw new HttpError(404, 'command_not_found');
       const problem = reviewProblem(command.options, review);
       if (problem !== null) throw new HttpError(400, 'command_review_invalid', problem);
     }
-    const fields =
-      review === undefined || command === null
-        ? undefined
-        : reviewDecisionFields(command.options, review, body.option_id);
+    const fields = review === undefined ? undefined : reviewDecisionFields(command.options, review, body.option_id);
     try {
-      await client.decide(decisionId, {
-        option: body.option_id,
+      // The creator's own answer (#631): aiur refuses the supervisor's `decide` on a decision only a human may take.
+      // A review's answer is its like/dislike map; aiur takes one of an option or a response, never both.
+      await client.answerAsCreator(decisionId, {
+        ticket: command.ticket,
+        principal: requirePrincipal(c, ['user']).userId,
         expected_version: body.version,
         idempotency_key: `${decisionId}:${body.version}`,
         rationale:
           fields === undefined
             ? 'Creator answered the Command in the game inbox'
             : `Creator answered the Command in the game inbox. ${fields.rationale}`,
-        confidence: 100,
-        ...(fields === undefined
-          ? { alternatives_considered: [] }
-          : fields.alternatives_considered === undefined
-            ? {}
-            : { alternatives_considered: fields.alternatives_considered }),
-        ...(fields === undefined ? {} : { response: fields.response }),
-        reversibility_belief: 'reversible',
+        ...(fields === undefined ? { option: body.option_id } : { response: fields.response }),
       });
     } catch (error) {
       // Another writer answered first: aiur's status is final and the inbox refetches.
       if (error instanceof AiurHttpError && error.status === 409) {
         return c.json({ status: 'conflict' as const, by: 'other' as const }, 409);
       }
-      deps.log({ event: 'game_command_answer_failed', gameId: game.id, decisionId, error: (error as Error).name });
+      deps.log({
+        event: 'game_command_answer_failed',
+        gameId: game.id,
+        decisionId,
+        error: (error as Error).name,
+        ...(error instanceof AiurHttpError ? { status: error.status } : {}),
+      });
       throw new HttpError(502, 'aiur_answer_failed');
     }
-    if (review !== undefined && command !== null) {
+    if (review !== undefined) {
       tryRecordReview(deps.db, { gameId: game.id, command, optionId: body.option_id, review }, deps.log);
     }
     return c.json({ status: 'answered' as const, decision_id: decisionId, option_id: body.option_id }, 200);

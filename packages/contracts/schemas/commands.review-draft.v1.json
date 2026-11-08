@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "deck": {
+      "type": "object",
+      "properties": {
+        "cards": {
+          "maxItems": 12,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "option_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9_-]{1,32}$"
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "like",
+                  "dislike"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "option_id",
+              "verdict"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "picked": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,32}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "cards",
+        "notes",
+        "picked"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "deck"
+  ],
+  "additionalProperties": false,
+  "$id": "https://open-game-maker-2000.local/schemas/commands.review-draft.v1.json"
+}

@@ -136,26 +136,43 @@ async function resolveItem(
   };
 }
 
-// The media each option shows, by option id: its first item the deck can render. An item aiur cannot serve leaves its
-// option without media (its copy logs the failure once); it never fails the inbox.
+// The media each option shows, by option id: its first item the deck can render, and its first audio item when that
+// is not the shown one (a character card's portrait with its voice). An item aiur cannot serve leaves its option
+// without that media (its copy logs the failure once); it never fails the inbox.
+export type ResolvedOptionMedia = { media?: OptionMedia; audio?: OptionMedia };
+
 export async function optionMediaFromAiur(
   deps: AppDeps,
   client: AiurClient,
   decision: Decision,
   sign: MediaSigner,
-): Promise<Map<string, OptionMedia>> {
-  const media = new Map<string, OptionMedia>();
+): Promise<Map<string, ResolvedOptionMedia>> {
+  const resolved = new Map<string, ResolvedOptionMedia>();
+  const quietly = async (item: DecisionMedia | undefined) => {
+    if (item === undefined) return undefined;
+    try {
+      return await resolveItem(deps, client, decision.decision_id, item, sign);
+    } catch {
+      // The failed copy was logged once when it failed; every poll in its retry window lands here quietly.
+      return undefined;
+    }
+  };
   await Promise.all(
     decision.options.map(async (option) => {
-      const item = (option.media ?? []).find((candidate) => KIND[candidate.kind ?? ''] !== undefined);
-      if (item === undefined) return;
-      try {
-        const resolved = await resolveItem(deps, client, decision.decision_id, item, sign);
-        if (resolved !== undefined) media.set(option.id, resolved);
-      } catch {
-        // The failed copy was logged once when it failed; every poll in its retry window lands here quietly.
-      }
+      const items = option.media ?? [];
+      const shown = items.find((candidate) => KIND[candidate.kind ?? ''] !== undefined);
+      const voice = KIND[shown?.kind ?? ''] === 'audio' ? undefined : items.find(({ kind }) => kind === 'audio');
+      const [media, audio] = await Promise.all([quietly(shown), quietly(voice)]);
+      if (media === undefined && audio === undefined) return;
+      resolved.set(option.id, {
+        ...(media === undefined ? {} : { media }),
+        ...(audio === undefined ? {} : { audio: withoutKind(audio) }),
+      });
     }),
   );
+  return resolved;
+}
+
+function withoutKind({ kind: _kind, ...media }: OptionMedia): Omit<OptionMedia, 'kind'> {
   return media;
 }

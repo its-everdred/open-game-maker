@@ -1,0 +1,10 @@
+{
+  "deck": {
+    "cards": [
+      { "option_id": "pip", "verdict": "like" },
+      { "option_id": "mo", "verdict": "dislike", "reason": "Too squeaky" }
+    ],
+    "notes": "",
+    "picked": null
+  }
+}
