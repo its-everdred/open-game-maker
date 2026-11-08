@@ -11,7 +11,7 @@ Never report a visual result you haven't looked at. Reading code or logs is not 
 
 - Headless Chromium on the GPU: `--use-angle=gl-egl --enable-gpu --ignore-gpu-blocklist` (SwiftShader is the slow
   default). Serve the prototype over HTTP; `file://` breaks module imports.
-- Stills: 1440x900 and 390x844 (phone, `deviceScaleFactor: 2`, `isMobile`). Check the title, the main screen and the
+- Stills: 1440x900 and 390x844 (phone, `deviceScaleFactor: 2`, `isMobile`). For a game in the app, take them in the app shell with touch on at 390x844, 844x390, 820x1180 and 1180x820, each beside its approved render (Blobs shipped unplayable on an iPad after passing desktop and non-touch stills, 2026-11-08). Check the title, the main screen and the
   first click.
 - Motion: pages expose a capture mode (`?capture`, `window.__frame(t)`) so any time can be drawn exactly.
   `prototypes/title-city/tools/capture.mjs stills|timeline|record "<query>" <out> ...` draws stills, one tiled
