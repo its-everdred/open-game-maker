@@ -66,6 +66,14 @@
   background: var(--glow-5);
 }
 
+/* Held still (reduced motion), the glows needn't sit on their own layers; promoted, a software renderer composites all
+   five screen-sized discs on every frame something else on the screen draws. */
+@media (prefers-reduced-motion: reduce) {
+  .glow-backdrop span {
+    will-change: auto;
+  }
+}
+
 @keyframes glow-drift {
   0% {
     transform: translate(0, 0) scale(1);

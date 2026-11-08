@@ -38,7 +38,9 @@ function fallSpeedCommand(): GameCommand {
   };
 }
 
-test.use({ serviceWorkers: 'block', video: 'on' });
+// Reduced motion holds the review's drifting glows still: under CI's software renderer, repainting them every frame
+// starves screenshots and clicks past the test timeout.
+test.use({ serviceWorkers: 'block', video: 'on', reducedMotion: 'reduce' });
 
 test.beforeEach(() => {
   answerBodies.length = 0;
