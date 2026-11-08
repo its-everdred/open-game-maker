@@ -5,8 +5,15 @@
   inset: 0;
   z-index: 40;
   overflow: auto;
-  background: var(--paper);
+  background: var(--glow-night);
   color: var(--ink);
+}
+
+/* The header and body float over the review's glow backdrop. */
+.review-screen-body,
+.review-screen-state {
+  position: relative;
+  z-index: 1;
 }
 
 .app-chrome:has(.review-screen) main {
@@ -41,7 +48,8 @@
   white-space: nowrap;
 }
 
-.review-screen-close {
+.review-screen-close,
+.review-screen-step {
   display: grid;
   flex: none;
   place-items: center;
@@ -56,10 +64,21 @@
 }
 
 .review-screen-close .icon,
-.review-screen-close .icon svg {
+.review-screen-close .icon svg,
+.review-screen-step .icon,
+.review-screen-step .icon svg {
   display: block;
   width: 20px;
   height: 20px;
+}
+
+/* Previous and next: the same round Gruvbox buttons as the X; at either end the arrow stays put, dimmed. */
+.review-screen-step {
+  text-decoration: none;
+}
+
+.review-screen-step-off {
+  opacity: 0.35;
 }
 
 /* The X alone: the icon's duotone square reads as a box inside the round button. */
@@ -141,4 +160,10 @@
   color: var(--ink);
   font: 700 15px/1 var(--display);
   cursor: pointer;
+}
+
+.review-screen-steps {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
 }

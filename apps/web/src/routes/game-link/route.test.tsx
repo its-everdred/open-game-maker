@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,6 +7,7 @@ import type { GameCommand } from '@ogm/contracts';
 
 import { collectScreenRoutes } from '../../app/router';
 import { api, ApiError } from '../../lib/api/client';
+import { resetReviewDrafts } from '../../features/commands-inbox/drafts';
 import { route as reviewRoute } from '../review/route';
 import { route as gameLinkRoute } from './route';
 
@@ -15,9 +16,35 @@ vi.mock('../../lib/api/client', async (original) => {
   return { ...actual, api: vi.fn() };
 });
 vi.mock('../../features/build-chat/jobs', () => ({ useMyJobs: () => ({ jobs: [] }) }));
-vi.mock('../../features/commands-inbox/ReviewDeck', () => ({
-  ReviewDeck: ({ command }: { command: GameCommand }) => <p>Deck for {command.decision_id}</p>,
-}));
+vi.mock('../../features/commands-inbox/ReviewDeck', async () => {
+  const { markSent } = await import('../../features/commands-inbox/drafts');
+  return {
+    ReviewDeck: ({
+      command,
+      nav,
+      onAnswered,
+    }: {
+      command: GameCommand;
+      nav?: { prev: React.ReactNode; next: React.ReactNode };
+      onAnswered?(): void;
+    }) => (
+      <>
+        <p>Deck for {command.decision_id}</p>
+        {nav?.prev}
+        {nav?.next}
+        <button
+          type="button"
+          onClick={() => {
+            markSent(command);
+            onAnswered?.();
+          }}
+        >
+          Answer
+        </button>
+      </>
+    ),
+  };
+});
 
 const mockedApi = vi.mocked(api);
 
@@ -86,7 +113,7 @@ function renderAt(entry: string) {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  return router;
+  return Object.assign(router, { client });
 }
 
 beforeEach(() => {
@@ -95,6 +122,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetReviewDrafts();
 });
 
 describe('short game links', () => {
@@ -114,6 +142,51 @@ describe('short game links', () => {
 
     expect(await screen.findByText('Deck for d_one')).toBeVisible();
     expect(router.state.location.pathname).toBe('/blobs/review/1');
+  });
+
+  it('lists the game’s open reviews as rows at /<slug>/review, healing an old slug', async () => {
+    serve([command('d_two', 2), command('d_one', 1)]);
+
+    const router = renderAt('/old-blobs/review');
+
+    const first = await screen.findByRole('link', { name: 'Pick d_one, open' });
+    expect(router.state.location.pathname).toBe('/blobs/review');
+    expect(first).toHaveAttribute('href', '/blobs/review/1');
+    expect(screen.getByRole('link', { name: 'Pick d_two, open' })).toHaveAttribute('href', '/blobs/review/2');
+  });
+
+  // The arrows walk the game's numbered reviews. Once an answer lands, aiur closes that review and the next refetch
+  // drops it from the list; the sent screen must still lead on to its neighbours, not strand the creator.
+  it('keeps the arrows on the sent screen after the answered review leaves the list', async () => {
+    serve([command('d_one', 1), command('d_two', 2), command('d_three', 3)]);
+    const router = renderAt('/blobs/review/2');
+
+    expect(await screen.findByText('Deck for d_two')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Previous question' })).toHaveAttribute('href', '/blobs/review/1');
+    expect(screen.getByRole('link', { name: 'Next question' })).toHaveAttribute('href', '/blobs/review/3');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    serve([command('d_one', 1), command('d_three', 3)]);
+    await act(() => router.client.invalidateQueries());
+
+    expect(await screen.findByRole('heading', { name: 'Saved' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Previous question' })).toHaveAttribute('href', '/blobs/review/1');
+    expect(screen.getByRole('link', { name: 'Next question' })).toHaveAttribute('href', '/blobs/review/3');
+  });
+
+  // Coming back to a review already sent (the list still has it until aiur closes it) shows it as sent, never a deck
+  // that would answer it a second time.
+  it('shows a sent review as sent when the creator comes back to it', async () => {
+    serve([command('d_one', 1), command('d_two', 2)]);
+    renderAt('/blobs/review/1');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Answer' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Next question' }));
+    expect(await screen.findByText('Deck for d_two')).toBeVisible();
+    fireEvent.click(screen.getByRole('link', { name: 'Previous question' }));
+
+    expect(await screen.findByRole('heading', { name: 'Saved' })).toBeVisible();
+    expect(screen.queryByText('Deck for d_one')).not.toBeInTheDocument();
   });
 
   it('says the review is not open when no Command has that number', async () => {

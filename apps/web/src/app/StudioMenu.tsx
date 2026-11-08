@@ -8,6 +8,7 @@ import { BugButton } from '../features/bug-report';
 import { EnergyButton, EnergyDetail } from '../features/energy/EnergyButton';
 import { JobConversationModal } from '../features/build-chat/JobConversationModal';
 import { openConversation } from '../features/build-chat/conversation';
+import { resetReviewDrafts } from '../features/commands-inbox/drafts';
 import { isTerminal, useMyJobs } from '../features/build-chat/jobs';
 import { signOut } from '../lib/api/auth';
 import { useSession } from '../lib/api/session';
@@ -85,6 +86,7 @@ export function StudioMenu() {
     setSigningOut(true);
     try {
       await signOut();
+      resetReviewDrafts();
     } catch {
       setAnnouncement('Sign out failed. Try again.');
       setSigningOut(false);

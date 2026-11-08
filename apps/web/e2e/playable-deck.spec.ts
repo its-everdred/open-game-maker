@@ -38,7 +38,9 @@ function fallSpeedCommand(): GameCommand {
   };
 }
 
-test.use({ serviceWorkers: 'block', video: 'on' });
+// Reduced motion holds the review's drifting glows still: under CI's software renderer, repainting them every frame
+// starves screenshots and clicks past the test timeout.
+test.use({ serviceWorkers: 'block', video: 'on', reducedMotion: 'reduce' });
 
 test.beforeEach(() => {
   answerBodies.length = 0;
@@ -94,15 +96,29 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
     timeout: SECONDS * 1000 + 5_000,
   });
 
-  // Compare plays slow, then medium, then fast, naming the one on screen, and the deck stays on its card.
+  // Compare plays slow, then medium, then fast, naming the one on screen, and the deck stays on its card. The names
+  // and the frames are recorded as they appear: a screenshot on a busy runner can outlast a 4-second slice, and
+  // checking each name live then misses one that already played.
+  await page.evaluate(() => {
+    window.__tags = [];
+    new MutationObserver(() => {
+      const tag = document.querySelector('.review-deck-playable-tag')?.textContent;
+      if (tag && window.__tags.at(-1) !== tag) window.__tags.push(tag);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  // Each option's own slice loads in turn; the frame for that speed is the evidence it played.
+  const loaded: string[] = [];
+  page.on('framenavigated', (frame) => {
+    const speed = /\/g\/g_fall.*[?&]speed=(\w+)/.exec(frame.url())?.[1];
+    if (speed !== undefined && loaded.at(-1) !== speed) loaded.push(speed);
+  });
   await page.getByRole('button', { name: 'Compare every option' }).click();
-  for (const label of ['Slow', 'Medium', 'Fast']) {
-    await expect(page.locator('.review-deck-playable-tag')).toHaveText(label, { timeout: SECONDS * 1000 + 5_000 });
-    // Each option's own slice loads in turn; the frame for that speed is the evidence it played.
-    await gameFrame(page, label.toLowerCase());
-    await page.waitForTimeout(500);
-    await capture(page, testInfo, `playable-compare-${label.toLowerCase()}`);
-  }
+  await expect(page.locator('.review-deck-playable-tag')).toBeVisible();
+  await capture(page, testInfo, 'playable-compare');
+  await expect
+    .poll(() => page.evaluate(() => window.__tags), { timeout: 3 * (SECONDS * 1000 + 5_000) })
+    .toEqual(['Slow', 'Medium', 'Fast']);
+  expect(loaded).toEqual(['slow', 'medium', 'fast']);
   await expect(page.getByRole('button', { name: 'Play Medium again' })).toBeVisible({
     timeout: SECONDS * 1000 + 5_000,
   });
@@ -127,6 +143,7 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
 declare global {
   interface Window {
     __fixture: { params: Record<string, string>; messages: string[]; paused: boolean };
+    __tags: string[];
   }
 }
 

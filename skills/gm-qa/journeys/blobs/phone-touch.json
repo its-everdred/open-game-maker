@@ -1,0 +1,21 @@
+{
+  "name": "phone-touch",
+  "viewport": "phone",
+  "steps": [
+    { "do": "expect", "text": "Endless", "timeoutMs": 90000 },
+    { "do": "tap", "text": "Endless" },
+    { "do": "wait", "ms": 2500 },
+    { "do": "tap", "selector": "[aria-label=\"Move left\"]" },
+    { "do": "tap", "selector": "[aria-label=\"Rotate\"]" },
+    { "do": "tap", "selector": "[aria-label=\"Hard drop\"]" },
+    {
+      "do": "expect",
+      "pixels": "changed",
+      "region": [0.2, 0.15, 0.6, 0.65],
+      "look": "Did the piece land where the touch buttons sent it?"
+    },
+    { "do": "swipe", "from": [0.6, 0.4], "to": [0.3, 0.4] },
+    { "do": "expect", "pixels": "changed", "region": [0.2, 0.15, 0.6, 0.65] },
+    { "do": "expect", "pixels": "nonblank", "look": "Are the touch buttons clear of the board and in thumb reach?" }
+  ]
+}

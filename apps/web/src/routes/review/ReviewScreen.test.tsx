@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameCommand } from '@ogm/contracts';
 
+import { markSent, resetReviewDrafts } from '../../features/commands-inbox/drafts';
 import { ShortReviewScreen } from './ReviewScreen';
 
 const command: GameCommand = {
@@ -66,6 +67,7 @@ vi.mock('../../features/commands-inbox/ReviewDeck', () => ({
 
 afterEach(() => {
   cleanup();
+  resetReviewDrafts();
   state.commands = [command];
   state.isFetching = false;
   voice.mounts = 0;
@@ -130,6 +132,17 @@ describe('the decision screen with voice', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Choose' }));
     expect(screen.getByRole('heading', { name: 'Saved' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
+  });
+
+  // An answer sent earlier stays sent in the device's drafts. Changing it must open the deck again, not leave the
+  // creator on Saved with no way to correct it.
+  it('changes an answer sent on an earlier visit', () => {
+    markSent(command);
+    renderScreen();
+    expect(screen.getByRole('heading', { name: 'Saved' })).toBeVisible();
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Change' })));
+    expect(screen.getByRole('heading', { name: 'Pick a hero' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Choose' })).toBeVisible();
   });
 
   // A registered game's own Command has no job to tell, and its aiur cannot take a changed answer.

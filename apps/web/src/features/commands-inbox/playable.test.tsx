@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameCommand } from '@ogm/contracts';
 
 import type { GameFrameState, MountGameFrameOptions } from '../editor/frame';
+import { resetReviewDrafts } from './drafts';
 import { ReviewDeck } from './ReviewDeck';
 
 // A gameplay-feel question (#608) is answered by playing each option, so the deck runs a slice of the game in the card
@@ -65,6 +66,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetReviewDrafts();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });

@@ -1,20 +1,30 @@
 import { useState } from 'react';
 
 import type { GameCommand } from '@ogm/contracts';
+import { reviewPath } from '@ogm/contracts/browser';
 
 import { Icon } from '../../components/Icon';
 import { AiurCommands, gameScope, type AiurCommandAnswer } from '../aiur/embed';
 import { answerCommand, useGameCommands } from './commands';
 import { mediaKindOf, withoutLinks } from './review';
-import { isReviewDeck, ReviewDeck } from './ReviewDeck';
+import { isReviewDeck } from './ReviewDeck';
+import { ReviewRowLink } from './ReviewRows';
 import './commands-inbox.css';
 
 // One game's open Commands (M3): the same list the embeddable `<aiur-commands>` component renders when aiur ships it.
 // Answering goes through the job's checkpoint route when a job owns the Command, and through the game's own route when
 // it does not; either way the answer lands in aiur's canonical Decision API. A Command whose options carry media (A3)
-// opens as a review deck in its row, so the creator judges the cards here; the deck's deep link (review-route.ts)
-// opens the same deck on its own screen.
-export function CommandsInbox({ gameId, onOpenJob }: { gameId: string; onOpenJob(jobId: string): void }) {
+// is a row: its first sample, a short title and its open, draft or sent state; a tap opens its deck on the review
+// screen, where the arrows walk the game's other questions.
+export function CommandsInbox({
+  gameId,
+  slug,
+  onOpenJob,
+}: {
+  gameId: string;
+  slug?: string | null;
+  onOpenJob(jobId: string): void;
+}) {
   const { commands } = useGameCommands(gameId);
   const [answering, setAnswering] = useState<string>();
 
@@ -50,42 +60,44 @@ export function CommandsInbox({ gameId, onOpenJob }: { gameId: string; onOpenJob
           const jobId = command.job_id;
           return (
             <li className="commands-inbox-item" key={command.checkpoint_id}>
-              <p className="commands-inbox-question">{withoutLinks(command.question)}</p>
               {isReviewDeck(command) ? (
-                <ReviewDeck gameId={gameId} command={command} />
+                <ReviewRowLink command={command} href={deckHref(gameId, slug, command)} />
               ) : (
-                <div className="build-chat-options">
-                  {command.options.map((option) => (
-                    <button
-                      aria-label={withoutLinks(option.label)}
-                      className="build-chat-option"
-                      disabled={answering !== undefined}
-                      key={option.id}
-                      onClick={() => void answer(command, option.id)}
-                      type="button"
-                    >
-                      {option.media && (
-                        <span className="checkpoint-option-media" aria-hidden="true">
-                          {mediaKindOf(option.media) === 'image' ? (
-                            <img alt="" src={option.media.url} />
-                          ) : (
-                            <video
-                              muted
-                              playsInline
-                              poster={option.media.poster}
-                              preload="metadata"
-                              src={option.media.url}
-                            />
-                          )}
-                        </span>
-                      )}
-                      <span className="checkpoint-option-label">{withoutLinks(option.label)}</span>
-                      {option.id === command.recommend && (
-                        <span className="checkpoint-recommended">Builder&apos;s pick</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <p className="commands-inbox-question">{withoutLinks(command.question)}</p>
+                  <div className="build-chat-options">
+                    {command.options.map((option) => (
+                      <button
+                        aria-label={withoutLinks(option.label)}
+                        className="build-chat-option"
+                        disabled={answering !== undefined}
+                        key={option.id}
+                        onClick={() => void answer(command, option.id)}
+                        type="button"
+                      >
+                        {option.media && (
+                          <span className="checkpoint-option-media" aria-hidden="true">
+                            {mediaKindOf(option.media) === 'image' ? (
+                              <img alt="" src={option.media.url} />
+                            ) : (
+                              <video
+                                muted
+                                playsInline
+                                poster={option.media.poster}
+                                preload="metadata"
+                                src={option.media.url}
+                              />
+                            )}
+                          </span>
+                        )}
+                        <span className="checkpoint-option-label">{withoutLinks(option.label)}</span>
+                        {option.id === command.recommend && (
+                          <span className="checkpoint-recommended">Builder&apos;s pick</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
               {/* A Command read from the game's own aiur instance belongs to no job, so there is no conversation here
                 to open; the job's Commands keep the button. */}
@@ -105,4 +117,10 @@ export function CommandsInbox({ gameId, onOpenJob }: { gameId: string; onOpenJob
       </ul>
     </AiurCommands>
   );
+}
+
+// The deck's own screen: the short link when the game has a slug and the Command a number, the legacy link otherwise.
+function deckHref(gameId: string, slug: string | null | undefined, command: GameCommand): string {
+  if (slug && command.review_number !== undefined) return reviewPath(slug, command.review_number);
+  return `/game/${encodeURIComponent(gameId)}/review/${encodeURIComponent(command.checkpoint_id)}`;
 }

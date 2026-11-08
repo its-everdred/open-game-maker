@@ -1,9 +1,11 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { GameCommand } from '@ogm/contracts';
 import type { EnergyView } from '@ogm/contracts/browser';
 
+import { useDeckDraft, useReviewDraft } from '../features/commands-inbox/drafts';
 import { StudioMenu } from './StudioMenu';
 
 const state = vi.hoisted(() => ({
@@ -275,6 +277,22 @@ describe('StudioMenu', () => {
     expect(screen.getByRole('dialog', { name: 'Build the moon gate' })).toBeVisible();
     expect(screen.getByText('conversation job-1')).toBeVisible();
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  // Review drafts live in memory until sent; the next person signing in on the same device must not find them.
+  it('clears unsent review drafts on sign out', async () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    auth.signOut.mockResolvedValueOnce(undefined);
+    const draft = { checkpoint_id: 'cp_1', version: 1 } as GameCommand;
+    const { result } = renderHook(() => ({ edit: useDeckDraft(draft)[1], draft: useReviewDraft(draft) }));
+    act(() => result.current.edit({ type: 'judge', optionId: 'a', verdict: 'like' }));
+    expect(result.current.draft.deck.cards).toHaveLength(1);
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    await waitFor(() => expect(result.current.draft.deck.cards).toEqual([]));
   });
 
   it('keeps sign out retryable when the auth request fails', async () => {

@@ -69,6 +69,24 @@
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
+  /* The review's glossy look (#614), after the studio prototype's games screen: five soft glows on a deep night, and
+     glass panes over them. Only the review surface uses these; the rest of the app stays flat Gruvbox. */
+  --glow-night: #0f0e16;
+  --glow-1: radial-gradient(closest-side, rgb(214 93 14 / 0.32), rgb(214 93 14 / 0.14) 55%, transparent);
+  --glow-2: radial-gradient(closest-side, rgb(177 98 134 / 0.3), rgb(177 98 134 / 0.14) 55%, transparent);
+  --glow-3: radial-gradient(closest-side, rgb(69 133 136 / 0.34), rgb(69 133 136 / 0.15) 55%, transparent);
+  --glow-4: radial-gradient(closest-side, rgb(215 153 33 / 0.2), rgb(215 153 33 / 0.09) 55%, transparent);
+  --glow-5: radial-gradient(closest-side, rgb(104 157 106 / 0.16), rgb(104 157 106 / 0.07) 55%, transparent);
+  --glow-sheen: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 0.07),
+    transparent 38%,
+    rgb(255 255 255 / 0.025) 62%,
+    transparent 80%
+  );
+  --glass-fill: rgb(24 22 32 / 0.55);
+  --glass-edge: rgb(242 234 214 / 0.32);
+  --glass-shine: rgb(255 255 255 / 0.14);
 }
 
 * {
