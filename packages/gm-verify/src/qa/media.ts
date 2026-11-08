@@ -4,6 +4,20 @@ import { ffmpeg } from '../capture.js';
 export const PANE_HEIGHT = 720;
 const H264 = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast', '-crf', '27', '-movflags', '+faststart'];
 
+/** Recordings are at most this wide: what the MP4 needs, and Playwright's encoder keeps up with a loaded host. */
+export const RECORD_MAX_WIDTH = 960;
+
+/** The recording size for a viewport: its own size, scaled down to `RECORD_MAX_WIDTH`, both sides even. */
+export function recordSize(viewport: { width: number; height: number } | null | undefined): {
+  width: number;
+  height: number;
+} {
+  const { width, height } = viewport ?? { width: 1280, height: 720 };
+  const scale = Math.min(1, RECORD_MAX_WIDTH / width);
+  const even = (n: number) => Math.max(2, Math.round((n * scale) / 2) * 2);
+  return { width: even(width), height: even(height) };
+}
+
 /** Playwright's WebM recording as a phone-playable MP4. */
 export function mp4Args(webm: string, out: string): string[] {
   return ['-i', webm, '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', ...H264, out];

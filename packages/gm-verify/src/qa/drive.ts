@@ -8,7 +8,7 @@ import { FfmpegMissingError, hasFfmpeg } from '../capture.js';
 import { ConsoleCollector } from '../console.js';
 import type { ConsoleEntry, ViewportName } from '../report.js';
 import type { SoloJourney } from './journey.js';
-import { encodeClip } from './media.js';
+import { encodeClip, recordSize } from './media.js';
 import { watchConsole } from './open.js';
 import { Player, type StepResult } from './player.js';
 
@@ -42,7 +42,7 @@ export async function driveJourney(
   const dir = join(options.outDir, journey.name);
   const videoDir = join(dir, '.video');
   mkdirSync(videoDir, { recursive: true });
-  const size = VIEWPORTS[viewport].viewport ?? { width: 1280, height: 720 };
+  const size = recordSize(VIEWPORTS[viewport].viewport);
   const context = await browser.newContext({ ...VIEWPORTS[viewport], recordVideo: { dir: videoDir, size } });
   const collector = new ConsoleCollector();
   let steps: StepResult[];

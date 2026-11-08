@@ -8,7 +8,7 @@ import { FfmpegMissingError, hasFfmpeg } from '../capture.js';
 import { ConsoleCollector } from '../console.js';
 import type { ConsoleEntry, ViewportName } from '../report.js';
 import type { ExpectStep, RoomJourney } from './journey.js';
-import { encodeGif, sideBySide } from './media.js';
+import { encodeGif, recordSize, sideBySide } from './media.js';
 import { watchConsole } from './open.js';
 import { Player, type StepResult } from './player.js';
 
@@ -100,7 +100,7 @@ export async function qaRoom(
   try {
     for (let seat = 0; seat < options.clients; seat += 1) {
       const viewport = viewportFor(seat);
-      const size = VIEWPORTS[viewport].viewport ?? { width: 1280, height: 720 };
+      const size = recordSize(VIEWPORTS[viewport].viewport);
       const context = await browser.newContext({
         ...VIEWPORTS[viewport],
         recordVideo: { dir: join(videoDir, String(seat)), size },

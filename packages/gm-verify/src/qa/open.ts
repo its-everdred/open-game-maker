@@ -63,12 +63,14 @@ async function openOne(
     await page.goto(url, { waitUntil: 'commit', timeout: timeoutMs });
     let ttiMs: number | null = null;
     let readyHook = false;
-    while (Date.now() - started < timeoutMs) {
+    /* Checks once more after the deadline, so a slow boot reads as slow (with its time), not as never interactive. */
+    for (;;) {
       readyHook = await readyFlag(page);
       if (readyHook || !isBlank(await pixelStats(page, await frame(page)))) {
         ttiMs = Date.now() - started;
         break;
       }
+      if (Date.now() - started >= timeoutMs) break;
       await page.waitForTimeout(POLL_MS);
     }
     /* A frame or two after ready, so the still shows what a player sees rather than the first paint. */
@@ -79,6 +81,7 @@ async function openOne(
     const renderer = await rendererString(page);
     const entries = collector.list();
     if (ttiMs === null) failures.push(`not interactive after ${timeoutMs}ms`);
+    else if (ttiMs > timeoutMs) failures.push(`interactive after ${ttiMs}ms, over the ${timeoutMs}ms limit`);
     if (blank) failures.push('blank frame');
     if (renderer === 'no WebGL') failures.push('no WebGL');
     for (const entry of entries.filter((e) => e.level === 'error')) failures.push(`console error: ${entry.text}`);

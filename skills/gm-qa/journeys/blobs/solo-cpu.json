@@ -1,0 +1,21 @@
+{
+  "name": "solo-cpu",
+  "viewport": "desktop",
+  "steps": [
+    { "do": "expect", "text": "Versus CPU", "timeoutMs": 90000 },
+    { "do": "click", "text": "Versus CPU" },
+    { "do": "expect", "text": "ticks", "timeoutMs": 20000, "look": "Is a countdown showing over both boards, yours in front?" },
+    { "do": "wait", "ms": 3500 },
+    { "do": "press", "key": "ArrowLeft", "times": 2 },
+    { "do": "press", "key": "ArrowUp" },
+    { "do": "press", "key": "Space" },
+    {
+      "do": "expect",
+      "pixels": "changed",
+      "region": [0.42, 0.35, 0.16, 0.5],
+      "look": "Did the piece land at the bottom of your board, moved left and turned?"
+    },
+    { "do": "wait", "ms": 5000 },
+    { "do": "expect", "pixels": "nonblank", "look": "Is the CPU's board filling up while yours stays playable?" }
+  ]
+}
