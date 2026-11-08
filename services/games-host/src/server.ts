@@ -2,7 +2,7 @@ import { createReadStream, type Stats } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { relative, sep } from 'node:path';
 import { Readable } from 'node:stream';
-import { createBrotliCompress, createGzip } from 'node:zlib';
+import { constants as zlib, createBrotliCompress, createGzip } from 'node:zlib';
 
 import { Hono, type Context, type Handler, type MiddlewareHandler } from 'hono';
 
@@ -170,7 +170,9 @@ async function serveFile(
 
   let body: Readable = createReadStream(bodyFile);
   if (encoding === 'br' && bodyFile === file) {
-    body = body.pipe(createBrotliCompress());
+    // Node's default Brotli quality (11) took 38 s to stream a 5.4 MB game bundle, so the game sat blank; quality 5 is
+    // a few hundred ms and still well under gzip's size.
+    body = body.pipe(createBrotliCompress({ params: { [zlib.BROTLI_PARAM_QUALITY]: 5 } }));
   } else if (encoding === 'gzip') {
     body = body.pipe(createGzip());
   }
