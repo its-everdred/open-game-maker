@@ -21,6 +21,12 @@ export const CommandOption = z.object({
 // 2-5 native-question rule.
 export const MAX_COMMAND_OPTIONS = 12;
 
+// Marks a Command as a player-facing question (#595). Game Maker writes it into the decision's long context; the
+// creator's inbox, menu count and review deck show only Commands that carry it (or a gm checkpoint marker). Everything
+// else (engineering and operations questions) stays with the Executor. Until aiur exposes an audience field, this
+// marker is how a Command says who it is for.
+export const CREATOR_AUDIENCE_MARKER = '<!-- gm-audience:creator -->';
+
 export const GameCommand = z.object({
   // Null when the Command belongs to no job: a game registered from a repository that already exists reads its
   // instance's open Commands, and its `checkpoint_id` is aiur's decision id.

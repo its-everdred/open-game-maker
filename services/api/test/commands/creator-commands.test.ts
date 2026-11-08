@@ -1,4 +1,5 @@
 import type { AiurClient, Decision } from '@ogm/aiur-client';
+import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -11,7 +12,7 @@ import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
 // Kevin (2026-11-08): the creator's menu shows how many decisions are open across all their games and walks through
 // them, and it shows player-facing decisions only. An engineering question (a provider's HTTP 402, a CI check) goes to
-// the Executor; until aiur has an audience field, a decision without `audience: "creator"` stays out of creator views.
+// the Executor; until aiur has an audience field, a decision without Game Maker's creator marker stays out of creator views.
 
 const ids = {
   family: 'f_70000000-0000-4000-8000-000000000001',
@@ -81,7 +82,7 @@ const decision = (id: string, overrides: Partial<Decision> = {}): Decision => ({
     { id: 'b', label: 'B' },
   ],
   recommendation: { option_id: 'a' },
-  context: { short_summary: `Topic ${id}`, audience: 'creator' },
+  context: { short_summary: `Topic ${id}`, long_context_markdown: CREATOR_AUDIENCE_MARKER },
   answer: null,
   active_answer: null,
   created_at: AT,
@@ -132,7 +133,7 @@ describe('the creator’s decision inbox', () => {
       [ids.blobs]: [
         decision('d_player'),
         decision('d_engineering', { context: { short_summary: 'Vision broker returns 402' } }),
-        decision('d_ops', { context: { short_summary: 'Rotate token', audience: 'executor' } }),
+        decision('d_ops', { context: { short_summary: 'Rotate token' } }),
       ],
     });
 
@@ -334,7 +335,10 @@ describe('a job’s Commands in the decision inbox', () => {
     expect((await (await read(deps, '/me/commands')).json()) as unknown).toEqual({ commands: [] });
 
     await pollerFor(deps, [
-      decision('d_legacy', { kind: 'native_question', context: { short_summary: 'Door style', audience: 'creator' } }),
+      decision('d_legacy', {
+        kind: 'native_question',
+        context: { short_summary: 'Door style', long_context_markdown: CREATOR_AUDIENCE_MARKER },
+      }),
     ]).tick();
     const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<Record<string, unknown>> };
 
@@ -367,22 +371,22 @@ describe('a job’s Commands in the decision inbox', () => {
     const decisions = [
       decision('d_mirror_player', {
         kind: 'native_question',
-        context: { short_summary: 'Gate colour', audience: 'creator' },
+        context: { short_summary: 'Gate colour', long_context_markdown: CREATOR_AUDIENCE_MARKER },
       }),
       decision('d_mirror_eng', { kind: 'native_question', context: { short_summary: 'CI is red' } }),
     ];
     const poller = pollerFor(deps, decisions);
 
     await poller.tick();
-    // Both decisions were mirrored; only the creator's reaches the menu.
-    expect(deps.sqlite.prepare(`SELECT id FROM build_chat_messages WHERE kind = 'checkpoint'`).all()).toHaveLength(2);
+    // Only the creator's decision is mirrored (#595), so only it reaches the menu.
+    expect(deps.sqlite.prepare(`SELECT id FROM build_chat_messages WHERE kind = 'checkpoint'`).all()).toHaveLength(1);
     const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<Record<string, unknown>> };
 
     expect(body.commands).toEqual([
       expect.objectContaining({
         decision_id: 'd_mirror_player',
         job_id: ids.job,
-        title: 'Add the moon gate',
+        title: 'Gate colour',
         summary: 'Gate colour',
         game_title: 'Blobs',
       }),

@@ -40,9 +40,9 @@ option that carries an image, GIF, video or audio.
 ### Player-facing only
 
 The inbox lists only Commands meant for the player. Engineering and operations questions go to the Executor and never
-reach a creator view. Aiur has no audience field yet, so a decision aiur holds counts as the player's only when its
-`context.audience` is `"creator"`; any other decision is left out. A builder's own `checkpoint.open` question is
-the player's by construction.
+reach a creator view. Aiur has no audience field yet, so a decision aiur holds counts as the player's only when it
+carries Game Maker's creator marker (`CREATOR_AUDIENCE_MARKER`, which `gm decide` writes) or a gm checkpoint marker;
+any other decision is left out. A builder's own `checkpoint.open` question is the player's by construction.
 
 ## The menu's decision inbox
 

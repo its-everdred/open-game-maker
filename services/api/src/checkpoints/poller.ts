@@ -39,6 +39,10 @@ function nativeCheckpoint(decision: Decision): StoredCheckpoint {
   const recommend = recommendationOf(decision);
   const audience = creatorAudience(decision);
   const summary = summaryOf(decision);
+  // A short summary only titles the Command when it is topic-sized (as `gm decide` writes it); a longer one would not
+  // fit the inbox title, so the job's title stays.
+  const shortSummary = decision.context?.short_summary?.trim();
+  const topic = shortSummary && shortSummary.length <= 80 ? shortSummary : undefined;
   return {
     checkpoint_id: decision.decision_id,
     decision_id: decision.decision_id,
@@ -48,6 +52,7 @@ function nativeCheckpoint(decision: Decision): StoredCheckpoint {
     ...(recommend === undefined ? {} : { recommend }),
     blocking: decision.blocking,
     pick: pickOf(decision),
+    ...(topic ? { topic } : {}),
     status: statusOf(decision),
     ...(audience === undefined ? {} : { audience }),
     ...(summary === undefined ? {} : { summary }),

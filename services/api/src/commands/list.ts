@@ -53,7 +53,8 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
       const command = GameCommand.safeParse({
         job_id: job.id,
         ticket: job.aiurIssueNumber === null ? null : String(job.aiurIssueNumber),
-        title: job.plan.title,
+        // A Command's own topic titles it; an older checkpoint without one falls back to the job's title.
+        title: checkpoint.topic ?? job.plan.title,
         ...(checkpoint.summary === undefined ? {} : { summary: checkpoint.summary }),
         checkpoint_id: checkpoint.checkpoint_id ?? row.id,
         decision_id: checkpoint.decision_id,
