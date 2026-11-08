@@ -30,7 +30,9 @@ describe('gm wrappers of the vendored tool sets', () => {
     expect(variants).toContain('never leave `--route` out, and skip any other command that would generate');
     /* sprite_set.py run calls route_media.py video with no --route for every action without a supplied clip. */
     expect(variants).toContain('never run `route_media.py video` or `sprite_set.py run`');
-    expect(variants).toContain('`video2dsprite` only runs `video2dsprite.py process` on a clip the creator supplies');
+    expect(variants).toContain(
+      'On a clip the creator supplies, `video2dsprite` runs its one-clip pipeline without step 3 (Generate)',
+    );
     expect(variants).toContain("a configured key is the owner's consent");
     expect(variants).toContain('Ask the Executor before any generation');
     expect(variants).toContain('Never send a paid-pack asset to a cloud model as a reference');
@@ -50,6 +52,7 @@ describe('gm wrappers of the vendored tool sets', () => {
       .filter((name) => name.startsWith('gm-') && existsSync(join(skills, name, 'SKILL.md')))
       .map((name) => join(name, 'SKILL.md'))
       .concat('gm-core/references/roles.md');
+    expect(files.length).toBeGreaterThan(10);
     for (const file of files) {
       const prose = readFileSync(join(skills, file), 'utf8').replace(/\s+/g, ' ');
       for (const m of prose.matchAll(/(\S+ \S+ )?`?--route[ =]`?([\w-]+)/g))

@@ -62,8 +62,8 @@ key is the owner's consent":
   passes `--route codex-cli` (the signed-in Codex CLI): `generate2dmedia`'s `route_media.py image`, `master_still.py
   generate` and `master_still.py edit`. Never use `--route auto`, `api`, `local` or a Grok route, never leave
   `--route` out, and skip any other command that would generate.
-- Video is never generated: never run `route_media.py video` or `sprite_set.py run`. `video2dsprite` only runs
-  `video2dsprite.py process` on a clip the creator supplies.
+- Video is never generated: never run `route_media.py video` or `sprite_set.py run`. On a clip the creator supplies,
+  `video2dsprite` runs its one-clip pipeline without step 3 (Generate).
 - Ask the Executor before any generation; it is the operator's call. Processing what exists needs no ask.
 - Never send a paid-pack asset to a cloud model as a reference; only free-licence files may go.
 
