@@ -14,7 +14,8 @@ export type RefusalRule =
   | 'missing-file'
   | 'sha-mismatch'
   | 'name-collision'
-  | 'unknown-id';
+  | 'unknown-id'
+  | 'unlisted';
 
 export type Refusal = { code: 'rights'; rule: RefusalRule; id: string; detail: string; path?: string };
 export type LockRights = LockEntry['rights'];

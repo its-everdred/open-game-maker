@@ -7,7 +7,9 @@ import { ConfigError, loadEnv } from '@ogm/config';
 
 import { CommandError, EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { printJson } from '../../context.js';
+import { readLock } from '../../lock.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
+import { scanReferences, unlisted } from '../../references.js';
 
 /*
  * The operator's publish for a game registered against a repository whose own tickets are not Game Maker jobs: no
@@ -208,6 +210,16 @@ export const command: GmCommand = {
 
       // The game's own build script is its production build; a script that already names a base or a mode keeps it.
       // The base stays relative because the games host serves every build under /g/<gameId>/<buildId>/.
+      // The asset list is what ships: refuse before building when the code names an asset the list lacks.
+      const listed = (await readLock(game))?.assets.map((entry) => entry.id) ?? [];
+      const missingAssets = unlisted(listed, await scanReferences(game));
+      if (missingAssets.length > 0) {
+        const lines = missingAssets.map(({ id, file }) => `${id} (${file})`).join('\n');
+        throw new CommandError(
+          `assets.lock.json does not list assets the code uses:\n${lines}\nTry: gm assets use <id>`,
+        );
+      }
+
       const pkg = JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')) as { scripts?: { build?: string } };
       const script = pkg.scripts?.build ?? '';
       if (!script) throw new CommandError(`${facts.repoPath} has no build script`);
