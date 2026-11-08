@@ -68,6 +68,7 @@ describe('command registry', () => {
       'packs index',
       'packs sync',
       'perf',
+      'policy',
       'run',
       'scope done',
       'shot',

@@ -15,6 +15,10 @@ Before coding, write a five-line plan and a short list titled "defaults I'd reac
 it against the scope. Templates are engine scaffolds, not game designs: do not inherit a theme, entity, HUD, name,
 or mechanic from them.
 
+Playing a game spends no tokens and no paid API unless `gm policy` says paid APIs during gameplay are on (an instance
+admin setting, off by default). While it is off, design no live paid feature (LLM, voice or media API calls at play
+time): bake that content at build time, and never put a provider key in the game.
+
 ## Keep the layers honest
 
 Pack facts go on asset cards or in the set adapter, never in the game. Call the adapter for rendering, collision,
@@ -78,6 +82,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm chat post` sends the current still or clip to the build chat.
 - `gm checkpoint open|wait` offers and waits on a creator-facing decision.
 - `gm changes` summarizes the current game-repo diff.
+- `gm policy` says whether a played game may call paid APIs.
 
 ## Load when…
 
