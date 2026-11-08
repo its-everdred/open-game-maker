@@ -78,11 +78,11 @@ describe('gm look evidence', () => {
 
   it('fails absolute paths and paths that climb out of the repository', async () => {
     const { root, game } = monorepo();
-    const file = body(root, '`/home/user/sheet.png` and `../../../review/210/sheet-phone.png`');
+    const file = body(root, '`/tmp/sheet.png` and `../../../review/210/sheet-phone.png`');
     const result = await gm(['look', 'evidence', '--body', file, '--json'], { cwd: game });
     expect(result.code).toBe(1);
     expect(JSON.parse(result.out.join('\n')).missing).toEqual([
-      '/home/user/sheet.png',
+      '/tmp/sheet.png',
       '../../../review/210/sheet-phone.png',
     ]);
   });
