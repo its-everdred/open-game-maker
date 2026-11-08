@@ -52,10 +52,13 @@ export function markSent(command: GameCommand): void {
   }));
 }
 
-// Changing a saved answer: the question opens again as an untouched deck, not the votes already sent.
+// Changing a saved answer: the deck starts untouched rather than from the votes already sent. The answer stays sent
+// until a new one goes out, so leaving mid-change keeps the question answered.
 export function reopenDraft(command: GameCommand): void {
   const key = draftKey(command);
-  useDraftStore.setState((store) => ({ drafts: { ...store.drafts, [key]: EMPTY } }));
+  useDraftStore.setState((store) => ({
+    drafts: { ...store.drafts, [key]: { ...(store.drafts[key] ?? EMPTY), deck: initialDeck() } },
+  }));
 }
 
 // A row's state in the inbox: untouched, started (some cards judged or notes written) or sent.

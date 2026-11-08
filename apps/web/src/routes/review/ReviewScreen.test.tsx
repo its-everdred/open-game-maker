@@ -143,6 +143,10 @@ describe('the decision screen with voice', () => {
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Change' })));
     expect(screen.getByRole('heading', { name: 'Pick a hero' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Choose' })).toBeVisible();
+    // Leaving before a new answer goes out keeps the question answered.
+    cleanup();
+    renderScreen();
+    expect(screen.getByRole('heading', { name: 'Saved' })).toBeVisible();
   });
 
   // A registered game's own Command has no job to tell, and its aiur cannot take a changed answer.

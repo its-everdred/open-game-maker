@@ -223,7 +223,8 @@ function ReviewScreen({
     );
 
   const answered = seen ?? command;
-  if ((saved || spokenSave || sentBefore) && answered !== undefined) {
+  // While a change is open the earlier answer is still on record, but the deck is what the creator is answering.
+  if ((saved || spokenSave || (sentBefore && correcting === 0)) && answered !== undefined) {
     return (
       <ReviewFrame
         head={
