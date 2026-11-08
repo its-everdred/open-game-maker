@@ -39,6 +39,7 @@ const admin = [
   'admin.analytics.read',
   'game.flag_abuse',
   'report.view',
+  'admin.gameplay.set',
 ] as const satisfies readonly Action[];
 
 const sameFamilyOther = {
@@ -56,6 +57,7 @@ const sameFamilyOther = {
     'game.flag_abuse',
     'report.file',
     'report.view',
+    'admin.gameplay.set',
   ],
   creator: ['game.create', 'game.play', 'game.fork', 'member.invite', 'report.file'],
   player: ['game.play', 'report.file'],

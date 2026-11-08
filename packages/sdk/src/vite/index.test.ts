@@ -34,10 +34,11 @@ describe('foldDesignFiles', () => {
     });
   });
 
-  it('leaves the creator feedback ledger out of the design doc', () => {
+  it('leaves the creator feedback ledger and the decision record out of the design doc', () => {
     const dir = designDir({
       'a.json': { schemaVersion: 1, globals: { width: 10 }, entities: { [A]: entity(A) } },
       'feedback.json': { schemaVersion: 1, entries: [] },
+      'decisions.json': { schemaVersion: 1, decisions: [] },
     });
     expect(foldDesignFiles(dir)).toEqual({
       schemaVersion: 1,

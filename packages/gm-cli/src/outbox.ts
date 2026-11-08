@@ -162,27 +162,24 @@ export function copyOutboxMedia(root: string, source: string, kind: 'image' | 'c
   return relativePath;
 }
 
-export function knownChatMessageIds(root: string, jobId: string): Set<string> {
+/** The job's chat posts by id, with what each carries: a text line, or an image or clip the creator can see. */
+export function knownChatMessageIds(root: string, jobId: string): Map<string, ChatPostPayload['kind']> {
   const file = join(root, '.gm', 'outbox', 'chat.jsonl');
   let contents: string;
   try {
     contents = readFileSync(file, 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Set();
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Map();
     throw new CommandError(`cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const ids = new Set<string>();
+  const ids = new Map<string, ChatPostPayload['kind']>();
   for (const raw of contents.split('\n')) {
     if (!raw.trim()) continue;
     try {
       const parsed = AgentOutboxLine.safeParse(JSON.parse(raw));
-      if (
-        parsed.success &&
-        parsed.data.type === 'chat.post' &&
-        parsed.data.job_id === jobId &&
-        ChatPostPayload.safeParse(parsed.data.payload).success
-      )
-        ids.add(parsed.data.id);
+      if (!parsed.success || parsed.data.type !== 'chat.post' || parsed.data.job_id !== jobId) continue;
+      const post = ChatPostPayload.safeParse(parsed.data.payload);
+      if (post.success) ids.set(parsed.data.id, post.data.kind);
     } catch {
       // A malformed prior line is not a valid media candidate.
     }
