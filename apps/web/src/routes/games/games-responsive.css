@@ -126,7 +126,7 @@
 
 @media (orientation: landscape) and (max-height: 540px) {
   /* The spotlight fills the screen above the New game band; its decisions scroll inside the copy column, so the row
-     never outgrows the screen and pushes the cover off it (#629). */
+     never outgrows the screen and pushes the cover off it. */
   .games-spotlight {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
     grid-template-rows: minmax(0, 1fr);

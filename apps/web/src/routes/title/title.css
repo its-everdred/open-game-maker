@@ -11,7 +11,7 @@
 
 .title-town {
   /* the whole screen, under iOS Safari's toolbars and the home indicator too: the screen box is 100svh (so Start stays
-     above the toolbar), which stops short of the bottom once the toolbar floats or hides (#629) */
+     above the toolbar), which stops short of the bottom once the toolbar floats or hides */
   position: fixed;
   top: 0;
   right: 0;
