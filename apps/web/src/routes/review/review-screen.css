@@ -13,7 +13,7 @@
   z-index: 50;
 }
 
-/* The review is the whole screen (#594): the app's logo, menu and chat dock never float over the deck. */
+/* The review is the whole screen: the app's logo, menu and chat dock never float over the deck. */
 .app-chrome:has(.review-screen) :is(.studio-logo, .studio-menu-control, #chat-dock-slot) {
   display: none;
 }
