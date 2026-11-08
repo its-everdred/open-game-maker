@@ -170,8 +170,10 @@ export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcom
   const design = isDesignJob(job.kind);
   const previous = design ? latestForCheckpoint(deps.db, job.gameId, checkpoint.checkpoint_id ?? row.id) : null;
   if (checkpoint.status === 'answered') {
-    // The same answer again — a double click or a retry — is the answer already standing, not a conflict.
-    if (checkpoint.option_id === optionId) return { kind: 'answered', decisionId: checkpoint.decision_id, optionId };
+    // The same answer again — a double click or a retry — is the answer already standing, not a conflict. A corrected
+    // answer stands in place of aiur's.
+    const standing = checkpoint.corrected_option_id ?? checkpoint.option_id;
+    if (standing === optionId) return { kind: 'answered', decisionId: checkpoint.decision_id, optionId };
     if (checkpoint.option_id === undefined) return { kind: 'conflict', status: 'answered' };
     if (!design) {
       const job = input.job as typeof input.job & { aiur: NonNullable<typeof input.job.aiur> };

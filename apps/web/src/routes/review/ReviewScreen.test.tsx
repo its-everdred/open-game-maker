@@ -67,6 +67,7 @@ vi.mock('../../features/commands-inbox/ReviewDeck', () => ({
 afterEach(() => {
   cleanup();
   state.commands = [command];
+  state.isFetching = false;
   voice.mounts = 0;
   voice.unmounts = 0;
   voice.targets = [];
@@ -106,6 +107,18 @@ describe('the decision screen with voice', () => {
     expect(screen.getByRole('heading', { name: 'Saved' })).toBeVisible();
     expect(voice.unmounts).toBe(0);
 
+    // The next spoken turn refetches the Commands; Saved holds and the call stays up.
+    state.isFetching = true;
+    view.rerender(
+      <MemoryRouter initialEntries={['/blobs/review/1']}>
+        <Routes>
+          <Route path="/:slug/review/:number" element={<ShortReviewScreen />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('heading', { name: 'Saved' })).toBeVisible();
+    expect(voice.unmounts).toBe(0);
+
     // Change reopens the same decision even though it is no longer in the open list.
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Change' })));
     expect(screen.getByRole('heading', { name: 'Pick a hero' })).toBeVisible();
@@ -116,5 +129,15 @@ describe('the decision screen with voice', () => {
     renderScreen();
     fireEvent.click(screen.getByRole('button', { name: 'Choose' }));
     expect(screen.getByRole('heading', { name: 'Saved' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
+  });
+
+  // A registered game's own Command has no job to tell, and its aiur cannot take a changed answer.
+  it('offers no Change for a Command with no job', () => {
+    state.commands = [{ ...command, job_id: null }];
+    renderScreen();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose' }));
+    expect(screen.getByRole('heading', { name: 'Saved' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
   });
 });

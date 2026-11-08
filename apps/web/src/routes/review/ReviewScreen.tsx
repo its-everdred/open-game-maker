@@ -83,6 +83,8 @@ function ReviewScreen({
   // open on a fresh read, the answer landed. Worked out during render, so the screen goes straight to Saved and the
   // voice button stays mounted (an effect would render the "not open" state first and hang up the call).
   const spokenSave = voiceUsed && seen !== undefined && command === undefined && !isFetching && correcting === 0;
+  // Latched, so a later refetch (each spoken turn asks for one) cannot drop the screen out of Saved mid-call.
+  if (spokenSave && !saved) setSaved(true);
 
   // The Command's job is what gives the screen the app's voice support: the same build-chat voice target the composer
   // uses, naming this decision so the agent is briefed on it first. A Command without a job in hand keeps typing only.
@@ -125,16 +127,19 @@ function ReviewScreen({
         </header>
         <div className="review-screen-body">
           <p className="review-screen-question">{seen.question}</p>
-          <button
-            className="review-screen-change tap-secondary"
-            onClick={() => {
-              setSaved(false);
-              setCorrecting((count) => count + 1);
-            }}
-            type="button"
-          >
-            Change
-          </button>
+          {/* A Command with no job answers through its game's own aiur, which cannot take a changed answer. */}
+          {seen.job_id === null ? null : (
+            <button
+              className="review-screen-change tap-secondary"
+              onClick={() => {
+                setSaved(false);
+                setCorrecting((count) => count + 1);
+              }}
+              type="button"
+            >
+              Change
+            </button>
+          )}
         </div>
       </div>
     );

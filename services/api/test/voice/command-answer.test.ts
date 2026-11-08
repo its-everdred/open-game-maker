@@ -158,7 +158,17 @@ describe('answerVoiceCommand', () => {
       'The creator changed their answer to "Ship it?": "Ship it" now stands instead of "Wait". Follow the new answer.',
       expect.any(String),
     );
-    expect(parseCheckpoint(row())).toMatchObject({ status: 'answered', option_id: 'ship' });
+    expect(parseCheckpoint(row())).toMatchObject({
+      status: 'answered',
+      option_id: 'wait',
+      corrected_option_id: 'ship',
+    });
+
+    // The poller keeps option_id equal to aiur's answer; the correction survives it.
+    const polled = parseCheckpoint(row())!;
+    deps.sqlite
+      .prepare('UPDATE build_chat_messages SET checkpoint_json = ? WHERE id = ?')
+      .run(JSON.stringify({ ...polled, option_id: 'wait' }), row().id);
 
     // Changing back compares against the answer that now stands, so the ticket hears that too.
     const job = (await deps.registry.chatJobs!.get(ids.running))!;
@@ -167,7 +177,8 @@ describe('answerVoiceCommand', () => {
     ).resolves.toMatchObject({ kind: 'superseded', optionId: 'wait' });
     expect(message).toHaveBeenCalledTimes(2);
     expect(message.mock.calls[1]![1]).toContain('"Wait" now stands instead of "Ship it"');
-    expect(parseCheckpoint(row())).toMatchObject({ option_id: 'wait' });
+    expect(parseCheckpoint(row())).toMatchObject({ option_id: 'wait', corrected_option_id: 'wait' });
+    expect(new Set(message.mock.calls.map((call) => call[2])).size).toBe(2);
   });
 
   it('routes a spoken option through the Aiur Decision API and closes the local Command', async () => {
