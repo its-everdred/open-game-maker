@@ -76,7 +76,8 @@ summary and an opaque reference.
 
 When the player says it's ready, or the important decisions are answered or defaulted, write the spec using
 `references/spec-template.md` and hand it to the Executor (the new-game parent issue's private context). The Executor
-plans the whole game with `gm-new-game-plan`; you do not create tickets.
+plans the whole game with `gm-new-game-plan`; you do not create tickets. The spec's loops and screens
+are the first draft of the game's flow diagram (`../gm-new-game-plan/references/flow-diagram.md`).
 
 A spec is complete when the Executor can plan without a second interview: core loop, controls, camera, world and
 levels, progression, win and loss, the prototype ladder's rungs (what each proves), acceptance criteria, and the open

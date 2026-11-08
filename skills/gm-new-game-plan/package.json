@@ -1,0 +1,17 @@
+{
+  "name": "@ogm/gm-new-game-plan",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint skill.test.ts scripts"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}

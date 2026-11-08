@@ -34,7 +34,8 @@ The Executor runs all four against a game's newest build with `ops/bin/ogm-qa <s
 
 ## Journeys
 
-A journey is JSON in `games/<name>/qa/journeys/`. Points and regions are viewport fractions, so one journey fits both
+A journey is JSON in `games/<name>/qa/journeys/`. It follows a path of edges in the game's flow diagram
+(`design/flow/flow.md`), and the journeys together cover every edge. Points and regions are viewport fractions, so one journey fits both
 sizes. `{name}` is a value a `read` step saved; room journeys also have `{clients}` and `{seat}`.
 
 | Step | Does |
