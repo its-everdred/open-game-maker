@@ -26,7 +26,8 @@ export function useGridNav(options: GridNavOptions) {
   const arrived = useRef(false);
   useEffect(() => {
     const tile = options.containerRef?.current?.querySelectorAll<HTMLButtonElement>('.game-tile')[focused];
-    if (!tile) return;
+    // already focused: StrictMode's second effect run must not spend the arrival
+    if (!tile || tile === document.activeElement) return;
     tile.focus({ preventScroll: !arrived.current });
     arrived.current = true;
   }, [focused, options.containerRef]);

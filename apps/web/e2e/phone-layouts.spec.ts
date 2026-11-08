@@ -56,6 +56,16 @@ test('the title scene reaches the bottom of the screen even when the title box i
   expect(town.y).toBe(0);
   expect(town.y + town.height).toBeGreaterThanOrEqual(852);
   await expect(start).toBeInViewport();
+  // Chromium has no collapsing toolbar, so 100svh and 100lvh measure alike here: pin the unit that reaches under it.
+  const height = await page.evaluate(() =>
+    [...document.styleSheets]
+      .filter((sheet) => !sheet.href || sheet.href.startsWith(location.origin))
+      .flatMap((sheet) => [...sheet.cssRules])
+      .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule && rule.selectorText === '.title-town')
+      .map((rule) => rule.style.getPropertyValue('height'))
+      .find(Boolean),
+  );
+  expect(height).toBe('100lvh');
 });
 
 for (const [device, viewport] of Object.entries(landscapes)) {
