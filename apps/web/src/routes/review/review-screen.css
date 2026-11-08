@@ -171,7 +171,7 @@
   gap: 28px;
 }
 
-/* The deck's screen fits the phone it is on (#631): the header, the card at the largest size that fits, the controls
+/* The deck's screen fits the phone it is on: the header, the card at the largest size that fits, the controls
    and the question line, with nothing to scroll in portrait or landscape. */
 .review-screen-deck {
   display: flex;
