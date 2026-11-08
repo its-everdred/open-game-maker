@@ -25,6 +25,21 @@ describe('MailSender', () => {
     expect(selected.sender).toBeInstanceOf(SmtpMailSender);
   });
 
+  it('keeps a QA address on the admin inbox under SMTP, so the host can read its sign-in link', async () => {
+    const { sqlite } = makeDeps();
+    const sendMail = vi.fn().mockResolvedValue({ messageId: '<1@example.com>' });
+    vi.spyOn(SmtpMailSender.prototype, 'send').mockImplementation(sendMail);
+    const { sender } = selectMailSender(
+      { SMTP_URL: 'smtp://127.0.0.1:2525', OGM_QA_EMAILS: 'QA@example.com' },
+      sqlite,
+    );
+    await sender.send({ ...message, to: 'qa@example.com' });
+    await sender.send(message);
+    expect(listOutbox(sqlite).map((row) => row.to)).toEqual(['qa@example.com']);
+    expect(sendMail).toHaveBeenCalledExactlyOnceWith(message);
+    vi.restoreAllMocks();
+  });
+
   it('admin inbox writes one mail_outbox row per send, listable and markable once', async () => {
     const { sqlite } = makeDeps();
     const { id } = await new AdminInboxMailSender(sqlite).send(message);

@@ -10,6 +10,7 @@ export const authEnvSpec = {
   GOOGLE_CLIENT_SECRET: { kind: 'string', required: false },
   SMTP_URL: { kind: 'string', required: false },
   SMTP_FROM: { kind: 'string', required: false },
+  OGM_QA_EMAILS: { kind: 'string', required: false },
 } as const;
 
 export type AuthEnv = ReturnType<typeof loadAuthEnv>;
