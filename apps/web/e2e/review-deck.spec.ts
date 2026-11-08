@@ -282,6 +282,7 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
   await page.getByRole('button', { name: 'Send the review' }).click();
 
   await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
       option_id: 'm1',
@@ -318,11 +319,10 @@ test('heads a long-question review with a short title, an X and nothing over the
   await body.scrollIntoViewIfNeeded();
   await capture(page, testInfo, 'long-question-open');
 
-  // On a phone the screen is the deck's alone: no app menu, logo or chat dock floats over it.
-  if (testInfo.project.name === 'phone') {
-    for (const chrome of ['.studio-menu-control', '.studio-logo', '#chat-dock-slot']) {
-      await expect(page.locator(chrome)).toBeHidden();
-    }
+  // The screen is the deck's alone: no app menu, logo or chat dock floats over it. Checked by style, not visibility, so
+  // an empty dock cannot pass for a hidden one.
+  for (const chrome of ['.studio-menu-control', '.studio-logo', '#chat-dock-slot']) {
+    await expect(page.locator(chrome)).toHaveCSS('display', 'none');
   }
   // Nothing sits over the X: the point at its centre hits the button itself.
   const close = page.getByRole('button', { name: 'Close' });
