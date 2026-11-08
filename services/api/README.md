@@ -8,7 +8,7 @@ Env (through `@ogm/config`): `OGM_API_PORT`, `OGM_ANALYTICS_RETENTION_DAYS` (def
 `OGM_GAMES_ORIGIN`, `OGM_INTERNAL_TOKEN`, `OGM_JOB_TOKEN_SECRET`, `OGM_BLOB_ROOT`, `OGM_BLOB_SIGNING_KEY`,
 `OGM_PUBLIC_ORIGIN`; the auth
 context adds `OGM_APP_ORIGIN`, `OGM_SESSION_SECRET`, `OGM_WS_TOKEN_SECRET` and the optional
-`OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SMTP_URL`, `SMTP_FROM` (see
+`OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SMTP_URL`, `SMTP_FROM`, `OGM_QA_EMAILS` (see
 `docs/ops/netlify-proxy.md`). Room lifecycle calls add `OGM_ROOMS_INTERNAL_URL` and `OGM_ROOMS_INTERNAL_SECRET`.
 The sign-in allow list lives in the `allowed_users` table (lowercase email, `player` / `maker` / `admin` role,
 who added it, when) and admins manage it at `/admin/users`. `OGM_ALLOWED_EMAILS` and `OGM_MAINTAINER_EMAILS` are
