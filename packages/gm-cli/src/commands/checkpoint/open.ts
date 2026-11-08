@@ -79,7 +79,10 @@ export const command: GmCommand = {
   usage: '--question <q> --option <id>=<label> --option <id>=<label> [options]',
   example: 'checkpoint open --question "Which look?" --option a=Chunky --option b=Flat --recommend a',
   flags: {
-    job: { type: 'string', help: 'build job id (defaults to GM_JOB, then .gm/context/job.json)' },
+    job: {
+      type: 'string',
+      help: 'build job id (defaults to GM_JOB, then .gm/context/job.json); without one nothing is written to the outbox',
+    },
     question: { type: 'string', help: 'bounded direction question for the creator' },
     option: { type: 'string', multiple: true, help: 'candidate id and label; repeat 2-5 times' },
     media: { type: 'string', multiple: true, help: 'option id and prior chat message id; repeat as needed' },

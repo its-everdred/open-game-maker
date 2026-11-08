@@ -167,6 +167,9 @@ describe('gm checkpoint open', () => {
       { id: 'fast', label: 'Fast', description: 'Play Fast for 5s' },
     ]);
     expect(JSON.stringify(printed.emit_event.payload.context)).toContain('slices of the game');
+    // The slices also ride in aiur's own copy, so the Command plays wherever it is read from.
+    const context = printed.emit_event.payload.context as { long_context_markdown: string };
+    expect([...playablesFromMarker(context.long_context_markdown).keys()]).toEqual(['slow', 'fast']);
     expect(checkpointLine(root).payload.options).toEqual([
       {
         id: 'slow',
@@ -213,6 +216,17 @@ describe('gm checkpoint open', () => {
       a: { scenario: 'scenario=sandbox&speed=slow', seconds: 20 },
       b: { scenario: 'scenario=sandbox&speed=fast', seconds: 8 },
     });
+  });
+
+  it('exits 2 when the build workspace context names no job, instead of raising a job-less Command', async () => {
+    const root = workspace();
+    mkdirSync(join(root, '.gm', 'context'), { recursive: true });
+    writeFileSync(join(root, '.gm', 'context', 'job.json'), '{}');
+    const result = await gm(['checkpoint', 'open', '--question', 'Which?', '--option', 'a=A', '--option', 'b=B'], {
+      cwd: root,
+    });
+    expect(result.code).toBe(2);
+    expect(result.err[0]).toContain('has no job_id');
   });
 
   it('exits 2 for chat media without a build job', async () => {

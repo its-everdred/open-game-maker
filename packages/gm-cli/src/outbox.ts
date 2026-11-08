@@ -85,6 +85,8 @@ export function optionalJobContext(options: { cwd: string; job?: string; environ
       } catch {
         throw new UsageError(`${contextFile} is not valid JSON`, 'gm chat post --job <id> --text "<one line>"');
       }
+      // A build workspace whose context names no job is broken, not a host checkout.
+      if (!jobId) throw new UsageError(`${contextFile} has no job_id`, 'pass --job <id>');
     }
   }
   if (!jobId) return { root, jobId: null };
