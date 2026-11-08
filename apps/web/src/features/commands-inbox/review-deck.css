@@ -414,7 +414,7 @@
   height: 20px;
 }
 
-/* A playable card (#608): the game's own frame in the card, sized like a clip. Touch buttons, keys and gamepad reach the
+/* A playable card: the game's own frame in the card, sized like a clip. Touch buttons, keys and gamepad reach the
    game; once its slice ends the game pauses under a scrim with "play again" and "compare". */
 .review-deck-playable {
   position: relative;

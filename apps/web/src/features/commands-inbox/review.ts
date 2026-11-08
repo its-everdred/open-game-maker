@@ -149,7 +149,7 @@ export function clipLength(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-// A link never shows as text in the deck (#608): a URL in a title, question or label is dropped and the words around
+// A link never shows as text in the deck: a URL in a title, question or label is dropped and the words around
 // it kept. (`gm checkpoint open` keeps the question itself to one short line.)
 const LINK = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S*/gi;
 
