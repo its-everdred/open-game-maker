@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AgentOutboxLine } from '@ogm/contracts';
+import { AgentOutboxLine, playablesFromMarker } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { gm, tempDir } from './helpers.js';
@@ -175,6 +175,53 @@ describe('gm checkpoint open', () => {
       },
       { id: 'fast', label: 'Fast', playable: { scenario: 'scenario=sandbox&speed=fast', seconds: 5, branch: 'feel' } },
     ]);
+  });
+
+  // A Blobs playtest is raised from an aiur workspace or the host (#639), where there is no build job. The Command
+  // reaches the game's deck through aiur alone, so its slices must ride in the decision itself.
+  it('raises a playable Command without a build job, carrying its slices in the decision', async () => {
+    const root = workspace();
+    const result = await gm(
+      [
+        'checkpoint',
+        'open',
+        '--question',
+        'Which fall speed feels right?',
+        '--option',
+        'a=Slow',
+        '--option',
+        'b=Fast',
+        '--option',
+        'c=Neither',
+        '--playable',
+        'a=scenario=sandbox&speed=slow',
+        '--playable',
+        'b=scenario=sandbox&speed=fast',
+        '--seconds',
+        'a=20',
+        '--json',
+      ],
+      { cwd: root },
+    );
+
+    expect(result).toMatchObject({ code: 0, err: [] });
+    expect(existsSync(join(root, '.gm', 'outbox', 'checkpoint.jsonl'))).toBe(false);
+    const printed = JSON.parse(result.out[0]) as {
+      emit_event: { payload: { context: { long_context_markdown: string } } };
+    };
+    expect(Object.fromEntries(playablesFromMarker(printed.emit_event.payload.context.long_context_markdown))).toEqual({
+      a: { scenario: 'scenario=sandbox&speed=slow', seconds: 20 },
+      b: { scenario: 'scenario=sandbox&speed=fast', seconds: 8 },
+    });
+  });
+
+  it('exits 2 for chat media without a build job', async () => {
+    const result = await gm(
+      ['checkpoint', 'open', '--question', 'Which?', '--option', 'a=A', '--option', 'b=B', '--media', 'a=m_1'],
+      { cwd: workspace() },
+    );
+    expect(result.code).toBe(2);
+    expect(result.err[0]).toContain('--media needs a build job');
   });
 
   it.each([

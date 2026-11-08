@@ -71,6 +71,29 @@ export const OptionPlayable = z
   })
   .strict();
 
+// aiur keeps only text on a Command's options and refuses a `playable` media kind, so a Command raised without a build
+// job (from the host or an aiur workspace, #639) carries its options' slices in its context as a hidden marker:
+// `<!-- gm-playable:{"<option id>":<OptionPlayable>,...} -->`. A scenario cannot hold `>`, so the JSON never ends the
+// comment early.
+const PLAYABLE_MARKER = /<!-- gm-playable:(.+?) -->/;
+const PlayableMarker = z.record(z.string(), OptionPlayable);
+
+export function playableMarker(playables: ReadonlyMap<string, OptionPlayable>): string {
+  return `<!-- gm-playable:${JSON.stringify(Object.fromEntries(playables))} -->`;
+}
+
+// The slices a marker names, by option id; a missing or malformed marker names none.
+export function playablesFromMarker(text: string | null | undefined): Map<string, OptionPlayable> {
+  const match = typeof text === 'string' ? PLAYABLE_MARKER.exec(text) : null;
+  if (match === null) return new Map();
+  try {
+    const parsed = PlayableMarker.safeParse(JSON.parse(match[1] as string) as unknown);
+    return parsed.success ? new Map(Object.entries(parsed.data)) : new Map();
+  } catch {
+    return new Map();
+  }
+}
+
 export const ChatCheckpointOption = z.object({
   id: z.string(),
   label: z.string(),

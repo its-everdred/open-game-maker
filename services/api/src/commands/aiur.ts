@@ -1,5 +1,5 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
-import { GameCommand, type CommandOption } from '@ogm/contracts';
+import { GameCommand, playablesFromMarker, type CommandOption } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
@@ -33,12 +33,14 @@ function recommendOf(decision: Decision): string | undefined {
   return typeof id === 'string' && id !== '' ? id : undefined;
 }
 
-// `media` is each option's resolved media by option id (see `aiur-media.ts`); without it the options are text only.
+// `media` is each option's resolved media by option id (see `aiur-media.ts`); without it the options are text only. An
+// option the context's playable marker names (`gm checkpoint open --playable`, #639) is a slice of the game to play.
 export function toGameCommand(
   decision: Decision,
   media: ReadonlyMap<string, NonNullable<CommandOption['media']>> = new Map(),
 ): GameCommand | null {
   const recommend = recommendOf(decision);
+  const playables = playablesFromMarker(decision.context?.long_context_markdown);
   const command = GameCommand.safeParse({
     job_id: null,
     ticket: decision.ticket.identifier,
@@ -50,7 +52,13 @@ export function toGameCommand(
     question: decision.question,
     options: decision.options.map(({ id, label }) => {
       const optionMedia = media.get(id);
-      return optionMedia === undefined ? { id, label } : { id, label, media: optionMedia };
+      const playable = playables.get(id);
+      return {
+        id,
+        label,
+        ...(optionMedia === undefined ? {} : { media: optionMedia }),
+        ...(playable === undefined ? {} : { playable }),
+      };
     }),
     ...(recommend === undefined ? {} : { recommend }),
     blocking: decision.blocking,

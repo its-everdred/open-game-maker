@@ -1,10 +1,10 @@
-import { AgentOutboxLine, OptionPlayable } from '@ogm/contracts';
+import { AgentOutboxLine, OptionPlayable, playableMarker } from '@ogm/contracts';
 import { ulid } from 'ulid';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { checkOptions, readLedger } from '../../ledger/index.js';
 import { provenancePairs, strings } from '../../ledger/provenance.js';
-import { appendOutboxLine, gameDir, jobContext, knownChatMessageIds } from '../../outbox.js';
+import { appendOutboxLine, gameDir, knownChatMessageIds, optionalJobContext } from '../../outbox.js';
 
 const OPTION_ID = /^[a-z0-9_-]{1,32}$/;
 // The deck shows the question as one short line and never shows a link (#608): a gameplay question carries a playable
@@ -36,6 +36,7 @@ function pair(raw: string, flag: string): [string, string] {
 }
 
 export function buildEmitEvent(payload: CheckpointOpenPayload): EmitEventCall {
+  const playables = new Map(payload.options.flatMap(({ id, playable }) => (playable ? [[id, playable] as const] : [])));
   return {
     name: 'decision.requested',
     message: payload.question,
@@ -49,8 +50,8 @@ export function buildEmitEvent(payload: CheckpointOpenPayload): EmitEventCall {
       context: {
         short_summary: 'Direction checkpoint for the creator',
         long_context_markdown: `<!-- gm-checkpoint:${payload.checkpoint_id} -->\n${
-          payload.options.some(({ playable }) => playable)
-            ? 'Options are slices of the game the creator plays in the review deck.'
+          playables.size > 0
+            ? `Options are slices of the game the creator plays in the review deck.\n${playableMarker(playables)}`
             : 'Options are previews already posted in the build chat.'
         }`,
       },
@@ -119,12 +120,16 @@ export const command: GmCommand = {
     if (recommend && !ids.includes(recommend))
       throw new UsageError(`recommended option "${recommend}" does not exist`, 'recommend one of the --option ids');
 
-    const { root, jobId } = jobContext({
+    // Without a build job (a host checkout or an aiur workspace) the Command reaches the game's deck through aiur
+    // alone: nothing is written to an outbox, and chat media, which lives in a job's chat, cannot be named.
+    const { root, jobId } = optionalJobContext({
       cwd: ctx.cwd,
       job: typeof flags.job === 'string' ? flags.job : undefined,
       environmentJob: ctx.config.jobId,
     });
-    const knownMedia = knownChatMessageIds(root, jobId);
+    if (jobId === null && strings(flags, 'media').length > 0)
+      throw new UsageError('--media needs a build job', 'pass --job <id>, or use --playable without a job');
+    const knownMedia = jobId === null ? new Set<string>() : knownChatMessageIds(root, jobId);
     const media = new Map<string, string>();
     for (const raw of strings(flags, 'media')) {
       const [optionId, messageId] = pair(raw, 'media');
@@ -173,16 +178,18 @@ export const command: GmCommand = {
       ...(recommend ? { recommend } : {}),
       blocking: flags.blocking === true,
     };
-    const line = AgentOutboxLine.parse({
-      v: 1,
-      id: ulid(),
-      job_id: jobId,
-      at: new Date().toISOString(),
-      type: 'checkpoint.open',
-      payload,
-    });
-    appendOutboxLine(root, 'checkpoint.jsonl', line);
-    ctx.emit('checkpoint.open', { kind: 'direction_checkpoint' }, jobId);
+    if (jobId !== null) {
+      const line = AgentOutboxLine.parse({
+        v: 1,
+        id: ulid(),
+        job_id: jobId,
+        at: new Date().toISOString(),
+        type: 'checkpoint.open',
+        payload,
+      });
+      appendOutboxLine(root, 'checkpoint.jsonl', line);
+    }
+    ctx.emit('checkpoint.open', { kind: 'direction_checkpoint' }, jobId ?? undefined);
     const emitEvent = buildEmitEvent(payload);
     if (ctx.json) ctx.out(JSON.stringify({ checkpoint_id: payload.checkpoint_id, emit_event: emitEvent }));
     else {
