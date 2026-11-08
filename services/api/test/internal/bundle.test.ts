@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app/app.js';
 import { claimAttachments, storeAttachment } from '../../src/build-chat/attachments.js';
 import type { TicketJob } from '../../src/app/registry.js';
+import { writeLimits } from '../../src/energy/store.js';
 import { bundleRoutes, hookSecretFiles } from '../../src/internal/bundle.js';
 import { tarGz } from '../../src/internal/tarball.js';
 import { makeApp, makeDeps } from '../helpers.js';
@@ -106,8 +107,17 @@ describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
         branch: 'main',
         lockfilePath: 'assets.lock.json',
       },
+      energy: expect.objectContaining({ level: 'unknown', preference: 'balanced' }),
     });
     expect(JSON.stringify(body)).not.toMatch(/aiur_|ghp_|sk-|@/);
+  });
+
+  it("hands the build agent the instance's Energy, without dollars", async () => {
+    const { deps, get } = await setup();
+    writeLimits(deps.db, { day: 1_000_000, week: null, month: null, voice: null, images: null }, new Date());
+    const { energy } = JobBundle.parse(await (await get('/internal/jobs/by-ticket/12/bundle', SECRET_A)).json());
+    expect(energy).toMatchObject({ level: 'healthy', windows: [{ window: 'day', usedPercent: 0 }, {}, {}] });
+    expect(JSON.stringify(energy)).not.toMatch(/MicroUsd|provider/);
   });
 
   it('passes repair diagnostics through', async () => {
