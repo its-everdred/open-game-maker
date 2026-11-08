@@ -118,7 +118,7 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await expect(page.getByRole('list', { name: 'Likes', exact: true }).getByRole('button')).toHaveCount(2);
   await capture(page, testInfo, 'playable-ended');
   await page.getByRole('button', { name: 'Choose Fast' }).click();
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   expect(answerBodies).toEqual([
     { option_id: 'fast', review: { likes: ['slow', 'fast'], dislikes: [{ option_id: 'medium' }] } },
   ]);
