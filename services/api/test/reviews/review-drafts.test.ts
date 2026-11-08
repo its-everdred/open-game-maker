@@ -109,9 +109,7 @@ describe('review deck drafts', () => {
   it('refuses a deck that is not a deck and saves nothing', async () => {
     const { put, list } = await setup();
 
-    expect(
-      (await put(ids.owner, { cards: [{ option_id: 'pip', verdict: 'maybe' }] })).status,
-    ).toBe(400);
+    expect((await put(ids.owner, { cards: [{ option_id: 'pip', verdict: 'maybe' }] })).status).toBe(400);
     expect((await put(ids.owner, oneVote, 'not a key')).status).toBe(400);
 
     expect(await list(ids.owner)).toEqual([]);
