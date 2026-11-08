@@ -132,6 +132,21 @@ it withdrew. `--must` adds the machine-checkable side of the rule as JSON, for e
 predates a rule that applies to its scope. It exits 1 and names each violation, or prints `options ok`. Run it on any
 option set before the options reach the creator; gm-verify runs it as a gate.
 
+## Sweep ticket premises
+
+```text
+gm plan premises --tickets <issues.json> --decisions <decisions.json>
+```
+
+`gm plan premises` checks each open ticket in `--tickets` (from
+`gh issue list --state open --limit 1000 --json number,title,body,state`) against the premises it names: `Decisions:`
+ids, `Spec:` and `Owns:` paths relative to the repository root, and `context-sha:`. `--decisions` is the game's
+decision history from `GET /internal/games/<id>/design-decisions`. A ticket is flagged when a cited decision was
+revised or superseded by a later one, mooted by a later `gm options reject` that rejected its answer or withdrew its
+Command, or is missing from the history, or when a spec or owned file changed between `context-sha` and HEAD. It
+prints one JSON report (`flagged` with each ticket's reasons, `clean`, and `unchecked` for tickets that name no
+premise) and exits 1 when any ticket is flagged. It needs no model; run it from the game's folder.
+
 ## Agree a scope session
 
 ```text
