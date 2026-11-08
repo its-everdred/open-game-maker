@@ -1,6 +1,6 @@
 ---
 name: gm-new-game-plan
-description: Load as the Executor when a new-game parent issue (label request:new-game) arrives with a design spec. Architects the whole game, cuts parallel tickets with shallow dependencies, files them with features, epics and an aiur Build Order, puts the playable prototype first, and keeps re-planning as decisions change.
+description: Load as the Executor when a new-game parent issue (label request:new-game) arrives with a design spec. Architects the whole game, cuts parallel tickets with shallow dependencies, files them with features, epics and an aiur Build Order, plans the game as a ladder of playable prototypes and staged domain decisions, and keeps re-planning as decisions change.
 ---
 
 # New-game planning (Executor)
@@ -31,20 +31,22 @@ this section adds what is specific to games.
    count: as many as the game needs, each completable by one agent in a few hours.
 4. **Shallow dependencies.** Aim for depth 2–3: skeleton → parallel systems and content → integration and polish.
    Depend on interfaces, not on finished features. Avoid two tickets editing the same file.
-5. **Prototype first.** Mark the tickets that deliver the prototype milestone (spec section 13) as priority 1; the
-   rest of the full game is planned and queued behind them. The prototype is a feedback chance, never a gate: keep
-   building whether or not the player plays it.
+5. **A prototype ladder, not a one-shot build.** Plan the game as gameplay rungs (P1..Pn, each a playable link with
+   scenarios that proves one thing) and domain tracks (visuals, characters, audio) that climb stages, each stage ending
+   in a creator Command with media: read `references/prototype-ladder.md`. One ticket per stage per track, one or two
+   per rung; stage n+1 is gated on stage n's decision. P1 and the first stage of each track are priority 1. A rung is a
+   feedback chance, never a gate: keep building whether or not the player plays it.
 6. **Questions as tickets' blockers.** A ticket that needs an open decision depends on that Command; everything else
    starts now. Content tickets that need a creative choice (music direction, character look) open their own option
    Commands with samples (see the design skill's question protocol).
 
-## Always an audio options ticket
+## Always an audio track
 
-Every new game gets one audio ticket from the start, worked by an agent with `gm-audio`, `gm-voiceover` and
-`gm-image-mock`. It sends the creator options, as review decks, in four categories tailored to the game: soundtrack
-(3–4 background-music styles), sound effects (2–3 juicy sets for the game's core actions), an announcer (short
-callouts such as "Nice one!") and character voices (expressive, never monotone). Options come from the resource
-packs first (`gm assets search`); generation (voices) is samples only until the creator picks.
+Every new game gets the ladder's audio track from the start (stage tickets worked with `gm-audio`, `gm-voiceover` and
+`gm-image-mock`): soundtrack (3–4 background-music styles) can go out on day one; sound effects (2–3 juicy sets) and
+an announcer (short callouts such as "Nice one!") wait for a rung with the core actions and are shown synced on a
+gameplay capture; character voices belong to the characters track (expressive, never monotone). Options come from
+the resource packs first (`gm assets search`); generation (voices) is samples only until the creator picks.
 
 ## Evidence and review states
 
@@ -80,6 +82,8 @@ tickets rewritten for a weaker implementer). Game specifics on top of it:
   implementation tickets; library and asset tickets are already research and get no extra spike.
 - Research docs go to `games/<name>/docs/research/<ticket>.md` and woven specs to `games/<name>/docs/spec/<area>.md`;
   private detail stays in the game's private context and is referenced, never copied.
+- Ladder stage tickets are deep-dived when the decision they build on exists, not before (`references/prototype-ladder.md`,
+  Tickets); rungs and first stages are researched up front.
 - Give each research agent the game skills its lane needs (a biome ticket gets the set and asset skills, a combat ticket
   gets input and effects skills), and the rest by name only.
 
@@ -88,8 +92,10 @@ tickets rewritten for a weaker implementer). Game specifics on top of it:
 - Apply provisional defaults to open Commands after about five minutes; record them as decisions (origin: default).
 - When a decision changes (a late answer), find the affected tickets and merged code, then re-plan: edit open tickets,
   add rework tickets, revert only what the change requires, and message running agents with `aiur-main message`.
+  Answers that reach beyond the asking ticket, the pair-confirm pattern and the premise sweep:
+  `references/answer-routing.md`.
 - Schedule with the instance's normal limits and queue; small edits to other games may jump ahead of a large build.
-- When the prototype set merges, tell the player it is playable (never open the game for them).
+- When a rung merges, tell the player its play link and scenarios are ready (never open the game for them).
 
 ## Done
 
