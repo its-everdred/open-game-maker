@@ -278,19 +278,37 @@ describe('recordReview', () => {
     expect(listReviews(deps.db, GAME)).toHaveLength(1);
   });
 
+  // Both writes share one timestamp, as two quick answers in the same millisecond do: the later write still reads first.
   it('records a new row when the creator changes the review', async () => {
     const { deps } = await setup();
     const command = commandOf(deps);
-    recordReview(deps.db, { gameId: GAME, command, optionId: 'wood', review: WOOD_AND_IRON });
+    const at = '2026-11-07T17:45:00.000Z';
+    recordReview(deps.db, { gameId: GAME, command, optionId: 'wood', review: WOOD_AND_IRON, at });
 
     recordReview(deps.db, {
       gameId: GAME,
       command,
       optionId: 'iron',
       review: { likes: ['iron'], dislikes: [{ option_id: 'wood' }] },
+      at,
     });
 
     expect(listReviews(deps.db, GAME).map(({ option_id }) => option_id)).toEqual(['iron', 'wood']);
+  });
+
+  // Switching back within the same millisecond is a real change from the latest row, so it must not read as a repeat
+  // of the first one.
+  it('records a switch back to an earlier review written in the same millisecond', async () => {
+    const { deps } = await setup();
+    const command = commandOf(deps);
+    const at = '2026-11-07T17:45:00.000Z';
+    const ironOverWood = { likes: ['iron'], dislikes: [{ option_id: 'wood' }] };
+    recordReview(deps.db, { gameId: GAME, command, optionId: 'wood', review: WOOD_AND_IRON, at });
+    recordReview(deps.db, { gameId: GAME, command, optionId: 'iron', review: ironOverWood, at });
+
+    recordReview(deps.db, { gameId: GAME, command, optionId: 'wood', review: WOOD_AND_IRON, at });
+
+    expect(listReviews(deps.db, GAME).map(({ option_id }) => option_id)).toEqual(['wood', 'iron', 'wood']);
   });
 
   it('keeps the whole-set notes, and records a new row when only the notes change', async () => {
