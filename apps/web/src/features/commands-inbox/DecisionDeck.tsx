@@ -79,6 +79,8 @@ export function DecisionDeck({
           <button
             className="review-deck-send decision-deck-next"
             onClick={() => {
+              // A decision left behind (answered, or refused) is not walked to again.
+              markAnswered();
               setError(undefined);
               setCurrent(next);
             }}

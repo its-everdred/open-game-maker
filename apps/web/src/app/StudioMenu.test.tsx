@@ -302,6 +302,15 @@ describe('StudioMenu', () => {
     );
 
     expect(screen.queryByRole('dialog', { name: 'Topic d1' })).not.toBeInTheDocument();
+
+    // Nor does it come back when the first creator signs in again.
+    state.session = { data: { user: { id: 'user-1' } } };
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <StudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('dialog', { name: 'Topic d1' })).not.toBeInTheDocument();
   });
 
   it('groups jobs by game and distinguishes paused, parked, and playable work', () => {

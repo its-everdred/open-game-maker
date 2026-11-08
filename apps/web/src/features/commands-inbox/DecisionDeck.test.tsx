@@ -136,7 +136,8 @@ describe('DecisionDeck', () => {
   it('keeps the decision open with a retry when the answer does not send, and still offers the next one', async () => {
     answers.answerCommand.mockRejectedValueOnce(new Error('offline'));
     const commands = [command('d1'), command('d2')];
-    render(<DecisionDeck commands={commands} first={commands[0]!} onClose={vi.fn()} />);
+    const onClose = vi.fn();
+    render(<DecisionDeck commands={commands} first={commands[0]!} onClose={onClose} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Option A' }));
 
@@ -146,6 +147,10 @@ describe('DecisionDeck', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next decision' }));
     expect(screen.getByRole('dialog', { name: 'Topic d2' })).toBeVisible();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // The refused decision is not walked back to: answering the last other one closes the deck.
+    fireEvent.click(screen.getByRole('button', { name: 'Option A' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   // The inbox refetches while an answer is sent; a decision answered elsewhere meanwhile drops out of it. The deck must
