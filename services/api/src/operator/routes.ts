@@ -1,0 +1,111 @@
+import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
+import { and, eq } from 'drizzle-orm';
+
+import { schema } from '@ogm/db';
+
+import { HttpError } from '../app/errors.js';
+import { hasInternalCredential } from '../app/internal-auth.js';
+import type { ApiBindings, AppDeps } from '../app/types.js';
+import { ARCHIVE_LIMITS } from '../builds/untar.js';
+import { findGameBySlugOrId } from '../games/slug.js';
+import { publishArchive } from './publish.js';
+
+// An operator's route to publish a build for a game the app registered against a repository whose own tickets are
+// not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
+// Nothing here is reachable with a user session: the caller presents the internal token in its own header, as the
+// New Game routes do. A game's facts come first, so the host script knows where to build before it uploads.
+export const prefix = '/internal/operator';
+
+const SHA = /^[0-9a-f]{40}$/u;
+
+function requireOperator(c: Context<ApiBindings>): void {
+  if (!hasInternalCredential(c)) throw new HttpError(401, 'unauthenticated');
+}
+
+function gameFor(deps: AppDeps, ref: string) {
+  const game = findGameBySlugOrId(deps.db, ref);
+  if (!game) throw new HttpError(404, 'game_not_found');
+  return game;
+}
+
+// What the host script needs to build the game at a SHA and to say what it is replacing: the game's folder in the
+// instance repository, the checkout the daemon row registered and the build the main branch serves now.
+function facts(deps: AppDeps, game: ReturnType<typeof gameFor>) {
+  const daemon = game.slug
+    ? deps.db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).get()
+    : undefined;
+  const branch = deps.db
+    .select({ id: schema.branches.id, latestBuildId: schema.branches.latestBuildId })
+    .from(schema.branches)
+    .where(and(eq(schema.branches.gameId, game.id), eq(schema.branches.name, 'main')))
+    .get();
+  const build = branch?.latestBuildId
+    ? deps.db
+        .select({
+          id: schema.builds.id,
+          gitSha: schema.builds.gitSha,
+          status: schema.builds.status,
+          createdAt: schema.builds.createdAt,
+        })
+        .from(schema.builds)
+        .where(eq(schema.builds.id, branch.latestBuildId))
+        .get()
+    : undefined;
+  return {
+    game: {
+      id: game.id,
+      slug: game.slug,
+      title: game.title,
+      repo: { owner: game.githubOwner, name: game.githubRepo, path: game.githubPath },
+      repoVisibility: game.repoVisibility,
+    },
+    daemon: daemon
+      ? {
+          port: daemon.port,
+          checkoutPath: daemon.checkoutPath,
+          unit: daemon.unit,
+          envFile: daemon.envFile,
+          status: daemon.status,
+        }
+      : null,
+    branch: branch ? { id: branch.id, name: 'main', latestBuildId: branch.latestBuildId } : null,
+    build: build ?? null,
+  };
+}
+
+const routes = new Hono<ApiBindings>()
+  .get('/games/:ref', (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    return c.json(facts(deps, gameFor(deps, c.req.param('ref'))));
+  })
+  // The operator's host script builds the game and posts the same archive the daemon's hook uploads, so the publisher
+  // reads one artifact shape. A second run with a newer SHA stages and publishes the next build.
+  .post(
+    '/games/:ref/builds',
+    async (c, next) => {
+      requireOperator(c);
+      await next();
+    },
+    bodyLimit({
+      maxSize: ARCHIVE_LIMITS.compressedBytes,
+      onError: (c) => c.json({ error: { code: 'archive_too_large' } }, 413),
+    }),
+    async (c) => {
+      const deps = c.get('deps');
+      const game = gameFor(deps, c.req.param('ref'));
+      const gitSha = c.req.header('x-gm-sha') ?? '';
+      if (!SHA.test(gitSha)) return c.json({ error: { code: 'invalid_sha' } }, 400);
+      const result = await publishArchive(deps, game, gitSha, Buffer.from(await c.req.arrayBuffer()));
+      if (result.state === 'refused') {
+        deps.log({ event: 'build_upload_refused', jobId: result.jobId, gameId: game.id, reason: result.reason });
+        return c.json({ error: { code: result.reason } }, 422);
+      }
+      return result.state === 'done'
+        ? c.json({ state: 'done', jobId: result.jobId, buildId: result.buildId }, 201)
+        : c.json({ state: 'failed', jobId: result.jobId, reason: result.reason }, 422);
+    },
+  );
+
+export default routes;

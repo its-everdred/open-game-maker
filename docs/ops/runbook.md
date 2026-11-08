@@ -258,6 +258,46 @@ and the game's inbox read that instance's aiur and no other's.
 The row's `status` defaults to `running`, because the instance the game is registered against is already up. Nothing
 else changes — the game appears in the games picker and opens from its play link as soon as it is registered.
 
+## Publish a build for a registered game
+
+A game the app registered against a repository whose own tickets are not Game Maker jobs never gets a build: the
+daemon's `before_remove` hook uploads a build per ticket, and those tickets never run in this instance's daemon. The
+game appears in the picker and opens from its play link, but nothing is playable until an operator publishes a build.
+
+`ops/bin/ogm-publish` builds one registered game at a git SHA and publishes the build through the same publisher the
+daemon's uploads use, so the release history stays one path:
+
+```
+ops/bin/ogm-publish <game-slug> [--sha <ref>] [--checkout <path>] [--api <url>] [--keep] [--json]
+```
+
+It reads the internal token and the API port from `~/.config/ogm/env/api.env` (`OGM_INTERNAL_TOKEN`, `OGM_API_PORT`;
+`OGM_INTERNAL_TOKEN` and `OGM_API_PORT` in the environment win), asks the API for the game's facts — its folder in the
+instance repository and the checkout its daemon row names — and checks the SHA out into a scratch git worktree. It
+builds that folder's own build script in production mode with a relative base (`--base=./`, so the build works under
+`/g/<gameId>/<buildId>/`), exports `OGM_ASSETS_ROOT`, then archives `dist/` with the repository's `manifest.json`,
+`design/design.json` and `achievements.json` and posts it to the API's internal route. The build lands as the next
+build on the game's `main` branch and as a release in the game's history.
+
+The script needs the host's `~/.config/ogm/env/api.env`, so run it on the host as the API's user:
+
+```
+ops/bin/ogm-publish blobs                 # build the registered game "blobs" at its checkout's origin/main
+ops/bin/ogm-publish blobs --sha <sha>     # build a specific commit
+ops/bin/ogm-publish blobs --keep          # keep the worktree and the archive for inspection
+ops/bin/ogm-publish blobs --json          # print the API's answer as one JSON line
+```
+
+Re-run it with a newer SHA to publish the next release; the previous build stays playable until the new one is
+tested and the branch pointer moves. Exit codes: 0 published, 2 the build or the upload failed (a 422 carries the
+reason), 64 bad usage, 65 no game, no checkout or no internal token.
+
+The two routes it calls are operator-only, reached with the internal token in `x-ogm-internal` and never with a user
+session: `GET /internal/operator/games/<slug>` returns the game's facts and `POST /internal/operator/games/<slug>/builds`
+takes the gzipped archive with the commit in `x-gm-sha`. The upload writes a `feature` job row that the publisher
+settles — `done` for a published build, `failed` for a refused archive — so the release history reads like any other
+build's.
+
 ## Prove the instance monorepo flow
 
 Every game in an instance lives in the one repository named by `OGM_INSTANCE_REPO`: `games/<slug>/` per game and

@@ -125,6 +125,7 @@ export default new Hono().get('/seen', (c) => c.text(seen));
       '/api/v1/games',
       '/internal/new-game',
       '/',
+      '/internal/operator',
       '/',
       '/api/v1/reports',
       '/api/v1',
