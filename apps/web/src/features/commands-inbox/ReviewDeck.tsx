@@ -45,8 +45,13 @@ export function ReviewDeck({
 
   const cards = deckCards(command);
   const card = cards[state.cards.length];
-  const finished = deckFinished(command, state);
   const onePick = command.pick !== 'many';
+  // A one-pick deck with several likes and no pick has no answer yet: Send then opens the ending grid, where tapping a
+  // like chooses it and sends. Guessing the first like would answer with a card the creator never chose.
+  const mustChoose =
+    onePick && state.picked === null && state.cards.filter(({ verdict }) => verdict === 'like').length > 1;
+  const [choosing, setChoosing] = useState(false);
+  const finished = deckFinished(command, state) || choosing;
   const fullscreenCard = fullscreen === null ? undefined : cards.find(({ id }) => id === fullscreen);
   const fullscreenView =
     fullscreenCard === undefined ? null : <MediaFullscreen card={fullscreenCard} onClose={() => setFullscreen(null)} />;
@@ -76,19 +81,22 @@ export function ReviewDeck({
     },
     [command, dispatch, gameId, onAnswered, state],
   );
-  // Send is always on: a half-judged deck sends what it has, the same answer the ending grid would send.
+  // Send is always on: a half-judged deck sends what it has, the same answer the ending grid would send. On the ending
+  // grid of a one-pick deck that still needs its choice, the likes' chips are the send.
   const sendButton = (
     <div className="review-deck-send-row">
       {nav?.prev}
-      <button
-        aria-label="Send the review"
-        className="review-deck-send"
-        disabled={state.sending}
-        onClick={() => void answer(answerOf(command, state).option_id)}
-        type="button"
-      >
-        <Icon name="send" />
-      </button>
+      {finished && mustChoose ? null : (
+        <button
+          aria-label="Send the review"
+          className="review-deck-send"
+          disabled={state.sending}
+          onClick={() => (mustChoose ? setChoosing(true) : void answer(answerOf(command, state).option_id))}
+          type="button"
+        >
+          <Icon name="send" />
+        </button>
+      )}
       {nav?.next}
     </div>
   );

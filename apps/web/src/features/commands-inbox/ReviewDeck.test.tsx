@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameCommand, VoiceTarget } from '@ogm/contracts';
 
-import { resetReviewDrafts } from './drafts';
+import { resetReviewDrafts, useIsSent } from './drafts';
 import { ReviewDeck } from './ReviewDeck';
 import type { DictationPort } from './voice-note';
 
@@ -153,6 +153,29 @@ describe('ReviewDeck', () => {
       url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
       method: 'POST',
       body: { option_id: 'v1', review: { likes: ['v1'], dislikes: [] } },
+    });
+    // The rows and the arrows read the sent mark from the drafts, so the question shows as sent everywhere.
+    expect(renderHook(() => useIsSent(deckCommand())).result.current).toBe(true);
+  });
+
+  // A one-pick Command answers with the card the creator chose. With two likes and no choice, Send must not guess the
+  // first like: it opens the ending grid, and tapping a like there chooses and sends it.
+  it('asks a one-pick deck with several likes to choose before it sends', async () => {
+    const { onAnswered } = renderDeck();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send the review' }));
+
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Send the review' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Voice two' }));
+
+    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
+    expect(calls).toContainEqual({
+      url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
+      method: 'POST',
+      body: { option_id: 'v2', review: { likes: ['v1', 'v2'], dislikes: [] } },
     });
   });
 
