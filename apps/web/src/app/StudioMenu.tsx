@@ -43,7 +43,7 @@ export function StudioMenu() {
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
   const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
   // The badge counts every open player-facing decision across the creator's games; red when one blocks its build.
-  const outstandingRequests = decisions.commands.length;
+  const openDecisions = decisions.commands.length;
   const blocked = decisions.commands.some((command) => command.blocking);
 
   useEffect(() => {
@@ -106,22 +106,22 @@ export function StudioMenu() {
         data-building={buildingJobs.length > 0}
         data-blocking={blocked}
         aria-label="Menu"
-        aria-describedby={outstandingRequests > 0 ? 'studio-menu-requests' : undefined}
+        aria-describedby={openDecisions > 0 ? 'studio-menu-requests' : undefined}
         aria-expanded={open}
         aria-controls="studio-menu-panel"
         onClick={() => setOpen((current) => !current)}
       >
         <span className="studio-menu-ring" aria-hidden="true" />
         <Icon name="menu" />
-        {outstandingRequests > 0 ? (
+        {openDecisions > 0 ? (
           <span className="studio-menu-badge" aria-hidden="true">
-            {outstandingRequests}
+            {openDecisions}
           </span>
         ) : null}
       </button>
-      {outstandingRequests > 0 ? (
+      {openDecisions > 0 ? (
         <span id="studio-menu-requests" className="sr">
-          {outstandingRequests} {outstandingRequests === 1 ? 'decision needs' : 'decisions need'} your answer
+          {openDecisions} {openDecisions === 1 ? 'decision needs' : 'decisions need'} your answer
         </span>
       ) : null}
       <span className="sr" role="status" aria-live="polite">

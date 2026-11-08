@@ -1,6 +1,8 @@
 import type { Decision } from '@ogm/aiur-client';
 
 import { parseCheckpoint, type ChatRow, type StoredCheckpoint } from '../build-chat/store.js';
+import { summaryOf } from '../commands/aiur.js';
+import { creatorAudience } from '../commands/audience.js';
 
 const marker = /gm-checkpoint:(cp_[0-7][0-9A-HJKMNP-TV-Z]{25})/;
 const openStatuses = new Set(['open', 'pending', 'deferred']);
@@ -96,6 +98,10 @@ export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPl
         pick: pickOf(decision),
         status,
         ...(optionId === undefined ? {} : { option_id: optionId }),
+        // Who the decision is for and its topic follow aiur on every poll, so a row stored before aiur set them (or
+        // before this app read them) catches up instead of staying hidden from the creator or topic-less.
+        audience: creatorAudience(decision),
+        summary: summaryOf(decision),
       },
     });
   }

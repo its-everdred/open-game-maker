@@ -7,6 +7,15 @@ import { DecisionDeck } from './DecisionDeck';
 
 const answers = vi.hoisted(() => ({ answerCommand: vi.fn(async () => undefined) }));
 vi.mock('./commands', () => answers);
+// The review deck is tested on its own; here it only has to report that its review was sent.
+vi.mock('./ReviewDeck', () => ({
+  isReviewDeck: (command: CreatorCommand) => command.options.every(({ media }) => media !== undefined),
+  ReviewDeck: ({ onAnswered }: { onAnswered(): void }) => (
+    <button type="button" onClick={onAnswered}>
+      Send review
+    </button>
+  ),
+}));
 
 const command = (id: string, gameId = 'g_blobs'): CreatorCommand => ({
   game_id: gameId,
@@ -60,6 +69,41 @@ describe('DecisionDeck', () => {
     // The last open decision answered: the deck closes.
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(answers.answerCommand).toHaveBeenCalledTimes(3);
+  });
+
+  // A review deck shows its own sent state, so the modal stays open on it rather than closing under the creator.
+  it('walks on from a review deck, and stays on it when it is the last decision', () => {
+    const media = { url: 'https://media.example.test/a.png', width: 320, height: 320 };
+    const review = {
+      ...command('d_review'),
+      options: [
+        { id: 'a', label: 'Option A', media },
+        { id: 'b', label: 'Option B', media },
+      ],
+    };
+    const onClose = vi.fn();
+    render(<DecisionDeck commands={[review, command('d2')]} first={review} onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next decision' }));
+    expect(screen.getByRole('dialog', { name: 'Topic d2' })).toBeVisible();
+
+    cleanup();
+    render(<DecisionDeck commands={[review]} first={review} onClose={onClose} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Send review' }));
+    expect(screen.queryByRole('button', { name: 'Next decision' })).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // Two games' instances can each hold a decision with the same id; answering one must not skip the other.
+  it('tells apart two games’ decisions that share an id', async () => {
+    const commands = [command('d1', 'g_blobs'), { ...command('d1', 'g_castle'), summary: 'Castle topic' }];
+    render(<DecisionDeck commands={commands} first={commands[0]!} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Option A' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Next decision' }));
+
+    expect(screen.getByRole('dialog', { name: 'Castle topic' })).toBeVisible();
   });
 
   it('keeps the decision open with a retry when the answer does not send', async () => {

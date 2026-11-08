@@ -1,8 +1,9 @@
 import type { AiurClient, Decision } from '@ogm/aiur-client';
 import { schema } from '@ogm/db';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { insertChatRow } from '../../src/build-chat/store.js';
+import { AIUR_LIST_TIMEOUT_MS } from '../../src/commands/aiur.js';
 import { createInboxWriter } from '../../src/checkpoints/inbox.js';
 import { createCheckpointPoller } from '../../src/checkpoints/poller.js';
 import type { AppDeps } from '../../src/app/types.js';
@@ -142,6 +143,30 @@ describe('the creator’s decision inbox', () => {
     expect(inbox.commands.map((command) => command.decision_id)).toEqual(['d_player']);
   });
 
+  // One game's instance that never answers must not stall every other game's decisions in the menu.
+  it('lists the other games’ decisions when one game’s instance hangs', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const deps = seed();
+      deps.aiurClientForGame = async (gameId: string) =>
+        ({
+          decisions: async () =>
+            gameId === ids.blobs ? new Promise<Decision[]>(() => undefined) : [decision('d_castle')],
+        }) as unknown as AiurClient;
+
+      const pending = read(deps, '/me/commands');
+      await vi.advanceTimersByTimeAsync(AIUR_LIST_TIMEOUT_MS + 1);
+      const body = (await (await pending).json()) as { commands: Array<{ decision_id: string }> };
+
+      expect(body.commands.map((command) => command.decision_id)).toEqual(['d_castle']);
+      expect(deps.lines).toContainEqual(
+        expect.objectContaining({ event: 'game_commands_unavailable', gameId: ids.blobs }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('refuses an anonymous caller', async () => {
     const { app } = await makeApp(seed());
     expect((await app.request('/api/v1/me/commands')).status).toBe(401);
@@ -181,20 +206,8 @@ describe('a job’s Commands in the decision inbox', () => {
       .run();
   }
 
-  // The poller mirrors the job ticket's aiur decisions into checkpoints; the creator audience and the short topic must
-  // survive that copy, or every mirrored decision would vanish from the menu (or every one would show).
-  it('keeps a mirrored decision’s audience and topic, and shows only the creator’s', async () => {
-    const deps = seed();
-    serveAiur(deps, {});
-    seedJob(deps);
-    const decisions = [
-      decision('d_mirror_player', {
-        kind: 'native_question',
-        context: { short_summary: 'Gate colour', audience: 'creator' },
-      }),
-      decision('d_mirror_eng', { kind: 'native_question', context: { short_summary: 'CI is red' } }),
-    ];
-    const poller = createCheckpointPoller({
+  function pollerFor(deps: ReturnType<typeof makeDeps>, decisions: Decision[]) {
+    return createCheckpointPoller({
       db: deps.db,
       sqlite: deps.sqlite,
       jobs: () =>
@@ -217,6 +230,73 @@ describe('a job’s Commands in the decision inbox', () => {
       publish: () => undefined,
       log: deps.log,
     });
+  }
+
+  function storeCheckpoint(deps: ReturnType<typeof makeDeps>, checkpointId: string, decisionId: string) {
+    insertChatRow(deps.sqlite, {
+      jobId: ids.job,
+      at: AT,
+      actor: 'agent',
+      kind: 'checkpoint',
+      checkpoint: {
+        checkpoint_id: checkpointId,
+        decision_id: decisionId,
+        version: 1,
+        question: 'Which door?',
+        options: [
+          { id: 'wood', label: 'Wooden door' },
+          { id: 'iron', label: 'Iron door' },
+        ],
+        status: 'open',
+      },
+    });
+  }
+
+  // A decision mirrored before aiur marked it for the creator (or before this app read the mark) is stored without an
+  // audience. The next poll must catch it up, or it stays hidden from the creator for good.
+  it('catches a stored mirrored decision up with the audience and topic aiur gives it later', async () => {
+    const deps = seed();
+    serveAiur(deps, {});
+    seedJob(deps);
+    storeCheckpoint(deps, 'd_legacy', 'd_legacy');
+    expect((await (await read(deps, '/me/commands')).json()) as unknown).toEqual({ commands: [] });
+
+    await pollerFor(deps, [
+      decision('d_legacy', { kind: 'native_question', context: { short_summary: 'Door style', audience: 'creator' } }),
+    ]).tick();
+    const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<Record<string, unknown>> };
+
+    expect(body.commands).toEqual([expect.objectContaining({ decision_id: 'd_legacy', summary: 'Door style' })]);
+  });
+
+  it('gives a builder’s checkpoint the topic aiur holds for it', async () => {
+    const deps = seed();
+    serveAiur(deps, {});
+    seedJob(deps);
+    storeCheckpoint(deps, 'cp_builder', 'd_builder');
+
+    await pollerFor(deps, [decision('d_builder', { context: { short_summary: 'Door style' } })]).tick();
+    const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<Record<string, unknown>> };
+
+    expect(body.commands).toEqual([
+      expect.objectContaining({ decision_id: 'd_builder', title: 'Add the moon gate', summary: 'Door style' }),
+    ]);
+  });
+
+  // The poller mirrors the job ticket's aiur decisions into checkpoints; the creator audience and the short topic must
+  // survive that copy, or every mirrored decision would vanish from the menu (or every one would show).
+  it('keeps a mirrored decision’s audience and topic, and shows only the creator’s', async () => {
+    const deps = seed();
+    serveAiur(deps, {});
+    seedJob(deps);
+    const decisions = [
+      decision('d_mirror_player', {
+        kind: 'native_question',
+        context: { short_summary: 'Gate colour', audience: 'creator' },
+      }),
+      decision('d_mirror_eng', { kind: 'native_question', context: { short_summary: 'CI is red' } }),
+    ];
+    const poller = pollerFor(deps, decisions);
 
     await poller.tick();
     // Both decisions were mirrored; only the creator's reaches the menu.
@@ -238,23 +318,7 @@ describe('a job’s Commands in the decision inbox', () => {
     const deps = seed();
     serveAiur(deps, {});
     seedJob(deps);
-    insertChatRow(deps.sqlite, {
-      jobId: ids.job,
-      at: AT,
-      actor: 'agent',
-      kind: 'checkpoint',
-      checkpoint: {
-        checkpoint_id: 'cp_builder',
-        decision_id: 'd_builder',
-        version: 1,
-        question: 'Which door?',
-        options: [
-          { id: 'wood', label: 'Wooden door' },
-          { id: 'iron', label: 'Iron door' },
-        ],
-        status: 'open',
-      },
-    });
+    storeCheckpoint(deps, 'cp_builder', 'd_builder');
 
     const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<{ decision_id: string }> };
 

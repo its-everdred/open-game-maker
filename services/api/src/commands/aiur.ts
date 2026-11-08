@@ -25,7 +25,8 @@ function clip(text: string): string {
   return text.length > 200 ? `${text.slice(0, 199)}…` : text;
 }
 
-function summaryOf(decision: Decision): string | undefined {
+// The decision's short topic (aiur's `short_summary`), the line the menu's decision list shows.
+export function summaryOf(decision: Decision): string | undefined {
   const summary = decision.context?.short_summary?.trim() ?? '';
   return summary === '' ? undefined : clip(summary);
 }
@@ -56,6 +57,26 @@ export function toGameCommand(decision: Decision): GameCommand | null {
   return command.success ? command.data : null;
 }
 
+// The menu reads every game's instance at once, so one that hangs must not stall the others: past this wait the game
+// is treated as unreachable for this read.
+export const AIUR_LIST_TIMEOUT_MS = 5_000;
+
+class AiurListTimeout extends Error {
+  override name = 'AiurListTimeout';
+}
+
+async function withinListTimeout<T>(work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new AiurListTimeout()), AIUR_LIST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // The game's own open Commands. A game whose daemon row is missing or whose instance cannot be reached has none:
 // the inbox still lists its jobs' Commands, and the failure is logged rather than failing the whole page.
 export async function gameCommandsFromAiur(
@@ -66,7 +87,7 @@ export async function gameCommandsFromAiur(
   let decisions: Decision[];
   try {
     const client = await deps.aiurClientForGame(gameId);
-    decisions = await client.decisions();
+    decisions = await withinListTimeout(client.decisions());
   } catch (error) {
     if (error instanceof HttpError) return [];
     if (error instanceof AiurHttpError) {

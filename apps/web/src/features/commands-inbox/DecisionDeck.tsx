@@ -28,11 +28,9 @@ export function DecisionDeck({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
 
-  const done = answered.has(current.decision_id);
-  const next = commands.find(
-    (command) => command.decision_id !== current.decision_id && !answered.has(command.decision_id),
-  );
-  const markAnswered = () => setAnswered((before) => new Set(before).add(current.decision_id));
+  const done = answered.has(keyOf(current));
+  const next = commands.find((command) => keyOf(command) !== keyOf(current) && !answered.has(keyOf(command)));
+  const markAnswered = () => setAnswered((before) => new Set(before).add(keyOf(current)));
   const answer = async (optionId: string) => {
     setSending(true);
     setError(undefined);
@@ -71,11 +69,16 @@ export function DecisionDeck({
           </p>
         )}
         {done && next && (
-          <button className="decision-deck-next tap-primary" onClick={() => setCurrent(next)} type="button">
+          <button className="review-deck-send decision-deck-next" onClick={() => setCurrent(next)} type="button">
             Next decision
           </button>
         )}
       </div>
     </Dialog>
   );
+}
+
+// Each game has its own aiur instance, so a decision is named by its game as well as its id.
+function keyOf(command: CreatorCommand): string {
+  return `${command.game_id}:${command.decision_id}`;
 }
