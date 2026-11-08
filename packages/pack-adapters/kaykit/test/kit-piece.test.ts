@@ -156,6 +156,14 @@ describe('kitPiece', () => {
     expect(height(await kitPiece(loader, TREE))).toBeCloseTo(4, 2);
   });
 
+  it('merges the parts of a card with several materials built from its own file', async () => {
+    const files = { 'tree.glb': await glb({ Tree_1: [2, 3] }, { packed: true }) };
+    const { loader } = await fixtureLoader({ [TREE]: { file: 'tree.glb', mesh: TREE } }, files);
+    const piece = await kitPiece(loader, TREE);
+    expect(height(piece)).toBeCloseTo(3, 2);
+    expect(piece.geometry.groups).toHaveLength(2);
+  });
+
   it('refuses a packed file without the card rather than drawing another piece', async () => {
     const files = { 'forest.glb': await glb({ [BUSH]: 0.5, [ROCK]: 1 }) };
     const { loader } = await fixtureLoader({ [TREE]: { file: 'forest.glb', mesh: TREE } }, files);

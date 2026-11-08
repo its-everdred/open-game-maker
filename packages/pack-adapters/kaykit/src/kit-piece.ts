@@ -14,6 +14,13 @@ function meshesUnder(root: Object3D): Mesh[] {
   return found;
 }
 
+/** The glTF node a decoded mesh belongs to: a mesh with several materials loads as a group of meshes, one per material. */
+function gltfNode(mesh: Mesh, root: Object3D): Object3D {
+  let object: Object3D = mesh;
+  while (object !== root && object.userData.name === undefined && object.parent) object = object.parent;
+  return object;
+}
+
 /** One mesh per decoded card node, so every placement of a card shares its geometry. */
 const pieces = new WeakMap<Object3D, Mesh>();
 
@@ -85,17 +92,22 @@ export async function kitPiece(loader: AssetLoader, cardId: string): Promise<Mes
   root.traverse((object) => {
     node ??= object.userData.name === wanted ? object : undefined;
   });
-  const owner = node ?? root;
-  let cached = pieces.get(owner);
-  if (!cached) {
-    const meshes = meshesUnder(owner);
-    if (meshes.length === 0) throw new Error(`Kit card ${cardId} has no mesh`);
-    if (!node && meshes.length !== 1) {
+  if (!node) {
+    /* A card with its own file: its glTF mesh is named after the card, but the node holding it keeps the source name. */
+    const meshes = meshesUnder(root);
+    const nodes = new Set(meshes.map((mesh) => gltfNode(mesh, root)));
+    if (nodes.size !== 1) {
       if (name) throw new Error(`Kit card ${cardId} has no node named ${name} in ${file}`);
       throw new Error(`Kit card ${cardId} needs exactly one mesh in ${file}, found ${meshes.length}`);
     }
+    [node] = nodes;
+  }
+  let cached = pieces.get(node!);
+  if (!cached) {
+    const meshes = meshesUnder(node!);
+    if (meshes.length === 0) throw new Error(`Kit card ${cardId} has no mesh`);
     cached = piece(meshes, root, cardId);
-    pieces.set(owner, cached);
+    pieces.set(node!, cached);
   }
   return cached.clone();
 }
