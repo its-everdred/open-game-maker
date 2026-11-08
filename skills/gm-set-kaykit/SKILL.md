@@ -31,6 +31,10 @@ Use one scale convention for the whole game. Confirm rig ids before clip reuse; 
 Loop locomotion and idle clips, but hold a named terminal pose after a one-shot when the vocabulary provides one.
 Contact frames are verified data, never guessed from duration. Kit pieces snap by the card's `grid_m` fact.
 
+For three.js details: loading the GLBs and clips `vendor/gamedev/threejs-gltf-loading/SKILL.md`, playing and blending
+clips `vendor/threejs/threejs-animation/SKILL.md`, lighting the kit `vendor/threejs/threejs-lighting/SKILL.md`, and its
+materials `vendor/threejs/threejs-materials/SKILL.md`.
+
 ## Cards
 
 | Need | Topic |

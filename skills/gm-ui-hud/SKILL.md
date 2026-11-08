@@ -69,6 +69,6 @@ is unchecked. Never claim every device.
 
 ## Reference
 
-Open `vendor/gamedev/game-ui-ux` for anchors, focus order, and event-driven HUD patterns, and
-`vendor/phaser/scale-and-responsive` or `vendor/phaser/text-and-bitmaptext` only for engine details. The host
+Open `vendor/gamedev/game-ui-ux/SKILL.md` for anchors, focus order, and event-driven HUD patterns, and
+`vendor/phaser/scale-and-responsive/SKILL.md` or `vendor/phaser/text-and-bitmaptext/SKILL.md` only for engine details. The host
 contract wins when a vendor reference suggests owning pause, settings, or device safe areas.

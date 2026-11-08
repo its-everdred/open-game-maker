@@ -117,4 +117,4 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-pack-adapter | Changing shared pack code or proposing a promotion. |
 | vendor/phaser | Working in Phaser; load only the capability needed. |
 | vendor/threejs | Working in Three.js; load only the capability needed. |
-| vendor/gamedev | Needing a focused game-development reference not covered above. |
+| vendor/gamedev | Needing a focused game-development reference; `references/roles.md` lists each role's picks. |

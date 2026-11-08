@@ -33,6 +33,7 @@ list it under unchecked.
 - Use `--inputs` and closer `--frames` around small events instead of judging them from a wide shot.
 - Check the title, main play state, first action, HUD, and any changed scene or screen.
 - Treat the sheet as the source of truth. Do not infer appearance from scene objects or source code.
+- A model looks black, flat, or wrong in a still? Open `vendor/gamedev/threejs-materials-lighting/SKILL.md`.
 
 ## Judge a set as a set
 

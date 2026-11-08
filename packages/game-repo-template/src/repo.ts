@@ -40,6 +40,8 @@ export function renderRepoTemplate(ref: string, ctx: TemplateCtx, root: string =
     ...pack.discovery.flatMap(({ name, target }) => [
       { path: `.codex/skills/${name}`, content: `../../.claude/skills/${target}`, mode: '120000' as const },
       { path: `.agents/skills/${name}`, content: `../../.claude/skills/${target}`, mode: '120000' as const },
+      // A vendored skill also gets a flat `.claude/skills/<name>` link so top-level skill indexes list it.
+      ...(target !== name ? [{ path: `.claude/skills/${name}`, content: target, mode: '120000' as const }] : []),
     ]),
     ...scaffoldFiles,
   ];

@@ -5,9 +5,19 @@ description: Author and verify rights-cleared 3D assets offline with Blender, th
 
 # Game Maker 3D
 
-Use Blender for offline mesh, material, rig, animation, GLB, still, and turntable work. Load the relevant
-`vendor/threejs` skill for runtime scenes, loading, lighting, cameras, or performance. Do not rebuild offline authoring
-inside Three.js or put game rules in a Blender script.
+Use Blender for offline mesh, material, rig, animation, GLB, still, and turntable work. Do not rebuild offline authoring
+inside Three.js or put game rules in a Blender script. For the runtime step, load its skill:
+
+| Runtime step | Skill |
+|---|---|
+| lighting and shadows | `vendor/threejs/threejs-lighting/SKILL.md` |
+| materials | `vendor/threejs/threejs-materials/SKILL.md` |
+| textures and colour spaces | `vendor/threejs/threejs-textures/SKILL.md` |
+| loading a GLB and its clips | `vendor/gamedev/threejs-gltf-loading/SKILL.md` |
+| scene, renderer, and loop | `vendor/gamedev/threejs-scene-setup/SKILL.md` |
+| cameras | `vendor/gamedev/camera-systems/SKILL.md` |
+| post-processing | `vendor/threejs/threejs-postprocessing/SKILL.md` |
+| performance | `vendor/threejs/threejs-performance/SKILL.md` |
 
 ## Author deterministically
 

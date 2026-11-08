@@ -197,11 +197,19 @@ function managedTreeMatches(source: string, installed: string): boolean {
   return walkFiles(source).every((path) => installedHash(installed, path) === fileSha256(join(source, path)));
 }
 
+// `.claude/skills` holds gm skills at the top level already; a vendored skill sits under `vendor/<set>/`, so it also
+// gets a flat `.claude/skills/<name>` link that top-level skill indexes can list.
+const LINK_PARENTS = ['.codex', '.agents', '.claude'] as const;
+
+function linksInto(parentName: string, skill: DiscoverySkill): boolean {
+  return parentName !== '.claude' || skill.target !== skill.name;
+}
+
 function linkDrift(repoDir: string, skills: DiscoverySkill[], lock: SkillsLock | null): string[] {
   const drift: string[] = [];
-  for (const parentName of ['.codex', '.agents']) {
+  for (const parentName of LINK_PARENTS) {
     const parent = join(repoDir, parentName, 'skills');
-    for (const skill of skills) {
+    for (const skill of skills.filter((candidate) => linksInto(parentName, candidate))) {
       const path = join(parent, skill.name);
       const canonical = join(repoDir, '.claude', 'skills', skill.target);
       const expected = slash(relative(parent, canonical));
@@ -233,7 +241,7 @@ function lstatExists(path: string): boolean {
 function copyContents(source: string, destination: string): void {
   mkdirSync(destination, { recursive: true });
   for (const entry of readdirSync(source)) {
-    cpSync(join(source, entry), join(destination, entry), { recursive: true, force: true });
+    cpSync(join(source, entry), join(destination, entry), { recursive: true, force: true, verbatimSymlinks: true });
   }
 }
 
@@ -348,17 +356,17 @@ function installLinks(
   const localEdits: string[] = [];
   const oldSkills = oldDiscoverySkills(oldLock);
   const desired = new Set(skills.map(({ name }) => name));
-  for (const parentName of ['.codex', '.agents']) {
+  for (const parentName of LINK_PARENTS) {
     const parent = join(repoDir, parentName, 'skills');
     mkdirSync(parent, { recursive: true });
     if (oldLock) {
-      for (const skill of oldSkills.filter(({ name }) => !desired.has(name))) {
+      for (const skill of oldSkills.filter((skill) => !desired.has(skill.name) && linksInto(parentName, skill))) {
         const removed = removeOwnedDiscovery(join(parent, skill.name), parent, skill, oldLock);
         changed ||= removed.changed;
         if (removed.localEdits) localEdits.push(`${parentName}/skills/${skill.name}`);
       }
     }
-    for (const skill of skills) {
+    for (const skill of skills.filter((candidate) => linksInto(parentName, candidate))) {
       const path = join(parent, skill.name);
       const canonical = join(repoDir, '.claude', 'skills', skill.target);
       const expected = slash(relative(parent, canonical));
