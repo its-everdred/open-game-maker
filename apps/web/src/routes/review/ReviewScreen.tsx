@@ -1,23 +1,59 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Navigate, useNavigate, useParams } from 'react-router';
 
 import type { VoiceTarget } from '@ogm/contracts';
+import { reviewPath, type GameCommand } from '@ogm/contracts/browser';
 
-import { findCommand } from '../../features/commands-inbox/review-route';
+import { findCommand, findCommandByNumber } from '../../features/commands-inbox/review-route';
+import { PlayLinkMessage } from '../play/PlayScreen';
+import { playLinkDenial, usePlayLink } from '../play/api';
 import { useGameCommands } from '../../features/commands-inbox/commands';
 import { ReviewDeck } from '../../features/commands-inbox/ReviewDeck';
 import { useMyJobs } from '../../features/build-chat/jobs';
 import './review-screen.css';
 
-// The review deck on its own screen (A3): the deep link `/game/:gameId/review/:commandId` the Executor pushes to the
-// creator. It renders the same deck the game's inbox renders, in the studio's own look and chrome, and goes back to
-// the game's inbox once the answer lands. The Command stays in the game's inbox after an answer until aiur marks it
-// answered, so a reload of this link shows the deck's ending grid, not a second answer.
-export function ReviewScreen() {
+// The short link the Executor pushes to the creator (#591): `/<slug>/review/<n>`, the game's slug and the Command's
+// number inside the game. A slug the game has outgrown is rewritten to the current one so the address heals.
+export function ShortReviewScreen() {
+  const { slug = '', number = '' } = useParams();
+  const link = usePlayLink(slug);
+
+  if (link.isError) return <PlayLinkMessage denial={playLinkDenial(link.error)} />;
+  if (!link.data) return null;
+  const current = link.data.slug;
+  if (current && current !== slug) return <Navigate replace to={reviewPath(current, Number(number))} />;
+  return <ReviewScreen gameId={link.data.id} find={(commands) => findCommandByNumber(commands, number)} />;
+}
+
+// The link before short links: `/game/<id>/review/<checkpoint or decision id>`. It moves to the short form once the
+// game's slug and the Command's number are known; a Command that is no longer open shows the deck's closed state here.
+export function LegacyReviewScreen() {
   const { gameId = '', commandId = '' } = useParams();
-  const navigate = useNavigate();
+  const game = usePlayLink(gameId);
   const { commands, isPending } = useGameCommands(gameId);
   const command = findCommand(commands, commandId);
+
+  if (game.isPending || isPending) return null;
+  const slug = game.data?.slug;
+  if (slug && command?.review_number !== undefined) {
+    return <Navigate replace to={reviewPath(slug, command.review_number)} />;
+  }
+  return <ReviewScreen gameId={gameId} find={(open) => findCommand(open, commandId)} />;
+}
+
+// The review deck on its own screen (A3). It renders the same deck the game's inbox renders, in the studio's own look
+// and chrome, and goes back to the game's inbox once the answer lands. The Command stays in the game's inbox after an
+// answer until aiur marks it answered, so a reload of this link shows the deck's ending grid, not a second answer.
+function ReviewScreen({
+  gameId,
+  find,
+}: {
+  gameId: string;
+  find(commands: readonly GameCommand[]): GameCommand | undefined;
+}) {
+  const navigate = useNavigate();
+  const { commands, isPending } = useGameCommands(gameId);
+  const command = find(commands);
   const [sent, setSent] = useState(false);
   const back = () => navigate(`/all?spotlight=${encodeURIComponent(gameId)}`);
 

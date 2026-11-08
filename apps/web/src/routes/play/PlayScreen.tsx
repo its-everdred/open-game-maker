@@ -21,7 +21,7 @@ const COPY: Record<PlayLinkDenial, string> = {
   unavailable: 'Couldn’t open that game. Try again.',
 };
 
-function PlayLinkMessage({ denial }: { denial: PlayLinkDenial }) {
+export function PlayLinkMessage({ denial }: { denial: PlayLinkDenial }) {
   return (
     <div className="games-screen">
       <p className="games-status" role="status">
