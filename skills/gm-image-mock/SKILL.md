@@ -44,7 +44,7 @@ palette, the HUD.
 Budget: one image per option per view, then regenerate only the ones that came out wrong. Look at every image before
 sending it (gm-verify). If your tools cannot show you an image (a shell-only agent), ask a vision model:
 `request-mock.py --kind look --ref <shot> --ref <target> --prompt-file <questions>` writes its plain answers to
-`<out>/<name>.look.md`; ask about every rule in the feedback ledger and every difference from the target: wrong genre, unreadable HUD, extra limbs or off-kit style means regenerate or drop it.
+`<out>/<name>-<id>.look.md`, ending in `VERDICT: pass` or `VERDICT: fail` (`gm look check` gates the PR on it); ask about every rule in the feedback ledger and every difference from the target: wrong genre, unreadable HUD, extra limbs or off-kit style means regenerate or drop it.
 
 ## Before a mock becomes a build target
 
