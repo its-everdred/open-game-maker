@@ -34,6 +34,9 @@ export type AnswerInput = {
   // A review deck's like/dislike map, when the Command's options carry media. Validated against the checkpoint before
   // anything is answered, so a client cannot name a card the Command does not have.
   review?: CommandReview;
+  // Where the player gave the answer. A spoken answer from two-way voice takes this same path, so the chat row, the
+  // inbox, the decision history and aiur all hold one record whichever way the creator answered.
+  channel?: 'chat' | 'voice';
   now?: () => Date;
 };
 
@@ -47,10 +50,15 @@ function winnerPatch(decision: Decision) {
   };
 }
 
-function rationale(source: AnswerSource, label: string, review?: string): string {
+function rationale(
+  source: AnswerSource,
+  label: string,
+  review?: string,
+  channel: AnswerInput['channel'] = 'chat',
+): string {
   if (source === 'default') return `Provisional default after the answer window passed without a reply: '${label}'`;
   if (source === 'skip') return `Creator skipped the question and took the recommendation '${label}'`;
-  const chose = `Creator chose '${label}' in the build chat`;
+  const chose = `Creator chose '${label}' ${channel === 'voice' ? 'in two-way voice' : 'in the build chat'}`;
   return review === undefined ? chose : `${chose}. ${review}`;
 }
 
@@ -183,7 +191,7 @@ export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcom
       option: optionId,
       expected_version: checkpoint.version,
       idempotency_key: `ogm:${input.source}:${checkpointId}:${checkpoint.version}`,
-      rationale: rationale(input.source, option.label, fields?.rationale),
+      rationale: rationale(input.source, option.label, fields?.rationale, input.channel),
       // aiur's "alternatives considered" are the likes left over once the answer's card is taken out; the whole map
       // travels in `response`, so nothing is lost when there are none.
       ...(fields === undefined

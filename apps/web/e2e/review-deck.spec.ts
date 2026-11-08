@@ -172,7 +172,7 @@ test('judges the 6-card voice deck and sends the review with its reasons', async
 
   await page.getByRole('button', { name: 'Choose Voice 5' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
       option_id: 'v5',
@@ -184,6 +184,36 @@ test('judges the 6-card voice deck and sends the review with its reasons', async
     },
   ]);
   await capture(page, testInfo, 'voice-deck-sent');
+
+  // A saved answer can be corrected (#597): Change reopens a fresh deck for the same decision.
+  await page.getByRole('button', { name: 'Change' }).click();
+  await expect(deck).toBeVisible();
+  await expect(page.locator('.review-deck-progress')).toHaveText('1 of 6');
+});
+
+// Kevin (#597): an optional voice button inside the decision that never covers the media or the options.
+test('offers voice about the decision without covering the cards or the options', async ({ page }, testInfo) => {
+  testInfo.setTimeout(120_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await installReviewApi(page, { voice: true });
+  await page.goto(`/blobs/review/${imageCommand().review_number!}`);
+
+  const voice = page.getByRole('button', { name: 'Talk about this decision' });
+  await expect(voice).toBeVisible();
+  const button = (await voice.boundingBox())!;
+  const covered = [page.locator('.review-deck-card'), page.locator('.review-deck-actions')];
+  for (const target of covered) {
+    const box = (await target.boundingBox())!;
+    const overlaps =
+      button.x < box.x + box.width &&
+      box.x < button.x + button.width &&
+      button.y < box.y + box.height &&
+      box.y < button.y + button.height;
+    expect(overlaps).toBe(false);
+  }
+  // The token asked for names this decision, which is what the agent is briefed on first.
+  expect(voiceTokenTargets.at(-1)).toMatchObject({ command_id: imageCommand().decision_id, ticket: '570' });
+  await capture(page, testInfo, 'decision-voice-button');
 });
 
 test('judges the 9-card image deck with the arrow keys and sends the review', async ({ page }, testInfo) => {
@@ -262,7 +292,7 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
   // set-level note travels beside them.
   await page.getByRole('button', { name: 'Send the review' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
       option_id: 'm1',
@@ -285,8 +315,19 @@ async function openDeck(page: Page, reviewNumber: number) {
 
 // The two decks and the answer route the app's own client calls. Media is served from its own origin so the cards have
 // real audio and stills to draw.
-async function installReviewApi(page: Page) {
+const voiceTokenTargets: Array<Record<string, unknown>> = [];
+
+// `voice` gives the Commands' job to the signed-in creator and a configured voice host, so the decision offers voice.
+async function installReviewApi(page: Page, options: { voice?: boolean } = {}) {
   const commands = [voiceCommand(), imageCommand()];
+  const job = {
+    id: imageCommand().job_id!,
+    gameId,
+    creatorId: 'u1',
+    state: 'running',
+    aiurIssueNumber: 570,
+    updatedAt: '2026-11-07T17:40:00.000Z',
+  };
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -308,6 +349,18 @@ async function installReviewApi(page: Page) {
       });
     }
     if (path === `/api/v1/games/${gameId}/commands`) return json(route, { commands });
+    if (options.voice && path === '/api/v1/games') return json(route, { games: [{ id: gameId, title: 'Blobs' }] });
+    if (options.voice && path === '/api/v1/jobs') return json(route, { jobs: [job] });
+    if (options.voice && path === '/api/v1/voice/token') {
+      voiceTokenTargets.push(
+        (JSON.parse(route.request().postData() ?? '{}') as { target: Record<string, unknown> }).target,
+      );
+      return json(route, {
+        token: 'vct1.e2e.mac',
+        expires_at: '2026-11-08T10:00:00.000Z',
+        url: 'wss://voice.example.test/ws/voice',
+      });
+    }
     if (path === '/api/v1/jobs' || path === '/api/v1/jobs/active') return json(route, { jobs: [] });
     if (path.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });
     if (/\/jobs\/[^/]+\/checkpoints\/[^/]+\/answer$/.test(path)) {

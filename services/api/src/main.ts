@@ -156,6 +156,7 @@ const stopBriefingPush =
   env.OGM_VOICE_HOST_INTERNAL_URL && env.OGM_VOICE_INTERNAL_SECRET
     ? startBriefingPush({
         db,
+        sqlite,
         events: deps.events,
         defaults: budgetDefaults,
         url: env.OGM_VOICE_HOST_INTERNAL_URL,
