@@ -71,4 +71,7 @@ agents read the full text (speech already transcribed, never raw audio by defaul
   item.
 - **Keep two piles:** game decisions and platform feedback stay apart.
 - **Evidence:** say plainly whether something was verified (research, a test, a played build) or is a recommendation.
-- **Short titles:** every Command gets a 2–5 word topic (`--short-summary`) for the inbox and the modal title.
+- **Short titles, no links:** every Command gets a 2–5 word topic (`--short-summary`) and at most one short line of
+  description. Never put a URL or long text in either. The options and their media carry the content.
+- **Gameplay questions are played, not linked:** when the choice is about feel (speed, chain pause, controls), each
+  option is a playable slice embedded in the deck (a few seconds each, one after another), never a link.
