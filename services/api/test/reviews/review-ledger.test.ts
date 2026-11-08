@@ -283,13 +283,20 @@ describe('recordReview', () => {
   it('records a new row when the creator changes the review', async () => {
     const { deps } = await setup();
     const command = commandOf(deps);
-    recordReview(deps.db, { gameId: GAME, command, optionId: 'wood', review: WOOD_AND_IRON });
+    recordReview(deps.db, {
+      gameId: GAME,
+      command,
+      optionId: 'wood',
+      review: WOOD_AND_IRON,
+      at: '2026-11-07T17:45:00.000Z',
+    });
 
     recordReview(deps.db, {
       gameId: GAME,
       command,
       optionId: 'iron',
       review: { likes: ['iron'], dislikes: [{ option_id: 'wood' }] },
+      at: '2026-11-07T17:46:00.000Z',
     });
 
     expect(listReviews(deps.db, GAME).map(({ option_id }) => option_id)).toEqual(['iron', 'wood']);
