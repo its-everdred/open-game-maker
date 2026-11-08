@@ -116,6 +116,8 @@ export const ChatCheckpoint = z.object({
   recommend: z.string().optional(),
   blocking: z.boolean().optional(),
   pick: z.enum(['one', 'many']).optional(),
+  // The Command's 2-5 word topic (`gm decide --topic`), its title in the inbox and modal. Older checkpoints have none.
+  topic: z.string().optional(),
   status: z.enum(['open', 'answered', 'moot']),
   option_id: z.string().optional(),
   // A review deck's answer: the likes and dislikes the creator chose, with their words on a dislike (A3).
@@ -189,6 +191,8 @@ export const CheckpointOpenPayload = z
     blocking: z.boolean(),
     // 'many' opens a review deck whose answer is the likes and dislikes, not one card. Absent means 'one'.
     pick: z.enum(['one', 'many']).optional(),
+    // The 2-5 word topic `gm decide` requires; the inbox titles the Command with it.
+    topic: z.string().trim().min(1).max(80).optional(),
   })
   .strict()
   .superRefine((payload, ctx) => {

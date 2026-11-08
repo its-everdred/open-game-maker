@@ -109,7 +109,7 @@ the selected option id, exits 3 on timeout, and exits 4 when the checkpoint beco
 
 Without a build job (no `--job`, `GM_JOB` or `.gm/context/job.json`), `gm checkpoint open` writes nothing to the outbox
 and refuses `--media`; the printed call carries each `--playable` slice, so the Command shows as playable cards in the
-game's review deck (see `packages/gm-cli/src/commands/checkpoint/README.md`).
+game's review deck (see `packages/gm-cli/src/commands/checkpoint/README.md`). `gm decide` does the same.
 
 `--provenance <id>=<json|@file>` records what an option was built from — the packs and assets it used, its generator,
 when it was built, and its design aspect, kind, and view. The ledger check reads it; a game that carries a ledger

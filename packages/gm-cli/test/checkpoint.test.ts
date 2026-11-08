@@ -218,6 +218,44 @@ describe('gm checkpoint open', () => {
     });
   });
 
+  it('lets gm decide raise a titled playable Command without a build job', async () => {
+    const root = workspace();
+    const result = await gm(
+      [
+        'decide',
+        '--topic',
+        'Blobs fall speed',
+        '--question',
+        'Which fall speed feels right?',
+        '--option',
+        'a=Slow',
+        '--option',
+        'b=Fast',
+        '--playable',
+        'a=scenario=sandbox&speed=slow',
+        '--playable',
+        'b=scenario=sandbox&speed=fast',
+        '--recommend',
+        'a',
+        '--reason',
+        'Easier to read',
+        '--json',
+      ],
+      { cwd: root },
+    );
+
+    expect(result).toMatchObject({ code: 0, err: [] });
+    expect(existsSync(join(root, '.gm', 'outbox', 'checkpoint.jsonl'))).toBe(false);
+    const printed = JSON.parse(result.out[0]) as {
+      emit_event: { payload: { context: { short_summary: string; long_context_markdown: string } } };
+    };
+    expect(printed.emit_event.payload.context.short_summary).toBe('Blobs fall speed');
+    expect([...playablesFromMarker(printed.emit_event.payload.context.long_context_markdown).keys()]).toEqual([
+      'a',
+      'b',
+    ]);
+  });
+
   it('exits 2 when the build workspace context names no job, instead of raising a job-less Command', async () => {
     const root = workspace();
     mkdirSync(join(root, '.gm', 'context'), { recursive: true });

@@ -4,6 +4,7 @@ import { GameCommand, playablesFromMarker, type CommandOption } from '@ogm/contr
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import type { MediaSigner } from '../build-chat/store.js';
+import { isForCreator } from '../checkpoints/correlate.js';
 import { optionMediaFromAiur } from './aiur-media.js';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
@@ -14,7 +15,8 @@ import { optionMediaFromAiur } from './aiur-media.js';
 // A decision aiur has answered, dismissed or called moot is not an open Command and is left out, as the job
 // checkpoints leave it out. An open or deferred decision is still waiting on the creator. A Command whose options
 // fall outside the inbox contract (fewer than two, more than five, or an option id aiur would not accept) is dropped
-// rather than failing the whole inbox.
+// rather than failing the whole inbox. A decision not marked for the creator (an engineering or operations question) is
+// the Executor's and is never listed here (#595).
 const OPEN = new Set(['open', 'deferred']);
 
 function isOpen(decision: Decision): boolean {
@@ -92,7 +94,11 @@ export async function gameCommandsFromAiur(
   // A job's Command is already in its checkpoint, so the game's own read leaves those to the job. A Command the inbox
   // would drop anyway is dropped before its media is copied.
   const open = decisions.filter(
-    (decision) => !jobTickets.has(decision.ticket.identifier) && isOpen(decision) && toGameCommand(decision) !== null,
+    (decision) =>
+      !jobTickets.has(decision.ticket.identifier) &&
+      isOpen(decision) &&
+      isForCreator(decision) &&
+      toGameCommand(decision) !== null,
   );
   const commands = await Promise.all(
     open.map(async (decision) => toGameCommand(decision, await optionMediaFromAiur(deps, client, decision, sign))),
