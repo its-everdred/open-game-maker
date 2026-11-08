@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameCommand, ReviewDraftsPage } from '@ogm/contracts';
 
-import { resetReviewDrafts, useIsSent } from './drafts';
+import { hydrateDrafts, resetReviewDrafts, useIsSent } from './drafts';
 import { ReviewDeck } from './ReviewDeck';
 
 const calls: Array<{ url: string; method: string; body: unknown }> = [];
@@ -321,6 +321,29 @@ describe('ReviewDeck', () => {
 
     act(() => vi.advanceTimersByTime(300));
     expect(screen.getByText('2 of 3')).toBeVisible();
+  });
+
+  // Votes from another device can arrive while a card is flying off. The card that flew is the one judged; the card
+  // the deck now shows is left for the creator.
+  it('judges the card that flew, even when votes arrive during its flight', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    renderDeck();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Like' }));
+    act(() =>
+      hydrateDrafts([
+        {
+          key: 'cp_1:3',
+          deck: { cards: [{ option_id: 'v1', verdict: 'like' }] },
+          updated_at: '2026-11-08T10:00:00.000Z',
+        },
+      ]),
+    );
+    act(() => vi.advanceTimersByTime(300));
+
+    expect(screen.getByText('2 of 3')).toBeVisible();
+    expect(screen.getByLabelText('Voice two')).toBeInTheDocument();
   });
 
   it('shows the failure when the answer is refused, and tries again once a vote is cast again', async () => {

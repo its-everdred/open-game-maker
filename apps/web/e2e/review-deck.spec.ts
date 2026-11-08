@@ -227,7 +227,7 @@ test('judges the 9-card image deck with the arrow keys and answers on the last v
   await capture(page, testInfo, 'image-deck-card-1');
 
   // Tapping the still opens it at the phone's full size, and Close returns to the same card.
-  await firstCard.click();
+  await page.locator('.review-deck-card').first().click();
   const viewer = page.getByRole('dialog', { name: 'Mock 1' });
   await expect(viewer).toBeVisible();
   await expect(viewer.locator('img')).toHaveAttribute('src', 'https://media.example.test/matrix/m1.svg');

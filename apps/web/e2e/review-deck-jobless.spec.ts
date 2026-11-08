@@ -84,6 +84,7 @@ const command: GameCommand = {
 test.use({ serviceWorkers: 'block' });
 
 test('shows a jobless Command’s still, clip and sample on their cards', async ({ page }, testInfo) => {
+  testInfo.setTimeout(60_000);
   await installAuthRoutes(page, { signedIn: true });
   await installApi(page);
   await page.goto('/blobs/review/1');

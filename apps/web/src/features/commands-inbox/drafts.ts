@@ -95,14 +95,14 @@ export function saveDraft(gameId: string, command: GameCommand, deck: DeckState)
   queues.set(key, queued);
 }
 
-// The server's drafts fill in any question this tab has not started, so votes cast elsewhere come back. A question
-// this tab already has votes on keeps them: they are newer, and already on their way to the server.
+// The server's drafts fill in any question this tab has not touched yet, so votes cast elsewhere come back. A question
+// this tab already holds keeps its own state, even with every vote undone: it is newer, and already on its way to the
+// server, and a cached page read again on the next visit must not bring old votes back.
 export function hydrateDrafts(drafts: ReviewDraftsPage['drafts']): void {
   useDraftStore.setState((store) => {
     const next = { ...store.drafts };
     for (const { key, deck } of drafts) {
-      const local = next[key];
-      if (local !== undefined && (local.sent || local.deck.cards.length > 0)) continue;
+      if (next[key] !== undefined) continue;
       saved.set(key, JSON.stringify(deck));
       next[key] = {
         sent: false,

@@ -177,9 +177,10 @@ describe('a jobless Command’s option media', () => {
         {
           id: 'pip',
           label: 'Pip',
+          // aiur lists the voice first here: the card still shows the portrait.
           media: [
-            attachment('med_pip', 'image', 'image/png'),
             attachment('med_pip_voice', 'audio', 'audio/mpeg', { duration_ms: 2500 }),
+            attachment('med_pip', 'image', 'image/png'),
           ],
         },
         { id: 'hum', label: 'Hum', media: [attachment('med_hum', 'audio', 'audio/mpeg', { duration_ms: 2000 })] },

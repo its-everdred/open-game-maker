@@ -32,8 +32,9 @@ export function ReviewDeck({
   useServerDrafts(gameId);
   const [state, dispatch] = useDeckDraft(command);
   const [error, setError] = useState<string>();
-  // The card on its way off screen after a vote; it is judged once it has gone.
-  const [leaving, setLeaving] = useState<Verdict | null>(null);
+  // The card on its way off screen after a vote; that card is judged once it has gone, even if the deck changed
+  // under it meanwhile (votes cast on another device arriving).
+  const [leaving, setLeaving] = useState<{ optionId: string; verdict: Verdict } | null>(null);
   // The card whose still, GIF or clip is open full screen.
   const [fullscreen, setFullscreen] = useState<string | null>(null);
   const sound = useDeckSound();
@@ -92,16 +93,19 @@ export function ReviewDeck({
       if (nextSound === undefined) stop();
       else play(nextSound);
       if (prefersReducedMotion()) dispatch({ type: 'judge', optionId: card.id, verdict });
-      else setLeaving(verdict);
+      else setLeaving({ optionId: card.id, verdict });
     },
     [card, dispatch, leaving, next, play, state.sending, stop],
   );
 
-  const gone = useCallback(() => {
-    if (card === undefined || leaving === null) return;
-    setLeaving(null);
-    dispatch({ type: 'judge', optionId: card.id, verdict: leaving });
-  }, [card, dispatch, leaving]);
+  useEffect(() => {
+    if (leaving === null) return;
+    const timer = window.setTimeout(() => {
+      setLeaving(null);
+      dispatch({ type: 'judge', ...leaving });
+    }, FLY_MS);
+    return () => window.clearTimeout(timer);
+  }, [dispatch, leaving]);
 
   const reasonCard = state.reason === null ? undefined : cards.find(({ id }) => id === state.reason!.optionId);
   return (
@@ -136,9 +140,8 @@ export function ReviewDeck({
               card={card}
               letter={letterOf(cards, card.id)}
               playing={sound.playing && cardSound !== undefined && sound.src === cardSound}
-              leaving={leaving}
+              leaving={leaving?.optionId === card.id ? leaving.verdict : null}
               onRelease={vote}
-              onGone={gone}
               onTap={() => {
                 if (cardSound !== undefined) sound.replay(cardSound);
                 else setFullscreen(card.id);
@@ -301,7 +304,6 @@ function DeckCard({
   playing,
   leaving,
   onRelease,
-  onGone,
   onTap,
 }: {
   gameId: string;
@@ -311,7 +313,6 @@ function DeckCard({
   playing: boolean;
   leaving: Verdict | null;
   onRelease(verdict: Verdict): void;
-  onGone(): void;
   onTap(): void;
 }) {
   const element = useRef<HTMLDivElement>(null);
@@ -337,8 +338,8 @@ function DeckCard({
     if (dislikeStamp.current !== null) dislikeStamp.current.style.opacity = dx < 0 ? String(reach) : '0';
   };
 
-  // A vote from a button, a key or a released swipe sends the card off the side it was voted to, stamped, and the deck
-  // judges it once it has gone.
+  // A vote from a button, a key or a released swipe sends the card off the side it was voted to, stamped; the deck
+  // judges it once the flight is over.
   useEffect(() => {
     const node = element.current;
     if (leaving === null || node === null) return;
@@ -348,9 +349,7 @@ function DeckCard({
     node.style.transform = `translate(${away}px, ${dy}px) rotate(${(leaving === 'like' ? 1 : -1) * MAX_TILT * 1.5}deg)`;
     const stamp = leaving === 'like' ? likeStamp.current : dislikeStamp.current;
     if (stamp !== null) stamp.style.opacity = '1';
-    const timer = window.setTimeout(onGone, FLY_MS);
-    return () => window.clearTimeout(timer);
-  }, [leaving, onGone]);
+  }, [leaving]);
 
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
 

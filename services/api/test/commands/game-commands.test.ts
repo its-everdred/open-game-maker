@@ -549,6 +549,24 @@ describe('a registered game’s own Commands', () => {
     expect(answerAsCreator).not.toHaveBeenCalled();
   });
 
+  // The creator's answer grant is scoped to the Command's ticket (#631): a Command aiur cannot place on a ticket, or one
+  // outside the inbox contract, is refused before any grant is minted.
+  it('refuses an answer to a Command it cannot place on a ticket and answers nothing', async () => {
+    const { app, answerAsCreator } = await appWithAiur([
+      decision({ decision_id: 'd_aiur_1', options: [{ id: 'square', label: 'Square blobs' }] }),
+    ]);
+
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'square', version: 2 }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'command_not_found' });
+    expect(answerAsCreator).not.toHaveBeenCalled();
+  });
+
   it('reports another writer’s answer as a conflict', async () => {
     const { app } = await appWithAiur(
       [decision()],
