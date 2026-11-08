@@ -12,6 +12,7 @@ import { AiurConversation, jobScope, type AiurCommandAnswer } from '../aiur/embe
 import { admitNewGame, type AdmissionResult, type SupportedOffer } from './admit';
 import { Captions } from './Captions';
 import { Composer } from './Composer';
+import { energyRefusalText } from '../energy/api';
 import { Offers } from './Offers';
 import { useScopeSession } from './useScopeSession';
 
@@ -126,7 +127,12 @@ export function ScopeChat({
           conversation
         )}
         {refusal && !waitingForAdmin ? (
-          <Offers offers={refusal.offers} disabled={submitting} onChoose={(offer) => void choose(offer)} />
+          <Offers
+            offers={refusal.offers}
+            message={energyRefusalText(refusal.window)}
+            disabled={submitting}
+            onChoose={(offer) => void choose(offer)}
+          />
         ) : null}
         {waitingForAdmin ? (
           <AllowanceStatus
