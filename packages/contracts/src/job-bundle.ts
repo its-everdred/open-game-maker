@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { Id } from './api.js';
 import { ChatAttachmentKind, MAX_IMAGE_ATTACHMENT_BYTES } from './chat.js';
+import { EnergyView } from './energy.js';
 import { JobKind } from './jobs.js';
 
 // A file the creator attached to the job's chat (#222). The after_create hook downloads `blob` (an attachment id served
@@ -47,6 +48,8 @@ export const JobBundle = z
       .strict()
       .optional(),
     attachments: z.array(JobBundleAttachment).optional(),
+    // The instance's Energy and the creator's preference when the job started (#598); `gm energy` reads it.
+    energy: EnergyView.optional(),
   })
   .strict();
 

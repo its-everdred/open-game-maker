@@ -14,8 +14,13 @@ function charges(db: Db, familyId: string, key: string, userId?: string): number
         eq(schema.budgetLedger.dayKey, key),
       )
     : and(eq(schema.budgetLedger.familyId, familyId), eq(schema.budgetLedger.dayKey, key));
+  return netCharges(db.select().from(schema.budgetLedger).where(where).all());
+}
+
+// A job's charge: its open reservation, plus usage beyond it, plus adjustments.
+export function netCharges(rows: readonly { jobId: string; kind: keyof Charge; amountMicroUsd: number }[]): number {
   const byJob = new Map<string, Charge>();
-  for (const row of db.select().from(schema.budgetLedger).where(where).all()) {
+  for (const row of rows) {
     const charge = byJob.get(row.jobId) ?? { reservation: 0, release: 0, usage: 0, adjustment: 0 };
     charge[row.kind] += row.amountMicroUsd;
     byJob.set(row.jobId, charge);
