@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# OGM executor QA: play a registered game's newest build like a player with the four gm qa commands, and leave one run
+# directory with the stills, clips, look requests and qa-report.md.
+#
+# usage: ogm-qa <game-slug> [--build <buildId>] [--clients 2-4] [--out <dir>] [--checkout <path>] [--api <url>]
+#
+#   --build     the build to play (default: the newest build on the game's main branch)
+#   --clients   clients for each room journey (default 2)
+#   --out       the run directory (default: $OGM_QA_ROOT/<slug>/<buildId>, OGM_QA_ROOT ~/.local/state/ogm/qa)
+#   --checkout  the repository checkout holding <game>/qa/journeys (default: the daemon row's registered checkout)
+#   --api       the API's loopback base URL (default: http://127.0.0.1:$OGM_API_PORT)
+#
+# Runs `gm qa open`, `gm qa drive` for each solo journey, `gm qa room` for each room journey, `gm qa look`, then
+# `gm qa look --report`, from the game's folder so the look questions carry its feedback ledger. It keeps going after a
+# failure so the report covers every step. The look answers are a looker's job: answer look/answers.json in the run
+# directory and run `gm qa look --report --out <dir>` again.
+#
+# exit 0 the report passed; 1 it failed or has unchecked looks; 64 bad usage; 65 no game, build, origin or token.
+# The internal token is read from ~/.config/ogm/env/api.env (or OGM_INTERNAL_TOKEN); nothing here prints it.
+
+set -uo pipefail
+
+usage() {
+  printf 'usage: ogm-qa <game-slug> [--build <buildId>] [--clients 2-4] [--out <dir>] [--checkout <path>] [--api <url>]\n' >&2
+  exit 64
+}
+
+slug=
+build=
+clients=2
+out=
+checkout=
+api=
+while (($#)); do
+  case $1 in
+    --build | --clients | --out | --checkout | --api)
+      [[ $# -ge 2 ]] || usage
+      declare "${1#--}=$2"
+      shift 2
+      ;;
+    -h | --help | -*) usage ;;
+    *)
+      [[ -n $slug ]] && usage
+      slug=$1
+      shift
+      ;;
+  esac
+done
+[[ -n $slug ]] || usage
+[[ $clients =~ ^[234]$ ]] || usage
+
+fail() {
+  printf 'ogm-qa: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+env_dir=${OGM_ENV_DIR:-$HOME/.config/ogm/env}
+# Read one name out of a unit's env file without sourcing it: the files also hold secrets.
+env_value() {
+  grep -E "^$2=" "$env_dir/$1.env" 2> /dev/null | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true
+}
+
+token=${OGM_INTERNAL_TOKEN:-$(env_value api OGM_INTERNAL_TOKEN)}
+port=${OGM_API_PORT:-$(env_value api OGM_API_PORT)}
+origin=${OGM_GAMES_ORIGIN:-$(env_value games OGM_GAMES_ORIGIN)}
+origin=${origin:-$(env_value api OGM_GAMES_ORIGIN)}
+api=${api:-${OGM_API_URL:-http://127.0.0.1:${port:-0}}}
+[[ -n $token ]] || fail "no internal token: set OGM_INTERNAL_TOKEN or put one in $env_dir/api.env" 65
+[[ -n $origin ]] || fail "no games origin: set OGM_GAMES_ORIGIN or put one in $env_dir/games.env" 65
+
+facts=$(curl -fsS --max-time 20 -H "x-ogm-internal: $token" "$api/internal/operator/games/$slug" 2> /dev/null) ||
+  fail "the API did not answer for game \"$slug\" at $api" 65
+# Unit separator, not a tab: read collapses runs of whitespace separators, so an empty repo path would shift the rest.
+IFS=$'\x1f' read -r game_id repo_path daemon_checkout latest < <(printf '%s' "$facts" | node -e '
+  let raw = "";
+  process.stdin.on("data", (chunk) => (raw += chunk));
+  process.stdin.on("end", () => {
+    const f = JSON.parse(raw);
+    const row = [f.game.id, f.game.repo.path ?? "", f.daemon?.checkoutPath ?? "", f.branch?.latestBuildId ?? ""];
+    process.stdout.write(row.join("\x1f") + "\n");
+  });
+')
+[[ -n $game_id ]] || fail "the API's answer for \"$slug\" carried no game id" 65
+build=${build:-$latest}
+[[ -n $build ]] || fail "game \"$slug\" has no build on main yet; publish one first (ops/bin/ogm-publish $slug)" 65
+url="${origin%/}/g/$game_id/$build/"
+
+checkout=${checkout:-$daemon_checkout}
+game_dir=${checkout:+$checkout/$repo_path}
+[[ -n $game_dir && -d $game_dir ]] || fail "no checkout of $slug's folder: pass --checkout" 65
+out=${out:-${OGM_QA_ROOT:-$HOME/.local/state/ogm/qa}/$slug/$build}
+mkdir -p "$out" || fail "cannot create $out" 65
+
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+read -r -a gm <<< "${OGM_GM:-node $repo/packages/gm-cli/dist/index.js}"
+
+worst=0
+step() {
+  printf '== gm %s\n' "$*"
+  (cd "$game_dir" && "${gm[@]}" "$@") || worst=1
+}
+
+printf 'qa %s build %s\n' "$slug" "$build"
+step qa open --url "$url" --out "$out"
+shopt -s nullglob
+for journey in "$game_dir"/qa/journeys/*.json; do
+  kind=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).kind ?? "solo"' "$journey")
+  if [[ $kind == room ]]; then
+    step qa room --url "$url" --journey "$journey" --clients "$clients" --out "$out"
+  else
+    step qa drive --url "$url" --journey "$journey" --out "$out"
+  fi
+done
+step qa look --out "$out"
+step qa look --report --out "$out"
+printf 'report %s/qa-report.md\n' "$out"
+exit "$worst"

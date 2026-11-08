@@ -99,6 +99,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |
 | gm-build | Installing or building in the network-off sandbox. |
 | gm-verify | Checking behavior, visuals, accessibility, performance, or evidence. |
+| gm-qa | QA-ing a hosted build like a player: phone and desktop, journeys, rooms across devices, report. |
 | gm-genre-platformer | Building or tuning a platformer. |
 | gm-input | Adding input actions, buffering, rebinding, or accessibility. |
 | gm-ui-hud | Building menus, HUD, layout, or readable game text. |
