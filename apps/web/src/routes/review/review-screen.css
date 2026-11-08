@@ -104,7 +104,7 @@
   font-weight: 700;
 }
 
-/* Two-way voice about the open decision (#597). It lives in the header, so it never covers the cards or the options;
+/* Two-way voice about the open decision. It lives in the header, so it never covers the cards or the options;
    a live call keeps the button lit until it is pressed again. */
 .review-screen-voice {
   display: grid;

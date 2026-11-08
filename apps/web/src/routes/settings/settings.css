@@ -30,6 +30,11 @@
   margin: 0;
 }
 
+.settings-screen > header nav {
+  display: flex;
+  gap: 10px;
+}
+
 .settings-screen > header a {
   display: inline-flex;
   align-items: center;

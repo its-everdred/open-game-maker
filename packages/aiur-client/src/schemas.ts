@@ -274,6 +274,25 @@ const DecisionAnswerSchema = z
   .nullable()
   .optional();
 
+// One media item on a Command's prompt or option, in aiur's public projection: a local file is an `attachment` locator
+// fetched through the decision media route, a vetted https file a `url` locator. Every field is lenient so one odd item
+// never fails the whole decision list; callers check what they render.
+const DecisionMediaLocatorSchema = z
+  .object({ kind: z.string(), attachment_id: z.string().optional(), value: z.string().optional() })
+  .loose();
+export const DecisionMediaSchema = z
+  .object({
+    kind: z.string().nullable().optional(),
+    mime_type: z.string().nullable().optional(),
+    attachment_id: z.string().nullable().optional(),
+    width: z.number().nullable().optional(),
+    height: z.number().nullable().optional(),
+    duration_ms: z.number().nullable().optional(),
+    locator: DecisionMediaLocatorSchema.nullable().optional(),
+    poster: DecisionMediaLocatorSchema.nullable().optional(),
+  })
+  .loose();
+
 export const DecisionSchema = z
   .object({
     decision_id: z.string(),
@@ -285,7 +304,14 @@ export const DecisionSchema = z
     reversibility: z.enum(['reversible', 'partially_reversible', 'irreversible']),
     question: z.string(),
     options: z.array(
-      z.object({ id: z.string(), label: z.string(), description: z.string().nullable().optional() }).loose(),
+      z
+        .object({
+          id: z.string(),
+          label: z.string(),
+          description: z.string().nullable().optional(),
+          media: z.array(DecisionMediaSchema).nullable().optional(),
+        })
+        .loose(),
     ),
     recommendation: z
       .object({ option_id: z.string().nullable().optional(), reason: z.string().nullable().optional() })
@@ -346,3 +372,4 @@ export type GapRecord = z.infer<typeof GapRecordSchema>;
 export type ResetRecord = z.infer<typeof ResetRecordSchema>;
 export type EventPage = z.infer<typeof EventPageSchema>;
 export type Decision = z.infer<typeof DecisionSchema>;
+export type DecisionMedia = z.infer<typeof DecisionMediaSchema>;

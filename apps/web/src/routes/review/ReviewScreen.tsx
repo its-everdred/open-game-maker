@@ -4,6 +4,7 @@ import { Navigate, useNavigate, useParams } from 'react-router';
 import { reviewPath, type GameCommand } from '@ogm/contracts/browser';
 
 import { findCommand, findCommandByNumber } from '../../features/commands-inbox/review-route';
+import { withoutLinks } from '../../features/commands-inbox/review';
 import { PlayLinkMessage } from '../play/PlayScreen';
 import { playLinkDenial, usePlayLink } from '../play/api';
 import { queryClient } from '../../app/query';
@@ -165,7 +166,7 @@ function ReviewScreen({
   return (
     <div className="review-screen">
       <header className="review-screen-head">
-        <h1>{reviewTitle(shown.title)}</h1>
+        <h1>{reviewTitle(withoutLinks(shown.title))}</h1>
         {voice}
         <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
           <Icon name="close" />
@@ -184,7 +185,7 @@ function ReviewScreen({
           }}
         />
         <details className="review-screen-question">
-          <summary>{shown.question}</summary>
+          <summary>{withoutLinks(shown.question)}</summary>
         </details>
       </div>
     </div>
