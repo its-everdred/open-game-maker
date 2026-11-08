@@ -125,6 +125,8 @@ describe('gm qa look', () => {
     const root = game();
     const look = await gm(['qa', 'look'], { cwd: root });
     expect(look.code).toBe(0);
+    /* The looker opens these as printed, from where it ran gm, not from inside the run directory. */
+    expect(look.out).toContain('look-1: shots/qa/solo-cpu/desktop-01-end.png');
     expect(look.out).toContain(
       '  solo-cpu#rule1 Does this keep the creator\'s rule: "Characters are rigged models, never stand-ins."?',
     );

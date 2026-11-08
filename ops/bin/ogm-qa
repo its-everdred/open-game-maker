@@ -70,13 +70,14 @@ api=${api:-${OGM_API_URL:-http://127.0.0.1:${port:-0}}}
 
 facts=$(curl -fsS --max-time 20 -H "x-ogm-internal: $token" "$api/internal/operator/games/$slug" 2> /dev/null) ||
   fail "the API did not answer for game \"$slug\" at $api" 65
-IFS=$'\t' read -r game_id repo_path daemon_checkout latest < <(printf '%s' "$facts" | node -e '
+# Unit separator, not a tab: read collapses runs of whitespace separators, so an empty repo path would shift the rest.
+IFS=$'\x1f' read -r game_id repo_path daemon_checkout latest < <(printf '%s' "$facts" | node -e '
   let raw = "";
   process.stdin.on("data", (chunk) => (raw += chunk));
   process.stdin.on("end", () => {
     const f = JSON.parse(raw);
     const row = [f.game.id, f.game.repo.path ?? "", f.daemon?.checkoutPath ?? "", f.branch?.latestBuildId ?? ""];
-    process.stdout.write(row.join("\t") + "\n");
+    process.stdout.write(row.join("\x1f") + "\n");
   });
 ')
 [[ -n $game_id ]] || fail "the API's answer for \"$slug\" carried no game id" 65

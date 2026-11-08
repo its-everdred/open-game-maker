@@ -10,6 +10,8 @@ import { buildUrl, outDir, outFlag, readJourneyFlag, urlFlag, withBrowser } from
 const LINKS = ['clean', 'bad'] as const;
 /** The local run is gm-verify's four-client scenario; it always seats four. */
 const LOCAL_CLIENTS = 4;
+/** The simulator scenario finishes in a minute or two; past this it is stuck, not slow. */
+const LOCAL_TIMEOUT_MS = 10 * 60_000;
 
 /** gm-verify's scenario runner, beside its built package: `<pkg>/dist/index.js` → `<pkg>/scenarios/scenario.ts`. */
 export function scenarioScript(): string {
@@ -45,10 +47,14 @@ export const command: GmCommand = {
       const child = spawnSync(
         process.execPath,
         [scenarioScript(), 'multi-client', '--game', game, '--out', out, '--link', flags.link as string],
-        { cwd: ctx.cwd, encoding: 'utf8' },
+        { cwd: ctx.cwd, encoding: 'utf8', timeout: LOCAL_TIMEOUT_MS, killSignal: 'SIGKILL' },
       );
       for (const line of `${child.stdout ?? ''}`.split('\n').filter(Boolean)) ctx.out(line);
       for (const line of `${child.stderr ?? ''}`.split('\n').filter(Boolean)) ctx.err(line);
+      if (child.signal) {
+        ctx.err(`the local room stopped after ${LOCAL_TIMEOUT_MS / 60_000} minutes (${child.signal})`);
+        return EXIT.failed;
+      }
       if (child.error) throw new UsageError(`cannot run the local room: ${child.error.message}`, 'pnpm install');
       return child.status === 0 ? EXIT.ok : EXIT.failed;
     }

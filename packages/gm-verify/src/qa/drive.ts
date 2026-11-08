@@ -9,7 +9,7 @@ import { ConsoleCollector } from '../console.js';
 import type { ConsoleEntry, ViewportName } from '../report.js';
 import type { SoloJourney } from './journey.js';
 import { clipStart, encodeGif, encodeMp4, recordSize } from './media.js';
-import { watchConsole } from './open.js';
+import { errorText, gotoBuild, hasConsoleError, watchConsole } from './open.js';
 import { Player, type StepResult } from './player.js';
 
 export type DriveResult = {
@@ -42,11 +42,12 @@ export async function driveJourney(
   const dir = join(options.outDir, journey.name);
   const videoDir = join(dir, '.video');
   mkdirSync(videoDir, { recursive: true });
+  rmSync(join(dir, DRIVE_RESULT), { force: true });
   const size = recordSize(VIEWPORTS[viewport].viewport);
   const recordingStartedAt = Date.now();
   const context = await browser.newContext({ ...VIEWPORTS[viewport], recordVideo: { dir: videoDir, size } });
   const collector = new ConsoleCollector();
-  let steps: StepResult[];
+  let steps: StepResult[] = [];
   let webm: string | undefined;
   let firstInputAt: number | undefined;
   try {
@@ -55,10 +56,16 @@ export async function driveJourney(
     const player = new Player(page, dir, { label: viewport, touch: VIEWPORTS[viewport].hasTouch === true });
     /* Not `load`: a hosted build is still loading its assets, and the journey's first expect waits for that.
        Not `commit`: an unpainted page cannot be screenshotted, and the first input step takes a frame. */
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
-    steps = await player.runAll(journey.steps);
-    firstInputAt = player.firstInputAt;
+    const opened = await gotoBuild(page, url);
+    if (opened) steps = [{ index: 0, step: `open ${url}`, ok: false, ms: 0, error: opened }];
+    else {
+      steps = await player.runAll(journey.steps);
+      firstInputAt = player.firstInputAt;
+    }
     webm = await page.video()?.path();
+  } catch (error) {
+    /* A crash still leaves a failed result, so the report cannot read an older run's pass for this journey. */
+    steps = [...steps, { index: steps.length, step: 'run', ok: false, ms: 0, error: errorText(error) }];
   } finally {
     await context.close();
   }
@@ -74,19 +81,23 @@ export async function driveJourney(
     encodeGif(join(dir, 'journey.mp4'), join(dir, 'journey.gif'), binary);
     clip.gif = 'journey.gif';
   } catch (error) {
-    unchecked.push(`${clip ? 'gif' : 'clip'} (${error instanceof Error ? error.message : String(error)})`);
+    unchecked.push(`${clip ? 'gif' : 'clip'} (${errorText(error)})`);
   } finally {
     rmSync(videoDir, { recursive: true, force: true });
   }
 
+  const consoleEntries = collector.list();
   const result: DriveResult = {
     journey: journey.name,
     url,
     viewport,
-    verdict: steps.length === journey.steps.length && steps.every((s) => s.ok) ? 'pass' : 'fail',
+    verdict:
+      steps.length === journey.steps.length && steps.every((s) => s.ok) && !hasConsoleError(consoleEntries)
+        ? 'pass'
+        : 'fail',
     steps,
-    skipped: journey.steps.length - steps.length,
-    console: collector.list(),
+    skipped: Math.max(0, journey.steps.length - steps.length),
+    console: consoleEntries,
     clip,
     unchecked,
   };

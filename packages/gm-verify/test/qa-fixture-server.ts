@@ -26,6 +26,11 @@ export async function serveQaGame(): Promise<{ url: string; close(): Promise<voi
     req.on('end', () => {
       const body = raw ? (JSON.parse(raw) as { token?: string; dx?: number }) : {};
       const parts = url.pathname.split('/').filter(Boolean);
+      if (parts[0] === 'down') {
+        /* What the games host answers while its upstream is away: a painted error page, not a blank one. */
+        res.writeHead(502, { 'content-type': 'text/html' }).end('<h1>502 Bad Gateway</h1>');
+        return;
+      }
       if (parts[0] !== 'room') {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(PAGE);
         return;

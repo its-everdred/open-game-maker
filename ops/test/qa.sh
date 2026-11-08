@@ -26,14 +26,14 @@ mkdir -p "$journeys"
 printf '{"name":"solo-cpu","steps":[{"do":"click","text":"Versus CPU"}]}\n' > "$journeys/solo-cpu.json"
 printf '{"name":"online-2p","kind":"room"}\n' > "$journeys/online-2p.json"
 
-# The facts route: blobs has a newest build, empty has none.
+# The facts route: blobs has a newest build, empty has none, rooted lives at its repository's root (an empty path).
 cat > "$scratch/server.mjs" << 'SERVER'
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 
 const [portFile, checkout] = process.argv.slice(2);
-const facts = (slug, latestBuildId) => ({
-  game: { id: `g_${slug}`, slug, title: slug, repo: { owner: 'open', name: 'games', path: `games/${slug}` } },
+const facts = (slug, latestBuildId, path = `games/${slug}`) => ({
+  game: { id: `g_${slug}`, slug, title: slug, repo: { owner: 'open', name: 'games', path } },
   daemon: { port: 4011, checkoutPath: checkout, unit: 'u', envFile: 'e', status: 'running' },
   branch: { id: 'b_main', name: 'main', latestBuildId },
   build: null,
@@ -43,6 +43,7 @@ const server = createServer((request, response) => {
   const body =
     request.url === '/internal/operator/games/blobs' ? facts('blobs', 'build_new')
     : request.url === '/internal/operator/games/empty' ? facts('empty', null)
+    : request.url === '/internal/operator/games/rooted' ? facts('rooted', 'build_root', '')
     : null;
   response.writeHead(ok && body ? 200 : ok ? 404 : 401, { 'content-type': 'application/json' });
   response.end(JSON.stringify(body ?? { error: { code: ok ? 'game_not_found' : 'unauthenticated' } }));
@@ -88,6 +89,13 @@ GM_FAIL_DRIVE=1 "$qa" blobs --api "$api" --build build_old --out "$scratch/run" 
   fail "a failed drive should fail the run" || assert_eq 1 "$?" 'failed step exit'
 assert_eq 5 "$(wc -l < "$GM_LOG" | tr -d ' ')" 'every step ran after the failure'
 assert_grep "qa open --url https://games.example:10000/g/g_blobs/build_old/ --out $scratch/run" "$GM_LOG"
+
+# An empty repo path keeps the fields after it in place: the run plays rooted's build from the checkout root.
+: > "$GM_LOG"
+"$qa" rooted --api "$api" --out "$scratch/rooted" > /dev/null 2> "$scratch/err.txt" ||
+  fail "a game at its repository's root should run: $(cat "$scratch/err.txt")"
+assert_eq "$checkout | qa open --url https://games.example:10000/g/g_rooted/build_root/ --out $scratch/rooted" \
+  "$(head -n 1 "$GM_LOG")" 'rooted game runs from the checkout root'
 
 # Refusals: bad usage, a game with no build, an unknown game, no token, no origin.
 "$qa" > /dev/null 2>&1 && fail "ogm-qa without a slug should exit 64" || assert_eq 64 "$?" 'usage exit'

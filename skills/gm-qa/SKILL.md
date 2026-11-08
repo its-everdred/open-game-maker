@@ -11,10 +11,12 @@ into one run directory (`--out`, default `shots/qa`) so `gm qa look` sees the wh
 
 ## The run
 
-1. `gm qa open --url <build>`: boots phone and desktop. Fails on a console error, no WebGL, a blank frame, or no first
+1. `gm qa open --url <build>`: boots phone and desktop. Fails on a non-2xx page (a 502 from the games host), a console
+   error, no WebGL, a blank frame, or no first
    frame before `--timeout`. Read `open-phone.png` and `open-desktop.png` before going on.
 2. `gm qa drive --url <build> --journey games/<name>/qa/journeys/<j>.json`: plays one solo journey and records
-   `journey.mp4` and `journey.gif`. A missing expect fails the journey and stops it there, with a `fail-<n>.png`.
+   `journey.mp4` and `journey.gif`. A missing expect fails the journey and stops it there, with a `fail-<n>.png`; a
+   console error while it plays fails it too.
 3. `gm qa room --url <build> --journey <room>.json --clients 2-4`: seat 0 (desktop) creates the room, the others
    (phone, desktop, phone) join with what it read. Checks seats, the countdown within `countdownSpreadMs` on every
    client, seat 0's move seen by the others, and the last seat dropping and rejoining. Writes `room.png` (tiled) and
@@ -24,7 +26,8 @@ into one run directory (`--out`, default `shots/qa`) so `gm qa look` sees the wh
    every rule in `design/feedback.json`. Open each request's images, answer each id in `look/answers.json` with
    `{"pass": true|false, "note": "..."}`, worst defect in the note. Never answer a still you did not open.
 5. `gm qa look --report`: writes `qa-report.md`, pass or fail per step. Exit 0 only when every step passed and every
-   look was answered yes; an unanswered look reports `unchecked` (exit 1), not pass.
+   look was answered yes; an unanswered look, a look whose still changed since it was answered, or a missing clip
+   reports `unchecked` (exit 1), not pass.
 
 The Executor runs all four against a game's newest build with `ops/bin/ogm-qa <slug>` on the host.
 

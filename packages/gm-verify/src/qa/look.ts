@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -5,14 +6,15 @@ import { z } from 'zod';
 
 import { DRIVE_RESULT, type DriveResult } from './drive.js';
 import type { QaOpenResult } from './open.js';
-import { ROOM_RESULT, type QaRoomResult } from './room.js';
+import { REQUIRED_ROOM_CHECKS, ROOM_RESULT, type QaRoomResult } from './room.js';
 
 /** A looker reads at most this many images per request; more and the later ones get skimmed. */
 export const MAX_LOOK_IMAGES = 6;
 export const LOOK_DIR = 'look';
 export const QA_REPORT = 'qa-report.md';
 
-export type LookQuestion = { id: string; image: string; text: string };
+/** `hash` covers the question and its still's bytes, so an answer only counts for the exact still it was given on. */
+export type LookQuestion = { id: string; image: string; text: string; hash?: string };
 export type LookRequest = { id: string; images: string[]; questions: LookQuestion[] };
 
 export const lookAnswersSchema = z.record(
@@ -94,11 +96,27 @@ export function groupRequests(questions: readonly LookQuestion[]): LookRequest[]
  * Writes `look/requests.json` and, the first time, `look/answers.json` with every question unanswered (`null`). The
  * looker opens each request's images, answers `{ "pass": true|false, "note": "..." }` per id, then runs the report.
  */
+function hashed(runDir: string, questions: readonly LookQuestion[]): LookQuestion[] {
+  return questions.map((q) => {
+    const path = join(runDir, q.image);
+    const hash = createHash('sha256').update(q.text).update('\0');
+    if (existsSync(path)) hash.update(readFileSync(path));
+    return { ...q, hash: hash.digest('hex') };
+  });
+}
+
+/** The hash each question had when `gm qa look` last asked it, by id. */
+function askedHashes(runDir: string): Map<string, string | undefined> {
+  const asked = readJson<LookRequest[]>(join(runDir, LOOK_DIR, 'requests.json')) ?? [];
+  return new Map(asked.flatMap((r) => r.questions.map((q) => [q.id, q.hash] as const)));
+}
+
 export function writeLookRequests(
   runDir: string,
   rules: readonly string[],
 ): { requests: LookRequest[]; answersPath: string } {
-  const questions = lookQuestions(readRun(runDir), rules);
+  const questions = hashed(runDir, lookQuestions(readRun(runDir), rules));
+  const asked = askedHashes(runDir);
   const requests = groupRequests(questions);
   const dir = join(runDir, LOOK_DIR);
   mkdirSync(dir, { recursive: true });
@@ -107,7 +125,10 @@ export function writeLookRequests(
   const previous = existsSync(answersPath)
     ? lookAnswersSchema.parse(JSON.parse(readFileSync(answersPath, 'utf8')))
     : {};
-  const answers: LookAnswers = Object.fromEntries(questions.map((q) => [q.id, previous[q.id] ?? null]));
+  /* A rerun that changed a still (or the question) asks it again rather than keeping the old answer. */
+  const answers: LookAnswers = Object.fromEntries(
+    questions.map((q) => [q.id, asked.get(q.id) === q.hash ? (previous[q.id] ?? null) : null]),
+  );
   writeFileSync(answersPath, `${JSON.stringify(answers, null, 2)}\n`);
   return { requests, answersPath };
 }
@@ -132,15 +153,24 @@ export function writeQaReport(runDir: string, rules: readonly string[]): { verdi
   const run = readRun(runDir);
   const answersPath = join(runDir, LOOK_DIR, 'answers.json');
   const answers = existsSync(answersPath) ? lookAnswersSchema.parse(JSON.parse(readFileSync(answersPath, 'utf8'))) : {};
-  const questions = lookQuestions(run, rules);
+  const questions = hashed(runDir, lookQuestions(run, rules));
+  const asked = askedHashes(runDir);
   const lines: string[] = [];
   const all: Row[] = [];
   const unchecked: string[] = [];
   const lookRow = (q: LookQuestion): Row => {
     const answer = answers[q.id];
+    if (answer && asked.get(q.id) !== q.hash)
+      return { step: `look: ${q.text}`, result: 'unchecked', detail: `${q.image} changed since gm qa look` };
     return answer
       ? { step: `look: ${q.text}`, result: answer.pass ? 'pass' : 'fail', detail: `${answer.note} (${q.image})`.trim() }
       : { step: `look: ${q.text}`, result: 'unchecked', detail: q.image };
+  };
+  const consoleRow = (entries: readonly { level: string; text: string }[], who = ''): Row[] => {
+    const errors = entries.filter((e) => e.level === 'error');
+    return errors.length === 0
+      ? []
+      : [{ step: `${who}console errors`, result: 'fail', detail: `${errors.length}: ${errors[0]!.text}` }];
   };
   const section = (title: string, rows: Row[]) => {
     all.push(...rows);
@@ -170,14 +200,17 @@ export function writeQaReport(runDir: string, rules: readonly string[]): { verdi
     }));
     if (journey.skipped > 0)
       rows.push({ step: `${journey.skipped} later steps`, result: 'fail', detail: 'not run after the failure' });
+    rows.push(...consoleRow(journey.console));
     rows.push(...questions.filter((q) => q.id.startsWith(`${journey.dir}#`)).map(lookRow));
     section(`Journey ${journey.journey} (${journey.viewport})`, rows);
     unchecked.push(...journey.unchecked.map((u) => `${journey.journey}: ${u}`));
   }
   for (const room of run.rooms) {
     const rows: Row[] = room.checks.map((c) => ({ step: c.name, result: c.ok ? 'pass' : 'fail', detail: c.detail }));
-    for (const name of ['host', 'join', 'seated', 'countdown', 'move', 'rejoin'])
+    if (room.error) rows.push({ step: 'run', result: 'fail', detail: room.error });
+    for (const name of REQUIRED_ROOM_CHECKS)
       if (!room.checks.some((c) => c.name === name)) rows.push({ step: name, result: 'fail', detail: 'not reached' });
+    for (const client of room.clients) rows.push(...consoleRow(client.console, `seat ${client.seat} `));
     rows.push(...questions.filter((q) => q.id.startsWith(`${room.dir}#`)).map(lookRow));
     section(`Room ${room.journey} (${room.clients.map((c) => c.viewport).join(', ')})`, rows);
     unchecked.push(...room.unchecked.map((u) => `${room.journey}: ${u}`));
@@ -185,7 +218,7 @@ export function writeQaReport(runDir: string, rules: readonly string[]): { verdi
 
   const verdict: QaVerdict = all.some((r) => r.result === 'fail')
     ? 'fail'
-    : all.length === 0 || all.some((r) => r.result === 'unchecked')
+    : all.length === 0 || unchecked.length > 0 || all.some((r) => r.result === 'unchecked')
       ? 'unchecked'
       : 'pass';
   const head = ['# QA report', '', `Verdict: **${verdict}**`];

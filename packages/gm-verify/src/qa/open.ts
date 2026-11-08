@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Browser, Page } from 'playwright';
@@ -37,6 +37,31 @@ export function watchConsole(page: Page, collector: ConsoleCollector): void {
   });
 }
 
+export function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function hasConsoleError(entries: readonly ConsoleEntry[]): boolean {
+  return entries.some((e) => e.level === 'error');
+}
+
+/** Opens the build; returns why it failed (a navigation error, or the server's non-2xx answer such as a 502), else null. */
+export async function gotoBuild(
+  page: Page,
+  url: string,
+  options: { waitUntil?: 'commit' | 'domcontentloaded'; timeout?: number } = {},
+): Promise<string | null> {
+  try {
+    const response = await page.goto(url, {
+      waitUntil: options.waitUntil ?? 'domcontentloaded',
+      timeout: options.timeout,
+    });
+    return response && !response.ok() ? `HTTP ${response.status()} from ${url}` : null;
+  } catch (error) {
+    return errorText(error);
+  }
+}
+
 async function readyFlag(page: Page): Promise<boolean> {
   return page
     .evaluate(() => {
@@ -60,7 +85,8 @@ async function openOne(
     watchConsole(page, collector);
     const started = Date.now();
     const failures: string[] = [];
-    await page.goto(url, { waitUntil: 'commit', timeout: timeoutMs });
+    const opened = await gotoBuild(page, url, { waitUntil: 'commit', timeout: timeoutMs });
+    if (opened) failures.push(opened);
     let ttiMs: number | null = null;
     let readyHook = false;
     /* Checks once more after the deadline, so a slow boot reads as slow (with its time), not as never interactive. */
@@ -108,6 +134,7 @@ export async function qaOpen(
   options: { outDir: string; viewports?: ViewportName[]; timeoutMs?: number },
 ): Promise<QaOpenResult> {
   mkdirSync(options.outDir, { recursive: true });
+  rmSync(join(options.outDir, 'qa-open.json'), { force: true });
   const viewports: OpenViewport[] = [];
   for (const viewport of options.viewports ?? (['phone', 'desktop'] as const)) {
     viewports.push(await openOne(browser, url, viewport, options.outDir, options.timeoutMs ?? OPEN_TIMEOUT_MS));

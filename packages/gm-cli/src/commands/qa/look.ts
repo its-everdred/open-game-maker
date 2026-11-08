@@ -1,4 +1,4 @@
-import { relative } from 'node:path';
+import { join, relative } from 'node:path';
 import { existsSync } from 'node:fs';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
@@ -24,10 +24,10 @@ export const command: GmCommand = {
     const { requests, answersPath } = verify.writeLookRequests(dir, rules);
     const answers = relative(ctx.cwd, answersPath);
     if (!flags.report) {
-      if (ctx.json) printJson(ctx, { requests, answers });
+      if (ctx.json) printJson(ctx, { dir: relative(ctx.cwd, dir) || '.', requests, answers });
       else {
         for (const request of requests) {
-          ctx.out(`${request.id}: ${request.images.join(' ')}`);
+          ctx.out(`${request.id}: ${request.images.map((image) => relative(ctx.cwd, join(dir, image))).join(' ')}`);
           for (const q of request.questions) ctx.out(`  ${q.id} ${q.text}`);
         }
         ctx.out(`answer each id in ${answers} with {"pass": true|false, "note": "..."}, then gm qa look --report`);

@@ -64,6 +64,16 @@ describe('gm qa open', () => {
     expect(result.verdict).toBe('fail');
     expect(result.viewports[0]?.failures).toContain('console error: qa stub noise');
   });
+
+  it('fails a build the games host answers with a 502, whatever the error page paints', async () => {
+    const result = await qaOpen(browser, `${server.url}down/`, {
+      outDir: out(),
+      viewports: ['desktop'],
+      timeoutMs: 2_000,
+    });
+    expect(result.verdict).toBe('fail');
+    expect(result.viewports[0]?.failures).toContain(`HTTP 502 from ${server.url}down/`);
+  });
 });
 
 describe('gm qa drive', () => {
@@ -129,6 +139,18 @@ describe('gm qa drive', () => {
     expect(result.steps[1]?.error).toBe('missing text "Score 99" after 500ms');
     expect(result.steps[1]?.shot).toMatch(/fail-1\.png$/);
     expect(result.skipped).toBe(1);
+  });
+
+  it('fails at the first step when the build answers 502, rather than playing the error page', async () => {
+    const journey = soloJourneySchema.parse({ name: 'down', steps: [{ do: 'click', text: 'Play' }] });
+    const dir = out();
+    const result = await driveJourney(browser, `${server.url}down/`, journey, {
+      outDir: dir,
+      ffmpegBinary: 'no-such-ffmpeg',
+    });
+    expect(result.verdict).toBe('fail');
+    expect(result.steps).toEqual([expect.objectContaining({ ok: false, error: `HTTP 502 from ${server.url}down/` })]);
+    expect(existsSync(join(dir, 'down', 'journey-result.json'))).toBe(true);
   });
 });
 

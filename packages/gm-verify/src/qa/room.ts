@@ -9,7 +9,7 @@ import { ConsoleCollector } from '../console.js';
 import type { ConsoleEntry, ViewportName } from '../report.js';
 import type { ExpectStep, RoomJourney } from './journey.js';
 import { clipStart, encodeGif, recordSize, sideBySide } from './media.js';
-import { watchConsole } from './open.js';
+import { errorText, gotoBuild, hasConsoleError, watchConsole } from './open.js';
 import { Player, type StepResult } from './player.js';
 
 export const MIN_CLIENTS = 2;
@@ -17,6 +17,8 @@ export const MAX_CLIENTS = 4;
 export const ROOM_RESULT = 'qa-room.json';
 
 export type RoomCheckName = 'host' | 'join' | 'seated' | 'start' | 'countdown' | 'move' | 'rejoin';
+/** Every room must pass these (`start` is optional); a missing one reads as not reached. */
+export const REQUIRED_ROOM_CHECKS: readonly RoomCheckName[] = ['host', 'join', 'seated', 'countdown', 'move', 'rejoin'];
 export type RoomCheck = { name: RoomCheckName; ok: boolean; detail: string; steps: (StepResult & { seat: number })[] };
 
 export type QaRoomResult = {
@@ -28,6 +30,8 @@ export type QaRoomResult = {
   tile: string | null;
   clip: { mp4: string; gif: string | null } | null;
   unchecked: string[];
+  /** What stopped the run early (a crash), if anything. */
+  error: string | null;
 };
 
 /** Seat 0 hosts on a desktop; the rest alternate phone and desktop so every room mixes both. */
@@ -71,6 +75,7 @@ export async function qaRoom(
   const dir = join(options.outDir, journey.name);
   const videoDir = join(dir, '.video');
   mkdirSync(videoDir, { recursive: true });
+  rmSync(join(dir, ROOM_RESULT), { force: true });
   const startedAt = Date.now();
   const clients: Client[] = [];
   const checks: RoomCheck[] = [];
@@ -78,6 +83,12 @@ export async function qaRoom(
   const videos: { path: string; startS: number }[] = [];
   const binary = options.ffmpegBinary ?? 'ffmpeg';
   const unchecked: string[] = [];
+  let error: string | null = null;
+  /* A navigation that fails (or a non-2xx answer) fails the step it belongs to rather than ending the run. */
+  const open = async (client: Client, target: string, step: string): Promise<StepResult[]> => {
+    const failed = await gotoBuild(client.player.page, target);
+    return failed ? [{ index: 0, step, ok: false, ms: 0, error: failed }] : [];
+  };
 
   const record = (
     name: RoomCheckName,
@@ -120,15 +131,20 @@ export async function qaRoom(
     }
     const [host, ...guests] = clients as [Client, ...Client[]];
 
-    await host.player.page.goto(url, { waitUntil: 'domcontentloaded' });
-    const hosted = record('host', [{ seat: 0, steps: await host.player.runAll(journey.host) }]);
+    const hostOpen = await open(host, url, `open ${url}`);
+    const hosted = record('host', [
+      { seat: 0, steps: hostOpen.length > 0 ? hostOpen : await host.player.runAll(journey.host) },
+    ]);
     let ok = hosted;
     if (ok) {
       const joined: { seat: number; steps: StepResult[] }[] = [];
       for (const guest of guests) {
         Object.assign(guest.player.vars, host.player.vars, { seat: String(guest.seat) });
-        await guest.player.page.goto(url, { waitUntil: 'domcontentloaded' });
-        joined.push({ seat: guest.seat, steps: await guest.player.runAll(journey.join) });
+        const guestOpen = await open(guest, url, `open ${url}`);
+        joined.push({
+          seat: guest.seat,
+          steps: guestOpen.length > 0 ? guestOpen : await guest.player.runAll(journey.join),
+        });
       }
       ok = record('join', joined);
     }
@@ -159,8 +175,8 @@ export async function qaRoom(
       /* about:blank closes the page's sockets for real while its recording carries on. */
       await dropper.player.page.goto('about:blank');
       await dropper.player.page.waitForTimeout(journey.dropMs);
-      await dropper.player.page.goto(back, { waitUntil: 'domcontentloaded' });
-      const rejoined = await dropper.player.run(journey.rejoin, 0);
+      const backOpen = await open(dropper, back, `return to ${back}`);
+      const rejoined = backOpen[0] ?? (await dropper.player.run(journey.rejoin, 0));
       const hostSees = await host.player.run(journey.seated, 1);
       record('rejoin', [
         { seat: dropper.seat, steps: [rejoined] },
@@ -174,13 +190,15 @@ export async function qaRoom(
       /* Every pane starts at seat 0's first input, so the stacked clip shows one moment across the room. */
       if (path) videos.push({ path, startS: clipStart(c.recordingStartedAt, clients[0]?.player.firstInputAt) });
     }
+  } catch (caught) {
+    /* A crash still writes a failed result, so the report cannot read an older run's pass for this room. */
+    error = errorText(caught);
   } finally {
     await Promise.all(clients.map((c) => c.context.close().catch(() => undefined)));
   }
 
   let tileFile: string | null = null;
   let clip: QaRoomResult['clip'] = null;
-  const why = (error: unknown) => (error instanceof Error ? error.message : String(error));
   try {
     if (!hasFfmpeg(binary)) throw new FfmpegMissingError(binary);
     sideBySide(stills, join(dir, 'room.png'), false, binary);
@@ -196,23 +214,29 @@ export async function qaRoom(
     clip = { mp4: 'room.mp4', gif: null };
     encodeGif(join(dir, 'room.mp4'), join(dir, 'room.gif'), binary);
     clip.gif = 'room.gif';
-  } catch (error) {
-    unchecked.push(`${clip ? 'gif' : tileFile ? 'clip' : 'tile and clip'} (${why(error)})`);
+  } catch (caught) {
+    unchecked.push(`${clip ? 'gif' : tileFile ? 'clip' : 'tile and clip'} (${errorText(caught)})`);
   } finally {
     rmSync(videoDir, { recursive: true, force: true });
   }
 
-  const names: RoomCheckName[] = ['host', 'join', 'seated', 'countdown', 'move', 'rejoin'];
+  const seats = clients.map((c) => ({ seat: c.seat, viewport: c.viewport, console: c.console.list() }));
   const result: QaRoomResult = {
     journey: journey.name,
     url,
-    clients: clients.map((c) => ({ seat: c.seat, viewport: c.viewport, console: c.console.list() })),
+    clients: seats,
     checks,
     verdict:
-      names.every((name) => checks.some((c) => c.name === name && c.ok)) && checks.every((c) => c.ok) ? 'pass' : 'fail',
+      error === null &&
+      REQUIRED_ROOM_CHECKS.every((name) => checks.some((c) => c.name === name && c.ok)) &&
+      checks.every((c) => c.ok) &&
+      !seats.some((c) => hasConsoleError(c.console))
+        ? 'pass'
+        : 'fail',
     tile: tileFile,
     clip,
     unchecked,
+    error,
   };
   writeFileSync(join(dir, ROOM_RESULT), `${JSON.stringify(result, null, 2)}\n`);
   return result;

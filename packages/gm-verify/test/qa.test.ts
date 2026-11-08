@@ -8,7 +8,7 @@ import type { DriveResult } from '../src/qa/drive.js';
 import { fill, journeySchema, roomJourneySchema } from '../src/qa/journey.js';
 import { groupRequests, MAX_LOOK_IMAGES, writeLookRequests, writeQaReport, type LookQuestion } from '../src/qa/look.js';
 import { clipStart, gifArgs, mp4Args, recordSize, sideBySideArgs } from '../src/qa/media.js';
-import { countdownSpread, viewportFor } from '../src/qa/room.js';
+import { countdownSpread, viewportFor, type QaRoomResult } from '../src/qa/room.js';
 
 describe('journey schema', () => {
   it('refuses a click that names nothing to click, so a typo cannot pass as a no-op', () => {
@@ -102,9 +102,11 @@ describe('look requests', () => {
   });
 });
 
-function runDir(): string {
+function runDir(unchecked = ['clip (ffmpeg not found on PATH)']): string {
   const dir = mkdtempSync(join(tmpdir(), 'gm-qa-look-'));
   mkdirSync(join(dir, 'solo-cpu'));
+  writeFileSync(join(dir, 'solo-cpu', 'desktop-01-look-1.png'), 'board');
+  writeFileSync(join(dir, 'solo-cpu', 'desktop-02-end.png'), 'end');
   const result: DriveResult = {
     journey: 'solo-cpu',
     url: 'https://games.example/g/1/2/',
@@ -125,7 +127,7 @@ function runDir(): string {
     skipped: 0,
     console: [],
     clip: null,
-    unchecked: ['clip (ffmpeg not found on PATH)'],
+    unchecked,
   };
   writeFileSync(join(dir, 'solo-cpu', 'journey-result.json'), JSON.stringify(result));
   return dir;
@@ -138,7 +140,7 @@ describe('qa report', () => {
     const dir = runDir();
     const { requests, answersPath } = writeLookRequests(dir, rules);
     expect(requests).toHaveLength(1);
-    expect(requests[0]?.questions).toEqual([
+    expect(requests[0]?.questions.map(({ hash: _hash, ...q }) => q)).toEqual([
       { id: 'solo-cpu#1', image: 'solo-cpu/desktop-01-look-1.png', text: 'Is the board drawn?' },
       {
         id: 'solo-cpu#rule1',
@@ -157,7 +159,7 @@ describe('qa report', () => {
   });
 
   it('passes only when every step passed and every look was answered yes, and fails on one no', () => {
-    const dir = runDir();
+    const dir = runDir([]);
     const { answersPath } = writeLookRequests(dir, rules);
     writeFileSync(answersPath, JSON.stringify({ 'solo-cpu#1': { pass: true }, 'solo-cpu#rule1': { pass: true } }));
     expect(writeQaReport(dir, rules).verdict).toBe('pass');
@@ -176,6 +178,66 @@ describe('qa report', () => {
     writeFileSync(answersPath, JSON.stringify({ 'solo-cpu#1': { pass: true, note: '' }, 'solo-cpu#rule1': null }));
     writeLookRequests(dir, rules);
     expect(JSON.parse(readFileSync(answersPath, 'utf8'))['solo-cpu#1']).toEqual({ pass: true, note: '' });
+  });
+
+  it('stays unchecked while a clip is missing, even with every look answered yes', () => {
+    const dir = runDir();
+    const { answersPath } = writeLookRequests(dir, rules);
+    writeFileSync(answersPath, JSON.stringify({ 'solo-cpu#1': { pass: true }, 'solo-cpu#rule1': { pass: true } }));
+    expect(writeQaReport(dir, rules).verdict).toBe('unchecked');
+  });
+
+  it('drops an answer once its still changes, so a rerun cannot inherit an old yes', () => {
+    const dir = runDir([]);
+    const { answersPath } = writeLookRequests(dir, rules);
+    writeFileSync(answersPath, JSON.stringify({ 'solo-cpu#1': { pass: true }, 'solo-cpu#rule1': { pass: true } }));
+    writeFileSync(join(dir, 'solo-cpu', 'desktop-01-look-1.png'), 'a different board');
+    const report = writeQaReport(dir, rules);
+    expect(report.verdict).toBe('unchecked');
+    expect(readFileSync(report.path, 'utf8')).toContain('changed since gm qa look');
+    writeLookRequests(dir, rules);
+    expect(JSON.parse(readFileSync(answersPath, 'utf8'))).toEqual({
+      'solo-cpu#1': null,
+      'solo-cpu#rule1': { pass: true, note: '' },
+    });
+  });
+
+  it('fails a journey that logged a console error while it played', () => {
+    const dir = runDir([]);
+    const path = join(dir, 'solo-cpu', 'journey-result.json');
+    const result = JSON.parse(readFileSync(path, 'utf8')) as DriveResult;
+    result.console = [{ level: 'error', text: 'TypeError: board is undefined' }];
+    writeFileSync(path, JSON.stringify(result));
+    const report = writeQaReport(dir, []);
+    expect(report.verdict).toBe('fail');
+    expect(readFileSync(report.path, 'utf8')).toContain('| console errors | fail | 1: TypeError: board is undefined |');
+  });
+
+  it('fails a room that crashed after hosting, listing every check it never reached', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gm-qa-room-'));
+    mkdirSync(join(dir, 'online-2p'));
+    const room: QaRoomResult = {
+      journey: 'online-2p',
+      url: 'https://games.example/g/1/2/',
+      clients: [
+        { seat: 0, viewport: 'desktop', console: [] },
+        { seat: 1, viewport: 'phone', console: [] },
+      ],
+      checks: [{ name: 'host', ok: true, detail: '', steps: [] }],
+      verdict: 'fail',
+      tile: null,
+      clip: null,
+      unchecked: [],
+      error: 'Target page, context or browser has been closed',
+    };
+    writeFileSync(join(dir, 'online-2p', 'qa-room.json'), JSON.stringify(room));
+    const report = writeQaReport(dir, []);
+    expect(report.verdict).toBe('fail');
+    const md = readFileSync(report.path, 'utf8');
+    expect(md).toContain('| run | fail | Target page, context or browser has been closed |');
+    for (const name of ['join', 'seated', 'countdown', 'move', 'rejoin'])
+      expect(md).toContain(`| ${name} | fail | not reached |`);
+    expect(md).not.toContain('| host | fail |');
   });
 
   it('fails a journey whose step failed even with no looks', () => {
