@@ -136,8 +136,9 @@ export async function registerFile(ctx: GmContext, path: string, from: string[],
     ...(sourceIds.length > 0 ? { derived_from: sourceIds } : {}),
     added: new Date().toISOString().slice(0, 10),
   });
-  await writeLock(ctx.cwd, lock);
+  /* The lock is the commit point, so it is written last: a failed credits write leaves nothing registered. */
   await writeGeneratedText(join(ctx.cwd, 'CREDITS.md'), renderCredits(lock));
+  await writeLock(ctx.cwd, lock);
   await unlink(file.absolute);
   ctx.emit('assets.register', { id, derived_from: sourceIds });
   return id;

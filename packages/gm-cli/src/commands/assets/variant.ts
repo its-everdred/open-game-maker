@@ -105,7 +105,7 @@ export const command: GmCommand = {
   summary: 'clone a locked model, recolour its materials or attach props to its joints, and register it as t3',
   usage: '<id> --name <slug> [--recolour <material>=#rrggbb...] [--prop <id>@<slot|joint>...] [--game <id>]',
   example:
-    'assets variant t1:kaykit-adventurers/knight@1.0 --name red-knight --recolour knight_texture=#c03030 --prop t1:kaykit-adventurers/sword@1.0@hand-right',
+    'assets variant t1:kaykit-adventurers/knight@1.0 --name red-knight --recolour knight_texture=#c03030 --prop t1:kaykit-adventurers/sword@1.0@handslot.r',
   flags: {
     name: { type: 'string', help: 'variant slug; the file is assets/model/variants/<slug>.glb' },
     recolour: { type: 'string', multiple: true, help: 'multiply a material (or * for all) by an sRGB hex colour' },

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { Document, NodeIO } from '@gltf-transform/core';
@@ -175,6 +175,22 @@ describe('gm assets variant makes a t3 clone and never touches the original', ()
     expect(result.code).toBe(2);
     expect(result.err.join('\n')).toContain('no blob store');
     expect(existsSync(join(cwd, 'assets/model/variants/red-orc.glb'))).toBe(false);
+  });
+
+  it('registers nothing when CREDITS.md cannot be written, so the same name works on retry', async () => {
+    const { cwd, env } = await gameWithModels();
+    const before = readFileSync(join(cwd, 'assets.lock.json'), 'utf8');
+    rmSync(join(cwd, 'CREDITS.md'), { force: true });
+    mkdirSync(join(cwd, 'CREDITS.md'));
+    const args = ['assets', 'variant', ORC, '--name', 'red-orc', '--recolour', '*=#ff0000', '--game', 'g1'];
+
+    await expect(gm(args, { cwd, env })).rejects.toThrow('EISDIR');
+    expect(readFileSync(join(cwd, 'assets.lock.json'), 'utf8')).toBe(before);
+    expect(existsSync(join(cwd, 'assets/model/variants/red-orc.glb'))).toBe(false);
+
+    rmSync(join(cwd, 'CREDITS.md'), { recursive: true });
+    expect((await gm(args, { cwd, env })).code).toBe(0);
+    expect(lock(cwd).assets.some((entry) => entry.id === 't3:g1/model/variants/red-orc')).toBe(true);
   });
 
   it('only clones a model the game has locked', async () => {
