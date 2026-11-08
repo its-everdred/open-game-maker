@@ -171,6 +171,46 @@ describe('BuildChatDock', () => {
     expect(api).toHaveBeenCalledWith('/budget/status');
   });
 
+  it('explains an Energy block by its window and keeps it, not the member allowance, while waiting on an admin', async () => {
+    const refused = Object.assign(new Error('refused'), {
+      status: 402,
+      body: {
+        error: 'energy_limit_reached',
+        window: 'week',
+        remainingMicroUsd: 0,
+        resetsAt: '2026-11-09T08:00:00.000Z',
+        offers: ['ask_admin'],
+      },
+    });
+    api.mockImplementation(async (path: string) => {
+      if (path === '/budget/status') {
+        return {
+          remainingMicroUsd: 5_000_000,
+          remainingPercent: 100,
+          unitLabel: 'coins',
+          resetsAt: '2026-11-03T07:00:00.000Z',
+          freeSlots: { new_game: 0, edit: 0 },
+          queued: [],
+        };
+      }
+      throw refused;
+    });
+    renderDock();
+
+    act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
+    send('Make the door glow');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This build needs more Energy than is left this week.');
+    expect(screen.queryByRole('button', { name: 'Queue for the reset' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ask an admin' }));
+    const status = await screen.findByRole('region', { name: 'Allowance status' });
+    expect(status).toHaveTextContent('This build needs more Energy than is left this week.');
+    expect(status).toHaveTextContent(new Date('2026-11-09T08:00:00.000Z').toLocaleString());
+    expect(status).not.toHaveTextContent(/remain/);
+    // The admin may raise the limit at any time; admission re-checks on retry.
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
+  });
+
   it('queues the refused message for the allowance reset', async () => {
     api
       .mockRejectedValueOnce({

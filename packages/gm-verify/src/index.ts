@@ -15,3 +15,4 @@ export * from './replay.js';
 export * from './gates/index.js';
 export * from './link/schedule.js';
 export * from './link/transport.js';
+export * from './qa/index.js';

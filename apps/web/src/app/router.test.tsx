@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, matchRoutes, RouterProvider, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RESERVED_GAME_SLUGS } from '@ogm/contracts/browser';
 
+import { authClient } from '../lib/api/auth';
 import { collectScreenRoutes, screenRouteObjects } from './router';
 import type { ScreenRoute } from './screen';
 
@@ -48,6 +49,8 @@ vi.mock('../lib/notify', () => ({
 
 vi.mock('../lib/sound', () => soundApi);
 
+vi.mock('../lib/api/session', () => ({ useSession: () => ({ data: null, isPending: false }) }));
+
 const routeTable = [
   '/',
   '/signin',
@@ -83,6 +86,12 @@ describe('screen route collection', () => {
     soundApi.setVolume.mockReset();
     soundApi.unlock.mockReset();
     vi.restoreAllMocks();
+  });
+
+  // A mounted better-auth session store unmounts on a 1 s timer that touches `window`; if it outlives the file, it
+  // fires after jsdom is gone and fails the run with an unhandled error (#615).
+  afterAll(() => {
+    expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy();
   });
 
   it.each(routeTable)('resolves %s through a screen module', (path) => {

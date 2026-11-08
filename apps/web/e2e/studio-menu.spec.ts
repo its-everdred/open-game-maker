@@ -64,6 +64,19 @@ const blobsDecisions = () => [
   decision(2, 'Jump feel', 'How should a jump feel?', ['Floaty', 'Snappy']),
   decision(3, 'Level length', 'How long should a level be?', ['One minute', 'Three minutes']),
 ];
+const energyView = {
+  level: 'limited',
+  preference: 'balanced',
+  windows: [
+    { window: 'day', usedPercent: 40, resetsAt: '2026-11-09T08:00:00.000Z' },
+    { window: 'week', usedPercent: 80, resetsAt: '2026-11-09T08:00:00.000Z' },
+    { window: 'month', usedPercent: null, resetsAt: '2026-12-01T08:00:00.000Z' },
+  ],
+  services: [
+    { service: 'voice', usedPercent: null },
+    { service: 'images', usedPercent: null },
+  ],
+};
 
 test.use({ serviceWorkers: 'block' });
 
@@ -151,6 +164,26 @@ test('counts the open decisions and walks through each one from the menu', async
   await capturePhone(page, testInfo, 'decisions-done');
 });
 
+test('rings Energy in the menu and opens its windows, then its settings', async ({ page }, testInfo) => {
+  testInfo.setTimeout(90_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await stubBrandArt(page);
+  await installGamesMenuApi(page);
+  await page.goto('/all');
+
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Energy: Limited' }).click();
+  const detail = page.getByRole('link', { name: 'Energy settings' });
+  await expect(detail).toContainText('20% left');
+  await capturePhone(page, testInfo, 'games-menu-energy');
+
+  await detail.click();
+  await expect(page).toHaveURL(/\/settings\/energy$/);
+  await expect(page.getByRole('heading', { name: 'Energy: Limited' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Balanced' })).toBeChecked();
+  await capturePhone(page, testInfo, 'settings-energy');
+});
+
 for (const mode of ['play', 'edit'] as const) {
   test(`opens game actions in ${mode} context`, async ({ page }) => {
     await installAuthRoutes(page, { signedIn: true });
@@ -230,6 +263,7 @@ async function installGamesMenuApi(page: Page, decisions: ReturnType<typeof blob
     if (url.pathname.endsWith('/chat')) return route.fulfill({ contentType: 'text/event-stream', body: ': open\n\n' });
     if (url.pathname.endsWith('/checkpoints/budget')) return json(route, { used: 0, max: 3 });
     if (url.pathname === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (url.pathname === '/api/v1/energy') return json(route, energyView);
     return json(route, { error: 'not_mocked', path: url.pathname }, 404);
   });
   return answered;

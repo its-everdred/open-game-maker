@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommandsInbox } from './CommandsInbox';
@@ -9,13 +10,15 @@ const calls: Array<{ url: string; method: string; body: unknown }> = [];
 let commands = [commandFixture()];
 let answerStatus = 200;
 
-function renderInbox(onOpenJob = vi.fn()) {
+function renderInbox(onOpenJob = vi.fn(), slug?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
     onOpenJob,
     ...render(
       <QueryClientProvider client={client}>
-        <CommandsInbox gameId="g_1" onOpenJob={onOpenJob} />
+        <MemoryRouter>
+          <CommandsInbox gameId="g_1" slug={slug} onOpenJob={onOpenJob} />
+        </MemoryRouter>
       </QueryClientProvider>,
     ),
   };
@@ -112,6 +115,54 @@ describe('CommandsInbox', () => {
       }),
     );
     expect(screen.queryByRole('button', { name: 'Open Build the moon gate' })).not.toBeInTheDocument();
+  });
+
+  // A Command whose every option is a sample is a review: the inbox shows it as a row that opens its deck on the review
+  // screen (the short link when the game has a slug and the Command a number), not a deck squeezed into the spotlight.
+  it('shows a review Command as a row linking to its deck', async () => {
+    const image = { url: 'https://media.example.test/a.png', width: 320, height: 320 };
+    const review = commandFixture({
+      title: 'Pick the gate',
+      review_number: 4,
+      options: [
+        { id: 'a', label: 'Arch', media: image },
+        { id: 'b', label: 'Door', media: image },
+      ],
+    });
+    commands = [review];
+    const view = renderInbox(vi.fn(), 'moon');
+
+    const row = await screen.findByRole('link', { name: 'Pick the gate, open' });
+    expect(row).toHaveAttribute('href', '/moon/review/4');
+    expect(screen.queryByRole('region', { name: /^Review / })).not.toBeInTheDocument();
+    view.unmount();
+
+    // Without a slug the row falls back to the legacy link, which heals itself to the short form.
+    renderInbox();
+    expect(await screen.findByRole('link', { name: 'Pick the gate, open' })).toHaveAttribute(
+      'href',
+      '/game/g_1/review/m_3',
+    );
+  });
+
+  // A Command with media on only some options keeps the plain list (#611). An aiur clip may carry no duration and no
+  // poster; it is still a clip, never an image tag pointing at an mp4.
+  it('shows an aiur clip in the option list as a clip', async () => {
+    const command = commandFixture({ job_id: null, checkpoint_id: 'd_1', decision_id: 'd_1' });
+    command.options = [
+      {
+        id: 'roll',
+        label: 'Roll across the floor',
+        media: { url: 'https://api.example.test/blobs/sha256/roll', width: 64, height: 48, kind: 'video' },
+      },
+      { id: 'flat', label: 'Lie flat' },
+    ];
+    commands = [command];
+    renderInbox();
+
+    const option = await screen.findByRole('button', { name: 'Roll across the floor' });
+    expect(option.querySelector('video')).toHaveAttribute('src', 'https://api.example.test/blobs/sha256/roll');
+    expect(option.querySelector('img')).toBeNull();
   });
 
   it('leaves the Command in place when the answer is refused', async () => {

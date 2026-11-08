@@ -1,7 +1,11 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { GameCommand } from '@ogm/contracts';
+import type { EnergyView } from '@ogm/contracts/browser';
+
+import { useDeckDraft, useReviewDraft } from '../features/commands-inbox/drafts';
 import { StudioMenu } from './StudioMenu';
 
 const state = vi.hoisted(() => ({
@@ -9,6 +13,7 @@ const state = vi.hoisted(() => ({
   jobs: { jobs: [] as TestJob[], active: [] as TestJob[], games: [] as Array<{ id: string; title: string }> },
   session: { data: null as { user: { id: string } } | null },
   decisions: [] as TestDecision[],
+  energy: { data: undefined as EnergyView | undefined },
 }));
 
 const sound = vi.hoisted(() => ({
@@ -35,6 +40,10 @@ vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
 vi.mock('../lib/sound', () => sound);
 vi.mock('../routes/admin/api', () => ({ useAdminMe: () => state.admin }));
+vi.mock('../features/energy/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/energy/api')>()),
+  useEnergy: () => state.energy,
+}));
 
 type TestDecision = {
   game_id: string;
@@ -103,6 +112,7 @@ afterEach(() => {
   state.jobs = { jobs: [], active: [], games: [] };
   state.session = { data: null };
   state.decisions = [];
+  state.energy = { data: undefined };
   sound.setMuted.mockReset();
   sound.setVolume.mockReset();
   auth.signOut.mockReset();
@@ -144,6 +154,36 @@ describe('StudioMenu', () => {
       'href',
       '/g/game-1/releases?action=rollback',
     );
+  });
+
+  it('rings what is left of the tightest Energy window and opens the windows, then settings', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.energy = {
+      data: {
+        level: 'limited',
+        preference: 'balanced',
+        windows: [
+          { window: 'day', usedPercent: 40, resetsAt: '2026-11-09T08:00:00.000Z' },
+          { window: 'week', usedPercent: 80, resetsAt: '2026-11-09T08:00:00.000Z' },
+          { window: 'month', usedPercent: null, resetsAt: '2026-12-01T08:00:00.000Z' },
+        ],
+        services: [
+          { service: 'voice', usedPercent: null },
+          { service: 'images', usedPercent: null },
+        ],
+      },
+    };
+
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    const energy = screen.getByRole('button', { name: 'Energy: Limited' });
+    expect(energy.querySelector('circle:last-child')).toHaveAttribute('stroke-dasharray', '20 100');
+    expect(screen.queryByRole('link', { name: 'Energy settings' })).not.toBeInTheDocument();
+
+    fireEvent.click(energy);
+    const detail = screen.getByRole('link', { name: 'Energy settings' });
+    expect(detail).toHaveAttribute('href', '/settings/energy');
+    expect(detail).toHaveTextContent(/Today.*60% left.*This week.*20% left.*This month.*Unknown/);
   });
 
   it('moves build progress to the menu and announces each start and end once', () => {
@@ -313,6 +353,22 @@ describe('StudioMenu', () => {
     expect(screen.getByRole('dialog', { name: 'Build the moon gate' })).toBeVisible();
     expect(screen.getByText('conversation job-1')).toBeVisible();
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  // Review drafts live in memory until sent; the next person signing in on the same device must not find them.
+  it('clears unsent review drafts on sign out', async () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    auth.signOut.mockResolvedValueOnce(undefined);
+    const draft = { checkpoint_id: 'cp_1', version: 1 } as GameCommand;
+    const { result } = renderHook(() => ({ edit: useDeckDraft(draft)[1], draft: useReviewDraft(draft) }));
+    act(() => result.current.edit({ type: 'judge', optionId: 'a', verdict: 'like' }));
+    expect(result.current.draft.deck.cards).toHaveLength(1);
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    await waitFor(() => expect(result.current.draft.deck.cards).toEqual([]));
   });
 
   it('keeps sign out retryable when the auth request fails', async () => {

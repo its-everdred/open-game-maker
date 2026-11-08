@@ -18,6 +18,8 @@ import { reserve } from '../budget/ledger.js';
 import { dayKey, nextReset } from '../budget/reset.js';
 import { getBudgetSettings, type BudgetDefaults } from '../budget/settings.js';
 import { HttpError } from '../app/errors.js';
+import { energySource } from '../energy/source.js';
+import { energyBlock } from '../energy/view.js';
 import type { AppEvents } from '../app/events.js';
 import { acceptedFor } from './repo.js';
 import { SLOT_STATES } from './state.js';
@@ -66,12 +68,14 @@ function refusal(
   remainingMicroUsd: number,
   resetsAt: string,
   offers: AllowanceExceeded['offers'] = ['trim', 'split', 'queue', 'ask_admin'],
+  window?: AllowanceExceeded['window'],
 ): never {
   throw new AdmissionRefused({
     error,
     remainingMicroUsd,
     resetsAt,
     offers,
+    ...(window ? { window } : {}),
   });
 }
 
@@ -121,6 +125,22 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
         settings.platformCapMicroUsd
       ) {
         refusal('platform_cap_reached', platformLeft, resetsAt);
+      }
+      // The instance's Energy ceilings overlap: the build must fit every window an admin set (#598).
+      const energy = energySource({ db: deps.db, zone: deps.defaults.resetZone });
+      const block = energyBlock(energy.snapshot(targetAt), reservation.amountMicroUsd);
+      if (block) {
+        // Queue only when the build would fit at the next reset, the moment a queued build starts.
+        const fitsAtReset =
+          request.start !== 'at_reset' && energyBlock(energy.snapshot(resetAt), reservation.amountMicroUsd) === null;
+        // The 402 reaches players, who never see dollars: the window and its reset say what they need.
+        refusal(
+          'energy_limit_reached',
+          0,
+          block.resetsAt,
+          fitsAtReset ? ['queue', 'ask_admin'] : ['ask_admin'],
+          block.window,
+        );
       }
 
       const slot = request.kind === 'new_game' ? 'new_game' : 'edit';

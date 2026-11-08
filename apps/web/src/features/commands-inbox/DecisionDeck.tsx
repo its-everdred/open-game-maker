@@ -5,6 +5,7 @@ import type { CreatorCommand } from '@ogm/contracts';
 import { Dialog } from '../../components/Dialog';
 import { CommandOptions } from './CommandOptions';
 import { answerCommand } from './commands';
+import { withoutLinks } from './review';
 import { isReviewDeck, ReviewDeck } from './ReviewDeck';
 import '../build-chat/conversation-modal.css';
 import './commands-inbox.css';
@@ -57,7 +58,7 @@ export function DecisionDeck({
         <span aria-hidden="true">×</span>
       </button>
       <div className="decision-deck-body">
-        <p className="commands-inbox-question">{current.question}</p>
+        <p className="commands-inbox-question">{withoutLinks(current.question)}</p>
         {isReviewDeck(current) ? (
           <ReviewDeck key={keyOf(current)} gameId={current.game_id} command={current} onAnswered={markAnswered} />
         ) : (

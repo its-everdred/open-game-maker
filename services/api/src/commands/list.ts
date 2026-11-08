@@ -41,7 +41,12 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
         checkpoint.options.map(async (option) => {
           const media =
             option.media_id === undefined ? undefined : await optionMedia(deps, job.id, option.media_id, sign);
-          return { id: option.id, label: option.label, ...(media === undefined ? {} : { media }) };
+          return {
+            id: option.id,
+            label: option.label,
+            ...(media === undefined ? {} : { media }),
+            ...(option.playable === undefined ? {} : { playable: option.playable }),
+          };
         }),
       );
       // One malformed checkpoint row is left out of the inbox rather than failing every Command in the game.
@@ -68,7 +73,7 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
   // A registered game's Commands belong to no job. A decision already listed from a job's checkpoint stays the
   // job's, so one Command never appears twice.
   const listed = new Set(commands.map((command) => command.decision_id));
-  for (const command of await gameCommandsFromAiur(deps, game.id, jobTickets)) {
+  for (const command of await gameCommandsFromAiur(deps, game.id, jobTickets, sign)) {
     if (!listed.has(command.decision_id)) commands.push(command);
   }
 

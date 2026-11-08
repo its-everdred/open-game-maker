@@ -66,10 +66,12 @@ export const CreateJobAccepted = z.object({
   position: z.number().int().nonnegative().optional(),
 });
 export const AllowanceExceeded = z.object({
-  error: z.enum(['allowance_exceeded', 'platform_cap_reached']),
+  error: z.enum(['allowance_exceeded', 'platform_cap_reached', 'energy_limit_reached']),
   remainingMicroUsd: MicroUsd,
   resetsAt: IsoTime,
   offers: z.array(z.enum(['trim', 'split', 'queue', 'ask_admin'])),
+  // energy_limit_reached: the instance Energy window the build doesn't fit (#598).
+  window: z.enum(['day', 'week', 'month']).optional(),
 });
 export const Job = z.object({
   id: Id,

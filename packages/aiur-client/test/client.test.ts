@@ -177,6 +177,58 @@ describe('createAiurClient', () => {
     await expect(createAiurClient(daemon, fetchImpl).decision('decision-1')).resolves.toMatchObject(canonical);
   });
 
+  // A Command's option media (aiur's public projection) must survive the parse: the game inbox renders it (#611).
+  it('keeps the media a decision carries on its options', async () => {
+    const media = {
+      kind: 'image',
+      mime_type: 'image/png',
+      attachment_id: 'med_0123456789abcdef01234567',
+      alt_text: 'A blob lying flat',
+      caption: null,
+      byte_size: 2048,
+      width: 640,
+      height: 480,
+      duration_ms: null,
+      locator: { kind: 'attachment', attachment_id: 'med_0123456789abcdef01234567' },
+      poster: null,
+    };
+    const withMedia = { ...decision, options: [{ id: 'flat', label: 'Lie flat', media: [media] }] };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(withMedia));
+
+    const parsed = await createAiurClient(daemon, fetchImpl).decision('decision-1');
+
+    expect(parsed.options[0]!.media).toEqual([media]);
+  });
+
+  // The file behind an attachment is read through the decision media route with the supervisor token, and its body is
+  // handed back unread so a large clip streams instead of being parsed as JSON.
+  it('streams a decision media file through the supervisor-authorized media route', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } }));
+
+    const signal = AbortSignal.timeout(1000);
+    const file = await createAiurClient(daemon, fetchImpl).decisionMedia('decision 1', 'med_abc', signal);
+
+    expect(fetchImpl.mock.calls[0]![0]).toBe('http://127.0.0.1:4000/api/v1/decisions/decision%201/media/med_abc');
+    expect(new Headers(fetchImpl.mock.calls[0]![1]?.headers).get('authorization')).toBe('Bearer supervisor-secret');
+    // The caller's deadline reaches the request, so a stalled transfer can be aborted.
+    expect(fetchImpl.mock.calls[0]![1]?.signal).toBe(signal);
+    expect(file.mime).toBe('image/png');
+    expect(new Uint8Array(await new Response(file.body).arrayBuffer())).toEqual(new Uint8Array([137, 80, 78, 71]));
+  });
+
+  it('reports a missing decision media file as a typed HTTP error', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ error: { code: 'not_found', message: 'Not found' } }, 404));
+
+    await expect(createAiurClient(daemon, fetchImpl).decisionMedia('decision-1', 'med_abc')).rejects.toMatchObject({
+      status: 404,
+      code: 'not_found',
+    });
+  });
+
   it('sends the minimal reversible decision answer required by a checkpoint', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ status: 'accepted', decision }, 202));
 
