@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from 'react';
 
 import { Icon } from '../components/Icon';
 import { MenuRing } from '../components/MenuCircle';
@@ -31,7 +31,10 @@ export function VolumeCircle({
   const gesture = useRef<Gesture | undefined>(undefined);
   const on = sound === 'on';
 
+  useEffect(() => () => window.clearTimeout(gesture.current?.timer), []);
+
   const down = (event: PointerEvent<HTMLButtonElement>) => {
+    window.clearTimeout(gesture.current?.timer);
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const current: Gesture = { x: event.clientX, y: event.clientY, from: volume, moved: false, held: false, timer: 0 };
     current.timer = window.setTimeout(() => {
@@ -51,7 +54,12 @@ export function VolumeCircle({
     window.clearTimeout(current.timer);
     onVolume(clamp(current.from + distance / FULL_DRAG_PX));
   };
+  // Up keeps the gesture for the click that follows; a cancelled press gets no click, so forget it.
   const release = () => window.clearTimeout(gesture.current?.timer);
+  const cancel = () => {
+    release();
+    gesture.current = undefined;
+  };
   const click = () => {
     const current = gesture.current;
     gesture.current = undefined;
@@ -75,7 +83,7 @@ export function VolumeCircle({
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={release}
-      onPointerCancel={release}
+      onPointerCancel={cancel}
       onClick={click}
       onKeyDown={key}
       onContextMenu={(event) => event.preventDefault()}

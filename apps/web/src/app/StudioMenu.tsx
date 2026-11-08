@@ -203,7 +203,8 @@ export function StudioMenu() {
       </div>
     );
   } else if (sheet === 'bug') {
-    sheetContent = <BugSheet close={() => setSheet(undefined)} />;
+    // A report that finishes after another circle was tapped must not close that circle's sheet.
+    sheetContent = <BugSheet close={() => setSheet((current) => (current === 'bug' ? undefined : current))} />;
   } else if (sheet === 'energy' && session) {
     sheetContent = <EnergyDetail close={close} />;
   } else if (sheet === 'builds' && buildGroups.length > 0) {
@@ -297,7 +298,7 @@ export function StudioMenu() {
               </span>
             ))}
           </div>
-          {sheet ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
+          {sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
         </div>
       ) : null}
       <JobConversationModal />

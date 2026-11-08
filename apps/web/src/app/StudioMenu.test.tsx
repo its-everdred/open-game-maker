@@ -23,6 +23,7 @@ const sound = vi.hoisted(() => ({
   status: vi.fn(() => 'on' as const),
 }));
 const auth = vi.hoisted(() => ({ signOut: vi.fn() }));
+const report = vi.hoisted(() => ({ sendReport: vi.fn() }));
 
 vi.mock('../features/build-chat/jobs', () => ({
   isTerminal: (value: string) => ['done', 'failed', 'cancelled'].includes(value),
@@ -33,6 +34,7 @@ vi.mock('../features/build-chat/Chat', () => ({
 }));
 vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
+vi.mock('../features/bug-report/send', () => report);
 vi.mock('../lib/sound', () => sound);
 vi.mock('../routes/admin/api', () => ({ useAdminMe: () => state.admin }));
 vi.mock('../features/energy/api', async (importOriginal) => ({
@@ -80,6 +82,7 @@ afterEach(() => {
   sound.setMuted.mockReset();
   sound.setVolume.mockReset();
   auth.signOut.mockReset();
+  report.sendReport.mockReset();
   vi.useRealTimers();
 });
 
@@ -265,6 +268,8 @@ describe('StudioMenu', () => {
     act(() => vi.advanceTimersByTime(5 * 60 * 1000 + 1));
 
     expect(screen.queryByRole('group', { name: /Moon Vault builds/ })).not.toBeInTheDocument();
+    // No empty sheet is left hanging under the row once its builds are gone.
+    expect(document.querySelector('.studio-menu-sheet')).toBeNull();
   });
 
   it('groups jobs by game, badges open requests, and distinguishes paused, parked, and playable work', () => {
@@ -340,6 +345,44 @@ describe('StudioMenu', () => {
     expect(screen.getByRole('dialog', { name: 'Build the moon gate' })).toBeVisible();
     expect(screen.getByText('conversation job-1')).toBeVisible();
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('opens the problem report under the row, sends it and folds the sheet, or closes it unsent', async () => {
+    report.sendReport.mockResolvedValueOnce(undefined);
+    renderMenu('/');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'What went wrong?' }), { target: { value: 'Gate stuck' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Report a problem' })).not.toBeInTheDocument());
+    expect(report.sendReport).toHaveBeenCalledWith({ text: 'Gate stuck' });
+    expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('form', { name: 'Report a problem' })).not.toBeInTheDocument();
+  });
+
+  // A slow report must not close the sheet of the circle the creator tapped while it was sending.
+  it('keeps another circle’s sheet open when a slow report finishes', async () => {
+    let finish: () => void = () => undefined;
+    report.sendReport.mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve)));
+    renderMenu('/');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    vi.useFakeTimers();
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Mute' }), { clientX: 0, clientY: 0 });
+    act(() => vi.advanceTimersByTime(450));
+    vi.useRealTimers();
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeVisible();
+
+    await act(async () => finish());
+
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeVisible();
   });
 
   // Review drafts live in memory until sent; the next person signing in on the same device must not find them.
