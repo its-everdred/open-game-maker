@@ -11,17 +11,12 @@ import { requireAssetsRoot } from '../../context.js';
 import { readLock } from '../../lock.js';
 import { resolveEntry, type Locations } from '../../resolve.js';
 import { gltfIo, readyMeshopt } from '../build/assets/gltf.js';
-import { registerFile } from './register.js';
+import { registerFile, repeated } from './register.js';
 
 const USAGE = 'gm assets variant <id> --name <slug> [--recolour <material>=#rrggbb] [--prop <id>@<slot|joint>]';
 
 type Recolour = { material: string; factor: [number, number, number, number] };
 type Prop = { id: string; at: string };
-
-function repeated(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
-  return typeof value === 'string' ? [value] : [];
-}
 
 /** glTF colour factors are linear; the creator's palette is sRGB hex. */
 function linear(channel: number): number {
@@ -39,8 +34,8 @@ function parseRecolour(value: string): Recolour {
 
 function parseProp(value: string): Prop {
   const at = value.lastIndexOf('@');
-  /* Asset ids carry their own `@version`, so the attach point is after the last `@`. */
-  if (at <= 0 || at === value.length - 1 || !value.slice(0, at).includes('@')) {
+  /* Library ids carry their own `@version`, so the attach point is after the last `@`. */
+  if (at <= 0 || at === value.length - 1) {
     throw new UsageError(`--prop ${value} is not <id>@<slot|joint>`, USAGE);
   }
   return { id: value.slice(0, at), at: value.slice(at + 1) };
@@ -73,7 +68,11 @@ function recolour(document: Document, change: Recolour): void {
       .map((material) => material.getName());
     throw new UsageError(`no material named ${change.material}`, `one of: ${names.join(', ') || '(none)'}`);
   }
-  for (const material of materials) material.setBaseColorFactor(change.factor);
+  for (const material of materials) {
+    const [r, g, b, a] = material.getBaseColorFactor();
+    const [fr, fg, fb] = change.factor;
+    material.setBaseColorFactor([r * fr, g * fg, b * fb, a]);
+  }
 }
 
 /** A rig joint by name, preferring skin joints over other nodes that happen to share it. */
@@ -141,6 +140,15 @@ export const command: GmCommand = {
       blobRoot: ctx.blobRoot,
       collections: index.collections,
     };
+    /* Provenance (rights, licence, credit) comes from library cards; refuse before cloning, not after. */
+    for (const entry of [sourceEntry, ...propEntries]) {
+      if (!index.cards.some((card) => card.id === entry.id)) {
+        throw new UsageError(
+          `${entry.id} is not a library asset; variants are made from library models`,
+          'gm assets search --kind model',
+        );
+      }
+    }
     const slots = index.cards.find((card) => card.id === sourceEntry.id)?.rig?.attach_points ?? [];
 
     await readyMeshopt();

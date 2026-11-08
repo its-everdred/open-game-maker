@@ -11,7 +11,12 @@ import { gm, tempDir } from './helpers.js';
 
 const MODELS = 'packs/kenney-mini-dungeon/2.0/extracted/Models/GLB format';
 
-function triangle(document: Document, name: string, material: string) {
+function triangle(
+  document: Document,
+  name: string,
+  material: string,
+  factor: [number, number, number, number] = [1, 1, 1, 1],
+) {
   const buffer = document.getRoot().listBuffers()[0] ?? document.createBuffer();
   const position = document
     .createAccessor()
@@ -21,7 +26,7 @@ function triangle(document: Document, name: string, material: string) {
   const primitive = document
     .createPrimitive()
     .setAttribute('POSITION', position)
-    .setMaterial(document.createMaterial(material).setBaseColorFactor([1, 1, 1, 1]));
+    .setMaterial(document.createMaterial(material).setBaseColorFactor(factor));
   return document.createMesh(name).addPrimitive(primitive);
 }
 
@@ -31,7 +36,8 @@ async function character(): Promise<Uint8Array> {
   const root = document.createNode('root');
   const arm = document.createNode('arm-right').setTranslation([0.3, 0.5, 0]);
   root.addChild(arm);
-  const body = document.createNode('body').setMesh(triangle(document, 'body', 'colormap'));
+  /* A non-white, translucent starting factor shows the recolour multiplies rather than replaces. */
+  const body = document.createNode('body').setMesh(triangle(document, 'body', 'colormap', [0.5, 1, 1, 0.8]));
   body.setSkin(document.createSkin('rig').addJoint(root).addJoint(arm));
   document.createScene().addChild(root).addChild(body);
   return new NodeIO().writeBinary(document);
@@ -93,10 +99,12 @@ describe('gm assets variant makes a t3 clone and never touches the original', ()
       .getRoot()
       .listMaterials()
       .find((material) => material.getName() === 'colormap');
-    /* glTF factors are linear: sRGB mid-grey #808080 is 0.2159 linear, not 0.5 and not 128. */
+    /* glTF factors are linear: sRGB mid-grey #808080 is 0.2159 linear, not 0.5 and not 128; it multiplies the
+       material's own factor (0.5 red, 0.8 alpha) instead of replacing it. */
     const [r, g, b, a] = colormap!.getBaseColorFactor();
-    for (const channel of [r, g, b]) expect(channel).toBeCloseTo(0.2159, 4);
-    expect(a).toBe(1);
+    expect(r).toBeCloseTo(0.2159 * 0.5, 4);
+    for (const channel of [g, b]) expect(channel).toBeCloseTo(0.2159, 4);
+    expect(a).toBeCloseTo(0.8, 6);
     const sword = variant
       .getRoot()
       .listNodes()
@@ -180,5 +188,88 @@ describe('gm assets variant makes a t3 clone and never touches the original', ()
 
     expect(result.code).toBe(2);
     expect(result.err.join('\n')).toContain(`gm assets use ${unknown}`);
+  });
+
+  it('attaches several props by raw joint name into one single-buffer glb', async () => {
+    const { cwd, env, blobRoot } = await gameWithModels();
+
+    const result = await gm(
+      [
+        'assets',
+        'variant',
+        ORC,
+        '--name',
+        'two-swords',
+        '--prop',
+        `${WALL}@arm-right`,
+        '--prop',
+        `${WALL}@root`,
+        '--game',
+        'g1',
+      ],
+      { cwd, env },
+    );
+
+    expect(result.err).toEqual([]);
+    const entry = lock(cwd).assets.find((candidate) => candidate.id === 't3:g1/model/variants/two-swords');
+    const variant = await new NodeIO().readBinary(readFileSync(join(blobRoot, 'blobs/sha256', entry!.sha256)));
+    const parents = variant
+      .getRoot()
+      .listNodes()
+      .filter((node) => node.getName() === 'sword')
+      .map((node) => node.getParentNode()?.getName())
+      .sort();
+    expect(parents).toEqual(['arm-right', 'root']);
+    expect(variant.getRoot().listBuffers()).toHaveLength(1);
+  });
+
+  it('refuses a registered variant as a source before cloning, since its provenance is not a library card', async () => {
+    const { cwd, env } = await gameWithModels();
+    expect(
+      (
+        await gm(['assets', 'variant', ORC, '--name', 'red-orc', '--recolour', '*=#ff0000', '--game', 'g1'], {
+          cwd,
+          env,
+        })
+      ).code,
+    ).toBe(0);
+    const before = readFileSync(join(cwd, 'assets.lock.json'), 'utf8');
+
+    const result = await gm(
+      [
+        'assets',
+        'variant',
+        't3:g1/model/variants/red-orc',
+        '--name',
+        'blue-orc',
+        '--recolour',
+        '*=#0000ff',
+        '--game',
+        'g1',
+      ],
+      { cwd, env },
+    );
+
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('is not a library asset');
+    expect(existsSync(join(cwd, 'assets/model/variants/blue-orc.glb'))).toBe(false);
+    expect(readFileSync(join(cwd, 'assets.lock.json'), 'utf8')).toBe(before);
+  });
+
+  it.each([
+    [['--name', 'Bad Name', '--recolour', '*=#ff0000'], 'lowercase slug'],
+    [['--name', 'orc'], 'at least one --recolour or --prop'],
+    [['--name', 'orc', '--recolour', 'colormap=red'], 'is not <material>=#rrggbb'],
+    [['--name', 'orc', '--prop', 'hand-right'], 'is not <id>@<slot|joint>'],
+    [['--name', 'orc', '--prop', `${WALL}@`], 'is not <id>@<slot|joint>'],
+  ])('refuses malformed flags %j without writing anything', async (flags, message) => {
+    const { cwd, env } = await gameWithModels();
+    const before = readFileSync(join(cwd, 'assets.lock.json'), 'utf8');
+
+    const result = await gm(['assets', 'variant', ORC, ...flags], { cwd, env });
+
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain(message);
+    expect(readFileSync(join(cwd, 'assets.lock.json'), 'utf8')).toBe(before);
   });
 });

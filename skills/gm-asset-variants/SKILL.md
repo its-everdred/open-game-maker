@@ -51,5 +51,8 @@ order: try installed packs and mirrors first, then vary a selected source before
   single-material character it tints everything; use a lighter colour than you think, or tint at runtime instead.
 - KayKit rigs share joints across a character set. A prop on `hand-right` follows that joint's animation, so check the
   prop in a moving clip, not only the rest pose.
+- `gm assets variant` does not scale or offset a prop. If a prop is the wrong size for the hand, pick another prop or
+  script a scaled copy and register that with `--from`.
+- Variants are made from library models only; to change a variant, make a new one from the same library source.
 - Merged parts from two kits keep their own materials and textures; they stay separate meshes in one file.
 - Variants are ordinary models: the game instances them like any other, with no extra cost per copy.

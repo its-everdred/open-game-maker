@@ -14,7 +14,7 @@ import { readLock, upsertLock, writeGeneratedText, writeLock } from '../../lock.
 import { intersectLockRights, rightsForCard } from '../../rules.js';
 import { MIME } from '../packs/index.js';
 
-function repeated(value: unknown): string[] {
+export function repeated(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
   return typeof value === 'string' ? [value] : [];
 }
