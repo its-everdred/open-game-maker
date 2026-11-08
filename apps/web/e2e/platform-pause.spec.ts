@@ -25,7 +25,13 @@ for (const viewport of viewports) {
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page);
     await page.goto('/g/game?test');
+    /* Pause mounts when the game loads; its space is held from the start so the bar's buttons never jump under a tap. */
+    const ask = page.getByRole('button', { name: 'Ask for a change' });
+    await expect(ask).toBeVisible();
+    const askBefore = await ask.boundingBox();
     await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 30_000 }).toBe('ready');
+    await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+    expect(await ask.boundingBox()).toEqual(askBefore);
 
     const pause = page.getByRole('button', { name: 'Pause' });
     await expect(pause).toBeVisible();

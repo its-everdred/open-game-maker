@@ -336,6 +336,12 @@ export function GameScreen() {
     roomSnapshot: room.snapshot,
   };
 
+  const hudShown =
+    mode === 'play' &&
+    frameRef.current !== undefined &&
+    frameState.manifest !== undefined &&
+    activeSnapshot !== undefined;
+
   return (
     <section className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}`} aria-label="Play and edit">
       <PlayEditBar
@@ -353,7 +359,16 @@ export function GameScreen() {
         }}
       >
         <GameExtras placement="topbar" {...extraProps} />
-        {mode === 'play' ? <span className="platform-pause-slot" ref={setPauseSlot} /> : null}
+        {mode === 'play' ? (
+          <span className="platform-pause-slot" ref={setPauseSlot}>
+            {/* Holds Pause's space until the HUD mounts, so the bar's buttons do not shift when the game loads. */}
+            {hudShown ? null : (
+              <button className="platform-pause tap-primary" type="button" tabIndex={-1} aria-hidden="true" disabled>
+                Pause
+              </button>
+            )}
+          </span>
+        ) : null}
       </PlayEditBar>
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
@@ -382,7 +397,7 @@ export function GameScreen() {
             snap={canvasOptions.snap}
           />
         ) : null}
-        {mode === 'play' &&
+        {hudShown &&
         frameRef.current !== undefined &&
         frameState.manifest !== undefined &&
         activeSnapshot !== undefined ? (

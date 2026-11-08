@@ -388,6 +388,10 @@
   display: contents;
 }
 
+.platform-pause[aria-hidden='true'] {
+  visibility: hidden;
+}
+
 .platform-pause {
   min-width: 64px;
   min-height: 64px;
