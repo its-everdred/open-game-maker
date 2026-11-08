@@ -6,7 +6,7 @@ import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
 import { answerCommand } from './commands';
 import { markSent, saveDraft, useDeckDraft, useServerDrafts } from './drafts';
-import { answerOf, clipLength, deckCards, deckFinished, letterOf, mediaKindOf, reviewOf, withoutLinks } from './review';
+import { answerOf, clipLength, deckCards, deckFinished, letterOf, mediaKindOf, withoutLinks } from './review';
 import { PlayableCard } from './playable';
 import './review-deck.css';
 import './review-glass.css';

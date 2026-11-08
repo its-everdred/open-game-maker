@@ -166,13 +166,9 @@ export async function optionMediaFromAiur(
       if (media === undefined && audio === undefined) return;
       resolved.set(option.id, {
         ...(media === undefined ? {} : { media }),
-        ...(audio === undefined ? {} : { audio: withoutKind(audio) }),
+        ...(audio === undefined ? {} : { audio }),
       });
     }),
   );
   return resolved;
-}
-
-function withoutKind({ kind: _kind, ...media }: OptionMedia): Omit<OptionMedia, 'kind'> {
-  return media;
 }
