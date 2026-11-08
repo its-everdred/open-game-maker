@@ -7,7 +7,7 @@ import { Icon } from '../../components/Icon';
 import { AiurCommands, gameScope, type AiurCommandAnswer } from '../aiur/embed';
 import { answerCommand, useGameCommands } from './commands';
 import { isReviewDeck } from './ReviewDeck';
-import { ReviewRows } from './ReviewRows';
+import { ReviewRowLink } from './ReviewRows';
 import './commands-inbox.css';
 
 // One game's open Commands (M3): the same list the embeddable `<aiur-commands>` component renders when aiur ships it.
@@ -60,7 +60,7 @@ export function CommandsInbox({
           return (
             <li className="commands-inbox-item" key={command.checkpoint_id}>
               {isReviewDeck(command) ? (
-                <ReviewRows commands={[command]} hrefOf={(deck) => deckHref(gameId, slug, deck)} />
+                <ReviewRowLink command={command} href={deckHref(gameId, slug, command)} />
               ) : (
                 <>
                   <p className="commands-inbox-question">{command.question}</p>

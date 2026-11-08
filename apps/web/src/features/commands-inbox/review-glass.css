@@ -197,11 +197,11 @@
   text-decoration: none;
 }
 
-.review-row[data-state='draft'] .review-row-link {
+.review-row-link[data-state='draft'] {
   --k: var(--gruvbox-yellow);
 }
 
-.review-row[data-state='sent'] .review-row-link {
+.review-row-link[data-state='sent'] {
   --k: var(--gruvbox-green);
 }
 

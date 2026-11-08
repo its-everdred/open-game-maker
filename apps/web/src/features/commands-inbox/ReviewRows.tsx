@@ -27,28 +27,35 @@ export function ReviewRows({
 }
 
 function ReviewRow({ command, href }: { command: GameCommand; href: string }) {
+  return (
+    <li className="review-row">
+      <ReviewRowLink command={command} href={href} />
+    </li>
+  );
+}
+
+// One question's row on its own, for a list that already holds it (the games spotlight's requests).
+export function ReviewRowLink({ command, href }: { command: GameCommand; href: string }) {
   const draft = useReviewDraft(command);
   const state = draftState(draft);
   const title = reviewTitle(command.title);
   const total = command.options.length;
   const done = total === 0 ? 0 : Math.min(draft.deck.cards.length, total) / total;
   return (
-    <li className="review-row" data-state={state}>
-      <Link aria-label={`${title}, ${state}`} className="review-row-link" to={href}>
-        <RowThumb command={command} />
-        <span className="review-row-title">{title}</span>
-        {state === 'sent' ? (
-          <span className="review-row-mark" aria-hidden="true">
-            <Icon name="thumbsUp" />
-          </span>
-        ) : (
-          <svg className="review-row-progress" viewBox="0 0 28 28" aria-hidden="true">
-            <circle cx="14" cy="14" r="12" />
-            {done > 0 ? <circle cx="14" cy="14" r="12" pathLength={1} strokeDasharray={`${done} 1`} /> : null}
-          </svg>
-        )}
-      </Link>
-    </li>
+    <Link aria-label={`${title}, ${state}`} className="review-row-link" data-state={state} to={href}>
+      <RowThumb command={command} />
+      <span className="review-row-title">{title}</span>
+      {state === 'sent' ? (
+        <span className="review-row-mark" aria-hidden="true">
+          <Icon name="thumbsUp" />
+        </span>
+      ) : (
+        <svg className="review-row-progress" viewBox="0 0 28 28" aria-hidden="true">
+          <circle cx="14" cy="14" r="12" />
+          {done > 0 ? <circle cx="14" cy="14" r="12" pathLength={1} strokeDasharray={`${done} 1`} /> : null}
+        </svg>
+      )}
+    </Link>
   );
 }
 
