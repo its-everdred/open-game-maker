@@ -131,7 +131,9 @@ describe('DecisionDeck', () => {
     expect(screen.getByRole('dialog', { name: 'Castle topic' })).toBeVisible();
   });
 
-  it('keeps the decision open with a retry when the answer does not send', async () => {
+  // A refused answer (the decision was answered elsewhere, or moved on) must not trap the walk: the creator can retry
+  // or move on to the next decision.
+  it('keeps the decision open with a retry when the answer does not send, and still offers the next one', async () => {
     answers.answerCommand.mockRejectedValueOnce(new Error('offline'));
     const commands = [command('d1'), command('d2')];
     render(<DecisionDeck commands={commands} first={commands[0]!} onClose={vi.fn()} />);
@@ -139,7 +141,42 @@ describe('DecisionDeck', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Option A' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('That answer did not send. Try again.');
-    expect(screen.queryByRole('button', { name: 'Next decision' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Option A' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next decision' }));
+    expect(screen.getByRole('dialog', { name: 'Topic d2' })).toBeVisible();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  // The inbox refetches while an answer is sent; a decision answered elsewhere meanwhile drops out of it. The deck must
+  // close rather than strand the creator on an answered decision with nothing to walk to.
+  it('closes when the next decision was answered elsewhere while this answer was sending', async () => {
+    const commands = [command('d1'), command('d2')];
+    const onClose = vi.fn();
+    const view = render(<DecisionDeck commands={commands} first={commands[0]!} onClose={onClose} />);
+    answers.answerCommand.mockImplementationOnce(async () => {
+      view.rerender(<DecisionDeck commands={[commands[0]!]} first={commands[0]!} onClose={onClose} />);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Option A' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  // An answer that lands after the creator closed the deck must not close the next deck they opened.
+  it('does not close anything when an answer lands after the deck was closed', async () => {
+    let land!: () => void;
+    answers.answerCommand.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => (land = () => resolve(undefined))),
+    );
+    const onClose = vi.fn();
+    const view = render(<DecisionDeck commands={[command('d1')]} first={command('d1')} onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Option A' }));
+    view.unmount();
+    land();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

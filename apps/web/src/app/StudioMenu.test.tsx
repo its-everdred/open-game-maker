@@ -285,6 +285,25 @@ describe('StudioMenu', () => {
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
+  // On a shared device, a decision one creator opened must not stay on screen, answerable, for the next account.
+  it('closes the open decision when another creator signs in', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1')];
+    const view = renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Topic d1, Blobs' }));
+    expect(screen.getByRole('dialog', { name: 'Topic d1' })).toBeVisible();
+
+    state.session = { data: { user: { id: 'user-2' } } };
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <StudioMenu />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('dialog', { name: 'Topic d1' })).not.toBeInTheDocument();
+  });
+
   it('groups jobs by game and distinguishes paused, parked, and playable work', () => {
     const paused = runningJob({
       id: 'job-paused',

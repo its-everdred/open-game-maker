@@ -150,10 +150,14 @@ describe('the creator’s decision inbox', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const deps = seed();
+      let hung: AbortSignal | undefined;
       deps.aiurClientForGame = async (gameId: string) =>
         ({
-          decisions: async () =>
-            gameId === ids.blobs ? new Promise<Decision[]>(() => undefined) : [decision('d_castle')],
+          decisions: async (_query: unknown, signal?: AbortSignal) => {
+            if (gameId !== ids.blobs) return [decision('d_castle')];
+            hung = signal;
+            return new Promise<Decision[]>(() => undefined);
+          },
         }) as unknown as AiurClient;
 
       const pending = read(deps, '/me/commands');
@@ -164,6 +168,8 @@ describe('the creator’s decision inbox', () => {
       expect(deps.lines).toContainEqual(
         expect.objectContaining({ event: 'game_commands_unavailable', gameId: ids.blobs }),
       );
+      // The hung request is cancelled too, so a wedged instance does not hold one open socket per menu poll.
+      expect(hung?.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
     }

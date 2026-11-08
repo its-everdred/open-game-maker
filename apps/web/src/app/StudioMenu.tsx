@@ -37,7 +37,8 @@ export function StudioMenu() {
   const [announcement, setAnnouncement] = useState('');
   const [buildClock, setBuildClock] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
-  const [deck, setDeck] = useState<CreatorCommand>();
+  // The deck belongs to the creator who opened it: another account signed in on this device never sees it.
+  const [deck, setDeck] = useState<{ creatorId: string; command: CreatorCommand }>();
   const [energyOpen, setEnergyOpen] = useState(false);
   const game = matchPath('/g/:gameId/*', location.pathname);
   const gameId = game?.params.gameId;
@@ -66,6 +67,10 @@ export function StudioMenu() {
       document.removeEventListener('keydown', escape);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (deck && deck.creatorId !== creatorId) setDeck(undefined);
+  }, [creatorId, deck]);
 
   useEffect(() => {
     if (!creatorId) return;
@@ -147,7 +152,7 @@ export function StudioMenu() {
                       // The deck returns focus to the menu button, not to this row, which closing the menu removes.
                       trigger.current?.focus();
                       close();
-                      setDeck(command);
+                      if (creatorId) setDeck({ creatorId, command });
                     }}
                   >
                     <strong>{command.summary ?? command.title}</strong>
@@ -257,7 +262,9 @@ export function StudioMenu() {
         </div>
       ) : null}
       <JobConversationModal />
-      {deck ? <DecisionDeck commands={decisions.commands} first={deck} onClose={() => setDeck(undefined)} /> : null}
+      {deck && deck.creatorId === creatorId ? (
+        <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />
+      ) : null}
     </div>
   );
 }
