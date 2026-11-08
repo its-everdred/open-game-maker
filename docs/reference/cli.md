@@ -114,13 +114,17 @@ an unknown topic exits 2 with a list hint. Pattern retrieval is offline and neve
 ```text
 gm chat post --job <id> --text "<one line>" [--image <png>]
 gm chat post --job <id> --text "<one line>" --clip <mp4> --poster <png>
-gm checkpoint open --job <id> --question "<question>" --option <id>=<label> --option <id>=<label> [--media <id>=<chat-message-id>] [--provenance <id>=<json|@file>] [--recommend <id>] [--blocking]
+gm checkpoint open [--job <id>] --question "<question>" --option <id>=<label> --option <id>=<label> [--media <id>=<chat-message-id>] [--playable <id>=<scenario query>] [--seconds <id>=<n>] [--lead-in <id>=<move>] [--branch <name>] [--provenance <id>=<json|@file>] [--recommend <id>] [--blocking]
 gm checkpoint wait <checkpoint-id|decision-id> [--timeout <seconds>]
 ```
 
 `gm chat post` copies media into `.gm/outbox/media/` and prints the chat message id. `gm checkpoint open` prints
 the checkpoint id and the `decision.requested` `emit_event` call the agent must make. `gm checkpoint wait` prints
 the selected option id, exits 3 on timeout, and exits 4 when the checkpoint becomes moot.
+
+Without a build job (no `--job`, `GM_JOB` or `.gm/context/job.json`), `gm checkpoint open` writes nothing to the outbox
+and refuses `--media`; the printed call carries each `--playable` slice, so the Command shows as playable cards in the
+game's review deck (see `packages/gm-cli/src/commands/checkpoint/README.md`). `gm decide` does the same.
 
 `--provenance <id>=<json|@file>` records what an option was built from — the packs and assets it used, its generator,
 when it was built, and its design aspect, kind, and view. The ledger check reads it; a game that carries a ledger

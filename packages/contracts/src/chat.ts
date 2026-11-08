@@ -71,6 +71,29 @@ export const OptionPlayable = z
   })
   .strict();
 
+// aiur keeps only text on a Command's options and refuses a `playable` media kind, so a Command raised without a build
+// job (from the host or an aiur workspace, #639) carries its options' slices in its context as a hidden marker:
+// `<!-- gm-playable:{"<option id>":<OptionPlayable>,...} -->`. A scenario cannot hold `>`, so the JSON never ends the
+// comment early.
+const PLAYABLE_MARKER = /<!-- gm-playable:(.+?) -->/;
+const PlayableMarker = z.record(z.string(), OptionPlayable);
+
+export function playableMarker(playables: ReadonlyMap<string, OptionPlayable>): string {
+  return `<!-- gm-playable:${JSON.stringify(Object.fromEntries(playables))} -->`;
+}
+
+// The slices a marker names, by option id; a missing or malformed marker names none.
+export function playablesFromMarker(text: string | null | undefined): Map<string, OptionPlayable> {
+  const match = typeof text === 'string' ? PLAYABLE_MARKER.exec(text) : null;
+  if (match === null) return new Map();
+  try {
+    const parsed = PlayableMarker.safeParse(JSON.parse(match[1] as string) as unknown);
+    return parsed.success ? new Map(Object.entries(parsed.data)) : new Map();
+  } catch {
+    return new Map();
+  }
+}
+
 export const ChatCheckpointOption = z.object({
   id: z.string(),
   label: z.string(),
@@ -93,6 +116,8 @@ export const ChatCheckpoint = z.object({
   recommend: z.string().optional(),
   blocking: z.boolean().optional(),
   pick: z.enum(['one', 'many']).optional(),
+  // The Command's 2-5 word topic (`gm decide --topic`), its title in the inbox and modal. Older checkpoints have none.
+  topic: z.string().optional(),
   status: z.enum(['open', 'answered', 'moot']),
   option_id: z.string().optional(),
   // A review deck's answer: the likes and dislikes the creator chose, with their words on a dislike (A3).
@@ -166,6 +191,8 @@ export const CheckpointOpenPayload = z
     blocking: z.boolean(),
     // 'many' opens a review deck whose answer is the likes and dislikes, not one card. Absent means 'one'.
     pick: z.enum(['one', 'many']).optional(),
+    // The 2-5 word topic `gm decide` requires; the inbox titles the Command with it.
+    topic: z.string().trim().min(1).max(80).optional(),
   })
   .strict()
   .superRefine((payload, ctx) => {

@@ -1,6 +1,6 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
+import { CREATOR_AUDIENCE_MARKER, type OptionPlayable } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import type { OptionPlayable } from '@ogm/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../../src/app/errors.js';
@@ -110,6 +110,7 @@ function checkpoint(
     version?: number | undefined;
     at?: string;
     options?: Array<{ id: string; label: string; media_id?: string; playable?: OptionPlayable }>;
+    topic?: string;
   } = {},
 ) {
   insertChatRow(deps.sqlite, {
@@ -128,6 +129,7 @@ function checkpoint(
       recommend: 'wood',
       blocking: true,
       status: overrides.status ?? 'open',
+      ...(overrides.topic === undefined ? {} : { topic: overrides.topic }),
       ...(overrides.version === undefined ? { version: 3 } : { version: overrides.version }),
     },
   });
@@ -177,6 +179,17 @@ describe('game commands inbox', () => {
       { id: 'wood', label: 'Wooden door' },
       { id: 'iron', label: 'Iron door' },
     ]);
+  });
+
+  it('titles a Command with its own topic, and an older one without a topic with its job', async () => {
+    const { app, deps } = await appWithJobs();
+    checkpoint(deps, ids.job, ULID, { topic: 'Front door material' });
+    checkpoint(deps, ids.linkedJob, MEDIA_ID);
+
+    const body = (await (await get(app, ids.game)).json()) as { commands: Array<{ job_id: string; title: string }> };
+
+    expect(body.commands).toContainEqual(expect.objectContaining({ job_id: ids.job, title: 'Front door material' }));
+    expect(body.commands).toContainEqual(expect.objectContaining({ job_id: ids.linkedJob, title: 'Job 3' }));
   });
 
   // The short link `/<slug>/review/<n>` (#591) must keep opening the same Command: a number is given once, in the
@@ -356,7 +369,7 @@ const decision = (overrides: Partial<Decision> = {}): Decision => ({
     { id: 'square', label: 'Square blobs' },
   ],
   recommendation: { option_id: 'round' },
-  context: { short_summary: 'Blobs look' },
+  context: { short_summary: 'Blobs look', long_context_markdown: CREATOR_AUDIENCE_MARKER },
   answer: null,
   active_answer: null,
   created_at: '2026-11-04T12:00:00.000Z',
@@ -421,6 +434,24 @@ describe('a registered game’s own Commands', () => {
     expect(body.commands.map(({ decision_id }) => decision_id)).not.toContain('d_moot');
     // The job's own Command appears once, from its checkpoint.
     expect(body.commands.filter(({ decision_id }) => decision_id === 'd_job')).toHaveLength(1);
+  });
+
+  // Kevin (2026-11-08): the creator never sees an engineering question. Until aiur has an audience field, a Command
+  // without Game Maker's creator marker is the Executor's, so it stays out of the inbox, its count and the deck.
+  it('leaves out a Command that is not marked for the creator', async () => {
+    const { app } = await appWithAiur([
+      decision({
+        decision_id: 'd_engineering',
+        question: 'The vision broker returned HTTP 402. Retry or skip?',
+        context: { short_summary: 'Vision broker 402' },
+      }),
+      decision({ decision_id: 'd_no_context', context: {} }),
+      decision({ decision_id: 'd_creator' }),
+    ]);
+
+    const body = (await (await get(app, ids.game)).json()) as { commands: Array<{ decision_id: string }> };
+
+    expect(body.commands.map(({ decision_id }) => decision_id)).toEqual(['d_creator']);
   });
 
   it('drops a Command whose options fall outside the inbox contract', async () => {

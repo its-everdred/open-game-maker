@@ -12,7 +12,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { loadavg, tmpdir } from 'node:os';
 import { extname, join, resolve } from 'node:path';
@@ -221,7 +221,7 @@ const TYPES: Record<string, string> = {
 };
 
 function sendFile(response: ServerResponse, path: string): void {
-  if (!existsSync(path)) {
+  if (!existsSync(path) || !statSync(path).isFile()) {
     response.writeHead(404).end('not found');
     return;
   }
@@ -246,13 +246,20 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-function gamesServer(dist: string): Server {
+/**
+ * The games origin for one built game. A build's page and everything it loads relative to itself (its asset manifest at
+ * `/g/<id>/<build>/assets/manifest.json`) come from the build; root `/assets/` chunks and the content-addressed `/a/<file>`
+ * blobs the manifest names (`gm build assets` writes them to `public/a`) come from the same output.
+ */
+export function gamesServer(dist: string): Server {
   const builds = new Set<string>([PIN.buildId, DRAFT_BUILD]);
   return createServer((request, response) => {
     const path = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
-    const page = /^\/g\/[^/]+\/([^/]+)\/index\.html$/.exec(path);
-    if (page && builds.has(page[1]!)) return sendFile(response, join(dist, 'index.html'));
-    if (path.startsWith('/assets/') && !path.includes('..')) return sendFile(response, join(dist, path));
+    if (!path.includes('..')) {
+      const inBuild = /^\/g\/[^/]+\/([^/]+)\/(.+)$/.exec(path);
+      if (inBuild && builds.has(inBuild[1]!)) return sendFile(response, join(dist, inBuild[2]!));
+      if (path.startsWith('/assets/') || path.startsWith('/a/')) return sendFile(response, join(dist, path));
+    }
     response.writeHead(404).end('not found');
   });
 }
@@ -385,14 +392,26 @@ async function untilNode(page: Page, check: () => Promise<boolean>, timeoutMs: n
   }
 }
 
-type EntitySnapshot = { playerIndex: number; p: number[] };
+type EntitySnapshot = { playerIndex?: number; p?: number[] };
+export type GameText = { state?: { entities?: Record<string, EntitySnapshot> } };
+
+/** The x of the entity a seat drives, or undefined when the game gives that seat no avatar. */
+export function avatarX(text: GameText, playerIndex: number): number | undefined {
+  const entity = Object.values(text.state?.entities ?? {}).find((candidate) => candidate.playerIndex === playerIndex);
+  return entity?.p?.[0];
+}
+
+/** Step 5 moves avatars; a game without any (a board game) cannot be judged by it. */
+export function hasAvatars(text: GameText): boolean {
+  return Object.values(text.state?.entities ?? {}).some((entity) => typeof entity.playerIndex === 'number');
+}
+
+async function gameText(page: Page): Promise<GameText> {
+  return (await page.evaluate(() => window.__multiHarness.renderGameToText())) as GameText;
+}
 
 async function playerX(page: Page, playerIndex: number): Promise<number | undefined> {
-  const text = (await page.evaluate(() => window.__multiHarness.renderGameToText())) as {
-    state?: { entities?: Record<string, EntitySnapshot> };
-  };
-  const entity = Object.values(text.state?.entities ?? {}).find((candidate) => candidate.playerIndex === playerIndex);
-  return entity?.p[0];
+  return avatarX(await gameText(page), playerIndex);
 }
 
 function stableId(): string {
@@ -446,6 +465,8 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
   let clients: Client[] = [];
   /** The seats this run took offline itself (step 6), on top of whatever the profile schedules. */
   const droppedSeats = new Set<number>();
+  /** Checks this game cannot be judged by, named in the report instead of failed or silently skipped. */
+  const unchecked: string[] = [];
 
   /** The game declares its authority mode in its manifest; the room is created with the same one (D-NET-1). */
   const manifestNet = ((): { authority?: string; maxSeats?: number } => {
@@ -638,7 +659,14 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     await shoot(4);
 
     log('5 each peer moves its own avatar; the primary never moves');
-    for (const playerIndex of [1, 2, 3]) {
+    /* Avatars may spawn a moment after playing; only a game that still has none is named unchecked. */
+    let avatars = false;
+    for (const giveUpAt = Date.now() + 2_000; !avatars && Date.now() < giveUpAt;) {
+      avatars = hasAvatars(await gameText(clients[0]!.page));
+      if (!avatars) await clients[0]!.page.waitForTimeout(100);
+    }
+    if (!avatars) unchecked.push('peer avatar moves (the game has no playerIndex entities)');
+    for (const playerIndex of avatars ? [1, 2, 3] : []) {
       const primaryBefore = await playerX(clients[0]!.page, playerIndex);
       const primaryAnchor = await playerX(clients[0]!.page, 0);
       const mover = clients[playerIndex]!;
@@ -654,7 +682,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       );
       assert((await playerX(clients[0]!.page, 0)) === primaryAnchor, 'the primary moved on a peer input');
     }
-    probes.peerMovedPx = true;
+    probes.peerMovedPx = avatars;
     await shoot(5);
 
     log('6 seat 2 drops for 3 s and returns; seat 3 drops past the window and forfeits');
@@ -771,6 +799,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     unchecked: [
       ...ALWAYS_UNCHECKED,
       ...MULTI_UNCHECKED,
+      ...unchecked,
       ...(isSoftware(renderer) ? ['latency bands on a software renderer'] : []),
     ],
     verdict: error ? 'fail' : verdictFor({ budgets, console: consoleList }),

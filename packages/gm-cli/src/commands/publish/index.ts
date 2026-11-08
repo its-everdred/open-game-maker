@@ -82,13 +82,35 @@ function tail(text: string, lines = 20): string {
   return text.trimEnd().split('\n').slice(-lines).join('\n');
 }
 
+/** fetch's own message is a bare "fetch failed"; the socket's reason sits on its cause. */
+function reason(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause instanceof Error ? error.cause : null;
+  if (!cause) return error.message;
+  const code = (cause as { code?: unknown }).code;
+  return `${error.message} (${typeof code === 'string' ? `${code}: ` : ''}${cause.message})`;
+}
+
+/*
+ * A connection that drops before an answer (#646: the first upload after a long build failed with "fetch failed" and
+ * an immediate rerun published) is tried once more. A timeout is not, as the API may still be working on the request,
+ * and nor is an answer that breaks off: the API has acted by then, and a second upload would publish a second build.
+ */
 async function request(url: string, init: RequestInit): Promise<{ status: number; body: string }> {
-  try {
-    const response = await fetch(url, init);
-    return { status: response.status, body: await response.text() };
-  } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
-    throw new CommandError(`no answer from ${url}: ${cause}`);
+  for (let attempt = 1; ; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (error) {
+      const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      if (attempt === 1 && !timedOut) continue;
+      throw new CommandError(`no answer from ${url}: ${reason(error)}`);
+    }
+    try {
+      return { status: response.status, body: await response.text() };
+    } catch (error) {
+      throw new CommandError(`the answer from ${url} broke off (HTTP ${response.status}): ${reason(error)}`);
+    }
   }
 }
 

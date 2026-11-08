@@ -1,9 +1,10 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
-import { GameCommand, type CommandOption } from '@ogm/contracts';
+import { GameCommand, playablesFromMarker, type CommandOption } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import type { MediaSigner } from '../build-chat/store.js';
+import { isForCreator } from '../checkpoints/correlate.js';
 import { optionMediaFromAiur } from './aiur-media.js';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
@@ -14,7 +15,8 @@ import { optionMediaFromAiur } from './aiur-media.js';
 // A decision aiur has answered, dismissed or called moot is not an open Command and is left out, as the job
 // checkpoints leave it out. An open or deferred decision is still waiting on the creator. A Command whose options
 // fall outside the inbox contract (fewer than two, more than five, or an option id aiur would not accept) is dropped
-// rather than failing the whole inbox.
+// rather than failing the whole inbox. A decision not marked for the creator (an engineering or operations question) is
+// the Executor's and is never listed here (#595).
 const OPEN = new Set(['open', 'deferred']);
 
 function isOpen(decision: Decision): boolean {
@@ -33,12 +35,14 @@ function recommendOf(decision: Decision): string | undefined {
   return typeof id === 'string' && id !== '' ? id : undefined;
 }
 
-// `media` is each option's resolved media by option id (see `aiur-media.ts`); without it the options are text only.
+// `media` is each option's resolved media by option id (see `aiur-media.ts`); without it the options are text only. An
+// option the context's playable marker names (`gm checkpoint open --playable`, #639) is a slice of the game to play.
 export function toGameCommand(
   decision: Decision,
   media: ReadonlyMap<string, NonNullable<CommandOption['media']>> = new Map(),
 ): GameCommand | null {
   const recommend = recommendOf(decision);
+  const playables = playablesFromMarker(decision.context?.long_context_markdown);
   const command = GameCommand.safeParse({
     job_id: null,
     ticket: decision.ticket.identifier,
@@ -50,7 +54,13 @@ export function toGameCommand(
     question: decision.question,
     options: decision.options.map(({ id, label }) => {
       const optionMedia = media.get(id);
-      return optionMedia === undefined ? { id, label } : { id, label, media: optionMedia };
+      const playable = playables.get(id);
+      return {
+        id,
+        label,
+        ...(optionMedia === undefined ? {} : { media: optionMedia }),
+        ...(playable === undefined ? {} : { playable }),
+      };
     }),
     ...(recommend === undefined ? {} : { recommend }),
     blocking: decision.blocking,
@@ -84,7 +94,11 @@ export async function gameCommandsFromAiur(
   // A job's Command is already in its checkpoint, so the game's own read leaves those to the job. A Command the inbox
   // would drop anyway is dropped before its media is copied.
   const open = decisions.filter(
-    (decision) => !jobTickets.has(decision.ticket.identifier) && isOpen(decision) && toGameCommand(decision) !== null,
+    (decision) =>
+      !jobTickets.has(decision.ticket.identifier) &&
+      isOpen(decision) &&
+      isForCreator(decision) &&
+      toGameCommand(decision) !== null,
   );
   const commands = await Promise.all(
     open.map(async (decision) => toGameCommand(decision, await optionMediaFromAiur(deps, client, decision, sign))),
