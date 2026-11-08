@@ -32,6 +32,11 @@ top-right corner inside the safe insets (64 px plus margin), and on touch screen
 lower-left and lower-right corners. Put status top-left, score top-centre, and prompts bottom-centre. Hide what does
 not matter in the current state.
 
+On phones the on-screen buttons are translucent but must never cover important content. Keep a 140 × 200 CSS px
+zone clear in each lower corner, above the safe insets: no HUD element, prompt, or tap target there, and frame the
+camera so the player, threats, and goals stay out of it. On laptops the overlay is hidden; keep the same layout so
+a keyboard or gamepad player sees what a phone player sees.
+
 ## Readable by default
 
 - Text is at least 16 CSS px on a phone after scaling; multiply by `PlayerSettings.textScale` from
@@ -56,6 +61,10 @@ declared input.
 
 Look at every still: no clipped text, nothing under a notch, the centre clear, and the top-right corner and lower
 corners empty. The stills show the game alone, without the host's HUD, so an empty corner is the check.
+
+On the hosted build, the gm-qa journey `hud-clear.json` reaches title, play, won, and lost on a phone with the
+on-screen buttons showing and on a desktop with a gamepad, and asks at each step whether a button covers the HUD,
+the player, or a goal. Name the devices it passed on; never claim every device.
 
 ## Reference
 
