@@ -71,6 +71,7 @@ describe('command registry', () => {
       'packs sync',
       'perf',
       'plan premises',
+      'policy',
       'publish',
       'qa drive',
       'qa look',

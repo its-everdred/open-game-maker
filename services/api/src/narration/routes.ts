@@ -8,6 +8,7 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
+import { requireMeteredDispatch } from '../gameplay/policy.js';
 import { findGame, findGameForFamily } from '../games/games.js';
 import { getNarrationRenderer, NarrationLine } from './render.js';
 
@@ -31,6 +32,7 @@ export default new Hono<ApiBindings>().post('/:gameId/narration/render', async (
     findGame(deps.db, gameId);
   }
 
+  requireMeteredDispatch(c);
   const renderer = getNarrationRenderer(deps);
   if (!renderer) throw new HttpError(503, 'narration_unavailable');
   const { lines } = await parseBody(c, renderBody);

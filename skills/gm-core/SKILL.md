@@ -13,7 +13,8 @@ the build chat instead.
 
 Before coding, write a five-line plan and a short list titled "defaults I'd reach for." Drop each default or justify
 it against the scope. Templates are engine scaffolds, not game designs: do not inherit a theme, entity, HUD, name,
-or mechanic from them.
+or mechanic from them. Play spends no paid API unless `gm policy` says an admin turned it on (default off): bake LLM,
+voice and media content at build time, and never put a provider key in the game; publishing refuses both.
 
 ## Keep the layers honest
 

@@ -11,6 +11,8 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { budgetDefaults } from '../admin/family.js';
 import type { AppDeps } from '../app/types.js';
 import { switchBranchBuild } from '../design/reapply.js';
+import { scanBuild } from '../gameplay/paid-integrations.js';
+import { paidApisDuringGameplay } from '../gameplay/policy.js';
 import { getDesignRuntime } from '../design/routes.js';
 import { resolveBranch, StaleBaseRev } from '../design/store.js';
 import { isTerminal } from '../jobs/state.js';
@@ -100,6 +102,9 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
     if (!creditsDocumentSchema.safeParse(await readJson(join(files, 'credits.json'))).success) {
       throw new PublishFailure('credits_invalid');
     }
+    const integrations = await scanBuild(files);
+    if (integrations.credentials.length > 0) throw new PublishFailure('provider_credential');
+    if (integrations.paid.length > 0 && !paidApisDuringGameplay(deps.db)) throw new PublishFailure('paid_integration');
     const saveSchemaVersion = (manifest.data as Record<string, unknown>).saveSchemaVersion;
     const achievements = await readFile(join(files, 'achievements.json')).catch(() => Buffer.alloc(0));
     const published = await withArtifactMutation(async () => {
