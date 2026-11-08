@@ -21,11 +21,14 @@ test('switches from the selected game to the grid only when the thumbnail row ov
 
   await visit(1);
   const grid = page.locator('.games-grid');
-  const capacity = await grid.evaluate((element) => {
-    const template = getComputedStyle(element).gridTemplateColumns;
-    return template.split(/\s+/).filter(Boolean).length;
-  });
-  expect(capacity).toBeGreaterThan(0);
+  const columns = () =>
+    grid.evaluate((element) => {
+      const template = getComputedStyle(element).gridTemplateColumns;
+      return template.split(/\s+/).filter(Boolean).length;
+    });
+  // The grid can re-render after first paint; a detached node reports no columns.
+  await expect.poll(columns).toBeGreaterThan(0);
+  const capacity = await columns();
   await expect(page.locator('.games-spotlight')).toBeVisible();
   await expect(page.locator('.game-tile')).toHaveCount(1);
   await testInfo.attach(`${testInfo.project.name}-one-game`, {
