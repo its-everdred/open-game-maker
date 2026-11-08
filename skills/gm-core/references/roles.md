@@ -4,8 +4,8 @@ Every game ticket carries `game:<slug>` and one or more `role:*` labels. aiur in
 the start of the ticket (`agent.skills.by_label`), so the labels decide what the worker knows before it reads a file.
 Pick roles by the work the ticket does; a ticket that spans two kinds of work gets both.
 
-This table is the one source: `gm skills config` prints the aiur config from it, the builder writes it into each game
-daemon's config, and `gm plan check` refuses a ticket whose roles are not in it.
+This table is the one source: `gm skills config` prints the aiur config from it, the builder writes its role labels
+into each game daemon's config, and `gm plan check` refuses a ticket whose roles are not in it.
 
 | Label | Work | Mandatory skills |
 |---|---|---|

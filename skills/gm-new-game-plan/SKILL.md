@@ -78,11 +78,12 @@ the resource packs first (`gm assets search`); generation (voices) is samples on
 - **Roles on every ticket.** Each child carries `game:<slug>` and one or more `role:*` labels chosen by its work type
   from `../gm-core/references/roles.md` (a HUD ticket `role:visual`, a combat ticket `role:gameplay`, a ticket that
   does both gets both). aiur inlines each label's mandatory skills when the ticket starts, so a ticket without a role
-  starts without the skills its work needs. Before queueing, run
-  `gm plan check --tickets <file> --game <slug>` with the tickets from
-  `gh issue list --state open --limit 1000 --json number,title,labels`; it exits 1 naming each ticket with no game, no
-  known role or an unknown role. Fix the labels, never the check. The instance's aiur config maps the labels to
-  skills: paste `gm skills config` (run from the instance root) into its `agent.skills`.
+  starts without the skills its work needs. Before queueing, and again after filing more children, run
+  `gm plan check --tickets <file> --game <slug>` on the children you filed (each links the parent:
+  `gh issue list --state open --limit 1000 --search "#<parent> in:body" --json number,title,labels`); other games'
+  tickets are skipped, and it exits 1 naming each ticket with no game, two games, no known role or an unknown role.
+  Fix the labels, never the check. The instance's aiur config maps the labels to skills: paste `gm skills config`
+  (run from the instance root) into its `agent.skills`.
 - Build Order: the parent issue is its root; confirm with `aiur-main build-orders <root>` that every child appears with
   the right edges, then queue the unblocked children (`aiur-main --todo`).
 - Post the plan summary on the parent: architecture sketch, ticket list by lane, prototype set, open decisions.

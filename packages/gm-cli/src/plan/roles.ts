@@ -1,14 +1,14 @@
 /**
  * The role check (`skills/gm-core/references/roles.md`): every game ticket carries exactly one `game:<slug>` label and
  * one or more known `role:*` labels, because those labels decide which skills aiur inlines when the ticket starts.
- * The new-game parent (`request:new-game`) is a planning record, never dispatched, so it is not checked.
+ * The new-game parent (`request:new-game`) is a planning record, never dispatched, so it is not checked. With `game`,
+ * a ticket carrying exactly one other game's label belongs to a sibling game in the same instance repo and is skipped.
  */
 export type LabelledTicket = { number: number; title?: string; labels: string[] };
 
 export type RoleProblem =
   | { kind: 'no_game' }
   | { kind: 'two_games'; labels: string[] }
-  | { kind: 'wrong_game'; label: string; expected: string }
   | { kind: 'no_role' }
   | { kind: 'unknown_role'; label: string };
 
@@ -21,13 +21,12 @@ export function checkRoles(tickets: LabelledTicket[], knownRoles: string[], game
   let checked = 0;
   for (const ticket of tickets) {
     if (ticket.labels.includes(PARENT)) continue;
+    const games = ticket.labels.filter((label) => label.startsWith('game:'));
+    if (game !== undefined && games.length === 1 && games[0] !== `game:${game}`) continue;
     checked += 1;
     const problems: RoleProblem[] = [];
-    const games = ticket.labels.filter((label) => label.startsWith('game:'));
     if (games.length === 0) problems.push({ kind: 'no_game' });
     else if (games.length > 1) problems.push({ kind: 'two_games', labels: games });
-    else if (game !== undefined && games[0] !== `game:${game}`)
-      problems.push({ kind: 'wrong_game', label: games[0]!, expected: `game:${game}` });
     const roles = ticket.labels.filter((label) => label.startsWith('role:'));
     for (const label of roles.filter((role) => !knownRoles.includes(role)))
       problems.push({ kind: 'unknown_role', label });
@@ -43,8 +42,6 @@ export function describeProblem(problem: RoleProblem): string {
       return 'no game:<slug> label';
     case 'two_games':
       return `more than one game label (${problem.labels.join(', ')})`;
-    case 'wrong_game':
-      return `${problem.label} is not ${problem.expected}`;
     case 'no_role':
       return 'no role:* label from gm-core/references/roles.md';
     case 'unknown_role':

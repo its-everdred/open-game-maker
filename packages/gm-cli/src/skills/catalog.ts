@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { readRoles, ROLES_PATH, type Role } from '@ogm/game-repo-template';
+import { readRoles, type Role } from '@ogm/game-repo-template';
 
 import { locateSkillPack } from './pack.js';
 
@@ -15,10 +15,12 @@ export function catalogRoot(cwd: string, skillsDir: string | null): string {
   return existsSync(installed) ? installed : locateSkillPack(cwd, skillsDir);
 }
 
-/** The role table from the installed gm-core when present, else from the platform pack. */
+/**
+ * The role table from the platform skill pack: the same table the builder writes into game daemons' configs, so a
+ * game repo's older installed copy can never pass a role that dispatch does not know.
+ */
 export function rolesFor(cwd: string, skillsDir: string | null): Role[] {
-  const installed = join(cwd, INSTALLED);
-  return readRoles(existsSync(join(installed, ROLES_PATH)) ? installed : locateSkillPack(cwd, skillsDir));
+  return readRoles(locateSkillPack(cwd, skillsDir));
 }
 
 function skillFiles(dir: string): string[] {

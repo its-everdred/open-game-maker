@@ -1,10 +1,11 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { skillsConfig, type GameSkills } from '@ogm/game-repo-template';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { rolesFor } from '../../skills/catalog.js';
+import { recordedSet } from '../../skills/game-lock.js';
 
 // Each `games/<slug>/gm.lock.json` under the instance root, with the set it records (if any).
 function instanceGames(root: string): GameSkills[] {
@@ -13,16 +14,8 @@ function instanceGames(root: string): GameSkills[] {
   return readdirSync(games, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(games, entry.name, 'gm.lock.json')))
     .map((entry) => {
-      const file = join(games, entry.name, 'gm.lock.json');
-      let lock: { set?: unknown };
-      try {
-        lock = JSON.parse(readFileSync(file, 'utf8')) as { set?: unknown };
-      } catch {
-        throw new UsageError(`${file} is not valid JSON`, 'repair the creation lock first');
-      }
-      return typeof lock.set === 'string' && lock.set !== ''
-        ? { slug: entry.name, set: lock.set }
-        : { slug: entry.name };
+      const set = recordedSet(join(games, entry.name));
+      return set ? { slug: entry.name, set } : { slug: entry.name };
     });
 }
 

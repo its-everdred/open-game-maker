@@ -24,13 +24,13 @@ describe('gm plan check', () => {
     expect(result.out).toEqual(['plan ok: 2 tickets carry a game and a role']);
   });
 
-  it('fails a ticket filed without a role, without its game, or with a role that is not in roles.md', async () => {
+  it('fails a ticket filed without a role, without its game, with two games or with a role not in roles.md', async () => {
     const result = await check(
       [
         { number: 4, labels: ['game:blobs'] },
         { number: 5, labels: ['role:audio'] },
         { number: 6, labels: ['game:blobs', 'role:painter'] },
-        { number: 7, labels: ['game:castle', 'role:qa'] },
+        { number: 7, labels: ['game:blobs', 'game:castle', 'role:qa'] },
       ],
       '--game',
       'blobs',
@@ -40,17 +40,44 @@ describe('gm plan check', () => {
       '#4: no role:* label from gm-core/references/roles.md',
       '#5: no game:<slug> label',
       '#6: role:painter is not a role in gm-core/references/roles.md; no role:* label from gm-core/references/roles.md',
-      '#7: game:castle is not game:blobs',
+      '#7: more than one game label (game:blobs, game:castle)',
     ]);
   });
 
-  it('reads the roles from a game repo’s installed gm-core before the platform pack', async () => {
+  it("skips a sibling game's tickets in a shared instance repo when --game names the planned game", async () => {
+    const result = await check(
+      [
+        { number: 8, labels: ['game:blobs', 'role:qa'] },
+        { number: 9, labels: ['game:castle'] },
+      ],
+      '--game',
+      'blobs',
+      '--json',
+    );
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.out[0]!)).toEqual({ checked: 1, failed: [] });
+  });
+
+  it('fails loud when there is nothing to check, so a wrong tickets file never reads as a clean plan', async () => {
+    const result = await check([{ number: 10, labels: ['request:new-game'] }]);
+    expect(result.code).toBe(1);
+    expect(result.err).toEqual(['no tickets to check in issues.json']);
+  });
+
+  it('reads the roles from the platform pack the builder uses, never a game repo’s older installed copy', async () => {
     const root = tempDir('gm-plan-check-');
     mkdirSync(join(root, '.claude/skills/gm-core/references'), { recursive: true });
     writeFileSync(join(root, '.claude/skills/gm-core/references/roles.md'), '| `role:painter` | art | gm-core |\n');
-    writeFileSync(join(root, 'issues.json'), JSON.stringify([{ number: 8, labels: ['game:blobs', 'role:painter'] }]));
-    const result = await gm(['plan', 'check', '--tickets', 'issues.json'], { cwd: root });
-    expect(result.code).toBe(0);
+    writeFileSync(join(root, 'issues.json'), JSON.stringify([{ number: 11, labels: ['game:blobs', 'role:painter'] }]));
+    expect((await gm(['plan', 'check', '--tickets', 'issues.json'], { cwd: root })).code).toBe(1);
+    const pack = join(root, 'pack');
+    mkdirSync(join(pack, 'gm-core/references'), { recursive: true });
+    writeFileSync(join(pack, 'gm-core/references/roles.md'), '| `role:painter` | art | gm-core |\n');
+    const overridden = await gm(['plan', 'check', '--tickets', 'issues.json'], {
+      cwd: root,
+      env: { GM_SKILLS_DIR: pack },
+    });
+    expect(overridden.code).toBe(0);
   });
 });
 
@@ -103,6 +130,8 @@ describe('gm skills search and show', () => {
     expect(result.code).toBe(0);
     expect(result.out[0]).toBe('mandatory for: role:gameplay, role:qa, role:multiplayer');
     expect(result.out[1]).toMatch(/^---\nname: gm-qa\n/);
+    const json = JSON.parse((await gm(['skills', 'show', 'gm-qa', '--json'], {})).out[0]!);
+    expect(json.mandatoryFor).toEqual(['role:gameplay', 'role:qa', 'role:multiplayer']);
   });
 
   it('searches a game repo’s installed skills instead of the platform pack', async () => {

@@ -40,7 +40,7 @@ export const command: GmCommand = {
   example: 'plan check --tickets issues.json --game blobs',
   flags: {
     tickets: { type: 'string', help: 'JSON from gh issue list --json number,title,labels' },
-    game: { type: 'string', help: 'the game slug every ticket must carry as game:<slug>' },
+    game: { type: 'string', help: "check only this game's tickets; another game's tickets are skipped" },
   },
   async run(ctx, _args, flags) {
     const path = typeof flags.tickets === 'string' ? flags.tickets.trim() : '';
@@ -53,6 +53,10 @@ export const command: GmCommand = {
     }));
     const known = rolesFor(ctx.cwd, ctx.skillsDir).map((role) => role.label);
     const report = checkRoles(tickets, known, game);
+    if (report.checked === 0) {
+      ctx.err(`no tickets to check in ${path}${game ? ` for game:${game}` : ''}`);
+      return EXIT.failed;
+    }
     if (ctx.json) ctx.out(JSON.stringify(report));
     else if (report.failed.length === 0) ctx.out(`plan ok: ${report.checked} tickets carry a game and a role`);
     else

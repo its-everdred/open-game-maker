@@ -88,14 +88,12 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm changes` summarizes the current game-repo diff.
 - `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 - `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.
-- `gm skills search <words>` finds an on-demand skill; `gm skills show <name>` prints it. The skills your ticket's
-  `role:*` labels make mandatory (`references/roles.md`) are already inlined; search is for the rest.
 
 ## Load when…
 
 | Skill | Load when… |
 |---|---|
-| gm-core | Starting or resuming any Game Maker build. |
+| gm-core | Starting or resuming any Game Maker build. Your `role:*` labels inlined the rest (`references/roles.md`); find others with `gm skills search <words>`, `gm skills show <name>`. |
 | gm-asset-showcase | Building or verifying a pre-rendered asset-set showcase. |
 | gm-asset-variants | Recolouring a model, attaching a prop to a rig joint, or making any variant of a library asset. |
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
