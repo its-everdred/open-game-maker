@@ -1,6 +1,6 @@
 ---
 name: gm-new-game-plan
-description: Load as the Executor when a new-game parent issue (label request:new-game) arrives with a design spec. Architects the whole game, cuts parallel tickets with shallow dependencies, files them with features, epics and an aiur Build Order, plans the game as a ladder of playable prototypes and staged domain decisions, and keeps re-planning as decisions change.
+description: Load as the Executor when a new-game parent issue (label request:new-game) arrives with a design spec. Architects the whole game, cuts parallel tickets with shallow dependencies, files them with features, epics and an aiur Build Order, plans the game as a five-stage prototype ladder (concepts, dioramas, rendered gameplay clips, real gameplay, iterations) with a creator review at each stage, and keeps re-planning as decisions change.
 ---
 
 # New-game planning (Executor)
@@ -27,7 +27,7 @@ this section adds what is specific to games.
    (every screen, transition, back path and multiplayer addition), each screen node carrying its target image, and
    get the creator's answers on its open choices: `references/flow-diagram.md`, template `references/flow-template.md`.
    Screen and gameplay tickets cite their node; until it is approved they may be cut but wait on its approval Command
-   (visuals-track stages do not).
+   (stage 1 concept tickets do not).
 3. **Skeleton ticket first.** One small ticket creates the folder, the template, the system stubs with their
    interfaces, data formats and test hooks, so every later ticket edits its own files.
 4. **Cut tickets by ownership.** Each ticket owns a clear set of files and one outcome a player can see or a test can
@@ -36,24 +36,26 @@ this section adds what is specific to games.
    count: as many as the game needs, each completable by one agent in a few hours.
 5. **Shallow dependencies.** Aim for depth 2–3: skeleton → parallel systems and content → integration and polish.
    Depend on interfaces, not on finished features. Avoid two tickets editing the same file.
-6. **A prototype ladder, not a one-shot build.** Plan the game as gameplay rungs (P1..Pn, each a playable link with
-   scenarios that proves one thing) and domain tracks (visuals, characters, audio) that climb stages, each stage ending
-   in a creator Command with media: read `references/prototype-ladder.md`. One ticket per stage per track, one or two
-   per rung; stage n+1 is gated on stage n's decision. P1 and the first stage of each track are priority 1. A rung is a
-   feedback chance, never a gate: keep building whether or not the player plays it.
+6. **A prototype ladder, not a one-shot build.** Every game climbs five stages per feature, in order, each ending in a
+   creator review Command with media: 1 concepts, 2 dioramas, 3 rendered gameplay clips, 4 video to real gameplay,
+   5 gameplay iterations (`references/prototype-ladder.md`). Write the plan from `references/build-order-template.md`
+   into `games/<name>/design/ladder.md` (worked example `references/examples/blobs-ladder.md`) and check it with
+   `scripts/check-ladder.ts`. One ticket per stage per feature, stamped with that stage's roles; stage n+1 is gated on
+   stage n's review for that feature, and a rejection loops back within the stage. Each stage's approved output is the
+   next one's acceptance target. Stage 1 tickets are priority 1.
 7. **Questions as tickets' blockers.** A ticket that needs an open decision depends on that Command; everything else
    starts now. Content tickets that need a creative choice (music direction, character look) open their own option
    Commands with samples (see the design skill's question protocol). A gameplay-feel question (speed, chain pause,
    controls) gives each option a playable slice (`gm decide --playable <id>=<scenario query>`), never a link, and the
    question is one short line.
 
-## Always an audio track
+## Always audio from stage 1
 
-Every new game gets the ladder's audio track from the start (stage tickets worked with `gm-audio`, `gm-voiceover` and
-`gm-image-mock`): soundtrack (3–4 background-music styles) can go out on day one; sound effects (2–3 juicy sets) and
-an announcer (short callouts such as "Nice one!") wait for a rung with the core actions and are shown synced on a
-gameplay capture; character voices belong to the characters track (expressive, never monotone). Options come from
-the resource packs first (`gm assets search`); generation (voices) is samples only until the creator picks.
+Every new game's stage 1 includes audio concepts from the start (worked with `gm-audio` and `gm-voiceover`): 3–4
+background-music styles, 2–3 juicy sound-effect sets, an announcer (short callouts such as "Nice one!") and character
+voices (expressive, never monotone). The picks are laid on the stage 3 clips, synced to the events, and wired into the
+stage 4 slices. Options come from the resource packs first (`gm assets search`); generation (voices) is samples only
+until the creator picks.
 
 ## Evidence and review states
 
@@ -99,7 +101,7 @@ tickets rewritten for a weaker implementer). Game specifics on top of it:
 - Research docs go to `games/<name>/docs/research/<ticket>.md` and woven specs to `games/<name>/docs/spec/<area>.md`;
   private detail stays in the game's private context and is referenced, never copied.
 - Ladder stage tickets are deep-dived when the decision they build on exists, not before (`references/prototype-ladder.md`,
-  Tickets); rungs and first stages are researched up front.
+  Tickets); stage 1 tickets are researched up front.
 - Give each research agent the game skills its lane needs (a biome ticket gets the set and asset skills, a combat ticket
   gets input and effects skills), and the rest by name only.
 
@@ -111,7 +113,8 @@ tickets rewritten for a weaker implementer). Game specifics on top of it:
   Answers that reach beyond the asking ticket, the pair-confirm pattern and the premise sweep:
   `references/answer-routing.md`.
 - Schedule with the instance's normal limits and queue; small edits to other games may jump ahead of a large build.
-- When a rung merges, tell the player its play link and scenarios are ready (never open the game for them).
+- When a stage 4 or 5 slice merges, tell the player its play link and scenarios are ready (never open the game for
+  them).
 
 ## Done
 

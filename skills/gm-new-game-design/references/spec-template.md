@@ -64,10 +64,11 @@ sees, and how to tell it works. Unknowns go in "Open questions and defaults", ne
 - Saves (what persists):
 
 ## 13. Prototype ladder (built first; see gm-new-game-plan/references/prototype-ladder.md)
-- Rungs P1..Pn: what each proves (one question each) and the scenarios the creator opens to try it:
-- Its content (one level, one enemy type, ...):
-- Acceptance per rung (observable):
-- Track directions known so far (visuals, characters, audio); their stages decide the rest:
+- Features the creator reviews (screens and moments, each with its flow node); each climbs the five stages: concepts,
+  dioramas, rendered gameplay clips, real gameplay, iterations:
+- Per feature, the moments its clips show and the scenarios its playable slice opens:
+- Knobs worth a gameplay iteration (feel, speed, difficulty, modes):
+- Directions known so far (looks, characters, music, sound effects, voices); stage 1 concepts decide the rest:
 
 ## 14. Full-game acceptance criteria
 - Observable checks for the complete game (player can ..., on phone and desktop):
