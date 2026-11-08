@@ -98,7 +98,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-image-mock | Any visual design review: step 1 is generated mocks of the player screen in the kit, before dioramas. |
 | gm-scope-options | Turning a vague brief into distinct creator-facing options. |
 | gm-new-game-design | Scoping a new game from the New Game flow with the player. |
-| gm-new-game-plan | Executor: turning a new-game spec into tickets, epics and a Build Order. |
+| gm-new-game-plan | Executor: turning a new-game spec into a prototype ladder of staged tickets and a Build Order. |
 | gm-editor-tuning | Exposing safe creator-tunable values. |
 | gm-repair | Repairing a failed build or verification gate. |
 | gm-set-<set> | Using a set's adapter named by `gm.lock.json`. |
