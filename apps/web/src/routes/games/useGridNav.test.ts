@@ -67,4 +67,29 @@ describe('useGridNav', () => {
     act(() => result.current.onKeyDown(key('Escape')));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it('focuses the selected tile on arrival without scrolling, then scrolls to later tiles', () => {
+    const container = document.createElement('div');
+    container.innerHTML = '<button class="game-tile"></button><button class="game-tile"></button>';
+    document.body.append(container);
+    const tiles = [...container.querySelectorAll<HTMLButtonElement>('.game-tile')];
+    const focus = tiles.map((tile) => vi.spyOn(tile, 'focus'));
+    const { result } = renderHook(() =>
+      useGridNav({
+        count: 2,
+        selectedIndex: 0,
+        columns: () => 2,
+        onSelect: vi.fn(),
+        onOpen: vi.fn(),
+        onClose: vi.fn(),
+        containerRef: { current: container },
+      }),
+    );
+
+    // a short phone screen: scrolling to the tile carried the spotlight's first decision off the top (#629)
+    expect(focus[0]).toHaveBeenCalledWith({ preventScroll: true });
+    act(() => result.current.onKeyDown(key('ArrowRight')));
+    expect(focus[1]).toHaveBeenCalledWith({ preventScroll: false });
+    container.remove();
+  });
 });

@@ -1,5 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { request } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +10,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { HarnessSnapshot } from './multi-client/harness.ts';
 import {
+  avatarX,
   bandsFor,
+  gamesServer,
+  hasAvatars,
   judgeSeat,
   LIMITS,
   MULTI_UNCHECKED,
@@ -162,6 +167,87 @@ describe('profileFor', () => {
 });
 
 const REPLAY_FIXTURE = fileURLToPath(new URL('../fixtures/link/seed-1234.json', import.meta.url));
+
+describe('the scenario games server', () => {
+  /* What `vite build` leaves for a game whose assets were built: `public/assets` and `public/a` copied into dist. */
+  async function serveBuild(): Promise<{
+    get: (path: string) => Promise<number>;
+    raw: (path: string) => Promise<number>;
+    close: () => Promise<void>;
+  }> {
+    const root = mkdtempSync(join(tmpdir(), 'gm-games-server-'));
+    const dist = join(root, 'dist');
+    mkdirSync(dist);
+    writeFileSync(join(root, 'outside.txt'), 'not part of the build');
+    mkdirSync(join(dist, 'assets'));
+    mkdirSync(join(dist, 'a'));
+    writeFileSync(join(dist, 'index.html'), '<!doctype html>');
+    writeFileSync(join(dist, 'assets', 'manifest.json'), '{}');
+    writeFileSync(join(dist, 'assets', 'index-abc.js'), '');
+    writeFileSync(join(dist, 'a', 'mossbeard.0f1e2d.glb'), 'glb');
+    const server = gamesServer(dist);
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    const { port } = server.address() as AddressInfo;
+    return {
+      get: async (path) => (await fetch(`http://127.0.0.1:${port}${path}`)).status,
+      /* fetch normalises `..` away; a raw request puts it on the wire as written. */
+      raw: (path) =>
+        new Promise((done, fail) => {
+          request({ host: '127.0.0.1', port, path }, (response) => {
+            response.resume();
+            done(response.statusCode ?? 0);
+          })
+            .on('error', fail)
+            .end();
+        }),
+      close: async () => {
+        await new Promise((done) => server.close(done));
+        rmSync(root, { recursive: true, force: true });
+      },
+    };
+  }
+
+  it('serves a real game: its page, the manifest beside the build and the blobs the manifest names', async () => {
+    const games = await serveBuild();
+    try {
+      expect(await games.get('/g/multi-client/b1/index.html')).toBe(200);
+      expect(await games.get('/g/multi-client/b2/index.html')).toBe(200);
+      expect(await games.get('/g/multi-client/b1/assets/manifest.json')).toBe(200);
+      expect(await games.get('/assets/index-abc.js')).toBe(200);
+      expect(await games.get('/a/mossbeard.0f1e2d.glb')).toBe(200);
+    } finally {
+      await games.close();
+    }
+  });
+
+  it('serves no other build, no directory and nothing outside the build', async () => {
+    const games = await serveBuild();
+    try {
+      expect(await games.get('/g/multi-client/b3/index.html')).toBe(404);
+      expect(await games.get('/g/multi-client/b1/assets')).toBe(404);
+      expect(await games.raw('/a/../../outside.txt')).toBe(404);
+      expect(await games.get('/a/missing.glb')).toBe(404);
+    } finally {
+      await games.close();
+    }
+  });
+});
+
+describe('step 5 and games without avatars', () => {
+  const text = (entities: Record<string, { playerIndex?: number; p?: number[] }>) => ({ state: { entities } });
+
+  it('reads the x of the avatar a seat drives', () => {
+    const avatars = text({ a: { playerIndex: 0, p: [10, 0] }, b: { playerIndex: 2, p: [40, 5] } });
+    expect(hasAvatars(avatars)).toBe(true);
+    expect(avatarX(avatars, 2)).toBe(40);
+    expect(avatarX(avatars, 1)).toBeUndefined();
+  });
+
+  it('finds no avatars in a board game, so step 5 is named unchecked instead of timing out', () => {
+    expect(hasAvatars(text({ board: { p: [0, 0] }, piece: {} }))).toBe(false);
+    expect(hasAvatars({})).toBe(false);
+  });
+});
 
 describe.skipIf(!enabled)('multi-client scenario (OGM_SCENARIOS=1)', () => {
   it('runs the eight §3.8 steps on a bad link and writes a four-seat report', async () => {
