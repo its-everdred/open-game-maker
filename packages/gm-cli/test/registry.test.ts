@@ -45,6 +45,7 @@ describe('command registry', () => {
       'assets sheet',
       'assets unused',
       'assets use',
+      'assets variant',
       'assets vendor',
       'assets why',
       'build',

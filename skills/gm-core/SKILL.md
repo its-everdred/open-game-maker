@@ -77,8 +77,8 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 ## `gm` cheat sheet
 
 - `gm assets search|facets|info` finds and inspects candidate cards.
-- `gm assets sheet` makes the labelled lineup; `gm assets use|vendor|register|list|unused|why` records choices and derivatives;
-  record an asset with `gm assets use` as soon as the code names it (the build fails on an unlisted id).
+- `gm assets sheet` makes the labelled lineup; `gm assets use|vendor|register|variant|list|unused|why` records choices
+  and derivatives; record an asset with `gm assets use` as soon as the code names it (the build fails on an unlisted id).
 - `gm maps search` finds map sources; `gm build assets` builds the selected asset manifest.
 - `gm check`, `gm test`, and `gm run` are the definition-of-done gates.
 - `gm shot` captures evidence; `gm perf` checks frame and resource budgets.
@@ -95,6 +95,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 |---|---|
 | gm-core | Starting or resuming any Game Maker build. |
 | gm-asset-showcase | Building or verifying a pre-rendered asset-set showcase. |
+| gm-asset-variants | Recolouring a model, attaching a prop to a rig joint, or making any variant of a library asset. |
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
 | gm-voiceover | Making a short consented local voice draft and caption timing. |
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |
