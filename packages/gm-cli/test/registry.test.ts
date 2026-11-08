@@ -62,6 +62,7 @@ describe('command registry', () => {
       'energy',
       'instance init',
       'look check',
+      'look evidence',
       'look sheet',
       'maps index',
       'maps search',

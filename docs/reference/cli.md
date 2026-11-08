@@ -39,6 +39,7 @@ gm test [--inputs <script.json>] [--ticks <count>] [--serve <dir>] [--out <dir>]
 gm run [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
 gm look sheet <screen> --still <png> [--target <png>]
 gm look check [--json]
+gm look evidence --body <file> [--json]
 ```
 
 `gm check` runs TypeScript, deterministic simulation-source, test-hook, and registered asset gates. Use `static` or
@@ -67,7 +68,7 @@ for the game build from `./dist`. `--frame bare` captures the game page alone, a
 
 `gm look check` gates the PR on the vision look requests (`gm-image-mock`, `request-mock.py --kind look`), which log
 each answer or broker error to `.gm-mock/looks.jsonl` with the git blob id of every image they judged. It judges each
-`tN.png` still committed at HEAD in the game folder, or, when none is committed (an instance repository ignores
+`tN.png` still committed at HEAD in the game folder (outside `review/`, which holds PR evidence), or, when none is committed (an instance repository ignores
 `*.png`), each `tN.png` rendered there. The newest look on exactly those bytes decides: its answer's last line must be
 `VERDICT: pass`. A `VERDICT: fail`, an answer that does not end in a verdict, no look on those bytes, or no stills at all
 exits 1. A broker error or timeout (for example a 402) is reported as `blocked` and also exits 1; it is never a pass.
@@ -76,6 +77,11 @@ A game records the render the creator approved for each screen in `review/decisi
 (`{"screens": {"select": {"target": "review/mock-matrix/select.png"}}}`). `gm look sheet <screen> --still <png>` puts the
 still beside that target (`--target` overrides it) at one height in `look/<screen>.sheet.png`, and `gm look check`
 judges every such sheet like a still: a screen with no sheet, or whose sheet's newest look reads a mismatch, exits 1.
+
+`gm look evidence --body <file>` reads a pull request body and exits 1 when it links a sheet, still or clip
+(`.png`, `.jpg`, `.gif`, `.webp`, `.mp4`, `.webm`) that is not committed at HEAD, from the repository root or the game
+folder, as a regular file (a symlink does not count). A worker's `assets-local/` and `shots/` are deleted after merge, so
+evidence goes in `review/<ticket>/` in the game folder. URLs are not checked.
 
 ## Refresh the skill pack
 

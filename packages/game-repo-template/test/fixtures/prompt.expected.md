@@ -37,4 +37,5 @@ The hero jumps twice.
 - After every `gm run`, post a still to the build chat with `gm chat post`.
 - Done means `gm check`, `gm test` and `gm run` are green.
 - Before opening or updating the pull request, run `gm look check`; it must pass. If it reports `blocked`, the look broker failed: do not open the pull request, and report the work as blocked in the workpad, never as a pass.
+- Commit every sheet, still and clip the pull request links under `review/12/` in the game folder and link those committed paths: files left in `assets-local/` or `shots/` are deleted with the workspace. Write the body to a file and run `gm look evidence --body <file>` before opening or updating the pull request; it must pass.
 - Open the pull request with `Closes #12` as its first line and a `## Local tests` section listing each command you ran and its result.
