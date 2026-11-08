@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -169,8 +170,15 @@ const REPLAY_FIXTURE = fileURLToPath(new URL('../fixtures/link/seed-1234.json', 
 
 describe('the scenario games server', () => {
   /* What `vite build` leaves for a game whose assets were built: `public/assets` and `public/a` copied into dist. */
-  async function serveBuild(): Promise<{ get: (path: string) => Promise<number>; close: () => Promise<void> }> {
-    const dist = mkdtempSync(join(tmpdir(), 'gm-games-server-'));
+  async function serveBuild(): Promise<{
+    get: (path: string) => Promise<number>;
+    raw: (path: string) => Promise<number>;
+    close: () => Promise<void>;
+  }> {
+    const root = mkdtempSync(join(tmpdir(), 'gm-games-server-'));
+    const dist = join(root, 'dist');
+    mkdirSync(dist);
+    writeFileSync(join(root, 'outside.txt'), 'not part of the build');
     mkdirSync(join(dist, 'assets'));
     mkdirSync(join(dist, 'a'));
     writeFileSync(join(dist, 'index.html'), '<!doctype html>');
@@ -182,9 +190,19 @@ describe('the scenario games server', () => {
     const { port } = server.address() as AddressInfo;
     return {
       get: async (path) => (await fetch(`http://127.0.0.1:${port}${path}`)).status,
+      /* fetch normalises `..` away; a raw request puts it on the wire as written. */
+      raw: (path) =>
+        new Promise((done, fail) => {
+          request({ host: '127.0.0.1', port, path }, (response) => {
+            response.resume();
+            done(response.statusCode ?? 0);
+          })
+            .on('error', fail)
+            .end();
+        }),
       close: async () => {
         await new Promise((done) => server.close(done));
-        rmSync(dist, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
       },
     };
   }
@@ -207,7 +225,7 @@ describe('the scenario games server', () => {
     try {
       expect(await games.get('/g/multi-client/b3/index.html')).toBe(404);
       expect(await games.get('/g/multi-client/b1/assets')).toBe(404);
-      expect(await games.get('/a/%2e%2e/index.html')).toBe(404);
+      expect(await games.raw('/a/../../outside.txt')).toBe(404);
       expect(await games.get('/a/missing.glb')).toBe(404);
     } finally {
       await games.close();

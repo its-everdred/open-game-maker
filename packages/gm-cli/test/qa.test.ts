@@ -78,7 +78,8 @@ describe('gm qa usage', () => {
 
   it('says --local is core-only from a game instance instead of letting Node refuse the scenario', () => {
     /* An instance installs gm-verify from its vendored tarball; Node will not strip types under node_modules. */
-    const vendored = '/srv/blobs/node_modules/.pnpm/@ogm+gm-verify@file+vendor/node_modules/@ogm/gm-verify/scenarios/scenario.ts';
+    const vendored =
+      '/srv/blobs/node_modules/.pnpm/@ogm+gm-verify@file+vendor/node_modules/@ogm/gm-verify/scenarios/scenario.ts';
     expect(localRoomBlocker(vendored)).toBe(
       '--local runs only from an Open Game Maker core checkout, not a game instance',
     );

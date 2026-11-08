@@ -659,7 +659,12 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     await shoot(4);
 
     log('5 each peer moves its own avatar; the primary never moves');
-    const avatars = hasAvatars(await gameText(clients[0]!.page));
+    /* Avatars may spawn a moment after playing; only a game that still has none is named unchecked. */
+    let avatars = false;
+    for (const giveUpAt = Date.now() + 2_000; !avatars && Date.now() < giveUpAt;) {
+      avatars = hasAvatars(await gameText(clients[0]!.page));
+      if (!avatars) await clients[0]!.page.waitForTimeout(100);
+    }
     if (!avatars) unchecked.push('peer avatar moves (the game has no playerIndex entities)');
     for (const playerIndex of avatars ? [1, 2, 3] : []) {
       const primaryBefore = await playerX(clients[0]!.page, playerIndex);
