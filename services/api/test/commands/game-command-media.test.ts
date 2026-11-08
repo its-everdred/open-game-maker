@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import type { AiurClient, Decision, DecisionMedia, DecisionMediaFile } from '@ogm/aiur-client';
+import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -77,7 +78,7 @@ const decision = (options: Decision['options']): Decision => ({
   question: 'How should the blobs rest?',
   options,
   recommendation: null,
-  context: { short_summary: 'Blobs staging' },
+  context: { short_summary: 'Blobs staging', long_context_markdown: CREATOR_AUDIENCE_MARKER },
   answer: null,
   active_answer: null,
   created_at: AT,

@@ -42,6 +42,14 @@ describe('gm skill pack', () => {
     expect(text).toContain('the second game on the same set');
     expect(text).toContain('the second set or dimension');
     expect(text).toContain('write the rule once in L3 before promoting it');
+    // Kevin (2026-11-08): agents ask the creator product questions as they appear, never engineering ones.
+    const prose = text.replace(/\s+/g, ' ');
+    expect(prose).toContain("**Ask, don't assume.**");
+    expect(prose).toContain('gm decide');
+    expect(prose).toContain('2-5 word `--topic`');
+    expect(prose).toContain('design/decisions.json');
+    expect(prose).toContain('never go to the creator');
+    expect(text).not.toContain('Needs Kevin');
     expect(text).not.toMatch(/assets-local|scripts\/assets|meta-improve|claude\.ai|sprite-forge|landing-page/i);
   });
 
