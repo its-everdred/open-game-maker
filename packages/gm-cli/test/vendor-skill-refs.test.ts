@@ -7,8 +7,10 @@ import { describe, expect, it } from 'vitest';
 const SKILLS = fileURLToPath(new URL('../../../skills/', import.meta.url));
 const read = (path: string) => readFileSync(join(SKILLS, path), 'utf8');
 // Workers only open a vendored skill the prompt names exactly; a bare `vendor/threejs` was loaded almost never (#658).
-const exactRefs = (text: string) => [...text.matchAll(/`(vendor\/[a-z]+\/[a-z0-9-]+\/SKILL\.md)`/gu)].map((m) => m[1]!);
-const bareRefs = (text: string) => [...text.matchAll(/`(vendor\/[a-z0-9/-]+)`/gu)].map((m) => m[1]!);
+const exactRefs = (text: string) =>
+  [...text.matchAll(/`(?:\.claude\/skills\/)?(vendor\/[a-z]+\/[a-z0-9-]+\/SKILL\.md)`/gu)].map((m) => m[1]!);
+const bareRefs = (text: string) =>
+  [...text.matchAll(/`(?:\.claude\/skills\/)?(vendor\/[a-z0-9/-]+)`/gu)].map((m) => m[1]!);
 
 function roleSection(roles: string, role: string): string {
   const start = roles.indexOf(`### ${role}\n`);
@@ -41,7 +43,7 @@ describe('recommended vendored skills', () => {
       expect(refs, role).toEqual(expect.arrayContaining(skills.map((skill) => `vendor/${skill}/SKILL.md`)));
     }
     for (const ref of exactRefs(roles)) expect(existsSync(join(SKILLS, ref)), ref).toBe(true);
-    expect(read('gm-core/SKILL.md')).toContain('references/roles.md');
+    expect(read('gm-core/SKILL.md')).toContain('`.claude/skills/gm-core/references/roles.md`');
   });
 
   it('has gm-3d, gm-ui-hud, gm-verify and gm-set-kaykit name exact, existing vendored skills', () => {

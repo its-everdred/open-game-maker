@@ -54,6 +54,15 @@ function makePack(): string {
   return root;
 }
 
+function lstatExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sha(file: string): string {
   return createHash('sha256').update(readFileSync(file)).digest('hex');
 }
@@ -106,6 +115,30 @@ describe('gm skills sync', () => {
       code: 0,
       out: ['skills up to date'],
       err: [],
+    });
+  });
+
+  it('retargets the links of a vendored skill that moved sets and removes them when it leaves the pack', async () => {
+    const pack = makePack();
+    const repo = tempDir('gm-game-');
+    await gm(['skills', 'sync'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
+
+    write(pack, 'vendor/gamedev/cameras/SKILL.md', '---\nname: cameras\n---\ncameras moved\n');
+    rmSync(join(pack, 'vendor/phaser'), { recursive: true });
+    const moved = await gm(['skills', 'sync'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
+
+    expect(moved.out.filter((line) => line.startsWith('kept local edit'))).toEqual([]);
+    expect(readlinkSync(join(repo, '.claude/skills/cameras'))).toBe('vendor/gamedev/cameras');
+    expect(readlinkSync(join(repo, '.codex/skills/cameras'))).toBe('../../.claude/skills/vendor/gamedev/cameras');
+    expect(readFileSync(join(repo, '.agents/skills/cameras/SKILL.md'), 'utf8')).toContain('cameras moved');
+
+    rmSync(join(pack, 'vendor/gamedev'), { recursive: true });
+    await gm(['skills', 'sync'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
+
+    expect(lstatExists(join(repo, '.claude/skills/cameras'))).toBe(false);
+    expect(statSync(join(repo, '.claude/skills/gm-core/SKILL.md')).isFile()).toBe(true);
+    expect(await gm(['skills', 'sync', '--check'], { cwd: repo, env: { GM_SKILLS_DIR: pack } })).toMatchObject({
+      code: 0,
     });
   });
 

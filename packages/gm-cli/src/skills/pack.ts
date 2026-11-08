@@ -370,8 +370,20 @@ function installLinks(
       const path = join(parent, skill.name);
       const canonical = join(repoDir, '.claude', 'skills', skill.target);
       const expected = slash(relative(parent, canonical));
-      const exists = lstatExists(path);
+      let exists = lstatExists(path);
       if (exists && lstatSync(path).isSymbolicLink() && readlinkSync(path) === expected && existsSync(path)) continue;
+      // A skill the pack moved (say, to another vendor set) keeps its name: retarget the link this tool made for it.
+      const previous = oldSkills.find(({ name }) => name === skill.name);
+      if (
+        exists &&
+        previous &&
+        previous.target !== skill.target &&
+        lstatSync(path).isSymbolicLink() &&
+        readlinkSync(path) === slash(relative(parent, join(repoDir, '.claude', 'skills', previous.target)))
+      ) {
+        rmSync(path, { force: true });
+        exists = false;
+      }
       if (
         exists &&
         !lstatSync(path).isSymbolicLink() &&

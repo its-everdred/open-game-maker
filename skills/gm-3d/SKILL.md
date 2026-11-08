@@ -8,7 +8,7 @@ description: Author and verify rights-cleared 3D assets offline with Blender, th
 Use Blender for offline mesh, material, rig, animation, GLB, still, and turntable work. Do not rebuild offline authoring
 inside Three.js or put game rules in a Blender script. For the runtime step, load its skill:
 
-| Runtime step | Skill |
+| Runtime step | Skill, under `.claude/skills/` |
 |---|---|
 | lighting and shadows | `vendor/threejs/threejs-lighting/SKILL.md` |
 | materials | `vendor/threejs/threejs-materials/SKILL.md` |
