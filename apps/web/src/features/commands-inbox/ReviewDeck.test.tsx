@@ -414,6 +414,26 @@ describe('ReviewDeck', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open Mock two full screen' }));
     expect(screen.getByRole('dialog', { name: 'Mock two' })).toBeVisible();
   });
+
+  // An aiur Command's clip may come with no poster (#611): its grid thumbnail is the clip itself, never an image tag
+  // pointing at an mp4, which draws as a broken picture.
+  it('shows a poster-less clip in the ending grid as a clip', () => {
+    const command = imageCommand({ pick: 'many' });
+    command.options[0] = {
+      id: 'm1',
+      label: 'Mock one',
+      media: { url: 'https://media.example.test/m1.mp4', width: 320, height: 300, duration_ms: 1000, kind: 'video' },
+    };
+    renderDeck(command);
+
+    for (const label of ['Like', 'Like', 'Like']) {
+      fireEvent.click(screen.getByRole('button', { name: label }));
+    }
+
+    const likes = screen.getByRole('list', { name: 'Likes' });
+    expect(likes.querySelector('video')).toHaveAttribute('src', 'https://media.example.test/m1.mp4');
+    expect(likes.querySelectorAll('img')).toHaveLength(2);
+  });
 });
 
 // Three cards carrying stills of different shapes, so the whole-sample checks have something that would crop.

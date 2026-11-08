@@ -6,6 +6,7 @@ import { reviewPath } from '@ogm/contracts/browser';
 import { Icon } from '../../components/Icon';
 import { AiurCommands, gameScope, type AiurCommandAnswer } from '../aiur/embed';
 import { answerCommand, useGameCommands } from './commands';
+import { mediaKindOf, withoutLinks } from './review';
 import { isReviewDeck } from './ReviewDeck';
 import { ReviewRowLink } from './ReviewRows';
 import './commands-inbox.css';
@@ -63,11 +64,11 @@ export function CommandsInbox({
                 <ReviewRowLink command={command} href={deckHref(gameId, slug, command)} />
               ) : (
                 <>
-                  <p className="commands-inbox-question">{command.question}</p>
+                  <p className="commands-inbox-question">{withoutLinks(command.question)}</p>
                   <div className="build-chat-options">
                     {command.options.map((option) => (
                       <button
-                        aria-label={option.label}
+                        aria-label={withoutLinks(option.label)}
                         className="build-chat-option"
                         disabled={answering !== undefined}
                         key={option.id}
@@ -76,7 +77,7 @@ export function CommandsInbox({
                       >
                         {option.media && (
                           <span className="checkpoint-option-media" aria-hidden="true">
-                            {option.media.duration_ms === undefined ? (
+                            {mediaKindOf(option.media) === 'image' ? (
                               <img alt="" src={option.media.url} />
                             ) : (
                               <video
@@ -89,7 +90,7 @@ export function CommandsInbox({
                             )}
                           </span>
                         )}
-                        <span className="checkpoint-option-label">{option.label}</span>
+                        <span className="checkpoint-option-label">{withoutLinks(option.label)}</span>
                         {option.id === command.recommend && (
                           <span className="checkpoint-recommended">Builder&apos;s pick</span>
                         )}

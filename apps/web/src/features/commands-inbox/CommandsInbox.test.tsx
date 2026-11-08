@@ -145,6 +145,26 @@ describe('CommandsInbox', () => {
     );
   });
 
+  // A Command with media on only some options keeps the plain list (#611). An aiur clip may carry no duration and no
+  // poster; it is still a clip, never an image tag pointing at an mp4.
+  it('shows an aiur clip in the option list as a clip', async () => {
+    const command = commandFixture({ job_id: null, checkpoint_id: 'd_1', decision_id: 'd_1' });
+    command.options = [
+      {
+        id: 'roll',
+        label: 'Roll across the floor',
+        media: { url: 'https://api.example.test/blobs/sha256/roll', width: 64, height: 48, kind: 'video' },
+      },
+      { id: 'flat', label: 'Lie flat' },
+    ];
+    commands = [command];
+    renderInbox();
+
+    const option = await screen.findByRole('button', { name: 'Roll across the floor' });
+    expect(option.querySelector('video')).toHaveAttribute('src', 'https://api.example.test/blobs/sha256/roll');
+    expect(option.querySelector('img')).toBeNull();
+  });
+
   it('leaves the Command in place when the answer is refused', async () => {
     answerStatus = 409;
     renderInbox();

@@ -5,6 +5,7 @@ import { JOB_STAGE_WORDS, type Job } from '@ogm/contracts/browser';
 
 import { Icon } from '../components/Icon';
 import { BugButton } from '../features/bug-report';
+import { EnergyButton, EnergyDetail } from '../features/energy/EnergyButton';
 import { JobConversationModal } from '../features/build-chat/JobConversationModal';
 import { openConversation } from '../features/build-chat/conversation';
 import { resetReviewDrafts } from '../features/commands-inbox/drafts';
@@ -33,6 +34,7 @@ export function StudioMenu() {
   const [announcement, setAnnouncement] = useState('');
   const [buildClock, setBuildClock] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
+  const [energyOpen, setEnergyOpen] = useState(false);
   const game = matchPath('/g/:gameId/*', location.pathname);
   const gameId = game?.params.gameId;
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
@@ -204,6 +206,7 @@ export function StudioMenu() {
 
           {session ? (
             <div className="studio-menu-actions">
+              <EnergyButton open={energyOpen} onToggle={() => setEnergyOpen((current) => !current)} />
               <MenuLink label="Credits" icon="credits" to="/settings/credits" close={close} />
               <button
                 type="button"
@@ -219,6 +222,7 @@ export function StudioMenu() {
               ) : null}
             </div>
           ) : null}
+          {session && energyOpen ? <EnergyDetail close={close} /> : null}
         </div>
       ) : null}
       <JobConversationModal />

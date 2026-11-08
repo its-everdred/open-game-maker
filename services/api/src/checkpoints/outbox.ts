@@ -19,7 +19,11 @@ export async function handle(line: AgentOutboxLine, ctx: OutboxContext): Promise
       mediaId: option.media_id,
       reason: media === null ? 'media_unknown' : 'job_mismatch',
     });
-    return { id: option.id, label: option.label };
+    return {
+      id: option.id,
+      label: option.label,
+      ...(option.playable === undefined ? {} : { playable: option.playable }),
+    };
   });
   const checkpoint: StoredCheckpoint = {
     checkpoint_id: payload.checkpoint_id,

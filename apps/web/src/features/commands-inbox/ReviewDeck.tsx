@@ -6,7 +6,8 @@ import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
 import { answerCommand } from './commands';
 import { markSent, useDeckDraft } from './drafts';
-import { answerOf, clipLength, deckCards, deckFinished, letterOf, mediaKindOf, reviewOf } from './review';
+import { answerOf, clipLength, deckCards, deckFinished, letterOf, mediaKindOf, reviewOf, withoutLinks } from './review';
+import { PlayableCard } from './playable';
 import { VoiceNote, type DictationPort } from './voice-note';
 import './review-deck.css';
 import './review-glass.css';
@@ -105,7 +106,7 @@ export function ReviewDeck({
     const target = cards.find(({ id }) => id === state.reason!.optionId);
     return (
       <ReasonSheet
-        label={target?.label ?? ''}
+        label={withoutLinks(target?.label ?? '')}
         text={state.reason.text}
         onChange={(text) => dispatch({ type: 'set-reason', text })}
         onClose={() => dispatch({ type: 'close-reason' })}
@@ -132,6 +133,8 @@ export function ReviewDeck({
           }}
         >
           <DeckCard
+            gameId={gameId}
+            cards={cards}
             card={card}
             letter={letterOf(cards, card.id)}
             drag={drag}
@@ -274,11 +277,11 @@ export function ReviewDeck({
 // video), which is what the deck judges one at a time. A Command with mixed options keeps the plain option list —
 // its text choice is not a card — and the deep link still opens it in the deck.
 export function isReviewDeck(command: GameCommand): boolean {
-  return command.options.every(({ media }) => media !== undefined);
+  return command.options.every(({ media, playable }) => media !== undefined || playable !== undefined);
 }
 
 function labelOf(cards: GameCommand['options'], optionId: string): string {
-  return optionOf(cards, optionId)?.label ?? optionId;
+  return withoutLinks(optionOf(cards, optionId)?.label ?? optionId);
 }
 
 function optionOf(cards: GameCommand['options'], optionId: string): GameCommand['options'][number] | undefined {
@@ -290,6 +293,8 @@ function optionOf(cards: GameCommand['options'], optionId: string): GameCommand[
 const TAP_SLOP = 4;
 
 function DeckCard({
+  gameId,
+  cards,
   card,
   letter,
   drag,
@@ -297,6 +302,8 @@ function DeckCard({
   onDragEnd,
   onTap,
 }: {
+  gameId: string;
+  cards: GameCommand['options'];
   card: GameCommand['options'][number];
   letter: string;
   drag: number;
@@ -324,8 +331,9 @@ function DeckCard({
       style={{ transform: drag === 0 ? undefined : `translateX(${drag}px)` }}
       onPointerDown={(event) => {
         if (event.pointerType === 'mouse' && event.button !== 0) return;
-        // The replay control and the label keep their own taps; only the sample itself opens the viewer.
-        if ((event.target as HTMLElement).closest('button') !== null) return;
+        // The replay control and the label keep their own taps, and a playable slice keeps every touch for the game;
+        // only the sample itself opens the viewer.
+        if ((event.target as HTMLElement).closest('button, .review-deck-playable') !== null) return;
         start.current = { x: event.clientX, y: event.clientY };
         capturePointer(event.currentTarget, event.pointerId);
       }}
@@ -349,7 +357,11 @@ function DeckCard({
         onDragEnd(0);
       }}
     >
-      {media === undefined ? null : kind === 'audio' ? (
+      {/* A playable option is played even when it also carries a still; keyed by the card so its slice, pause and
+          compare state never carry over to the next card. */}
+      {card.playable !== undefined ? (
+        <PlayableCard key={card.id} gameId={gameId} card={card} options={cards} />
+      ) : media === undefined ? null : kind === 'audio' ? (
         <AudioCard audio={audio} label={card.label} playing={playing} setPlaying={setPlaying} src={media.url} />
       ) : kind === 'video' ? (
         <video
@@ -373,10 +385,10 @@ function DeckCard({
       {/* Few words on a card: its letter, with the option's own label as the media's accessible name. A card
           with no media is its words, so it shows them. */}
       <p className="review-deck-label" aria-hidden={media === undefined ? undefined : 'true'}>
-        {media === undefined ? card.label : letter}
+        {media === undefined ? withoutLinks(card.label) : letter}
       </p>
       {/* An audio card has no still to show, so its card says how long the sample runs beside the replay control. */}
-      {kind === 'audio' && media?.duration_ms !== undefined ? (
+      {card.playable === undefined && kind === 'audio' && media?.duration_ms !== undefined ? (
         <p className="review-deck-length">{clipLength(media.duration_ms)}</p>
       ) : null}
     </div>
@@ -384,10 +396,11 @@ function DeckCard({
 }
 
 // The ending grid shows the whole sample too: a thumbnail that opens the same full-screen view. An audio card has no
-// still to show, so its grid entry is the label chip alone.
+// still to show, so its grid entry is the label chip alone. A clip with no poster shows its own first frame.
 function MediaThumb({ option, onOpen }: { option: GameCommand['options'][number] | undefined; onOpen(): void }) {
   const media = option?.media;
   if (option === undefined || media === undefined || mediaKindOf(media) === 'audio') return null;
+  const style = { aspectRatio: `${media.width} / ${media.height}` };
   return (
     <button
       aria-label={`Open ${option.label} full screen`}
@@ -395,11 +408,11 @@ function MediaThumb({ option, onOpen }: { option: GameCommand['options'][number]
       onClick={onOpen}
       type="button"
     >
-      <img
-        alt={option.label}
-        src={media.poster ?? media.url}
-        style={{ aspectRatio: `${media.width} / ${media.height}` }}
-      />
+      {mediaKindOf(media) === 'video' && media.poster === undefined ? (
+        <video aria-label={option.label} muted playsInline preload="metadata" src={media.url} style={style} />
+      ) : (
+        <img alt={option.label} src={media.poster ?? media.url} style={style} />
+      )}
     </button>
   );
 }
@@ -413,7 +426,7 @@ function MediaFullscreen({ card, onClose }: { card: GameCommand['options'][numbe
   if (mediaKindOf(media) === 'audio') return null;
   return (
     <Dialog
-      title={card.label}
+      title={withoutLinks(card.label)}
       className="review-deck-fullscreen"
       backdropClassName="review-deck-fullscreen-backdrop"
       onClose={onClose}

@@ -5,6 +5,7 @@ import type { VoiceTarget } from '@ogm/contracts';
 import { gamePath, reviewPath, type GameCommand } from '@ogm/contracts/browser';
 
 import { findCommand, findCommandByNumber } from '../../features/commands-inbox/review-route';
+import { withoutLinks } from '../../features/commands-inbox/review';
 import { PlayLinkMessage } from '../play/PlayScreen';
 import { playLinkDenial, usePlayLink } from '../play/api';
 import { useGameCommands } from '../../features/commands-inbox/commands';
@@ -228,7 +229,7 @@ function ReviewScreen({
     <ReviewFrame
       head={
         <>
-          <h1>{reviewTitle(command.title)}</h1>
+          <h1>{reviewTitle(withoutLinks(command.title))}</h1>
           <CloseButton onClose={back} />
         </>
       }
@@ -242,7 +243,7 @@ function ReviewScreen({
           onAnswered={() => setSent(true)}
         />
         <details className="review-screen-question">
-          <summary>{command.question}</summary>
+          <summary>{withoutLinks(command.question)}</summary>
         </details>
       </div>
     </ReviewFrame>

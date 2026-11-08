@@ -77,4 +77,29 @@ describe('ReviewRows', () => {
     );
     expect(screen.getByRole('link', { name: 'Which of these two voices…, open' })).toBeInTheDocument();
   });
+
+  // An aiur clip may name its kind and carry no poster: its row shows the clip's first frame, never an image tag
+  // pointing at an mp4 (a broken picture in the row). A link in the title never shows as text.
+  it('shows a posterless clip as a clip and drops links from the title', () => {
+    const clip = { url: 'https://media.example.test/roll.mp4', width: 64, height: 48, kind: 'video' as const };
+    render(
+      <MemoryRouter>
+        <ReviewRows
+          commands={[
+            command({
+              title: 'Pick the roll https://example.test/x',
+              options: [
+                { id: 'm1', label: 'Roll', media: clip },
+                { id: 'm2', label: 'Flat', media: clip },
+              ],
+            }),
+          ]}
+          hrefOf={() => '/blobs/review/1'}
+        />
+      </MemoryRouter>,
+    );
+    const row = screen.getByRole('link', { name: 'Pick the roll, open' });
+    expect(row.querySelector('.review-row-thumb video')).toHaveAttribute('src', 'https://media.example.test/roll.mp4');
+    expect(row.querySelector('.review-row-thumb img')).toBeNull();
+  });
 });

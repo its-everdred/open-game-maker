@@ -5,7 +5,7 @@ import type { GameCommand } from '@ogm/contracts';
 import { Icon } from '../../components/Icon';
 import { reviewTitle } from '../../routes/review/title';
 import { draftState, useReviewDraft } from './drafts';
-import { mediaKindOf } from './review';
+import { mediaKindOf, withoutLinks } from './review';
 import './review-glass.css';
 
 // The game's open questions as rows: each shows its first sample, a few words of title and whether it is open,
@@ -38,7 +38,7 @@ function ReviewRow({ command, href }: { command: GameCommand; href: string }) {
 export function ReviewRowLink({ command, href }: { command: GameCommand; href: string }) {
   const draft = useReviewDraft(command);
   const state = draftState(draft);
-  const title = reviewTitle(command.title);
+  const title = reviewTitle(withoutLinks(command.title));
   const total = command.options.length;
   const done = total === 0 ? 0 : Math.min(draft.deck.cards.length, total) / total;
   return (
@@ -59,7 +59,7 @@ export function ReviewRowLink({ command, href }: { command: GameCommand; href: s
   );
 }
 
-// The question's first sample: a still or a clip's poster, a sound mark for a voice deck, nothing for a text question.
+// The question's first sample: a still, a clip's poster (or its first frame), a sound mark for a voice deck, nothing for a text question.
 function RowThumb({ command }: { command: GameCommand }) {
   const media = command.options.find((option) => option.media !== undefined)?.media;
   const kind = media === undefined ? undefined : mediaKindOf(media);
@@ -67,6 +67,8 @@ function RowThumb({ command }: { command: GameCommand }) {
     <span className="review-row-thumb" aria-hidden="true">
       {media === undefined ? null : kind === 'audio' ? (
         <Icon name="soundOn" />
+      ) : kind === 'video' && media.poster === undefined ? (
+        <video muted playsInline preload="metadata" src={media.url} />
       ) : (
         <img alt="" src={media.poster ?? media.url} />
       )}

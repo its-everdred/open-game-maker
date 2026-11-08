@@ -12,6 +12,7 @@ import {
   ChatPostBody,
   ChatPostPayload,
   chatSchemas,
+  OptionPlayable,
 } from '../src/chat.js';
 import { loadJson } from './helpers.js';
 
@@ -53,6 +54,9 @@ describe('build chat contract', () => {
     { file: 'post-payload.image-without-file.json', schema: ChatPostPayload, path: 'file' },
     { file: 'post.too-many-attachments.json', schema: ChatPostBody, path: 'attachments' },
     { file: 'attachment.disallowed-type.json', schema: ChatAttachment, path: 'mime' },
+    // A playable's scenario is a bare query: a URL never reaches the card, and the host's own parameters stay the host's.
+    { file: 'option-playable.url-scenario.json', schema: OptionPlayable, path: 'scenario' },
+    { file: 'option-playable.reserved-param.json', schema: OptionPlayable, path: 'scenario' },
   ])('rejects $file at $path', ({ file, schema, path }) => {
     const result = (schema as z.ZodType).safeParse(loadJson(`fixtures/chat-negative/${file}`));
     expect(result.success).toBe(false);
