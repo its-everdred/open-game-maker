@@ -78,6 +78,14 @@ describe('renderRepoTemplate', () => {
     });
   });
 
+  it('lists vendored skills flat in .claude/skills so a top-level skill index finds them', () => {
+    const { files } = renderRepoTemplate('game-3d@1', ctx);
+    const link = files.find((file) => file.path === '.claude/skills/threejs-lighting');
+    expect(link).toMatchObject({ content: 'vendor/threejs/threejs-lighting', mode: '120000' });
+    expect(files.some((file) => file.path === '.claude/skills/vendor/threejs/threejs-lighting/SKILL.md')).toBe(true);
+    expect(files.find((file) => file.path === '.claude/skills/gm-core')).toBeUndefined();
+  });
+
   it('names the ci job `required` and runs the commands AGENTS.md names', () => {
     const { files, requiredChecks } = renderRepoTemplate('game-3d@1', ctx, emptyRoot());
     const workflow = parse(files.find((f) => f.path === '.github/workflows/ci.yml')!.content);

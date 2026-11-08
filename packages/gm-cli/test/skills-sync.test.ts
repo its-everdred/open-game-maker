@@ -54,6 +54,15 @@ function makePack(): string {
   return root;
 }
 
+function lstatExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sha(file: string): string {
   return createHash('sha256').update(readFileSync(file)).digest('hex');
 }
@@ -85,6 +94,52 @@ describe('gm skills sync', () => {
     expect(lock.skills['vendor/phaser/cameras/SKILL.md']?.sha256).toBe(
       sha(join(repo, '.claude/skills/vendor/phaser/cameras/SKILL.md')),
     );
+  });
+
+  it('links vendored skills flat in .claude/skills and keeps the link across a pack update', async () => {
+    const pack = makePack();
+    const repo = tempDir('gm-game-');
+    await gm(['skills', 'sync'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
+
+    expect(readlinkSync(join(repo, '.claude/skills/cameras'))).toBe('vendor/phaser/cameras');
+    expect(readFileSync(join(repo, '.claude/skills/cameras/SKILL.md'), 'utf8')).toContain('cameras v1');
+    expect(lstatSync(join(repo, '.claude/skills/gm-core')).isSymbolicLink()).toBe(false);
+
+    writeFileSync(join(pack, 'vendor/phaser/cameras/SKILL.md'), '---\nname: cameras\n---\ncameras v2\n');
+    const updated = await gm(['skills', 'sync'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
+
+    expect(updated.code).toBe(0);
+    expect(readlinkSync(join(repo, '.claude/skills/cameras'))).toBe('vendor/phaser/cameras');
+    expect(readFileSync(join(repo, '.claude/skills/cameras/SKILL.md'), 'utf8')).toContain('cameras v2');
+    expect(await gm(['skills', 'sync', '--check'], { cwd: repo, env: { GM_SKILLS_DIR: pack } })).toEqual({
+      code: 0,
+      out: ['skills up to date'],
+      err: [],
+    });
+  });
+
+  it('retargets the links of a vendored skill that moved sets and removes them when it leaves the pack', async () => {
+    const pack = makePack();
+    const repo = tempDir('gm-game-');
+    await gm(['skills', 'sync'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
+
+    write(pack, 'vendor/gamedev/cameras/SKILL.md', '---\nname: cameras\n---\ncameras moved\n');
+    rmSync(join(pack, 'vendor/phaser'), { recursive: true });
+    const moved = await gm(['skills', 'sync'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
+
+    expect(moved.out.filter((line) => line.startsWith('kept local edit'))).toEqual([]);
+    expect(readlinkSync(join(repo, '.claude/skills/cameras'))).toBe('vendor/gamedev/cameras');
+    expect(readlinkSync(join(repo, '.codex/skills/cameras'))).toBe('../../.claude/skills/vendor/gamedev/cameras');
+    expect(readFileSync(join(repo, '.agents/skills/cameras/SKILL.md'), 'utf8')).toContain('cameras moved');
+
+    rmSync(join(pack, 'vendor/gamedev'), { recursive: true });
+    await gm(['skills', 'sync'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
+
+    expect(lstatExists(join(repo, '.claude/skills/cameras'))).toBe(false);
+    expect(statSync(join(repo, '.claude/skills/gm-core/SKILL.md')).isFile()).toBe(true);
+    expect(await gm(['skills', 'sync', '--check'], { cwd: repo, env: { GM_SKILLS_DIR: pack } })).toMatchObject({
+      code: 0,
+    });
   });
 
   it('keeps the set skill recorded by gm new in step without installing other sets', async () => {
