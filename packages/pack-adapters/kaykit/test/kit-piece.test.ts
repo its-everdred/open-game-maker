@@ -118,6 +118,32 @@ describe('kitPiece', () => {
     expect(treeBox.max.y).toBeCloseTo(8, 2);
   });
 
+  it('draws a card whose parts carry different attributes, lit', async () => {
+    const document = new Document();
+    const buffer = document.createBuffer();
+    const triangle = (values: number[]) =>
+      document.createAccessor().setType('VEC3').setArray(new Float32Array(values)).setBuffer(buffer);
+    const mesh = document.createMesh(TREE);
+    const plain = document.createPrimitive().setAttribute('POSITION', triangle([0, 0, 0, 1, 0, 0, 0, 2, 0]));
+    const lit = document
+      .createPrimitive()
+      .setAttribute('POSITION', triangle([2, 0, 0, 3, 0, 0, 2, 3, 0]))
+      .setAttribute('NORMAL', triangle([0, 0, 1, 0, 0, 1, 0, 0, 1]));
+    mesh
+      .addPrimitive(plain.setMaterial(document.createMaterial('a')))
+      .addPrimitive(lit.setMaterial(document.createMaterial('b')));
+    document.createScene().addChild(document.createNode(TREE).setMesh(mesh));
+    const bytes = await new NodeIO().writeBinary(document);
+    const files = {
+      'kit.glb': bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    };
+    const { loader } = await fixtureLoader({ [TREE]: { file: 'kit.glb', mesh: TREE } }, files);
+
+    const piece = await kitPiece(loader, TREE);
+    expect(height(piece)).toBe(3);
+    expect(piece.geometry.getAttribute('normal').count).toBe(6);
+  });
+
   it('takes the only mesh of a card that has its own file', async () => {
     const files = { 'tree.glb': await glb({ Tree_1: 4 }) };
     const { loader } = await fixtureLoader({ [TREE]: { file: 'tree.glb' } }, files);

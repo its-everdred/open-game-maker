@@ -46,11 +46,15 @@ function baked(mesh: Mesh, root: Object3D): BufferGeometry {
  */
 function piece(meshes: Mesh[], root: Object3D, cardId: string): Mesh {
   if (meshes.length === 1) return new Mesh(baked(meshes[0]!, root), meshes[0]!.material);
-  const geometry = mergeGeometries(
-    meshes.map((mesh) => baked(mesh, root)),
-    true,
-  );
+  const parts = meshes.map((mesh) => baked(mesh, root));
+  /* Parts may differ in which attributes they carry (one with UVs, one without); merging needs the same set. */
+  const shared = Object.keys(parts[0]!.attributes).filter((name) => parts.every((part) => part.hasAttribute(name)));
+  for (const part of parts) {
+    for (const name of Object.keys(part.attributes)) if (!shared.includes(name)) part.deleteAttribute(name);
+  }
+  const geometry = mergeGeometries(parts, true);
   if (!geometry) throw new Error(`Kit card ${cardId} has parts with different vertex attributes`);
+  if (!geometry.hasAttribute('normal')) geometry.computeVertexNormals();
   return new Mesh(
     geometry,
     meshes.map((mesh) => mesh.material as Material),
@@ -69,7 +73,10 @@ function piece(meshes: Mesh[], root: Object3D, cardId: string): Mesh {
  */
 export async function kitPiece(loader: AssetLoader, cardId: string): Promise<Mesh> {
   const { file, mesh: name } = loader.resolve(cardId);
-  /* `loader.mesh` decodes and caches the file; whatever mesh it returns sits in that decoded scene. */
+  /*
+   * `loader.mesh` decodes and caches the file; the mesh it returns sits in that decoded scene unless a game has moved
+   * it into its own scene, so games take every kit card through `kitPiece`.
+   */
   let root: Object3D = await loader.mesh(cardId);
   while (root.parent) root = root.parent;
 

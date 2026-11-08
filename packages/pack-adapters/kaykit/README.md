@@ -30,5 +30,6 @@ Adapter for the KayKit 3D set (three + Rapier). It reads rig, kit and geometry f
 ## Verified
 
 `pnpm --filter @gm/pack-kaykit test` builds skinned meshes and clip libraries in the test (one with a renamed joint)
-and checks retarget, loop and hold, cross-fade, snapping, colliders and map round trips. `test:browser` renders a
+and checks retarget, loop and hold, cross-fade, snapping, colliders and map round trips; `kitPiece` is checked on
+kit files packed with meshopt as `gm build assets` packs them. `test:browser` renders a
 retargeted idle on the GPU flags and saves the still.
