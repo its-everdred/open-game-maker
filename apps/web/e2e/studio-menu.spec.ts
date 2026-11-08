@@ -67,7 +67,7 @@ test('opens the same volume and report menu on the title', async ({ page }, test
   await capturePhone(page, testInfo, 'title-menu-closed');
   await page.getByRole('button', { name: 'Menu' }).click();
 
-  await expect(page.getByRole('slider', { name: 'Volume' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Mute|Unmute)$/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible();
   await expect(page.locator('.bug-fab')).toHaveCount(0);
   await capturePhone(page, testInfo, 'title-menu-open');
@@ -87,11 +87,13 @@ test('shows the active build ring and contextual build in the games menu', async
   await capturePhone(page, testInfo, 'games-menu-building');
 
   await trigger.click();
+  await capturePhone(page, testInfo, 'games-menu-open');
+  await page.getByRole('button', { name: 'Builds: 42%' }).click();
   await expect(page.getByRole('group', { name: 'Moon Vault builds' })).toBeVisible();
   const jobBar = page.getByRole('button', { name: /Add the moon gate.*Active.*Building the moon gate.*42%/ });
   await expect(jobBar).toBeVisible();
   await expect(page.locator('.bug-fab')).toHaveCount(0);
-  await capturePhone(page, testInfo, 'games-menu-open');
+  await capturePhone(page, testInfo, 'games-menu-builds');
 
   // A job bar opens that ticket's conversation over the screen instead of leaving it (#478).
   await jobBar.click();
@@ -119,6 +121,44 @@ test('rings Energy in the menu and opens its windows, then its settings', async 
   await expect(page.getByRole('radio', { name: 'Balanced' })).toBeChecked();
   await capturePhone(page, testInfo, 'settings-energy');
 });
+
+// Kevin (2026-11-08): the circles open in one row beside the menu button, at its height, in portrait and landscape.
+for (const [orientation, viewport] of [
+  ['portrait', { width: 390, height: 844 }],
+  ['landscape', { width: 844, height: 390 }],
+] as const) {
+  test(`lays the circles out in a row beside the menu button in ${orientation}`, async ({
+    page,
+    isMobile,
+  }, testInfo) => {
+    testInfo.setTimeout(90_000);
+    test.skip(!isMobile, 'phone layout acceptance path');
+    await page.setViewportSize(viewport);
+    await installAuthRoutes(page, { signedIn: true });
+    await stubBrandArt(page);
+    await installGamesMenuApi(page);
+    await page.goto('/all');
+
+    const trigger = page.getByRole('button', { name: 'Menu' });
+    await expect(trigger).toHaveAttribute('data-building', 'true');
+    await capturePhone(page, testInfo, `${orientation}-closed`);
+
+    await trigger.click();
+    const circles = page.getByRole('group', { name: 'Menu' }).locator('.menu-circle');
+    await expect(circles.first()).toHaveAttribute('aria-label', 'Builds: 42%');
+    await page.waitForTimeout(500);
+    const menuBox = (await trigger.boundingBox())!;
+    const first = (await circles.first().boundingBox())!;
+    expect(Math.abs(first.y - menuBox.y)).toBeLessThan(1);
+    expect(first.height).toBeCloseTo(menuBox.height, 0);
+    expect(first.x + first.width).toBeLessThan(menuBox.x);
+    await capturePhone(page, testInfo, `${orientation}-open`);
+
+    await page.getByRole('button', { name: 'Builds: 42%' }).click();
+    await expect(page.getByRole('group', { name: 'Moon Vault builds' })).toBeVisible();
+    await capturePhone(page, testInfo, `${orientation}-building`);
+  });
+}
 
 for (const mode of ['play', 'edit'] as const) {
   test(`opens game actions in ${mode} context`, async ({ page }) => {

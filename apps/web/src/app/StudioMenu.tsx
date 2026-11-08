@@ -1,10 +1,19 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactElement,
+} from 'react';
 import { Link, matchPath, useLocation } from 'react-router';
 
 import { JOB_STAGE_WORDS, type Job } from '@ogm/contracts/browser';
 
 import { Icon } from '../components/Icon';
-import { BugButton } from '../features/bug-report';
+import { MenuRing } from '../components/MenuCircle';
+import { BugButton, BugSheet } from '../features/bug-report';
 import { EnergyButton, EnergyDetail } from '../features/energy/EnergyButton';
 import { JobConversationModal } from '../features/build-chat/JobConversationModal';
 import { openConversation } from '../features/build-chat/conversation';
@@ -15,10 +24,14 @@ import { useSession } from '../lib/api/session';
 import { getVolume, onChange, setMuted, setVolume, status } from '../lib/sound';
 import { useAdminMe } from '../routes/admin/api';
 import { requireAdmin } from '../routes/admin/guard';
+import { VolumeCircle } from './VolumeCircle';
 
 const RECENT_BUILD_MS = 5 * 60 * 1000;
 const MAX_TRACKED_BUILDS = 100;
 const activeBuildsByCreator = new Map<string, Set<string>>();
+
+// The circle whose detail shows in the sheet under the row; one at a time.
+type Sheet = 'volume' | 'bug' | 'builds' | 'energy';
 
 export function StudioMenu() {
   const root = useRef<HTMLDivElement>(null);
@@ -34,7 +47,7 @@ export function StudioMenu() {
   const [announcement, setAnnouncement] = useState('');
   const [buildClock, setBuildClock] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
-  const [energyOpen, setEnergyOpen] = useState(false);
+  const [sheet, setSheet] = useState<Sheet>();
   const game = matchPath('/g/:gameId/*', location.pathname);
   const gameId = game?.params.gameId;
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
@@ -94,6 +107,154 @@ export function StudioMenu() {
   };
   const close = () => setOpen(false);
   const gamePath = gameId === undefined ? undefined : `/g/${encodeURIComponent(gameId)}`;
+  const toggleSheet = (next: Sheet) => setSheet((current) => (current === next ? undefined : next));
+  const buildsDone = visibleBuilds.length > 0 && visibleBuilds.every((job) => job.state === 'done');
+  const buildsPercent =
+    visibleBuilds.length === 0
+      ? 0
+      : Math.round(visibleBuilds.reduce((total, job) => total + buildPercent(job), 0) / visibleBuilds.length);
+
+  // Nearest the menu button first; the row runs right to left.
+  const circles: ReactElement[] = [];
+  if (buildGroups.length > 0) {
+    circles.push(
+      <button
+        key="builds"
+        type="button"
+        className="menu-circle"
+        data-done={buildsDone}
+        aria-label={`Builds: ${buildsPercent}%`}
+        aria-expanded={sheet === 'builds'}
+        aria-controls="studio-menu-builds"
+        onClick={() => toggleSheet('builds')}
+      >
+        <MenuRing percent={buildsPercent} />
+        <Icon name="build" />
+      </button>,
+    );
+  }
+  if (session) {
+    circles.push(<EnergyButton key="energy" open={sheet === 'energy'} onToggle={() => toggleSheet('energy')} />);
+  }
+  circles.push(
+    <VolumeCircle
+      key="volume"
+      sound={sound}
+      volume={volume}
+      onVolume={changeVolume}
+      onMute={setMuted}
+      sliderOpen={sheet === 'volume'}
+      onSlider={() => setSheet('volume')}
+    />,
+    <BugButton key="bug" open={sheet === 'bug'} onToggle={() => toggleSheet('bug')} />,
+  );
+  if (gamePath) {
+    circles.push(
+      <MenuLink key="versions" label="Versions" icon="versions" to={`${gamePath}/versions`} close={close} />,
+      <MenuLink
+        key="publish"
+        label="Publish"
+        icon="publish"
+        to={`${gamePath}/releases?action=publish`}
+        close={close}
+      />,
+      <MenuLink
+        key="rollback"
+        label="Rollback"
+        icon="rollback"
+        to={`${gamePath}/releases?action=rollback`}
+        close={close}
+      />,
+    );
+  }
+  if (session) {
+    circles.push(<MenuLink key="credits" label="Credits" icon="credits" to="/settings/credits" close={close} />);
+    if (requireAdmin(admin.data ?? null) === 'ok') {
+      circles.push(<MenuLink key="admin" label="Admin" icon="admin" to="/admin" close={close} />);
+    }
+    circles.push(
+      <button
+        key="sign-out"
+        type="button"
+        className="menu-circle"
+        aria-label="Sign out"
+        disabled={signingOut}
+        onClick={() => void handleSignOut()}
+      >
+        <MenuRing />
+        <Icon name="signOut" />
+      </button>,
+    );
+  }
+
+  let sheetContent: ReactElement | null = null;
+  if (sheet === 'volume') {
+    sheetContent = (
+      <div id="studio-menu-volume" className="studio-menu-volume">
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          aria-label="Volume"
+          value={volume}
+          onChange={(event) => changeVolume(Number(event.target.value))}
+        />
+      </div>
+    );
+  } else if (sheet === 'bug') {
+    sheetContent = <BugSheet close={() => setSheet(undefined)} />;
+  } else if (sheet === 'energy' && session) {
+    sheetContent = <EnergyDetail close={close} />;
+  } else if (sheet === 'builds' && buildGroups.length > 0) {
+    sheetContent = (
+      <ul id="studio-menu-builds" className="studio-menu-builds" aria-label="Build progress">
+        {buildGroups.map((group) => (
+          <li key={group.gameId}>
+            <div className="studio-menu-build-group" role="group" aria-label={`${group.title} builds`}>
+              <div className="studio-menu-build-heading">
+                <strong>{group.title}</strong>
+                {group.playable ? (
+                  <Link to={buildPath(group.playable)} onClick={close}>
+                    Ready to try
+                  </Link>
+                ) : null}
+              </div>
+              <ul>
+                {group.jobs.map((job) => {
+                  const state = menuJobState(job);
+                  const percent = buildPercent(job);
+                  return (
+                    <li key={job.id}>
+                      <button
+                        className="studio-menu-job"
+                        data-status={state}
+                        data-success={job.state === 'done'}
+                        data-action-needed={(job.openRequestCount ?? 0) > 0}
+                        type="button"
+                        onClick={() => {
+                          close();
+                          openConversation(job.id);
+                        }}
+                      >
+                        <strong>{job.plan.title}</strong>
+                        <span className="studio-menu-job-state">{menuJobStateLabel(state)}</span>
+                        <span className="studio-menu-job-stage">{buildStage(job)}</span>
+                        <span className="studio-menu-job-percent">{percent}%</span>
+                        <span className="studio-menu-job-progress" aria-hidden="true">
+                          <span style={{ width: `${percent}%` }} />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </li>
+        ))}
+      </ul>
+    );
+  }
 
   return (
     <div ref={root} className="studio-menu-control">
@@ -106,7 +267,10 @@ export function StudioMenu() {
         aria-describedby={outstandingRequests > 0 ? 'studio-menu-requests' : undefined}
         aria-expanded={open}
         aria-controls="studio-menu-panel"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          setOpen((current) => !current);
+          setSheet(undefined);
+        }}
       >
         <span className="studio-menu-ring" aria-hidden="true" />
         <Icon name="menu" />
@@ -125,104 +289,15 @@ export function StudioMenu() {
         {announcement}
       </span>
       {open ? (
-        <div id="studio-menu-panel" className="studio-menu-panel" role="dialog" aria-label="Menu">
-          <div className="studio-menu-volume">
-            <button
-              type="button"
-              className="studio-menu-action"
-              aria-label={sound === 'on' ? 'Mute' : 'Unmute'}
-              onClick={() => setMuted(sound === 'on')}
-            >
-              <Icon name={sound === 'on' ? 'soundOn' : 'soundOff'} />
-            </button>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              aria-label="Volume"
-              value={volume}
-              onChange={(event) => changeVolume(Number(event.target.value))}
-            />
+        <div className="studio-menu-tray">
+          <div id="studio-menu-panel" className="studio-menu-row" role="group" aria-label="Menu">
+            {circles.map((circle, index) => (
+              <span key={circle.key} className="studio-menu-slot" style={{ '--i': index } as CSSProperties}>
+                {circle}
+              </span>
+            ))}
           </div>
-
-          <BugButton />
-
-          {buildGroups.length > 0 ? (
-            <ul className="studio-menu-builds" aria-label="Build progress">
-              {buildGroups.map((group) => (
-                <li key={group.gameId}>
-                  <div className="studio-menu-build-group" role="group" aria-label={`${group.title} builds`}>
-                    <div className="studio-menu-build-heading">
-                      <strong>{group.title}</strong>
-                      {group.playable ? (
-                        <Link to={buildPath(group.playable)} onClick={close}>
-                          Ready to try
-                        </Link>
-                      ) : null}
-                    </div>
-                    <ul>
-                      {group.jobs.map((job) => {
-                        const state = menuJobState(job);
-                        const percent = buildPercent(job);
-                        return (
-                          <li key={job.id}>
-                            <button
-                              className="studio-menu-job"
-                              data-status={state}
-                              data-success={job.state === 'done'}
-                              data-action-needed={(job.openRequestCount ?? 0) > 0}
-                              type="button"
-                              onClick={() => {
-                                close();
-                                openConversation(job.id);
-                              }}
-                            >
-                              <strong>{job.plan.title}</strong>
-                              <span className="studio-menu-job-state">{menuJobStateLabel(state)}</span>
-                              <span className="studio-menu-job-stage">{buildStage(job)}</span>
-                              <span className="studio-menu-job-percent">{percent}%</span>
-                              <span className="studio-menu-job-progress" aria-hidden="true">
-                                <span style={{ width: `${percent}%` }} />
-                              </span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {gamePath ? (
-            <div className="studio-menu-actions">
-              <MenuLink label="Versions" icon="versions" to={`${gamePath}/versions`} close={close} />
-              <MenuLink label="Publish" icon="publish" to={`${gamePath}/releases?action=publish`} close={close} />
-              <MenuLink label="Rollback" icon="rollback" to={`${gamePath}/releases?action=rollback`} close={close} />
-            </div>
-          ) : null}
-
-          {session ? (
-            <div className="studio-menu-actions">
-              <EnergyButton open={energyOpen} onToggle={() => setEnergyOpen((current) => !current)} />
-              <MenuLink label="Credits" icon="credits" to="/settings/credits" close={close} />
-              <button
-                type="button"
-                className="studio-menu-action"
-                aria-label="Sign out"
-                disabled={signingOut}
-                onClick={() => void handleSignOut()}
-              >
-                <Icon name="signOut" />
-              </button>
-              {requireAdmin(admin.data ?? null) === 'ok' ? (
-                <MenuLink label="Admin" icon="admin" to="/admin" close={close} />
-              ) : null}
-            </div>
-          ) : null}
-          {session && energyOpen ? <EnergyDetail close={close} /> : null}
+          {sheet ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
         </div>
       ) : null}
       <JobConversationModal />
@@ -232,7 +307,8 @@ export function StudioMenu() {
 
 function MenuLink({ label, icon, to, close }: { label: string; icon: string; to: string; close(): void }) {
   return (
-    <Link className="studio-menu-action" aria-label={label} to={to} onClick={close}>
+    <Link className="menu-circle" aria-label={label} to={to} onClick={close}>
+      <MenuRing />
       <Icon name={icon} />
     </Link>
   );

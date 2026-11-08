@@ -52,7 +52,7 @@
 }
 
 .studio-menu-button,
-.studio-menu-action {
+.menu-circle {
   display: grid;
   place-items: center;
   padding: 0;
@@ -75,14 +75,14 @@
 }
 
 .studio-menu-button .icon,
-.studio-menu-action .icon {
+.menu-circle .icon {
   display: grid;
   width: 24px;
   height: 24px;
 }
 
 .studio-menu-button .icon svg,
-.studio-menu-action .icon svg {
+.menu-circle .icon svg {
   width: 100%;
   height: 100%;
 }
@@ -116,41 +116,105 @@
   display: block;
 }
 
-.studio-menu-panel {
+.studio-menu-tray {
   position: absolute;
-  top: 60px;
+  top: 0;
   right: 0;
   display: grid;
+  justify-items: end;
   gap: 10px;
-  width: min(22rem, calc(100vw - 32px));
-  max-height: calc(100svh - var(--safe-t) - 84px);
+  width: calc(100vw - max(16px, var(--safe-l)) - max(16px, var(--safe-r)));
+  pointer-events: none;
+}
+
+/* The circles open out of the menu button to its left and run right to left, wrapping only when a phone runs out of
+   width. */
+.studio-menu-row {
+  display: flex;
+  flex-flow: row-reverse wrap;
+  gap: 8px;
+  max-width: calc(100% - 58px);
+  margin-right: 58px;
+}
+
+.studio-menu-slot {
+  display: grid;
+  pointer-events: auto;
+  animation: studio-menu-out 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  animation-delay: calc(var(--i) * 25ms);
+}
+
+.menu-circle {
+  --ring-color: var(--orange-b);
+  position: relative;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  text-decoration: none;
+}
+
+.menu-circle:active {
+  scale: 0.96;
+}
+
+.menu-circle:disabled {
+  opacity: 0.6;
+}
+
+.menu-circle[data-done='true'] {
+  --ring-color: var(--green-b);
+}
+
+.menu-circle-ring {
+  position: absolute;
+  inset: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  rotate: -90deg;
+  fill: none;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+
+.menu-circle-ring circle:first-child {
+  stroke: color-mix(in srgb, var(--cream) 16%, transparent);
+}
+
+.menu-circle-ring circle:last-child:not(:first-child) {
+  stroke: var(--ring-color);
+  stroke-linecap: round;
+}
+
+.volume-circle {
+  --ring-color: var(--cream);
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.studio-menu-sheet {
+  display: grid;
+  gap: 10px;
+  width: min(22rem, 100%);
+  max-height: calc(100svh - var(--safe-t) - 140px);
   padding: 12px;
   overflow-y: auto;
   border: 1px solid var(--rule);
   border-radius: var(--r);
   background: var(--night-2);
   color: var(--cream);
+  pointer-events: auto;
 }
 
-.studio-menu-volume,
-.studio-menu-actions {
+.studio-menu-volume {
   display: flex;
   align-items: center;
-  gap: 10px;
 }
 
 .studio-menu-volume input {
   min-width: 0;
   flex: 1;
   accent-color: var(--orange-b);
-}
-
-.studio-menu-action {
-  flex: none;
-  width: var(--tap-secondary);
-  height: var(--tap-secondary);
-  border-radius: 12px;
-  text-decoration: none;
 }
 
 .studio-menu-builds {
@@ -272,6 +336,14 @@ button.studio-menu-job {
   background: var(--green-b);
 }
 
+@keyframes studio-menu-out {
+  from {
+    opacity: 0;
+    scale: 0.4;
+    translate: calc((var(--i) + 1) * 58px) 0;
+  }
+}
+
 @keyframes studio-menu-spin {
   to {
     rotate: 360deg;
@@ -296,6 +368,10 @@ button.studio-menu-job {
 @media (prefers-reduced-motion: reduce) {
   .studio-menu-ring {
     border-color: var(--orange-b);
+    animation: none;
+  }
+
+  .studio-menu-slot {
     animation: none;
   }
 }

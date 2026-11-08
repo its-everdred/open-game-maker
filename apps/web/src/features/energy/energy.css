@@ -1,7 +1,7 @@
 /* Energy reuses the studio menu's tokens: green while healthy, orange when limited, red when critical. */
 .energy-button {
-  position: relative;
   --energy-color: color-mix(in srgb, var(--cream) 40%, transparent);
+  --ring-color: var(--energy-color);
 }
 
 .energy-button[data-level='healthy'],
@@ -17,26 +17,6 @@
 .energy-button[data-level='critical'],
 .energy-windows[data-level='critical'] {
   --energy-color: var(--red-b);
-}
-
-.energy-ring {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: calc(100% - 4px);
-  height: calc(100% - 4px);
-  rotate: -90deg;
-  fill: none;
-  stroke-width: 2.5;
-}
-
-.energy-ring circle:first-child {
-  stroke: color-mix(in srgb, var(--cream) 16%, transparent);
-}
-
-.energy-ring circle:last-child {
-  stroke: var(--energy-color);
-  stroke-linecap: round;
 }
 
 .energy-detail {

@@ -89,11 +89,68 @@ describe('StudioMenu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
 
-    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.75');
-    expect(screen.getByRole('button', { name: 'Mute' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Report a problem' })).toBeVisible();
+    expect(circleNames()).toEqual(['Mute', 'Report a problem']);
+    expect(ringOf(screen.getByRole('button', { name: 'Mute' }))).toBe('75 100');
     expect(screen.queryByRole('link', { name: 'Credits' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Versions' })).not.toBeInTheDocument();
+  });
+
+  // Kevin (2026-11-08): the menu expands a row of circles beside the button, not a dropdown panel; details open only
+  // for the circle tapped, and the menu button or a tap outside folds the row away.
+  it('expands circles nearest-first with no panel, and folds on the menu button or a tap outside', () => {
+    // Its own id: the start announcement is remembered per job across tests.
+    const job = runningJob({ id: 'job-row' });
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.jobs = { jobs: [job], active: [job], games: [{ id: 'game-1', title: 'Moon Vault' }] };
+    renderMenu('/games');
+    const trigger = screen.getByRole('button', { name: 'Menu' });
+
+    fireEvent.click(trigger);
+    expect(circleNames()).toEqual([
+      'Builds: 42%',
+      'Energy: Unknown',
+      'Mute',
+      'Report a problem',
+      'Credits',
+      'Sign out',
+    ]);
+    expect(document.querySelector('.studio-menu-sheet')).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('mutes on a tap, sets the level by dragging or arrow keys, and opens the slider on a long press', () => {
+    vi.useFakeTimers();
+    renderMenu('/');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    const volume = screen.getByRole('button', { name: 'Mute' });
+
+    fireEvent.click(volume);
+    expect(sound.setMuted).toHaveBeenCalledWith(true);
+
+    sound.setMuted.mockReset();
+    fireEvent.pointerDown(volume, { clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(volume, { clientX: 100, clientY: 76 });
+    fireEvent.pointerUp(volume);
+    fireEvent.click(volume);
+    expect(sound.setVolume).toHaveBeenLastCalledWith(0.95);
+    expect(ringOf(volume)).toBe('95 100');
+    expect(sound.setMuted).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(volume, { key: 'ArrowDown' });
+    expect(sound.setVolume).toHaveBeenLastCalledWith(0.9);
+
+    fireEvent.pointerDown(volume, { clientX: 100, clientY: 100 });
+    act(() => vi.advanceTimersByTime(450));
+    fireEvent.pointerUp(volume);
+    fireEvent.click(volume);
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.9');
+    expect(sound.setMuted).not.toHaveBeenCalled();
   });
 
   it('shows signed-in and game actions only in their relevant context', () => {
@@ -161,6 +218,9 @@ describe('StudioMenu', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Building Moon Vault');
 
     fireEvent.click(trigger);
+    const builds = screen.getByRole('button', { name: 'Builds: 42%' });
+    expect(ringOf(builds)).toBe('42 100');
+    fireEvent.click(builds);
     expect(screen.getByRole('button', { name: /Build the moon gate.*Active.*Building rooms.*42%/ })).toBeVisible();
 
     view.unmount();
@@ -199,6 +259,7 @@ describe('StudioMenu', () => {
     state.jobs = { jobs: [finished], active: [], games: [{ id: 'game-1', title: 'Moon Vault' }] };
     renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Builds: 100%' }));
     expect(screen.getByRole('button', { name: /Build the moon gate.*Finished.*Ready to try.*100%/ })).toBeVisible();
 
     act(() => vi.advanceTimersByTime(5 * 60 * 1000 + 1));
@@ -250,6 +311,7 @@ describe('StudioMenu', () => {
     expect(document.getElementById('studio-menu-requests')).toHaveTextContent('3 requests need your attention');
 
     fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
     const moon = screen.getByRole('group', { name: 'Moon Vault builds' });
     expect(moon).toHaveTextContent('Choose the moon gatePausedWaiting for your answer');
     expect(moon).toHaveTextContent('Paint the observatoryParked');
@@ -271,12 +333,13 @@ describe('StudioMenu', () => {
     state.jobs = { jobs: [job], active: [job], games: [{ id: 'game-1', title: 'Moon Vault' }] };
     renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Builds: 42%' }));
 
     fireEvent.click(screen.getByRole('button', { name: /Build the moon gate/ }));
 
     expect(screen.getByRole('dialog', { name: 'Build the moon gate' })).toBeVisible();
     expect(screen.getByText('conversation job-1')).toBeVisible();
-    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
   // Review drafts live in memory until sent; the next person signing in on the same device must not find them.
@@ -304,7 +367,7 @@ describe('StudioMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Sign out failed. Try again.'));
-    expect(screen.getByRole('dialog', { name: 'Menu' })).toBeVisible();
+    expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled();
   });
 
@@ -312,14 +375,24 @@ describe('StudioMenu', () => {
     renderMenu('/games');
     const trigger = screen.getByRole('button', { name: 'Menu' });
     fireEvent.click(trigger);
-    expect(screen.getByRole('dialog', { name: 'Menu' })).toBeVisible();
+    expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
-    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
 });
+
+function circleNames() {
+  return [...screen.getByRole('group', { name: 'Menu' }).querySelectorAll('.menu-circle')].map((circle) =>
+    circle.getAttribute('aria-label'),
+  );
+}
+
+function ringOf(circle: HTMLElement) {
+  return circle.querySelector('.menu-circle-ring circle:nth-child(2)')?.getAttribute('stroke-dasharray');
+}
 
 function renderMenu(path: string) {
   return render(
