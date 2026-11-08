@@ -222,7 +222,7 @@ describe('a jobless Command’s option media', () => {
       { id: 'flat', label: 'Lie flat' },
       { id: 'stack', label: 'Stack up' },
     ]);
-    expect(deps.lines.some((line) => line.event === 'game_command_media_unavailable')).toBe(true);
+    expect(deps.lines.some((line) => line.event === 'game_command_media_copy_failed')).toBe(true);
 
     // A file that just failed is not fetched again on the next poll.
     files.med_gone = { mime: 'image/png', bytes: new Uint8Array([1]) };
@@ -316,7 +316,7 @@ describe('a jobless Command’s option media', () => {
     );
 
     expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
-    expect(deps.lines.some((line) => line.event === 'game_command_media_unavailable')).toBe(true);
+    expect(deps.lines.some((line) => line.event === 'game_command_media_copy_failed')).toBe(true);
   });
 
   it('passes an https poster on, drops one only the aiur host holds, and skips media it cannot render', async () => {

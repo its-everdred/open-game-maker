@@ -78,7 +78,7 @@ function stored(deps: AppDeps, client: AiurClient, decisionId: string, item: Dec
   if (pending === undefined) {
     pending = copy(deps, client, decisionId, item, attachmentId);
     byKey.set(key, pending);
-    // Logged here as well as by the read that waited on it: a copy can fail after its read has moved on.
+    // Logged here, once, because a copy can fail after the read that started it has moved on.
     pending.catch((error: unknown) => {
       deps.log({ event: 'game_command_media_copy_failed', decisionId, error: (error as Error).name });
       setTimeout(() => byKey.delete(key), aiurMediaTiming.retryAfterMs).unref();
@@ -137,11 +137,10 @@ async function resolveItem(
 }
 
 // The media each option shows, by option id: its first item the deck can render. An item aiur cannot serve leaves its
-// option without media and is logged; it never fails the inbox.
+// option without media (its copy logs the failure once); it never fails the inbox.
 export async function optionMediaFromAiur(
   deps: AppDeps,
   client: AiurClient,
-  gameId: string,
   decision: Decision,
   sign: MediaSigner,
 ): Promise<Map<string, OptionMedia>> {
@@ -153,13 +152,8 @@ export async function optionMediaFromAiur(
       try {
         const resolved = await resolveItem(deps, client, decision.decision_id, item, sign);
         if (resolved !== undefined) media.set(option.id, resolved);
-      } catch (error) {
-        deps.log({
-          event: 'game_command_media_unavailable',
-          gameId,
-          decisionId: decision.decision_id,
-          error: (error as Error).name,
-        });
+      } catch {
+        // The failed copy was logged once when it failed; every poll in its retry window lands here quietly.
       }
     }),
   );

@@ -87,9 +87,7 @@ export async function gameCommandsFromAiur(
     (decision) => !jobTickets.has(decision.ticket.identifier) && isOpen(decision) && toGameCommand(decision) !== null,
   );
   const commands = await Promise.all(
-    open.map(async (decision) =>
-      toGameCommand(decision, await optionMediaFromAiur(deps, client, gameId, decision, sign)),
-    ),
+    open.map(async (decision) => toGameCommand(decision, await optionMediaFromAiur(deps, client, decision, sign))),
   );
   return commands.filter((command) => command !== null);
 }
