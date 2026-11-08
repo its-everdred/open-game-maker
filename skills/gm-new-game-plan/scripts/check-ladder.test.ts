@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -21,9 +21,16 @@ describe('check-ladder', () => {
 
   it('fails the template until it is filled in, so a copied blank plan never reads as ready', () => {
     const problems = checkLadder(TEMPLATE);
-    expect(problems[0]).toBe('Features: fill in one row per feature (no <placeholder> or empty names)');
+    expect(problems).toContain('Features: replace every <placeholder>');
     expect(problems).toContain('3. Rendered gameplay clips: "<feature>" has no ticket');
     expect(problems.every((problem) => !problem.startsWith('stages must be'))).toBe(true);
+    const halfFilled = TEMPLATE.replace(/<feature>/g, 'play').replace(/<ticket>/g, 'T1');
+    expect(checkLadder(halfFilled)).toEqual(['Features: replace every <placeholder>', '1. Concepts: replace every <placeholder>']);
+  });
+
+  it('reads only the first table of a section, so notes tables beside a stage are allowed', () => {
+    const withNotes = BLOBS.replace('## 2. Dioramas', '| Mock | Source |\n|---|---|\n| a | kit |\n\n## 2. Dioramas');
+    expect(checkLadder(withNotes)).toEqual([]);
   });
 
   it('fails a plan whose stages are out of order, so clips can never come before dioramas', () => {
@@ -69,18 +76,24 @@ describe('check-ladder', () => {
 
   it('runs as a command that exits 1 with the problems, 0 when clean, 2 without a file', () => {
     const script = path('./check-ladder.ts');
-    const run = (...args: string[]) => {
+    const runScript = (file: string, ...args: string[]) => {
       try {
-        return { code: 0, out: execFileSync('node', [script, ...args], { encoding: 'utf8', stdio: 'pipe' }) };
+        return { code: 0, out: execFileSync('node', [file, ...args], { encoding: 'utf8', stdio: 'pipe' }) };
       } catch (error) {
         const failed = error as { status: number; stdout: string };
         return { code: failed.status, out: failed.stdout };
       }
     };
+    const run = (...args: string[]) => runScript(script, ...args);
     expect(run(path('../references/examples/blobs-ladder.md'))).toEqual({ code: 0, out: '' });
     const broken = join(mkdtempSync(join(tmpdir(), 'gm-ladder-test-')), 'ladder.md');
     writeFileSync(broken, BLOBS.replace('3 Clips: chains, Blobs', ''));
     expect(run(broken)).toEqual({ code: 1, out: '3. Rendered gameplay clips: "chains" has no ticket\n' });
     expect(run().code).toBe(2);
+    expect(run(join(dirname(broken), 'missing.md')).code).toBe(2);
+    const link = join(dirname(broken), 'skill-link');
+    symlinkSync(path('..'), link);
+    /* installed skills are often symlinks (.codex/skills, .agents/skills); the check must still run through one */
+    expect(runScript(join(link, 'scripts/check-ladder.ts'), broken).code).toBe(1);
   });
 });
