@@ -14,7 +14,9 @@ import {
   initialDeck,
   mediaKindOf,
   reviewOf,
+  withoutLinks,
 } from './review';
+import { PlayableCard } from './playable';
 import { VoiceNote, type DictationPort } from './voice-note';
 import './review-deck.css';
 
@@ -111,6 +113,8 @@ export function ReviewDeck({
           }}
         >
           <DeckCard
+            gameId={gameId}
+            cards={cards}
             card={card}
             drag={drag}
             onDrag={setDrag}
@@ -256,11 +260,11 @@ export function ReviewDeck({
 // video), which is what the deck judges one at a time. A Command with mixed options keeps the plain option list —
 // its text choice is not a card — and the deep link still opens it in the deck.
 export function isReviewDeck(command: GameCommand): boolean {
-  return command.options.every(({ media }) => media !== undefined);
+  return command.options.every(({ media, playable }) => media !== undefined || playable !== undefined);
 }
 
 function labelOf(cards: GameCommand['options'], optionId: string): string {
-  return optionOf(cards, optionId)?.label ?? optionId;
+  return withoutLinks(optionOf(cards, optionId)?.label ?? optionId);
 }
 
 function optionOf(cards: GameCommand['options'], optionId: string): GameCommand['options'][number] | undefined {
@@ -272,12 +276,16 @@ function optionOf(cards: GameCommand['options'], optionId: string): GameCommand[
 const TAP_SLOP = 4;
 
 function DeckCard({
+  gameId,
+  cards,
   card,
   drag,
   onDrag,
   onDragEnd,
   onTap,
 }: {
+  gameId: string;
+  cards: GameCommand['options'];
   card: GameCommand['options'][number];
   drag: number;
   onDrag(dx: number): void;
@@ -304,8 +312,9 @@ function DeckCard({
       style={{ transform: drag === 0 ? undefined : `translateX(${drag}px)` }}
       onPointerDown={(event) => {
         if (event.pointerType === 'mouse' && event.button !== 0) return;
-        // The replay control and the label keep their own taps; only the sample itself opens the viewer.
-        if ((event.target as HTMLElement).closest('button') !== null) return;
+        // The replay control and the label keep their own taps, and a playable slice keeps every touch for the game;
+        // only the sample itself opens the viewer.
+        if ((event.target as HTMLElement).closest('button, .review-deck-playable') !== null) return;
         start.current = { x: event.clientX, y: event.clientY };
         capturePointer(event.currentTarget, event.pointerId);
       }}
@@ -329,7 +338,11 @@ function DeckCard({
         onDragEnd(0);
       }}
     >
-      {media === undefined ? null : kind === 'audio' ? (
+      {media === undefined ? (
+        card.playable === undefined ? null : (
+          <PlayableCard gameId={gameId} card={card} options={cards} />
+        )
+      ) : kind === 'audio' ? (
         <AudioCard audio={audio} label={card.label} playing={playing} setPlaying={setPlaying} src={media.url} />
       ) : kind === 'video' ? (
         <video
@@ -350,7 +363,7 @@ function DeckCard({
           style={{ aspectRatio: `${media.width} / ${media.height}` }}
         />
       )}
-      <p className="review-deck-label">{card.label}</p>
+      <p className="review-deck-label">{withoutLinks(card.label)}</p>
       {/* An audio card has no still to show, so its card says how long the sample runs beside the replay control. */}
       {kind === 'audio' && media?.duration_ms !== undefined ? (
         <p className="review-deck-length">{clipLength(media.duration_ms)}</p>

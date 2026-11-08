@@ -413,3 +413,54 @@
   width: 20px;
   height: 20px;
 }
+
+/* A playable card (#608): the game's own frame in the card, sized like a clip. Touch buttons, keys and gamepad reach the
+   game; once its slice ends the game pauses under a scrim with "play again" and "compare". */
+.review-deck-playable {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  max-height: min(70svh, 620px);
+  background: var(--night);
+  touch-action: none;
+}
+
+.review-deck-playable-frame {
+  width: 100%;
+  height: 100%;
+}
+
+.review-deck-playable-state {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  color: var(--ink);
+}
+
+.review-deck-playable-tag {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--night) 80%, transparent);
+  color: var(--ink);
+  font: 700 14px/1.2 var(--display);
+  pointer-events: none;
+}
+
+.review-deck-playable-ended {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: color-mix(in srgb, var(--night) 55%, transparent);
+}
+
+.review-deck-playable-ended .icon svg {
+  width: 26px;
+  height: 26px;
+}

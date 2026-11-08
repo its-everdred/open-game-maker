@@ -129,6 +129,70 @@ describe('gm checkpoint open', () => {
     expect(result.err[0]).toContain('unknown chat message id');
   });
 
+  // Gameplay-feel questions (#608) are answered by playing each option in the card, not by following a link.
+  it('writes each option’s playable slice with its seconds, lead-in and branch', async () => {
+    const root = workspace();
+    const result = await gm(
+      [
+        'checkpoint',
+        'open',
+        '--job',
+        JOB_ID,
+        '--question',
+        'Which fall speed?',
+        '--option',
+        'slow=Slow',
+        '--option',
+        'fast=Fast',
+        '--playable',
+        'slow=scenario=sandbox&speed=slow',
+        '--playable',
+        'fast=scenario=sandbox&speed=fast',
+        '--seconds',
+        'fast=5',
+        '--lead-in',
+        'slow=one-chain',
+        '--branch',
+        'feel',
+        '--json',
+      ],
+      { cwd: root },
+    );
+
+    expect(result).toMatchObject({ code: 0, err: [] });
+    expect(checkpointLine(root).payload.options).toEqual([
+      {
+        id: 'slow',
+        label: 'Slow',
+        playable: { scenario: 'scenario=sandbox&speed=slow', seconds: 8, lead_in: 'one-chain', branch: 'feel' },
+      },
+      { id: 'fast', label: 'Fast', playable: { scenario: 'scenario=sandbox&speed=fast', seconds: 5, branch: 'feel' } },
+    ]);
+  });
+
+  it.each([
+    { name: 'a URL scenario', extra: ['--playable', 'a=next=https://example.test/'], error: 'playable "a" is invalid' },
+    { name: 'a host parameter', extra: ['--playable', 'a=build=published'], error: 'playable "a" is invalid' },
+    { name: 'seconds without a playable', extra: ['--seconds', 'a=5'], error: 'has no --playable' },
+    { name: 'a link in a label', extra: ['--option', 'c=See https://example.test/c'], error: 'must not contain links' },
+  ])('exits 2 for $name', async ({ extra, error }) => {
+    const result = await gm(
+      ['checkpoint', 'open', '--job', JOB_ID, '--question', 'Which?', '--option', 'a=A', '--option', 'b=B', ...extra],
+      { cwd: workspace() },
+    );
+    expect(result.code).toBe(2);
+    expect(result.err[0]).toContain(error);
+  });
+
+  it('exits 2 for a question longer than one short line', async () => {
+    const result = await gm(
+      ['checkpoint', 'open', '--job', JOB_ID, '--question', 'x'.repeat(121), '--option', 'a=A', '--option', 'b=B'],
+      { cwd: workspace() },
+    );
+    expect(result.code).toBe(2);
+    expect(result.err[0]).toContain('one line');
+  });
+
   it('exits 2 when fewer than two options are provided', async () => {
     const result = await gm(
       ['checkpoint', 'open', '--job', JOB_ID, '--question', 'Which look?', '--option', 'a=Chunky'],

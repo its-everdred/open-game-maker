@@ -26,6 +26,8 @@ export interface GameFrameOptions {
   gameId: string;
   buildId: string;
   build: 'draft' | 'test' | 'published';
+  /** Extra query parameters the game reads at boot, such as a review deck's scenario (`speed=slow`). */
+  params?: Readonly<Record<string, string>>;
   mode: 'play' | 'edit' | 'test';
   playerIndex: number;
   tier?: Tier;
@@ -89,6 +91,8 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   Object.assign(iframe.style, { border: '0', width: '100%', height: '100%', display: 'block' });
   const path = `/g/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/index.html`;
   const source = new URL(path, gamesOrigin.origin);
+  /* The host's own parameters are set after, so a scenario can never change the build or the protocol. */
+  for (const [key, value] of Object.entries(options.params ?? {})) source.searchParams.set(key, value);
   source.searchParams.set('build', options.build);
   source.searchParams.set('protocol', String(SDK_PROTOCOL));
   iframe.src = source.href;

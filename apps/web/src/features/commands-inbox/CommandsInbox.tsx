@@ -5,6 +5,7 @@ import type { GameCommand } from '@ogm/contracts';
 import { Icon } from '../../components/Icon';
 import { AiurCommands, gameScope, type AiurCommandAnswer } from '../aiur/embed';
 import { answerCommand, useGameCommands } from './commands';
+import { questionLine, withoutLinks } from './review';
 import { isReviewDeck, ReviewDeck } from './ReviewDeck';
 import './commands-inbox.css';
 
@@ -49,14 +50,14 @@ export function CommandsInbox({ gameId, onOpenJob }: { gameId: string; onOpenJob
           const jobId = command.job_id;
           return (
             <li className="commands-inbox-item" key={command.checkpoint_id}>
-              <p className="commands-inbox-question">{command.question}</p>
+              <p className="commands-inbox-question">{questionLine(command.question)}</p>
               {isReviewDeck(command) ? (
                 <ReviewDeck gameId={gameId} command={command} />
               ) : (
                 <div className="build-chat-options">
                   {command.options.map((option) => (
                     <button
-                      aria-label={option.label}
+                      aria-label={withoutLinks(option.label)}
                       className="build-chat-option"
                       disabled={answering !== undefined}
                       key={option.id}
@@ -78,7 +79,7 @@ export function CommandsInbox({ gameId, onOpenJob }: { gameId: string; onOpenJob
                           )}
                         </span>
                       )}
-                      <span className="checkpoint-option-label">{option.label}</span>
+                      <span className="checkpoint-option-label">{withoutLinks(option.label)}</span>
                       {option.id === command.recommend && (
                         <span className="checkpoint-recommended">Builder&apos;s pick</span>
                       )}

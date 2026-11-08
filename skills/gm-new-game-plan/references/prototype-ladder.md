@@ -36,7 +36,8 @@ Each rung:
 4. **Shows the player view only.** No debug overlays or orbit cameras in the link; a debug view, if any, is a separate
    scenario that is never sent as evidence.
 5. **Ends in a feel Command** when a knob matters: 2–4 variants of the one value the rung is about (fall speed, rotate
-   rules, chain timing), each a scenario link with a clip, recommendation first.
+   rules, chain timing), each a playable option the review deck runs in the card (`gm checkpoint open --playable
+   <id>=<scenario query>`, a few seconds each with an optional `--lead-in`), recommendation first. Never a link.
 
 ### Worked example: a falling-block versus puzzle
 

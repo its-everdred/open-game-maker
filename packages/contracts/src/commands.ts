@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { Id, IsoTime } from './api.js';
-import { ChatMedia } from './chat.js';
+import { ChatMedia, OptionPlayable } from './chat.js';
 
 // The per-game Commands inbox (M3, A2a): one game's open aiur Commands in the shape the embeddable
 // `<aiur-commands>` component consumes (aiur#7487). A Command is one open aiur decision; a job's Command is answered
@@ -12,6 +12,8 @@ export const CommandOption = z.object({
   label: z.string().trim().min(1).max(200),
   // Present when the option carries media (A1 rich Commands). OGM signs the same blob URLs the chat uses.
   media: ChatMedia.optional(),
+  // Present when the option is a slice of the game to play (#608); the deck runs it in the card instead of a still.
+  playable: OptionPlayable.optional(),
 });
 
 // A review deck shows one card per option (A3), so a Command's option count is bounded by the deck, not by aiur's
