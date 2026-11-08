@@ -48,9 +48,17 @@ export function buildEmitEvent(payload: CheckpointOpenPayload): EmitEventCall {
       urgency: 'normal',
       context: {
         short_summary: 'Direction checkpoint for the creator',
-        long_context_markdown: `<!-- gm-checkpoint:${payload.checkpoint_id} -->\nOptions are previews already posted in the build chat.`,
+        long_context_markdown: `<!-- gm-checkpoint:${payload.checkpoint_id} -->\n${
+          payload.options.some(({ playable }) => playable)
+            ? 'Options are slices of the game the creator plays in the review deck.'
+            : 'Options are previews already posted in the build chat.'
+        }`,
       },
-      options: payload.options.map(({ id, label }) => ({ id, label, description: `Preview ${label}` })),
+      options: payload.options.map(({ id, label, playable }) => ({
+        id,
+        label,
+        description: playable ? `Play ${label} for ${playable.seconds}s` : `Preview ${label}`,
+      })),
       ...(payload.recommend
         ? {
             recommendation: {

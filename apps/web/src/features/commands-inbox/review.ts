@@ -150,17 +150,11 @@ export function clipLength(ms: number): string {
 }
 
 // A link never shows as text in the deck (#608): a URL in a title, question or label is dropped and the words around
-// it kept. The question shows as one short line.
+// it kept. (`gm checkpoint open` keeps the question itself to one short line.)
 const LINK = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S*/gi;
-const QUESTION_CHARS = 120;
 
 export function withoutLinks(text: string): string {
   return text.replace(LINK, '').replace(/\s+/g, ' ').trim();
-}
-
-export function questionLine(question: string): string {
-  const line = withoutLinks(question.split(/\r?\n/).find((part) => part.trim() !== '') ?? '');
-  return line.length <= QUESTION_CHARS ? line : `${line.slice(0, QUESTION_CHARS - 1).replace(/\s+\S*$/, '')}…`;
 }
 
 // The query a playable slice boots the game with: the option's scenario plus its lead-in move, if it has one.

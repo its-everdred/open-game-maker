@@ -97,11 +97,17 @@ function PlayableSlice({ gameId, option, onEnded }: { gameId: string; option: Op
       onState: (next) => {
         setState(next.bridgeState);
         if (next.bridgeState !== 'ready' || timer !== undefined) return;
-        // The keys go to the game while it plays, then back to the deck's arrows once it pauses.
-        element.querySelector('iframe')?.focus();
+        // The keys go to the game while it plays, then back to the deck's arrows once it pauses. Focus moves only when
+        // the creator is in this deck (or nowhere), and never scrolls: an inbox with several decks keeps its place.
+        const deck = element.closest<HTMLElement>('.review-deck');
+        const ours = () =>
+          document.activeElement === null ||
+          document.activeElement === document.body ||
+          deck?.contains(document.activeElement) === true;
+        if (ours()) element.querySelector('iframe')?.focus({ preventScroll: true });
         timer = setTimeout(() => {
           controller.pause();
-          element.closest<HTMLElement>('.review-deck')?.focus();
+          if (ours()) deck?.focus({ preventScroll: true });
           ended.current();
         }, seconds * 1000);
       },

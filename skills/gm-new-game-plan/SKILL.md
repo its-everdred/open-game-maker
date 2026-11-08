@@ -40,7 +40,7 @@ this section adds what is specific to games.
    starts now. Content tickets that need a creative choice (music direction, character look) open their own option
    Commands with samples (see the design skill's question protocol). A gameplay-feel question (speed, chain pause,
    controls) gives each option a playable slice (`gm checkpoint open --playable <id>=<scenario query>`, `gm decide
-   --playable` once #595 lands), never a link; the title is the 2–5 word topic and the question one short line.
+   --playable` once #595 lands), never a link, and the question is one short line.
 
 ## Always an audio track
 

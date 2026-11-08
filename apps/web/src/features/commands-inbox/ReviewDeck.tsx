@@ -86,7 +86,7 @@ export function ReviewDeck({
     const target = cards.find(({ id }) => id === state.reason!.optionId);
     return (
       <ReasonSheet
-        label={target?.label ?? ''}
+        label={withoutLinks(target?.label ?? '')}
         text={state.reason.text}
         onChange={(text) => dispatch({ type: 'set-reason', text })}
         onClose={() => dispatch({ type: 'close-reason' })}
@@ -338,11 +338,11 @@ function DeckCard({
         onDragEnd(0);
       }}
     >
-      {media === undefined ? (
-        card.playable === undefined ? null : (
-          <PlayableCard gameId={gameId} card={card} options={cards} />
-        )
-      ) : kind === 'audio' ? (
+      {/* A playable option is played even when it also carries a still; keyed by the card so its slice, pause and
+          compare state never carry over to the next card. */}
+      {card.playable !== undefined ? (
+        <PlayableCard key={card.id} gameId={gameId} card={card} options={cards} />
+      ) : media === undefined ? null : kind === 'audio' ? (
         <AudioCard audio={audio} label={card.label} playing={playing} setPlaying={setPlaying} src={media.url} />
       ) : kind === 'video' ? (
         <video
@@ -365,7 +365,7 @@ function DeckCard({
       )}
       <p className="review-deck-label">{withoutLinks(card.label)}</p>
       {/* An audio card has no still to show, so its card says how long the sample runs beside the replay control. */}
-      {kind === 'audio' && media?.duration_ms !== undefined ? (
+      {card.playable === undefined && kind === 'audio' && media?.duration_ms !== undefined ? (
         <p className="review-deck-length">{clipLength(media.duration_ms)}</p>
       ) : null}
     </div>
@@ -402,7 +402,7 @@ function MediaFullscreen({ card, onClose }: { card: GameCommand['options'][numbe
   if (mediaKindOf(media) === 'audio') return null;
   return (
     <Dialog
-      title={card.label}
+      title={withoutLinks(card.label)}
       className="review-deck-fullscreen"
       backdropClassName="review-deck-fullscreen-backdrop"
       onClose={onClose}

@@ -13,7 +13,6 @@ import {
   mediaKindOf,
   nextCompare,
   playableParams,
-  questionLine,
   reviewOf,
   shortlist,
   type DeckState,
@@ -205,21 +204,12 @@ describe('deck state readings', () => {
   });
 });
 
-// The deck never shows a link and keeps the question to one short line (#608): gameplay is tried in the card instead.
+// The deck never shows a link (#608): gameplay is tried in the card instead.
 describe('deck text', () => {
   it('drops every link and keeps the words around it', () => {
     expect(withoutLinks('Try it https://games.example.test/g/1?speed=slow then pick')).toBe('Try it then pick');
     expect(withoutLinks('See www.example.test')).toBe('See');
     expect(withoutLinks('Slow fall')).toBe('Slow fall');
-  });
-
-  it('shows the question as its first line, short and without links', () => {
-    expect(questionLine('Which fall speed? https://x.test/play\nLong context the agent added.')).toBe(
-      'Which fall speed?',
-    );
-    const long = questionLine(`Which ${'very '.repeat(40)}speed?`);
-    expect(long.length).toBeLessThanOrEqual(120);
-    expect(long.endsWith('…')).toBe(true);
   });
 });
 

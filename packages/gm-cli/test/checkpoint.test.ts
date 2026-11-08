@@ -160,6 +160,13 @@ describe('gm checkpoint open', () => {
     );
 
     expect(result).toMatchObject({ code: 0, err: [] });
+    // aiur's own copy of the Command says the options are played, not previews in the chat.
+    const printed = JSON.parse(result.out[0]) as { emit_event: { payload: Record<string, unknown> } };
+    expect(printed.emit_event.payload.options).toEqual([
+      { id: 'slow', label: 'Slow', description: 'Play Slow for 8s' },
+      { id: 'fast', label: 'Fast', description: 'Play Fast for 5s' },
+    ]);
+    expect(JSON.stringify(printed.emit_event.payload.context)).toContain('slices of the game');
     expect(checkpointLine(root).payload.options).toEqual([
       {
         id: 'slow',
@@ -175,6 +182,15 @@ describe('gm checkpoint open', () => {
     { name: 'a host parameter', extra: ['--playable', 'a=build=published'], error: 'playable "a" is invalid' },
     { name: 'seconds without a playable', extra: ['--seconds', 'a=5'], error: 'has no --playable' },
     { name: 'a link in a label', extra: ['--option', 'c=See https://example.test/c'], error: 'must not contain links' },
+    { name: 'a www link in a label', extra: ['--option', 'c=See www.example.test'], error: 'must not contain links' },
+    { name: 'too few seconds', extra: ['--playable', 'a=speed=slow', '--seconds', 'a=1'], error: 'is invalid' },
+    { name: 'too many seconds', extra: ['--playable', 'a=speed=slow', '--seconds', 'a=31'], error: 'is invalid' },
+    { name: 'an unknown option', extra: ['--playable', 'z=speed=slow'], error: 'does not exist' },
+    {
+      name: 'a second playable',
+      extra: ['--playable', 'a=speed=1', '--playable', 'a=speed=2'],
+      error: 'more than one',
+    },
   ])('exits 2 for $name', async ({ extra, error }) => {
     const result = await gm(
       ['checkpoint', 'open', '--job', JOB_ID, '--question', 'Which?', '--option', 'a=A', '--option', 'b=B', ...extra],
@@ -184,13 +200,17 @@ describe('gm checkpoint open', () => {
     expect(result.err[0]).toContain(error);
   });
 
-  it('exits 2 for a question longer than one short line', async () => {
+  it.each([
+    { name: 'longer than one short line', question: 'x'.repeat(121), error: 'one line' },
+    { name: 'over two lines', question: 'Which speed?\nMore context', error: 'one line' },
+    { name: 'with a link', question: 'Which? https://example.test/play', error: 'must not contain links' },
+  ])('exits 2 for a question $name', async ({ question, error }) => {
     const result = await gm(
-      ['checkpoint', 'open', '--job', JOB_ID, '--question', 'x'.repeat(121), '--option', 'a=A', '--option', 'b=B'],
+      ['checkpoint', 'open', '--job', JOB_ID, '--question', question, '--option', 'a=A', '--option', 'b=B'],
       { cwd: workspace() },
     );
     expect(result.code).toBe(2);
-    expect(result.err[0]).toContain('one line');
+    expect(result.err[0]).toContain(error);
   });
 
   it('exits 2 when fewer than two options are provided', async () => {

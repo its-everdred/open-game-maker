@@ -5,7 +5,7 @@ import type { GameCommand } from '@ogm/contracts';
 import { Icon } from '../../components/Icon';
 import { AiurCommands, gameScope, type AiurCommandAnswer } from '../aiur/embed';
 import { answerCommand, useGameCommands } from './commands';
-import { questionLine, withoutLinks } from './review';
+import { withoutLinks } from './review';
 import { isReviewDeck, ReviewDeck } from './ReviewDeck';
 import './commands-inbox.css';
 
@@ -50,7 +50,7 @@ export function CommandsInbox({ gameId, onOpenJob }: { gameId: string; onOpenJob
           const jobId = command.job_id;
           return (
             <li className="commands-inbox-item" key={command.checkpoint_id}>
-              <p className="commands-inbox-question">{questionLine(command.question)}</p>
+              <p className="commands-inbox-question">{withoutLinks(command.question)}</p>
               {isReviewDeck(command) ? (
                 <ReviewDeck gameId={gameId} command={command} />
               ) : (

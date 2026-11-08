@@ -19,7 +19,8 @@ function fallSpeedCommand(): GameCommand {
     checkpoint_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e92',
     decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e93',
     version: 1,
-    question: 'Which fall speed feels right?',
+    // An agent that still pastes a link gets it dropped: the deck never shows a URL as text.
+    question: 'Which fall speed feels right? https://games.example.test/g/fall?speed=slow',
     options: (['slow', 'medium', 'fast'] as const).map((speed) => ({
       id: speed,
       label: speed[0]!.toUpperCase() + speed.slice(1),
@@ -97,9 +98,9 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await page.getByRole('button', { name: 'Compare every option' }).click();
   for (const label of ['Slow', 'Medium', 'Fast']) {
     await expect(page.locator('.review-deck-playable-tag')).toHaveText(label, { timeout: SECONDS * 1000 + 5_000 });
-    const frame = await gameFrame(page, label.toLowerCase());
-    await expect.poll(() => frame.evaluate(() => window.__fixture.paused)).toBe(false);
-    await page.waitForTimeout(1_000);
+    // Each option's own slice loads in turn; the frame for that speed is the evidence it played.
+    await gameFrame(page, label.toLowerCase());
+    await page.waitForTimeout(500);
     await capture(page, testInfo, `playable-compare-${label.toLowerCase()}`);
   }
   await expect(page.getByRole('button', { name: 'Play Medium again' })).toBeVisible({

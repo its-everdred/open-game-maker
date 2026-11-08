@@ -117,6 +117,39 @@ describe('playable review cards', () => {
     await advance(0);
     expect(mounts[0]!.disposed).toBe(true);
     expect(mounts.at(-1)!.options.params).toEqual({ scenario: 'sandbox', speed: 'medium', lead_in: 'one-chain' });
+    // The new card plays: the last card's pause and "play again" do not carry over to it.
+    expect(screen.queryByRole('button', { name: 'Play Medium again' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Compare every option' })).toBeNull();
+  });
+
+  it('plays an option that also carries a still, instead of showing the still', async () => {
+    const command = fallSpeedCommand();
+    command.options[0] = {
+      ...command.options[0]!,
+      media: { url: 'https://media.example.test/s.png', width: 4, height: 3 },
+    };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ReviewDeck gameId="g_1" command={command} />
+      </QueryClientProvider>,
+    );
+    await advance(0);
+
+    expect(mounts).toHaveLength(1);
+    expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  it('says the game did not load and never pauses a game that never started', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'nope' }), { status: 500 })),
+    );
+    await renderDeck();
+    await advance(0);
+
+    expect(mounts).toHaveLength(0);
+    expect(screen.getByRole('status').textContent).toBe('The game did not load.');
   });
 
   it('replays the same slice from the start on play again', async () => {
