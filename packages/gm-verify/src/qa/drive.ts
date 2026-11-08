@@ -53,8 +53,9 @@ export async function driveJourney(
     const page = await context.newPage();
     watchConsole(page, collector);
     const player = new Player(page, dir, { label: viewport, touch: VIEWPORTS[viewport].hasTouch === true });
-    /* Only the commit: a hosted build is still loading its assets, and the journey's first expect waits for that. */
-    await page.goto(url, { waitUntil: 'commit' });
+    /* Not `load`: a hosted build is still loading its assets, and the journey's first expect waits for that.
+       Not `commit`: an unpainted page cannot be screenshotted, and the first input step takes a frame. */
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
     steps = await player.runAll(journey.steps);
     firstInputAt = player.firstInputAt;
     webm = await page.video()?.path();

@@ -120,14 +120,14 @@ export async function qaRoom(
     }
     const [host, ...guests] = clients as [Client, ...Client[]];
 
-    await host.player.page.goto(url, { waitUntil: 'commit' });
+    await host.player.page.goto(url, { waitUntil: 'domcontentloaded' });
     const hosted = record('host', [{ seat: 0, steps: await host.player.runAll(journey.host) }]);
     let ok = hosted;
     if (ok) {
       const joined: { seat: number; steps: StepResult[] }[] = [];
       for (const guest of guests) {
         Object.assign(guest.player.vars, host.player.vars, { seat: String(guest.seat) });
-        await guest.player.page.goto(url, { waitUntil: 'commit' });
+        await guest.player.page.goto(url, { waitUntil: 'domcontentloaded' });
         joined.push({ seat: guest.seat, steps: await guest.player.runAll(journey.join) });
       }
       ok = record('join', joined);
@@ -159,7 +159,7 @@ export async function qaRoom(
       /* about:blank closes the page's sockets for real while its recording carries on. */
       await dropper.player.page.goto('about:blank');
       await dropper.player.page.waitForTimeout(journey.dropMs);
-      await dropper.player.page.goto(back, { waitUntil: 'commit' });
+      await dropper.player.page.goto(back, { waitUntil: 'domcontentloaded' });
       const rejoined = await dropper.player.run(journey.rejoin, 0);
       const hostSees = await host.player.run(journey.seated, 1);
       record('rejoin', [
