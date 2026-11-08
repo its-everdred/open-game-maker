@@ -10,7 +10,9 @@ import { queryClient } from '../../app/query';
 import { gameCommandsQueryKey, useGameCommands } from '../../features/commands-inbox/commands';
 import { DecisionVoice, useDucking, type DecisionVoiceTarget } from '../../features/commands-inbox/decision-voice';
 import { ReviewDeck } from '../../features/commands-inbox/ReviewDeck';
+import { Icon } from '../../components/Icon';
 import { useMyJobs } from '../../features/build-chat/jobs';
+import { reviewTitle } from './title';
 import './review-screen.css';
 
 // The short link the Executor pushes to the creator (#591): `/<slug>/review/<n>`, the game's slug and the Command's
@@ -119,14 +121,13 @@ function ReviewScreen({
     return (
       <div className="review-screen">
         <header className="review-screen-head">
-          <button className="review-screen-back tap-primary" onClick={back} type="button">
-            Back to the game
-          </button>
           <h1>Saved</h1>
           {voice}
+          <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+            <Icon name="close" />
+          </button>
         </header>
         <div className="review-screen-body">
-          <p className="review-screen-question">{seen.question}</p>
           {/* A Command with no job answers through its game's own aiur, which cannot take a changed answer. */}
           {seen.job_id === null ? null : (
             <button
@@ -149,10 +150,10 @@ function ReviewScreen({
     return (
       <div className="review-screen">
         <header className="review-screen-head">
-          <button className="review-screen-back tap-primary" onClick={back} type="button">
-            Back to the game
-          </button>
           <h1>Review</h1>
+          <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+            <Icon name="close" />
+          </button>
         </header>
         <p className="review-screen-state" role="status">
           {isPending ? 'Loading the review…' : 'That review is not open. It may already be answered.'}
@@ -164,14 +165,13 @@ function ReviewScreen({
   return (
     <div className="review-screen">
       <header className="review-screen-head">
-        <button className="review-screen-back tap-primary" onClick={back} type="button">
-          Back to the game
-        </button>
-        <h1>{shown.title}</h1>
+        <h1>{reviewTitle(shown.title)}</h1>
         {voice}
+        <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+          <Icon name="close" />
+        </button>
       </header>
       <div className="review-screen-body">
-        <p className="review-screen-question">{shown.question}</p>
         {/* Keyed by each change, so a correction starts from a fresh deck rather than the votes already sent. */}
         <ReviewDeck
           key={correcting}
@@ -183,6 +183,9 @@ function ReviewScreen({
             setCorrecting(0);
           }}
         />
+        <details className="review-screen-question">
+          <summary>{shown.question}</summary>
+        </details>
       </div>
     </div>
   );
