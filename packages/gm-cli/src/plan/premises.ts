@@ -22,13 +22,15 @@ export type PremiseReason =
   | { kind: 'decision_mooted'; decision: string; feedback: string }
   | { kind: 'context_sha_missing' }
   | { kind: 'context_sha_unknown'; sha: string }
-  | { kind: 'spec_changed' | 'owned_changed'; files: string[] };
+  | { kind: 'spec_changed' | 'owned_changed'; files: string[] }
+  | { kind: 'git_failed'; error: string };
 
 export type TicketVerdict = { ticket: number; title?: string; premises: TicketPremises; reasons: PremiseReason[] };
 
-export type PremiseReport = { checked: number; flagged: TicketVerdict[]; clean: number[] };
+/** `unchecked` tickets name no premise at all, so nothing about them could be verified. */
+export type PremiseReport = { checked: number; flagged: TicketVerdict[]; clean: number[]; unchecked: number[] };
 
-/** Files under `paths` that changed between `sha` and HEAD; null when the repository does not know `sha`. */
+/** Files under `paths` that changed between `sha` and HEAD; null when the repository does not know `sha`; throws on a git failure. */
 export type ChangedSince = (sha: string, paths: string[]) => string[] | null;
 
 const KEY_LINE = /^\s*(?:[-*]\s+)?(?:\*\*)?(decisions|spec|owns|context-sha)(?:\*\*)?\s*:\s*(?:\*\*\s*)?(.*)$/i;
@@ -76,12 +78,14 @@ function currentDecision(decision: DesignDecision, supersededBy: Map<string, Des
 /** The ledger rejection that took the decision's answer back: its chosen option rejected, or its Command withdrawn. */
 function mootedBy(decision: DesignDecision, ledger: FeedbackLedger): string | null {
   const commands = new Set([decision.checkpoint_id, decision.decision_id]);
+  // A rejection recorded before the decision cannot have taken it back.
   const entry = ledger.entries.find(
     (candidate) =>
-      candidate.withdrawn.commands.some((command) => commands.has(command)) ||
-      (candidate.rejected.command !== null &&
-        commands.has(candidate.rejected.command) &&
-        candidate.rejected.options.some((option) => option.id === decision.chosen)),
+      Date.parse(candidate.at) > Date.parse(decision.at) &&
+      (candidate.withdrawn.commands.some((command) => commands.has(command)) ||
+        (candidate.rejected.command !== null &&
+          commands.has(candidate.rejected.command) &&
+          candidate.rejected.options.some((option) => option.id === decision.chosen))),
   );
   return entry?.id ?? null;
 }
@@ -95,15 +99,23 @@ export function sweepPremises(input: {
   const byId = new Map(input.decisions.map((decision) => [decision.id, decision]));
   // Oldest first, so a later re-answer of the same decision wins.
   const supersededBy = new Map<string, DesignDecision>();
-  for (const decision of [...input.decisions].sort((a, b) => a.at.localeCompare(b.at))) {
+  for (const decision of [...input.decisions].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
     if (decision.supersedes !== null) supersededBy.set(decision.supersedes, decision);
   }
 
   const open = input.tickets.filter((ticket) => ticket.state === undefined || ticket.state.toUpperCase() === 'OPEN');
   const flagged: TicketVerdict[] = [];
   const clean: number[] = [];
+  const unchecked: number[] = [];
   for (const ticket of open) {
     const premises = parsePremises(ticket.body);
+    if (
+      premises.decisions.length + premises.specs.length + premises.owns.length === 0 &&
+      premises.contextSha === null
+    ) {
+      unchecked.push(ticket.number);
+      continue;
+    }
     const reasons: PremiseReason[] = [];
 
     for (const id of premises.decisions) {
@@ -132,7 +144,13 @@ export function sweepPremises(input: {
         ];
         for (const { kind, paths } of files) {
           if (paths.length === 0) continue;
-          const changed = input.changedSince(premises.contextSha, paths);
+          let changed: string[] | null;
+          try {
+            changed = input.changedSince(premises.contextSha, paths);
+          } catch (error) {
+            reasons.push({ kind: 'git_failed', error: error instanceof Error ? error.message : String(error) });
+            break;
+          }
           if (changed === null) {
             reasons.push({ kind: 'context_sha_unknown', sha: premises.contextSha });
             break;
@@ -151,5 +169,5 @@ export function sweepPremises(input: {
         reasons,
       });
   }
-  return { checked: open.length, flagged, clean };
+  return { checked: open.length, flagged, clean, unchecked };
 }

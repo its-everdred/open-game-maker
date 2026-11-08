@@ -103,7 +103,7 @@ describe('gm plan premises', () => {
     };
     const result = await sweep(root, [ticket], [decision('D-01', 'a')]);
     expect(result.code).toBe(0);
-    expect(result.report).toEqual({ checked: 1, flagged: [], clean: [7] });
+    expect(result.report).toEqual({ checked: 1, flagged: [], clean: [7], unchecked: [] });
   });
 
   it('flags a ticket built on a decision the creator later changed, and names the decision that now stands', async () => {
@@ -136,33 +136,44 @@ describe('gm plan premises', () => {
     expect(result.report.flagged[0].reasons).toEqual([{ kind: 'decision_revised', decision: 'D-01', current: 'D-02' }]);
   });
 
-  it('flags a decision mooted by a ledger rejection of its answer, and one whose id is not in the history', async () => {
+  it('flags a decision whose answer a later ledger rejection took back, and one missing from the history', async () => {
     const { root } = repo();
-    await gm(
-      [
-        'options',
-        'reject',
-        '--words',
-        'not that look',
-        '--rule',
-        'no chunky look',
-        '--scope',
-        'look',
-        '--option',
-        'a=Chunky',
-        '--command',
-        'cp_D-01',
-      ],
-      { cwd: root },
-    );
+    const reject = (extra: string[]) =>
+      gm(['options', 'reject', '--words', 'not that', '--rule', 'not that', '--scope', 'look', ...extra], {
+        cwd: root,
+      });
+    // The creator rejects option a shown under cp_D-01, and a later rejection withdraws the Command cp_D-03.
+    await reject(['--option', 'a=Chunky', '--command', 'cp_D-01']);
+    await reject(['--withdraw-command', 'cp_D-03']);
+    const before = '2026-01-01T00:00:00Z';
     const result = await sweep(
       root,
-      [{ number: 9, body: body(['Decisions: D-01, D-04']) }],
-      [decision('D-01', 'a'), decision('D-02', 'b')],
+      [
+        { number: 9, body: body(['Decisions: D-01, D-04']) },
+        { number: 14, body: body(['Decisions: D-03']) },
+        { number: 15, body: body(['Decisions: D-05, D-06']) },
+        { number: 16, body: body(['No premise lines here.']) },
+      ],
+      [
+        decision('D-01', 'a', { at: before }),
+        decision('D-03', 'b', { at: before }),
+        // Same Command, but its answer is b, which nobody rejected.
+        decision('D-05', 'b', { at: before, checkpoint: 'cp_D-01' }),
+        // Picked a again after the rejection: the later answer stands.
+        decision('D-06', 'a', { at: '2099-01-01T00:00:00Z', checkpoint: 'cp_D-01' }),
+      ],
     );
-    const reasons = result.report.flagged[0].reasons;
-    expect(reasons).toContainEqual(expect.objectContaining({ kind: 'decision_mooted', decision: 'D-01' }));
-    expect(reasons).toContainEqual({ kind: 'decision_unknown', decision: 'D-04' });
+    expect(result.code).toBe(1);
+    const reasons = Object.fromEntries(
+      result.report.flagged.map((verdict: { ticket: number; reasons: unknown[] }) => [verdict.ticket, verdict.reasons]),
+    );
+    expect(reasons[9]).toEqual([
+      expect.objectContaining({ kind: 'decision_mooted', decision: 'D-01' }),
+      { kind: 'decision_unknown', decision: 'D-04' },
+    ]);
+    expect(reasons[14]).toEqual([expect.objectContaining({ kind: 'decision_mooted', decision: 'D-03' })]);
+    // A ticket naming no premise is not vouched for as clean.
+    expect(result.report).toMatchObject({ checked: 4, clean: [15], unchecked: [16] });
   });
 
   it('flags spec and owned-file changes after context-sha, naming only the changed files', async () => {
@@ -203,7 +214,7 @@ describe('gm plan premises', () => {
   it('skips closed tickets and refuses a decisions file of the wrong shape', async () => {
     const { root } = repo();
     const closed = await sweep(root, [{ number: 13, state: 'CLOSED', body: body(['Decisions: D-09']) }], []);
-    expect(closed.report).toEqual({ checked: 0, flagged: [], clean: [] });
+    expect(closed.report).toEqual({ checked: 0, flagged: [], clean: [], unchecked: [] });
 
     writeFileSync(join(root, 'issues.json'), '[]');
     writeFileSync(join(root, 'decisions.json'), '{"decisions":[{"id":"nope"}]}');
