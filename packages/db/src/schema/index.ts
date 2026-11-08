@@ -25,3 +25,5 @@ export * from './releases.js';
 export * from './allow-list.js';
 export * from './design-decisions.js';
 export * from './command-reviews.js';
+export * from './game-reviews.js';
+export * from './energy.js';

@@ -63,10 +63,11 @@ sees, and how to tell it works. Unknowns go in "Open questions and defaults", ne
 - Loss / fail state and retry:
 - Saves (what persists):
 
-## 13. Prototype milestone (built first)
-- What the prototype proves (the 1–3 mechanics that matter most):
+## 13. Prototype ladder (built first; see gm-new-game-plan/references/prototype-ladder.md)
+- Rungs P1..Pn: what each proves (one question each) and the scenarios the creator opens to try it:
 - Its content (one level, one enemy type, ...):
-- Prototype acceptance criteria (observable):
+- Acceptance per rung (observable):
+- Track directions known so far (visuals, characters, audio); their stages decide the rest:
 
 ## 14. Full-game acceptance criteria
 - Observable checks for the complete game (player can ..., on phone and desktop):

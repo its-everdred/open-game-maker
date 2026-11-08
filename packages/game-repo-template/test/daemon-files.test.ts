@@ -63,6 +63,8 @@ describe('renderDaemonFiles', () => {
     const rendered = await engine.parseAndRender(renderDaemonFiles().prompt, { issue, attempt: null });
     expect(rendered).toBe(fixture('prompt.expected.md'));
     expect(rendered).not.toContain('Continuation context');
+    // The pre-PR look gate: a failing or broker-errored look answer must stop the worker before it opens the PR.
+    expect(rendered).toContain('run `gm look check`; it must pass');
     const retried = await engine.parseAndRender(renderDaemonFiles().prompt, { issue, attempt: 2 });
     expect(retried).toContain('Retry attempt #2.');
   });

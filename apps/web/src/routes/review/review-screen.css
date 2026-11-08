@@ -13,6 +13,11 @@
   z-index: 50;
 }
 
+/* The review is the whole screen: the app's logo, menu and chat dock never float over the deck. */
+.app-chrome:has(.review-screen) :is(.studio-logo, .studio-menu-control, #chat-dock-slot) {
+  display: none;
+}
+
 .review-screen-head {
   position: sticky;
   top: 0;
@@ -28,18 +33,38 @@
 
 .review-screen-head h1 {
   flex: 1;
+  min-width: 0;
   margin: 0;
-  font: 700 clamp(1.7rem, 4vw, 3.2rem) / 1 var(--display);
+  overflow: hidden;
+  font: 700 clamp(1.35rem, 4vw, 3.2rem) / 1.1 var(--display);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.review-screen-back {
+.review-screen-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--tap-secondary);
+  height: var(--tap-secondary);
   border: 1px solid var(--rule);
-  border-radius: 999px;
-  padding: 0 20px;
+  border-radius: 50%;
+  padding: 0;
   background: var(--paper-2);
   color: var(--ink);
-  font: 700 15px/1 var(--display);
   cursor: pointer;
+}
+
+.review-screen-close .icon,
+.review-screen-close .icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+/* The X alone: the icon's duotone square reads as a box inside the round button. */
+.review-screen-close path[opacity] {
+  display: none;
 }
 
 .review-screen-body {
@@ -49,9 +74,26 @@
 }
 
 .review-screen-question {
-  margin: 0 0 16px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font: 700 clamp(15px, 2vw, 17px) / 1.4 var(--display);
+}
+
+.review-screen-question summary {
+  overflow: hidden;
+  cursor: pointer;
+  list-style: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-screen-question summary::-webkit-details-marker {
+  display: none;
+}
+
+.review-screen-question[open] summary {
   color: var(--ink);
-  font: 700 clamp(18px, 2.4vw, 22px) / 1.3 var(--display);
+  white-space: normal;
 }
 
 .review-screen-state {

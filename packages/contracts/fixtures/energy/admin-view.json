@@ -1,0 +1,55 @@
+{
+  "level": "limited",
+  "preference": "balanced",
+  "windows": [
+    {
+      "window": "day",
+      "usedPercent": 80,
+      "resetsAt": "2026-11-09T00:00:00Z"
+    },
+    {
+      "window": "week",
+      "usedPercent": 40,
+      "resetsAt": "2026-11-09T00:00:00Z"
+    },
+    {
+      "window": "month",
+      "usedPercent": null,
+      "resetsAt": "2026-12-01T00:00:00Z"
+    }
+  ],
+  "services": [
+    {
+      "service": "voice",
+      "usedPercent": null
+    },
+    {
+      "service": "images",
+      "usedPercent": null
+    }
+  ],
+  "limits": {
+    "day": 4000000,
+    "week": 20000000,
+    "month": null,
+    "voice": 1000000,
+    "images": null
+  },
+  "usage": {
+    "day": 3200000,
+    "week": 8000000,
+    "month": 12000000,
+    "voice": null,
+    "images": null
+  },
+  "resources": [
+    {
+      "label": "Builds",
+      "provider": "aiur",
+      "kind": "metered",
+      "spentMicroUsd": 12000000,
+      "remainingMicroUsd": null,
+      "resetsAt": null
+    }
+  ]
+}

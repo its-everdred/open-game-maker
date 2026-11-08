@@ -10,8 +10,9 @@ import { ChatMedia } from './chat.js';
 export const CommandOption = z.object({
   id: z.string().regex(/^[a-z0-9_-]{1,32}$/),
   label: z.string().trim().min(1).max(200),
-  // Present when the option carries media (A1 rich Commands). OGM signs the same blob URLs the chat uses.
-  media: ChatMedia.optional(),
+  // Present when the option carries media (A1 rich Commands). OGM signs the same blob URLs the chat uses. `kind` is set
+  // when the media names its type (an aiur Command's media does): a clip with no poster is still a clip.
+  media: ChatMedia.extend({ kind: z.enum(['image', 'video', 'audio']).optional() }).optional(),
 });
 
 // A review deck shows one card per option (A3), so a Command's option count is bounded by the deck, not by aiur's
@@ -38,6 +39,9 @@ export const GameCommand = z.object({
   // 'many' takes the likes and dislikes as the answer. Absent means 'one', which is what every older Command is.
   pick: z.enum(['one', 'many']).optional(),
   opened_at: IsoTime,
+  // The Command's short number inside its game (#591), for the `/<slug>/review/<n>` link. Given the first time the
+  // Command is listed and never reused.
+  review_number: z.number().int().positive().optional(),
 });
 
 // GET /api/v1/games/:gameId/commands → the open Commands of every job the caller can edit in that game, plus the

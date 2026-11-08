@@ -1,8 +1,10 @@
-import { AiurHttpError, type Decision } from '@ogm/aiur-client';
-import { GameCommand } from '@ogm/contracts';
+import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
+import { GameCommand, type CommandOption } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
+import type { MediaSigner } from '../build-chat/store.js';
+import { optionMediaFromAiur } from './aiur-media.js';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
 // not in any job's checkpoints: they are read from the instance's own Decision API, whose scoped grant already limits
@@ -31,7 +33,11 @@ function recommendOf(decision: Decision): string | undefined {
   return typeof id === 'string' && id !== '' ? id : undefined;
 }
 
-export function toGameCommand(decision: Decision): GameCommand | null {
+// `media` is each option's resolved media by option id (see `aiur-media.ts`); without it the options are text only.
+export function toGameCommand(
+  decision: Decision,
+  media: ReadonlyMap<string, NonNullable<CommandOption['media']>> = new Map(),
+): GameCommand | null {
   const recommend = recommendOf(decision);
   const command = GameCommand.safeParse({
     job_id: null,
@@ -42,7 +48,10 @@ export function toGameCommand(decision: Decision): GameCommand | null {
     decision_id: decision.decision_id,
     version: decision.version,
     question: decision.question,
-    options: decision.options.map(({ id, label }) => ({ id, label })),
+    options: decision.options.map(({ id, label }) => {
+      const optionMedia = media.get(id);
+      return optionMedia === undefined ? { id, label } : { id, label, media: optionMedia };
+    }),
     ...(recommend === undefined ? {} : { recommend }),
     blocking: decision.blocking,
     opened_at: decision.created_at,
@@ -56,10 +65,12 @@ export async function gameCommandsFromAiur(
   deps: AppDeps,
   gameId: string,
   jobTickets: ReadonlySet<string>,
+  sign: MediaSigner,
 ): Promise<GameCommand[]> {
+  let client: AiurClient;
   let decisions: Decision[];
   try {
-    const client = await deps.aiurClientForGame(gameId);
+    client = await deps.aiurClientForGame(gameId);
     decisions = await client.decisions();
   } catch (error) {
     if (error instanceof HttpError) return [];
@@ -70,12 +81,13 @@ export async function gameCommandsFromAiur(
     deps.log({ event: 'game_commands_unavailable', gameId, error: (error as Error).name });
     return [];
   }
-  const commands: GameCommand[] = [];
-  for (const decision of decisions) {
-    // A job's Command is already in its checkpoint, so the game's own read leaves those to the job.
-    if (jobTickets.has(decision.ticket.identifier) || !isOpen(decision)) continue;
-    const command = toGameCommand(decision);
-    if (command) commands.push(command);
-  }
-  return commands;
+  // A job's Command is already in its checkpoint, so the game's own read leaves those to the job. A Command the inbox
+  // would drop anyway is dropped before its media is copied.
+  const open = decisions.filter(
+    (decision) => !jobTickets.has(decision.ticket.identifier) && isOpen(decision) && toGameCommand(decision) !== null,
+  );
+  const commands = await Promise.all(
+    open.map(async (decision) => toGameCommand(decision, await optionMediaFromAiur(deps, client, decision, sign))),
+  );
+  return commands.filter((command) => command !== null);
 }
