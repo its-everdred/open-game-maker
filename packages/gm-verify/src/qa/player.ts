@@ -27,6 +27,8 @@ export class Player {
   private shots = 0;
   /** The frame before the latest input (or `mark`); a `changed` expect compares against it, then clears it. */
   private before: Buffer | undefined;
+  /** When the first input step began (epoch ms); the clip starts just before it. */
+  firstInputAt: number | undefined;
 
   readonly label: string;
   private readonly touch: boolean;
@@ -114,7 +116,10 @@ export class Player {
     const started = Date.now();
     const result: StepResult = { index, step: describeStep(step), ok: true, ms: 0 };
     try {
-      if (INPUT.has(step.do)) this.before = await frame(this.page);
+      if (INPUT.has(step.do)) {
+        this.firstInputAt ??= started;
+        this.before = await frame(this.page);
+      }
       switch (step.do) {
         case 'goto':
           await this.page.goto(fill(step.url, this.vars), { waitUntil: 'load' });

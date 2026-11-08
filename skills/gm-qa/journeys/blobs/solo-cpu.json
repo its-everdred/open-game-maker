@@ -4,7 +4,12 @@
   "steps": [
     { "do": "expect", "text": "Versus CPU", "timeoutMs": 90000 },
     { "do": "click", "text": "Versus CPU" },
-    { "do": "expect", "text": "ticks", "timeoutMs": 20000, "look": "Is a countdown showing over both boards, yours in front?" },
+    {
+      "do": "expect",
+      "text": "ticks",
+      "timeoutMs": 20000,
+      "look": "Is a countdown showing over both boards, yours in front?"
+    },
     { "do": "wait", "ms": 3500 },
     { "do": "press", "key": "ArrowLeft", "times": 2 },
     { "do": "press", "key": "ArrowUp" },

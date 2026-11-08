@@ -298,6 +298,24 @@ takes the gzipped archive with the commit in `x-gm-sha`. The upload writes a `fe
 settles — `done` for a published build, `failed` for a refused archive — so the release history reads like any other
 build's.
 
+## QA a game's newest build
+
+`ops/bin/ogm-qa` plays a registered game's newest build on the games origin like a player, with the four `gm qa`
+commands (the `gm-qa` skill), and leaves one run directory:
+
+```
+ops/bin/ogm-qa blobs                      # the newest build on main, rooms with 2 clients
+ops/bin/ogm-qa blobs --clients 4          # rooms with 4 clients (phone and desktop mixed)
+ops/bin/ogm-qa blobs --build <buildId>    # a specific build
+```
+
+It reads the internal token like `ogm-publish` and the games origin from `OGM_GAMES_ORIGIN` (`games.env`), asks the
+facts route for the newest build, then runs `gm qa open`, `gm qa drive` for each solo journey and `gm qa room` for each
+room journey in `<game>/qa/journeys/`, `gm qa look` and `gm qa look --report` from the game's folder in its registered
+checkout. The run lands in `~/.local/state/ogm/qa/<slug>/<buildId>/` (`OGM_QA_ROOT` moves it). Answer
+`look/answers.json` there after opening the stills, then `gm qa look --report --out <run>` again. Exit codes: 0 the
+report passed, 1 a step failed or a look is unanswered, 64 bad usage, 65 no game, build, origin or token.
+
 ## Prove the instance monorepo flow
 
 Every game in an instance lives in the one repository named by `OGM_INSTANCE_REPO`: `games/<slug>/` per game and

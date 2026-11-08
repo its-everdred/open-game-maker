@@ -8,7 +8,7 @@ import { FfmpegMissingError, hasFfmpeg } from '../capture.js';
 import { ConsoleCollector } from '../console.js';
 import type { ConsoleEntry, ViewportName } from '../report.js';
 import type { SoloJourney } from './journey.js';
-import { encodeClip, recordSize } from './media.js';
+import { clipStart, encodeGif, encodeMp4, recordSize } from './media.js';
 import { watchConsole } from './open.js';
 import { Player, type StepResult } from './player.js';
 
@@ -21,8 +21,8 @@ export type DriveResult = {
   /** Steps never run because an earlier one failed. */
   skipped: number;
   console: ConsoleEntry[];
-  clip: { mp4: string; gif: string } | null;
-  /** Why there is no clip (ffmpeg missing), so the report can list it as unchecked. */
+  clip: { mp4: string; gif: string | null } | null;
+  /** Why there is no clip or GIF (ffmpeg missing or too slow), so the report can list it as unchecked. */
   unchecked: string[];
 };
 
@@ -43,16 +43,20 @@ export async function driveJourney(
   const videoDir = join(dir, '.video');
   mkdirSync(videoDir, { recursive: true });
   const size = recordSize(VIEWPORTS[viewport].viewport);
+  const recordingStartedAt = Date.now();
   const context = await browser.newContext({ ...VIEWPORTS[viewport], recordVideo: { dir: videoDir, size } });
   const collector = new ConsoleCollector();
   let steps: StepResult[];
   let webm: string | undefined;
+  let firstInputAt: number | undefined;
   try {
     const page = await context.newPage();
     watchConsole(page, collector);
     const player = new Player(page, dir, { label: viewport, touch: VIEWPORTS[viewport].hasTouch === true });
-    await page.goto(url, { waitUntil: 'load' });
+    /* Only the commit: a hosted build is still loading its assets, and the journey's first expect waits for that. */
+    await page.goto(url, { waitUntil: 'commit' });
     steps = await player.runAll(journey.steps);
+    firstInputAt = player.firstInputAt;
     webm = await page.video()?.path();
   } finally {
     await context.close();
@@ -64,10 +68,12 @@ export async function driveJourney(
   try {
     if (!webm) throw new Error('no recording');
     if (!hasFfmpeg(binary)) throw new FfmpegMissingError(binary);
-    encodeClip(webm, join(dir, 'journey.mp4'), join(dir, 'journey.gif'), binary);
-    clip = { mp4: 'journey.mp4', gif: 'journey.gif' };
+    encodeMp4(webm, join(dir, 'journey.mp4'), clipStart(recordingStartedAt, firstInputAt), binary);
+    clip = { mp4: 'journey.mp4', gif: null };
+    encodeGif(join(dir, 'journey.mp4'), join(dir, 'journey.gif'), binary);
+    clip.gif = 'journey.gif';
   } catch (error) {
-    unchecked.push(`clip (${error instanceof Error ? error.message : String(error)})`);
+    unchecked.push(`${clip ? 'gif' : 'clip'} (${error instanceof Error ? error.message : String(error)})`);
   } finally {
     rmSync(videoDir, { recursive: true, force: true });
   }

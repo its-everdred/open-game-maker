@@ -8,7 +8,7 @@ import { FfmpegMissingError, hasFfmpeg } from '../capture.js';
 import { ConsoleCollector } from '../console.js';
 import type { ConsoleEntry, ViewportName } from '../report.js';
 import type { ExpectStep, RoomJourney } from './journey.js';
-import { encodeGif, recordSize, sideBySide } from './media.js';
+import { clipStart, encodeGif, recordSize, sideBySide } from './media.js';
 import { watchConsole } from './open.js';
 import { Player, type StepResult } from './player.js';
 
@@ -26,7 +26,7 @@ export type QaRoomResult = {
   checks: RoomCheck[];
   verdict: 'pass' | 'fail';
   tile: string | null;
-  clip: { mp4: string; gif: string } | null;
+  clip: { mp4: string; gif: string | null } | null;
   unchecked: string[];
 };
 
@@ -52,6 +52,7 @@ type Client = {
   context: BrowserContext;
   player: Player;
   console: ConsoleCollector;
+  recordingStartedAt: number;
 };
 
 /**
@@ -74,7 +75,7 @@ export async function qaRoom(
   const clients: Client[] = [];
   const checks: RoomCheck[] = [];
   const stills: string[] = [];
-  const videos: string[] = [];
+  const videos: { path: string; startS: number }[] = [];
   const binary = options.ffmpegBinary ?? 'ffmpeg';
   const unchecked: string[] = [];
 
@@ -101,6 +102,7 @@ export async function qaRoom(
     for (let seat = 0; seat < options.clients; seat += 1) {
       const viewport = viewportFor(seat);
       const size = recordSize(VIEWPORTS[viewport].viewport);
+      const recordingStartedAt = Date.now();
       const context = await browser.newContext({
         ...VIEWPORTS[viewport],
         recordVideo: { dir: join(videoDir, String(seat)), size },
@@ -114,18 +116,18 @@ export async function qaRoom(
         vars: { clients: String(options.clients), seat: String(seat) },
         startedAt,
       });
-      clients.push({ seat, viewport, context, player, console: collector });
+      clients.push({ seat, viewport, context, player, console: collector, recordingStartedAt });
     }
     const [host, ...guests] = clients as [Client, ...Client[]];
 
-    await host.player.page.goto(url, { waitUntil: 'load' });
+    await host.player.page.goto(url, { waitUntil: 'commit' });
     const hosted = record('host', [{ seat: 0, steps: await host.player.runAll(journey.host) }]);
     let ok = hosted;
     if (ok) {
       const joined: { seat: number; steps: StepResult[] }[] = [];
       for (const guest of guests) {
         Object.assign(guest.player.vars, host.player.vars, { seat: String(guest.seat) });
-        await guest.player.page.goto(url, { waitUntil: 'load' });
+        await guest.player.page.goto(url, { waitUntil: 'commit' });
         joined.push({ seat: guest.seat, steps: await guest.player.runAll(journey.join) });
       }
       ok = record('join', joined);
@@ -157,7 +159,7 @@ export async function qaRoom(
       /* about:blank closes the page's sockets for real while its recording carries on. */
       await dropper.player.page.goto('about:blank');
       await dropper.player.page.waitForTimeout(journey.dropMs);
-      await dropper.player.page.goto(back, { waitUntil: 'load' });
+      await dropper.player.page.goto(back, { waitUntil: 'commit' });
       const rejoined = await dropper.player.run(journey.rejoin, 0);
       const hostSees = await host.player.run(journey.seated, 1);
       record('rejoin', [
@@ -169,7 +171,8 @@ export async function qaRoom(
       const video = c.player.page.video();
       await c.context.close();
       const path = await video?.path();
-      if (path) videos.push(path);
+      /* Every pane starts at seat 0's first input, so the stacked clip shows one moment across the room. */
+      if (path) videos.push({ path, startS: clipStart(c.recordingStartedAt, clients[0]?.player.firstInputAt) });
     }
   } finally {
     await Promise.all(clients.map((c) => c.context.close().catch(() => undefined)));
@@ -177,17 +180,24 @@ export async function qaRoom(
 
   let tileFile: string | null = null;
   let clip: QaRoomResult['clip'] = null;
+  const why = (error: unknown) => (error instanceof Error ? error.message : String(error));
   try {
     if (!hasFfmpeg(binary)) throw new FfmpegMissingError(binary);
     sideBySide(stills, join(dir, 'room.png'), false, binary);
     tileFile = 'room.png';
-    if (videos.length === clients.length) {
-      sideBySide(videos, join(dir, 'room.mp4'), true, binary);
-      encodeGif(join(dir, 'room.mp4'), join(dir, 'room.gif'), binary);
-      clip = { mp4: 'room.mp4', gif: 'room.gif' };
-    } else unchecked.push('clip (a client left no recording)');
+    if (videos.length !== clients.length) throw new Error('a client left no recording');
+    sideBySide(
+      videos.map((v) => v.path),
+      join(dir, 'room.mp4'),
+      true,
+      binary,
+      videos.map((v) => v.startS),
+    );
+    clip = { mp4: 'room.mp4', gif: null };
+    encodeGif(join(dir, 'room.mp4'), join(dir, 'room.gif'), binary);
+    clip.gif = 'room.gif';
   } catch (error) {
-    unchecked.push(`tile and clip (${error instanceof Error ? error.message : String(error)})`);
+    unchecked.push(`${clip ? 'gif' : tileFile ? 'clip' : 'tile and clip'} (${why(error)})`);
   } finally {
     rmSync(videoDir, { recursive: true, force: true });
   }

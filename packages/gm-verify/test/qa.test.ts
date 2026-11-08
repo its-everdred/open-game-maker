@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { DriveResult } from '../src/qa/drive.js';
 import { fill, journeySchema, roomJourneySchema } from '../src/qa/journey.js';
 import { groupRequests, MAX_LOOK_IMAGES, writeLookRequests, writeQaReport, type LookQuestion } from '../src/qa/look.js';
-import { recordSize, sideBySideArgs } from '../src/qa/media.js';
+import { clipStart, gifArgs, mp4Args, recordSize, sideBySideArgs } from '../src/qa/media.js';
 import { countdownSpread, viewportFor } from '../src/qa/room.js';
 
 describe('journey schema', () => {
@@ -54,6 +54,29 @@ describe('room checks', () => {
 
   it('mixes phone and desktop with the host on a desktop', () => {
     expect([0, 1, 2, 3].map(viewportFor)).toEqual(['desktop', 'phone', 'desktop', 'phone']);
+  });
+
+  it('starts a clip a second before the first input, not on the minute of asset loading before it', () => {
+    expect(clipStart(10_000, 70_500)).toBe(59.5);
+    expect(clipStart(10_000, 10_400)).toBe(0);
+    expect(clipStart(10_000, undefined)).toBe(0);
+    expect(mp4Args('in.webm', 'out.mp4', 59.5).slice(0, 4)).toEqual(['-ss', '59.50', '-i', 'in.webm']);
+    expect(mp4Args('in.webm', 'out.mp4')[0]).toBe('-i');
+  });
+
+  it('keeps the GIF to a 15 s preview so a long journey cannot stall the encode', () => {
+    expect(gifArgs('in.mp4', 'out.gif').slice(0, 4)).toEqual(['-t', '15', '-i', 'in.mp4']);
+  });
+
+  it('seeks each stacked recording to its own start so the panes show one moment', () => {
+    expect(sideBySideArgs(['a.webm', 'b.webm'], 'o.mp4', true, [2, 0.5]).slice(0, 6)).toEqual([
+      '-ss',
+      '2.00',
+      '-i',
+      'a.webm',
+      '-ss',
+      '0.50',
+    ]);
   });
 
   it('records a desktop at 960 px wide and a phone at its own size', () => {

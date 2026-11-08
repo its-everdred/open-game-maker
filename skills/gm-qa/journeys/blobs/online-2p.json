@@ -12,7 +12,12 @@
     { "do": "expect", "text": "Online room", "timeoutMs": 90000 },
     { "do": "click", "text": "Online room" }
   ],
-  "seated": { "do": "expect", "text": "All seats ready", "timeoutMs": 20000, "look": "Does every seat card show its player?" },
+  "seated": {
+    "do": "expect",
+    "text": "All seats ready",
+    "timeoutMs": 20000,
+    "look": "Does every seat card show its player?"
+  },
   "start": [{ "do": "click", "text": "Start match" }],
   "countdown": { "do": "expect", "text": "ticks", "timeoutMs": 20000 },
   "move": {
@@ -21,7 +26,12 @@
       { "do": "press", "key": "ArrowLeft", "times": 2 },
       { "do": "press", "key": "Space" }
     ],
-    "expect": { "do": "expect", "pixels": "changed", "timeoutMs": 5000, "look": "Did the other player's piece land on this screen?" }
+    "expect": {
+      "do": "expect",
+      "pixels": "changed",
+      "timeoutMs": 5000,
+      "look": "Did the other player's piece land on this screen?"
+    }
   },
   "rejoin": { "do": "expect", "text": "Room ", "timeoutMs": 30000 },
   "dropMs": 3000

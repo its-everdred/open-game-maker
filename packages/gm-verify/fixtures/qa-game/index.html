@@ -5,13 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" href="data:," />
 <style>
-  body { margin: 0; font: 20px sans-serif; background: #123; color: #fff; }
-  #menu, #lobby { position: fixed; top: 20px; left: 20px; z-index: 1; }
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
-  button { font-size: 20px; margin: 4px; }
+  body {
+    margin: 0;
+    font: 20px sans-serif;
+    background: #123;
+    color: #fff;
+  }
+  #menu,
+  #lobby {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1;
+  }
+  canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  button {
+    font-size: 20px;
+    margin: 4px;
+  }
 </style>
 <div id="menu"><button id="play">Play</button><button id="create">Create room</button></div>
-<div id="lobby" hidden><span id="code"></span> <span id="seats"></span> <span id="count"></span> <span id="score"></span></div>
+<div id="lobby" hidden>
+  <span id="code"></span> <span id="seats"></span> <span id="count"></span> <span id="score"></span>
+</div>
 <canvas id="c"></canvas>
 <script>
   const q = new URLSearchParams(location.search);
@@ -51,7 +72,7 @@
   });
   let touchX = null;
   addEventListener('touchstart', (e) => (touchX = e.touches[0].clientX));
-  addEventListener('touchmove', (e) => (touchX ??= e.touches[0].clientX, (window.lastTouch = e.touches[0].clientX)));
+  addEventListener('touchmove', (e) => ((touchX ??= e.touches[0].clientX), (window.lastTouch = e.touches[0].clientX)));
   addEventListener('touchend', () => {
     if (touchX !== null && window.lastTouch !== undefined && Math.abs(window.lastTouch - touchX) > 30)
       move(window.lastTouch > touchX ? 1 : -1);
