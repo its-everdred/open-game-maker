@@ -46,6 +46,10 @@ export type NewChatRow = {
 export type StoredCheckpoint = ChatCheckpoint & {
   checkpoint_id?: string;
   version?: number;
+  // A creator's change to a non-design Command after aiur took its answer (#597): the answer that now stands and how
+  // many changes there were. Kept apart from `option_id`, which the poller keeps equal to aiur's answer.
+  corrected_option_id?: string;
+  corrections?: number;
 };
 
 // Mints a short-lived URL for a blob hash (the blob store's signed GET).

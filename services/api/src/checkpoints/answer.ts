@@ -10,6 +10,7 @@ import { isDesignJob, latestForCheckpoint, tryRecordDesignDecision } from '../de
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { jobTitle, tryRecordReview } from '../reviews/store.js';
 import { answeredOption, statusOf } from './correlate.js';
+import { correctAnswer } from './correction.js';
 import { checkpointRuntime } from './runtime.js';
 
 // How an answer reached the Command: the player chose it, the player skipped the question and took the recommendation,
@@ -34,6 +35,9 @@ export type AnswerInput = {
   // A review deck's like/dislike map, when the Command's options carry media. Validated against the checkpoint before
   // anything is answered, so a client cannot name a card the Command does not have.
   review?: CommandReview;
+  // Where the player gave the answer. A spoken answer from two-way voice takes this same path, so the chat row, the
+  // inbox, the decision history and aiur all hold one record whichever way the creator answered.
+  channel?: 'chat' | 'voice';
   now?: () => Date;
 };
 
@@ -47,10 +51,15 @@ function winnerPatch(decision: Decision) {
   };
 }
 
-function rationale(source: AnswerSource, label: string, review?: string): string {
+function rationale(
+  source: AnswerSource,
+  label: string,
+  review?: string,
+  channel: AnswerInput['channel'] = 'chat',
+): string {
   if (source === 'default') return `Provisional default after the answer window passed without a reply: '${label}'`;
   if (source === 'skip') return `Creator skipped the question and took the recommendation '${label}'`;
-  const chose = `Creator chose '${label}' in the build chat`;
+  const chose = `Creator chose '${label}' ${channel === 'voice' ? 'in two-way voice' : 'in the build chat'}`;
   return review === undefined ? chose : `${chose}. ${review}`;
 }
 
@@ -142,6 +151,7 @@ function recordReviewOf(input: AnswerInput, checkpoint: StoredCheckpoint, option
 // Answers one aiur Command through aiur's canonical decision path and records the design decision behind it. A Command
 // that aiur already answered keeps that answer: for a design decision a later answer is recorded as a new decision
 // that supersedes the earlier one and the Executor re-plans, because an answered aiur decision cannot be re-answered.
+// Any other job's ticket is told of the change (correction.ts).
 export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcome> {
   const { deps, job, row, optionId } = input;
   const checkpoint = parseCheckpoint(row);
@@ -160,9 +170,17 @@ export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcom
   const design = isDesignJob(job.kind);
   const previous = design ? latestForCheckpoint(deps.db, job.gameId, checkpoint.checkpoint_id ?? row.id) : null;
   if (checkpoint.status === 'answered') {
-    // The same answer again — a double click or a retry — is the answer already standing, not a conflict.
-    if (checkpoint.option_id === optionId) return { kind: 'answered', decisionId: checkpoint.decision_id, optionId };
-    if (!design || checkpoint.option_id === undefined) return { kind: 'conflict', status: 'answered' };
+    // The same answer again — a double click or a retry — is the answer already standing, not a conflict. A corrected
+    // answer stands in place of aiur's.
+    const standing = checkpoint.corrected_option_id ?? checkpoint.option_id;
+    if (standing === optionId) return { kind: 'answered', decisionId: checkpoint.decision_id, optionId };
+    if (checkpoint.option_id === undefined) return { kind: 'conflict', status: 'answered' };
+    if (!design) {
+      const job = input.job as typeof input.job & { aiur: NonNullable<typeof input.job.aiur> };
+      if (!(await correctAnswer(deps, job, row, checkpoint, optionId))) return { kind: 'client_unavailable' };
+      recordReviewOf(input, checkpoint, optionId);
+      return { kind: 'superseded', decisionId: checkpoint.decision_id, optionId, supersedes: null };
+    }
     await recordAnswer(input, checkpoint, optionId, previous, true);
     recordReviewOf(input, checkpoint, optionId);
     const latest = latestForCheckpoint(deps.db, job.gameId, checkpoint.checkpoint_id ?? row.id);
@@ -183,7 +201,7 @@ export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcom
       option: optionId,
       expected_version: checkpoint.version,
       idempotency_key: `ogm:${input.source}:${checkpointId}:${checkpoint.version}`,
-      rationale: rationale(input.source, option.label, fields?.rationale),
+      rationale: rationale(input.source, option.label, fields?.rationale, input.channel),
       // aiur's "alternatives considered" are the likes left over once the answer's card is taken out; the whole map
       // travels in `response`, so nothing is lost when there are none.
       ...(fields === undefined
