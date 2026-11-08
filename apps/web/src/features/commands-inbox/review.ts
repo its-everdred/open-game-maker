@@ -1,4 +1,4 @@
-import type { CommandOption, CommandReview, GameCommand } from '@ogm/contracts';
+import type { CommandOption, CommandReview, GameCommand, OptionPlayable } from '@ogm/contracts';
 
 // A review deck (A3): a Command whose options carry media is judged one card at a time. The deck's state is the order
 // the creator walked the cards in, so undo means "take the last judgement back" and the ending grid is the same list.
@@ -148,4 +148,26 @@ export function mediaKindOf(media: NonNullable<CommandOption['media']>): 'audio'
 export function clipLength(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+// A link never shows as text in the deck: a URL in a title, question or label is dropped and the words around
+// it kept. (`gm checkpoint open` keeps the question itself to one short line.)
+const LINK = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S*/gi;
+
+export function withoutLinks(text: string): string {
+  return text.replace(LINK, '').replace(/\s+/g, ' ').trim();
+}
+
+// The query a playable slice boots the game with: the option's scenario plus its lead-in move, if it has one.
+export function playableParams(playable: OptionPlayable): Record<string, string> {
+  const params = Object.fromEntries(new URLSearchParams(playable.scenario));
+  return playable.lead_in === undefined ? params : { ...params, lead_in: playable.lead_in };
+}
+
+// Compare mode plays every playable option in the Command's order, one slice after another; null once the last ends.
+export function nextCompare(options: GameCommand['options'], current: number): number | null {
+  for (let index = current + 1; index < options.length; index += 1) {
+    if (options[index]!.playable !== undefined) return index;
+  }
+  return null;
 }

@@ -107,6 +107,35 @@
               "built_at"
             ],
             "additionalProperties": false
+          },
+          "playable": {
+            "type": "object",
+            "properties": {
+              "scenario": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 300
+              },
+              "seconds": {
+                "default": 8,
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 30
+              },
+              "lead_in": {
+                "type": "string",
+                "pattern": "^[a-z0-9_-]{1,32}$"
+              },
+              "branch": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              }
+            },
+            "required": [
+              "scenario",
+              "seconds"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

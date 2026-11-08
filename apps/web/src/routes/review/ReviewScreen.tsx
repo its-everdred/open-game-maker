@@ -5,6 +5,7 @@ import type { VoiceTarget } from '@ogm/contracts';
 import { reviewPath, type GameCommand } from '@ogm/contracts/browser';
 
 import { findCommand, findCommandByNumber } from '../../features/commands-inbox/review-route';
+import { withoutLinks } from '../../features/commands-inbox/review';
 import { PlayLinkMessage } from '../play/PlayScreen';
 import { playLinkDenial, usePlayLink } from '../play/api';
 import { useGameCommands } from '../../features/commands-inbox/commands';
@@ -115,7 +116,7 @@ function ReviewScreen({
   return (
     <div className="review-screen">
       <header className="review-screen-head">
-        <h1>{reviewTitle(command.title)}</h1>
+        <h1>{reviewTitle(withoutLinks(command.title))}</h1>
         <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
           <Icon name="close" />
         </button>
@@ -123,7 +124,7 @@ function ReviewScreen({
       <div className="review-screen-body">
         <ReviewDeck gameId={gameId} command={command} voiceTarget={voiceTarget} onAnswered={() => setSent(true)} />
         <details className="review-screen-question">
-          <summary>{command.question}</summary>
+          <summary>{withoutLinks(command.question)}</summary>
         </details>
       </div>
     </div>

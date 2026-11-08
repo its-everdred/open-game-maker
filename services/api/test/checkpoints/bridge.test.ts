@@ -133,6 +133,37 @@ describe('checkpoint outbox and budget', () => {
     expect(publish).toHaveBeenCalledWith(JOB_ID);
     expect(checkpointBudget(deps.sqlite, JOB_ID, 'new_game')).toEqual({ used: 1, max: 3 });
   });
+
+  // A playable option (#608) is played in the card, so its slice survives storage even when a stray media id is dropped.
+  it('keeps each option’s playable slice, including one whose media was rejected', async () => {
+    const deps = makeChatDeps();
+    const otherMedia = insertChatRow(deps.sqlite, { jobId: OTHER_JOB_ID, actor: 'agent', kind: 'image' }).row!;
+    const slow = { scenario: 'scenario=sandbox&speed=slow', seconds: 8, lead_in: 'one-chain' };
+    const fast = { scenario: 'scenario=sandbox&speed=fast', seconds: 5 };
+
+    await handleCheckpoint(
+      checkpointLine({
+        options: [
+          { id: 'wood', label: 'Slow', playable: slow },
+          { id: 'iron', label: 'Fast', media_id: otherMedia.id, playable: fast },
+        ],
+      }),
+      {
+        jobId: JOB_ID,
+        workspaceRoot: mkdtempSync(join(tmpdir(), 'ogm-checkpoint-outbox-')),
+        sqlite: deps.sqlite,
+        blobStore: deps.blobStore,
+        publish: vi.fn(),
+        log: deps.log,
+      },
+    );
+
+    const row = listSince(deps.sqlite, JOB_ID, 0).find(({ kind }) => kind === 'checkpoint')!;
+    expect(parseCheckpoint(row)?.options).toEqual([
+      { id: 'wood', label: 'Slow', playable: slow },
+      { id: 'iron', label: 'Fast', playable: fast },
+    ]);
+  });
 });
 
 describe('checkpoint poller', () => {

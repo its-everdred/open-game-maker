@@ -1,4 +1,4 @@
-import { AgentOutboxLine } from '@ogm/contracts';
+import { AgentOutboxLine, OptionPlayable } from '@ogm/contracts';
 import { ulid } from 'ulid';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
@@ -7,11 +7,15 @@ import { provenancePairs, strings } from '../../ledger/provenance.js';
 import { appendOutboxLine, gameDir, jobContext, knownChatMessageIds } from '../../outbox.js';
 
 const OPTION_ID = /^[a-z0-9_-]{1,32}$/;
+// The deck shows the question as one short line and never shows a link (#608): a gameplay question carries a playable
+// slice instead of a URL to go and try.
+const MAX_QUESTION = 120;
+const URL_TEXT = /[a-z][a-z0-9+.-]*:\/\/|\bwww\./i;
 
 export type CheckpointOpenPayload = {
   checkpoint_id: `cp_${string}`;
   question: string;
-  options: { id: string; label: string; media_id?: string; provenance?: unknown }[];
+  options: { id: string; label: string; media_id?: string; provenance?: unknown; playable?: OptionPlayable }[];
   recommend?: string;
   blocking: boolean;
 };
@@ -44,9 +48,17 @@ export function buildEmitEvent(payload: CheckpointOpenPayload): EmitEventCall {
       urgency: 'normal',
       context: {
         short_summary: 'Direction checkpoint for the creator',
-        long_context_markdown: `<!-- gm-checkpoint:${payload.checkpoint_id} -->\nOptions are previews already posted in the build chat.`,
+        long_context_markdown: `<!-- gm-checkpoint:${payload.checkpoint_id} -->\n${
+          payload.options.some(({ playable }) => playable)
+            ? 'Options are slices of the game the creator plays in the review deck.'
+            : 'Options are previews already posted in the build chat.'
+        }`,
       },
-      options: payload.options.map(({ id, label }) => ({ id, label, description: `Preview ${label}` })),
+      options: payload.options.map(({ id, label, playable }) => ({
+        id,
+        label,
+        description: playable ? `Play ${label} for ${playable.seconds}s` : `Preview ${label}`,
+      })),
       ...(payload.recommend
         ? {
             recommendation: {
@@ -75,17 +87,31 @@ export const command: GmCommand = {
       multiple: true,
       help: 'option id and its provenance JSON or @file; repeat once per option',
     },
+    playable: {
+      type: 'string',
+      multiple: true,
+      help: 'option id and the scenario query its playable slice runs, e.g. a=scenario=sandbox&speed=slow',
+    },
+    seconds: { type: 'string', multiple: true, help: 'option id and how long its slice plays (2-30, default 8)' },
+    'lead-in': { type: 'string', multiple: true, help: 'option id and the scripted move its slice plays first' },
+    branch: { type: 'string', help: 'game branch whose build the playable slices run (defaults to main)' },
     recommend: { type: 'string', help: 'option id recommended by the builder' },
     blocking: { type: 'boolean', default: false, help: 'hold this worker until the creator answers' },
   },
   async run(ctx, _args, flags) {
     const question = typeof flags.question === 'string' ? flags.question.trim() : '';
     if (!question) throw new UsageError('--question is required', 'gm checkpoint open --question "<question>"');
-    if (question.length > 2000) throw new UsageError('--question exceeds 2000 characters', 'shorten the question');
+    if (question.length > MAX_QUESTION || /[\r\n]/.test(question))
+      throw new UsageError(`--question must be one line of at most ${MAX_QUESTION} characters`, 'shorten the question');
     const optionPairs = strings(flags, 'option').map((value) => pair(value, 'option'));
     if (optionPairs.length < 2 || optionPairs.length > 5)
       throw new UsageError('checkpoint needs 2-5 options', 'repeat --option <id>=<label> 2-5 times');
     const ids = optionPairs.map(([id]) => id);
+    if (URL_TEXT.test(question) || optionPairs.some(([, label]) => URL_TEXT.test(label)))
+      throw new UsageError(
+        'the question and labels must not contain links',
+        'use --playable to let the creator try it',
+      );
     if (new Set(ids).size !== ids.length)
       throw new UsageError('option ids must be unique', 'use a different id for each --option');
 
@@ -111,6 +137,8 @@ export const command: GmCommand = {
       media.set(optionId, messageId);
     }
 
+    const playables = playablePairs(flags, ids);
+
     const provenance = provenancePairs(flags, root);
     for (const id of provenance.keys()) {
       if (!ids.includes(id)) throw new UsageError(`provenance names unknown option "${id}"`, 'use an id from --option');
@@ -122,6 +150,7 @@ export const command: GmCommand = {
       label,
       ...(media.has(id) ? { media_id: media.get(id)! } : {}),
       ...(provenance.has(id) ? { provenance: provenance.get(id)! } : {}),
+      ...(playables.has(id) ? { playable: playables.get(id)! } : {}),
     }));
     // The ledger gate: an option the game's rejections already invalidated never reaches the creator.
     const verdict = checkOptions(
@@ -164,3 +193,38 @@ export const command: GmCommand = {
     return EXIT.ok;
   },
 };
+
+// `--playable <id>=<scenario>` with its optional `--seconds` and `--lead-in` per option, and one `--branch` for all.
+function playablePairs(flags: Record<string, unknown>, ids: readonly string[]): Map<string, OptionPlayable> {
+  const known = (raw: string, flag: string): [string, string] => {
+    const [id, value] = pair(raw, flag);
+    if (!ids.includes(id)) throw new UsageError(`${flag} option "${id}" does not exist`, 'use an id from --option');
+    return [id, value];
+  };
+  const scenarios = new Map(strings(flags, 'playable').map((raw) => known(raw, 'playable')));
+  if (scenarios.size !== strings(flags, 'playable').length)
+    throw new UsageError('an option has more than one --playable', 'pass one --playable per option');
+  const seconds = new Map(strings(flags, 'seconds').map((raw) => known(raw, 'seconds')));
+  const leadIns = new Map(strings(flags, 'lead-in').map((raw) => known(raw, 'lead-in')));
+  for (const id of [...seconds.keys(), ...leadIns.keys()]) {
+    if (!scenarios.has(id))
+      throw new UsageError(`option "${id}" has no --playable`, `add --playable ${id}=<scenario query>`);
+  }
+  const branch = typeof flags.branch === 'string' ? flags.branch.trim() : undefined;
+  const playables = new Map<string, OptionPlayable>();
+  for (const [id, scenario] of scenarios) {
+    const parsed = OptionPlayable.safeParse({
+      scenario,
+      ...(seconds.has(id) ? { seconds: Number(seconds.get(id)) } : {}),
+      ...(leadIns.has(id) ? { lead_in: leadIns.get(id) } : {}),
+      ...(branch ? { branch } : {}),
+    });
+    if (!parsed.success)
+      throw new UsageError(
+        `playable "${id}" is invalid: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`,
+        'gm help checkpoint open',
+      );
+    playables.set(id, parsed.data);
+  }
+  return playables;
+}
