@@ -1,5 +1,6 @@
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,11 +18,12 @@ function git(cwd: string, ...args: string[]): string {
   });
 }
 
-/** A game repo with one committed still (and its target mock) at HEAD. */
-function game(stillBytes = 'frame-a'): string {
+/** A game repo with one still and its target mock; `commitStills: false` is an instance repo that ignores `*.png`. */
+function game({ stillBytes = 'frame-a', commitStills = true } = {}): string {
   const root = tempDir('gm-look-');
   git(root, 'init', '-q');
   writeFileSync(join(root, 'gm.manifest.json'), '{}');
+  if (!commitStills) writeFileSync(join(root, '.gitignore'), '*.png\n');
   mkdirSync(join(root, 'shots/desktop'), { recursive: true });
   mkdirSync(join(root, 'design'), { recursive: true });
   writeFileSync(join(root, STILL), stillBytes);
@@ -35,39 +37,47 @@ function commit(root: string): void {
   git(root, 'commit', '-qm', 'stills');
 }
 
+type Broker = { answer: string } | { error: string } | 'silent';
+
 /**
- * Runs gm-image-mock's real look request against a broker that has already answered, so the test exercises the
- * log format `request-mock.py` writes and `gm look check` reads.
+ * Runs gm-image-mock's real look request and answers it the way the host broker does (once the request file
+ * lands), so the test exercises the log format `request-mock.py` writes and `gm look check` reads.
  */
-function look(root: string, name: string, broker: { answer: string } | { error: string }): void {
-  mkdirSync(join(root, '.gm-mock/done'), { recursive: true });
-  mkdirSync(join(root, 'looks'), { recursive: true });
-  if ('answer' in broker) {
-    writeFileSync(join(root, 'looks', `${name}.look.md`), broker.answer);
-    writeFileSync(join(root, '.gm-mock/done', `${name}.json`), JSON.stringify({ ok: true, file: `${name}.look.md` }));
-  } else {
-    writeFileSync(join(root, '.gm-mock/done', `${name}.json`), JSON.stringify({ ok: false, error: broker.error }));
-  }
+async function look(root: string, name: string, broker: Broker): Promise<string> {
+  let request = '';
   writeFileSync(join(root, 'questions.md'), 'Does the still match the target?');
   const args = ['--kind', 'look', '--name', name, '--out', 'looks', '--prompt-file', 'questions.md'];
-  try {
-    execFileSync(
-      'python3',
-      ['-I', REQUEST_MOCK, ...args, '--ref', STILL, '--ref', 'design/target.png', '--wait', '5'],
-      {
-        cwd: root,
-        stdio: 'pipe',
-      },
-    );
-  } catch {
-    // A broker error exits non-zero; the outcome is still logged for the gate.
+  const wait = broker === 'silent' ? '1' : '30';
+  const child = spawn(
+    'python3',
+    ['-I', REQUEST_MOCK, ...args, '--ref', STILL, '--ref', 'design/target.png'].concat(['--wait', wait]),
+    {
+      cwd: root,
+      stdio: 'ignore',
+    },
+  );
+  const exited = new Promise((resolve) => child.on('close', resolve));
+  if (broker !== 'silent') {
+    const posted = join(root, '.gm-mock/requests', `${name}.json`);
+    while (!existsSync(posted)) await sleep(20);
+    // The host broker consumes each request it answers.
+    request = readFileSync(posted, 'utf8');
+    rmSync(posted);
+    const done = join(root, '.gm-mock/done', `${name}.json`);
+    if ('answer' in broker) {
+      mkdirSync(join(root, 'looks'), { recursive: true });
+      writeFileSync(join(root, 'looks', `${name}.look.md`), broker.answer);
+      writeFileSync(done, JSON.stringify({ ok: true, file: `${name}.look.md` }));
+    } else writeFileSync(done, JSON.stringify({ ok: false, error: broker.error }));
   }
+  await exited;
+  return request;
 }
 
-describe('gm look check', () => {
+describe('gm look check', { timeout: 60_000 }, () => {
   it('passes when the newest look at the committed still answers VERDICT: pass', async () => {
     const root = game();
-    look(root, 'first', { answer: 'Matches the target.\n\nVERDICT: pass\n' });
+    await look(root, 'first', { answer: 'Matches the target.\n\nVERDICT: pass\n' });
 
     const result = await gm(['look', 'check'], { cwd: root });
 
@@ -78,18 +88,20 @@ describe('gm look check', () => {
 
   it('fails a still whose look answered VERDICT: fail, so the worker cannot push past it (Blobs #117)', async () => {
     const root = game();
-    look(root, 'first', { answer: 'The HUD covers the player.\n\n**VERDICT: fail**\n' });
+    await look(root, 'first', { answer: 'The HUD covers the player.\n\n**VERDICT: fail**\n' });
 
     const result = await gm(['look', 'check'], { cwd: root });
 
     expect(result.code).toBe(1);
-    expect(result.err).toEqual([`fail ${STILL}: VERDICT: fail in looks/first.look.md`]);
+    expect(result.err).toEqual([
+      `fail ${STILL}: VERDICT: fail in looks/first.look.md; fix what it names, then look again`,
+    ]);
   });
 
   it('reports a broker error such as 402 as blocked, never as a pass', async () => {
     const root = game();
-    look(root, 'first', { answer: 'VERDICT: pass' });
-    look(root, 'second', { error: '402 Payment Required' });
+    await look(root, 'first', { answer: 'VERDICT: pass' });
+    await look(root, 'second', { error: '402 Payment Required' });
 
     const result = await gm(['look', 'check', '--json'], { cwd: root });
 
@@ -101,34 +113,73 @@ describe('gm look check', () => {
     });
   });
 
+  it('reports a broker that never answers as blocked', async () => {
+    const root = game();
+    await look(root, 'first', 'silent');
+
+    const result = await gm(['look', 'check'], { cwd: root });
+
+    expect(result.code).toBe(1);
+    expect(result.err[0]).toBe(`blocked ${STILL}: look broker error: no answer from the mock broker in 1s`);
+  });
+
   it('judges the bytes at HEAD: a pass on an older render does not cover a re-rendered still', async () => {
-    const root = game('frame-a');
-    look(root, 'first', { answer: 'VERDICT: pass' });
+    const root = game({ stillBytes: 'frame-a' });
+    await look(root, 'first', { answer: 'VERDICT: pass' });
     writeFileSync(join(root, STILL), 'frame-b');
     commit(root);
 
     const result = await gm(['look', 'check'], { cwd: root });
 
     expect(result.code).toBe(1);
-    expect(result.err).toEqual([`missing ${STILL}: no look answer for this version of the still`]);
+    expect(result.err[0]).toMatch(new RegExp(`^missing ${STILL}: no look answer for this version of the still; `));
   });
 
-  it('lets the newest look decide and fails an answer with no verdict line', async () => {
-    const root = game();
-    look(root, 'first', { answer: 'VERDICT: fail' });
-    look(root, 'second', { answer: 'Looks fine to me.' });
+  it('does not reuse the last answer when a request name is reused for new bytes', async () => {
+    const root = game({ stillBytes: 'frame-a' });
+    await look(root, 'first', { answer: 'VERDICT: pass' });
+    writeFileSync(join(root, STILL), 'frame-b');
+    commit(root);
+    // The broker has not answered the new bytes yet: the old pass must not be taken as their answer.
+    await look(root, 'first', 'silent');
 
     const result = await gm(['look', 'check'], { cwd: root });
 
     expect(result.code).toBe(1);
-    expect(result.err).toEqual([`fail ${STILL}: no VERDICT line in looks/second.look.md`]);
+    expect(result.err[0]).toBe(`blocked ${STILL}: look broker error: no answer from the mock broker in 1s`);
   });
 
-  it('asks the look model for the verdict line the gate reads', () => {
+  it('lets the newest look decide and fails an answer that does not end in a verdict', async () => {
     const root = game();
-    look(root, 'first', { answer: 'VERDICT: pass' });
+    await look(root, 'first', { answer: 'VERDICT: fail' });
+    await look(root, 'second', {
+      answer: 'VERDICT: pass\n\nCorrection: the image did not load, so I cannot judge it.',
+    });
 
-    const request = execFileSync('cat', [join(root, '.gm-mock/requests/first.json')], { encoding: 'utf8' });
-    expect(JSON.parse(request).prompt).toMatch(/VERDICT: pass` or `VERDICT: fail`\.$/);
+    const result = await gm(['look', 'check'], { cwd: root });
+
+    expect(result.code).toBe(1);
+    expect(result.err).toEqual([`fail ${STILL}: looks/second.look.md does not end in a VERDICT line`]);
+  });
+
+  it('judges rendered stills in a repo that ignores *.png, and never passes with nothing to judge', async () => {
+    const root = game({ commitStills: false });
+    rmSync(join(root, STILL));
+    const empty = await gm(['look', 'check'], { cwd: root });
+    writeFileSync(join(root, STILL), 'frame-a');
+    await look(root, 'first', { answer: 'VERDICT: pass' });
+    const judged = await gm(['look', 'check'], { cwd: root });
+
+    expect(empty.code).toBe(1);
+    expect(empty.err).toEqual(['no tN.png stills to judge: run gm run, then look at its stills']);
+    expect(judged.out).toEqual(['look ok: 1 rendered stills pass']);
+    expect(judged.code).toBe(0);
+  });
+
+  it('asks the look model for the verdict line the gate reads', async () => {
+    const root = game();
+    const request = JSON.parse(await look(root, 'first', { answer: 'VERDICT: pass' })) as { prompt: string };
+
+    expect(request.prompt).toMatch(/VERDICT: pass` or `VERDICT: fail`\.$/);
   });
 });

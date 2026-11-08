@@ -51,6 +51,9 @@ for ref in req['refs']:
     blobs.append(hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest())
 for d in ('requests', 'done'):
     os.makedirs(os.path.join(root, '.gm-mock', d), exist_ok=True)
+done = os.path.join(root, '.gm-mock', 'done', rid + '.json')
+if os.path.exists(done):
+    os.remove(done)  # a reused --name must wait for this answer, not read the last one
 tmp = os.path.join(root, '.gm-mock', 'requests', rid + '.tmp')
 json.dump(req, open(tmp, 'w'))
 os.rename(tmp, tmp[:-4] + '.json')
@@ -64,7 +67,6 @@ def log_look(entry):
         f.write(json.dumps(line) + '\n')
 
 
-done = os.path.join(root, '.gm-mock', 'done', rid + '.json')
 end = time.time() + a.wait
 while time.time() < end:
     if os.path.exists(done):
