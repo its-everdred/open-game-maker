@@ -47,7 +47,8 @@ function readEnvFile(file: string): Record<string, string> {
 }
 
 function hostEnv(ctx: GmContext, home: string) {
-  const file = readEnvFile(join(home, '.config', 'ogm', 'env', 'api.env'));
+  // OGM_ENV_DIR names the host's env directory, as for the other host tools.
+  const file = readEnvFile(join(ctx.env?.OGM_ENV_DIR || join(home, '.config', 'ogm', 'env'), 'api.env'));
   const source: Record<string, string> = {};
   for (const name of Object.keys(ENV)) {
     const value = ctx.env?.[name] || file[name];
@@ -98,10 +99,15 @@ async function readFacts(api: string, token: string, slug: string): Promise<Fact
   if (status === 404) throw new UsageError(`game "${slug}" is not registered at ${api}`, 'register the game first');
   if (status === 401) throw new UsageError(`the API at ${api} refused the internal token`, 'check api.env');
   if (status !== 200) throw new CommandError(`the API answered HTTP ${status} for game "${slug}": ${body}`);
-  const answer = JSON.parse(body) as {
+  let answer: {
     game?: { id?: string; slug?: string | null; repo?: { path?: string | null } };
     daemon?: { checkoutPath?: string | null } | null;
   };
+  try {
+    answer = JSON.parse(body) as typeof answer;
+  } catch {
+    throw new CommandError(`the API's answer for game "${slug}" is not JSON: ${body.slice(0, 200)}`);
+  }
   const gameId = answer.game?.id ?? '';
   const repoPath = answer.game?.repo?.path ?? '';
   if (!gameId) throw new CommandError(`the API's answer for "${slug}" carried no game id`);
@@ -254,7 +260,6 @@ export const command: GmCommand = {
         const origin = env.OGM_APP_ORIGIN?.replace(/\/+$/, '') ?? '';
         const play = `${origin}/play/${encodeURIComponent(facts.slug)}`;
         const buildId = String(answer.buildId ?? '');
-        ctx.emit('publish.done', { gameId: facts.gameId, sha: commit, buildId });
         if (ctx.json) {
           printJson(ctx, {
             state: 'done',
@@ -268,6 +273,14 @@ export const command: GmCommand = {
         } else {
           ctx.out(`published ${facts.repoPath} at ${commit}: build ${buildId}`);
           ctx.out(`play ${play}`);
+        }
+        // The build is published; an unwritable events file must not turn that into a failure and a re-run.
+        try {
+          ctx.emit('publish.done', { gameId: facts.gameId, sha: commit, buildId });
+        } catch (error) {
+          ctx.err(
+            `published, but the activity event was not written: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
         return EXIT.ok;
       }

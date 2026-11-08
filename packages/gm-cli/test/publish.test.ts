@@ -22,6 +22,7 @@ let checkout: string;
 let bin: string;
 let staleSha: string;
 let remoteSha: string;
+let brokenSha: string;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -68,6 +69,12 @@ beforeAll(async () => {
   writeGame(origin, 'new');
   git(origin, 'commit', '-qam', 'new');
   remoteSha = git(origin, 'rev-parse', 'HEAD');
+  // A commit only origin has, on a side branch, whose build fails.
+  git(origin, 'switch', '-qc', 'broken');
+  writeFileSync(join(origin, 'games', 'blobs', 'build.sh'), 'echo "vite: cannot resolve ./src/main.ts" >&2\nexit 3\n');
+  git(origin, 'commit', '-qam', 'broken');
+  brokenSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-q', 'main');
 
   // pnpm stand-in: the scratch repository has nothing to install, and its build is one shell script.
   bin = join(root, 'bin');
@@ -166,7 +173,8 @@ describe('gm publish', () => {
     uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_publish","buildId":"build_publish"}' };
     expect(git(checkout, 'rev-parse', 'origin/main')).toBe(staleSha);
 
-    const run = await publish(['blobs', '--api', api]);
+    // The token in the environment reaches the API and never the build.
+    const run = await publish(['blobs', '--api', api], { env: { OGM_INTERNAL_TOKEN: TOKEN } });
 
     expect(run.err).toEqual([]);
     expect(run.code).toBe(0);
@@ -229,6 +237,17 @@ describe('gm publish', () => {
     expect(run.err).toEqual([`not published (${remoteSha}): {"error":{"code":"manifest_invalid"}}`]);
   });
 
+  it('fetches a --sha only origin has, exits 1 with the build output when the build fails, and cleans up', async () => {
+    const run = await publish(['blobs', '--sha', brokenSha, '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain("the game's build failed");
+    expect(run.err.join('\n')).toContain('vite: cannot resolve ./src/main.ts');
+    expect(requests.map((r) => r.method)).toEqual(['GET']);
+    expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
+    expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
   it('refuses with exit 2 and a next step: no slug outside a game, an unknown game, no token', async () => {
     const outside = await publish(['--api', api]);
     expect(outside.code).toBe(2);
@@ -242,5 +261,12 @@ describe('gm publish', () => {
     expect(noToken.code).toBe(2);
     expect(noToken.err[0]).toContain('no internal token');
     expect(requests).toEqual([]);
+    // OGM_ENV_DIR points at the host's env directory instead of ~/.config/ogm/env.
+    const envDir = join(hostHome(), '.config', 'ogm', 'env');
+    const fromEnvDir = await publish(['nope', '--api', api], {
+      home: hostHome('OGM_API_PORT=1\n'),
+      env: { OGM_ENV_DIR: envDir },
+    });
+    expect(fromEnvDir.err[0]).toContain('game "nope" is not registered');
   });
 });
