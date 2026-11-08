@@ -180,8 +180,8 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
   const context = await browser.newContext({
     ...VIEWPORTS[options.viewport],
     ...options.contextOptions,
-    /* A service worker would answer game requests before the local-build route sees them. */
     ...(app?.storageState ? { storageState: app.storageState } : {}),
+    /* A service worker would answer game requests before the local-build route sees them. */
     ...(app?.localUrl ? { serviceWorkers: 'block' as const } : {}),
   });
   if (app?.localUrl) {
