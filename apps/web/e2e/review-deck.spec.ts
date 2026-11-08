@@ -107,6 +107,25 @@ function imageCommand(): GameCommand {
   };
 }
 
+// A Command opened with no short summary (#594): aiur's own Decision API then hands the whole question over as the
+// title, the way Kevin's phone showed it. The screen still heads it with a few words.
+const LONG_QUESTION =
+  'Which of these two voices should the Blobs use for their idle chatter, given that the narrator already sits ' +
+  'in the low register and the hub music leaves little room in the mids? Pick the one that reads as small and warm ' +
+  'on a phone speaker without getting lost under the music.';
+
+function longCommand(): GameCommand {
+  return {
+    ...voiceCommand(),
+    title: LONG_QUESTION,
+    checkpoint_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e77',
+    decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e78',
+    question: LONG_QUESTION,
+    options: voiceCommand().options.slice(0, 2),
+    review_number: 3,
+  };
+}
+
 test.use({ serviceWorkers: 'block', video: 'on' });
 
 test.beforeEach(() => {
@@ -276,6 +295,49 @@ test('judges the 9-card image deck with the arrow keys and sends the review', as
   await capture(page, testInfo, 'image-deck-sent');
 });
 
+test('heads a long-question review with a short title, an X and nothing over the deck', async ({ page }, testInfo) => {
+  await openDeck(page, longCommand().review_number!);
+  await page.getByRole('button', { name: 'Like', exact: true }).waitFor();
+  await capture(page, testInfo, 'long-question');
+
+  // The title is a few words of the question, never the question itself.
+  const heading = page.getByRole('heading', { level: 1 });
+  await expect(heading).toHaveText('Which of these two voices…');
+  await expect(page.getByRole('button', { name: 'Back to the game' })).toHaveCount(0);
+
+  // The whole question waits in a collapsed line under the options and opens with a tap.
+  const body = page.locator('.review-screen-question');
+  const deckBottom = await page.locator('.review-deck').evaluate((element) => element.getBoundingClientRect().bottom);
+  const bodyTop = await body.evaluate((element) => element.getBoundingClientRect().top);
+  expect(bodyTop).toBeGreaterThanOrEqual(deckBottom);
+  await expect(body).toHaveJSProperty('open', false);
+  const closedHeight = (await body.boundingBox())!.height;
+  await body.getByText(LONG_QUESTION, { exact: true }).click();
+  await expect(body).toHaveJSProperty('open', true);
+  expect((await body.boundingBox())!.height).toBeGreaterThan(closedHeight * 2);
+  await body.scrollIntoViewIfNeeded();
+  await capture(page, testInfo, 'long-question-open');
+
+  // On a phone the screen is the deck's alone: no app menu, logo or chat dock floats over it.
+  if (testInfo.project.name === 'phone') {
+    for (const chrome of ['.studio-menu-control', '.studio-logo', '#chat-dock-slot']) {
+      await expect(page.locator(chrome)).toBeHidden();
+    }
+  }
+  // Nothing sits over the X: the point at its centre hits the button itself.
+  const close = page.getByRole('button', { name: 'Close' });
+  const box = (await close.boundingBox())!;
+  const hit = await page.evaluate(
+    ([x, y]) => document.elementFromPoint(x!, y!)?.closest('button')?.getAttribute('aria-label'),
+    [box.x + box.width / 2, box.y + box.height / 2],
+  );
+  expect(hit).toBe('Close');
+  const viewport = page.viewportSize()!;
+  expect(box.x + box.width).toBeGreaterThan(viewport.width - 80);
+  await close.click();
+  await expect(page).toHaveURL(/\/all\?spotlight=/);
+});
+
 // The short link the Executor pushes (#591): the game's slug and the Command's number inside the game.
 async function openDeck(page: Page, reviewNumber: number) {
   await installAuthRoutes(page, { signedIn: true });
@@ -286,7 +348,7 @@ async function openDeck(page: Page, reviewNumber: number) {
 // The two decks and the answer route the app's own client calls. Media is served from its own origin so the cards have
 // real audio and stills to draw.
 async function installReviewApi(page: Page) {
-  const commands = [voiceCommand(), imageCommand()];
+  const commands = [voiceCommand(), imageCommand(), longCommand()];
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
