@@ -1,5 +1,5 @@
 import type { AssetLoader } from '@gm/sdk/assets';
-import { Mesh, type Material, type Object3D } from 'three';
+import { BufferAttribute, BufferGeometry, Matrix4, Mesh, type Material, type Object3D } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 function isMesh(object: Object3D): object is Mesh {
@@ -18,14 +18,36 @@ function meshesUnder(root: Object3D): Mesh[] {
 const pieces = new WeakMap<Object3D, Mesh>();
 
 /**
- * A card with several materials loads as one mesh per material; they become one mesh with a material per group, so
- * the card is still a single mesh (an `InstancedMesh` can draw it too).
+ * A float copy of `mesh`'s geometry in the decoded file's own space. `gm build assets` quantizes with meshopt, which
+ * stores positions as normalized integers and puts the scale and offset that undo it on the card's node; baked in
+ * here, the piece needs no transform of its own, so a game can set position and scale freely.
  */
-function merged(meshes: Mesh[], cardId: string): Mesh {
-  if (meshes.length === 0) throw new Error(`Kit card ${cardId} has no mesh`);
-  if (meshes.length === 1) return meshes[0]!;
+function baked(mesh: Mesh, root: Object3D): BufferGeometry {
+  const source = mesh.geometry;
+  const geometry = new BufferGeometry();
+  for (const [name, attribute] of Object.entries(source.attributes)) {
+    const { count, itemSize } = attribute;
+    const values = new Float32Array(count * itemSize);
+    for (let index = 0; index < count; index++) {
+      for (let axis = 0; axis < itemSize; axis++) values[index * itemSize + axis] = attribute.getComponent(index, axis);
+    }
+    geometry.setAttribute(name, new BufferAttribute(values, itemSize));
+  }
+  if (source.index) geometry.setIndex(source.index.clone());
+  for (const group of source.groups) geometry.addGroup(group.start, group.count, group.materialIndex);
+  root.updateMatrixWorld(true);
+  return geometry.applyMatrix4(new Matrix4().copy(root.matrixWorld).invert().multiply(mesh.matrixWorld));
+}
+
+/**
+ * The card's meshes as one mesh with an identity transform. A card with several materials loads as one mesh per
+ * material; they become one mesh with a material per group, so the card is still a single mesh (an `InstancedMesh` can
+ * draw it too).
+ */
+function piece(meshes: Mesh[], root: Object3D, cardId: string): Mesh {
+  if (meshes.length === 1) return new Mesh(baked(meshes[0]!, root), meshes[0]!.material);
   const geometry = mergeGeometries(
-    meshes.map((mesh) => mesh.geometry),
+    meshes.map((mesh) => baked(mesh, root)),
     true,
   );
   if (!geometry) throw new Error(`Kit card ${cardId} has parts with different vertex attributes`);
@@ -36,13 +58,14 @@ function merged(meshes: Mesh[], cardId: string): Mesh {
 }
 
 /**
- * The mesh a kit card draws with, as a fresh clone (shared geometry and material) so every placement keeps its own
- * transform.
+ * The mesh a kit card draws with, as a fresh clone (shared geometry and material, identity transform) so every
+ * placement keeps its own transform.
  *
  * `gm build assets` packs every piece of a kit into one file, one node per card named by its id. three's glTF loader
  * strips `:`, `/` and `.` from node names and keeps the original in `userData.name`, so looking a card id up by name
  * misses and the file's first mesh comes back instead: every card of the pack draws the same piece. A card with its
- * own file (no `mesh` in the manifest) may be that file's only mesh; anything else is refused with the card named.
+ * own file is that file's only mesh (`gm build assets` names the glTF mesh, not the node, after the card there); a file
+ * with several meshes and no node for the card is refused with the card named.
  */
 export async function kitPiece(loader: AssetLoader, cardId: string): Promise<Mesh> {
   const { file, mesh: name } = loader.resolve(cardId);
@@ -55,18 +78,17 @@ export async function kitPiece(loader: AssetLoader, cardId: string): Promise<Mes
   root.traverse((object) => {
     node ??= object.userData.name === wanted ? object : undefined;
   });
-  if (node) {
-    let piece = pieces.get(node);
-    if (!piece) {
-      piece = merged(meshesUnder(node), cardId);
-      pieces.set(node, piece);
+  const owner = node ?? root;
+  let cached = pieces.get(owner);
+  if (!cached) {
+    const meshes = meshesUnder(owner);
+    if (meshes.length === 0) throw new Error(`Kit card ${cardId} has no mesh`);
+    if (!node && meshes.length !== 1) {
+      if (name) throw new Error(`Kit card ${cardId} has no node named ${name} in ${file}`);
+      throw new Error(`Kit card ${cardId} needs exactly one mesh in ${file}, found ${meshes.length}`);
     }
-    return piece.clone();
+    cached = piece(meshes, root, cardId);
+    pieces.set(owner, cached);
   }
-  if (name) throw new Error(`Kit card ${cardId} has no node named ${name} in ${file}`);
-  const meshes = meshesUnder(root);
-  if (meshes.length !== 1) {
-    throw new Error(`Kit card ${cardId} needs exactly one mesh in ${file}, found ${meshes.length}`);
-  }
-  return meshes[0]!.clone();
+  return cached.clone();
 }

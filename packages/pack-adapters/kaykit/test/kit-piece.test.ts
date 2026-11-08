@@ -1,4 +1,8 @@
 import { Document, NodeIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { meshopt, weld } from '@gltf-transform/functions';
+import { MeshoptEncoder } from 'meshoptimizer';
+import { Box3, type Mesh } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { kitPiece } from '../src/kit-piece.js';
@@ -11,9 +15,11 @@ const ROCK = 't1:kaykit-forest/rock_1@1.0';
 
 /**
  * A glb laid out the way `gm build assets` packs a kit: one node per card, node and mesh named by the card id, each
- * piece made of triangles (one per material) whose tallest is `height` metres so a test can tell which piece came back.
+ * piece made of triangles (one per material, side by side along x) whose tallest is `height` metres so a test can tell
+ * which piece came back. `packed` compresses it as `gm build assets` does (meshopt, which quantizes positions and moves
+ * the scale and offset that undo it onto each card's node).
  */
-async function glb(pieces: Record<string, number | number[]>): Promise<ArrayBuffer> {
+async function glb(pieces: Record<string, number | number[]>, { packed = false } = {}): Promise<ArrayBuffer> {
   const document = new Document();
   const buffer = document.createBuffer();
   const scene = document.createScene('Scene');
@@ -23,20 +29,25 @@ async function glb(pieces: Record<string, number | number[]>): Promise<ArrayBuff
       const position = document
         .createAccessor()
         .setType('VEC3')
-        .setArray(new Float32Array([0, 0, 0, 1, 0, 0, 0, height, 0]))
+        .setArray(new Float32Array([2 * index, 0, 0, 2 * index + 1, 0, 0, 2 * index, height, 0]))
         .setBuffer(buffer);
       const material = document.createMaterial(`${name}-${index}`);
       mesh.addPrimitive(document.createPrimitive().setAttribute('POSITION', position).setMaterial(material));
     }
     scene.addChild(document.createNode(name).setMesh(mesh));
   }
-  const bytes = await new NodeIO().writeBinary(document);
+  const io = new NodeIO();
+  if (packed) {
+    await MeshoptEncoder.ready;
+    io.registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
+    await document.transform(weld(), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
+  }
+  const bytes = await io.writeBinary(document);
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-function height(mesh: { geometry: { computeBoundingBox(): void; boundingBox: { max: { y: number } } | null } }) {
-  mesh.geometry.computeBoundingBox();
-  return mesh.geometry.boundingBox!.max.y;
+function height(mesh: Mesh) {
+  return new Box3().setFromObject(mesh).max.y;
 }
 
 async function packedForest() {
@@ -85,10 +96,38 @@ describe('kitPiece', () => {
     expect((await kitPiece(loader, TREE)).geometry).toBe(piece.geometry);
   });
 
+  it('draws packed cards at their authored size wherever a game places and scales them', async () => {
+    const files = { 'forest.glb': await glb({ [BUSH]: 0.5, [TREE]: [2, 3] }, { packed: true }) };
+    const card = (id: string) => ({ file: 'forest.glb', mesh: id });
+    const { loader } = await fixtureLoader({ [BUSH]: card(BUSH), [TREE]: card(TREE) }, files);
+
+    const bush = await kitPiece(loader, BUSH);
+    bush.position.set(10, 0, 0);
+    bush.scale.setScalar(2);
+    const bushBox = new Box3().setFromObject(bush);
+    expect(bushBox.min.x).toBeCloseTo(10, 2);
+    expect(bushBox.min.y).toBeCloseTo(0, 2);
+    expect(bushBox.max.y).toBeCloseTo(1, 2);
+
+    const tree = await kitPiece(loader, TREE);
+    tree.position.set(0, 5, 0);
+    const treeBox = new Box3().setFromObject(tree);
+    expect(treeBox.min.x).toBeCloseTo(0, 2);
+    expect(treeBox.max.x).toBeCloseTo(3, 2);
+    expect(treeBox.min.y).toBeCloseTo(5, 2);
+    expect(treeBox.max.y).toBeCloseTo(8, 2);
+  });
+
   it('takes the only mesh of a card that has its own file', async () => {
     const files = { 'tree.glb': await glb({ Tree_1: 4 }) };
     const { loader } = await fixtureLoader({ [TREE]: { file: 'tree.glb' } }, files);
     expect(height(await kitPiece(loader, TREE))).toBe(4);
+  });
+
+  it('takes the only mesh of a card built from its own file, whose node keeps the source name', async () => {
+    const files = { 'tree.glb': await glb({ Tree_1: 4 }, { packed: true }) };
+    const { loader } = await fixtureLoader({ [TREE]: { file: 'tree.glb', mesh: TREE } }, files);
+    expect(height(await kitPiece(loader, TREE))).toBeCloseTo(4, 2);
   });
 
   it('refuses a packed file without the card rather than drawing another piece', async () => {

@@ -13,8 +13,9 @@ Adapter for the KayKit 3D set (three + Rapier). It reads rig, kit and geometry f
 - `createKitPlacer(loader)`: `snap` to the piece's `kit.grid_m` in 90° steps, `footprint`, and `colliderFor` (a
   cuboid from `geometry.bounds_m` for solid pieces, `null` for floors and props unless the game asks).
 - `kitPiece(loader, cardId)`: the card's own mesh from a packed kit file (three strips `:`, `/` and `.` from node
-  names, so a lookup by card id would draw the file's first piece), cloned so each placement keeps its own transform; a
-  card with several materials comes back as one mesh with a material per group.
+  names, so a lookup by card id would draw the file's first piece), with the node's meshopt dequantization baked into
+  the geometry so a placement can set position and scale freely; a card with several materials comes back as one mesh
+  with a material per group.
 - `parseKitMap` / `writeKitMap`: the Tiled JSON subset kits are authored in (orthogonal, a `grid_m` map property,
   `asset` tile property, rotate flags or object `rotation` as turns, `z` property as height); `kitPalette(manifest)`
   lists what may be placed.
