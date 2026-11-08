@@ -16,6 +16,8 @@ let server: Server;
 let api: string;
 let requests: Logged[] = [];
 let uploadAnswer: { status: number; body: string } = { status: 201, body: '' };
+// Uploads still to drop by closing the connection without an answer, as a reset keep-alive socket does.
+let dropUploads = 0;
 let root: string;
 let origin: string;
 let checkout: string;
@@ -136,6 +138,10 @@ beforeAll(async () => {
         );
       }
       if (request.method === 'POST' && request.url === '/internal/operator/games/blobs/builds') {
+        if (dropUploads > 0) {
+          dropUploads -= 1;
+          return request.socket.destroy();
+        }
         return json(uploadAnswer.status, uploadAnswer.body);
       }
       return json(404, '{"error":{"code":"game_not_found"}}');
@@ -243,6 +249,33 @@ describe('gm publish', () => {
 
     expect(run.code).toBe(1);
     expect(run.err).toEqual([`not published (${remoteSha}): {"error":{"code":"manifest_invalid"}}`]);
+  });
+
+  // #646: the first upload after a long build failed with "fetch failed" and an immediate rerun published.
+  it('sends the upload once more when the connection drops before an answer, and publishes', async () => {
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_3","buildId":"build_3"}' };
+    dropUploads = 1;
+
+    const run = await publish(['blobs', '--api', api]);
+
+    expect(run.err).toEqual([]);
+    expect(run.code).toBe(0);
+    expect(run.out).toContain(`published games/blobs at ${remoteSha}: build build_3`);
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST']);
+  });
+
+  it('exits 1 naming the socket error when the upload drops twice, so a publish chain stops', async () => {
+    dropUploads = 2;
+
+    const run = await publish(['blobs', '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err).toHaveLength(1);
+    expect(run.err[0]).toMatch(
+      /^no answer from http:\/\/127\.0\.0\.1:\d+\/internal\/operator\/games\/blobs\/builds: fetch failed \(.+\)$/,
+    );
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST']);
+    expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
   });
 
   it('fetches a --sha only origin has, exits 1 with the build output when the build fails, and cleans up', async () => {
