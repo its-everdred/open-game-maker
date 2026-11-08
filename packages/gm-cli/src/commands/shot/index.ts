@@ -4,7 +4,7 @@ import { basename, join, relative, resolve } from 'node:path';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
 
-const STILL = /^t\d+(?:\.\d+)?\.png$/;
+export const STILL = /^t\d+(?:\.\d+)?\.png$/;
 const numeric = new Intl.Collator('en', { numeric: true });
 
 /** Finds only captured stills (`tN.png`), recursively; timelines and existing sheets are never tiled back in. */

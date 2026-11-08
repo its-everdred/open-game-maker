@@ -1,0 +1,38 @@
+{
+  "id": "fall-fixture",
+  "sdk": "^1.0.0",
+  "title": "Block Fall",
+  "inputs": {
+    "actions": {
+      "move": "stick",
+      "drop": "button"
+    }
+  },
+  "presentation": {
+    "orientation": "any",
+    "minLogical": {
+      "w": 100,
+      "h": 60
+    },
+    "fit": "responsive"
+  },
+  "view": "side",
+  "dimension": "2d",
+  "capabilities": [],
+  "palette": {
+    "categories": [],
+    "items": []
+  },
+  "controls": [],
+  "tools": ["select"],
+  "gizmos": {},
+  "grid": {
+    "size": 1,
+    "units": "tile"
+  },
+  "saves": false,
+  "overrides": {
+    "aliases": {},
+    "retired": []
+  }
+}

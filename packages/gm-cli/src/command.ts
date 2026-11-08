@@ -31,6 +31,10 @@ export type GmContext = {
   blobApi?: { url: string; secretFile: string } | null;
   /** `OGM_BLOCKLIST_FILE`, resolved against cwd; null when unset. */
   blocklistFile: string | null;
+  /** The raw environment, for a command that reads its own names through `@ogm/config` (so a bad value fails only it). */
+  env?: Record<string, string | undefined>;
+  /** The user's home directory; host commands find `~/.config/ogm/env` and scratch state under it. */
+  home?: string;
 };
 
 /** One file per command under `src/commands/<namespace>/<cmd>.ts`, exporting `command`. */

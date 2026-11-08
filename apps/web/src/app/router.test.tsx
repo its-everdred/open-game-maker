@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, matchRoutes, RouterProvider, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
+import { RESERVED_GAME_SLUGS } from '@ogm/contracts/browser';
+
+import { authClient } from '../lib/api/auth';
 import { collectScreenRoutes, screenRouteObjects } from './router';
 import type { ScreenRoute } from './screen';
 
@@ -41,6 +44,8 @@ vi.mock('../lib/notify', () => ({
 
 vi.mock('../lib/sound', () => soundApi);
 
+vi.mock('../lib/api/session', () => ({ useSession: () => ({ data: null, isPending: false }) }));
+
 const routeTable = [
   '/',
   '/signin',
@@ -63,6 +68,9 @@ const routeTable = [
   '/admin/builds/job-1',
   '/admin/intake',
   '/settings',
+  '/blobs',
+  '/blobs/play',
+  '/blobs/review/12',
 ];
 
 describe('screen route collection', () => {
@@ -75,8 +83,29 @@ describe('screen route collection', () => {
     vi.restoreAllMocks();
   });
 
+  // A mounted better-auth session store unmounts on a 1 s timer that touches `window`; if it outlives the file, it
+  // fires after jsdom is gone and fails the run with an unhandled error (#615).
+  afterAll(() => {
+    expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy();
+  });
+
   it.each(routeTable)('resolves %s through a screen module', (path) => {
     expect(matchRoutes(screenRouteObjects, path)).not.toBeNull();
+  });
+
+  // A game's short link sits at the top of the path (#591). Every screen's first segment must be a slug the API never
+  // hands out, or a game made before the screen existed would hold the screen's address.
+  it('reserves every screen’s first path segment as a game slug', () => {
+    const segments = screenRouteObjects
+      .map((route) => route.path!.split('/')[1]!)
+      .filter((segment) => segment !== '' && !segment.startsWith(':'));
+    expect(segments.length).toBeGreaterThan(5);
+    expect(segments.filter((segment) => !RESERVED_GAME_SLUGS.has(segment))).toEqual([]);
+  });
+
+  it.each(['/new', '/settings', '/admin', '/all', '/login'])('keeps %s on its screen, not a game link', (path) => {
+    const matched = matchRoutes(screenRouteObjects, path)!;
+    expect(matched[0]!.route.path).toBe(path);
   });
 
   it('collects a fixture screen from the glob result without router edits', () => {

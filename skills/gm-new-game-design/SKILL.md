@@ -30,12 +30,14 @@ provenance (`--provenance <id>=@<file>.json`) when you offer it, so the check ca
   ready (they say so, or the description has clearly run out), not because a checklist is waiting.
 - Talk like a friendly game designer, in short turns. Typed and spoken replies are equal; a spoken answer may be loose,
   so restate it in one line only when the meaning is genuinely ambiguous.
-- **Front-load the big decisions.** Early choices shape everything downstream: core loop, controls, camera, world
-  structure, art direction inside the chosen style, main characters, tone of story, music direction, win and loss.
-  There is no question cap; ask as many high-leverage questions as the game needs, and stop asking about details a
-  sensible default covers.
+- **Front-load the structural decisions; the rest arrive per stage.** Ask up front what shapes the build: core loop,
+  controls, camera, world structure, player count, tone of story, win and loss. Look, characters, voices and audio are
+  decided later, one stage at a time, from real media as the prototype ladder climbs
+  (`../gm-new-game-plan/references/prototype-ladder.md`); here record only the direction the player already gave and
+  any hard constraints. There is no question cap; stop asking about details a sensible default covers.
 - **Look starts with image mocks.** The first visual review is always generated mock-ups of the player's screen in the
-  chosen kit (`gm-image-mock`): four options that differ greatly, then real-asset dioramas toward the one picked.
+  chosen kit (`gm-image-mock`): four options that differ greatly, then real-asset dioramas toward the one picked. It is
+  the ladder's first visual stage, and may run during the conversation or right after the spec.
 - **Show, don't only tell.** Offer options as concrete samples where they help: an asset lineup or mock-up still, a
   short GIF or clip, a music or sound clip from the library, a story beat in prose, a tiny playable sketch. Pick the
   format that best answers that decision; label mock-ups as mock-ups.
@@ -77,5 +79,6 @@ When the player says it's ready, or the important decisions are answered or defa
 plans the whole game with `gm-new-game-plan`; you do not create tickets.
 
 A spec is complete when the Executor can plan without a second interview: core loop, controls, camera, world and
-levels, characters, style and asset picks, UI, audio, progression, win and loss, prototype milestone, acceptance
-criteria, and the open questions with their defaults.
+levels, progression, win and loss, the prototype ladder's rungs (what each proves), acceptance criteria, and the open
+questions with their defaults. Characters, style picks, UI and audio may hold only a direction: their stages decide
+them later.

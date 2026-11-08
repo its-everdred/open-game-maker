@@ -2,12 +2,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { EnergyView } from '@ogm/contracts/browser';
+
 import { StudioMenu } from './StudioMenu';
 
 const state = vi.hoisted(() => ({
   admin: { data: undefined as { platformRole: 'maintainer' | 'admin' | 'none' } | undefined },
   jobs: { jobs: [] as TestJob[], active: [] as TestJob[], games: [] as Array<{ id: string; title: string }> },
   session: { data: null as { user: { id: string } } | null },
+  energy: { data: undefined as EnergyView | undefined },
 }));
 
 const sound = vi.hoisted(() => ({
@@ -30,6 +33,10 @@ vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
 vi.mock('../lib/sound', () => sound);
 vi.mock('../routes/admin/api', () => ({ useAdminMe: () => state.admin }));
+vi.mock('../features/energy/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/energy/api')>()),
+  useEnergy: () => state.energy,
+}));
 
 type TestJob = {
   id: string;
@@ -67,6 +74,7 @@ afterEach(() => {
   state.admin = { data: undefined };
   state.jobs = { jobs: [], active: [], games: [] };
   state.session = { data: null };
+  state.energy = { data: undefined };
   sound.setMuted.mockReset();
   sound.setVolume.mockReset();
   auth.signOut.mockReset();
@@ -108,6 +116,36 @@ describe('StudioMenu', () => {
       'href',
       '/g/game-1/releases?action=rollback',
     );
+  });
+
+  it('rings what is left of the tightest Energy window and opens the windows, then settings', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.energy = {
+      data: {
+        level: 'limited',
+        preference: 'balanced',
+        windows: [
+          { window: 'day', usedPercent: 40, resetsAt: '2026-11-09T08:00:00.000Z' },
+          { window: 'week', usedPercent: 80, resetsAt: '2026-11-09T08:00:00.000Z' },
+          { window: 'month', usedPercent: null, resetsAt: '2026-12-01T08:00:00.000Z' },
+        ],
+        services: [
+          { service: 'voice', usedPercent: null },
+          { service: 'images', usedPercent: null },
+        ],
+      },
+    };
+
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    const energy = screen.getByRole('button', { name: 'Energy: Limited' });
+    expect(energy.querySelector('circle:last-child')).toHaveAttribute('stroke-dasharray', '20 100');
+    expect(screen.queryByRole('link', { name: 'Energy settings' })).not.toBeInTheDocument();
+
+    fireEvent.click(energy);
+    const detail = screen.getByRole('link', { name: 'Energy settings' });
+    expect(detail).toHaveAttribute('href', '/settings/energy');
+    expect(detail).toHaveTextContent(/Today.*60% left.*This week.*20% left.*This month.*Unknown/);
   });
 
   it('moves build progress to the menu and announces each start and end once', () => {

@@ -44,14 +44,28 @@ palette, the HUD.
 Budget: one image per option per view, then regenerate only the ones that came out wrong. Look at every image before
 sending it (gm-verify). If your tools cannot show you an image (a shell-only agent), ask a vision model:
 `request-mock.py --kind look --ref <shot> --ref <target> --prompt-file <questions>` writes its plain answers to
-`<out>/<name>.look.md`; ask about every rule in the feedback ledger and every difference from the target: wrong genre, unreadable HUD, extra limbs or off-kit style means regenerate or drop it.
+`<out>/<name>-<id>.look.md`, ending in `VERDICT: pass` or `VERDICT: fail` (`gm look check` gates the PR on it); ask about every rule in the feedback ledger and every difference from the target: wrong genre, unreadable HUD, extra limbs or off-kit style means regenerate or drop it.
+
+## Before a mock becomes a build target
+
+A painted mock can promise what the engine cannot draw. Before the picked mock becomes a ticket's target:
+1. **Prefer restyled real renders** (the render-restyle tool) as targets; a pure prompt mock is direction, not spec.
+2. **Feasibility list:** map every element (camera and staging, board, pieces, background, HUD, characters) to a kit
+   card id or an engine feature, and mark what needs code (procedural geometry, a material) or an engine change. Gaps go
+   to the creator as a question with options, never silently swapped for primitives.
+3. **Evidence matches the mock's moment:** the same mode, board size and situation (a chain mid-clear), from the same
+   camera.
+4. **The look check gates the push:** any `VERDICT: fail` or unanswered question on the head's stills means no PR; a
+   broker error (such as 402) is a blocker to report, not a pass.
 
 ## Show
 
 Raise one `decision.requested` Command: the mocks in `media[]` (option ids A to D), recommendation first, each option
 described as what the player sees in one line. The creator answers per option (like or dislike, a note each) and
 with notes on the whole set; apply both. Label them as mock-ups. Record the pick in the decision log; the pick
-is the visual target for the diorama and build work that follows.
+is the visual target for the diorama and build work that follows. A mock answers how the game looks; how it feels
+(speed, chain pause, controls) is never a still or a link: offer playable options instead (`gm checkpoint open
+--playable <id>=<scenario query>`), which the review deck plays one after another in the card.
 
 ## Voice samples
 

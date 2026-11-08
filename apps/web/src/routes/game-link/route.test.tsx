@@ -1,0 +1,179 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, render, screen } from '@testing-library/react';
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { GameCommand } from '@ogm/contracts';
+
+import { collectScreenRoutes } from '../../app/router';
+import { api, ApiError } from '../../lib/api/client';
+import { route as reviewRoute } from '../review/route';
+import { route as gameLinkRoute } from './route';
+
+vi.mock('../../lib/api/client', async (original) => {
+  const actual = await original<typeof import('../../lib/api/client')>();
+  return { ...actual, api: vi.fn() };
+});
+vi.mock('../../features/build-chat/jobs', () => ({ useMyJobs: () => ({ jobs: [] }) }));
+vi.mock('../../features/commands-inbox/ReviewDeck', () => ({
+  ReviewDeck: ({ command }: { command: GameCommand }) => <p>Deck for {command.decision_id}</p>,
+}));
+
+const mockedApi = vi.mocked(api);
+
+const game = {
+  id: 'g_blobs',
+  familyId: 'f_house',
+  ownerId: 'u_owner',
+  title: 'Blobs',
+  slug: 'blobs',
+  visibility: 'listed' as const,
+  repo: null,
+  createdAt: '2026-11-01T00:00:00.000Z',
+};
+
+function command(decisionId: string, reviewNumber: number): GameCommand {
+  return {
+    job_id: null,
+    ticket: '570',
+    title: `Pick ${decisionId}`,
+    checkpoint_id: `cp_${decisionId}`,
+    decision_id: decisionId,
+    version: 1,
+    question: 'Which voice?',
+    options: [
+      { id: 'a', label: 'A' },
+      { id: 'b', label: 'B' },
+    ],
+    blocking: true,
+    opened_at: '2026-11-07T17:40:00.000Z',
+    review_number: reviewNumber,
+  };
+}
+
+// Resolving answers to the game's current slug, an old slug and its id; anything else is not a game.
+function serve(commands: GameCommand[]) {
+  mockedApi.mockImplementation(async (path: string) => {
+    const resolved = /^\/games\/resolve\/(.+)$/.exec(path);
+    if (resolved) {
+      if (['blobs', 'old-blobs', game.id].includes(decodeURIComponent(resolved[1]!))) return { game };
+      throw new ApiError(404, { error: 'game_not_found' });
+    }
+    if (path === `/games/${game.id}/commands`) return { commands };
+    throw new Error(`unexpected ${path}`);
+  });
+}
+
+function Location() {
+  const location = useLocation();
+  return <output>{`${location.pathname}${location.search}`}</output>;
+}
+
+// The real route modules (paths and children) without the session guard and chrome, beside stand-ins for the screens
+// a link lands on.
+function renderAt(entry: string) {
+  const routes = collectScreenRoutes({
+    '../routes/game-link/route.tsx': { route: { ...gameLinkRoute, chrome: 'bare', auth: 'none' } },
+    '../routes/review/route.tsx': { route: { ...reviewRoute, chrome: 'bare', auth: 'none' } },
+  });
+  const router = createMemoryRouter(
+    [...routes, { path: '/all', element: <Location /> }, { path: '/g/:gameId', element: <Location /> }],
+    { initialEntries: [entry] },
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  return router;
+}
+
+beforeEach(() => {
+  mockedApi.mockReset();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe('short game links', () => {
+  it('opens the review the number names', async () => {
+    serve([command('d_two', 2), command('d_one', 1)]);
+
+    renderAt('/blobs/review/1');
+
+    expect(await screen.findByText('Deck for d_one')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Pick d_one' })).toBeVisible();
+  });
+
+  it('heals a link made before the game was renamed', async () => {
+    serve([command('d_one', 1)]);
+
+    const router = renderAt('/old-blobs/review/1');
+
+    expect(await screen.findByText('Deck for d_one')).toBeVisible();
+    expect(router.state.location.pathname).toBe('/blobs/review/1');
+  });
+
+  it('says the review is not open when no Command has that number', async () => {
+    serve([command('d_one', 1)]);
+
+    renderAt('/blobs/review/7');
+
+    expect(await screen.findByText('That review is not open. It may already be answered.')).toBeVisible();
+  });
+
+  it('says the link points at nothing for a slug no game has', async () => {
+    serve([]);
+
+    renderAt('/nobody/review/1');
+
+    expect(await screen.findByText(/This link doesn’t point at a game\./)).toBeVisible();
+  });
+
+  it('opens the game’s page from /<slug>', async () => {
+    serve([]);
+
+    renderAt('/blobs');
+
+    expect(await screen.findByText('/all?spotlight=g_blobs')).toBeVisible();
+  });
+
+  it('plays the game from /<slug>/play, keeping the link’s query', async () => {
+    serve([]);
+
+    renderAt('/blobs/play?chat=j_1');
+
+    expect(await screen.findByText('/g/g_blobs?chat=j_1&mode=play')).toBeVisible();
+  });
+});
+
+describe('the old review link', () => {
+  it('moves /game/<id>/review/<checkpoint> to the short form', async () => {
+    serve([command('d_two', 2)]);
+
+    const router = renderAt(`/game/${game.id}/review/cp_d_two`);
+
+    expect(await screen.findByText('Deck for d_two')).toBeVisible();
+    expect(router.state.location.pathname).toBe('/blobs/review/2');
+  });
+
+  it('moves a link built from the decision id too', async () => {
+    serve([command('d_two', 2)]);
+
+    const router = renderAt(`/game/${game.id}/review/d_two`);
+
+    expect(await screen.findByText('Deck for d_two')).toBeVisible();
+    expect(router.state.location.pathname).toBe('/blobs/review/2');
+  });
+
+  it('stays put and says so when the Command is no longer open', async () => {
+    serve([]);
+
+    const router = renderAt(`/game/${game.id}/review/cp_gone`);
+
+    expect(await screen.findByText('That review is not open. It may already be answered.')).toBeVisible();
+    expect(router.state.location.pathname).toBe(`/game/${game.id}/review/cp_gone`);
+  });
+});

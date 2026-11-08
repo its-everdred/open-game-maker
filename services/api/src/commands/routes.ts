@@ -12,6 +12,7 @@ import { getChatRuntime } from '../build-chat/routes.js';
 import { getChatRow, listCheckpoints, parseCheckpoint, toMessage, type MediaSigner } from '../build-chat/store.js';
 import { listJobs } from '../jobs/repo.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
+import { reviewNumbers } from '../reviews/numbers.js';
 import { tryRecordReview } from '../reviews/store.js';
 import { gameCommandsFromAiur, toGameCommand } from './aiur.js';
 
@@ -53,7 +54,12 @@ export default new Hono<ApiBindings>()
           checkpoint.options.map(async (option) => {
             const media =
               option.media_id === undefined ? undefined : await optionMedia(deps, job.id, option.media_id, sign);
-            return { id: option.id, label: option.label, ...(media === undefined ? {} : { media }) };
+            return {
+              id: option.id,
+              label: option.label,
+              ...(media === undefined ? {} : { media }),
+              ...(option.playable === undefined ? {} : { playable: option.playable }),
+            };
           }),
         );
         // One malformed checkpoint row is left out of the inbox rather than failing every Command in the game.
@@ -79,12 +85,21 @@ export default new Hono<ApiBindings>()
     // A registered game's Commands belong to no job. A decision already listed from a job's checkpoint stays the
     // job's, so one Command never appears twice.
     const listed = new Set(commands.map((command) => command.decision_id));
-    for (const command of await gameCommandsFromAiur(deps, game.id, jobTickets)) {
+    for (const command of await gameCommandsFromAiur(deps, game.id, jobTickets, sign)) {
       if (!listed.has(command.decision_id)) commands.push(command);
     }
 
+    // Each Command keeps the short number it got the first time it was listed; new ones are numbered oldest first.
+    const oldestFirst = [...commands].sort((left, right) => left.opened_at.localeCompare(right.opened_at));
+    const numbers = reviewNumbers(
+      deps.db,
+      game.id,
+      oldestFirst.map((command) => command.decision_id),
+    );
     const page: GameCommandsPage = {
-      commands: commands.sort((left, right) => right.opened_at.localeCompare(left.opened_at)),
+      commands: commands
+        .sort((left, right) => right.opened_at.localeCompare(left.opened_at))
+        .map((command) => ({ ...command, review_number: numbers.get(command.decision_id)! })),
     };
     return c.json(page);
   })

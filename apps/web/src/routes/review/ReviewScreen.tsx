@@ -1,23 +1,71 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Navigate, useNavigate, useParams } from 'react-router';
 
 import type { VoiceTarget } from '@ogm/contracts';
+import { reviewPath, type GameCommand } from '@ogm/contracts/browser';
 
-import { findCommand } from '../../features/commands-inbox/review-route';
+import { findCommand, findCommandByNumber } from '../../features/commands-inbox/review-route';
+import { withoutLinks } from '../../features/commands-inbox/review';
+import { PlayLinkMessage } from '../play/PlayScreen';
+import { playLinkDenial, usePlayLink } from '../play/api';
 import { useGameCommands } from '../../features/commands-inbox/commands';
 import { ReviewDeck } from '../../features/commands-inbox/ReviewDeck';
+import { Icon } from '../../components/Icon';
 import { useMyJobs } from '../../features/build-chat/jobs';
+import { reviewTitle } from './title';
 import './review-screen.css';
 
-// The review deck on its own screen (A3): the deep link `/game/:gameId/review/:commandId` the Executor pushes to the
-// creator. It renders the same deck the game's inbox renders, in the studio's own look and chrome, and goes back to
-// the game's inbox once the answer lands. The Command stays in the game's inbox after an answer until aiur marks it
-// answered, so a reload of this link shows the deck's ending grid, not a second answer.
-export function ReviewScreen() {
+// The short link the Executor pushes to the creator (#591): `/<slug>/review/<n>`, the game's slug and the Command's
+// number inside the game. A slug the game has outgrown is rewritten to the current one so the address heals.
+export function ShortReviewScreen() {
+  const { slug = '', number = '' } = useParams();
+  const link = usePlayLink(slug);
+
+  if (link.isError) return <PlayLinkMessage denial={playLinkDenial(link.error)} />;
+  if (!link.data) return null;
+  const current = link.data.slug;
+  if (current && current !== slug && /^[1-9]\d*$/.test(number)) {
+    return <Navigate replace to={reviewPath(current, Number(number))} />;
+  }
+  // Keyed by the review, so moving between two reviews never carries one deck's votes into the other.
+  return (
+    <ReviewScreen
+      key={`${link.data.id}:${number}`}
+      gameId={link.data.id}
+      find={(commands) => findCommandByNumber(commands, number)}
+    />
+  );
+}
+
+// The link before short links: `/game/<id>/review/<checkpoint or decision id>`. It moves to the short form once the
+// game's slug and the Command's number are known; a Command that is no longer open shows the deck's closed state here.
+export function LegacyReviewScreen() {
   const { gameId = '', commandId = '' } = useParams();
-  const navigate = useNavigate();
+  const game = usePlayLink(gameId);
   const { commands, isPending } = useGameCommands(gameId);
   const command = findCommand(commands, commandId);
+
+  if (game.isPending || isPending) return null;
+  const slug = game.data?.slug;
+  if (slug && command?.review_number !== undefined) {
+    return <Navigate replace to={reviewPath(slug, command.review_number)} />;
+  }
+  return <ReviewScreen key={`${gameId}:${commandId}`} gameId={gameId} find={(open) => findCommand(open, commandId)} />;
+}
+
+// The review deck on its own screen (A3). It renders the same deck the game's inbox renders, in the studio's own look
+// and chrome, and goes back to the game's inbox once the answer lands. The Command stays in the game's inbox after an
+// answer until aiur marks it answered, so a reload of this link shows the deck's ending grid, not a second answer.
+function ReviewScreen({
+  gameId,
+  find,
+}: {
+  gameId: string;
+  find(commands: readonly GameCommand[]): GameCommand | undefined;
+}) {
+  const navigate = useNavigate();
+  const { commands, isPending } = useGameCommands(gameId);
+  const command = find(commands);
   const [sent, setSent] = useState(false);
   const back = () => navigate(`/all?spotlight=${encodeURIComponent(gameId)}`);
 
@@ -40,10 +88,10 @@ export function ReviewScreen() {
     return (
       <div className="review-screen">
         <header className="review-screen-head">
-          <button className="review-screen-back tap-primary" onClick={back} type="button">
-            Back to the game
-          </button>
           <h1>Review sent</h1>
+          <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+            <Icon name="close" />
+          </button>
         </header>
       </div>
     );
@@ -53,10 +101,10 @@ export function ReviewScreen() {
     return (
       <div className="review-screen">
         <header className="review-screen-head">
-          <button className="review-screen-back tap-primary" onClick={back} type="button">
-            Back to the game
-          </button>
           <h1>Review</h1>
+          <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+            <Icon name="close" />
+          </button>
         </header>
         <p className="review-screen-state" role="status">
           {isPending ? 'Loading the review…' : 'That review is not open. It may already be answered.'}
@@ -68,14 +116,16 @@ export function ReviewScreen() {
   return (
     <div className="review-screen">
       <header className="review-screen-head">
-        <button className="review-screen-back tap-primary" onClick={back} type="button">
-          Back to the game
+        <h1>{reviewTitle(withoutLinks(command.title))}</h1>
+        <button className="review-screen-close tap-secondary" onClick={back} type="button" aria-label="Close">
+          <Icon name="close" />
         </button>
-        <h1>{command.title}</h1>
       </header>
       <div className="review-screen-body">
-        <p className="review-screen-question">{command.question}</p>
         <ReviewDeck gameId={gameId} command={command} voiceTarget={voiceTarget} onAnswered={() => setSent(true)} />
+        <details className="review-screen-question">
+          <summary>{withoutLinks(command.question)}</summary>
+        </details>
       </div>
     </div>
   );

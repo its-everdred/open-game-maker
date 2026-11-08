@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { GameCommand } from '@ogm/contracts';
 
-import { findCommand, reviewPath } from './review-route';
+import { findCommand, findCommandByNumber, reviewPath } from './review-route';
 
 function command(overrides: Partial<GameCommand> = {}): GameCommand {
   return {
@@ -24,13 +24,23 @@ function command(overrides: Partial<GameCommand> = {}): GameCommand {
 }
 
 describe('review deep link', () => {
-  // The ticket's link shape: one URL per Command so the Executor can push it to the creator's phone.
-  it('builds /game/<gameId>/review/<checkpointId>', () => {
-    expect(reviewPath('g_1', command())).toBe('/game/g_1/review/cp_1');
+  // The short link (#591): the game's slug and the Command's number, short enough to read out or type on a phone.
+  it('builds /<slug>/review/<n>', () => {
+    expect(reviewPath('blobs', 12)).toBe('/blobs/review/12');
   });
 
-  it('escapes a game id so the path stays one segment', () => {
-    expect(reviewPath('g/../1', command())).toBe('/game/g%2F..%2F1/review/cp_1');
+  it('escapes a slug so the path stays one segment', () => {
+    expect(reviewPath('b/../1', 3)).toBe('/b%2F..%2F1/review/3');
+  });
+
+  it('finds the Command by its short number', () => {
+    const commands = [
+      command({ decision_id: 'd_1', review_number: 1 }),
+      command({ decision_id: 'd_2', review_number: 2 }),
+    ];
+    expect(findCommandByNumber(commands, '2')).toBe(commands[1]);
+    expect(findCommandByNumber(commands, '3')).toBeUndefined();
+    expect(findCommandByNumber([command()], 'undefined')).toBeUndefined();
   });
 
   // A link built from either identifier resolves to the same Command, so a decision id from aiur's side lands too.

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "preference": {
+      "type": "string",
+      "enum": [
+        "save",
+        "balanced",
+        "best"
+      ]
+    }
+  },
+  "required": [
+    "preference"
+  ],
+  "additionalProperties": false,
+  "$id": "https://open-game-maker-2000.local/schemas/energy.preference.v1.json"
+}

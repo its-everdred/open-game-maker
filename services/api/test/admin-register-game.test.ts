@@ -114,6 +114,18 @@ describe('registering a game whose repository already exists', () => {
     }
   });
 
+  // `games/settings` would be the game's top-level link `/settings`, which the settings screen already answers to.
+  it('refuses a folder named like an app route', async () => {
+    const { call, deps } = await seededApp();
+    const response = await call(X.admin, 'POST', '/games/import', {
+      ...blobs,
+      repo: { ...blobs.repo, path: 'games/settings' },
+    });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: 'game_slug_reserved' });
+    expect(gameRow(deps, 'settings')).toBeUndefined();
+  });
+
   it('refuses a repository and folder already registered', async () => {
     const { call } = await seededApp();
     expect((await call(X.admin, 'POST', '/games/import', blobs)).status).toBe(201);
