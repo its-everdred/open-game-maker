@@ -1,0 +1,129 @@
+/* Energy reuses the studio menu's tokens: green while healthy, orange when limited, red when critical. */
+.energy-button {
+  position: relative;
+  --energy-color: color-mix(in srgb, var(--cream) 40%, transparent);
+}
+
+.energy-button[data-level='healthy'],
+.energy-windows[data-level='healthy'] {
+  --energy-color: var(--green-b);
+}
+
+.energy-button[data-level='limited'],
+.energy-windows[data-level='limited'] {
+  --energy-color: var(--orange-b);
+}
+
+.energy-button[data-level='critical'],
+.energy-windows[data-level='critical'] {
+  --energy-color: var(--red-b);
+}
+
+.energy-ring {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  rotate: -90deg;
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.energy-ring circle:first-child {
+  stroke: color-mix(in srgb, var(--cream) 16%, transparent);
+}
+
+.energy-ring circle:last-child {
+  stroke: var(--energy-color);
+  stroke-linecap: round;
+}
+
+.energy-detail {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.energy-windows {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.energy-meter {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px;
+  font-weight: 700;
+}
+
+.energy-meter[data-known='false'] > span:nth-child(2) {
+  opacity: 0.6;
+}
+
+.energy-meter-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cream) 16%, transparent);
+}
+
+.energy-meter-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--energy-color, var(--orange-b));
+}
+
+.energy-screen {
+  display: grid;
+  gap: 24px;
+  padding-top: 24px;
+}
+
+.energy-screen fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.energy-screen label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.energy-screen input {
+  accent-color: var(--orange-b);
+}
+
+.energy-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 12px;
+}
+
+.energy-limits label {
+  display: grid;
+  gap: 4px;
+}
+
+.energy-screen table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.energy-screen th,
+.energy-screen td {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+}

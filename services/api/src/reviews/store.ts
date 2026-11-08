@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { CommandReviewEntry, CommandReview as CommandReviewValue, GameCommand } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 import type { LogLine } from '../app/types.js';
 import { listJobs } from '../jobs/repo.js';
@@ -35,7 +35,7 @@ export function recordReview(db: Db, input: RecordReviewInput): CommandReviewEnt
         eq(schema.commandReviews.checkpointId, input.command.checkpoint_id),
       ),
     )
-    .orderBy(desc(schema.commandReviews.at))
+    .orderBy(desc(schema.commandReviews.at), desc(sql`rowid`))
     .get();
   if (existing !== undefined && sameReview(existing, input.optionId, likes, dislikes, notes)) return toEntry(existing);
 
@@ -79,13 +79,14 @@ export function tryRecordReview(
   }
 }
 
-// The game's review ledger, newest first — the read #567 builds the game's design/feedback.json from.
+// The game's review ledger, newest first, with insertion order breaking a same-millisecond tie — the read #567 builds
+// the game's design/feedback.json from.
 export function listReviews(db: Db, gameId: string): CommandReviewEntry[] {
   return db
     .select()
     .from(schema.commandReviews)
     .where(eq(schema.commandReviews.gameId, gameId))
-    .orderBy(desc(schema.commandReviews.at), desc(schema.commandReviews.id))
+    .orderBy(desc(schema.commandReviews.at), desc(sql`rowid`))
     .all()
     .map(toEntry);
 }

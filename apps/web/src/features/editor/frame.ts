@@ -72,6 +72,8 @@ export type MountGameFrameOptions = {
   mode: 'play' | 'edit';
   design: { rev: number; doc: DesignDoc };
   build?: 'draft' | 'test' | 'published';
+  /** Query parameters the game boots with: a review deck's playable scenario (#608). */
+  params?: Readonly<Record<string, string>>;
   create?(options: GameFrameOptions): FrameLike;
   onState?(state: GameFrameState): void;
   onSaveWrite?(payload: { saveSchemaVersion: number; data: unknown }): void;
@@ -169,6 +171,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       gameId: options.gameId,
       buildId: options.buildId,
       build: options.build ?? 'draft',
+      ...(options.params === undefined ? {} : { params: options.params }),
       mode: options.mode,
       playerIndex: 0,
       capabilities: [],
