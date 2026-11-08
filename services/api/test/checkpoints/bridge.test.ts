@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { AiurConfigError, createAiurClient, type AiurClient, type Decision } from '@ogm/aiur-client';
-import type { AgentOutboxLine } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, type AgentOutboxLine } from '@ogm/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getChatRuntime } from '../../src/build-chat/routes.js';
@@ -112,6 +112,7 @@ describe('checkpoint outbox and budget', () => {
           { id: 'wood', label: 'Wooden', media_id: validMedia.id },
           { id: 'iron', label: 'Iron', media_id: otherMedia.id },
         ],
+        topic: 'Door material',
       }),
       {
         jobId: JOB_ID,
@@ -128,6 +129,7 @@ describe('checkpoint outbox and budget', () => {
       checkpoint_id: CP_ID,
       decision_id: '',
       status: 'open',
+      topic: 'Door material',
       options: [{ id: 'wood', media_id: validMedia.id }, { id: 'iron' }],
     });
     expect(publish).toHaveBeenCalledWith(JOB_ID);
@@ -140,7 +142,7 @@ describe('checkpoint poller', () => {
     expect(statusOf(decision({ decision_status: 'waiting_for_future_route' }))).toBe('open');
   });
 
-  it('links marker Commands, mirrors supported native questions, and marks missing open Commands moot', async () => {
+  it('links marker Commands, mirrors creator-facing native questions, and marks missing open Commands moot', async () => {
     const workspace = mkdtempSync(join(tmpdir(), 'ogm-checkpoint-poller-'));
     const deps = makeChatDeps();
     registerWorkspace(deps.sqlite, JOB_ID, workspace);
@@ -150,7 +152,16 @@ describe('checkpoint poller', () => {
       kind: 'native_question',
       question: 'Which path?',
       questions: [{ question: 'Which path?', multi_select: false }],
-      context: {},
+      context: { short_summary: 'Forest path choice', long_context_markdown: CREATOR_AUDIENCE_MARKER },
+      blocking: false,
+    });
+    // An engineering question an agent raised with plain `aiur command request`: the Executor's, never the creator's.
+    const engineering = decision({
+      decision_id: 'engineering-1',
+      kind: 'native_question',
+      question: 'Retry the vision broker after HTTP 402?',
+      questions: [{ question: 'Retry the vision broker after HTTP 402?', multi_select: false }],
+      context: { short_summary: 'Vision broker 402' },
       blocking: false,
     });
     const unrelated = decision({
@@ -169,7 +180,7 @@ describe('checkpoint poller', () => {
     });
     const decisions = vi
       .fn()
-      .mockResolvedValueOnce([decision(), native, unrelated, multiSelect])
+      .mockResolvedValueOnce([decision(), native, unrelated, multiSelect, engineering])
       .mockResolvedValueOnce([]);
     const client = { decisions } as unknown as AiurClient;
     deps.registry.aiurClientFor = () => client;
@@ -188,7 +199,12 @@ describe('checkpoint poller', () => {
     expect(checkpoints.map(parseCheckpoint)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ checkpoint_id: CP_ID, decision_id: DECISION_ID, version: 2 }),
-        expect.objectContaining({ decision_id: 'native-1', question: 'Which path?', status: 'open' }),
+        expect.objectContaining({
+          decision_id: 'native-1',
+          question: 'Which path?',
+          topic: 'Forest path choice',
+          status: 'open',
+        }),
       ]),
     );
     expect(decisions).toHaveBeenCalledWith({ ticket: '142', limit: 50 });
@@ -197,6 +213,9 @@ describe('checkpoint poller', () => {
         expect.objectContaining({ decision_id: 'unrelated-1' }),
         expect.objectContaining({ decision_id: 'multi-select-1' }),
       ]),
+    );
+    expect(checkpoints.map(parseCheckpoint)).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ decision_id: 'engineering-1' })]),
     );
 
     await poller.tick();
