@@ -1,7 +1,7 @@
 import { copyFile, lstat, mkdir, readFile, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { loadIndex, type ResolvedCard } from '@ogm/asset-cards';
+import { loadIndex, packOf, setFor, type ResolvedCard } from '@ogm/asset-cards';
 import { povIdSchema, styleFamilyIdSchema, type AssetMetadata, type AssetsLock, type LockEntry } from '@ogm/contracts';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
@@ -346,6 +346,8 @@ export const command: GmCommand = {
         };
       }
       const meta = metadataFor(item.card);
+      const pack = packOf(item.card.id);
+      const set = pack === undefined ? undefined : setFor(pack)?.id;
       lock = upsertLock(lock, {
         id: item.card.id,
         ...located,
@@ -353,6 +355,7 @@ export const command: GmCommand = {
         rights: rightsForCard(item.card, index.collections),
         credit: item.credit,
         ...(meta === undefined ? {} : { meta }),
+        ...(set === undefined ? {} : { set }),
         added: item.existing?.added ?? new Date().toISOString().slice(0, 10),
       });
       if (item.familyException) {

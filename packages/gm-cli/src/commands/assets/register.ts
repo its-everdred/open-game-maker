@@ -6,7 +6,7 @@ import { loadIndex } from '@ogm/asset-cards';
 import type { AssetCredit, LockEntry } from '@ogm/contracts';
 
 import { putBlob } from '../../blobs.js';
-import { EXIT, UsageError, type GmCommand } from '../../command.js';
+import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { requireAssetsRoot, resolveContainedPath } from '../../context.js';
 import { renderCredits } from '../../credits.js';
 import { creditForCard, derivedCredit } from '../../license-metadata.js';
@@ -14,7 +14,7 @@ import { readLock, upsertLock, writeGeneratedText, writeLock } from '../../lock.
 import { intersectLockRights, rightsForCard } from '../../rules.js';
 import { MIME } from '../packs/index.js';
 
-function repeated(value: unknown): string[] {
+export function repeated(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
   return typeof value === 'string' ? [value] : [];
 }
@@ -79,6 +79,71 @@ function derivedLicense(sourceLicenses: string[]): string {
   return sourceLicenses.length === 1 ? sourceLicenses[0]! : 'LicenseRef-derived';
 }
 
+/** Move a game-repo file into the blob store and record it as a t3 lock entry derived from `from`; returns its id. */
+export async function registerFile(ctx: GmContext, path: string, from: string[], game: unknown): Promise<string> {
+  const file = await safeRelativePath(ctx.cwd, path);
+  let lock = await readLock(ctx.cwd);
+  if (lock === null)
+    throw new UsageError('no assets.lock.json here', 'gm assets use <id> --family <family> --pov <pov>');
+
+  const sourceIds = [...new Set(from)];
+  const sourceRights: LockEntry['rights'][] = [];
+  const sourceCredits: AssetCredit[] = [];
+  let sourceLicenses: string[] = [];
+  if (sourceIds.length > 0) {
+    const index = await loadIndex(requireAssetsRoot(ctx));
+    const byId = new Map(index.cards.map((card) => [card.id, card]));
+    for (const id of sourceIds) {
+      const card = byId.get(id);
+      if (!card) throw new UsageError(`unknown source asset ${id}`, 'gm assets why <id>');
+      const collection = card.collection === undefined ? undefined : index.collections[card.collection];
+      if (!collection) throw new UsageError(`source asset ${id} has no collection`, 'gm assets why <id>');
+      const metadata = await creditForCard(requireAssetsRoot(ctx), card, collection);
+      if (metadata.credit === undefined) {
+        throw new UsageError(`${id} ${metadata.detail ?? 'has no credit metadata'}`, 'gm assets why <id>');
+      }
+      sourceRights.push(rightsForCard(card, index.collections));
+      sourceCredits.push(metadata.credit);
+      sourceLicenses.push(card.resolved.license);
+    }
+  }
+  const rights = intersectLockRights(sourceRights);
+  if (rights.redistribution === 'none') {
+    throw new UsageError('derived source rights prohibit redistribution', `gm assets why ${sourceIds[0]}`);
+  }
+  sourceLicenses = [...new Set(sourceLicenses)];
+  const gameName = await gameId(ctx.cwd, game);
+  const id = `t3:${gameName}/${idPath(file.relative)}`;
+  const taken = lock.assets.find((entry) => entry.id === id && entry.path !== file.relative);
+  if (taken) {
+    throw new UsageError(
+      `${id} already names ${taken.path}`,
+      'rename the file so its id differs, e.g. assets/model/door-2.glb',
+    );
+  }
+  // D-ASSETS-REFERENCE: the bytes live in the instance blob store; the repo keeps only the lock entry.
+  const bytes = await readFile(file.absolute);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  await putBlob(ctx, bytes, sha256, MIME[extname(file.relative).toLowerCase()] ?? 'application/octet-stream');
+  lock = upsertLock(lock, {
+    id,
+    sha256,
+    source: 'blob',
+    path: file.relative,
+    license: derivedLicense(sourceLicenses),
+    rights,
+    credit: derivedCredit(gameName, sourceCredits),
+    ...(sourceIds.length > 0 ? { derived_from: sourceIds } : {}),
+    added: new Date().toISOString().slice(0, 10),
+  });
+  /* The lock is the commit point, so it is written last: a failed credits write leaves nothing registered. */
+  await writeGeneratedText(join(ctx.cwd, 'CREDITS.md'), renderCredits(lock));
+  await writeLock(ctx.cwd, lock);
+  await unlink(file.absolute);
+  ctx.emit('assets.register', { id, derived_from: sourceIds });
+  return id;
+}
+
 export const command: GmCommand = {
   name: 'assets register',
   summary: 'move an agent-made or derived asset into the blob store and record it in assets.lock.json',
@@ -95,65 +160,7 @@ export const command: GmCommand = {
     if (flags['made-by-agent'] !== true) {
       throw new UsageError('--made-by-agent is required', 'gm assets register <path> --made-by-agent');
     }
-    const file = await safeRelativePath(ctx.cwd, args[0]!);
-    let lock = await readLock(ctx.cwd);
-    if (lock === null)
-      throw new UsageError('no assets.lock.json here', 'gm assets use <id> --family <family> --pov <pov>');
-
-    const sourceIds = [...new Set(repeated(flags.from))];
-    const sourceRights: LockEntry['rights'][] = [];
-    const sourceCredits: AssetCredit[] = [];
-    let sourceLicenses: string[] = [];
-    if (sourceIds.length > 0) {
-      const index = await loadIndex(requireAssetsRoot(ctx));
-      const byId = new Map(index.cards.map((card) => [card.id, card]));
-      for (const id of sourceIds) {
-        const card = byId.get(id);
-        if (!card) throw new UsageError(`unknown source asset ${id}`, 'gm assets why <id>');
-        const collection = card.collection === undefined ? undefined : index.collections[card.collection];
-        if (!collection) throw new UsageError(`source asset ${id} has no collection`, 'gm assets why <id>');
-        const metadata = await creditForCard(requireAssetsRoot(ctx), card, collection);
-        if (metadata.credit === undefined) {
-          throw new UsageError(`${id} ${metadata.detail ?? 'has no credit metadata'}`, 'gm assets why <id>');
-        }
-        sourceRights.push(rightsForCard(card, index.collections));
-        sourceCredits.push(metadata.credit);
-        sourceLicenses.push(card.resolved.license);
-      }
-    }
-    const rights = intersectLockRights(sourceRights);
-    if (rights.redistribution === 'none') {
-      throw new UsageError('derived source rights prohibit redistribution', `gm assets why ${sourceIds[0]}`);
-    }
-    sourceLicenses = [...new Set(sourceLicenses)];
-    const game = await gameId(ctx.cwd, flags.game);
-    const id = `t3:${game}/${idPath(file.relative)}`;
-    const taken = lock.assets.find((entry) => entry.id === id && entry.path !== file.relative);
-    if (taken) {
-      throw new UsageError(
-        `${id} already names ${taken.path}`,
-        'rename the file so its id differs, e.g. assets/model/door-2.glb',
-      );
-    }
-    // D-ASSETS-REFERENCE: the bytes live in the instance blob store; the repo keeps only the lock entry.
-    const bytes = await readFile(file.absolute);
-    const sha256 = createHash('sha256').update(bytes).digest('hex');
-    await putBlob(ctx, bytes, sha256, MIME[extname(file.relative).toLowerCase()] ?? 'application/octet-stream');
-    lock = upsertLock(lock, {
-      id,
-      sha256,
-      source: 'blob',
-      path: file.relative,
-      license: derivedLicense(sourceLicenses),
-      rights,
-      credit: derivedCredit(game, sourceCredits),
-      ...(sourceIds.length > 0 ? { derived_from: sourceIds } : {}),
-      added: new Date().toISOString().slice(0, 10),
-    });
-    await writeLock(ctx.cwd, lock);
-    await writeGeneratedText(join(ctx.cwd, 'CREDITS.md'), renderCredits(lock));
-    await unlink(file.absolute);
-    ctx.emit('assets.register', { id, derived_from: sourceIds });
+    await registerFile(ctx, args[0]!, repeated(flags.from), flags.game);
     return EXIT.ok;
   },
 };

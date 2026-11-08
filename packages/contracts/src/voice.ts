@@ -16,6 +16,8 @@ export const VoiceTarget = z.discriminatedUnion('kind', [
     job_id: z.string().min(1),
     ticket: z.string().min(1),
     creator_id: z.string().min(1),
+    // The aiur decision the creator started voice from (#597): the briefing puts it first and describes its cards.
+    command_id: z.string().min(1).max(200).optional(),
   }),
 ]);
 // POST /api/v1/voice/token { target } → a 300 s `vct1.<payload>.<mac>` token the voice host verifies.

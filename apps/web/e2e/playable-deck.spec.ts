@@ -131,7 +131,7 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await page.getByRole('button', { name: 'Like', exact: true }).click();
 
   // The last vote answers through the job's checkpoint route with the whole map.
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   await capture(page, testInfo, 'playable-sent');
   expect(answerBodies).toEqual([
     { option_id: 'slow', review: { likes: ['slow', 'fast'], dislikes: [{ option_id: 'medium' }] } },

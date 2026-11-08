@@ -13,6 +13,7 @@ import type { TicketJob } from '../../src/app/registry.js';
 import { writeLimits, writePreference } from '../../src/energy/store.js';
 import { bundleRoutes, hookSecretFiles } from '../../src/internal/bundle.js';
 import { tarGz } from '../../src/internal/tarball.js';
+import { setPaidApisDuringGameplay } from '../../src/gameplay/policy.js';
 import { ids, insertJob } from '../budget/fixture.js';
 import { makeApp, makeDeps } from '../helpers.js';
 
@@ -105,6 +106,7 @@ describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
         pov: 'iso',
         genre: 'platformer',
         multiplayer: false,
+        paidApisDuringGameplay: false,
         branch: 'main',
         lockfilePath: 'assets.lock.json',
       },
@@ -300,6 +302,26 @@ describe('job attachments for the after_create hook', () => {
       expect(listed?.path).not.toMatch(/sk-|ghp_|@/);
     },
   );
+});
+
+describe('gameplay policy for agents', () => {
+  // Agents design no live paid feature unless the instance admin's setting says they may.
+  it("carries the instance admin's setting in the bundle and on the live route", async () => {
+    const { deps, get } = await setup();
+    const bundle = async () => (await (await get('/internal/jobs/by-ticket/12/bundle', SECRET_A)).json()).gameContext;
+    expect(await bundle()).toMatchObject({ paidApisDuringGameplay: false });
+    expect(await (await get('/internal/gameplay', SECRET_A)).json()).toEqual({ paidApisDuringGameplay: false });
+
+    setPaidApisDuringGameplay(deps.db, true);
+    expect(await bundle()).toMatchObject({ paidApisDuringGameplay: true });
+    expect(await (await get('/internal/gameplay', SECRET_B)).json()).toEqual({ paidApisDuringGameplay: true });
+  });
+
+  it('answers the live route only to a daemon', async () => {
+    const { get } = await setup();
+    expect((await get('/internal/gameplay')).status).toBe(401);
+    expect((await get('/internal/gameplay', 'not-a-daemon-secret')).status).toBe(401);
+  });
 });
 
 describe('GET /internal/skills/:version.tgz', () => {

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 
 import { gamePath, reviewPath, type GameCommand } from '@ogm/contracts/browser';
@@ -7,12 +7,15 @@ import { findCommand, findCommandByNumber } from '../../features/commands-inbox/
 import { withoutLinks } from '../../features/commands-inbox/review';
 import { PlayLinkMessage } from '../play/PlayScreen';
 import { playLinkDenial, usePlayLink } from '../play/api';
-import { useGameCommands } from '../../features/commands-inbox/commands';
-import { useIsSent, useServerDrafts } from '../../features/commands-inbox/drafts';
+import { queryClient } from '../../app/query';
+import { gameCommandsQueryKey, useGameCommands } from '../../features/commands-inbox/commands';
+import { DecisionVoice, useDucking, type DecisionVoiceTarget } from '../../features/commands-inbox/decision-voice';
+import { reopenDraft, useIsSent, useServerDrafts } from '../../features/commands-inbox/drafts';
 import { GlowBackdrop } from '../../features/commands-inbox/GlowBackdrop';
 import { ReviewDeck } from '../../features/commands-inbox/ReviewDeck';
 import { ReviewRows } from '../../features/commands-inbox/ReviewRows';
 import { Icon } from '../../components/Icon';
+import { useMyJobs } from '../../features/build-chat/jobs';
 import { reviewTitle } from './title';
 import './review-screen.css';
 
@@ -151,11 +154,10 @@ function ReviewScreen({
   find(commands: readonly GameCommand[]): GameCommand | undefined;
 }) {
   const navigate = useNavigate();
-  const { commands, isPending } = useGameCommands(gameId);
+  const { commands, isPending, isFetching } = useGameCommands(gameId);
   const command = find(commands);
-  const [sentHere, setSent] = useState(false);
   // A review sent earlier (moved away from, then back to) stays sent: no second deck to answer it again.
-  const sent = useIsSent(command) || sentHere;
+  const sentBefore = useIsSent(command);
   // A short link closes to the game's rows; a legacy link, with no slug to build them from, closes to the game.
   const back = () => navigate(slug === undefined ? `/all?spotlight=${encodeURIComponent(gameId)}` : reviewsPath(slug));
   const here = command?.review_number ?? number;
@@ -172,27 +174,92 @@ function ReviewScreen({
         }
       : undefined;
 
-  if (sent) {
+  // The decision as last read while open. A saved answer drops it from the open list, and changing that answer
+  // reopens the same deck from here.
+  const [seen, setSeen] = useState<GameCommand>();
+  useEffect(() => {
+    if (command !== undefined) setSeen(command);
+  }, [command]);
+  const [saved, setSaved] = useState(false);
+  const [correcting, setCorrecting] = useState(0);
+  const [voiceUsed, setVoiceUsed] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  useDucking(speaking);
+  const shown = command ?? (correcting > 0 ? seen : undefined);
+
+  // A spoken choice is saved by the voice agent, not by this screen: once a call has run and the decision is no longer
+  // open on a fresh read, the answer landed. Worked out during render, so the screen goes straight to Saved and the
+  // voice button stays mounted (an effect would render the "not open" state first and hang up the call).
+  const spokenSave = voiceUsed && seen !== undefined && command === undefined && !isFetching && correcting === 0;
+  // Latched, so a later refetch (each spoken turn asks for one) cannot drop the screen out of Saved mid-call.
+  if (spokenSave && !saved) setSaved(true);
+
+  // The Command's job is what gives the screen the app's voice support: the same build-chat voice target the composer
+  // uses, naming this decision so the agent is briefed on it first. A Command without a job in hand keeps typing only.
+  const { jobs } = useMyJobs();
+  const voiceTarget = useMemo<DecisionVoiceTarget | undefined>(() => {
+    const decision = shown ?? seen;
+    const job = decision === undefined ? undefined : jobs.find((candidate) => candidate.id === decision.job_id);
+    if (decision === undefined || job === undefined) return undefined;
+    return {
+      kind: 'build',
+      game_id: job.gameId,
+      job_id: job.id,
+      ticket: job.aiurIssueNumber === null ? '' : String(job.aiurIssueNumber),
+      creator_id: job.creatorId,
+      command_id: decision.decision_id,
+    };
+  }, [jobs, seen, shown]);
+
+  const voice =
+    voiceTarget === undefined || voiceTarget.ticket === '' ? null : (
+      <DecisionVoice
+        target={voiceTarget}
+        onLive={(live) => {
+          if (live) setVoiceUsed(true);
+        }}
+        onSpeaking={setSpeaking}
+        onHeard={() => void queryClient.invalidateQueries({ queryKey: gameCommandsQueryKey(gameId) })}
+      />
+    );
+
+  const answered = seen ?? command;
+  // While a change is open the earlier answer is still on record, but the deck is what the creator is answering.
+  if ((saved || spokenSave || (sentBefore && correcting === 0)) && answered !== undefined) {
     return (
       <ReviewFrame
         head={
           <>
-            <h1>Review sent</h1>
+            <h1>Saved</h1>
+            {voice}
             <CloseButton onClose={back} />
           </>
         }
       >
-        {nav === undefined ? null : (
-          <div className="review-screen-body review-screen-steps">
-            {nav.prev}
-            {nav.next}
-          </div>
-        )}
+        <div className="review-screen-body review-screen-steps">
+          {nav?.prev}
+          {/* A Command with no job answers through its game's own aiur, which cannot take a changed answer. */}
+          {answered.job_id === null ? null : (
+            <button
+              className="review-screen-change tap-secondary"
+              onClick={() => {
+                // A correction starts from a fresh deck rather than the votes already sent.
+                reopenDraft(answered);
+                setSaved(false);
+                setCorrecting((count) => count + 1);
+              }}
+              type="button"
+            >
+              Change
+            </button>
+          )}
+          {nav?.next}
+        </div>
       </ReviewFrame>
     );
   }
 
-  if (command === undefined) {
+  if (shown === undefined) {
     return (
       <ReviewFrame
         head={
@@ -213,15 +280,24 @@ function ReviewScreen({
     <ReviewFrame
       head={
         <>
-          <h1>{reviewTitle(withoutLinks(command.title))}</h1>
+          <h1>{reviewTitle(withoutLinks(shown.title))}</h1>
+          {voice}
           <CloseButton onClose={back} />
         </>
       }
     >
       <div className="review-screen-body review-screen-deck">
-        <ReviewDeck gameId={gameId} command={command} onAnswered={() => setSent(true)} />
+        <ReviewDeck
+          key={correcting}
+          gameId={gameId}
+          command={shown}
+          onAnswered={() => {
+            setSaved(true);
+            setCorrecting(0);
+          }}
+        />
         <details className="review-screen-question">
-          <summary>{withoutLinks(command.question)}</summary>
+          <summary>{withoutLinks(shown.question)}</summary>
         </details>
       </div>
     </ReviewFrame>

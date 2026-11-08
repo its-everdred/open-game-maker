@@ -159,7 +159,7 @@ describe('short game links', () => {
     serve([command('d_one', 1), command('d_three', 3)]);
     await act(() => router.client.invalidateQueries());
 
-    expect(await screen.findByRole('heading', { name: 'Review sent' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Saved' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Previous question' })).toHaveAttribute('href', '/blobs/review/1');
     expect(screen.getByRole('link', { name: 'Next question' })).toHaveAttribute('href', '/blobs/review/3');
   });
@@ -175,7 +175,7 @@ describe('short game links', () => {
     expect(await screen.findByText('Deck for d_two')).toBeVisible();
     await act(() => router.navigate('/blobs/review/1'));
 
-    expect(await screen.findByRole('heading', { name: 'Review sent' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Saved' })).toBeVisible();
     expect(screen.queryByText('Deck for d_one')).not.toBeInTheDocument();
   });
 

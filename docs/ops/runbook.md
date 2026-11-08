@@ -276,7 +276,8 @@ Run from a game folder, the slug defaults to that game (the folder of the neares
 internal token, the API port and the app origin from `~/.config/ogm/env/api.env` (or `$OGM_ENV_DIR/api.env`;
 `OGM_INTERNAL_TOKEN`, `OGM_API_PORT`, `OGM_APP_ORIGIN`; the same names in the environment win), asks the API for the game's facts — its folder in the
 instance repository and the checkout its daemon row names — and checks the commit out into a scratch git worktree
-under `~/.local/state/ogm/publish`. Without `--sha` the commit is the repository's remote `main` as fetched now, never
+under `~/.local/state/ogm/publish`. It refuses before building when the game's code names an asset its
+`assets.lock.json` does not list. Without `--sha` the commit is the repository's remote `main` as fetched now, never
 the checkout's own HEAD or a stale `origin/main`. It builds that folder's own build script in production mode with a
 relative base (`--base=./`, so the build works under `/g/<gameId>/<buildId>/`) and `OGM_ASSETS_ROOT`, then archives
 `dist/` with the repository's `manifest.json`, `design/design.json` and `achievements.json` and posts it to the API's

@@ -136,7 +136,7 @@ test.beforeEach(() => {
 
 test('judges the 6-card voice deck and answers once every card has a vote', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
-  await openDeck(page, voiceCommand().review_number!);
+  await openDeck(page, voiceCommand().review_number!, { dropAnswered: true });
 
   const deck = page.getByRole('region', { name: 'Review Pick the Blobs voices' });
   await expect(deck).toBeVisible();
@@ -182,7 +182,7 @@ test('judges the 6-card voice deck and answers once every card has a vote', asyn
   await judgeCard(page, 'like');
 
   // The last vote answers the Command with the whole map.
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
       option_id: 'v1',
@@ -195,6 +195,36 @@ test('judges the 6-card voice deck and answers once every card has a vote', asyn
   // Each vote was saved as a draft on the way.
   await expect.poll(() => draftBodies.at(-1)?.cards.length).toBe(6);
   await capture(page, testInfo, 'voice-deck-sent');
+
+  // A saved answer can be corrected (#597): Change reopens a fresh deck for the same decision.
+  await page.getByRole('button', { name: 'Change' }).click();
+  await expect(deck).toBeVisible();
+  await expect(page.locator('.review-deck-progress')).toHaveText('1 of 6');
+});
+
+// Kevin (#597): an optional voice button inside the decision that never covers the media or the options.
+test('offers voice about the decision without covering the cards or the options', async ({ page }, testInfo) => {
+  testInfo.setTimeout(120_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await installReviewApi(page, { voice: true });
+  await page.goto(`/blobs/review/${imageCommand().review_number!}`);
+
+  const voice = page.getByRole('button', { name: 'Talk about this decision' });
+  await expect(voice).toBeVisible();
+  const button = (await voice.boundingBox())!;
+  const covered = [page.locator('.review-deck-card'), page.locator('.review-deck-actions')];
+  for (const target of covered) {
+    const box = (await target.boundingBox())!;
+    const overlaps =
+      button.x < box.x + box.width &&
+      box.x < button.x + button.width &&
+      button.y < box.y + box.height &&
+      box.y < button.y + button.height;
+    expect(overlaps).toBe(false);
+  }
+  // The token asked for names this decision, which is what the agent is briefed on first.
+  expect(voiceTokenTargets.at(-1)).toMatchObject({ command_id: imageCommand().decision_id, ticket: '570' });
+  await capture(page, testInfo, 'decision-voice-button');
 });
 
 test('judges the 9-card image deck with the arrow keys and answers on the last vote', async ({ page }, testInfo) => {
@@ -252,7 +282,7 @@ test('judges the 9-card image deck with the arrow keys and answers on the last v
   await judgeCard(page, 'dislike');
 
   // A Command that asks for many answers with the likes and dislikes as soon as the last card has its vote.
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
@@ -352,7 +382,7 @@ test('opens questions from the rows, keeps each draft and answers one by swipe',
     .getByRole('dialog', { name: /^Why did you dislike/ })
     .getByRole('button', { name: 'Skip' })
     .click();
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   expect(answerBodies).toEqual([{ option_id: 'v1', review: { likes: ['v1'], dislikes: [{ option_id: 'v2' }] } }]);
 
   // Back on the rows: the swiped question is sent and the look is still a draft.
@@ -377,16 +407,30 @@ async function swipe(page: Page, direction: 'left' | 'right') {
 }
 
 // The short link the Executor pushes (#591): the game's slug and the Command's number inside the game.
-async function openDeck(page: Page, reviewNumber: number) {
+async function openDeck(page: Page, reviewNumber: number, options: ReviewApiOptions = {}) {
   await installAuthRoutes(page, { signedIn: true });
-  await installReviewApi(page);
+  await installReviewApi(page, options);
   await page.goto(`/blobs/review/${reviewNumber}`);
 }
 
 // The two decks and the answer route the app's own client calls. Media is served from its own origin so the cards have
 // real audio and stills to draw.
-async function installReviewApi(page: Page) {
+const voiceTokenTargets: Array<Record<string, unknown>> = [];
+
+// `voice` gives the Commands' job to the signed-in creator and a configured voice host, so the decision offers voice.
+// `dropAnswered` takes an answered Command off the open list, so Change has to reopen it from the screen.
+type ReviewApiOptions = { voice?: boolean; dropAnswered?: boolean };
+
+async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
   const commands = [voiceCommand(), imageCommand(), longCommand()];
+  const job = {
+    id: imageCommand().job_id!,
+    gameId,
+    creatorId: 'u1',
+    state: 'running',
+    aiurIssueNumber: 570,
+    updatedAt: '2026-11-07T17:40:00.000Z',
+  };
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -408,6 +452,18 @@ async function installReviewApi(page: Page) {
       });
     }
     if (path === `/api/v1/games/${gameId}/commands`) return json(route, { commands });
+    if (options.voice && path === '/api/v1/games') return json(route, { games: [{ id: gameId, title: 'Blobs' }] });
+    if (options.voice && path === '/api/v1/jobs') return json(route, { jobs: [job] });
+    if (options.voice && path === '/api/v1/voice/token') {
+      voiceTokenTargets.push(
+        (JSON.parse(route.request().postData() ?? '{}') as { target: Record<string, unknown> }).target,
+      );
+      return json(route, {
+        token: 'vct1.e2e.mac',
+        expires_at: '2026-11-08T10:00:00.000Z',
+        url: 'wss://voice.example.test/ws/voice',
+      });
+    }
     if (path === '/api/v1/jobs' || path === '/api/v1/jobs/active') return json(route, { jobs: [] });
     if (path === `/api/v1/games/${gameId}/review-drafts`) return json(route, { drafts: [] });
     if (path.startsWith(`/api/v1/games/${gameId}/review-drafts/`)) {
@@ -417,6 +473,8 @@ async function installReviewApi(page: Page) {
     if (path.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });
     if (/\/jobs\/[^/]+\/checkpoints\/[^/]+\/answer$/.test(path)) {
       answerBodies.push(JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>);
+      const answered = commands.findIndex(({ checkpoint_id }) => path.includes(`/checkpoints/${checkpoint_id}/`));
+      if (options.dropAnswered && answered >= 0) commands.splice(answered, 1);
       return json(route, {
         status: 'answered',
         decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e73',

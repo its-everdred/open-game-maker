@@ -21,6 +21,7 @@ import type { ApiBindings } from '../app/types.js';
 import type { AppDeps } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
 import { createRateLimiter } from '../auth/rate-limit.js';
+import { requireMeteredDispatch } from '../gameplay/policy.js';
 import { findGameForFamily } from '../games/games.js';
 import { findJobRow } from '../jobs/repo.js';
 import { registerVoiceTarget } from './briefing-push.js';
@@ -55,6 +56,7 @@ function internalSecret(given: string | undefined, expected: string | undefined)
 
 async function authorizedTarget(c: Context<ApiBindings>) {
   const principal = requirePrincipal(c, ['user']);
+  requireMeteredDispatch(c);
   const { target } = await parseBody(c, VoiceTokenRequest);
   const { db } = c.get('deps');
   if (target.creator_id !== principal.userId) throw new HttpError(403, 'not_target_creator');

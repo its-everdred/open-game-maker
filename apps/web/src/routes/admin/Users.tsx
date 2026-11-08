@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 
 import { adminKeys, adminRequest, invalidateAdmin, useAllowedUsers, useAdminMe } from './api';
 import { ConfirmDialog } from './ConfirmDialog';
+import { GameplaySetting } from './GameplaySetting';
 import type { AdminAllowedUser, AllowListRole } from './types';
 
 const ROLES: AllowListRole[] = ['player', 'maker', 'admin'];
@@ -90,6 +91,7 @@ export function Users() {
           {addError(add.error)}
         </p>
       ) : null}
+      <GameplaySetting />
       <UsersTable
         busy={changeRole.isPending || remove.isPending || invite.isPending}
         currentEmail={me.data.user.email.toLowerCase()}

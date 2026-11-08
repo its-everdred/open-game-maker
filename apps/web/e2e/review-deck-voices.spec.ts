@@ -106,7 +106,7 @@ test('plays each Blob’s voice and answers once all eight have a vote', async (
   }
 
   // The eighth vote answered the Command through the game's own route; aiur took it (200).
-  await expect(page.getByRole('heading', { name: 'Review sent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   expect(answerBodies).toEqual([
     {
       option_id: 'pip',

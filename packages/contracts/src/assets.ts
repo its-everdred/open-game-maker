@@ -11,8 +11,9 @@ export type Tier = z.infer<typeof tierSchema>;
  * 1: entries may carry `meta` (card sprite/rig/kit/geometry blocks).
  * 2: build manifests use content-addressed `/a/` URLs and may be accompanied by a cache plan.
  * 3: lock entries may carry normalized legal-credit metadata.
+ * 4: lock entries may name the curated asset set their pack belongs to (`set`).
  */
-export const ASSETS_SCHEMA_MINOR = 3;
+export const ASSETS_SCHEMA_MINOR = 4;
 const minorSchema = z.number().int().min(0).optional();
 
 export const loadPhaseSchema = z.enum(['boot', 'ready', 'stream']);
@@ -236,6 +237,8 @@ const lockEntrySchema = z.looseObject({
   credit: assetCreditSchema.optional(),
   meta: assetMetadataSchema.optional(),
   derived_from: z.array(lockAssetIdSchema).optional(),
+  /** The curated compatibility set (style-families.json) the entry's pack belongs to, when it has one. */
+  set: z.string().min(1).optional(),
   added: z.iso.date(),
 });
 
