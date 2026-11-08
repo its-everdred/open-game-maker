@@ -63,6 +63,14 @@
   flex: none;
 }
 
+/* The bar scrolls sideways when it overflows; Pause stays pinned at its visible end (#641). */
+.game-screen .play-bar .platform-pause {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  flex: none;
+}
+
 .game-screen .play-title {
   flex: 1;
   font: 700 22px var(--display);

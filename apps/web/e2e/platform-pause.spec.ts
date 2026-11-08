@@ -13,6 +13,8 @@ const viewports = [
   { width: 844, height: 390 },
   { width: 820, height: 1180 },
   { width: 1180, height: 820 },
+  /* Between the phone and wide layouts the bar scrolls sideways; Pause must stay in view. */
+  { width: 834, height: 1194 },
 ];
 
 for (const viewport of viewports) {
@@ -36,7 +38,9 @@ for (const viewport of viewports) {
       pauseBox.y < gameBox.y + gameBox.height &&
       gameBox.y < pauseBox.y + pauseBox.height;
     expect(overlaps).toBe(false);
-    expect(pauseBox.x + pauseBox.width).toBeLessThanOrEqual(viewport.width);
+    const barBox = await page.locator('.play-bar').boundingBox();
+    if (!barBox) throw new Error('play bar has no box');
+    expect(pauseBox.x + pauseBox.width).toBeLessThanOrEqual(barBox.x + barBox.width);
     expect(pauseBox.y).toBeGreaterThanOrEqual(0);
 
     await pause.click();

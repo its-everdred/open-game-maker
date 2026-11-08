@@ -211,7 +211,13 @@ export function PlatformHud({
     <div className="platform-hud">
       {pauseSlot
         ? createPortal(
-            <button ref={pauseRef} className="platform-pause tap-primary" type="button" onClick={pause}>
+            <button
+              ref={pauseRef}
+              className="platform-pause tap-primary"
+              type="button"
+              disabled={paused}
+              onClick={pause}
+            >
               Pause
             </button>,
             pauseSlot,

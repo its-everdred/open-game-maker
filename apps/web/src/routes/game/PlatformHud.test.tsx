@@ -86,6 +86,8 @@ describe('PlatformHud', () => {
     const pause = screen.getByRole('button', { name: 'Pause' });
     fireEvent.click(pause);
     expect(screen.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+    /* Pause sits in the play bar, outside the dialog's shade, so a second press must not pause again. */
+    fireEvent.click(pause);
     expect(test.frame.pause).toHaveBeenCalledOnce();
     const resume = screen.getByRole('button', { name: 'Resume' });
     await waitFor(() => expect(resume).toHaveFocus());
