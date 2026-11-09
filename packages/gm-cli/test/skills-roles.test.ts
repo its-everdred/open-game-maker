@@ -105,9 +105,7 @@ describe('gm skills config', () => {
     expect(result.out).toContain(
       '      "role:assets": [gm-core, gm-asset-variants, gm-pack-adapter, gm-asset-showcase]',
     );
-    expect(result.out).toContain(
-      '      "role:gameplay": [gm-core, gm-input, gm-verify, gm-qa, gm-map-inspiration]',
-    );
+    expect(result.out).toContain('      "role:gameplay": [gm-core, gm-input, gm-verify, gm-qa, gm-map-inspiration]');
   });
 });
 

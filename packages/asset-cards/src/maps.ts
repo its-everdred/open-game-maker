@@ -293,10 +293,13 @@ export async function loadMapLayout(
     }
     const metrics = layoutMetrics(spec);
     const computed = spec.tags.computed;
-    const countsAgree = (['room_count', 'connection_count', 'loop_count', 'dead_end_count', 'secret_count'] as const).every(
-      (key) => metrics[key] === computed[key],
-    );
-    return countsAgree && metrics.endpoints_ok && metrics.areas_ok && metrics.total_area_cells === computed.total_area_cells
+    const countsAgree = (
+      ['room_count', 'connection_count', 'loop_count', 'dead_end_count', 'secret_count'] as const
+    ).every((key) => metrics[key] === computed[key]);
+    return countsAgree &&
+      metrics.endpoints_ok &&
+      metrics.areas_ok &&
+      metrics.total_area_cells === computed.total_area_cells
       ? spec
       : null;
   } catch {
