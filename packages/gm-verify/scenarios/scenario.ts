@@ -66,6 +66,10 @@ function usage<T>(read: () => T): T {
     process.exit(2);
   }
 }
+if (command === 'two-client' && [values.clients, values.seed, values.start].some((value) => value !== undefined)) {
+  console.error('--clients, --seed and --start apply to multi-client only');
+  process.exit(2);
+}
 const clients = usage(() => parseClients(values.clients));
 const seed = usage(() => parseSeed(values.seed));
 const start =

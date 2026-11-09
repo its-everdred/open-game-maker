@@ -96,6 +96,8 @@ export const command: GmCommand = {
         return EXIT.failed;
       }
       if (child.error) throw new UsageError(`cannot run the local room: ${child.error.message}`, 'pnpm install');
+      /* The scenario exits 2 when it refuses its arguments (a bad --seed, an unknown --start): a usage error, not a fail. */
+      if (child.status === EXIT.usage) return EXIT.usage;
       return child.status === 0 ? EXIT.ok : EXIT.failed;
     }
     if (flags.seed !== undefined || flags.start !== undefined)

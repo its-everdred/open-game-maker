@@ -45,14 +45,11 @@ export function dropPlan(clients: number): { rejoin: number; forfeit?: number } 
 export const NO_FORFEIT = 'seat forfeit (a two-seat room has no second peer to forfeit)';
 
 /**
- * The room options a game may choose for a run. Authority mode is not one of them: the game's manifest already sets it
- * and the room is always created with that.
+ * The room options a game may choose for a run: only those the run checks took effect (step 1 compares every seat's team
+ * with {@link expectedTeam}), so a start can never be reported that the room ignored. Authority mode is not one of them:
+ * the game's manifest already sets it and the room is always created with that.
  */
-export const startConfigSchema = z.strictObject({
-  teams: TeamPolicySchema.optional(),
-  spectators: z.enum(['off', 'on']).optional(),
-  pauseOnDisconnect: z.boolean().optional(),
-});
+export const startConfigSchema = z.strictObject({ teams: TeamPolicySchema.optional() });
 export type StartConfig = z.infer<typeof startConfigSchema>;
 
 /** Where a game names its start configurations: `{ "<name>": { "teams": "alternate" } }`. */
@@ -62,9 +59,20 @@ export const STARTS_FILE = join('qa', 'starts.json');
 export function readStart(gameDir: string, name: string): StartConfig {
   const path = join(gameDir, STARTS_FILE);
   if (!existsSync(path)) throw new Error(`--start ${name}: the game has no ${STARTS_FILE}`);
-  const starts = z.record(z.string(), startConfigSchema).safeParse(JSON.parse(readFileSync(path, 'utf8')));
-  if (!starts.success) throw new Error(`${STARTS_FILE} is invalid: ${starts.error.message}`);
-  const start = starts.data[name];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (caught) {
+    throw new Error(`${STARTS_FILE} is not valid JSON: ${caught instanceof Error ? caught.message : String(caught)}`, {
+      cause: caught,
+    });
+  }
+  const starts = z.record(z.string(), startConfigSchema).safeParse(raw);
+  if (!starts.success) {
+    const issues = starts.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+    throw new Error(`${STARTS_FILE} is invalid (${issues}); an entry may set only "teams": "none" or "alternate"`);
+  }
+  const start = Object.hasOwn(starts.data, name) ? starts.data[name] : undefined;
   if (start === undefined) {
     throw new Error(
       `--start ${name} is not in ${STARTS_FILE} (it names ${Object.keys(starts.data).join(', ') || 'none'})`,
@@ -74,11 +82,13 @@ export function readStart(gameDir: string, name: string): StartConfig {
 }
 
 /** The report's record of the start: its name and each option it passed to the room. */
-export function startProbes(name: string, start: StartConfig): Record<string, string | boolean> {
-  return {
-    start: name,
-    ...Object.fromEntries(Object.entries(start).map(([key, value]) => [`start.${key}`, value as string | boolean])),
-  };
+export function startProbes(name: string, start: StartConfig): Record<string, string> {
+  return { start: name, ...(start.teams === undefined ? {} : { 'start.teams': start.teams }) };
+}
+
+/** The team the room must give `seat` under `policy` (services/rooms `teamOf`): alternate is seat n → team n % 2. */
+export function expectedTeam(seat: number, policy: StartConfig['teams'] = 'none'): number {
+  return policy === 'alternate' ? seat % 2 : 0;
 }
 
 /** The room-create body: the start's options, under the run's own pin, owner, seats, protocol and authority mode. */

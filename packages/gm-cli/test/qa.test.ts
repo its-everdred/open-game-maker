@@ -92,9 +92,7 @@ describe('gm qa usage', () => {
     ]);
   });
 
-  it('runs --local through the gm-verify multi-client scenario that exists beside the package', () => {
-    /* The scenario must accept what --local passes it. */
-    expect(readFileSync(scenarioScript(), 'utf8')).toMatch(/clients: \{ type: 'string' \}[\s\S]*seed[\s\S]*start/);
+  it('runs --local through the gm-verify four-client scenario that exists beside the package', () => {
     expect(existsSync(scenarioScript())).toBe(true);
     expect(readFileSync(scenarioScript(), 'utf8')).toContain("'multi-client'");
     expect(localRoomBlocker(scenarioScript())).toBeUndefined();

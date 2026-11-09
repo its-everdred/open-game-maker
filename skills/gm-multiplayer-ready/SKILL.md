@@ -136,15 +136,17 @@ Run it after a conversion, after changing snapshots or input, and before calling
 pnpm --filter @ogm/gm-verify scenario multi-client --game <gameDir> --link bad --out shots/mp
 ```
 
-Four browsers take four seats in one protocol-2 room and it asserts: every seat welcomed within 2 s and seated 0–3, a
-private canary never reaches a watcher, the watchers' design equals the primary's at each rev, all four playing in
-500 ms of the start, each peer's input moving its own avatar while the primary's does not, a 3 s drop rejoining its seat
-and a longer one forfeiting it without ending the room, and a draft load reaching all four. The report carries
+Four browsers (or `--clients 2`/`3`) take their seats in one protocol-2 room and it asserts: every seat welcomed within
+2 s and seated from 0, a private canary never reaches a watcher, the watchers' design equals the primary's at each rev,
+every seat playing in 500 ms of the start, each peer's input moving its own avatar while the primary's does not, a 3 s
+drop rejoining its seat and a longer one forfeiting it without ending the room, and a draft load reaching every seat. The report carries
 `clients: 4` and one `seats[]` entry per seat (ticks, RTT, delay p95s, desyncs, recoveries). `--link clean` is the same
-steps unimpaired; `--link @<report.json>` replays from its seed. `--clients 2` or `3` seats fewer (two seats rejoin the
-peer and skip the forfeit, named in `unchecked`); `--seed <n>` replaces the link seed (`link.seed` in the report);
-`--start <name>` creates the room with an entry of the game's `qa/starts.json`, such as `{"2v2": {"teams": "alternate"}}`
-(`teams`, `spectators`, `pauseOnDisconnect`; recorded as `start` probes). A v1 room uses `scenario two-client` instead.
+steps unimpaired; `--link @<report.json>` replays from its seed. Two seats rejoin the peer and skip the forfeit (named
+in `unchecked`). `--seed <n>` replaces the link seed (`link.seed` in the report). `--start <name>` creates the room with
+an entry of `<gameDir>/qa/starts.json`, for example `{"2v2": {"teams": "alternate"}, "duel": {}}`; an entry may set only
+`teams`, `"none"` (every seat team 0) or `"alternate"` (seat n on team n % 2). The run fails if the room's seats are on
+other teams; the report's probes carry `start`, `start.teams` and `seatTeams` (each seat's team, from seat 0). A v1 room
+uses `scenario two-client` instead.
 
 ## Done
 

@@ -43,7 +43,14 @@ import type { Browser, BrowserContext, Page } from 'playwright';
 import { framesContaining, newCanary } from './two-client.ts';
 import type {} from './multi-client/harness.ts';
 import type { HarnessSnapshot } from './multi-client/harness.ts';
-import { dropPlan, NO_FORFEIT, roomBody, startProbes, type StartConfig } from './multi-client/run-options.ts';
+import {
+  dropPlan,
+  expectedTeam,
+  NO_FORFEIT,
+  roomBody,
+  startProbes,
+  type StartConfig,
+} from './multi-client/run-options.ts';
 
 export type LinkProfileName = 'clean' | 'bad';
 
@@ -66,7 +73,7 @@ export type MultiClientOptions = {
 export type MultiClientResult = { report: VerifyReport; reportPath: string; seats: SeatMetrics[]; link: LinkConfig };
 
 export const LIMITS = { welcomeMs: 2_000, playSwitchMs: 500 } as const;
-/** `seatReconnectSec` is short so step 6 can prove a forfeit inside one run; seat 2 returns first, seat 3 does not. */
+/** `seatReconnectSec` is short so step 6 can prove a forfeit inside one run: one seat returns first, another does not. */
 export const MULTI_TIMINGS = {
   ownerReconnectSec: 2,
   playerReconnectSec: 1,
@@ -631,6 +638,12 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       .sort((left, right) => left.seat - right.seat)
       .map((entry) => entry.team)
       .join(',');
+    const teams = options.start?.config.teams;
+    const wrongTeam = taken.find((entry) => entry.team !== expectedTeam(entry.seat, teams));
+    assert(
+      wrongTeam === undefined,
+      `seat ${wrongTeam?.seat} is on team ${wrongTeam?.team} under teams ${teams ?? 'none'}`,
+    );
     await shoot(1);
 
     log('2 the primary places three entities; every watcher matches at each revision');
