@@ -167,6 +167,14 @@ export function aiur(ctx: GmContext, args: string[]): string {
   return said;
 }
 
+/** Runs `gh <args>`; a failure fails the command with gh's first line. */
+export function gh(ctx: GmContext, args: string[]): string {
+  const result = exec(ctx, 'gh', args);
+  if (!result.ok)
+    throw new CommandError(`gh ${args[0]} ${args[1] ?? ''} failed: ${firstLine(result.err || result.out)}`);
+  return result.out;
+}
+
 /** The ticket's state label without the `agent:` prefix; `-` when it has none. */
 export function stateLabel(ticket: Ticket): string {
   const states = ticket.labels.filter((label) => /^agent:[a-z-]+$/.test(label) && label !== 'agent:paused');

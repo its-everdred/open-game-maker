@@ -27,6 +27,8 @@ import { activeJobs, activeJobsForSlug, byTicket } from './jobs/repo.js';
 import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projection.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
+import { createDecisionWaitPoller } from './decision-waits/poller.js';
+import { createWaitTickets } from './decision-waits/tickets.js';
 import { startBriefingPush } from './voice/briefing-push.js';
 import { questionSession } from './voice/question-session.js';
 
@@ -154,6 +156,17 @@ intake.start();
 const stopScheduler = startScheduler({ ...lifecycleDeps, log });
 const stopEstimateRefinement = startEstimateRefinement({ db, events: deps.events, log });
 const stopBuildSweep = startBuildSweep(deps, { graceMs: 30 * 60_000, intervalMs: 60_000 });
+// Tickets parked on a decision start as soon as it is answered, with no Executor step (#680).
+const decisionWaits = createDecisionWaitPoller({
+  daemons: async () =>
+    (await daemonDirectory.fleet.listDaemons())
+      .filter(({ status }) => status === 'running' || status === 'idle')
+      .map(({ slug, repo }) => ({ slug, repo })),
+  clientFor: daemonDirectory.clientForSlug,
+  tickets: createWaitTickets(env.OGM_INTAKE_GITHUB_TOKEN),
+  log,
+});
+decisionWaits.start(env.OGM_CHECKPOINT_POLL_MS);
 const stopBriefingPush =
   env.OGM_VOICE_HOST_INTERNAL_URL && env.OGM_VOICE_INTERNAL_SECRET
     ? startBriefingPush({
@@ -199,6 +212,7 @@ process.once('SIGTERM', () => {
   stopScheduler();
   stopEstimateRefinement();
   stopBuildSweep();
+  decisionWaits.stop();
   stopBriefingPush();
   usageReconciler.stop();
   void Promise.all([feed.stop(), usageReconciler.idle()]).finally(() => server.close(() => sqlite.close()));
