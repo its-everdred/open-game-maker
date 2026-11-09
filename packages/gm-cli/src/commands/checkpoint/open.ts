@@ -179,7 +179,10 @@ export function openCheckpoint(
     question,
     options,
     ...(recommend ? { recommend } : {}),
-    blocking: flags.blocking === true,
+    // Every checkpoint is a creator Command, and aiur retires a non-blocking one 5 minutes after its ticket has no
+    // running agent, so the creator's pick expired unseen. Raise them all blocking; revert to `flags.blocking === true`
+    // once aiur #7872 (decisions from the user never expire) is deployed.
+    blocking: true,
     ...(rules.topic === undefined ? {} : { topic: rules.topic }),
   };
   if (jobId !== null) {
@@ -234,7 +237,7 @@ export const command: GmCommand = {
     'lead-in': { type: 'string', multiple: true, help: 'option id and the scripted move its slice plays first' },
     branch: { type: 'string', help: 'game branch whose build the playable slices run (defaults to main)' },
     recommend: { type: 'string', help: 'option id recommended by the builder' },
-    blocking: { type: 'boolean', default: false, help: 'hold this worker until the creator answers' },
+    blocking: { type: 'boolean', default: false, help: 'always on until aiur #7872 is deployed' },
   },
   async run(ctx, _args, flags) {
     printEmitEvent(

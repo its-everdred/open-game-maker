@@ -11,7 +11,8 @@ gm checkpoint wait <checkpoint-id> --timeout 600
 ```
 
 `open` writes `.gm/outbox/checkpoint.jsonl`. `wait` reads `.gm/inbox/checkpoints/<id>.json`; it exits 3 on timeout
-and 4 when the checkpoint is moot. A checkpoint is non-blocking unless `open` receives `--blocking`.
+and 4 when the checkpoint is moot. Every checkpoint and `gm decide` Command is raised
+blocking, so aiur never retires a creator's pick unseen; revert to non-blocking by default once aiur #7872 is deployed.
 
 A gameplay-feel question (speed, a chain's pause, controls) gives each option a `--playable <id>=<scenario query>`: the
 review deck plays the game's build (`--branch`, default `main`) with that query for `--seconds` (default 8), after an

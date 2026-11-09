@@ -52,7 +52,7 @@ export const command: GmCommand = {
     recommend: { type: 'string', help: 'option id you recommend' },
     reason: { type: 'string', help: 'one line: why the recommended option' },
     revisit: { type: 'boolean', default: false, help: 'ask a recorded question again because the creator reopened it' },
-    blocking: { type: 'boolean', default: false, help: 'hold this worker until the creator answers' },
+    blocking: { type: 'boolean', default: false, help: 'always on until aiur #7872 is deployed' },
   },
   async run(ctx, _args, flags) {
     const topic = text(flags, 'topic');

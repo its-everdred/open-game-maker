@@ -97,6 +97,19 @@ describe('gm decide', () => {
     ]);
   });
 
+  // aiur retires a non-blocking Command 5 minutes after its ticket has no running agent, so a creator's pick expired
+  // unseen (#669). Until aiur #7872 is deployed every creator Command is raised blocking, even without --blocking.
+  it('raises the creator Command blocking even without --blocking', async () => {
+    const root = workspace();
+    const result = await decide(root, await media(root, 2));
+
+    expect(result).toMatchObject({ code: 0, err: [] });
+    const printed = JSON.parse(result.out[0]!) as { emit_event: { payload: Record<string, any> } };
+    expect(printed.emit_event.payload.context.long_context_markdown).toContain(CREATOR_AUDIENCE_MARKER);
+    expect(printed.emit_event.payload.blocking).toBe(true);
+    expect(outboxLines(root)[0]!.payload).toMatchObject({ blocking: true });
+  });
+
   it('never asks a recorded question again unless the creator reopened it', async () => {
     const root = workspace();
     const ids = await media(root, 2);

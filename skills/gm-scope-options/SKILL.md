@@ -35,16 +35,18 @@ For a vague creation brief, offer three clearly different takes in one question.
 core verb, short loop, and boundary; recommend one. Different palettes or names are not different takes.
 
 Record each option's provenance first (the packs and assets it used, its generator, and when it was built) as a JSON
-file per option, post a still or clip of each with `gm chat post`, then run the ledger check and ask one non-blocking
+file per option, post a still or clip of each with `gm chat post`, then run the ledger check and ask one blocking
 question:
 
 ```text
 gm options check --option "a=Gather and craft" --option "b=Race and deliver" --option "c=Defend and repair" --provenance a=@provenance/a.json --provenance b=@provenance/b.json --provenance c=@provenance/c.json
-gm decide --topic "Core game loop" --question "Which game loop should I build?" --option "a=Gather and craft" --option "b=Race and deliver" --option "c=Defend and repair" --media a=<msg> --media b=<msg> --media c=<msg> --recommend a --reason "Fits the cozy pitch" --provenance a=@provenance/a.json --provenance b=@provenance/b.json --provenance c=@provenance/c.json
+gm decide --topic "Core game loop" --question "Which game loop should I build?" --option "a=Gather and craft" --option "b=Race and deliver" --option "c=Defend and repair" --media a=<msg> --media b=<msg> --media c=<msg> --recommend a --reason "Fits the cozy pitch" --provenance a=@provenance/a.json --provenance b=@provenance/b.json --provenance c=@provenance/c.json --blocking
 ```
 
-Open at most three checkpoints during an edit or a single-ticket build. A new game from the New Game flow follows `gm-new-game-design` instead (no cap). Do not add `--blocking` unless the next dependent step truly
-cannot be built before the creator chooses; continue independent work either way.
+Open at most three checkpoints during an edit or a single-ticket build. A new game from the New Game flow follows `gm-new-game-design` instead (no cap). Pass `--blocking` on every creator Command: aiur retires a
+non-blocking one 5 minutes after the ticket has no running agent, so the creator's pick expires unseen (`gm decide`
+and `gm checkpoint open` raise it blocking regardless). Revert this to non-blocking once aiur #7872 is deployed.
+Continue independent work either way.
 
 ## Lock the agreed scope
 

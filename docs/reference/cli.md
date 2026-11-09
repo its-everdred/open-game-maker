@@ -141,6 +141,9 @@ gm checkpoint wait <checkpoint-id|decision-id> [--timeout <seconds>]
 `gm chat post` copies media into `.gm/outbox/media/` and prints the chat message id. `gm checkpoint open` prints
 the checkpoint id and the `decision.requested` `emit_event` call the agent must make. `gm checkpoint wait` prints
 the selected option id, exits 3 on timeout, and exits 4 when the checkpoint becomes moot.
+`gm checkpoint open` and `gm decide` raise every creator Command with `blocking: true`, with or without
+`--blocking`, so aiur never retires a creator's pick unseen; revert to non-blocking by default once aiur #7872 is
+deployed.
 
 Without a build job (no `--job`, `GM_JOB` or `.gm/context/job.json`), `gm checkpoint open` writes nothing to the outbox
 and refuses `--media`; the printed call carries each `--playable` slice, so the Command shows as playable cards in the

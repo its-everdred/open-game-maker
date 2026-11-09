@@ -45,9 +45,9 @@ updates `screens/` and the Executor re-renders. Look at every render before send
 
 - The Executor owns the diagram. Draw it from the spec right after the architecture, with the targets that exist
   (plain nodes for the rest), so stage 1 concepts never wait on it.
-- Each open choice is one `decision.requested` Command (as in gm-image-mock): render each variant of the affected part
-  of the graph (mode then character beside character then mode) into a scratch flow directory and put the renders in
-  `media[]` as options A, B, C, recommended first.
+- Each open choice is one `decision.requested` Command with `blocking: true` (as in gm-image-mock): render each variant
+  of the affected part of the graph (mode then character beside character then mode) into a scratch flow directory and
+  put the renders in `media[]` as options A, B, C, recommended first.
 - One more Command sends the rendered levels in the review deck for approval of the diagram as a whole. Like every
   Command it gets a provisional default when the creator is silent, recorded as a default, never as their approval.
 - Commit the approved `flow.md`, `screens/` and `render/` in `games/<name>/design/flow/` and set Status to approved
