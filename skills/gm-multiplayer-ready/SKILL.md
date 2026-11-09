@@ -140,7 +140,7 @@ Four browsers (or `--clients 2`/`3`) take their seats in one protocol-2 room and
 2 s and seated from 0, a private canary never reaches a watcher, the watchers' design equals the primary's at each rev,
 every seat playing in 500 ms of the start, each peer's input moving its own avatar while the primary's does not, a 3 s
 drop rejoining its seat and a longer one forfeiting it without ending the room, and a draft load reaching every seat. The report carries
-`clients: 4` and one `seats[]` entry per seat (ticks, RTT, delay p95s, desyncs, recoveries). `--link clean` is the same
+`clients` (the seat count) and one `seats[]` entry per seat (ticks, RTT, delay p95s, desyncs, recoveries). `--link clean` is the same
 steps unimpaired; `--link @<report.json>` replays from its seed. Two seats rejoin the peer and skip the forfeit (named
 in `unchecked`). `--seed <n>` replaces the link seed (`link.seed` in the report). `--start <name>` creates the room with
 an entry of `<gameDir>/qa/starts.json`, for example `{"2v2": {"teams": "alternate"}, "duel": {}}`; an entry may set only
