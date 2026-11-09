@@ -1,7 +1,7 @@
 import { HealthResponse } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { recordSupervisorTokenStatus } from '../src/job-commands/health.js';
+import { recordDaemonReadTokenStatus, recordSupervisorTokenStatus } from '../src/job-commands/health.js';
 import { makeApp } from './helpers.js';
 
 describe('GET /healthz', () => {
@@ -23,6 +23,27 @@ describe('GET /healthz', () => {
     expect(body.details).toEqual({
       command_decisions: { ok: false, missing_supervisor_token_daemons: ['game-1'] },
     });
+  });
+
+  it('updates command health when the fleet reports a missing read token and its recovery', async () => {
+    const { app, deps } = await makeApp();
+    recordDaemonReadTokenStatus(deps, 'game-1', true);
+
+    const missing = HealthResponse.parse(await (await app.request('/healthz')).json());
+    expect(missing.details).toEqual({
+      command_decisions: { ok: false, missing_supervisor_token_daemons: ['game-1'] },
+    });
+
+    recordDaemonReadTokenStatus(deps, 'game-1', false);
+
+    const recovered = HealthResponse.parse(await (await app.request('/healthz')).json());
+    expect(recovered.details).toEqual({
+      command_decisions: { ok: true, missing_supervisor_token_daemons: [] },
+    });
+    expect(deps.lines.filter((line) => line.event === 'daemon-read-token-status')).toEqual([
+      { event: 'daemon-read-token-status', daemon: 'game-1', status: 'missing' },
+      { event: 'daemon-read-token-status', daemon: 'game-1', status: 'present' },
+    ]);
   });
 
   it('tags the response with a request id and logs one line without the body', async () => {

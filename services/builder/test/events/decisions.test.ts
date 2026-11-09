@@ -1,9 +1,13 @@
-import { schema } from '@ogm/db';
-import { describe, expect, it } from 'vitest';
+import { migrate, openDb, schema } from '@ogm/db';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDecisionsPoller } from '../../src/events/decisions.js';
+import { startFeedConsumers } from '../../src/events/index.js';
 import { decision, harness, SLUG } from './helpers.js';
-import type { AiurClient } from '@ogm/aiur-client';
+import { buildFleet, cleanupHomes, tempHome } from '../fleet/helpers.js';
+import type { AiurClient, SubscribeEventsOptions } from '@ogm/aiur-client';
+
+afterEach(cleanupHomes);
 
 function setup() {
   const h = harness();
@@ -15,6 +19,61 @@ function setup() {
 }
 
 describe('decisions poller', () => {
+  it('uses the daemon read token and stores the returned open Command', async () => {
+    const home = await tempHome();
+    const requests: { url: string; headers: Headers }[] = [];
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/healthz')) return new Response(null, { status: 200 });
+      if (url.endsWith('/api/v1/decisions')) {
+        requests.push({ url, headers: new Headers(init?.headers) });
+        return Response.json({ decisions: [decision('d1', '142')] });
+      }
+      return Response.json({ error: 'not_found' }, { status: 404 });
+    });
+    const { fleet } = buildFleet(home, {
+      fetch: fetchImpl,
+      preflight: async () => ({ ok: true as const }),
+    });
+    await fleet.ensureDaemon({ slug: SLUG, repo: 'everdred-games/instance' }, 'feature');
+
+    const { sqlite, db } = openDb(':memory:');
+    migrate({ sqlite });
+    const subscribe = vi.fn(
+      (_client: AiurClient, options: SubscribeEventsOptions) =>
+        new Promise<void>((resolve) => options.signal.addEventListener('abort', () => resolve(), { once: true })),
+    );
+    const log = vi.fn();
+    const feed = startFeedConsumers({
+      fleet,
+      db,
+      activeJobs: () => [{ jobId: 'j_142', ticket: '142' }],
+      apply: { record: vi.fn(), issue: vi.fn(), progress: vi.fn() },
+      subscribe,
+      log,
+      intervals: { reconcileMs: 1e9, progressMs: 1e9, issueMs: 1e9, decisionsMs: 1e9 },
+    });
+
+    try {
+      await feed.tick();
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.url).toBe('http://127.0.0.1:4101/api/v1/decisions');
+      expect(requests[0]?.headers.get('authorization')).toBe('Bearer aiur_token2');
+      expect(db.select().from(schema.commands).all()).toEqual([
+        expect.objectContaining({
+          decisionId: 'd1',
+          jobId: 'j_142',
+          daemonSlug: SLUG,
+          status: 'open',
+        }),
+      ]);
+      expect(log).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'aiur-decisions-poll-failed' }));
+    } finally {
+      await feed.stop();
+      sqlite.close();
+    }
+  });
+
   it('creates an open command for an open Command on a job ticket, ignoring other tickets', async () => {
     const { h, client, poll, rows } = setup();
     client.decisions.mockResolvedValue([decision('d1', '142'), decision('d9', '999')]);

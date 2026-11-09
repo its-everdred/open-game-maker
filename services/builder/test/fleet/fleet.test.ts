@@ -1,4 +1,4 @@
-import { lstat, readFile, readlink, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readlink, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import { renderDaemonFiles } from '@ogm/game-repo-template';
 
 import { IDLE_STOP_MS } from '../../src/fleet/fleet.js';
 import { READY_TIMEOUT_MS, START_POLL_MS } from '../../src/fleet/health.js';
+import { daemonPaths, writeAtomic } from '../../src/fleet/secrets.js';
 import { preflight as realPreflight } from '../../src/policy/preflight.js';
 import { buildFleet, cleanupHomes, fakeFetch, liveRow, memoryStore, systemctlCalls, tempHome } from './helpers.js';
 
@@ -334,6 +335,65 @@ describe('checkHealth', () => {
 });
 
 describe('daemonFor and listDaemons', () => {
+  it('isolates unreadable read tokens and resumes the daemon after recovery', async () => {
+    const home = await tempHome();
+    const rows = [liveRow(1), liveRow(2)];
+    const store = memoryStore(rows);
+    const statuses: { daemon: string; missing: boolean }[] = [];
+    const broken = daemonPaths(home, rows[0].slug);
+    for (const row of rows) {
+      const paths = daemonPaths(home, row.slug);
+      await writeAtomic(paths.clientToken, 'client-token\n', 0o600);
+      await writeAtomic(paths.readToken, 'read-token\n', 0o600);
+    }
+    await rm(broken.readToken);
+    await mkdir(broken.readToken);
+    const { fleet } = buildFleet(home, {
+      store,
+      readTokenStatus: (daemon: string, missing: boolean) => statuses.push({ daemon, missing }),
+    });
+    const poll = () => Promise.all(rows.map((row) => fleet.daemonFor(row.slug)));
+
+    for (let tick = 0; tick < 2; tick += 1) {
+      await expect(poll()).resolves.toEqual([null, expect.objectContaining({ daemon: expect.any(Object) })]);
+    }
+    expect(statuses).toEqual([{ daemon: rows[0].slug, missing: true }]);
+
+    await rm(broken.readToken, { recursive: true });
+    await writeAtomic(broken.readToken, 'recovered-read-token\n', 0o600);
+    for (let tick = 0; tick < 2; tick += 1) {
+      const daemons = await poll();
+      expect(daemons.every((daemon) => daemon !== null)).toBe(true);
+    }
+    expect(statuses).toEqual([
+      { daemon: rows[0].slug, missing: true },
+      { daemon: rows[0].slug, missing: false },
+    ]);
+  });
+
+  it('reports read-token state changes once and withholds an unsupervised client', async () => {
+    const home = await tempHome();
+    const store = memoryStore([liveRow(1)]);
+    const statuses: { daemon: string; missing: boolean }[] = [];
+    const { clientToken, readToken } = daemonPaths(home, 'owner-game1');
+    await writeAtomic(clientToken, 'client-token\n', 0o600);
+    const { fleet } = buildFleet(home, {
+      store,
+      readTokenStatus: (daemon: string, missing: boolean) => statuses.push({ daemon, missing }),
+    });
+
+    await expect(fleet.daemonFor('owner-game1')).resolves.toBeNull();
+    await expect(fleet.daemonFor('owner-game1')).resolves.toBeNull();
+    await writeAtomic(readToken, 'read-token\n', 0o600);
+    await expect(fleet.daemonFor('owner-game1')).resolves.not.toBeNull();
+    await expect(fleet.daemonFor('owner-game1')).resolves.not.toBeNull();
+
+    expect(statuses).toEqual([
+      { daemon: 'owner-game1', missing: true },
+      { daemon: 'owner-game1', missing: false },
+    ]);
+  });
+
   it('returns a client for a running daemon and nothing for an unknown game', async () => {
     const home = await tempHome();
     const { fleet } = buildFleet(home);

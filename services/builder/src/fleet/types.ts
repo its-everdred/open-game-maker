@@ -50,7 +50,6 @@ export type FleetEnv = {
   assetsLocalDir: string;
   aiurRoot?: string;
   apiPort?: number;
-  supervisorToken?: string;
   codexHomeRoot?: string;
   codexAuthPath?: string;
 };
