@@ -74,9 +74,12 @@ export const NOT_PLAYED =
   "the game's online play was not exercised: no seat had a playerIndex entity to move, so the room ran but the game " +
   'never started a match (start it when the room starts playing, or give each seat an avatar)';
 
-/** The run's error when nothing else failed: none if step 5 moved avatars, {@link NOT_PLAYED} if it found none. */
-export function playError(sawAvatars: boolean): string | undefined {
-  return sawAvatars ? undefined : NOT_PLAYED;
+/** How long step 5 waits for avatars after the room plays: a game may run its own countdown before it spawns them. */
+export const AVATAR_WAIT_MS = 10_000;
+
+/** The run's error: an earlier failure stands; otherwise {@link NOT_PLAYED} when step 5 found no avatars to move. */
+export function playError(error: string | undefined, sawAvatars: boolean): string | undefined {
+  return error ?? (sawAvatars ? undefined : NOT_PLAYED);
 }
 
 const PIN = { gameId: 'multi-client', branchId: 'main', buildId: 'b1' } as const;
@@ -413,7 +416,7 @@ export function avatarX(text: GameText, playerIndex: number): number | undefined
   return entity?.p?.[0];
 }
 
-/** Step 5 moves avatars; a game without any (a board game) cannot be judged by it. */
+/** Step 5 moves avatars; a game without any (a board game, or one still on its menu) fails with {@link NOT_PLAYED}. */
 export function hasAvatars(text: GameText): boolean {
   return Object.values(text.state?.entities ?? {}).some((entity) => typeof entity.playerIndex === 'number');
 }
@@ -673,8 +676,8 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     await shoot(4);
 
     log('5 each peer moves its own avatar; the primary never moves');
-    /* Avatars may spawn a moment after playing; only a game that still has none is named unchecked. */
-    for (const giveUpAt = Date.now() + 2_000; !avatars && Date.now() < giveUpAt;) {
+    /* Avatars may spawn a while after playing; only a game that still has none is named unchecked, and fails. */
+    for (const giveUpAt = Date.now() + AVATAR_WAIT_MS; !avatars && Date.now() < giveUpAt;) {
       avatars = hasAvatars(await gameText(clients[0]!.page));
       if (!avatars) await clients[0]!.page.waitForTimeout(100);
     }
@@ -789,7 +792,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     await Promise.all(servers.map((server) => new Promise((done) => server.close(done))));
     rmSync(work, { recursive: true, force: true });
   }
-  error ??= playError(avatars);
+  error = playError(error, avatars);
 
   const budgets = unknownBudgets();
   const consoleList = consoleEntries.list();

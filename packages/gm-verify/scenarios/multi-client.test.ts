@@ -245,7 +245,7 @@ describe('step 5 and games without avatars', () => {
     expect(avatarX(avatars, 1)).toBeUndefined();
   });
 
-  it('finds no avatars in a board game, so step 5 is named unchecked instead of timing out', () => {
+  it('finds no avatars in a board game, so step 5 is named unchecked instead of timing out on a move', () => {
     expect(hasAvatars(text({ board: { p: [0, 0] }, piece: {} }))).toBe(false);
     expect(hasAvatars({})).toBe(false);
   });
@@ -253,8 +253,10 @@ describe('step 5 and games without avatars', () => {
   it('fails a run whose game never put an avatar on any seat, since the room playing is not the game playing', () => {
     /* #651: Blobs stayed on character select; seats, desyncs and the drop all passed on the rooms transport alone. */
     const menu = text({ title: { p: [0, 0] } });
-    expect(playError(hasAvatars(menu))).toBe(NOT_PLAYED);
-    expect(playError(hasAvatars(text({ a: { playerIndex: 0, p: [10, 0] } })))).toBeUndefined();
+    expect(playError(undefined, hasAvatars(menu))).toBe(NOT_PLAYED);
+    expect(playError(undefined, hasAvatars(text({ a: { playerIndex: 0, p: [10, 0] } })))).toBeUndefined();
+    /* A step that already failed names the real cause; not playing is only the verdict when nothing else broke. */
+    expect(playError('seat 3 forfeit timed out', false)).toBe('seat 3 forfeit timed out');
   });
 });
 
