@@ -37,7 +37,7 @@ vi.mock('../features/build-chat/jobs', () => ({
 
 vi.mock('../features/commands-inbox/commands', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/commands-inbox/commands')>()),
-  useCreatorCommands: () => ({ commands: [] }),
+  useCreatorCommands: () => ({ commands: [], sessions: [] }),
 }));
 
 vi.mock('../routes/admin/api', () => ({

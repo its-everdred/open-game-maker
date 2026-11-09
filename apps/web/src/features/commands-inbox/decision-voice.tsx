@@ -10,7 +10,8 @@ import { probeVoice, type VoiceAvailability } from '../build-chat/voice';
 // question, options and cards first. A clear spoken choice is answered by the agent through the same route a click
 // takes; the screen sees it land on its next read of the Commands. The button sits in the screen's header, so it never
 // covers the cards or the options.
-export type DecisionVoiceTarget = Extract<VoiceTarget, { kind: 'build' }>;
+// A quick question session (#612) uses the same call, aimed at the game's queued product questions.
+export type DecisionVoiceTarget = Extract<VoiceTarget, { kind: 'build' | 'questions' }>;
 
 // While the agent talks, the deck's own sample plays quieter so both can be heard; the sample comes back to its own
 // volume once the agent's queued speech has played out.
@@ -21,6 +22,7 @@ export function DecisionVoice({
   onLive,
   onSpeaking,
   onHeard,
+  autoStart = false,
   probe = probeVoice,
   createVoiceClient = (options) => new VoiceClient(options),
 }: {
@@ -29,6 +31,8 @@ export function DecisionVoice({
   onSpeaking(speaking: boolean): void;
   // A final turn from either side: the agent may have just saved a spoken choice, so the screen rereads the Commands.
   onHeard(): void;
+  // Start the call as soon as voice is available: opening a question session is the press that starts it.
+  autoStart?: boolean;
   probe?: (target: VoiceTarget) => Promise<VoiceAvailability>;
   createVoiceClient?: (options: VoiceClientOptions) => VoiceClient;
 }) {
@@ -123,12 +127,21 @@ export function DecisionVoice({
     }
   };
 
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || !available || autoStarted.current) return;
+    autoStarted.current = true;
+    void start();
+  });
+
   const live = client !== undefined;
   if (!available && !live) return null;
   return (
     <>
       <button
-        aria-label={live ? 'End voice' : 'Talk about this decision'}
+        aria-label={
+          live ? 'End voice' : target.kind === 'questions' ? 'Start quick voice chat' : 'Talk about this decision'
+        }
         aria-pressed={live}
         className={`review-screen-voice tap-secondary${live ? ' is-live' : ''}`}
         disabled={starting}

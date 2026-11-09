@@ -28,6 +28,7 @@ import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projec
 import { startScheduler } from './jobs/scheduler.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { startBriefingPush } from './voice/briefing-push.js';
+import { questionSession } from './voice/question-session.js';
 
 const log = (line: LogLine) => console.log(JSON.stringify({ service: 'api', ...line }));
 
@@ -75,6 +76,7 @@ const deps: AppDeps = {
     chatPollMs: env.OGM_CHAT_POLL_MS,
     checkpointPollMs: env.OGM_CHECKPOINT_POLL_MS,
     designDefaultMs: env.OGM_DESIGN_DEFAULT_MS,
+    voiceQuestionsAt: env.OGM_VOICE_QUESTIONS_AT,
     analyticsRetentionDays: env.OGM_ANALYTICS_RETENTION_DAYS,
     voiceTokenSecret: env.OGM_VOICE_TOKEN_SECRET,
     voiceWsUrl: env.OGM_VOICE_WS_URL,
@@ -159,6 +161,7 @@ const stopBriefingPush =
         sqlite,
         events: deps.events,
         defaults: budgetDefaults,
+        questionSession: (gameId) => questionSession(deps, gameId),
         url: env.OGM_VOICE_HOST_INTERNAL_URL,
         secret: env.OGM_VOICE_INTERNAL_SECRET,
         log,

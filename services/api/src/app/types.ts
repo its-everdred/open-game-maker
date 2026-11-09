@@ -35,6 +35,8 @@ export interface AppDeps {
     checkpointPollMs?: number;
     // How long an open design Command waits for the player before its provisional default answers it.
     designDefaultMs: number;
+    // How many queued product questions put a voice-session entry in the creator's inbox (#612); 5 when unset.
+    voiceQuestionsAt?: number;
     analyticsRetentionDays: number;
     // Both unset until the voice host is configured; the token route answers 503 meanwhile.
     voiceTokenSecret?: string;

@@ -47,6 +47,16 @@ defmodule OgmVoice.BriefingCacheTest do
     assert {:error, :unavailable} = BriefingSource.brief(@target)
   end
 
+  # A quick question session (#612) is the creator's, in one game: another creator's session there is a different key.
+  test "a question session reads the key of its game and creator" do
+    assert :ok = OgmVoice.Cache.put(%{@push | "target_key" => "questions:g1:u1"})
+    questions = %{"kind" => "questions", "game_id" => "g1", "creator_id" => "u1"}
+    assert {:ok, %Briefing{}} = BriefingSource.brief(questions)
+    assert %{id: "questions:g1:u1", kind: :questions} = BriefingSource.describe_target(questions)
+    assert {:error, :unavailable} = BriefingSource.brief(%{questions | "creator_id" => "u2"})
+    assert {:error, :unavailable} = BriefingSource.brief(@target)
+  end
+
   test "an invalid push is rejected and the previous briefing stays" do
     assert :ok = OgmVoice.Cache.put(@push)
     assert {:error, :invalid_push} = OgmVoice.Cache.put(%{@push | "summary" => 42})

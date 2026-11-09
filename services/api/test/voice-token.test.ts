@@ -169,6 +169,17 @@ describe('POST /api/v1/voice/token', () => {
     expect(await response.json()).toMatchObject({ error: 'not_target_creator' });
   });
 
+  // A quick question session (#612) is the game's: only someone who may edit the game, as themselves, gets one.
+  it('mints a question-session token for the game owner and refuses one for a member who may not edit', async () => {
+    const { request, gameId } = await setup();
+    const questions = { kind: 'questions', game_id: gameId, creator_id: creator.userId };
+
+    const response = await request(creator, questions);
+    expect(response.status).toBe(200);
+    expect(decode(((await response.json()) as { token: string }).token).claims.target).toEqual(questions);
+    expect((await request(sibling, { ...questions, creator_id: sibling.userId })).status).toBe(403);
+  });
+
   it("refuses another game's job (403): the host reads briefings and sends instructions by job_id alone", async () => {
     const { request, gameId } = await setup();
     const response = await request(creator, buildTarget(gameId, creator.userId, 'j-other'));

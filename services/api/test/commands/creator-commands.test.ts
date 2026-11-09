@@ -332,7 +332,10 @@ describe('a job’s Commands in the decision inbox', () => {
     serveAiur(deps, {});
     seedJob(deps);
     storeCheckpoint(deps, 'd_legacy', 'd_legacy');
-    expect((await (await read(deps, '/me/commands')).json()) as unknown).toEqual({ commands: [] });
+    expect((await (await read(deps, '/me/commands')).json()) as unknown).toEqual({
+      commands: [],
+      question_sessions: [],
+    });
 
     await pollerFor(deps, [
       decision('d_legacy', {

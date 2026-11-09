@@ -341,6 +341,31 @@ button.studio-menu-job {
   background: color-mix(in srgb, var(--red-b) 28%, var(--night-3));
 }
 
+/* A game's quick voice chat (#612): set apart from the decisions by its mic, its count and its outline. */
+button.studio-menu-questions {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  border: 2px solid var(--orange-b);
+  background: var(--night-2);
+}
+
+.studio-menu-questions svg {
+  width: 20px;
+  height: 20px;
+}
+
+.studio-menu-questions-count {
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--orange-b);
+  color: var(--night);
+  font: 800 13px/1 var(--body);
+}
+
 .studio-menu-job[data-status='finished'][data-success='true'] {
   background: color-mix(in srgb, var(--green-b) 28%, var(--night-3));
 }

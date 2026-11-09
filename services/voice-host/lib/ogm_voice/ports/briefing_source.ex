@@ -24,6 +24,9 @@ defmodule OgmVoice.Ports.BriefingSource do
   def describe_target(%{"kind" => "build", "job_id" => job} = target),
     do: %{id: key!(target), kind: :build, title: "Build #{job}"}
 
+  def describe_target(%{"kind" => "questions", "game_id" => game} = target),
+    do: %{id: key!(target), kind: :questions, title: "Quick questions for #{game}"}
+
   @impl true
   def brief(target) do
     with {:ok, entry} <- entry(target) do

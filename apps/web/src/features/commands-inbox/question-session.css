@@ -1,0 +1,45 @@
+/* A quick question session (#612): the call's mic, large, with the count of queued questions beside it. */
+.question-session .question-session-body {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.question-session .review-screen-voice {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--paper-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.question-session .review-screen-voice .icon svg {
+  display: block;
+  width: 36px;
+  height: 36px;
+}
+
+.question-session .review-screen-voice.is-live {
+  border-color: var(--ink);
+  background: var(--orange);
+  color: var(--night-2);
+}
+
+.question-session-count {
+  display: grid;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--orange-b);
+  color: var(--night);
+  font: 800 16px/1 var(--body);
+}

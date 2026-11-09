@@ -19,6 +19,12 @@ export const VoiceTarget = z.discriminatedUnion('kind', [
     // The aiur decision the creator started voice from (#597): the briefing puts it first and describes its cards.
     command_id: z.string().min(1).max(200).optional(),
   }),
+  // A quick question session (#612): the game's queued product questions, asked one at a time.
+  z.object({
+    kind: z.literal('questions'),
+    game_id: z.string().min(1),
+    creator_id: z.string().min(1),
+  }),
 ]);
 // POST /api/v1/voice/token { target } → a 300 s `vct1.<payload>.<mac>` token the voice host verifies.
 export const VoiceTokenRequest = z.object({ target: VoiceTarget }).strict();
@@ -29,7 +35,7 @@ export const VoiceTokenResponse = z.object({
 });
 // API → voice host: POST /internal/briefing, keyed "scope:<session_id>" or "build:<job_id>".
 export const BriefingPush = z.object({
-  target_key: z.string().regex(/^(scope|build):.+$/),
+  target_key: z.string().regex(/^(scope|build|questions):.+$/),
   observed_at: IsoTime,
   summary: z.string().optional(),
   current_task: z.string().optional(),

@@ -9,7 +9,12 @@ import {
 } from 'react';
 import { Link, matchPath, useLocation } from 'react-router';
 
-import { JOB_STAGE_WORDS, type CreatorCommand, type Job } from '@ogm/contracts/browser';
+import {
+  JOB_STAGE_WORDS,
+  type CreatorCommand,
+  type Job,
+  type QuestionSession as QueuedSession,
+} from '@ogm/contracts/browser';
 
 import { Icon } from '../components/Icon';
 import { MenuRing } from '../components/MenuCircle';
@@ -21,6 +26,7 @@ import { resetReviewDrafts } from '../features/commands-inbox/drafts';
 import { isTerminal, setJobPaused, useMyJobs } from '../features/build-chat/jobs';
 import { DecisionDeck } from '../features/commands-inbox/DecisionDeck';
 import { useCreatorCommands } from '../features/commands-inbox/commands';
+import { QuestionSession } from '../features/commands-inbox/QuestionSession';
 import { signOut } from '../lib/api/auth';
 import { useSession } from '../lib/api/session';
 import { getVolume, onChange, setMuted, setVolume, status } from '../lib/sound';
@@ -54,14 +60,16 @@ export function StudioMenu() {
   const bugDraft = useBugDraft();
   // The deck belongs to the creator who opened it: another account signed in on this device never sees it.
   const [deck, setDeck] = useState<{ creatorId: string; command: CreatorCommand }>();
+  const [questions, setQuestions] = useState<{ creatorId: string; session: QueuedSession }>();
   const game = matchPath('/g/:gameId/*', location.pathname);
   const gameId = game?.params.gameId;
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
   const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
-  // The badge counts every open player-facing decision across the creator's games; red when one blocks its build.
-  const openDecisions = decisions.commands.length;
+  // The badge counts every open player-facing decision across the creator's games, and each game's quick voice chat
+  // as one entry (#612); red when a decision blocks its build.
+  const openDecisions = decisions.commands.length + decisions.sessions.length;
   const blocked = decisions.commands.some((command) => command.blocking);
 
   useEffect(() => {
@@ -85,6 +93,10 @@ export function StudioMenu() {
   useEffect(() => {
     if (deck && deck.creatorId !== creatorId) setDeck(undefined);
   }, [creatorId, deck]);
+
+  useEffect(() => {
+    if (questions && questions.creatorId !== creatorId) setQuestions(undefined);
+  }, [creatorId, questions]);
 
   useEffect(() => {
     if (!creatorId) return;
@@ -264,6 +276,26 @@ export function StudioMenu() {
             </button>
           </li>
         ))}
+        {decisions.sessions.map((session) => (
+          <li key={`questions:${session.game_id}`}>
+            <button
+              className="studio-menu-job studio-menu-questions"
+              type="button"
+              aria-label={`${session.game_title} wants a quick voice chat, ${session.count} questions`}
+              onClick={() => {
+                trigger.current?.focus();
+                close();
+                if (creatorId) setQuestions({ creatorId, session });
+              }}
+            >
+              <Icon name="mic" />
+              <strong>{session.game_title} wants a quick voice chat</strong>
+              <span className="studio-menu-questions-count" aria-hidden="true">
+                {session.count}
+              </span>
+            </button>
+          </li>
+        ))}
       </ul>
     );
   } else if (sheet === 'builds' && buildGroups.length > 0) {
@@ -365,6 +397,13 @@ export function StudioMenu() {
       <JobConversationModal />
       {deck && deck.creatorId === creatorId ? (
         <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />
+      ) : null}
+      {questions && questions.creatorId === creatorId ? (
+        <QuestionSession
+          session={questions.session}
+          creatorId={questions.creatorId}
+          onClose={() => setQuestions(undefined)}
+        />
       ) : null}
     </div>
   );

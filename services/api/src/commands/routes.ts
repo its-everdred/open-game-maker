@@ -12,7 +12,7 @@ import { authorizedGame } from '../games/authorize.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { tryRecordReview } from '../reviews/store.js';
 import { toGameCommand } from './aiur.js';
-import { listCreatorCommands, listGameCommands } from './list.js';
+import { listCreatorCommands, listGameCommands, shownOneByOne } from './list.js';
 
 export const prefix = '/api/v1';
 
@@ -28,13 +28,14 @@ const AnswerCommandBody = CommandAnswerBody.extend({
 export default new Hono<ApiBindings>()
   .get('/games/:gameId/commands', async (c) => {
     const game = authorizedGame(c, 'game.edit');
-    const page: GameCommandsPage = { commands: await listGameCommands(c.get('deps'), game) };
+    // A product question waits for a voice session (#612); the game's inbox shows the decisions only.
+    const page: GameCommandsPage = { commands: shownOneByOne(await listGameCommands(c.get('deps'), game)) };
     return c.json(page);
   })
   // The menu's decision inbox: the caller's player-facing Commands across every game they may edit.
   .get('/me/commands', async (c) => {
     const principal = requirePrincipal(c, ['user']);
-    const page: CreatorCommandsPage = { commands: await listCreatorCommands(c.get('deps'), principal) };
+    const page: CreatorCommandsPage = await listCreatorCommands(c.get('deps'), principal);
     return c.json(page);
   })
   // A Command with no job: the player answered one the game's own aiur instance holds. Aiur's canonical Decision API

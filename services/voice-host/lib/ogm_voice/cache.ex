@@ -77,6 +77,7 @@ defmodule OgmVoice.Cache do
 
   defp check_key("scope:" <> id) when id != "", do: :ok
   defp check_key("build:" <> id) when id != "", do: :ok
+  defp check_key("questions:" <> id) when id != "", do: :ok
   defp check_key(_key), do: {:error, :invalid_target_key}
 
   defp briefing(push, at) do
