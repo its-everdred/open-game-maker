@@ -186,7 +186,7 @@ describe('gm command request', () => {
   // (#680); a key that could not be a GitHub label is refused before the Command is printed.
   it('stamps the decision key that waiting tickets name on the Command', async () => {
     const root = workspace();
-    const args = ['checkpoint', 'open', '--question', 'Which diorama?', '--option', 'a=Meadow', '--option', 'b=Table'];
+    const args = ['command', 'request', '--question', 'Which diorama?', '--option', 'a=Meadow', '--option', 'b=Table'];
     const result = await gm([...args, '--key', 'blobs/diorama', '--json'], { cwd: root });
     expect(result).toMatchObject({ code: 0, err: [] });
     const printed = JSON.parse(result.out[0]) as {
