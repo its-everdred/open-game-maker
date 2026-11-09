@@ -19,7 +19,33 @@ the full origin map.
 | Magic link | `https://makeopen.games/auth/magic-link/verify?token=…` (15 min, one use) |
 
 `ts.net` is never a trusted origin or the RP ID. Google stays off until `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
-are both set (GATE-GOOGLE-OAUTH); magic link and passkey work without it.
+are both set (GATE-GOOGLE-OAUTH). With Google on, the Sign-in page offers **Continue with Google** and a passkey;
+with it off, the page falls back to the email link (unset both and restart the API to bring it back if Google sign-in
+breaks). Invite emails still use magic links either way.
+
+## Google sign-in client (GATE-GOOGLE-OAUTH)
+
+The operator clicks these in the Google Cloud console; the client secret is never committed, pasted into a chat or
+printed in a log.
+
+1. Open `https://console.cloud.google.com/auth/overview` in a project of your own (no billing account is needed).
+2. **Branding**: app name `Open Game Maker 2000`, your support email, authorised domain `makeopen.games`.
+3. **Audience**: user type **External**, publishing status **Testing**. Add every allow-listed Google address as a
+   test user: in testing mode Google refuses anyone else before the app sees them (100 test users at most). The
+   allow-list at `/admin/users` still decides on top of that.
+4. **Data access**: keep the default `openid`, `email` and `profile` scopes; add nothing else.
+5. **Clients → Create client → Web application**, with the two Google rows from the table above: authorised
+   JavaScript origin `https://makeopen.games` and authorised redirect URI `https://makeopen.games/auth/callback/google`.
+   For another instance, use its `OGM_APP_ORIGIN` in both.
+6. On the API host, edit `~/.config/ogm/env/api.env` (mode `0600`) and set `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET` from the client's download. Nothing goes in `web.env` or Netlify: the web app asks the API
+   (`GET /auth/providers`) whether Google is on.
+7. `systemctl --user restart ogm-api`, then check `journalctl --user -u ogm-api -n 50` shows `auth-ready` with
+   `"google":true` and `curl -s https://makeopen.games/auth/providers` lists `google`.
+
+The Google flow keeps the same-origin rule: the browser starts at `/auth/sign-in/social`, Google returns to
+`/auth/callback/google` on the app origin, and Netlify proxies both to the API. An address that is not on the
+allow-list is sent back to Sign-in with an error and gets no account or session.
 
 ## Cookies
 
@@ -49,7 +75,8 @@ data. After the API is live, deploy the web app and confirm Start opens email si
 
 ## iPhone check (after OGM-006 and OGM-070 are live)
 
-1. Open `https://makeopen.games` in Safari, press Start, enter an allowed email, and sign in by magic link from the
-   admin inbox. Confirm no birth-date screen appears.
+1. Open `https://makeopen.games` in Safari, press Start, and sign in with **Continue with Google** using an
+   allowed address (or, while Google is off, by magic link from the admin inbox). Confirm no birth-date screen
+   appears.
 2. Register a passkey, sign out, sign in with the passkey.
 3. Note the iOS and Safari versions. If `Set-Cookie` arrives without `Secure` or with a `Domain`, the proxy rewrote it.
