@@ -32,6 +32,7 @@ order: try installed packs and mirrors first, then vary a selected source before
    | prop on a joint | `gm assets variant <id> --name <slug> --prop <prop-id>@<joint>` | a character holding a sword, a hat on a head |
    | stack, combine, mirror | a local script on a clone, then `gm assets register <path> --made-by-agent --from <id>` | new heights, merged parts, cheap asymmetry |
    | audio, sprite | trim, loop or palette-swap a copy, then register it with `--from` | SFX families, enemy palettes |
+   | 2D sprite palette | `generate2dsprite`'s `palette_tool.py variants` on a copy (Sprite Forge, below), then register it with `--from` | enemy families, team colours |
 
 4. **Make one variant per command.** `gm assets variant` clones the locked glb, multiplies each named material's base
    colour by the sRGB hex (`*` means every material), parents each prop at a rig joint (KayKit hands are
@@ -47,6 +48,24 @@ order: try installed packs and mirrors first, then vary a selected source before
    Never ship one you have not looked at (gm-verify).
 7. **Report.** One line per batch: how many variants, from which sources, by which operations, and anything that did
    not come out clean.
+
+## 2D art: Sprite Forge
+
+2D games use the Sprite Forge skills in `.claude/skills/vendor/sprite-forge/`: open the named skill's `SKILL.md` and
+run its tools from the repo root with the Python the Executor names (else `python3`) where it says `python`
+(`<skill-dir>` is that skill's folder). They need numpy, Pillow and scipy; if those are missing, tell the Executor and
+never install them. When no pack sprite or map fits (tier 4), `generate2dsprite` makes characters, props and FX and
+`generate2dmap` tilemaps, prop packs and parallax. These rules win over the vendored text, including its "a configured
+key is the owner's consent":
+
+- No fal and no provider key: never add, set or ask for one, and never spend. Every command that generates an image
+  passes `--route codex-cli` (the signed-in Codex CLI): `generate2dmedia`'s `route_media.py image`, `master_still.py
+  generate` and `master_still.py edit`. Never use `--route auto`, `api`, `local` or a Grok route, never leave
+  `--route` out, and skip any other command that would generate.
+- Video is never generated: never run `route_media.py video` or `sprite_set.py run`. On a clip the creator supplies,
+  `video2dsprite` runs its one-clip pipeline without step 3 (Generate).
+- Ask the Executor before any generation; it is the operator's call. Processing what exists needs no ask.
+- Never send a paid-pack asset to a cloud model as a reference; only free-licence files may go.
 
 ## Gotchas
 

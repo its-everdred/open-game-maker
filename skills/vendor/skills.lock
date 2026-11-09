@@ -17,6 +17,25 @@
       "license": "Apache-2.0",
       "path": "gamedev",
       "modified": true
+    },
+    "0x0funky/agent-sprite-forge": {
+      "sha": "5324342fdfab72430f4e9604f3fe427009f8596d",
+      "version": "0.4.0",
+      "license": "MIT",
+      "path": "sprite-forge"
+    },
+    "lovisdotio/video-to-game": {
+      "sha": "d1a24fd8a47576ec4b3c36388b30deda0631def9",
+      "license": "MIT",
+      "path": "video-to-game",
+      "partial": true
+    },
+    "anthropics/claude-plugins-official": {
+      "sha": "30202c767cfaf325212b3921ab484f83adaec850",
+      "version": "1.1.1",
+      "license": "Apache-2.0",
+      "path": "frontend-design",
+      "modified": true
     }
   }
 }

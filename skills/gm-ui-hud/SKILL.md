@@ -73,3 +73,7 @@ Open `.claude/skills/vendor/gamedev/game-ui-ux/SKILL.md` for anchors, focus orde
 `.claude/skills/vendor/phaser/scale-and-responsive/SKILL.md` or
 `.claude/skills/vendor/phaser/text-and-bitmaptext/SKILL.md` only for engine details. The host contract wins when a
 vendor reference suggests owning pause, settings, or device safe areas.
+
+For the layout and type of menus, HUD and the title, won and lost screens, open
+`.claude/skills/vendor/frontend-design/frontend-design/SKILL.md`. It defers: the game's approved targets (the picked
+mock, approved renders) and the app's Gruvbox palette win over its suggestions, and it never touches the host's HUD.
