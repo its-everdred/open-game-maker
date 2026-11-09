@@ -134,7 +134,7 @@ an unknown topic exits 2 with a list hint. Pattern retrieval is offline and neve
 ```text
 gm chat post --job <id> --text "<one line>" [--image <png>]
 gm chat post --job <id> --text "<one line>" --clip <mp4> --poster <png>
-gm checkpoint open [--job <id>] --question "<question>" --option <id>=<label> --option <id>=<label> [--media <id>=<chat-message-id>] [--playable <id>=<scenario query>] [--seconds <id>=<n>] [--lead-in <id>=<move>] [--branch <name>] [--provenance <id>=<json|@file>] [--recommend <id>] [--blocking]
+gm checkpoint open [--job <id>] --question "<question>" --option <id>=<label> --option <id>=<label> [--media <id>=<chat-message-id>] [--playable <id>=<scenario query>] [--seconds <id>=<n>] [--lead-in <id>=<move>] [--branch <name>] [--provenance <id>=<json|@file>] [--recommend <id>] [--key <decision-key>] [--blocking]
 gm checkpoint wait <checkpoint-id|decision-id> [--timeout <seconds>]
 ```
 
@@ -148,6 +148,10 @@ deployed.
 Without a build job (no `--job`, `GM_JOB` or `.gm/context/job.json`), `gm checkpoint open` writes nothing to the outbox
 and refuses `--media`; the printed call carries each `--playable` slice, so the Command shows as playable cards in the
 game's review deck (see `packages/gm-cli/src/commands/checkpoint/README.md`). `gm decide` does the same.
+
+`--key <decision-key>` (also on `gm decide`) names the Command for tickets that wait on it (`gm build park --on`), so
+a ticket can be parked before the question is asked. Name a key after its game, such as `blobs/diorama`: several games
+share one instance repository.
 
 `--provenance <id>=<json|@file>` records what an option was built from — the packs and assets it used, its generator,
 when it was built, and its design aspect, kind, and view. The ledger check reads it; a game that carries a ledger
@@ -228,7 +232,7 @@ that carries one still builds. Exits 1 naming each missing or invalid file.
 ```text
 gm build pause <ticket> | --game <slug>
 gm build resume <ticket> | --game <slug>
-gm build park <ticket>
+gm build park <ticket> [--on <decision-id|key> [--when <option>]]
 gm build requeue <ticket>
 gm build state <ticket> | --game <slug>
 gm build hold-pr <ticket>
@@ -239,6 +243,14 @@ Each action is one aiur call on the instance repository's build tickets: `pause`
 one without is refused before aiur is called. `--game <slug>` pauses or resumes every open ticket labelled
 `game:<slug>` in a single aiur call and never uses `--all`, so other games stay as they are. aiur's refusal is printed
 and exits 1.
+
+`gm build park --on <decision-id|key>` parks a ticket until a creator decision is answered: gm labels it
+`waits:<key>` and comments the wait. When the decision is answered (in the app, by voice or on the aiur dashboard), the
+API's next poll writes the answer into the ticket as a `gm-decision-answer` JSON comment (the pick, its label and any
+per-option thumbs and notes), reopens it if closed, resumes it if paused and queues it (`aiur --todo`), then deletes the
+label. No Executor step is needed, and tickets without the label never move. A closed ticket, or one aiur has not
+queued, is follow-up work the answer starts and is only labelled; `--when <option>` starts it only when the answer picks
+that option and closes it as not planned otherwise.
 
 `gm build state` reads the `agent:*` state labels, the open PR and its CI rollup from GitHub, and the ticket's status
 and pause reason from `aiur units --json`. When aiur cannot answer, the status shows `-` and the reason goes to stderr.
