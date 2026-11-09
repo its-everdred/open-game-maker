@@ -13,6 +13,7 @@ import {
   avatarX,
   bandsFor,
   gamesServer,
+  gameTimingFor,
   hasAvatars,
   judgeSeat,
   LIMITS,
@@ -79,6 +80,29 @@ describe('the multi-client bands and verdict', () => {
       inputGaps: 2,
       needsRecovery: true,
     });
+  });
+
+  it('judges a per-seat game at its seatStateHz, not the 20 Hz host snapshot rate', () => {
+    /* Blobs (open-games #60) publishes at 10 Hz: a clean run measured 252 ms against a 250 ms band built on 20 Hz. */
+    const blobs = gameTimingFor({ authority: 'per-seat', maxSeats: 4, seatStateHz: 10 });
+    expect(blobs).toEqual({ inputDelayTicks: 3, snapshotHz: 10 });
+    expect(bandsFor(CLEAN_LINK, blobs).remoteUpdateP95Ms).toBe(313);
+    expect(bandsFor(BAD_LINK, blobs).remoteUpdateP95Ms).toBe(538);
+    /* An absent seatStateHz is the SDK's 10 Hz default; the manifest's inputDelayTicks is read too. */
+    expect(gameTimingFor({ authority: 'per-seat', maxSeats: 4 })).toEqual({ inputDelayTicks: 3, snapshotHz: 10 });
+    expect(gameTimingFor({ authority: 'per-seat', maxSeats: 4, inputDelayTicks: 5, seatStateHz: 30 })).toEqual({
+      inputDelayTicks: 5,
+      snapshotHz: 30,
+    });
+  });
+
+  it('keeps host-authority games on the 20 Hz snapshot bands', () => {
+    for (const net of [{ authority: 'host', maxSeats: 4, seatStateHz: 10 }, { maxSeats: 4 }]) {
+      const timing = gameTimingFor(net);
+      expect(timing).toEqual({ inputDelayTicks: 3, snapshotHz: 20 });
+      expect(bandsFor(CLEAN_LINK, timing).remoteUpdateP95Ms).toBe(250);
+      expect(bandsFor(BAD_LINK, timing).remoteUpdateP95Ms).toBe(413);
+    }
   });
 
   it('names every seat that misses a band', () => {
