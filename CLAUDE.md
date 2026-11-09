@@ -11,7 +11,7 @@ use. Work here the way those agents will work: dogfood the skills.
   there; use `/* */` mid-line. A swallowed tail is still valid syntax, so `node --check` won't catch it (it dropped a
   scene's arguments and an iframe's attributes here); render or run the change before moving on.
 - **Scripted waits** (a chain that polls a log for an earlier step): match a terminal marker the step itself writes (`exit=0 <step>`),
-  never line adjacency (`grep -A1`); a stray log line between marker and status stalled the tiers render chain for 90 minutes. Waiting on a process: `pgrep -f` matches the waiting shell's own command line, so wait on a pid (`while kill -0 $PID`) instead (a Sonniss retry waited on itself overnight).
+  never line adjacency (`grep -A1`); a stray log line between marker and status stalled the tiers render chain for 90 minutes. Waiting on a process: `pgrep -f` matches the waiting shell's own command line, so wait on a pid (`while kill -0 $PID`) instead (a Sonniss retry waited on itself overnight); the same goes for `pkill -f`, which kills the calling shell (2026-11-09): kill by pid.
 - **Sprite Forge skills** (`agent-sprite-forge` plugin, project scope in `.claude/settings.json`: generate2dsprite,
   generate2dmap, video2dsprite, generate2dmedia, codeart2d): run their scripts with
   `~/.local/share/ogm/forge-venv/bin/python` (no `python` on PATH). No API key is configured, so `route_media.py` falls
@@ -36,6 +36,7 @@ use. Work here the way those agents will work: dogfood the skills.
   hand from its branch (body from the workpad), relabel `agent:ci-wait`, report the timeout to Aiur. GitHub's merge queue is not
   available on this user-owned repo (ruleset 26376924 = PR + green `required`, non-strict; merge on green without update-branch).
   Pausing a running worker: `aiur-main pause <id>` / `resume <id>` / `park <id>` (or the `agent:paused` label, which frees its slot); `message` does not stop it (#211 opened a PR after being told to stop). A ticket with an open PR sits in ci-wait and takes no turn: hold or close the PR, then `--todo`. Prove skill injection from the new session's first prompt (`Mapped skills (load first)`), excluding the old session file.
+  Creator Commands raised non-blocking expire 5 min after their ticket stops running (aiur `decision_expiry.ex`, fix asked of Aiur 2026-11-09): until it lands, ask Kevin in chat too and re-raise his unanswered picks while the ticket runs. Headless `claude -p` on the second login (`~/.claude-2`) hangs on its plugins: add `--setting-sources project --strict-mcp-config --no-session-persistence` (see `executor/mock-broker.py` look()).
   A multi-question Command (`3 questions: …`) can't be answered from the CLI (`question_answers :incomplete`): post the answers as a ticket comment plus `aiur-main message <ticket>`, then `executor-moot <id> --expected-version 1 --reason-class resolved_elsewhere`.
   Dusk Helm hold: its root open-games #2 carries `agent:paused` with `agent:queued` removed (every other Dusk Helm ticket is blocked by it); each audit, check that no `game:dusk-helm` ticket is running.
   Every audit: `aiur-main commands --filter open`; a worker's "Needs you" question idles its ticket until Kevin answers, and the
