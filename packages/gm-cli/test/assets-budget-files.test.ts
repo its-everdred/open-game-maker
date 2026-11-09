@@ -22,6 +22,8 @@ describe('mobile file-count budget', () => {
 
   it('still flags a game past 48 files', () => {
     const { manifest, details } = game(49);
-    expect(budgetReport(manifest, details, 'mobile' as never).exceeded).toEqual([{ metric: 'files', value: 49, limit: 48 }]);
+    expect(budgetReport(manifest, details, 'mobile' as never).exceeded).toEqual([
+      { metric: 'files', value: 49, limit: 48 },
+    ]);
   });
 });
