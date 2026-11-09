@@ -30,6 +30,12 @@ export function createAuthLogger(log: (line: Record<string, unknown>) => void) {
   };
 }
 
+const PASSKEY_SIGN_IN_PATHS = new Set([
+  '/passkey/generate-authenticate-options',
+  '/passkey/verify-authentication',
+  '/passkey/authenticate',
+]);
+
 const signInNotAllowed = () =>
   new APIError('FORBIDDEN', { message: 'sign in is not allowed', code: 'SIGN_IN_NOT_ALLOWED' });
 
@@ -110,7 +116,9 @@ export function createAuth(deps: {
           }
           if (!isAllowed(email)) return ctx.json(MAGIC_LINK_RESPONSE);
         }
-        if (ctx.path.startsWith('/passkey/')) {
+        // Signing in with a passkey has no session yet: only registration and passkey management need one.
+        // The session-create hook below still refuses a passkey sign-in for an address off the allow-list.
+        if (ctx.path.startsWith('/passkey/') && !PASSKEY_SIGN_IN_PATHS.has(ctx.path)) {
           const session = await getSessionFromCtx(ctx, { disableCookieCache: true, disableRefresh: true });
           if (!session || !isAllowed(session.user.email)) throw signInNotAllowed();
         }
