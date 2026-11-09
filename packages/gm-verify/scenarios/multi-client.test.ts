@@ -94,10 +94,15 @@ describe('the multi-client bands and verdict', () => {
       inputDelayTicks: 5,
       snapshotHz: 30,
     });
+    /* The SDK publishes on whole ticks: 7 Hz is every 9 ticks, so the interval is 150 ms, not 143. */
+    expect(Math.round(1_000 / gameTimingFor({ authority: 'per-seat', maxSeats: 4, seatStateHz: 7 }).snapshotHz)).toBe(
+      150,
+    );
   });
 
   it('keeps host-authority games on the 20 Hz snapshot bands', () => {
-    for (const net of [{ authority: 'host', maxSeats: 4, seatStateHz: 10 }, { maxSeats: 4 }]) {
+    /* Host authority ignores seatStateHz and inputDelayTicks, so neither may loosen its band. */
+    for (const net of [{ authority: 'host', maxSeats: 4, seatStateHz: 10, inputDelayTicks: 8 }, { maxSeats: 4 }]) {
       const timing = gameTimingFor(net);
       expect(timing).toEqual({ inputDelayTicks: 3, snapshotHz: 20 });
       expect(bandsFor(CLEAN_LINK, timing).remoteUpdateP95Ms).toBe(250);

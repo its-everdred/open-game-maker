@@ -105,13 +105,17 @@ const NET_DEFAULTS = { inputDelayTicks: 3, seatStateHz: 10, hostSnapshotHz: 20 }
 
 export type ManifestNet = { authority?: string; maxSeats?: number; inputDelayTicks?: number; seatStateHz?: number };
 
-/** The timing {@link bandsFor} judges a game by, read from its manifest the way the SDK reads it. */
+/**
+ * The timing {@link bandsFor} judges a game by, read from its manifest the way the SDK reads it. Only per-seat authority
+ * applies the manifest's `inputDelayTicks` and `seatStateHz`, and it publishes on whole 60 Hz ticks, so the rate is the
+ * one those ticks give (7 Hz publishes every 9 ticks, 150 ms). Host games keep the bands they were calibrated on.
+ */
 export function gameTimingFor(net: ManifestNet): { inputDelayTicks: number; snapshotHz: number } {
-  return {
-    inputDelayTicks: net.inputDelayTicks ?? NET_DEFAULTS.inputDelayTicks,
-    snapshotHz:
-      net.authority === 'per-seat' ? (net.seatStateHz ?? NET_DEFAULTS.seatStateHz) : NET_DEFAULTS.hostSnapshotHz,
-  };
+  if (net.authority !== 'per-seat') {
+    return { inputDelayTicks: NET_DEFAULTS.inputDelayTicks, snapshotHz: NET_DEFAULTS.hostSnapshotHz };
+  }
+  const everyTicks = Math.max(1, Math.round(60 / (net.seatStateHz ?? NET_DEFAULTS.seatStateHz)));
+  return { inputDelayTicks: net.inputDelayTicks ?? NET_DEFAULTS.inputDelayTicks, snapshotHz: 60 / everyTicks };
 }
 
 export function profileFor(link: LinkProfileName | LinkConfig | undefined): LinkConfig {
