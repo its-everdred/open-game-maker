@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type { VoiceTarget, VoiceTranscriptRequest, VoiceTranscriptResponse } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
 import { getChatRuntime } from '../build-chat/routes.js';
@@ -31,7 +31,19 @@ function scopeJob(deps: AppDeps, target: Extract<VoiceTarget, { kind: 'scope' }>
   return session?.game_id === target.game_id && session.creator_id === target.creator_id ? session.job_id : null;
 }
 
+// A question session belongs to the game, so its words go to the creator's newest build chat in that game.
+function questionsJob(deps: AppDeps, target: Extract<VoiceTarget, { kind: 'questions' }>): string | null {
+  const job = deps.db
+    .select({ id: schema.jobs.id })
+    .from(schema.jobs)
+    .where(and(eq(schema.jobs.gameId, target.game_id), eq(schema.jobs.creatorId, target.creator_id)))
+    .orderBy(desc(schema.jobs.createdAt))
+    .get();
+  return job?.id ?? null;
+}
+
 function targetJob(deps: AppDeps, target: VoiceTarget): string | null {
+  if (target.kind === 'questions') return questionsJob(deps, target);
   return target.kind === 'build' ? buildJob(deps, target) : scopeJob(deps, target);
 }
 

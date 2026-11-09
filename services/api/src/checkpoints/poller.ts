@@ -15,7 +15,7 @@ import {
 } from '../build-chat/store.js';
 import { summaryOf } from '../commands/aiur.js';
 import { creatorAudience } from '../commands/audience.js';
-import { correlate, pickOf, recommendationOf, statusOf } from './correlate.js';
+import { correlate, isTextOnly, pickOf, recommendationOf, statusOf } from './correlate.js';
 import type { InboxWriter } from './inbox.js';
 
 type PollerDeps = {
@@ -56,6 +56,7 @@ function nativeCheckpoint(decision: Decision): StoredCheckpoint {
     status: statusOf(decision),
     ...(audience === undefined ? {} : { audience }),
     ...(summary === undefined ? {} : { summary }),
+    ...(isTextOnly(decision) ? { text_only: true as const } : {}),
   };
 }
 

@@ -52,6 +52,21 @@ waiting. The top-right menu badge counts them, lists their topics, and opens eac
 the next one after an answer. Each answer goes through its game's route, as below. A game whose aiur instance does not
 answer within 5 seconds, or that fails to list, is left out of that read rather than failing the others.
 
+### Product questions
+
+A product question is a creator Command in plain words with no media (rules, scope, audience). `gm ask` raises one with
+Game Maker's creator marker and its text-only marker (`CREATOR_TEXT_ONLY_MARKER`); a look, sound or feel question is a
+review-deck decision (`gm decide`) and carries the thing itself on every option. Product questions carry
+`text_only: true` and are never shown one by one: both inboxes leave them out of `commands`. When a game has at least
+`OGM_VOICE_QUESTIONS_AT` (default 5) queued, `GET /api/v1/me/commands` lists it once in `question_sessions`
+(`game_id`, `game_title`, `count`), and the menu shows that game as one entry offering a quick voice chat. It is never
+pushed or opened on its own.
+
+Opening the entry starts two-way voice on the `questions` target (`{ kind: "questions", game_id, creator_id }`). The
+agent is briefed with the queued questions, oldest first, and the game's decision record, and asks them one at a time.
+A clear spoken answer is saved to its Command at once, through the job's checkpoint when a build owns it and as the
+creator's own aiur answer otherwise. An ambiguous answer, a skip or a stop leaves the question queued.
+
 ## Answering
 
 Answer through the job's checkpoint route, not the inbox route:

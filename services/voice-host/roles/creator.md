@@ -33,6 +33,8 @@ If the briefing has an "Open decision", start there. Compare its options only fr
 
 A clear choice of one option: call `answer_command` at once, with no confirm step, and say it is saved and can be changed on screen. A question, a maybe, or words you are unsure you heard right are not choices: reply or ask again.
 
+For "Quick questions", skip the read-aloud; ask one at a time, in order. Don't reopen what the "Decision record" settles. Clear answer: `answer_command`. Unsure or "skip": leave open. "Stop": end. Never say done while any stay open.
+
 ## Ending
 
 Before ending, call `record_summary` with decisions, open questions, and ideas.

@@ -29,6 +29,12 @@ export const MAX_COMMAND_OPTIONS = 12;
 // marker is how a Command says who it is for.
 export const CREATOR_AUDIENCE_MARKER = '<!-- gm-audience:creator -->';
 
+// Marks a creator Command as a product question (#612): plain words with no media (rules, scope, audience), which
+// `gm ask` writes beside the creator marker. Product questions are never shown one by one: they queue per game and,
+// past a threshold, the inbox offers one quick two-way voice chat that asks them. A look, sound or feel question is a
+// review-deck decision instead and always carries the thing itself.
+export const CREATOR_TEXT_ONLY_MARKER = '<!-- gm-question:text-only -->';
+
 export const GameCommand = z.object({
   // Null when the Command belongs to no job: a game registered from a repository that already exists reads its
   // instance's open Commands, and its `checkpoint_id` is aiur's decision id.
@@ -54,6 +60,8 @@ export const GameCommand = z.object({
   // The Command's short number inside its game (#591), for the `/<slug>/review/<n>` link. Given the first time the
   // Command is listed and never reused.
   review_number: z.number().int().positive().optional(),
+  // A product question (`CREATOR_TEXT_ONLY_MARKER`): it waits in its game's queue for a voice session.
+  text_only: z.boolean().optional(),
 });
 
 // GET /api/v1/games/:gameId/commands → the open Commands of every job the caller can edit in that game, plus the
@@ -66,12 +74,25 @@ export const CreatorCommand = GameCommand.extend({
   game_id: Id,
   game_title: z.string().trim().min(1).max(200),
 });
-export const CreatorCommandsPage = z.object({ commands: z.array(CreatorCommand) });
+// A game whose queued product questions reached the threshold: the inbox shows one entry that opens a quick two-way
+// voice chat asking them. `count` is how many are queued.
+export const QuestionSession = z.object({
+  game_id: Id,
+  game_title: z.string().trim().min(1).max(200),
+  count: z.number().int().positive(),
+});
+// `commands` holds the decisions shown one by one; product questions are never in it, only counted in
+// `question_sessions`.
+export const CreatorCommandsPage = z.object({
+  commands: z.array(CreatorCommand),
+  question_sessions: z.array(QuestionSession).optional(),
+});
 
 export type CommandOption = z.infer<typeof CommandOption>;
 export type GameCommand = z.infer<typeof GameCommand>;
 export type GameCommandsPage = z.infer<typeof GameCommandsPage>;
 export type CreatorCommand = z.infer<typeof CreatorCommand>;
+export type QuestionSession = z.infer<typeof QuestionSession>;
 export type CreatorCommandsPage = z.infer<typeof CreatorCommandsPage>;
 
 export const commandsSchemas = {

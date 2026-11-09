@@ -49,6 +49,8 @@ export type StoredCheckpoint = ChatCheckpoint & {
   // A decision mirrored from aiur: who it is for, and its short topic (see commands/audience.ts).
   audience?: 'creator';
   summary?: string;
+  // A product question (#612): it waits in its game's queue for a voice session instead of showing in the deck.
+  text_only?: true;
   // A creator's change to a non-design Command after aiur took its answer (#597): the answer that now stands and how
   // many changes there were. Kept apart from `option_id`, which the poller keeps equal to aiur's answer.
   corrected_option_id?: string;
@@ -125,6 +127,11 @@ export function findCheckpoint(sqlite: Sqlite, jobId: string, identifier: string
       );
     }) ?? null
   );
+}
+
+// A product question (#612) waits for a voice session and is never shown one by one, so the chat leaves its row out.
+export function shownInChat(row: ChatRow): boolean {
+  return parseCheckpoint(row)?.text_only !== true;
 }
 
 export function listSince(sqlite: Sqlite, jobId: string, since: number, limit = 200): ChatRow[] {

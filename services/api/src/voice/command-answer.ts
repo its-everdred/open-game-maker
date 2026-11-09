@@ -6,24 +6,17 @@ import { and, eq } from 'drizzle-orm';
 import type { AppDeps } from '../app/types.js';
 import { findCheckpoint } from '../build-chat/store.js';
 import { answerCheckpoint } from '../checkpoints/answer.js';
-import { parseCommandOptions, type CommandOption } from '../checkpoints/options.js';
+import { parseCommandOptions } from '../checkpoints/options.js';
 import { jobFor } from './briefing-push.js';
-
-function selectedOption(available: CommandOption[], choice: string): CommandOption | null {
-  const exact = available.find(({ id, label }) => id === choice || label === choice);
-  if (exact) return exact;
-  const folded = choice.toLocaleLowerCase();
-  const matches = available.filter(
-    ({ id, label }) => id.toLocaleLowerCase() === folded || label.toLocaleLowerCase() === folded,
-  );
-  return matches.length === 1 ? matches[0]! : null;
-}
+import { selectedOption } from './select-option.js';
+import { answerProductQuestion } from './question-session.js';
 
 export async function answerVoiceCommand(
   deps: AppDeps,
   request: VoiceCommandAnswerRequest,
 ): Promise<VoiceCommandAnswerResponse> {
   const target = request.target;
+  if (target.kind === 'questions') return answerProductQuestion(deps, { ...request, target });
   const job = jobFor(deps.db, target);
   if (
     !job ||
