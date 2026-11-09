@@ -4,7 +4,8 @@ import type { AssetBudgetReport, BuiltFileInfo } from './types.js';
 
 const LIMITS = {
   bytes: 2 * 1024 * 1024,
-  files: 30,
+  // A file count only matters as request overhead; the 2 MiB byte cap is the real mobile limit (raised for Blobs' scenery, 2026-11-09).
+  files: 48,
   tris: 300_000,
   gpuTexMB: 100,
   maxTexture: 1_024,

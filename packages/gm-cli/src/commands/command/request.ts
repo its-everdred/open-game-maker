@@ -1,4 +1,11 @@
-import { AgentOutboxLine, CREATOR_AUDIENCE_MARKER, OptionPlayable, playableMarker } from '@ogm/contracts';
+import {
+  AgentOutboxLine,
+  CREATOR_AUDIENCE_MARKER,
+  DecisionKey,
+  decisionKeyMarker,
+  OptionPlayable,
+  playableMarker,
+} from '@ogm/contracts';
 import { ulid } from 'ulid';
 
 import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
@@ -39,7 +46,20 @@ function pair(raw: string, flag: string): [string, string] {
 /** What `gm decide` adds to a Command: the Command's 2-5 word topic and why its recommendation is the one. */
 export type DecideContext = { topic: string; reason: string };
 
-export function buildEmitEvent(payload: CommandRequestPayload, decide?: DecideContext): EmitEventCall {
+/** `--key <key>`: the name tickets parked with `gm build park --on <key>` wait on (#680); undefined when not given. */
+export function decisionKeyFlag(flags: Record<string, unknown>): string | undefined {
+  if (flags.key === undefined) return undefined;
+  const key = DecisionKey.safeParse(flags.key);
+  if (!key.success)
+    throw new UsageError(`not a decision key: ${String(flags.key)}`, 'use [a-z0-9_/-], at most 40 characters');
+  return key.data;
+}
+
+export const KEY_FLAG = {
+  key: { type: 'string', help: 'decision key that tickets parked with gm build park --on <key> wait on' },
+} as const;
+
+export function buildEmitEvent(payload: CommandRequestPayload, decide?: DecideContext, key?: string): EmitEventCall {
   const playables = new Map(payload.options.flatMap(({ id, playable }) => (playable ? [[id, playable] as const] : [])));
   return {
     name: 'decision.requested',
@@ -54,6 +74,8 @@ export function buildEmitEvent(payload: CommandRequestPayload, decide?: DecideCo
       context: {
         short_summary: decide?.topic ?? 'Direction command for the creator',
         long_context_markdown: `<!-- gm-command:${payload.command_id} -->\n${CREATOR_AUDIENCE_MARKER}\n${
+          key === undefined ? '' : `${decisionKeyMarker(key)}\n`
+        }${
           playables.size > 0
             ? `Options are slices of the game the creator plays in the review deck.\n${playableMarker(playables)}`
             : 'Options are previews already posted in the build chat.'
@@ -200,8 +222,13 @@ export function requestCommand(
   return payload;
 }
 
-export function printEmitEvent(ctx: GmContext, payload: CommandRequestPayload, decide?: DecideContext): void {
-  const emitEvent = buildEmitEvent(payload, decide);
+export function printEmitEvent(
+  ctx: GmContext,
+  payload: CommandRequestPayload,
+  decide?: DecideContext,
+  key?: string,
+): void {
+  const emitEvent = buildEmitEvent(payload, decide, key);
   if (ctx.json) ctx.out(JSON.stringify({ command_id: payload.command_id, emit_event: emitEvent }));
   else {
     ctx.out(payload.command_id);
@@ -238,11 +265,15 @@ export const command: GmCommand = {
     branch: { type: 'string', help: 'game branch whose build the playable slices run (defaults to main)' },
     recommend: { type: 'string', help: 'option id recommended by the builder' },
     blocking: { type: 'boolean', default: false, help: 'always on until aiur #7872 is deployed' },
+    ...KEY_FLAG,
   },
   async run(ctx, _args, flags) {
+    const key = decisionKeyFlag(flags);
     printEmitEvent(
       ctx,
       requestCommand(ctx, flags, { name: 'command request', maxOptions: 5, mediaOnEveryOption: false }),
+      undefined,
+      key,
     );
     return EXIT.ok;
   },
