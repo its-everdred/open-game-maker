@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AgentOutboxLine, CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { AgentOutboxLine, CREATOR_AUDIENCE_MARKER, decisionKeyFromMarker } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { gm, tempDir } from './helpers.js';
@@ -108,6 +108,21 @@ describe('gm decide', () => {
     expect(printed.emit_event.payload.context.long_context_markdown).toContain(CREATOR_AUDIENCE_MARKER);
     expect(printed.emit_event.payload.blocking).toBe(true);
     expect(outboxLines(root)[0]!.payload).toMatchObject({ blocking: true });
+  });
+
+  // Tickets parked with `gm build park --on blobs/diorama` are released by the API when the Command carrying that key is
+  // answered (#680), so the key must ride in the Command's context; a key that cannot be a label is refused unwritten.
+  it('stamps the decision key that waiting tickets name on the Command', async () => {
+    const root = workspace();
+    const ids = await media(root, 2);
+    const result = await decide(root, ids, ['--key', 'blobs/diorama']);
+    expect(result).toMatchObject({ code: 0, err: [] });
+    const printed = JSON.parse(result.out[0]!) as { emit_event: { payload: Record<string, any> } };
+    expect(decisionKeyFromMarker(printed.emit_event.payload.context.long_context_markdown)).toBe('blobs/diorama');
+
+    const refused = await decide(root, ids, ['--key', 'Blobs Diorama'], 'Another hero topic');
+    expect(refused.code).toBe(2);
+    expect(outboxLines(root)).toHaveLength(1);
   });
 
   it('never asks a recorded question again unless the creator reopened it', async () => {

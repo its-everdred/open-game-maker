@@ -8,6 +8,15 @@ A creator's answer to a Command often reaches beyond the ticket that asked. Noth
 2. Anything outside it, it writes as `Out of ticket:` lines in its workpad and emits a `decision.followup` event (answer id, a privacy-safe summary of the feedback, the affected domain).
 3. **The Executor** reads every answer and every followup and edits the order. Neither redoes the other's part.
 
+## Work that waits on an answer starts by itself
+
+A ticket that cannot go on until the creator answers is parked on that decision, not left for the Executor to notice:
+`gm build park <ticket> --on <decision-id|key>`. Give the Command a key (`gm decide --key <game>/<topic>`) to park
+tickets before it is raised. Follow-up work an answer will need is filed (or left closed) ahead of time and parked the
+same way with `--when <option>`. When the answer arrives, each waiting ticket gets it as a `gm-decision-answer` comment
+and is queued; a follow-up for an option that was not picked is closed. A worker that starts from such a ticket reads
+that comment first.
+
 ## What the Executor does with a followup
 
 1. Record any rejection in the game's ledger first (`gm options reject`).
