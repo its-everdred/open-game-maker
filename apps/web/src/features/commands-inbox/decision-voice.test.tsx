@@ -72,7 +72,6 @@ describe('voice inside a decision', () => {
     expect(onLive).toHaveBeenLastCalledWith(false);
   });
 
-  // Leaving the decision while the token is still on its way must not open a microphone nobody can end.
   // Kevin (#612): opening a quick question session starts the two-way chat; ending it does not start another.
   it('starts a question session on its own once, and ends it on a press', async () => {
     const { client } = fakeClient();
@@ -103,6 +102,7 @@ describe('voice inside a decision', () => {
     expect(created).toHaveLength(1);
   });
 
+  // Leaving the decision while the token is still on its way must not open a microphone nobody can end.
   it('opens no call when the screen closes before the token arrives', async () => {
     let resolvePress: (value: unknown) => void = () => undefined;
     const probe = vi

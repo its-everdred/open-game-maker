@@ -8,7 +8,7 @@ import { findCheckpoint } from '../build-chat/store.js';
 import { answerCheckpoint } from '../checkpoints/answer.js';
 import { listProductQuestions } from '../commands/list.js';
 import { listDesignDecisions } from '../design-decisions/store.js';
-import { selectedOption } from './command-answer.js';
+import { selectedOption } from './select-option.js';
 
 type QuestionsTarget = Extract<VoiceTarget, { kind: 'questions' }>;
 

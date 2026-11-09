@@ -24,7 +24,15 @@ import { mediaSigner } from './media.js';
 import { loadOutboxHandlers } from './outbox-handlers.js';
 import { createOutboxRelay } from './outbox-relay.js';
 import { createProgressPoller } from './progress-poller.js';
-import { insertChatRow, listSince, newMessageId, toMessage, type ChatRow, type MediaSigner } from './store.js';
+import {
+  insertChatRow,
+  listSince,
+  newMessageId,
+  shownInChat,
+  toMessage,
+  type ChatRow,
+  type MediaSigner,
+} from './store.js';
 import { createChatHub, formatChatFrame, type ChatHub } from './stream.js';
 import { getNarrationRenderer } from '../narration/render.js';
 
@@ -154,7 +162,9 @@ function chatStream(c: Context<ApiBindings>, job: ChatJob, since: number) {
             const rows = listSince(deps.sqlite, job.jobId, cursor);
             if (rows.length === 0) return;
             for (const row of rows) {
-              await stream.write(formatChatFrame(row.seq, await messageOf(deps, row, runtime.sign)));
+              if (shownInChat(row)) {
+                await stream.write(formatChatFrame(row.seq, await messageOf(deps, row, runtime.sign)));
+              }
               cursor = row.seq;
             }
           }
@@ -190,7 +200,7 @@ export default new Hono<ApiBindings>()
     const { sign } = getChatRuntime(c.get('deps'));
     const rows = listSince(c.get('deps').sqlite, job.jobId, since);
     const page: ChatMessagesPage = {
-      messages: await Promise.all(rows.map((row) => messageOf(c.get('deps'), row, sign))),
+      messages: await Promise.all(rows.filter(shownInChat).map((row) => messageOf(c.get('deps'), row, sign))),
       last_seq: rows.at(-1)?.seq ?? since,
     };
     return c.json(page);

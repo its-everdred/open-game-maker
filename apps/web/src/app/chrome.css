@@ -341,7 +341,7 @@ button.studio-menu-job {
   background: color-mix(in srgb, var(--red-b) 28%, var(--night-3));
 }
 
-/* A game's quick voice chat (#612): set apart from the decisions by its mic, its count and its outline. */
+/* A game's quick voice chat (ticket 612): set apart from the decisions by its mic, its count and its outline. */
 button.studio-menu-questions {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;

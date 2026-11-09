@@ -21,7 +21,8 @@ Recommended: a
 - **Show, don't tell** (Kevin, 2026-11-08): every look, sound or feel question carries the thing itself on each
   option: an image, a clip, audio or a playable slice. A text-only option set never reaches the creator; questions
   that can only be words (rules, scope, audience) go to the product-question queue for a voice session instead
-  (`gm ask`).
+  (`gm ask`). Never wait on one: it is answered only when enough have queued; keep working and read the answer from
+  the decision record later.
 - **Fewest words:** a 2–5 word title, a prompt of a few words or none ("Which is best?"), option labels as short as
   "A", "B", "C" when the media says the rest. The creator answers by swipe or thumbs, so the choice must be obvious
   from the media.

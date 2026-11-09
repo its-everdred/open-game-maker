@@ -5,10 +5,7 @@ import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { alreadyAsked, appendDecision, DECISIONS_FILE, readDecisions } from '../../ledger/decisions.js';
 import { strings } from '../../ledger/provenance.js';
 import { gameDir } from '../../outbox.js';
-
-const OPTION_ID = /^[a-z0-9_-]{1,32}$/;
-const MAX_QUESTION = 120;
-const URL_TEXT = /[a-z][a-z0-9+.-]*:\/\/|\bwww\./i;
+import { MAX_QUESTION, pair, URL_TEXT } from '../checkpoint/open.js';
 
 function text(flags: Record<string, unknown>, name: string): string {
   const value = flags[name];
@@ -41,11 +38,7 @@ export const command: GmCommand = {
     if (!question || question.length > MAX_QUESTION || /[\r\n]/.test(question))
       throw new UsageError(`--question must be one line of at most ${MAX_QUESTION} characters`, 'shorten the question');
     const options = strings(flags, 'option').map((raw) => {
-      const separator = raw.indexOf('=');
-      const id = raw.slice(0, Math.max(separator, 0)).trim();
-      const label = separator < 0 ? '' : raw.slice(separator + 1).trim();
-      if (!OPTION_ID.test(id) || !label)
-        throw new UsageError('--option needs id=label with id matching [a-z0-9_-]{1,32}', 'gm help ask');
+      const [id, label] = pair(raw, 'option');
       return { id, label };
     });
     // A voice agent reads every option aloud, so the set stays short.
@@ -67,7 +60,7 @@ export const command: GmCommand = {
     if (earlier && flags.revisit !== true)
       throw new UsageError(
         `"${earlier.question}" was already asked under "${earlier.topic}" (${earlier.command}) and is in ${DECISIONS_FILE}`,
-        'use its answer; pass --revisit only when the creator reopened it',
+        'its answer is in the decision record once given; pass --revisit only when the creator reopened it',
       );
     // The record keys every question by a checkpoint-shaped id; a product question has no checkpoint, so it gets its own.
     const id = `cp_${ulid()}`;

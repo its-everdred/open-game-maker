@@ -1,7 +1,6 @@
-/* A quick question session (#612): the call's mic, large, with the count of queued questions beside it. */
+/* A quick question session (ticket 612): the call's mic, large. */
 .question-session .question-session-body {
   display: flex;
-  gap: 16px;
   align-items: center;
   justify-content: center;
   padding: 24px 0;
@@ -30,16 +29,4 @@
   border-color: var(--ink);
   background: var(--orange);
   color: var(--night-2);
-}
-
-.question-session-count {
-  display: grid;
-  min-width: 32px;
-  height: 32px;
-  padding: 0 8px;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--orange-b);
-  color: var(--night);
-  font: 800 16px/1 var(--body);
 }

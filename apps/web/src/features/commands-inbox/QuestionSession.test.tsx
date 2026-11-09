@@ -21,7 +21,6 @@ describe('a quick question session', () => {
     );
 
     expect(screen.getByRole('dialog', { name: 'Castle' })).toBeVisible();
-    expect(screen.getByLabelText('6 questions')).toHaveTextContent('6');
     expect(voice.mock.calls[0]![0]).toMatchObject({
       target: { kind: 'questions', game_id: 'g_castle', creator_id: 'u_1' },
       autoStart: true,

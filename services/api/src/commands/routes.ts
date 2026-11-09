@@ -29,7 +29,9 @@ export default new Hono<ApiBindings>()
   .get('/games/:gameId/commands', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     // A product question waits for a voice session (#612); the game's inbox shows the decisions only.
-    const page: GameCommandsPage = { commands: shownOneByOne(await listGameCommands(c.get('deps'), game)) };
+    const page: GameCommandsPage = {
+      commands: shownOneByOne(c.get('deps'), await listGameCommands(c.get('deps'), game)),
+    };
     return c.json(page);
   })
   // The menu's decision inbox: the caller's player-facing Commands across every game they may edit.

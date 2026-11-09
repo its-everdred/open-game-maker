@@ -8,17 +8,8 @@ import { findCheckpoint } from '../build-chat/store.js';
 import { answerCheckpoint } from '../checkpoints/answer.js';
 import { parseCommandOptions } from '../checkpoints/options.js';
 import { jobFor } from './briefing-push.js';
+import { selectedOption } from './select-option.js';
 import { answerProductQuestion } from './question-session.js';
-
-export function selectedOption<T extends { id: string; label: string }>(available: T[], choice: string): T | null {
-  const exact = available.find(({ id, label }) => id === choice || label === choice);
-  if (exact) return exact;
-  const folded = choice.toLocaleLowerCase();
-  const matches = available.filter(
-    ({ id, label }) => id.toLocaleLowerCase() === folded || label.toLocaleLowerCase() === folded,
-  );
-  return matches.length === 1 ? matches[0]! : null;
-}
 
 export async function answerVoiceCommand(
   deps: AppDeps,

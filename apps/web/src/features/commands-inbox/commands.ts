@@ -42,7 +42,7 @@ export function useCreatorCommands(creatorId: string | undefined) {
   return {
     ...query,
     commands: enabled ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS,
-    // Games whose queued product questions offer a quick voice chat (#612): one entry each, never opened on its own.
+    // Games whose queued product questions offer a quick voice chat (ticket 612): one entry each, never opened on its own.
     sessions: enabled ? (query.data?.question_sessions ?? NO_SESSIONS) : NO_SESSIONS,
   };
 }

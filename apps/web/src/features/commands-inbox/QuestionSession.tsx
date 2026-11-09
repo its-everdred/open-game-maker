@@ -47,9 +47,6 @@ export function QuestionSession({
           onSpeaking={() => undefined}
           onHeard={() => void queryClient.invalidateQueries({ queryKey: creatorCommandsQueryKey })}
         />
-        <span className="question-session-count" aria-label={`${session.count} questions`}>
-          {session.count}
-        </span>
       </div>
     </Dialog>
   );

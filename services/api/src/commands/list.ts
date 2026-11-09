@@ -94,8 +94,15 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
 // How many queued product questions open a voice session when `OGM_VOICE_QUESTIONS_AT` is not set.
 export const DEFAULT_VOICE_QUESTIONS_AT = 5;
 
+// Product questions are asked in a voice session only when voice is configured; without it they are listed one by one
+// like any decision, so they always have a way to be answered.
+function voiceConfigured(deps: AppDeps): boolean {
+  return Boolean(deps.config.voiceTokenSecret && deps.config.voiceWsUrl);
+}
+
 // The decisions shown one by one: a product question (#612) waits in its game's queue for a voice session instead.
-export function shownOneByOne<T extends GameCommand>(commands: T[]): T[] {
+export function shownOneByOne<T extends GameCommand>(deps: AppDeps, commands: T[]): T[] {
+  if (!voiceConfigured(deps)) return commands;
   return commands.filter((command) => command.text_only !== true);
 }
 
@@ -136,11 +143,13 @@ export async function listCreatorCommands(deps: AppDeps, principal: UserPrincipa
     }),
   );
   const threshold = deps.config.voiceQuestionsAt ?? DEFAULT_VOICE_QUESTIONS_AT;
-  const questionSessions = games.flatMap((game, index) => {
-    const count = perGame[index]!.filter((command) => command.text_only === true).length;
-    return count >= threshold ? [{ game_id: game.id, game_title: game.title.slice(0, 200), count }] : [];
-  });
-  const commands = shownOneByOne(perGame.flat()).sort(
+  const questionSessions = !voiceConfigured(deps)
+    ? []
+    : games.flatMap((game, index) => {
+        const count = perGame[index]!.filter((command) => command.text_only === true).length;
+        return count >= threshold ? [{ game_id: game.id, game_title: game.title.slice(0, 200), count }] : [];
+      });
+  const commands = shownOneByOne(deps, perGame.flat()).sort(
     (left, right) => Number(right.blocking) - Number(left.blocking) || left.opened_at.localeCompare(right.opened_at),
   );
   return { commands, question_sessions: questionSessions };

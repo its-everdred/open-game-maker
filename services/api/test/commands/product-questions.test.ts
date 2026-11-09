@@ -23,6 +23,8 @@ const QUESTION = `${CREATOR_AUDIENCE_MARKER}\n${CREATOR_TEXT_ONLY_MARKER}`;
 
 function seed() {
   const deps = makeDeps();
+  // Product questions queue only where they can be asked: the voice host is configured.
+  Object.assign(deps.config, { voiceTokenSecret: 'v'.repeat(32), voiceWsUrl: 'wss://voice.example.test' });
   deps.db
     .insert(schema.families)
     .values({ id: ids.family, name: 'Family', ownerUserId: ids.user, createdAt: AT })
@@ -114,6 +116,17 @@ describe('the product-question queue', () => {
     expect(inbox.commands.map(({ decision_id }) => decision_id)).toEqual(['d_look']);
   });
 
+  // Without a voice host there is no voice chat to ask them in, so they must not vanish: they show like any decision.
+  it('lists product questions one by one when voice is not configured', async () => {
+    const deps = seed();
+    Object.assign(deps.config, { voiceTokenSecret: undefined, voiceWsUrl: undefined });
+    serveAiur(deps, { [ids.blobs]: questions('q_blobs_', 5) });
+
+    const menu = await read(deps, '/me/commands');
+    expect(menu.commands).toHaveLength(5);
+    expect(menu.question_sessions).toEqual([]);
+  });
+
   it('takes the threshold from configuration', async () => {
     const deps = seed();
     deps.config.voiceQuestionsAt = 2;
@@ -167,24 +180,24 @@ describe('the product-question queue', () => {
         updatedAt: AT,
       })
       .run();
+    const job = {
+      jobId: ids.job,
+      gameId: ids.blobs,
+      familyId: ids.family,
+      ownerId: ids.user,
+      kind: 'feature',
+      state: 'running',
+      aiur: { daemonSlug: 'blobs', ticket: '12' },
+    };
+    const chatJobs = {
+      get: async (jobId: string) => (jobId === ids.job ? job : null),
+      active: async () => [job],
+    } as unknown as NonNullable<AppDeps['registry']['chatJobs']>;
+    deps.registry.chatJobs = chatJobs;
     const poller = createCheckpointPoller({
       db: deps.db,
       sqlite: deps.sqlite,
-      jobs: () =>
-        ({
-          get: async () => null,
-          active: async () => [
-            {
-              jobId: ids.job,
-              gameId: ids.blobs,
-              familyId: ids.family,
-              ownerId: ids.user,
-              kind: 'feature',
-              state: 'running',
-              aiur: { daemonSlug: 'blobs', ticket: '12' },
-            },
-          ],
-        }) as unknown as NonNullable<AppDeps['registry']['chatJobs']>,
+      jobs: () => chatJobs,
       clientFor: () => async () =>
         ({
           decisions: async () => [decision('q_job', QUESTION, { kind: 'direction_checkpoint' })],
@@ -199,5 +212,11 @@ describe('the product-question queue', () => {
       commands: [],
       question_sessions: [{ game_id: ids.blobs, game_title: 'Blobs', count: 1 }],
     });
+    // Nor is it shown one by one as a card in the build's chat.
+    const chat = (await (
+      await (await makeApp(deps)).app.request(`/api/v1/jobs/${ids.job}/chat/messages`, { headers: asUser(ids.user) })
+    ).json()) as { messages: Array<{ kind: string }>; last_seq: number };
+    expect(chat.messages.filter(({ kind }) => kind === 'checkpoint')).toEqual([]);
+    expect(chat.last_seq).toBeGreaterThan(0);
   });
 });

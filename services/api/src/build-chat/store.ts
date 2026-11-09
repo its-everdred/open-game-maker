@@ -129,6 +129,11 @@ export function findCheckpoint(sqlite: Sqlite, jobId: string, identifier: string
   );
 }
 
+// A product question (#612) waits for a voice session and is never shown one by one, so the chat leaves its row out.
+export function shownInChat(row: ChatRow): boolean {
+  return parseCheckpoint(row)?.text_only !== true;
+}
+
 export function listSince(sqlite: Sqlite, jobId: string, since: number, limit = 200): ChatRow[] {
   return sqlite
     .prepare(`SELECT ${columns} FROM build_chat_messages WHERE job_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`)
