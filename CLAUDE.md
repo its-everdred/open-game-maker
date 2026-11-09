@@ -48,6 +48,9 @@ use. Work here the way those agents will work: dogfood the skills.
   Config changes hot-reload: the daemon watches `.aiur/config` and applies it within a second without dropping agent turns
   (back the file up first; use only keys the running build knows; `aiur-main status` shows `CONFIG RELOAD REJECTED` on a
   bad file). Never stop/relaunch the daemon for a config change.
+  After a Codex weekly reset the usage meter stays stale (it refreshes only at boot or in a Codex session) and keeps dispatch off
+  Codex: `aiur-main restart --keep-agents --no-build` on both instances, not while an `og-local-ci.sh` run is in flight (the restart
+  killed one, exit 143), then `--todo` any ticket left `orphaned_claim`; `redispatch <id> --backend codex` moves a worker off Claude.
   Throughput gate: when `AGENTS` shows `binding: AIMD envelope` below the cap while CPU PSI is under target, `aiur-main set
   max-agents <cap>` (the same value) resets a *held* envelope within a minute (fleet 6→12 on 2026-11-01); while `AGENTS`
   says `resuming toward N (safe level)` it is already ramping and the reset does nothing, wait it out. Lowering the PSI
