@@ -140,6 +140,20 @@ describe('allow-list enforcement on Better Auth', () => {
     expect(await response.json()).toMatchObject({ code: 'SIGN_IN_NOT_ALLOWED' });
   });
 
+  it('starts a passkey sign-in without a session, since signing in is how a session begins', async () => {
+    const { app } = await makeApp();
+    const response = await app.request('/auth/passkey/generate-authenticate-options');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ rpId: 'makeopen.games' });
+  });
+
+  it('still refuses passkey registration without a session', async () => {
+    const { app } = await makeApp();
+    const response = await app.request('/auth/passkey/generate-register-options');
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'SIGN_IN_NOT_ALLOWED' });
+  });
+
   it('allows passkey registration with a session and no age cookie', async () => {
     const { app, deps } = await makeApp();
     const { session } = await signIn(app, outbox(deps), 'kim@example.com');
