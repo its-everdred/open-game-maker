@@ -14,7 +14,7 @@ describe('ticket roles', () => {
     expect(byLabel).toEqual({
       'role:visual': ['gm-core', 'gm-verify', 'gm-ui-hud', 'gm-image-mock'],
       'role:3d': ['gm-core', 'gm-3d', 'gm-verify'],
-      'role:gameplay': ['gm-core', 'gm-input', 'gm-verify', 'gm-qa'],
+      'role:gameplay': ['gm-core', 'gm-input', 'gm-verify', 'gm-qa', 'gm-map-inspiration'],
       'role:audio': ['gm-core', 'gm-audio', 'gm-voiceover'],
       'role:qa': ['gm-core', 'gm-qa', 'gm-verify'],
       'role:multiplayer': ['gm-core', 'gm-multiplayer-ready', 'gm-qa'],
