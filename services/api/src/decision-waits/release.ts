@@ -47,7 +47,7 @@ function answerComment(note: DecisionAnswerNote): string {
   const picked = note.option_label ?? note.option_id ?? 'a written answer';
   return [
     ANSWER_MARKER(note.decision_id),
-    `The creator answered "${note.question}": ${picked}. This ticket waited on it and is queued again.`,
+    `The creator answered "${note.question}": ${picked}. This ticket waited on it.`,
     '',
     '```json gm-decision-answer',
     JSON.stringify(note, null, 2),
@@ -93,6 +93,10 @@ async function releaseTicket(
   if (when !== undefined && when !== note.option_id) {
     if (!written) await tickets.comment(repo, ticket.number, notPickedComment(note, when));
     if (ticket.open) await tickets.setOpen(repo, ticket.number, false);
+    // Not needed means not needed: its other waits go too, so a later answer cannot reopen it.
+    for (const other of ticket.labels.map(waitKeyOfLabel)) {
+      if (other !== null && other !== key) await tickets.removeLabel(repo, ticket.number, other);
+    }
     return 'closed';
   }
   if (!written) await tickets.comment(repo, ticket.number, answerComment(note));
@@ -120,7 +124,10 @@ export async function releaseKey(
 ): Promise<Released[]> {
   const note = answerNote(decision);
   const released: Released[] = [];
-  for (const ticket of await tickets.waiting(repo, key)) {
+  const waiting = await tickets.waiting(repo, key);
+  // A label no ticket carries any more is deleted, so answered keys do not pile up and cost a read each minute.
+  if (waiting.length === 0) await tickets.deleteLabel(repo, key);
+  for (const ticket of waiting) {
     if (!ticket.labels.includes(`game:${slug}`)) continue;
     const outcome = await releaseTicket(client, tickets, repo, key, ticket, note);
     await tickets.removeLabel(repo, ticket.number, key);

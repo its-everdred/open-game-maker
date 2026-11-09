@@ -58,12 +58,15 @@ function github(seed: Seed[]) {
   seed.forEach(add);
   const find = (issue: number) => tickets.find(({ number }) => number === issue)!;
   const writes: string[] = [];
+  // Labels the repository still defines though no ticket carries them.
+  const labelsOnly = new Set<string>();
   const reads = { keys: 0 };
   let failComment: number | null = null;
   const api: WaitTickets = {
     async keys() {
       reads.keys += 1;
-      return [...new Set(tickets.flatMap(({ labels }) => labels.map(waitKeyOfLabel).filter((key) => key !== null)))];
+      const carried = tickets.flatMap(({ labels }) => labels.map(waitKeyOfLabel).filter((key) => key !== null));
+      return [...new Set([...carried, ...labelsOnly])];
     },
     async waiting(_repo, key) {
       return tickets.filter(({ labels }) => labels.includes(waitLabel(key))).map((ticket) => structuredClone(ticket));
@@ -80,12 +83,25 @@ function github(seed: Seed[]) {
       writes.push(`${open ? 'reopen' : 'close'} #${issue}`);
       find(issue).open = open;
     },
+    async deleteLabel(_repo, key) {
+      writes.push(`delete ${waitLabel(key)}`);
+      labelsOnly.delete(key);
+    },
     async removeLabel(_repo, issue, key) {
       writes.push(`unlabel #${issue} ${waitLabel(key)}`);
       find(issue).labels = find(issue).labels.filter((label) => label !== waitLabel(key));
     },
   };
-  return { api, tickets, find, add, writes, reads, failNextComment: (issue: number) => (failComment = issue) };
+  return {
+    api,
+    tickets,
+    find,
+    add,
+    writes,
+    reads,
+    labelsOnly,
+    failNextComment: (issue: number) => (failComment = issue),
+  };
 }
 
 function aiur(decisions: () => Decision[]) {
@@ -283,6 +299,21 @@ describe('decision waits', () => {
     // The answer is written once though the first attempt failed after writing it.
     expect(gh.find(211).comments.filter((body) => body.includes('gm-decision-answer:'))).toHaveLength(1);
     expect(aiurFake.calls).toEqual(['resume 211', 'resume 211', 'todo 211', 'resume 214', 'todo 214']);
+  });
+
+  it('drops every wait of a follow-up the answer made unnecessary, so a later answer cannot reopen it', async () => {
+    const gh = github([{ number: 51, waits: [{ key: 'blobs/diorama', when: 'a' }, { key: 'blobs/staging' }] }]);
+    const aiurFake = aiur(() => [answered('b')]);
+    await poller(gh, aiurFake.client).tick();
+    expect(gh.find(51)).toMatchObject({ open: false, labels: ['game:blobs'] });
+    expect(aiurFake.calls).toEqual([]);
+  });
+
+  it('deletes an answered key that no ticket carries any more', async () => {
+    const gh = github([]);
+    gh.labelsOnly.add('blobs/diorama');
+    await poller(gh, aiur(() => [answered('a')]).client).tick();
+    expect(gh.writes).toEqual(['delete waits:blobs/diorama']);
   });
 
   it('logs a daemon list that cannot be read instead of failing the poll', async () => {

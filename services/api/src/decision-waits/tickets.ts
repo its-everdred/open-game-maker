@@ -21,6 +21,8 @@ export interface WaitTickets {
   setOpen(repo: string, issue: number, open: boolean): Promise<void>;
   // Takes the ticket's `waits:<key>` label off once its release is done; the label itself stays for other tickets.
   removeLabel(repo: string, issue: number, key: string): Promise<void>;
+  // Deletes the repository's `waits:<key>` label once no ticket carries it.
+  deleteLabel(repo: string, key: string): Promise<void>;
 }
 
 export class GitHubError extends Error {
@@ -93,6 +95,13 @@ export function createWaitTickets(token: string, fetchImpl: typeof fetch = globa
         `${repoPath(repo)}/issues/${issue}`,
         open ? { state: 'open' } : { state: 'closed', state_reason: 'not_planned' },
       );
+    },
+    async deleteLabel(repo, key) {
+      try {
+        await call('DELETE', `${repoPath(repo)}/labels/${encodeURIComponent(waitLabel(key))}`);
+      } catch (error) {
+        if (!(error instanceof GitHubError && error.status === 404)) throw error;
+      }
     },
     async removeLabel(repo, issue, key) {
       try {

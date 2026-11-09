@@ -58,12 +58,15 @@ describe('wait tickets on GitHub', () => {
     await tickets.setOpen('acme/games', 7, false);
     await tickets.setOpen('acme/games', 7, true);
     await tickets.removeLabel('acme/games', 7, 'blobs/diorama');
+    await tickets.deleteLabel('acme/games', 'blobs/diorama');
     expect(calls.map(({ method, body }) => [method, body])).toEqual([
       ['PATCH', { state: 'closed', state_reason: 'not_planned' }],
       ['PATCH', { state: 'open' }],
       ['DELETE', undefined],
+      ['DELETE', undefined],
     ]);
     expect(calls[2]!.url).toMatch(/\/issues\/7\/labels\/waits%3Ablobs%2Fdiorama$/);
+    expect(calls[3]!.url).toMatch(/\/acme\/games\/labels\/waits%3Ablobs%2Fdiorama$/);
   });
 
   it('fails a write GitHub refuses, so the release is retried', async () => {
