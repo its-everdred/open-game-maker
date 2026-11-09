@@ -4,17 +4,17 @@ import { myJobsQueryKey } from './jobs';
 
 import type { CommandReview } from '@ogm/contracts';
 
-// One answer path for every surface: the job's checkpoint route validates the option against the job's checkpoint and
-// calls aiur's canonical Decision API, so the inbox, the conversation modal and an inline checkpoint card all agree.
+// One answer path for every surface: the job's Command route validates the option against the job's Command and
+// calls aiur's canonical Decision API, so the inbox, the conversation modal and an inline Command card all agree.
 // A review deck's answer also carries the whole like/dislike map, so aiur and the worker see what the creator rejected
 // and why.
-export async function answerCheckpoint(
+export async function answerJobCommand(
   jobId: string,
-  checkpointId: string,
+  commandId: string,
   optionId: string,
   review?: CommandReview,
 ): Promise<void> {
-  await api(`/jobs/${encodeURIComponent(jobId)}/checkpoints/${encodeURIComponent(checkpointId)}/answer`, {
+  await api(`/jobs/${encodeURIComponent(jobId)}/commands/${encodeURIComponent(commandId)}/answer`, {
     method: 'POST',
     json: { option_id: optionId, ...(review === undefined ? {} : { review }) },
   });

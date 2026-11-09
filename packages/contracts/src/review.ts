@@ -4,8 +4,8 @@ import { Id, IsoTime } from './api.js';
 
 // The review deck (A3): a Command whose options carry media is reviewed one card at a time. The creator swipes or
 // taps thumbs up/down on each card, may give a reason on a dislike, and the answer carries the whole like/dislike map
-// back through the job's checkpoint route. The cards are the Command's option ids, so every id here is validated
-// against the checkpoint before anything is written.
+// back through the job's Command route. The cards are the Command's option ids, so every id here is validated
+// against the Command before anything is written.
 export const MAX_REVIEW_CARDS = 12;
 export const ReviewReason = z.string().trim().min(1).max(1000);
 // The creator's words about the set as a whole, beside the per-card votes: "these are too young for the Blobs" applies
@@ -40,7 +40,7 @@ export const CommandReview = z
     }
   });
 
-// POST /api/v1/jobs/:jobId/checkpoints/:checkpointId/answer body. `review` is present only for a deck answer; the
+// POST /api/v1/jobs/:jobId/commands/:commandId/answer body. `review` is present only for a deck answer; the
 // option id is the Command's pick (the tapped shortlist card, or the first like when the Command asks for many).
 export const CommandAnswerBody = z
   .object({
@@ -65,7 +65,7 @@ export const CommandReviewEntry = z.object({
   // The aiur ticket the Command belongs to; null until the job is linked.
   ticket: z.string().nullable(),
   title: z.string().trim().min(1).max(200),
-  checkpoint_id: z.string().min(1).max(200),
+  command_id: z.string().min(1).max(200),
   decision_id: z.string().min(1).max(200),
   question: z.string().trim().min(1).max(8000),
   // The option the Command was answered with: the tapped shortlist card, or the first like.

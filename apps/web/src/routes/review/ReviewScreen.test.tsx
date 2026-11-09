@@ -12,7 +12,7 @@ const command: GameCommand = {
   job_id: 'j_1',
   ticket: '57',
   title: 'Pick a hero',
-  checkpoint_id: 'cp_1',
+  command_id: 'cp_1',
   decision_id: 'd_1',
   version: 1,
   question: 'Which hero look?',

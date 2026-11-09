@@ -67,7 +67,7 @@
   font-size: 13px;
 }
 
-.build-chat-row.checkpoint {
+.build-chat-row.command {
   padding: 12px;
   border: 1px solid var(--rule);
   border-radius: 14px;

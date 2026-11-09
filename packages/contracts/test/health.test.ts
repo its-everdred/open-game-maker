@@ -24,8 +24,8 @@ describe('health contract', () => {
         service: 'api',
         version: '1',
         uptimeSec: 1,
-        details: { checkpoint_decisions: { ok: false } },
+        details: { command_decisions: { ok: false } },
       }).details,
-    ).toEqual({ checkpoint_decisions: { ok: false } });
+    ).toEqual({ command_decisions: { ok: false } });
   });
 });

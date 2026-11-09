@@ -6,13 +6,7 @@ import type { Db, Sqlite } from '@ogm/db';
 import type { AiurClientResolver, ChatJobDirectory } from '../app/registry.js';
 import type { LogLine } from '../app/types.js';
 import { isDesignJob, tryRecordDesignDecision } from '../design-decisions/store.js';
-import {
-  insertChatRow,
-  listCheckpoints,
-  parseCheckpoint,
-  updateCheckpoint,
-  type StoredCheckpoint,
-} from '../build-chat/store.js';
+import { insertChatRow, listCommands, parseCommand, updateCommand, type StoredCommand } from '../build-chat/store.js';
 import { summaryOf } from '../commands/aiur.js';
 import { creatorAudience } from '../commands/audience.js';
 import { correlate, pickOf, recommendationOf, statusOf } from './correlate.js';
@@ -35,7 +29,7 @@ function nativeMessageId(jobId: string, decisionId: string): string {
   return `m_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function nativeCheckpoint(decision: Decision): StoredCheckpoint {
+function nativeCommand(decision: Decision): StoredCommand {
   const recommend = recommendationOf(decision);
   const audience = creatorAudience(decision);
   const summary = summaryOf(decision);
@@ -44,7 +38,7 @@ function nativeCheckpoint(decision: Decision): StoredCheckpoint {
   const shortSummary = decision.context?.short_summary?.trim();
   const topic = shortSummary && shortSummary.length <= 80 ? shortSummary : undefined;
   return {
-    checkpoint_id: decision.decision_id,
+    command_id: decision.decision_id,
     decision_id: decision.decision_id,
     version: decision.version,
     question: decision.question,
@@ -59,11 +53,11 @@ function nativeCheckpoint(decision: Decision): StoredCheckpoint {
   };
 }
 
-function changed(checkpoint: StoredCheckpoint, patch: Partial<StoredCheckpoint>): boolean {
-  return Object.entries(patch).some(([key, value]) => checkpoint[key as keyof StoredCheckpoint] !== value);
+function changed(command: StoredCommand, patch: Partial<StoredCommand>): boolean {
+  return Object.entries(patch).some(([key, value]) => command[key as keyof StoredCommand] !== value);
 }
 
-export function createCheckpointPoller(deps: PollerDeps) {
+export function createCommandPoller(deps: PollerDeps) {
   const failedDaemons = new Set<string>();
   const missingSupervisorTokens = new Set<string>();
   let timer: NodeJS.Timeout | null = null;
@@ -92,7 +86,7 @@ export function createCheckpointPoller(deps: PollerDeps) {
           );
           missingSupervisorTokens.delete(job.aiur.daemonSlug);
           deps.supervisorTokenStatus?.(job.aiur.daemonSlug, false);
-          const plan = correlate(decisions, listCheckpoints(deps.sqlite, job.jobId));
+          const plan = correlate(decisions, listCommands(deps.sqlite, job.jobId));
           let published = false;
           for (const decision of plan.create) {
             const result = insertChatRow(deps.sqlite, {
@@ -100,20 +94,20 @@ export function createCheckpointPoller(deps: PollerDeps) {
               jobId: job.jobId,
               at: decision.created_at,
               actor: 'agent',
-              kind: 'checkpoint',
+              kind: 'command',
               text: decision.question,
-              checkpoint: nativeCheckpoint(decision),
+              command: nativeCommand(decision),
             });
             published ||= result.inserted;
           }
           for (const action of plan.update) {
-            const before = parseCheckpoint(action.row);
+            const before = parseCommand(action.row);
             if (before === null || !changed(before, action.patch)) continue;
             const status = action.patch.status;
             if (status === 'answered' || status === 'moot') {
               const after = { ...before, ...action.patch };
               await deps.inbox.write(job.jobId, {
-                checkpoint_id: after.checkpoint_id ?? action.row.id,
+                command_id: after.command_id ?? action.row.id,
                 decision_id: after.decision_id,
                 ...(after.option_id === undefined ? {} : { option_id: after.option_id }),
                 status,
@@ -130,7 +124,7 @@ export function createCheckpointPoller(deps: PollerDeps) {
                     gameId: job.gameId,
                     jobId: job.jobId,
                     ticket: job.aiur?.ticket ?? null,
-                    checkpointId: after.checkpoint_id ?? action.row.id,
+                    commandId: after.command_id ?? action.row.id,
                     decisionId: after.decision_id,
                     question: after.question,
                     options: after.options.map(({ id, label }) => ({ id, label })),
@@ -143,7 +137,7 @@ export function createCheckpointPoller(deps: PollerDeps) {
                 );
               }
             }
-            updateCheckpoint(deps.sqlite, action.row.id, action.patch);
+            updateCommand(deps.sqlite, action.row.id, action.patch);
             published = true;
           }
           if (published) deps.publish(job.jobId);
@@ -156,7 +150,7 @@ export function createCheckpointPoller(deps: PollerDeps) {
           }
           if (!failedDaemons.has(job.aiur.daemonSlug)) {
             deps.log({
-              event: 'checkpoint-poll-error',
+              event: 'command-poll-error',
               daemon: job.aiur.daemonSlug,
               jobId: job.jobId,
               error: (error as Error).name,

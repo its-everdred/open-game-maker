@@ -22,7 +22,7 @@ export type AiurEmbedScope = {
 // What the surface may offer. The component still probes what the host answers at runtime.
 export type AiurEmbedFeatures = { voice: boolean; dictation: boolean; attachments: boolean };
 
-export type AiurCommandAnswer = { job_id: string; checkpoint_id: string; option_id: string };
+export type AiurCommandAnswer = { job_id: string; command_id: string; option_id: string };
 
 const ALL_FEATURES: AiurEmbedFeatures = { voice: true, dictation: true, attachments: true };
 

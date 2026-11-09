@@ -2,7 +2,7 @@ import type { Sqlite } from '@ogm/db';
 
 import type { ChatJob, ChatJobDirectory } from '../app/registry.js';
 import type { LogLine } from '../app/types.js';
-import { listCheckpoints, parseCheckpoint, type ChatRow } from '../build-chat/store.js';
+import { listCommands, parseCommand, type ChatRow } from '../build-chat/store.js';
 import { isDesignJob } from './store.js';
 
 export type DesignDefaultsDeps = {
@@ -54,12 +54,12 @@ export function createDesignDefaultSweep(deps: DesignDefaultsDeps) {
   async function sweepJob(job: ChatJob): Promise<number> {
     let count = 0;
     const nowMs = now().getTime();
-    for (const row of listCheckpoints(deps.sqlite, job.jobId)) {
-      const checkpoint = parseCheckpoint(row);
-      if (checkpoint === null || checkpoint.status !== 'open') continue;
+    for (const row of listCommands(deps.sqlite, job.jobId)) {
+      const command = parseCommand(row);
+      if (command === null || command.status !== 'open') continue;
       // A Command with no correlated aiur decision or no recommendation cannot default: there is nothing to take.
-      if (checkpoint.decision_id === '' || checkpoint.version === undefined) continue;
-      const recommended = checkpoint.recommend;
+      if (command.decision_id === '' || command.version === undefined) continue;
+      const recommended = command.recommend;
       if (recommended === undefined) continue;
       const openedMs = Date.parse(row.at);
       if (!Number.isFinite(openedMs) || nowMs - openedMs < deps.defaultMs) continue;
@@ -70,7 +70,7 @@ export function createDesignDefaultSweep(deps: DesignDefaultsDeps) {
             deps.log({
               event: 'design-default-skipped',
               jobId: job.jobId,
-              checkpointId: row.id,
+              commandId: row.id,
               reason: outcome.reason ?? 'unknown',
             });
           }
@@ -84,7 +84,7 @@ export function createDesignDefaultSweep(deps: DesignDefaultsDeps) {
         deps.log({
           event: 'design-default-error',
           jobId: job.jobId,
-          checkpointId: row.id,
+          commandId: row.id,
           error: error instanceof Error ? error.name : 'unknown',
         });
       }

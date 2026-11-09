@@ -52,7 +52,7 @@ describe('MessageList', () => {
     expect(screen.getByText('castle.png')).toBeVisible();
   });
 
-  it('renders reserved media, progress, and an actionable checkpoint', () => {
+  it('renders reserved media, progress, and an actionable command', () => {
     const messages: StreamedChatMessage[] = [
       {
         ...base,
@@ -65,8 +65,8 @@ describe('MessageList', () => {
       {
         ...base,
         id: 'm_3',
-        kind: 'checkpoint',
-        checkpoint: {
+        kind: 'command',
+        command: {
           decision_id: 'd_1',
           question: 'Which door?',
           options: [{ id: 'wood', label: 'Wooden', media_id: 'm_1' }],
@@ -88,11 +88,11 @@ describe('MessageList', () => {
     expect(screen.getByRole('button', { name: 'Wooden' })).toBeInTheDocument();
   });
 
-  it('loads the checkpoint budget and posts the selected option through the row', async () => {
+  it('loads the command budget and posts the selected option through the row', async () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined);
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith('/checkpoints/budget')) {
+      if (url.endsWith('/commands/budget')) {
         return new Response(JSON.stringify({ used: 1, max: 3 }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -108,8 +108,8 @@ describe('MessageList', () => {
       {
         ...base,
         id: 'm_3',
-        kind: 'checkpoint',
-        checkpoint: {
+        kind: 'command',
+        command: {
           decision_id: 'd_1',
           question: 'Which door?',
           options: [
@@ -122,12 +122,12 @@ describe('MessageList', () => {
     ];
 
     render(<MessageList messages={messages} />);
-    expect(await screen.findByText('Checkpoint 1 of 3')).toBeInTheDocument();
+    expect(await screen.findByText('Question 1 of 3')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Wooden' }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/v1/jobs/j_1/checkpoints/m_3/answer',
+        '/api/v1/jobs/j_1/commands/m_3/answer',
         expect.objectContaining({ method: 'POST', body: JSON.stringify({ option_id: 'wood' }) }),
       );
     });

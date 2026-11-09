@@ -1,21 +1,21 @@
-import { CheckpointOpenPayload, type AgentOutboxLine } from '@ogm/contracts';
+import { CommandRequestPayload, type AgentOutboxLine } from '@ogm/contracts';
 
 import type { OutboxContext } from '../build-chat/outbox-handlers.js';
-import { getChatRow, insertChatRow, type StoredCheckpoint } from '../build-chat/store.js';
+import { getChatRow, insertChatRow, type StoredCommand } from '../build-chat/store.js';
 
-export const type = 'checkpoint.open';
+export const type = 'command.request';
 
 export async function handle(line: AgentOutboxLine, ctx: OutboxContext): Promise<void> {
   if (getChatRow(ctx.sqlite, line.id) !== null) return;
-  const payload = CheckpointOpenPayload.parse(line.payload);
+  const payload = CommandRequestPayload.parse(line.payload);
   const options = payload.options.map((option) => {
     if (option.media_id === undefined) return option;
     const media = getChatRow(ctx.sqlite, option.media_id);
     if (media?.jobId === line.job_id) return option;
     ctx.log({
-      event: 'checkpoint-media-rejected',
+      event: 'command-media-rejected',
       jobId: line.job_id,
-      checkpointId: payload.checkpoint_id,
+      commandId: payload.command_id,
       mediaId: option.media_id,
       reason: media === null ? 'media_unknown' : 'job_mismatch',
     });
@@ -25,8 +25,8 @@ export async function handle(line: AgentOutboxLine, ctx: OutboxContext): Promise
       ...(option.playable === undefined ? {} : { playable: option.playable }),
     };
   });
-  const checkpoint: StoredCheckpoint = {
-    checkpoint_id: payload.checkpoint_id,
+  const command: StoredCommand = {
+    command_id: payload.command_id,
     decision_id: '',
     question: payload.question,
     options,
@@ -41,9 +41,9 @@ export async function handle(line: AgentOutboxLine, ctx: OutboxContext): Promise
     jobId: line.job_id,
     at: line.at,
     actor: 'agent',
-    kind: 'checkpoint',
+    kind: 'command',
     text: payload.question,
-    checkpoint,
+    command,
   });
   if (inserted) ctx.publish(line.job_id);
 }

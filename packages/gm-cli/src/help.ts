@@ -3,7 +3,7 @@ import { SHARED_FLAGS } from './flags.js';
 import type { Registry } from './registry.js';
 
 export function listHelp(registry: Registry): string[] {
-  const names = [...registry.keys()].sort();
+  const names = [...registry.keys()].filter((name) => !registry.get(name)?.hidden).sort();
   const width = Math.max(...names.map((name) => name.length));
   return [
     'usage: gm <command> [args] [--json] [--limit N] [--fields a,b]',

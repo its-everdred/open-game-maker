@@ -157,10 +157,10 @@ describe('buildBriefing', () => {
     expect(briefing.extra[0].text).toContain('Remaining today: 50.0 energy');
   });
 
-  it('includes open checkpoint questions in the order they were opened', async () => {
+  it('includes open command questions in the order they were opened', async () => {
     const deps = worked();
     deps.db
-      .insert(schema.checkpoints)
+      .insert(schema.commands)
       .values([
         {
           decisionId: 'd_second',
@@ -245,7 +245,7 @@ describe('buildBriefing', () => {
       updatedAt: '2026-10-31T20:01:00.000Z',
     });
     deps.db
-      .insert(schema.checkpoints)
+      .insert(schema.commands)
       .values([
         {
           decisionId: 'd_scope',

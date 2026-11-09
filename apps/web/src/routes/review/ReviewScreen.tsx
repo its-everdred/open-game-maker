@@ -122,7 +122,7 @@ function StepLink({ to, label, icon }: { to: string | undefined; label: string; 
   );
 }
 
-// The link before short links: `/game/<id>/review/<checkpoint or decision id>`. It moves to the short form once the
+// The link before short links: `/game/<id>/review/<command or decision id>`. It moves to the short form once the
 // game's slug and the Command's number are known; a Command that is no longer open shows the deck's closed state here.
 export function LegacyReviewScreen() {
   const { gameId = '', commandId = '' } = useParams();

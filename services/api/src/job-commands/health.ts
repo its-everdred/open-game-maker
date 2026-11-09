@@ -16,7 +16,7 @@ export function recordSupervisorTokenStatus(deps: AppDeps, daemon: string, missi
   else missingFor(deps).delete(daemon);
 }
 
-export function checkpointHealthDetails(deps: AppDeps) {
+export function commandHealthDetails(deps: AppDeps) {
   const daemons = [...missingFor(deps)].sort();
   return { ok: daemons.length === 0, missing_supervisor_token_daemons: daemons };
 }

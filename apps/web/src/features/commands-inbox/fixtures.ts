@@ -6,7 +6,7 @@ export function commandFixture(overrides: Partial<GameCommand> = {}): GameComman
     job_id: 'j_1',
     ticket: '478',
     title: 'Build the moon gate',
-    checkpoint_id: 'm_3',
+    command_id: 'm_3',
     decision_id: 'd_1',
     version: 3,
     question: 'Which gate should the courtyard use?',

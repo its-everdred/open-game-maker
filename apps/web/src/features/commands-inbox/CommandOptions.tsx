@@ -25,7 +25,7 @@ export function CommandOptions({
           type="button"
         >
           {option.media && (
-            <span className="checkpoint-option-media" aria-hidden="true">
+            <span className="command-option-media" aria-hidden="true">
               {mediaKindOf(option.media) === 'image' ? (
                 <img alt="" src={option.media.url} />
               ) : (
@@ -33,8 +33,8 @@ export function CommandOptions({
               )}
             </span>
           )}
-          <span className="checkpoint-option-label">{withoutLinks(option.label)}</span>
-          {option.id === command.recommend && <span className="checkpoint-recommended">Builder&apos;s pick</span>}
+          <span className="command-option-label">{withoutLinks(option.label)}</span>
+          {option.id === command.recommend && <span className="command-recommended">Builder&apos;s pick</span>}
         </button>
       ))}
     </div>

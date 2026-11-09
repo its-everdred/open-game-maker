@@ -82,10 +82,10 @@ export function listJobs(db: Db, gameIds: string | readonly string[]): Job[] {
 function openRequestCounts(db: Db, jobIds: readonly string[]): Map<string, number> {
   if (jobIds.length === 0) return new Map();
   const rows = db
-    .select({ jobId: schema.checkpoints.jobId, count: sql<number>`count(*)` })
-    .from(schema.checkpoints)
-    .where(and(inArray(schema.checkpoints.jobId, jobIds), eq(schema.checkpoints.status, 'open')))
-    .groupBy(schema.checkpoints.jobId)
+    .select({ jobId: schema.commands.jobId, count: sql<number>`count(*)` })
+    .from(schema.commands)
+    .where(and(inArray(schema.commands.jobId, jobIds), eq(schema.commands.status, 'open')))
+    .groupBy(schema.commands.jobId)
     .all();
   return new Map(rows.map(({ jobId, count }) => [jobId, Number(count)]));
 }

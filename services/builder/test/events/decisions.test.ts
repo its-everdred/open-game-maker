@@ -10,12 +10,12 @@ function setup() {
   const client = h.clientFor(SLUG);
   const poll = createDecisionsPoller(h.deps);
   const daemons = [{ slug: SLUG, client: client as unknown as AiurClient }];
-  const rows = () => h.db.select().from(schema.checkpoints).all();
+  const rows = () => h.db.select().from(schema.commands).all();
   return { h, client, poll: () => poll(daemons), rows };
 }
 
 describe('decisions poller', () => {
-  it('creates an open checkpoint for an open Command on a job ticket, ignoring other tickets', async () => {
+  it('creates an open command for an open Command on a job ticket, ignoring other tickets', async () => {
     const { h, client, poll, rows } = setup();
     client.decisions.mockResolvedValue([decision('d1', '142'), decision('d9', '999')]);
     await poll();
@@ -37,7 +37,7 @@ describe('decisions poller', () => {
         answeredAt: null,
       },
     ]);
-    expect(h.emitted).toEqual([{ kind: 'checkpoint.opened', jobId: 'j_142', decisionId: 'd1' }]);
+    expect(h.emitted).toEqual([{ kind: 'command.requested', jobId: 'j_142', decisionId: 'd1' }]);
 
     await poll();
     expect(h.emitted).toHaveLength(1);
@@ -50,7 +50,7 @@ describe('decisions poller', () => {
     await poll();
 
     expect(rows()[0]).toMatchObject({ status: 'answered', answeredAt: '2026-11-01T03:12:10.000Z' });
-    expect(h.emitted).toContainEqual({ kind: 'checkpoint.answered', jobId: 'j_142', decisionId: 'd1' });
+    expect(h.emitted).toContainEqual({ kind: 'command.answered', jobId: 'j_142', decisionId: 'd1' });
   });
 
   it('marks it answered when the Command carries an answer', async () => {

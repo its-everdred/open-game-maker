@@ -7,7 +7,7 @@ import { sizeClassRow } from '../budget/estimate.js';
 import { getBudgetSettings, type BudgetDefaults } from '../budget/settings.js';
 import { budgetStatus } from '../budget/status.js';
 import { toUnits } from '../budget/units.js';
-import { parseCommandOptions } from '../checkpoints/options.js';
+import { parseCommandOptions } from '../job-commands/options.js';
 import { decisionFocus } from './decision-focus.js';
 
 export type { VoiceTarget } from '@ogm/contracts';
@@ -24,7 +24,7 @@ export type Briefing = BriefingPush & {
   observed_at: string;
 };
 
-// `sqlite` reads the build chat's checkpoint rows, which carry each option's media; without it an open decision is
+// `sqlite` reads the build chat's Command rows, which carry each option's media; without it an open decision is
 // still named first, only without its cards' media.
 export type BriefingDeps = { db: Db; sqlite?: Sqlite; defaults: BudgetDefaults; now?: () => Date };
 
@@ -133,14 +133,14 @@ export async function buildBriefing(deps: BriefingDeps, target: VoiceTarget): Pr
   const commandRows = job
     ? deps.db
         .select({
-          id: schema.checkpoints.decisionId,
-          version: schema.checkpoints.version,
-          question: schema.checkpoints.question,
-          options: schema.checkpoints.options,
+          id: schema.commands.decisionId,
+          version: schema.commands.version,
+          question: schema.commands.question,
+          options: schema.commands.options,
         })
-        .from(schema.checkpoints)
-        .where(and(eq(schema.checkpoints.jobId, job.id), eq(schema.checkpoints.status, 'open')))
-        .orderBy(asc(schema.checkpoints.openedAt))
+        .from(schema.commands)
+        .where(and(eq(schema.commands.jobId, job.id), eq(schema.commands.status, 'open')))
+        .orderBy(asc(schema.commands.openedAt))
         .all()
     : [];
   // Voice started from a decision (#597) puts that decision first and tells the agent what its cards are.

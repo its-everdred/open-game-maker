@@ -104,7 +104,7 @@ describe('jobs routes', () => {
       })
       .run();
     deps.db
-      .insert(schema.checkpoints)
+      .insert(schema.commands)
       .values([
         {
           decisionId: 'decision-open-1',

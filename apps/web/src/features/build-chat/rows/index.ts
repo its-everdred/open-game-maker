@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 
 import type { StreamedChatMessage } from '../stream';
-import { CheckpointRow } from './CheckpointRow';
+import { CommandRow } from './CommandRow';
 import { MediaRow } from './MediaRow';
 import { ProgressRow } from './ProgressRow';
 import { TextRow } from './TextRow';
@@ -15,8 +15,8 @@ export function rowFor(kind: string): ComponentType<RowProps> {
       return MediaRow;
     case 'progress':
       return ProgressRow;
-    case 'checkpoint':
-      return CheckpointRow;
+    case 'command':
+      return CommandRow;
     case 'text':
     default:
       return TextRow;

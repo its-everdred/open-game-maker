@@ -4,16 +4,16 @@ import { GameCommand, playablesFromMarker } from '@ogm/contracts';
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import type { MediaSigner } from '../build-chat/store.js';
-import { isForCreator } from '../checkpoints/correlate.js';
+import { isForCreator } from '../job-commands/correlate.js';
 import { optionMediaFromAiur, type ResolvedOptionMedia } from './aiur-media.js';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
-// not in any job's checkpoints: they are read from the instance's own Decision API, whose scoped grant already limits
-// them to this game. A Command read here has no job, so its decision id is the checkpoint id the game's answer route
+// not in any job's Commands: they are read from the instance's own Decision API, whose scoped grant already limits
+// them to this game. A Command read here has no job, so its decision id is the Command id the game's answer route
 // takes, and the embeddable `<aiur-commands>` component renders it exactly as it renders a job's.
 //
 // A decision aiur has answered, dismissed or called moot is not an open Command and is left out, as the job
-// checkpoints leave it out. An open or deferred decision is still waiting on the creator. A Command whose options
+// Commands leave it out. An open or deferred decision is still waiting on the creator. A Command whose options
 // fall outside the inbox contract (fewer than two, more than five, or an option id aiur would not accept) is dropped
 // rather than failing the whole inbox. A decision not marked for the creator (an engineering or operations question) is
 // the Executor's and is never listed here (#595).
@@ -40,7 +40,7 @@ function recommendOf(decision: Decision): string | undefined {
 }
 
 // `media` is each option's resolved media by option id (see `aiur-media.ts`); without it the options are text only. An
-// option the context's playable marker names (`gm checkpoint open --playable`, #639) is a slice of the game to play.
+// option the context's playable marker names (`gm command request --playable`, #639) is a slice of the game to play.
 export function toGameCommand(
   decision: Decision,
   media: ReadonlyMap<string, ResolvedOptionMedia> = new Map(),
@@ -53,8 +53,8 @@ export function toGameCommand(
     ticket: decision.ticket.identifier,
     title: summary ?? clip(decision.question),
     ...(summary === undefined ? {} : { summary }),
-    // Aiur's decision is the checkpoint: one Command, one decision id, one version to answer against.
-    checkpoint_id: decision.decision_id,
+    // Aiur's decision is the Command itself: one Command, one decision id, one version to answer against.
+    command_id: decision.decision_id,
     decision_id: decision.decision_id,
     version: decision.version,
     question: decision.question,
@@ -117,7 +117,7 @@ export async function gameCommandsFromAiur(
     deps.log({ event: 'game_commands_unavailable', gameId, error: (error as Error).name });
     return [];
   }
-  // A job's Command is already in its checkpoint, so the game's own read leaves those to the job. An engineering or
+  // A job's Command is already in its build chat, so the game's own read leaves those to the job. An engineering or
   // operations decision goes to the Executor, never to the creator. A Command the inbox would drop anyway is dropped
   // before its media is copied.
   const open = decisions.filter(

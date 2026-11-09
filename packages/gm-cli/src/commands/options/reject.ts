@@ -71,7 +71,7 @@ export const command: GmCommand = {
     must: { type: 'string', help: 'machine-checkable requirement as JSON, e.g. {"packs":["kaykit"]}' },
     option: { type: 'string', multiple: true, help: 'rejected option id and label; repeat as needed' },
     provenance: { type: 'string', multiple: true, help: 'option id and its provenance JSON or @file' },
-    command: { type: 'string', help: 'the Command (checkpoint id) the rejected options were shown under' },
+    command: { type: 'string', help: 'the Command (command id) the rejected options were shown under' },
     media: { type: 'string', multiple: true, help: 'chat message id of the rejected media; repeat as needed' },
     'design-version': { type: 'string', help: 'the design version the game carried (default 0.0.0)' },
     withdraw: { type: 'string', multiple: true, help: 'an open option id this rejection invalidates' },
@@ -91,7 +91,7 @@ export const command: GmCommand = {
       throw new UsageError(`--must is not a valid requirement: ${must.error.message}`, 'gm help options reject');
     const commandId = typeof flags.command === 'string' ? flags.command.trim() : '';
     if (commandId && !/^[A-Za-z0-9_-]{1,128}$/.test(commandId))
-      throw new UsageError(`invalid Command id "${commandId}"`, 'pass the checkpoint or decision id');
+      throw new UsageError(`invalid Command id "${commandId}"`, 'pass the command or decision id');
 
     const root = workspaceRoot(ctx.cwd);
     const open = readOpenOptions(root, typeof flags.job === 'string' ? flags.job : undefined);
@@ -103,7 +103,7 @@ export const command: GmCommand = {
     for (const option of open) {
       if (!sharesRejection(rejected, option)) continue;
       withdrawnOptions.add(option.id);
-      withdrawnCommands.add(option.checkpoint_id);
+      withdrawnCommands.add(option.command_id);
     }
     for (const id of withdrawnOptions) {
       if (!OPTION_ID.test(id)) throw new UsageError(`invalid withdrawn option id "${id}"`, 'use an option id');

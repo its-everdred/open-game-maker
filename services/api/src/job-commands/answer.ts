@@ -4,14 +4,14 @@ import type { CommandReview, DesignDecision } from '@ogm/contracts';
 import type { ChatJob } from '../app/registry.js';
 import type { AppDeps } from '../app/types.js';
 import { getChatRuntime } from '../build-chat/routes.js';
-import { parseCheckpoint, updateCheckpoint, type ChatRow, type StoredCheckpoint } from '../build-chat/store.js';
+import { parseCommand, updateCommand, type ChatRow, type StoredCommand } from '../build-chat/store.js';
 import { notifyExecutor } from '../design-decisions/notify.js';
-import { isDesignJob, latestForCheckpoint, tryRecordDesignDecision } from '../design-decisions/store.js';
+import { isDesignJob, latestForCommand, tryRecordDesignDecision } from '../design-decisions/store.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { jobTitle, tryRecordReview } from '../reviews/store.js';
 import { answeredOption, statusOf } from './correlate.js';
 import { correctAnswer } from './correction.js';
-import { checkpointRuntime } from './runtime.js';
+import { commandRuntime } from './runtime.js';
 
 // How an answer reached the Command: the player chose it, the player skipped the question and took the recommendation,
 // or the provisional default answered it after the wait. The source is what the decision history records as `origin`.
@@ -32,7 +32,7 @@ export type AnswerInput = {
   row: ChatRow;
   optionId: string;
   source: AnswerSource;
-  // A review deck's like/dislike map, when the Command's options carry media. Validated against the checkpoint before
+  // A review deck's like/dislike map, when the Command's options carry media. Validated against the Command before
   // anything is answered, so a client cannot name a card the Command does not have.
   review?: CommandReview;
   // Where the player gave the answer. A spoken answer from two-way voice takes this same path, so the chat row, the
@@ -63,10 +63,10 @@ function rationale(
   return review === undefined ? chose : `${chose}. ${review}`;
 }
 
-async function writeInbox(deps: AppDeps, job: ChatJob, checkpoint: StoredCheckpoint, row: ChatRow, optionId: string) {
-  await checkpointRuntime(deps).inbox.write(job.jobId, {
-    checkpoint_id: checkpoint.checkpoint_id ?? row.id,
-    decision_id: checkpoint.decision_id,
+async function writeInbox(deps: AppDeps, job: ChatJob, command: StoredCommand, row: ChatRow, optionId: string) {
+  await commandRuntime(deps).inbox.write(job.jobId, {
+    command_id: command.command_id ?? row.id,
+    decision_id: command.decision_id,
     option_id: optionId,
     status: 'answered',
     at: new Date().toISOString(),
@@ -79,7 +79,7 @@ async function writeInbox(deps: AppDeps, job: ChatJob, checkpoint: StoredCheckpo
 // the earlier answer never reached this history, so `previous` may be null there.
 async function recordAnswer(
   input: AnswerInput,
-  checkpoint: StoredCheckpoint,
+  command: StoredCommand,
   optionId: string,
   previous: DesignDecision | null,
   late: boolean,
@@ -92,11 +92,11 @@ async function recordAnswer(
       gameId: job.gameId,
       jobId: job.jobId,
       ticket: job.aiur?.ticket ?? null,
-      checkpointId: checkpoint.checkpoint_id ?? input.row.id,
-      decisionId: checkpoint.decision_id,
-      question: checkpoint.question,
-      options: checkpoint.options.map(({ id, label }) => ({ id, label })),
-      recommended: checkpoint.recommend ?? null,
+      commandId: command.command_id ?? input.row.id,
+      decisionId: command.decision_id,
+      question: command.question,
+      options: command.options.map(({ id, label }) => ({ id, label })),
+      recommended: command.recommend ?? null,
       chosen: optionId,
       origin: input.source === 'default' ? 'default' : 'player',
       skipped: input.source === 'skip',
@@ -121,7 +121,7 @@ async function recordAnswer(
 // A review's reasons land in the game's review ledger beside the decision, once the answer is taken. A ledger write that
 // fails is logged by the recorder and must not undo the answer; #567 reads these rows to build the game's
 // design/feedback.json.
-function recordReviewOf(input: AnswerInput, checkpoint: StoredCheckpoint, optionId: string): void {
+function recordReviewOf(input: AnswerInput, command: StoredCommand, optionId: string): void {
   const { review } = input;
   if (review === undefined) return;
   const { deps, job } = input;
@@ -133,12 +133,12 @@ function recordReviewOf(input: AnswerInput, checkpoint: StoredCheckpoint, option
         job_id: job.jobId,
         ticket: job.aiur?.ticket ?? null,
         title: jobTitle(deps.db, job.gameId, job.jobId),
-        checkpoint_id: checkpoint.checkpoint_id ?? input.row.id,
-        decision_id: checkpoint.decision_id,
-        version: checkpoint.version ?? 1,
-        question: checkpoint.question,
-        options: checkpoint.options.map(({ id, label }) => ({ id, label })),
-        blocking: checkpoint.blocking ?? false,
+        command_id: command.command_id ?? input.row.id,
+        decision_id: command.decision_id,
+        version: command.version ?? 1,
+        question: command.question,
+        options: command.options.map(({ id, label }) => ({ id, label })),
+        blocking: command.blocking ?? false,
         opened_at: input.row.at,
       },
       optionId,
@@ -152,41 +152,41 @@ function recordReviewOf(input: AnswerInput, checkpoint: StoredCheckpoint, option
 // that aiur already answered keeps that answer: for a design decision a later answer is recorded as a new decision
 // that supersedes the earlier one and the Executor re-plans, because an answered aiur decision cannot be re-answered.
 // Any other job's ticket is told of the change (correction.ts).
-export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcome> {
+export async function answerCommand(input: AnswerInput): Promise<AnswerOutcome> {
   const { deps, job, row, optionId } = input;
-  const checkpoint = parseCheckpoint(row);
-  if (checkpoint === null || checkpoint.decision_id === '' || checkpoint.version === undefined || job.aiur === null) {
+  const command = parseCommand(row);
+  if (command === null || command.decision_id === '' || command.version === undefined || job.aiur === null) {
     return { kind: 'not_linked' };
   }
-  const option = checkpoint.options.find(({ id }) => id === optionId);
+  const option = command.options.find(({ id }) => id === optionId);
   if (!option) return { kind: 'invalid_option' };
   const review = input.review;
   if (review !== undefined) {
-    const problem = reviewProblem(checkpoint.options, review);
+    const problem = reviewProblem(command.options, review);
     if (problem !== null) return { kind: 'review_invalid', reason: problem };
   }
-  const fields = review === undefined ? undefined : reviewDecisionFields(checkpoint.options, review, optionId);
+  const fields = review === undefined ? undefined : reviewDecisionFields(command.options, review, optionId);
 
   const design = isDesignJob(job.kind);
-  const previous = design ? latestForCheckpoint(deps.db, job.gameId, checkpoint.checkpoint_id ?? row.id) : null;
-  if (checkpoint.status === 'answered') {
+  const previous = design ? latestForCommand(deps.db, job.gameId, command.command_id ?? row.id) : null;
+  if (command.status === 'answered') {
     // The same answer again — a double click or a retry — is the answer already standing, not a conflict. A corrected
     // answer stands in place of aiur's.
-    const standing = checkpoint.corrected_option_id ?? checkpoint.option_id;
-    if (standing === optionId) return { kind: 'answered', decisionId: checkpoint.decision_id, optionId };
-    if (checkpoint.option_id === undefined) return { kind: 'conflict', status: 'answered' };
+    const standing = command.corrected_option_id ?? command.option_id;
+    if (standing === optionId) return { kind: 'answered', decisionId: command.decision_id, optionId };
+    if (command.option_id === undefined) return { kind: 'conflict', status: 'answered' };
     if (!design) {
       const job = input.job as typeof input.job & { aiur: NonNullable<typeof input.job.aiur> };
-      if (!(await correctAnswer(deps, job, row, checkpoint, optionId))) return { kind: 'client_unavailable' };
-      recordReviewOf(input, checkpoint, optionId);
-      return { kind: 'superseded', decisionId: checkpoint.decision_id, optionId, supersedes: null };
+      if (!(await correctAnswer(deps, job, row, command, optionId))) return { kind: 'client_unavailable' };
+      recordReviewOf(input, command, optionId);
+      return { kind: 'superseded', decisionId: command.decision_id, optionId, supersedes: null };
     }
-    await recordAnswer(input, checkpoint, optionId, previous, true);
-    recordReviewOf(input, checkpoint, optionId);
-    const latest = latestForCheckpoint(deps.db, job.gameId, checkpoint.checkpoint_id ?? row.id);
+    await recordAnswer(input, command, optionId, previous, true);
+    recordReviewOf(input, command, optionId);
+    const latest = latestForCommand(deps.db, job.gameId, command.command_id ?? row.id);
     return {
       kind: 'superseded',
-      decisionId: checkpoint.decision_id,
+      decisionId: command.decision_id,
       optionId,
       supersedes: latest?.supersedes ?? null,
     };
@@ -194,13 +194,13 @@ export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcom
 
   const client = await deps.registry.aiurClientFor?.(job.aiur.daemonSlug);
   if (!client) return { kind: 'client_unavailable' };
-  const checkpointId = checkpoint.checkpoint_id ?? row.id;
+  const commandId = command.command_id ?? row.id;
 
   try {
-    const decided = await client.decide(checkpoint.decision_id, {
+    const decided = await client.decide(command.decision_id, {
       option: optionId,
-      expected_version: checkpoint.version,
-      idempotency_key: `ogm:${input.source}:${checkpointId}:${checkpoint.version}`,
+      expected_version: command.version,
+      idempotency_key: `ogm:${input.source}:${commandId}:${command.version}`,
       rationale: rationale(input.source, option.label, fields?.rationale, input.channel),
       // aiur's "alternatives considered" are the likes left over once the answer's card is taken out; the whole map
       // travels in `response`, so nothing is lost when there are none.
@@ -219,40 +219,34 @@ export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcom
       option_id: optionId,
       ...(review === undefined ? {} : { review }),
     };
-    await writeInbox(deps, job, checkpoint, row, optionId);
-    updateCheckpoint(deps.sqlite, row.id, patch);
+    await writeInbox(deps, job, command, row, optionId);
+    updateCommand(deps.sqlite, row.id, patch);
     getChatRuntime(deps).hub.publish(job.jobId);
-    await recordAnswer(input, checkpoint, optionId, previous, false);
-    recordReviewOf(input, checkpoint, optionId);
-    return { kind: 'answered', decisionId: checkpoint.decision_id, optionId };
+    await recordAnswer(input, command, optionId, previous, false);
+    recordReviewOf(input, command, optionId);
+    return { kind: 'answered', decisionId: command.decision_id, optionId };
   } catch (error) {
     if (!(error instanceof AiurHttpError) || error.status !== 409) throw error;
-    const winner = await client.decision(checkpoint.decision_id);
+    const winner = await client.decision(command.decision_id);
     const patch = winnerPatch(winner);
     if (patch.status === 'open') {
-      updateCheckpoint(deps.sqlite, row.id, patch);
+      updateCommand(deps.sqlite, row.id, patch);
       getChatRuntime(deps).hub.publish(job.jobId);
       return { kind: 'conflict', status: 'open' };
     }
-    await writeInbox(deps, job, { ...checkpoint, option_id: patch.option_id ?? '' }, row, patch.option_id ?? '');
-    updateCheckpoint(deps.sqlite, row.id, patch);
+    await writeInbox(deps, job, { ...command, option_id: patch.option_id ?? '' }, row, patch.option_id ?? '');
+    updateCommand(deps.sqlite, row.id, patch);
     getChatRuntime(deps).hub.publish(job.jobId);
     // Someone answered first. Their answer stands, unless this is a design decision the player answered after the
     // default already took it: then the player's answer is the later one and the decision history records it.
     const winnerOption = patch.option_id;
     if (design && input.source !== 'default' && winnerOption !== undefined && winnerOption !== optionId) {
-      await recordAnswer(
-        input,
-        { ...checkpoint, status: 'answered', option_id: winnerOption },
-        optionId,
-        previous,
-        true,
-      );
-      recordReviewOf(input, checkpoint, optionId);
-      const latest = latestForCheckpoint(deps.db, job.gameId, checkpointId);
+      await recordAnswer(input, { ...command, status: 'answered', option_id: winnerOption }, optionId, previous, true);
+      recordReviewOf(input, command, optionId);
+      const latest = latestForCommand(deps.db, job.gameId, commandId);
       return {
         kind: 'superseded',
-        decisionId: checkpoint.decision_id,
+        decisionId: command.decision_id,
         optionId,
         supersedes: latest?.supersedes ?? null,
       };
@@ -260,7 +254,7 @@ export async function answerCheckpoint(input: AnswerInput): Promise<AnswerOutcom
     if (design && winnerOption !== undefined) {
       await recordAnswer(
         { ...input, source: 'player' },
-        { ...checkpoint, status: 'answered', option_id: winnerOption },
+        { ...command, status: 'answered', option_id: winnerOption },
         winnerOption,
         previous,
         false,

@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { insertChatRow } from '../../src/build-chat/store.js';
 import { AIUR_LIST_TIMEOUT_MS } from '../../src/commands/aiur.js';
-import { createInboxWriter } from '../../src/checkpoints/inbox.js';
-import { createCheckpointPoller } from '../../src/checkpoints/poller.js';
+import { createInboxWriter } from '../../src/job-commands/inbox.js';
+import { createCommandPoller } from '../../src/job-commands/poller.js';
 import type { AppDeps } from '../../src/app/types.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
@@ -280,7 +280,7 @@ describe('a job’s Commands in the decision inbox', () => {
   }
 
   function pollerFor(deps: ReturnType<typeof makeDeps>, decisions: Decision[]) {
-    return createCheckpointPoller({
+    return createCommandPoller({
       db: deps.db,
       sqlite: deps.sqlite,
       jobs: () =>
@@ -305,14 +305,14 @@ describe('a job’s Commands in the decision inbox', () => {
     });
   }
 
-  function storeCheckpoint(deps: ReturnType<typeof makeDeps>, checkpointId: string, decisionId: string) {
+  function storeCommand(deps: ReturnType<typeof makeDeps>, commandId: string, decisionId: string) {
     insertChatRow(deps.sqlite, {
       jobId: ids.job,
       at: AT,
       actor: 'agent',
-      kind: 'checkpoint',
-      checkpoint: {
-        checkpoint_id: checkpointId,
+      kind: 'command',
+      command: {
+        command_id: commandId,
         decision_id: decisionId,
         version: 1,
         question: 'Which door?',
@@ -331,7 +331,7 @@ describe('a job’s Commands in the decision inbox', () => {
     const deps = seed();
     serveAiur(deps, {});
     seedJob(deps);
-    storeCheckpoint(deps, 'd_legacy', 'd_legacy');
+    storeCommand(deps, 'd_legacy', 'd_legacy');
     expect((await (await read(deps, '/me/commands')).json()) as unknown).toEqual({ commands: [] });
 
     await pollerFor(deps, [
@@ -345,16 +345,16 @@ describe('a job’s Commands in the decision inbox', () => {
     expect(body.commands).toEqual([expect.objectContaining({ decision_id: 'd_legacy', summary: 'Door style' })]);
   });
 
-  // `gm checkpoint open` sends the same placeholder topic for every question; taking it would label every builder
-  // question in the menu alike, so a builder's checkpoint keeps its job's title.
-  it('keeps a builder’s checkpoint on its job’s title, not the builder’s placeholder topic', async () => {
+  // `gm command request` sends the same placeholder topic for every question; taking it would label every builder
+  // question in the menu alike, so a builder's Command keeps its job's title.
+  it('keeps a builder’s command on its job’s title, not the builder’s placeholder topic', async () => {
     const deps = seed();
     serveAiur(deps, {});
     seedJob(deps);
-    storeCheckpoint(deps, 'cp_builder', 'd_builder');
+    storeCommand(deps, 'cp_builder', 'd_builder');
 
     await pollerFor(deps, [
-      decision('d_builder', { context: { short_summary: 'Direction checkpoint for the creator' } }),
+      decision('d_builder', { context: { short_summary: 'Direction command for the creator' } }),
     ]).tick();
     const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<Record<string, unknown>> };
 
@@ -362,7 +362,7 @@ describe('a job’s Commands in the decision inbox', () => {
     expect(body.commands[0]).not.toHaveProperty('summary');
   });
 
-  // The poller mirrors the job ticket's aiur decisions into checkpoints; the creator audience and the short topic must
+  // The poller mirrors the job ticket's aiur decisions into Commands; the creator audience and the short topic must
   // survive that copy, or every mirrored decision would vanish from the menu (or every one would show).
   it('keeps a mirrored decision’s audience and topic, and shows only the creator’s', async () => {
     const deps = seed();
@@ -379,7 +379,7 @@ describe('a job’s Commands in the decision inbox', () => {
 
     await poller.tick();
     // Only the creator's decision is mirrored (#595), so only it reaches the menu.
-    expect(deps.sqlite.prepare(`SELECT id FROM build_chat_messages WHERE kind = 'checkpoint'`).all()).toHaveLength(1);
+    expect(deps.sqlite.prepare(`SELECT id FROM build_chat_messages WHERE kind = 'command'`).all()).toHaveLength(1);
     const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<Record<string, unknown>> };
 
     expect(body.commands).toEqual([
@@ -393,11 +393,11 @@ describe('a job’s Commands in the decision inbox', () => {
     ]);
   });
 
-  it('keeps a builder’s own checkpoint, which asks the player by construction', async () => {
+  it('keeps a builder’s own command, which asks the player by construction', async () => {
     const deps = seed();
     serveAiur(deps, {});
     seedJob(deps);
-    storeCheckpoint(deps, 'cp_builder', 'd_builder');
+    storeCommand(deps, 'cp_builder', 'd_builder');
 
     const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<{ decision_id: string }> };
 

@@ -17,7 +17,7 @@ import { listCreatorCommands, listGameCommands } from './list.js';
 export const prefix = '/api/v1';
 
 // The Commands inbox (M3): one game's open aiur Commands across its tickets, in the shape the embeddable
-// `<aiur-commands>` component consumes (aiur#7487). A job's Commands answer through the job's checkpoint route; a
+// `<aiur-commands>` component consumes (aiur#7487). A job's Commands answer through the job's Command route; a
 // registered game's Commands have no job and answer through this route, which calls aiur's Decision API directly.
 
 const AnswerCommandBody = CommandAnswerBody.extend({

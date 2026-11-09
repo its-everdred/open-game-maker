@@ -4,9 +4,9 @@ import { schema } from '@ogm/db';
 import { and, eq } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
-import { findCheckpoint } from '../build-chat/store.js';
-import { answerCheckpoint } from '../checkpoints/answer.js';
-import { parseCommandOptions, type CommandOption } from '../checkpoints/options.js';
+import { findCommand } from '../build-chat/store.js';
+import { answerCommand } from '../job-commands/answer.js';
+import { parseCommandOptions, type CommandOption } from '../job-commands/options.js';
 import { jobFor } from './briefing-push.js';
 
 function selectedOption(available: CommandOption[], choice: string): CommandOption | null {
@@ -50,8 +50,8 @@ export async function answerVoiceCommand(
 
   const command = deps.db
     .select()
-    .from(schema.checkpoints)
-    .where(and(eq(schema.checkpoints.decisionId, request.command_id), eq(schema.checkpoints.jobId, job.id)))
+    .from(schema.commands)
+    .where(and(eq(schema.commands.decisionId, request.command_id), eq(schema.commands.jobId, job.id)))
     .get();
   if (!command || command.status !== 'open') return { status: 'stale' };
   const available = parseCommandOptions(command.options);
@@ -62,11 +62,11 @@ export async function answerVoiceCommand(
   // A Command the build chat holds is answered through the same path a click takes, so a spoken answer and a clicked
   // one leave one record: the chat row the inbox reads, the job's inbox, the design decision history and aiur.
   const chatJob = option === null ? null : await deps.registry.chatJobs?.get(job.id);
-  const row = chatJob ? findCheckpoint(deps.sqlite, job.id, command.decisionId) : null;
+  const row = chatJob ? findCommand(deps.sqlite, job.id, command.decisionId) : null;
   if (chatJob && row && option) {
     let outcome;
     try {
-      outcome = await answerCheckpoint({
+      outcome = await answerCommand({
         deps,
         job: chatJob,
         row,
@@ -107,8 +107,8 @@ export async function answerVoiceCommand(
 
 function closeCommand(deps: AppDeps, decisionId: string): void {
   deps.db
-    .update(schema.checkpoints)
+    .update(schema.commands)
     .set({ status: 'answered', answeredAt: new Date().toISOString() })
-    .where(and(eq(schema.checkpoints.decisionId, decisionId), eq(schema.checkpoints.status, 'open')))
+    .where(and(eq(schema.commands.decisionId, decisionId), eq(schema.commands.status, 'open')))
     .run();
 }

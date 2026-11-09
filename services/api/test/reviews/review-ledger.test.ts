@@ -1,7 +1,7 @@
 import type { AiurClient, Decision, DecisionAnswer } from '@ogm/aiur-client';
 import { describe, expect, it } from 'vitest';
 
-import { listCheckpoints, parseCheckpoint } from '../../src/build-chat/store.js';
+import { listCommands, parseCommand } from '../../src/build-chat/store.js';
 import { listReviews, recordReview } from '../../src/reviews/store.js';
 import type { AppDeps } from '../../src/app/types.js';
 import { as, chatJob, jobTable, makeChatApp } from '../build-chat/setup.js';
@@ -11,7 +11,7 @@ import {
   PARENT_TICKET,
   SCOPE_JOB,
   answeredDecision,
-  insertOpenDesignCheckpoint,
+  insertOpenDesignCommand,
   seedDesignGame,
 } from '../design-decisions/fixtures.js';
 
@@ -52,7 +52,7 @@ const WOOD_AND_IRON = {
 };
 
 function answerReview(app: App, body: Record<string, unknown>) {
-  return app.request(`/api/v1/jobs/${SCOPE_JOB}/checkpoints/${CP_ID}/answer`, {
+  return app.request(`/api/v1/jobs/${SCOPE_JOB}/commands/${CP_ID}/answer`, {
     method: 'POST',
     headers: { ...json, ...as('owner') },
     body: JSON.stringify(body),
@@ -66,7 +66,7 @@ function readLedger(app: App) {
 describe('review deck answers', () => {
   it('answers the Command and records the review in the game’s ledger', async () => {
     const { app, deps } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     const response = await answerReview(app, { option_id: 'wood', review: WOOD_AND_IRON });
 
@@ -79,14 +79,14 @@ describe('review deck answers', () => {
         game_id: GAME,
         job_id: SCOPE_JOB,
         title: 'Lantern Bay',
-        checkpoint_id: CP_ID,
+        command_id: CP_ID,
         option_id: 'wood',
         likes: [{ option_id: 'wood', label: 'Wooden' }],
         dislikes: [{ option_id: 'iron', label: 'Iron', reason: 'Too cold for the lantern room' }],
       }),
     ]);
-    // The answer also lands on the checkpoint row the inbox reads, so a reload shows the deck's ending grid.
-    expect(parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
+    // The answer also lands on the Command row the inbox reads, so a reload shows the deck's ending grid.
+    expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
       status: 'answered',
       option_id: 'wood',
       review: WOOD_AND_IRON,
@@ -95,7 +95,7 @@ describe('review deck answers', () => {
 
   it('serves the ledger back for the game, newest first', async () => {
     const { app, deps } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
     expect((await answerReview(app, { option_id: 'wood', review: WOOD_AND_IRON })).status).toBe(200);
 
     const response = await readLedger(app);
@@ -105,7 +105,7 @@ describe('review deck answers', () => {
       reviews: [
         {
           game_id: GAME,
-          checkpoint_id: CP_ID,
+          command_id: CP_ID,
           option_id: 'wood',
           likes: [{ option_id: 'wood', label: 'Wooden' }],
           dislikes: [{ option_id: 'iron', label: 'Iron', reason: 'Too cold for the lantern room' }],
@@ -116,7 +116,7 @@ describe('review deck answers', () => {
 
   it('sends the whole like and dislike map into the aiur decision', async () => {
     const { app, deps, answers } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     expect((await answerReview(app, { option_id: 'wood', review: WOOD_AND_IRON })).status).toBe(200);
 
@@ -141,7 +141,7 @@ describe('review deck answers', () => {
 
   it('names the likes the creator passed over as aiur’s alternatives, never the chosen card', async () => {
     const { app, deps, answers } = await setup();
-    insertOpenDesignCheckpoint(deps, {
+    insertOpenDesignCommand(deps, {
       options: [
         { id: 'wood', label: 'Wooden' },
         { id: 'iron', label: 'Iron' },
@@ -161,7 +161,7 @@ describe('review deck answers', () => {
 
   it('carries the whole-set notes beside the per-card votes and into the ledger', async () => {
     const { app, deps, answers } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
     const review = { ...WOOD_AND_IRON, notes: 'All of these read too cold for the lantern room.' };
 
     expect((await answerReview(app, { option_id: 'wood', review })).status).toBe(200);
@@ -174,7 +174,7 @@ describe('review deck answers', () => {
       notes: 'All of these read too cold for the lantern room.',
       dislikes: [{ option_id: 'iron', label: 'Iron', reason: 'Too cold for the lantern room' }],
     });
-    expect(parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
+    expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
       status: 'answered',
       review: { notes: 'All of these read too cold for the lantern room.' },
     });
@@ -182,7 +182,7 @@ describe('review deck answers', () => {
 
   it('takes a half-judged review, since Send is always on, and records only the cards judged', async () => {
     const { app, deps, answers } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     const response = await answerReview(app, { option_id: 'wood', review: { likes: ['wood'], dislikes: [] } });
 
@@ -196,7 +196,7 @@ describe('review deck answers', () => {
 
   it('refuses a review that names a card the Command does not have', async () => {
     const { app, deps } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     const response = await answerReview(app, {
       option_id: 'wood',
@@ -204,13 +204,13 @@ describe('review deck answers', () => {
     });
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ error: 'checkpoint_review_invalid' });
+    expect(await response.json()).toMatchObject({ error: 'command_review_invalid' });
     expect(listReviews(deps.db, GAME)).toEqual([]);
   });
 
   it('records no ledger row for a plain answer without a review', async () => {
     const { app, deps } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     expect((await answerReview(app, { option_id: 'wood' })).status).toBe(200);
 
@@ -219,7 +219,7 @@ describe('review deck answers', () => {
 
   it('keeps one ledger row when the same review is answered twice', async () => {
     const { app, deps } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
     expect((await answerReview(app, { option_id: 'wood', review: WOOD_AND_IRON })).status).toBe(200);
 
     const again = await answerReview(app, { option_id: 'wood', review: WOOD_AND_IRON });
@@ -232,18 +232,18 @@ describe('review deck answers', () => {
 // The ledger writer on its own: the answer route calls it, and #567 reads the same rows for design/feedback.json.
 describe('recordReview', () => {
   function commandOf(deps: AppDeps) {
-    insertOpenDesignCheckpoint(deps);
-    const checkpoint = parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)!;
+    insertOpenDesignCommand(deps);
+    const command = parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)!;
     return {
       job_id: SCOPE_JOB,
       ticket: String(PARENT_TICKET),
       title: 'Lantern Bay',
-      checkpoint_id: checkpoint.checkpoint_id!,
-      decision_id: checkpoint.decision_id,
-      version: checkpoint.version,
-      question: checkpoint.question,
-      options: checkpoint.options,
-      blocking: checkpoint.blocking ?? false,
+      command_id: command.command_id!,
+      decision_id: command.decision_id,
+      version: command.version,
+      question: command.question,
+      options: command.options,
+      blocking: command.blocking ?? false,
       opened_at: '2026-11-04T18:00:00.000Z',
     };
   }

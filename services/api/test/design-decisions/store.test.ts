@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   decisionId,
   isDesignJob,
-  latestForCheckpoint,
+  latestForCommand,
   listDesignDecisions,
   recordDesignDecision,
 } from '../../src/design-decisions/store.js';
@@ -27,7 +27,7 @@ function record(deps: ReturnType<typeof setup>, overrides: Record<string, unknow
     gameId: GAME,
     jobId: SCOPE_JOB,
     ticket: '42',
-    checkpointId: CP_ID,
+    commandId: CP_ID,
     decisionId: DECISION_ID,
     question: 'Which door?',
     options: OPTIONS,
@@ -66,7 +66,7 @@ describe('recordDesignDecision', () => {
       game_id: GAME,
       job_id: SCOPE_JOB,
       ticket: '42',
-      checkpoint_id: CP_ID,
+      command_id: CP_ID,
       decision_id: DECISION_ID,
       question: 'Which door?',
       options: OPTIONS,
@@ -124,7 +124,7 @@ describe('recordDesignDecision', () => {
       { id: 'D-01', chosen: 'iron', supersedes: null },
       { id: 'D-02', chosen: 'wood', supersedes: 'D-01' },
     ]);
-    expect(latestForCheckpoint(deps.db, GAME, CP_ID)).toMatchObject({ id: 'D-02', chosen: 'wood' });
+    expect(latestForCommand(deps.db, GAME, CP_ID)).toMatchObject({ id: 'D-02', chosen: 'wood' });
   });
 
   it('numbers each game’s history from D-01', () => {
@@ -168,7 +168,7 @@ describe('recordDesignDecision', () => {
       gameId: other,
       jobId: otherJob,
       ticket: null,
-      checkpointId: 'cp_other',
+      commandId: 'cp_other',
       decisionId: 'd_other',
       question: 'Which sky?',
       options: OPTIONS,

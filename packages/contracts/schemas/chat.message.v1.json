@@ -37,7 +37,7 @@
         "text",
         "image",
         "clip",
-        "checkpoint",
+        "command",
         "progress"
       ]
     },
@@ -78,7 +78,7 @@
       ],
       "additionalProperties": false
     },
-    "checkpoint": {
+    "command": {
       "type": "object",
       "properties": {
         "decision_id": {

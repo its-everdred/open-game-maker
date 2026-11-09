@@ -229,7 +229,7 @@ describe('createAiurClient', () => {
     });
   });
 
-  it('sends the minimal reversible decision answer required by a checkpoint', async () => {
+  it('sends the minimal reversible decision answer required by a command', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ status: 'accepted', decision }, 202));
 
     await createAiurClient(daemon, fetchImpl).decide('decision-1', {

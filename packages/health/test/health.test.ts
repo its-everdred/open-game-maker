@@ -21,9 +21,9 @@ describe('healthResponse', () => {
         version: 'v',
         startedAtMs: 0,
         nowMs: 1000,
-        details: { checkpoint_decisions: { ok: false } },
+        details: { command_decisions: { ok: false } },
       }).details,
-    ).toEqual({ checkpoint_decisions: { ok: false } });
+    ).toEqual({ command_decisions: { ok: false } });
   });
 
   it('refuses an empty service name', () => {

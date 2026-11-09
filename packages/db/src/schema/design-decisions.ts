@@ -20,7 +20,7 @@ export const designDecisions = sqliteTable(
       .notNull()
       .references(() => jobs.id, { onDelete: 'cascade' }),
     ticket: text('ticket'),
-    checkpointId: text('checkpoint_id').notNull(),
+    commandId: text('command_id').notNull(),
     decisionId: text('decision_id').notNull(),
     question: text('question').notNull(),
     options: text('options').notNull(),
@@ -34,7 +34,7 @@ export const designDecisions = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.gameId, table.number] }),
-    index('design_decisions_game_checkpoint').on(table.gameId, table.checkpointId),
+    index('design_decisions_game_command').on(table.gameId, table.commandId),
     check('design_decisions_number', sql`${table.number} > 0`),
     check('design_decisions_origin', sql`${table.origin} IN ('player', 'default')`),
     check('design_decisions_skipped', sql`${table.skipped} IN (0, 1)`),

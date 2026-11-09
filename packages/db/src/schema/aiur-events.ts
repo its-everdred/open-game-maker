@@ -26,9 +26,9 @@ export const aiurCursors = sqliteTable('aiur_cursors', {
   updatedAt: text('updated_at').notNull(),
 });
 
-// aiur Commands (direction checkpoints) for a job, polled from `/decisions`; OGM-082 renders and answers them.
-export const checkpoints = sqliteTable(
-  'checkpoints',
+// aiur Commands for a job, polled from `/decisions`; OGM-082 renders and answers them.
+export const commands = sqliteTable(
+  'commands',
   {
     decisionId: text('decision_id').primaryKey(),
     jobId: text('job_id').notNull(),
@@ -42,8 +42,8 @@ export const checkpoints = sqliteTable(
     answeredAt: text('answered_at'),
   },
   (table) => [
-    check('checkpoints_status', sql`${table.status} IN ('open', 'answered', 'moot')`),
-    index('checkpoints_job').on(table.jobId),
+    check('commands_status', sql`${table.status} IN ('open', 'answered', 'moot')`),
+    index('commands_job').on(table.jobId),
   ],
 );
 

@@ -6,7 +6,7 @@ import type { FeedbackLedger, FeedbackMust, FeedbackScope } from './ledger.js';
 export type OptionUnderCheck = {
   id: string;
   label: string;
-  /** The Command (checkpoint id) the option belongs to, when known. */
+  /** The Command id the option belongs to, when known. */
   command?: string | null;
   provenance?: OptionProvenance;
 };

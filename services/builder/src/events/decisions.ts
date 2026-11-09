@@ -4,10 +4,10 @@ import { and, eq } from 'drizzle-orm';
 
 import type { FeedDeps, RunningDaemon } from './types.js';
 
-type CheckpointStatus = 'open' | 'answered' | 'moot';
+type CommandStatus = 'open' | 'answered' | 'moot';
 
-// aiur decision_status → checkpoint status. Anything not listed (a future status) is treated as still open.
-const STATUS: Record<string, CheckpointStatus> = {
+// aiur decision_status → Command status. Anything not listed (a future status) is treated as still open.
+const STATUS: Record<string, CommandStatus> = {
   open: 'open',
   deferred: 'open',
   decided: 'answered',
@@ -18,11 +18,9 @@ const STATUS: Record<string, CheckpointStatus> = {
   moot: 'moot',
 };
 
-function statusOf(decision: Decision): CheckpointStatus {
+function statusOf(decision: Decision): CommandStatus {
   if (decision.answer !== undefined && decision.answer !== null) return 'answered';
-  return Object.hasOwn(STATUS, decision.decision_status)
-    ? (STATUS[decision.decision_status] as CheckpointStatus)
-    : 'open';
+  return Object.hasOwn(STATUS, decision.decision_status) ? (STATUS[decision.decision_status] as CommandStatus) : 'open';
 }
 
 function recommendOf(decision: Decision): string | null {
@@ -30,11 +28,11 @@ function recommendOf(decision: Decision): string | null {
   return typeof recommendation?.option_id === 'string' ? recommendation.option_id : null;
 }
 
-// Mirrors aiur Commands (not on the outbound feed) into `checkpoints`. Reads with the supervisor token, never answers.
+// Mirrors aiur Commands (not on the outbound feed) into `commands`. Reads with the supervisor token, never answers.
 export function createDecisionsPoller(deps: FeedDeps) {
   const log = deps.log ?? (() => undefined);
   const now = deps.now ?? (() => new Date());
-  const { checkpoints } = schema;
+  const { commands } = schema;
 
   async function pollDaemon(daemon: RunningDaemon): Promise<void> {
     const jobs = await deps.activeJobs(daemon.slug);
@@ -47,7 +45,7 @@ export function createDecisionsPoller(deps: FeedDeps) {
       const jobId = jobByTicket.get(decision.ticket.identifier) as string;
       const status = statusOf(decision);
       seen.add(decision.decision_id);
-      const existing = deps.db.select().from(checkpoints).where(eq(checkpoints.decisionId, decision.decision_id)).get();
+      const existing = deps.db.select().from(commands).where(eq(commands.decisionId, decision.decision_id)).get();
       const fields = {
         version: decision.version,
         question: decision.question,
@@ -57,7 +55,7 @@ export function createDecisionsPoller(deps: FeedDeps) {
         answeredAt: status === 'open' ? null : (existing?.answeredAt ?? at),
       };
       deps.db
-        .insert(checkpoints)
+        .insert(commands)
         .values({
           decisionId: decision.decision_id,
           jobId,
@@ -65,30 +63,26 @@ export function createDecisionsPoller(deps: FeedDeps) {
           openedAt: decision.created_at,
           ...fields,
         })
-        .onConflictDoUpdate({ target: checkpoints.decisionId, set: fields })
+        .onConflictDoUpdate({ target: commands.decisionId, set: fields })
         .run();
       if (status === 'open' && existing?.status !== 'open') {
-        deps.emit?.({ kind: 'checkpoint.opened', jobId, decisionId: decision.decision_id });
+        deps.emit?.({ kind: 'command.requested', jobId, decisionId: decision.decision_id });
       } else if (status !== 'open' && existing?.status === 'open') {
-        deps.emit?.({ kind: 'checkpoint.answered', jobId, decisionId: decision.decision_id });
+        deps.emit?.({ kind: 'command.answered', jobId, decisionId: decision.decision_id });
       }
     }
 
-    // An open checkpoint whose Command left the list was answered in aiur; one whose job ended is moot.
+    // An open Command whose Command left the list was answered in aiur; one whose job ended is moot.
     const activeJobIds = new Set(jobByTicket.values());
     const open = deps.db
       .select()
-      .from(checkpoints)
-      .where(and(eq(checkpoints.daemonSlug, daemon.slug), eq(checkpoints.status, 'open')))
+      .from(commands)
+      .where(and(eq(commands.daemonSlug, daemon.slug), eq(commands.status, 'open')))
       .all();
     for (const row of open.filter((r) => !seen.has(r.decisionId))) {
       const status = activeJobIds.has(row.jobId) ? 'answered' : 'moot';
-      deps.db
-        .update(checkpoints)
-        .set({ status, answeredAt: at })
-        .where(eq(checkpoints.decisionId, row.decisionId))
-        .run();
-      deps.emit?.({ kind: 'checkpoint.answered', jobId: row.jobId, decisionId: row.decisionId });
+      deps.db.update(commands).set({ status, answeredAt: at }).where(eq(commands.decisionId, row.decisionId)).run();
+      deps.emit?.({ kind: 'command.answered', jobId: row.jobId, decisionId: row.decisionId });
     }
   }
 

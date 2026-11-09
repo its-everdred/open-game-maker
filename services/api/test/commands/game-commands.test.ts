@@ -100,7 +100,7 @@ function job(deps: ReturnType<typeof makeDeps>, id: string, gameId: string, crea
     .run();
 }
 
-function checkpoint(
+function command(
   deps: ReturnType<typeof makeDeps>,
   jobId: string,
   id: string,
@@ -118,8 +118,8 @@ function checkpoint(
     jobId,
     at: overrides.at ?? AT,
     actor: 'agent',
-    kind: 'checkpoint',
-    checkpoint: {
+    kind: 'command',
+    command: {
       decision_id: overrides.decision_id ?? `d_${id.slice(-6)}`,
       question: 'Which door?',
       options: overrides.options ?? [
@@ -153,15 +153,15 @@ const get = async (app: Awaited<ReturnType<typeof makeApp>>['app'], gameId: stri
 describe('game commands inbox', () => {
   it('lists the open Commands of every job in the game, newest first', async () => {
     const { app, deps } = await appWithJobs();
-    checkpoint(deps, ids.job, ULID);
-    checkpoint(deps, ids.linkedJob, MEDIA_ID, { at: '2026-11-04T12:00:00.000Z' });
-    checkpoint(deps, ids.otherJob, '01JBX2Q7M3K8V5N4R6T9W0YZAD');
+    command(deps, ids.job, ULID);
+    command(deps, ids.linkedJob, MEDIA_ID, { at: '2026-11-04T12:00:00.000Z' });
+    command(deps, ids.otherJob, '01JBX2Q7M3K8V5N4R6T9W0YZAD');
 
     const body = (await (await get(app, ids.game)).json()) as {
       commands: Array<{
         job_id: string;
         title: string;
-        checkpoint_id: string;
+        command_id: string;
         question: string;
         version: number;
         options: unknown;
@@ -171,7 +171,7 @@ describe('game commands inbox', () => {
     expect(body.commands.map(({ job_id }) => job_id)).toEqual([ids.linkedJob, ids.job]);
     expect(body.commands[0]).toMatchObject({
       title: 'Job 3',
-      checkpoint_id: MEDIA_ID,
+      command_id: MEDIA_ID,
       question: 'Which door?',
       version: 3,
     });
@@ -183,8 +183,8 @@ describe('game commands inbox', () => {
 
   it('titles a Command with its own topic, and an older one without a topic with its job', async () => {
     const { app, deps } = await appWithJobs();
-    checkpoint(deps, ids.job, ULID, { topic: 'Front door material' });
-    checkpoint(deps, ids.linkedJob, MEDIA_ID);
+    command(deps, ids.job, ULID, { topic: 'Front door material' });
+    command(deps, ids.linkedJob, MEDIA_ID);
 
     const body = (await (await get(app, ids.game)).json()) as { commands: Array<{ job_id: string; title: string }> };
 
@@ -196,14 +196,14 @@ describe('game commands inbox', () => {
   // order the Commands were first shown, and a later Command never takes a number an earlier one had.
   it('numbers each Command once, oldest first, and never reuses a number', async () => {
     const { app, deps } = await appWithJobs();
-    checkpoint(deps, ids.job, ULID, { at: '2026-11-04T10:00:00.000Z' });
-    checkpoint(deps, ids.linkedJob, MEDIA_ID, { at: '2026-11-04T12:00:00.000Z' });
+    command(deps, ids.job, ULID, { at: '2026-11-04T10:00:00.000Z' });
+    command(deps, ids.linkedJob, MEDIA_ID, { at: '2026-11-04T12:00:00.000Z' });
     const numbered = async () =>
       (
         (await (await get(app, ids.game)).json()) as {
-          commands: Array<{ checkpoint_id: string; review_number: number }>;
+          commands: Array<{ command_id: string; review_number: number }>;
         }
-      ).commands.map(({ checkpoint_id, review_number }) => [checkpoint_id, review_number]);
+      ).commands.map(({ command_id, review_number }) => [command_id, review_number]);
 
     expect(await numbered()).toEqual([
       [MEDIA_ID, 2],
@@ -218,26 +218,26 @@ describe('game commands inbox', () => {
     // The first Command is answered and leaves the inbox; the next one opened takes 3, not 1.
     deps.sqlite
       .prepare(
-        "UPDATE build_chat_messages SET checkpoint_json = json_set(checkpoint_json, '$.status', 'answered') WHERE id = ?",
+        "UPDATE build_chat_messages SET command_json = json_set(command_json, '$.status', 'answered') WHERE id = ?",
       )
       .run(ULID);
     const later = '01JBX2Q7M3K8V5N4R6T9W0YZAE';
-    checkpoint(deps, ids.job, later, { at: '2026-11-04T13:00:00.000Z' });
+    command(deps, ids.job, later, { at: '2026-11-04T13:00:00.000Z' });
     expect(await numbered()).toEqual([
       [later, 3],
       [MEDIA_ID, 2],
     ]);
 
     // Numbers belong to their game: the other game starts at 1.
-    checkpoint(deps, ids.otherJob, '01JBX2Q7M3K8V5N4R6T9W0YZAD');
+    command(deps, ids.otherJob, '01JBX2Q7M3K8V5N4R6T9W0YZAD');
     const other = (await (await get(app, ids.otherGame)).json()) as { commands: Array<{ review_number: number }> };
     expect(other.commands.map(({ review_number }) => review_number)).toEqual([1]);
   });
 
   it('leaves out answered, moot, and uncorrelated Commands', async () => {
     const { app, deps } = await appWithJobs();
-    checkpoint(deps, ids.job, ULID, { status: 'answered' });
-    checkpoint(deps, ids.linkedJob, MEDIA_ID, { decision_id: '' });
+    command(deps, ids.job, ULID, { status: 'answered' });
+    command(deps, ids.linkedJob, MEDIA_ID, { decision_id: '' });
 
     const body = (await (await get(app, ids.game)).json()) as { commands: unknown[] };
 
@@ -254,7 +254,7 @@ describe('game commands inbox', () => {
       kind: 'image',
       media: { hash: `sha256:${'a'.repeat(64)}`, width: 320, height: 200 },
     });
-    checkpoint(deps, ids.job, ULID, {
+    command(deps, ids.job, ULID, {
       options: [
         { id: 'wood', label: 'Wooden door', media_id: '01JBX2Q7M3K8V5N4R6T9W0YZAE' },
         { id: 'iron', label: 'Iron door', media_id: '01JBX2Q7M3K8V5N4R6T9W0YZAF' },
@@ -279,7 +279,7 @@ describe('game commands inbox', () => {
   it('carries an option’s playable slice to the deck', async () => {
     const { app, deps } = await appWithJobs();
     const slow = { scenario: 'scenario=sandbox&speed=slow', seconds: 6, lead_in: 'one-chain' };
-    checkpoint(deps, ids.job, ULID, {
+    command(deps, ids.job, ULID, {
       options: [
         { id: 'slow', label: 'Slow', playable: slow },
         { id: 'fast', label: 'Fast', playable: { scenario: 'scenario=sandbox&speed=fast', seconds: 8 } },
@@ -296,8 +296,8 @@ describe('game commands inbox', () => {
 
   it('leaves out a malformed Command instead of failing the whole inbox', async () => {
     const { app, deps } = await appWithJobs();
-    checkpoint(deps, ids.job, ULID, { options: [{ id: 'wood', label: 'Wooden door' }] });
-    checkpoint(deps, ids.linkedJob, MEDIA_ID, { at: '2026-11-04T12:00:00.000Z' });
+    command(deps, ids.job, ULID, { options: [{ id: 'wood', label: 'Wooden door' }] });
+    command(deps, ids.linkedJob, MEDIA_ID, { at: '2026-11-04T12:00:00.000Z' });
 
     const body = (await (await get(app, ids.game)).json()) as { commands: Array<{ job_id: string }> };
 
@@ -317,9 +317,9 @@ describe('game commands inbox', () => {
   });
 });
 
-// The answer path the inbox uses is the job's checkpoint route; it must reach aiur's Decision API unchanged.
+// The answer path the inbox uses is the job's Command route; it must reach aiur's Decision API unchanged.
 describe('answering from the inbox', () => {
-  it('posts the option through the job checkpoint route', async () => {
+  it('posts the option through the job command route', async () => {
     const { app, deps } = await appWithJobs();
     const chatJob = {
       jobId: ids.job,
@@ -336,17 +336,14 @@ describe('answering from the inbox', () => {
     };
     deps.registry.aiurClientFor = async () =>
       ({ decide: async () => ({ version: 4, status: 'answered' }) }) as unknown as AiurClient;
-    checkpoint(deps, ids.job, ULID);
-    const inbox = (await (await get(app, ids.game)).json()) as { commands: Array<{ checkpoint_id: string }> };
+    command(deps, ids.job, ULID);
+    const inbox = (await (await get(app, ids.game)).json()) as { commands: Array<{ command_id: string }> };
 
-    const response = await app.request(
-      `/api/v1/jobs/${ids.job}/checkpoints/${inbox.commands[0]!.checkpoint_id}/answer`,
-      {
-        method: 'POST',
-        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
-        body: JSON.stringify({ option_id: 'wood' }),
-      },
-    );
+    const response = await app.request(`/api/v1/jobs/${ids.job}/commands/${inbox.commands[0]!.command_id}/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'wood' }),
+    });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: 'answered', option_id: 'wood' });
@@ -407,7 +404,7 @@ describe('a registered game’s own Commands', () => {
       job_id: null,
       ticket: '478',
       title: 'Blobs look',
-      checkpoint_id: 'd_aiur_1',
+      command_id: 'd_aiur_1',
       decision_id: 'd_aiur_1',
       version: 2,
       question: 'Which blobs?',
@@ -426,7 +423,7 @@ describe('a registered game’s own Commands', () => {
     ]);
     job(deps, ids.job, ids.game, '2026-11-04T09:00:00.000Z');
     deps.db.update(schema.jobs).set({ aiurIssueNumber: 99 }).run();
-    checkpoint(deps, ids.job, ULID, { decision_id: 'd_job' });
+    command(deps, ids.job, ULID, { decision_id: 'd_job' });
 
     const body = (await (await get(app, ids.game)).json()) as {
       commands: Array<{ decision_id: string; job_id: string | null }>;
@@ -436,7 +433,7 @@ describe('a registered game’s own Commands', () => {
     expect(body.commands).toContainEqual(expect.objectContaining({ decision_id: 'd_open', job_id: null }));
     expect(body.commands.map(({ decision_id }) => decision_id)).not.toContain('d_answered');
     expect(body.commands.map(({ decision_id }) => decision_id)).not.toContain('d_moot');
-    // The job's own Command appears once, from its checkpoint.
+    // The job's own Command appears once, from its build chat.
     expect(body.commands.filter(({ decision_id }) => decision_id === 'd_job')).toHaveLength(1);
   });
 
@@ -483,7 +480,7 @@ describe('a registered game’s own Commands', () => {
     };
     job(deps, ids.job, ids.game, '2026-11-04T09:00:00.000Z');
     const { app } = await makeApp(deps);
-    checkpoint(deps, ids.job, ULID);
+    command(deps, ids.job, ULID);
 
     const body = (await (await get(app, ids.game)).json()) as { commands: Array<{ job_id: string }> };
 
@@ -554,7 +551,7 @@ describe('a registered game’s own Commands', () => {
         game_id: ids.game,
         job_id: null,
         title: 'Blobs look',
-        checkpoint_id: 'd_aiur_1',
+        command_id: 'd_aiur_1',
         option_id: 'round',
         likes: [{ option_id: 'round', label: 'Round blobs' }],
         dislikes: [{ option_id: 'square', label: 'Square blobs', reason: 'Too boxy for blobs' }],

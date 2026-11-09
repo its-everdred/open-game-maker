@@ -73,7 +73,7 @@ const deps: AppDeps = {
     vapidSubject: `mailto:${env.OGM_VAPID_SUBJECT}`,
     builderWorkspacesRoot: env.OGM_BUILDER_WORKSPACES_ROOT,
     chatPollMs: env.OGM_CHAT_POLL_MS,
-    checkpointPollMs: env.OGM_CHECKPOINT_POLL_MS,
+    commandPollMs: env.OGM_COMMAND_POLL_MS,
     designDefaultMs: env.OGM_DESIGN_DEFAULT_MS,
     analyticsRetentionDays: env.OGM_ANALYTICS_RETENTION_DAYS,
     voiceTokenSecret: env.OGM_VOICE_TOKEN_SECRET,

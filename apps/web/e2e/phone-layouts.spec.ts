@@ -25,7 +25,7 @@ const commands = ['character voices', 'keys and HUD', 'level two'].map((title, i
   job_id: null,
   ticket: String(600 + index),
   title: `Blobs ${title}`,
-  checkpoint_id: `m_${index}`,
+  command_id: `m_${index}`,
   decision_id: `d_${index}`,
   version: 1,
   question: `Which ${title}?`,

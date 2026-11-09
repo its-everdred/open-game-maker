@@ -1,7 +1,7 @@
 import { HealthResponse } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { recordSupervisorTokenStatus } from '../src/checkpoints/health.js';
+import { recordSupervisorTokenStatus } from '../src/job-commands/health.js';
 import { makeApp } from './helpers.js';
 
 describe('GET /healthz', () => {
@@ -14,14 +14,14 @@ describe('GET /healthz', () => {
     expect(body.uptimeSec).toBeGreaterThanOrEqual(5);
   });
 
-  it('reports daemon slugs with missing checkpoint supervisor tokens', async () => {
+  it('reports daemon slugs with missing command supervisor tokens', async () => {
     const { app, deps } = await makeApp();
     recordSupervisorTokenStatus(deps, 'game-1', true);
 
     const response = await app.request('/healthz');
     const body = HealthResponse.parse(await response.json());
     expect(body.details).toEqual({
-      checkpoint_decisions: { ok: false, missing_supervisor_token_daemons: ['game-1'] },
+      command_decisions: { ok: false, missing_supervisor_token_daemons: ['game-1'] },
     });
   });
 

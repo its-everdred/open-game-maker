@@ -3,9 +3,9 @@
   "job_id": "j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f",
   "at": "2026-11-01T09:15:00Z",
   "actor": "agent",
-  "kind": "checkpoint",
+  "kind": "command",
   "text": "Which door looks right?",
-  "checkpoint": {
+  "command": {
     "decision_id": "",
     "question": "Which door looks right?",
     "options": [

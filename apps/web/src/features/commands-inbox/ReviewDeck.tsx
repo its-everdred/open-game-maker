@@ -15,7 +15,7 @@ import './review-glass.css';
 // thumbs up likes the card, left or thumbs down dislikes it, and arrows do the same from the keyboard. A dislike opens
 // a short reason note in the same tap. Each vote is saved on the server as it is cast, and once every card has one the
 // deck answers the Command with the whole map (#631): there is no Send. The answer goes back through the job's
-// checkpoint route, or the game's own route for a Command no job owns, so aiur and the worker see it.
+// Command route, or the game's own route for a Command no job owns, so aiur and the worker see it.
 
 type Card = GameCommand['options'][number];
 type Verdict = 'like' | 'dislike';

@@ -59,7 +59,7 @@ provenance (`--provenance <id>=@<file>.json`) when you offer it, so the check ca
 - **Naming and logo are real steps.** Offer short names drawn from the conversation; only claim a name was searched if
   you actually searched; a web search is not clearance. Logo options come from the design skills after the build.
 - Ask questions as aiur Commands (`gm decide` wraps them) so the Executor, the app inbox and voice all see the
-  same open questions. The three-checkpoint cap in `gm-scope-options` does not apply to new-game design.
+  same open questions. The three-Command cap in `gm-scope-options` does not apply to new-game design.
 
 ## What to record
 

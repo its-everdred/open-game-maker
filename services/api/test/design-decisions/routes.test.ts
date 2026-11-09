@@ -23,7 +23,7 @@ function decision(deps: Awaited<ReturnType<typeof setup>>['deps'], chosen: strin
     gameId: GAME,
     jobId: SCOPE_JOB,
     ticket: '42',
-    checkpointId: CP_ID,
+    commandId: CP_ID,
     decisionId: DECISION_ID,
     question: 'Which door?',
     options: OPTIONS,
@@ -67,7 +67,7 @@ describe('GET /internal/games/:gameId/design-decisions', () => {
       recommended: 'iron',
       affects: ['42'],
       decision_id: DECISION_ID,
-      checkpoint_id: CP_ID,
+      command_id: CP_ID,
     });
   });
 

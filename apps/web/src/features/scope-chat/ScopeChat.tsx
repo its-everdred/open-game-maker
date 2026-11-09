@@ -6,7 +6,7 @@ import type { BudgetStatus, ScopeChoices } from '@ogm/contracts';
 
 import { api } from '../../lib/api/client';
 import { useSession } from '../../lib/api/session';
-import { answerCheckpoint } from '../build-chat/checkpoints';
+import { answerJobCommand } from '../build-chat/commands';
 import { formatUnits } from '../build-chat/units';
 import { AiurConversation, jobScope, type AiurCommandAnswer } from '../aiur/embed';
 import { admitNewGame, type AdmissionResult, type SupportedOffer } from './admit';
@@ -98,7 +98,7 @@ export function ScopeChat({
   }
 
   const answer = (detail: AiurCommandAnswer) => {
-    void answerCheckpoint(detail.job_id, detail.checkpoint_id, detail.option_id);
+    void answerJobCommand(detail.job_id, detail.command_id, detail.option_id);
   };
   const conversation = (
     <>

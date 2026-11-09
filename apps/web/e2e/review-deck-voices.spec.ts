@@ -55,7 +55,7 @@ function voicesCommand(): GameCommand {
     job_id: null,
     ticket: '53',
     title: 'Blobs character voices',
-    checkpoint_id: DECISION,
+    command_id: DECISION,
     decision_id: DECISION,
     version: 1,
     question: 'Which voice fits each Blob?',

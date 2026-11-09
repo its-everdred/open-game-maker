@@ -77,7 +77,7 @@ function currentDecision(decision: DesignDecision, supersededBy: Map<string, Des
 
 /** The ledger rejection that took the decision's answer back: its chosen option rejected, or its Command withdrawn. */
 function mootedBy(decision: DesignDecision, ledger: FeedbackLedger): string | null {
-  const commands = new Set([decision.checkpoint_id, decision.decision_id]);
+  const commands = new Set([decision.command_id, decision.decision_id]);
   // A rejection recorded before the decision cannot have taken it back.
   const entry = ledger.entries.find(
     (candidate) =>

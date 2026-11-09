@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { toGameCommand } from '../../src/commands/aiur.js';
 
-// Blobs playtests (open-games #204, #639) are raised with `gm checkpoint open --playable` from an aiur workspace or the
+// Blobs playtests (open-games #204, #639) are raised with `gm command request --playable` from an aiur workspace or the
 // host, with no build job. aiur keeps only text on the options, so the slices travel in the context's playable marker,
 // and the game's deck reads the Command from aiur: without the marker read back, Kevin gets text cards he cannot play.
 const slow: OptionPlayable = { scenario: 'scenario=sandbox&speed=slow', seconds: 20 };
@@ -39,9 +39,7 @@ describe('a registered game’s playable Command', () => {
         ['b', fast],
       ]),
     );
-    const command = toGameCommand(
-      decision(`<!-- gm-checkpoint:cp_01JBX2Q7M3K8V5N4R6T9W0YZAB -->\nPlay them.\n${marker}`),
-    );
+    const command = toGameCommand(decision(`<!-- gm-command:cp_01JBX2Q7M3K8V5N4R6T9W0YZAB -->\nPlay them.\n${marker}`));
 
     expect(command?.options).toEqual([
       { id: 'a', label: 'Slow', playable: slow },

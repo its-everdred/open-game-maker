@@ -58,7 +58,7 @@ function voiceCommand(): GameCommand {
     job_id: 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f',
     ticket: '570',
     title: 'Pick the Blobs voices',
-    checkpoint_id: VOICE_DECK,
+    command_id: VOICE_DECK,
     decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e73',
     version: 2,
     question: 'Which voice should the Blobs use?',
@@ -85,7 +85,7 @@ function imageCommand(): GameCommand {
     job_id: 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e74',
     ticket: '570',
     title: 'Pick the Blobs look',
-    checkpoint_id: IMAGE_DECK,
+    command_id: IMAGE_DECK,
     decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e76',
     version: 3,
     question: 'Which Blobs look should the mock matrix keep?',
@@ -117,7 +117,7 @@ function longCommand(): GameCommand {
   return {
     ...voiceCommand(),
     title: LONG_QUESTION,
-    checkpoint_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e77',
+    command_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e77',
     decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e78',
     question: LONG_QUESTION,
     options: voiceCommand().options.slice(0, 2),
@@ -471,9 +471,9 @@ async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
       return route.fulfill({ status: 204 });
     }
     if (path.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });
-    if (/\/jobs\/[^/]+\/checkpoints\/[^/]+\/answer$/.test(path)) {
+    if (/\/jobs\/[^/]+\/commands\/[^/]+\/answer$/.test(path)) {
       answerBodies.push(JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>);
-      const answered = commands.findIndex(({ checkpoint_id }) => path.includes(`/checkpoints/${checkpoint_id}/`));
+      const answered = commands.findIndex(({ command_id }) => path.includes(`/commands/${command_id}/`));
       if (options.dropAnswered && answered >= 0) commands.splice(answered, 1);
       return json(route, {
         status: 'answered',
@@ -481,7 +481,7 @@ async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
         option_id: 'v1',
       });
     }
-    if (path.endsWith('/checkpoints/budget')) return json(route, { used: 0, max: 3 });
+    if (path.endsWith('/commands/budget')) return json(route, { used: 0, max: 3 });
     return json(route, { error: 'not_mocked', path }, 404);
   });
   await page.route('**/media.example.test/voices/*.wav', (route) =>

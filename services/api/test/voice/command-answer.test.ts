@@ -4,8 +4,8 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppDeps } from '../../src/app/types.js';
-import { findCheckpoint, insertChatRow, parseCheckpoint } from '../../src/build-chat/store.js';
-import { answerCheckpoint } from '../../src/checkpoints/answer.js';
+import { findCommand, insertChatRow, parseCommand } from '../../src/build-chat/store.js';
+import { answerCommand } from '../../src/job-commands/answer.js';
 import { answerVoiceCommand } from '../../src/voice/command-answer.js';
 import { ids, insertJob, NOW, worked } from '../budget/fixture.js';
 import { makeApp } from '../helpers.js';
@@ -32,7 +32,7 @@ function fixture() {
     .where(eq(schema.jobs.id, ids.running))
     .run();
   deps.db
-    .insert(schema.checkpoints)
+    .insert(schema.commands)
     .values({
       decisionId: 'decision-1',
       jobId: ids.running,
@@ -65,14 +65,14 @@ function fixture() {
 }
 
 // The same Command as the build chat holds it: the row the game's inbox and the review deck read.
-async function withChatCheckpoint(deps: ReturnType<typeof fixture>) {
+async function withChatCommand(deps: ReturnType<typeof fixture>) {
   insertChatRow(deps.sqlite, {
     jobId: ids.running,
     actor: 'agent',
-    kind: 'checkpoint',
+    kind: 'command',
     text: 'Ship it?',
-    checkpoint: {
-      checkpoint_id: 'cp-voice-1',
+    command: {
+      command_id: 'cp-voice-1',
       decision_id: 'decision-1',
       version: 3,
       question: 'Ship it?',
@@ -101,7 +101,7 @@ async function withChatCheckpoint(deps: ReturnType<typeof fixture>) {
   deps.registry.aiurClientFor = () => ({ decide, message }) as never;
   const direct = vi.fn();
   deps.aiurClientForGame = async () => ({ decide: direct }) as never;
-  // The app wires the checkpoint inbox and chat hub the shared answer path writes to.
+  // The app wires the Command inbox and chat hub the shared answer path writes to.
   await makeApp(deps);
   return { decide, direct, message };
 }
@@ -111,7 +111,7 @@ describe('answerVoiceCommand', () => {
   // left the inbox showing the Command open, so the review deck offered it again and a click then hit a conflict.
   it('writes a spoken answer to the same record a click writes', async () => {
     const deps = fixture();
-    const { decide, direct } = await withChatCheckpoint(deps);
+    const { decide, direct } = await withChatCommand(deps);
 
     await expect(
       answerVoiceCommand(deps, {
@@ -133,9 +133,9 @@ describe('answerVoiceCommand', () => {
         rationale: "Creator chose 'Ship it' in two-way voice",
       }),
     );
-    const row = findCheckpoint(deps.sqlite, ids.running, 'decision-1');
-    expect(row && parseCheckpoint(row)).toMatchObject({ status: 'answered', option_id: 'ship' });
-    expect(deps.db.select().from(schema.checkpoints).get()).toMatchObject({ status: 'answered' });
+    const row = findCommand(deps.sqlite, ids.running, 'decision-1');
+    expect(row && parseCommand(row)).toMatchObject({ status: 'answered', option_id: 'ship' });
+    expect(deps.db.select().from(schema.commands).get()).toMatchObject({ status: 'answered' });
   });
 
   // Kevin (#597): a saved answer can be corrected. aiur keeps the answer it was given, so a change to a build job's
@@ -143,11 +143,11 @@ describe('answerVoiceCommand', () => {
   // change on a non-design job was refused as a conflict and the creator's correction was lost.
   it('tells the job ticket when the creator changes a saved answer, and back again', async () => {
     const deps = fixture();
-    const { decide, message } = await withChatCheckpoint(deps);
-    const row = () => findCheckpoint(deps.sqlite, ids.running, 'decision-1')!;
+    const { decide, message } = await withChatCommand(deps);
+    const row = () => findCommand(deps.sqlite, ids.running, 'decision-1')!;
     deps.sqlite
-      .prepare('UPDATE build_chat_messages SET checkpoint_json = ? WHERE id = ?')
-      .run(JSON.stringify({ ...parseCheckpoint(row()), status: 'answered', option_id: 'wait' }), row().id);
+      .prepare('UPDATE build_chat_messages SET command_json = ? WHERE id = ?')
+      .run(JSON.stringify({ ...parseCommand(row()), status: 'answered', option_id: 'wait' }), row().id);
 
     await expect(
       answerVoiceCommand(deps, { target, command_id: 'decision-1', choice: 'ship', idempotency_key: 'voice-call-10' }),
@@ -158,26 +158,27 @@ describe('answerVoiceCommand', () => {
       'The creator changed their answer to "Ship it?": "Ship it" now stands instead of "Wait". Follow the new answer.',
       expect.any(String),
     );
-    expect(parseCheckpoint(row())).toMatchObject({
+    expect(parseCommand(row())).toMatchObject({
       status: 'answered',
       option_id: 'wait',
       corrected_option_id: 'ship',
     });
 
     // The poller keeps option_id equal to aiur's answer; the correction survives it.
-    const polled = parseCheckpoint(row())!;
+    const polled = parseCommand(row())!;
     deps.sqlite
-      .prepare('UPDATE build_chat_messages SET checkpoint_json = ? WHERE id = ?')
+      .prepare('UPDATE build_chat_messages SET command_json = ? WHERE id = ?')
       .run(JSON.stringify({ ...polled, option_id: 'wait' }), row().id);
 
     // Changing back compares against the answer that now stands, so the ticket hears that too.
     const job = (await deps.registry.chatJobs!.get(ids.running))!;
-    await expect(
-      answerCheckpoint({ deps, job, row: row(), optionId: 'wait', source: 'player' }),
-    ).resolves.toMatchObject({ kind: 'superseded', optionId: 'wait' });
+    await expect(answerCommand({ deps, job, row: row(), optionId: 'wait', source: 'player' })).resolves.toMatchObject({
+      kind: 'superseded',
+      optionId: 'wait',
+    });
     expect(message).toHaveBeenCalledTimes(2);
     expect(message.mock.calls[1]![1]).toContain('"Wait" now stands instead of "Ship it"');
-    expect(parseCheckpoint(row())).toMatchObject({ option_id: 'wait', corrected_option_id: 'wait' });
+    expect(parseCommand(row())).toMatchObject({ option_id: 'wait', corrected_option_id: 'wait' });
     expect(new Set(message.mock.calls.map((call) => call[2])).size).toBe(2);
   });
 
@@ -199,7 +200,7 @@ describe('answerVoiceCommand', () => {
       'decision-1',
       expect.objectContaining({ option: 'ship', expected_version: 3, idempotency_key: 'voice-call-1' }),
     );
-    expect(deps.db.select().from(schema.checkpoints).get()).toMatchObject({
+    expect(deps.db.select().from(schema.commands).get()).toMatchObject({
       status: 'answered',
       answeredAt: expect.any(String),
     });
@@ -262,7 +263,7 @@ describe('answerVoiceCommand', () => {
 
   it('returns stale without calling Aiur when the Command is no longer open', async () => {
     const deps = fixture();
-    deps.db.update(schema.checkpoints).set({ status: 'answered' }).run();
+    deps.db.update(schema.commands).set({ status: 'answered' }).run();
     const decide = vi.fn();
     deps.aiurClientForGame = async () => ({ decide }) as never;
 

@@ -41,7 +41,7 @@ export type FeedApply = {
   progress(daemonSlug: string, ticket: string, progress: TicketProgress): void;
 };
 
-export type CheckpointEvent = { kind: 'checkpoint.opened' | 'checkpoint.answered'; jobId: string; decisionId: string };
+export type CommandEvent = { kind: 'command.requested' | 'command.answered'; jobId: string; decisionId: string };
 
 export type FeedDeps = {
   fleet: FeedFleet;
@@ -51,7 +51,7 @@ export type FeedDeps = {
   subscribe?: typeof subscribeEvents;
   alert?: (message: string) => void;
   log?: (line: Record<string, unknown>) => void;
-  emit?: (event: CheckpointEvent) => void;
+  emit?: (event: CommandEvent) => void;
   now?: () => Date;
   intervals?: Partial<typeof INTERVALS>;
 };

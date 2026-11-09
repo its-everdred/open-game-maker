@@ -50,7 +50,7 @@ const decision = (n: number, topic: string, question: string, labels: [string, s
   ticket: '570',
   title: topic,
   summary: topic,
-  checkpoint_id: `d_blobs_${n}`,
+  command_id: `d_blobs_${n}`,
   decision_id: `d_blobs_${n}`,
   version: 1,
   question,
@@ -304,7 +304,7 @@ async function installGamesMenuApi(page: Page, decisions: ReturnType<typeof blob
     if (/^\/api\/v1\/games\/[^/]+\/commands$/.test(url.pathname)) return json(route, { commands: [] });
     if (url.pathname.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });
     if (url.pathname.endsWith('/chat')) return route.fulfill({ contentType: 'text/event-stream', body: ': open\n\n' });
-    if (url.pathname.endsWith('/checkpoints/budget')) return json(route, { used: 0, max: 3 });
+    if (url.pathname.endsWith('/commands/budget')) return json(route, { used: 0, max: 3 });
     if (url.pathname === '/api/v1/me') return json(route, { platformRole: 'none' });
     if (url.pathname === '/api/v1/energy') return json(route, energyView);
     return json(route, { error: 'not_mocked', path: url.pathname }, 404);

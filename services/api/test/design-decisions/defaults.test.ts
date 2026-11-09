@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { listCheckpoints, parseCheckpoint } from '../../src/build-chat/store.js';
-import { answerCheckpoint } from '../../src/checkpoints/answer.js';
+import { listCommands, parseCommand } from '../../src/build-chat/store.js';
+import { answerCommand } from '../../src/job-commands/answer.js';
 import { designDefaultInterval, createDesignDefaultSweep } from '../../src/design-decisions/defaults.js';
 import { listDesignDecisions } from '../../src/design-decisions/store.js';
 import type { AppDeps } from '../../src/app/types.js';
@@ -14,7 +14,7 @@ import {
   PARENT_TICKET,
   SCOPE_JOB,
   fakeAiur,
-  insertOpenDesignCheckpoint,
+  insertOpenDesignCommand,
   seedDesignGame,
 } from './fixtures.js';
 
@@ -52,7 +52,7 @@ async function setup(options: { jobs?: ReturnType<typeof designJob>[]; now?: str
     defaultMs: 300_000,
     intervalMs: designDefaultInterval(300_000),
     answer: async ({ job, row, optionId }) => {
-      const outcome = await answerCheckpoint({ deps, job, row, optionId, source: 'default' });
+      const outcome = await answerCommand({ deps, job, row, optionId, source: 'default' });
       return outcome.kind === 'answered' ? { answered: true } : { answered: false, reason: outcome.kind };
     },
     log: deps.log,
@@ -61,23 +61,23 @@ async function setup(options: { jobs?: ReturnType<typeof designJob>[]; now?: str
   return { app, deps, client, sweep };
 }
 
-function checkpointRow(deps: AppDeps) {
-  const row = listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1);
-  return row === undefined ? null : parseCheckpoint(row);
+function commandRow(deps: AppDeps) {
+  const row = listCommands(deps.sqlite, SCOPE_JOB).at(-1);
+  return row === undefined ? null : parseCommand(row);
 }
 
 describe('design default sweep', () => {
   it('answers an open design Command with its recommendation once the wait has passed', async () => {
     const { deps, client, sweep } = await setup({ now: AFTER_WAIT });
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     expect(await sweep.tick()).toBe(1);
 
-    expect(checkpointRow(deps)).toMatchObject({ status: 'answered', option_id: 'iron' });
+    expect(commandRow(deps)).toMatchObject({ status: 'answered', option_id: 'iron' });
     expect(listDesignDecisions(deps.db, GAME)).toEqual([
       expect.objectContaining({
         id: 'D-01',
-        checkpoint_id: CP_ID,
+        command_id: CP_ID,
         decision_id: DECISION_ID,
         chosen: 'iron',
         recommended: 'iron',
@@ -95,40 +95,40 @@ describe('design default sweep', () => {
 
   it('leaves a Command open while its wait has not passed', async () => {
     const { deps, client, sweep } = await setup({ now: BEFORE_WAIT });
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     expect(await sweep.tick()).toBe(0);
 
-    expect(checkpointRow(deps)).toMatchObject({ status: 'open' });
+    expect(commandRow(deps)).toMatchObject({ status: 'open' });
     expect(listDesignDecisions(deps.db, GAME)).toEqual([]);
     expect(client.messages).toEqual([]);
   });
 
   it('does not default a Command without a recommendation', async () => {
     const { deps, sweep } = await setup({ now: AFTER_WAIT });
-    insertOpenDesignCheckpoint(deps, { recommend: null });
+    insertOpenDesignCommand(deps, { recommend: null });
 
     expect(await sweep.tick()).toBe(0);
-    expect(checkpointRow(deps)).toMatchObject({ status: 'open' });
+    expect(commandRow(deps)).toMatchObject({ status: 'open' });
     expect(listDesignDecisions(deps.db, GAME)).toEqual([]);
   });
 
   it('leaves an edit’s Command to the player', async () => {
     const { deps, sweep } = await setup({ jobs: [designJob({ kind: 'feature' })], now: AFTER_WAIT });
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     expect(await sweep.tick()).toBe(0);
-    expect(checkpointRow(deps)).toMatchObject({ status: 'open' });
+    expect(commandRow(deps)).toMatchObject({ status: 'open' });
     expect(listDesignDecisions(deps.db, GAME)).toEqual([]);
   });
 
   it('does not default a Command aiur already answered', async () => {
     const { deps, sweep } = await setup({ now: AFTER_WAIT });
-    insertOpenDesignCheckpoint(deps);
-    const row = listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!;
-    const answered = await answerCheckpoint({
+    insertOpenDesignCommand(deps);
+    const row = listCommands(deps.sqlite, SCOPE_JOB).at(-1)!;
+    const answered = await answerCommand({
       deps,
-      job: designJob() as unknown as Parameters<typeof answerCheckpoint>[0]['job'],
+      job: designJob() as unknown as Parameters<typeof answerCommand>[0]['job'],
       row,
       optionId: 'wood',
       source: 'player',
@@ -136,14 +136,14 @@ describe('design default sweep', () => {
     expect(answered.kind).toBe('answered');
 
     expect(await sweep.tick()).toBe(0);
-    expect(checkpointRow(deps)).toMatchObject({ status: 'answered', option_id: 'wood' });
+    expect(commandRow(deps)).toMatchObject({ status: 'answered', option_id: 'wood' });
     // The player's answer stands: the sweep records nothing and does not overwrite it with the recommendation.
     expect(listDesignDecisions(deps.db, GAME)).toEqual([expect.objectContaining({ chosen: 'wood', origin: 'player' })]);
   });
 
   it('survives a job directory that cannot be read and reports it', async () => {
     const { deps, sweep } = await setup({ now: AFTER_WAIT });
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
     deps.registry.chatJobs = {
       get: async () => null,
       active: async () => {
@@ -154,7 +154,7 @@ describe('design default sweep', () => {
     // The timer would otherwise carry an unhandled rejection; the tick reports nothing answered and logs why.
     expect(await sweep.tick()).toBe(0);
     expect(deps.lines.filter((line) => line.event === 'design-default-error')).toHaveLength(1);
-    expect(checkpointRow(deps)).toMatchObject({ status: 'open' });
+    expect(commandRow(deps)).toMatchObject({ status: 'open' });
   });
 
   it('sweeps at a fraction of the wait, between one second and half a minute', () => {

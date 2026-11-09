@@ -348,9 +348,7 @@ describe('GamesScreen', () => {
     fireEvent.click(option);
 
     await waitFor(() =>
-      expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith('/checkpoints/m_3/answer'))).toBe(
-        true,
-      ),
+      expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith('/commands/m_3/answer'))).toBe(true),
     );
   });
 });

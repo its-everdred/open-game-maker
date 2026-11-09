@@ -283,10 +283,10 @@ describe('job controls', () => {
     expect(resume).toHaveBeenCalledWith('142');
   });
 
-  it('answers an open checkpoint idempotently and marks it answered', async () => {
+  it('answers an open command idempotently and marks it answered', async () => {
     const deps = setup();
     deps.db
-      .insert(schema.checkpoints)
+      .insert(schema.commands)
       .values({
         decisionId: 'decision-1',
         jobId: ids.job,
@@ -301,7 +301,7 @@ describe('job controls', () => {
     const decide = vi.fn().mockResolvedValue({ decision_id: 'decision-1' });
     const { app } = appWith(deps, { client: { decide } });
 
-    const response = await post(app, 'decide', ids.owner, { checkpointId: 'decision-1', option: 'ship' });
+    const response = await post(app, 'decide', ids.owner, { commandId: 'decision-1', option: 'ship' });
 
     expect(response.status).toBe(200);
     expect(decide).toHaveBeenCalledWith(
@@ -309,14 +309,14 @@ describe('job controls', () => {
       expect.objectContaining({ option: 'ship', expected_version: 3, idempotency_key: 'decision-1:3' }),
     );
     expect(
-      deps.db.select().from(schema.checkpoints).where(eq(schema.checkpoints.decisionId, 'decision-1')).get(),
+      deps.db.select().from(schema.commands).where(eq(schema.commands.decisionId, 'decision-1')).get(),
     ).toMatchObject({ status: 'answered', answeredAt: NOW.toISOString() });
   });
 
-  it('reports a missing supervisor token without changing the checkpoint', async () => {
+  it('reports a missing supervisor token without changing the command', async () => {
     const deps = setup();
     deps.db
-      .insert(schema.checkpoints)
+      .insert(schema.commands)
       .values({
         decisionId: 'decision-1',
         jobId: ids.job,
@@ -331,13 +331,13 @@ describe('job controls', () => {
     const decide = vi.fn().mockRejectedValue(new AiurConfigError('supervisor token missing'));
     const { app } = appWith(deps, { client: { decide } });
 
-    const response = await post(app, 'decide', ids.owner, { checkpointId: 'decision-1', option: 'ship' });
+    const response = await post(app, 'decide', ids.owner, { commandId: 'decision-1', option: 'ship' });
 
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: 'checkpoints_unavailable' });
-    expect(deps.db.select().from(schema.checkpoints).get()?.status).toBe('open');
+    expect(await response.json()).toEqual({ error: 'commands_unavailable' });
+    expect(deps.db.select().from(schema.commands).get()?.status).toBe('open');
     expect(deps.lines).toContainEqual(
-      expect.objectContaining({ event: 'admin-alert', code: 'checkpoints_unavailable', jobId: ids.job }),
+      expect.objectContaining({ event: 'admin-alert', code: 'commands_unavailable', jobId: ids.job }),
     );
   });
 });

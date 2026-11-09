@@ -20,8 +20,8 @@ const useDraftStore = create<DraftStore>()(() => ({ drafts: {} }));
 
 const EMPTY: ReviewDraft = { deck: initialDeck(), sent: false };
 
-export function draftKey(command: Pick<GameCommand, 'checkpoint_id' | 'version'>): string {
-  return `${command.checkpoint_id}:${command.version}`;
+export function draftKey(command: Pick<GameCommand, 'command_id' | 'version'>): string {
+  return `${command.command_id}:${command.version}`;
 }
 
 export function useReviewDraft(command: GameCommand): ReviewDraft {

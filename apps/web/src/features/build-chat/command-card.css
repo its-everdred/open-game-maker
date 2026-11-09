@@ -1,6 +1,6 @@
-.checkpoint-note,
-.checkpoint-state,
-.checkpoint-budget {
+.command-note,
+.command-state,
+.command-budget {
   display: block;
   margin-top: 8px;
   color: var(--muted);
@@ -8,7 +8,7 @@
   font-weight: 700;
 }
 
-.checkpoint-note {
+.command-note {
   color: var(--yellow-b);
 }
 
@@ -35,7 +35,7 @@ button.build-chat-option:disabled {
   opacity: 1;
 }
 
-.checkpoint-option-media {
+.command-option-media {
   display: block;
   width: 100%;
   overflow: hidden;
@@ -43,24 +43,24 @@ button.build-chat-option:disabled {
   background: var(--night);
 }
 
-.build-chat-option .checkpoint-option-media {
+.build-chat-option .command-option-media {
   padding: 0;
 }
 
-.checkpoint-option-media img,
-.checkpoint-option-media video {
+.command-option-media img,
+.command-option-media video {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.checkpoint-option-label {
+.command-option-label {
   display: block;
   font: 700 15px/1.15 var(--display);
 }
 
-.checkpoint-recommended {
+.command-recommended {
   display: block;
   color: var(--aqua-b);
   font-size: 11px;

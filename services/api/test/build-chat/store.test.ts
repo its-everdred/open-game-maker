@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { insertChatRow, lastPhase, listSince, toMessage, updateCheckpoint } from '../../src/build-chat/store.js';
+import { insertChatRow, lastPhase, listSince, toMessage, updateCommand } from '../../src/build-chat/store.js';
 import { makeDeps } from '../helpers.js';
 import { JOB_ID, OTHER_JOB_ID } from './setup.js';
 
@@ -44,22 +44,22 @@ describe('build chat store', () => {
     ).toBe(true);
   });
 
-  // A checkpoint answered after later rows must reach `since` readers again, ahead of every row inserted after it.
-  it('moves an updated checkpoint to the end of the sequence', () => {
+  // A Command answered after later rows must reach `since` readers again, ahead of every row inserted after it.
+  it('moves an updated command to the end of the sequence', () => {
     const { sqlite } = makeDeps();
-    const checkpoint = {
+    const command = {
       decision_id: '',
       question: 'Which door?',
       options: [{ id: 'a', label: 'Wood' }],
       status: 'open' as const,
     };
-    insertChatRow(sqlite, { id: ULID, jobId: JOB_ID, actor: 'agent', kind: 'checkpoint', checkpoint });
+    insertChatRow(sqlite, { id: ULID, jobId: JOB_ID, actor: 'agent', kind: 'command', command });
     insertChatRow(sqlite, text());
-    const updated = updateCheckpoint(sqlite, ULID, { decision_id: 'd_1', status: 'answered' });
+    const updated = updateCommand(sqlite, ULID, { decision_id: 'd_1', status: 'answered' });
     expect(updated?.seq).toBe(3);
     expect(listSince(sqlite, JOB_ID, 2).map((row) => row.id)).toEqual([ULID]);
     expect(insertChatRow(sqlite, text()).row?.seq).toBe(4);
-    expect(JSON.parse(updated!.checkpointJson!)).toMatchObject({ decision_id: 'd_1', status: 'answered' });
+    expect(JSON.parse(updated!.commandJson!)).toMatchObject({ decision_id: 'd_1', status: 'answered' });
   });
 
   it('remembers the last phase row', () => {

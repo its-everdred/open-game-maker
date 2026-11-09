@@ -21,7 +21,7 @@ never as hidden buttons.
 The API also reads `OGM_COMMIT_INTERNAL_URL`, `OGM_COMMIT_SERVICE_TOKEN`, `OGM_GAME_TEMPLATE_REF` (defaults to
 `game-2d@1`), `OGM_INSTANCE_REPO` (`owner/repository` of the one repository every game's folder lives in),
 `OGM_VAPID_KEY_FILE`, `OGM_VAPID_SUBJECT`, `OGM_BUILDER_WORKSPACES_ROOT` (optional), and
-`OGM_CHAT_POLL_MS` (default `10000`), and `OGM_CHECKPOINT_POLL_MS` (default `5000`).
+`OGM_CHAT_POLL_MS` (default `10000`), and `OGM_COMMAND_POLL_MS` (default `5000`).
 Optional `OGM_ASSETS_ROOT` (the `assets-local/` library) gives `GET /api/catalog/style-families` its pack titles and
 thumbnails; without it packs are named by id. Each style set includes `requiresPrivateRepository`: creation must force
 private repository visibility when it is `true`. The field is `false` only when every referenced pack resolves to a
@@ -88,9 +88,9 @@ puts through `OGM_INTERNAL_URL` and `OGM_HOOK_SECRET_FILE`). A put whose body do
 `:hex` returns `400 sha_mismatch`; one over `OGM_BLOB_PUT_MAX_BYTES` (default 64 MiB) returns `413 blob_too_large`; a
 blob already stored answers `200` without reading the body.
 
-Direction checkpoints use the same workspace pin. The API polls each active job's aiur Commands every
-`OGM_CHECKPOINT_POLL_MS`, keeps the supervisor token server-side, and writes answered or moot results under
-`<workspace>/.gm/inbox/checkpoints/` for the sandboxed `gm checkpoint wait` command.
+Creator Commands use the same workspace pin. The API polls each active job's aiur Commands every
+`OGM_COMMAND_POLL_MS`, keeps the supervisor token server-side, and writes answered or moot results under
+`<workspace>/.gm/inbox/commands/` for the sandboxed `gm command wait` command.
 
 ```sh
 pnpm --filter @ogm/api build && pnpm --filter @ogm/api start   # or: pnpm --filter @ogm/api dev

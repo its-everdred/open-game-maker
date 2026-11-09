@@ -69,9 +69,9 @@ export function seedDesignGame(deps: AppDeps): void {
     .run();
 }
 
-export type OpenCheckpoint = {
+export type OpenCommand = {
   id?: string;
-  checkpointId?: string;
+  commandId?: string;
   decisionId?: string;
   version?: number;
   question?: string;
@@ -82,16 +82,16 @@ export type OpenCheckpoint = {
 };
 
 // An open design Command in the creation chat, correlated to an aiur decision so the sweep may answer it.
-export function insertOpenDesignCheckpoint(deps: AppDeps, overrides: OpenCheckpoint = {}): string {
+export function insertOpenDesignCommand(deps: AppDeps, overrides: OpenCommand = {}): string {
   const row = insertChatRow(deps.sqlite, {
     id: overrides.id,
     jobId: SCOPE_JOB,
     at: overrides.at ?? NOW,
     actor: 'agent',
-    kind: 'checkpoint',
+    kind: 'command',
     text: overrides.question ?? 'Which door?',
-    checkpoint: {
-      checkpoint_id: overrides.checkpointId ?? CP_ID,
+    command: {
+      command_id: overrides.commandId ?? CP_ID,
       decision_id: overrides.decisionId ?? DECISION_ID,
       version: overrides.version ?? 2,
       question: overrides.question ?? 'Which door?',
@@ -104,7 +104,7 @@ export function insertOpenDesignCheckpoint(deps: AppDeps, overrides: OpenCheckpo
       status: 'open',
     },
   }).row;
-  if (row === null) throw new Error('checkpoint row not stored');
+  if (row === null) throw new Error('command row not stored');
   return row.id;
 }
 
@@ -123,7 +123,7 @@ export function answeredDecision(optionId: string): Decision {
       { id: 'iron', label: 'Iron' },
     ],
     recommendation: { option_id: 'iron', reason: 'Fits the castle' },
-    context: { long_context_markdown: `<!-- gm-checkpoint:${CP_ID} -->` },
+    context: { long_context_markdown: `<!-- gm-command:${CP_ID} -->` },
     created_at: NOW,
     decision_status: 'decided',
     answer: { selected_option_id: optionId },

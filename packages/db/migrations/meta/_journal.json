@@ -253,6 +253,13 @@
       "when": 1794153233186,
       "tag": "20261108155353_review_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794229030542,
+      "tag": "20261109125710_command_rename",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,7 @@ import type { AppDeps } from '../app/types.js';
 
 // A Command no job owns carries its option media in aiur's public projection: a vetted https file is a `url` locator
 // the browser may load as is, and a file on the aiur host is an `attachment` only the supervisor token can read. Such a
-// file is copied once into the blob store and signed exactly like a job checkpoint's media, so the browser never holds
+// file is copied once into the blob store and signed exactly like a job Command's media, so the browser never holds
 // an aiur credential. Copies are remembered per instance, decision and attachment. The inbox waits a moment for a
 // copy and then lists the option without media while the copy finishes for the next read; a stalled transfer is
 // aborted, and a failed copy is tried again only after a while so a broken file is not refetched on every poll.

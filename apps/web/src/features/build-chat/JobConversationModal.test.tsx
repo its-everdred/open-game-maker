@@ -86,7 +86,7 @@ describe('JobConversationModal', () => {
   });
 
   // Once aiur's conversation element is installed it replaces the markup, and its answers take the same route.
-  it('forwards an answer from aiur’s conversation element to the job checkpoint route', async () => {
+  it('forwards an answer from aiur’s conversation element to the job command route', async () => {
     if (!customElements.get(AIUR_CONVERSATION_TAG)) {
       customElements.define(AIUR_CONVERSATION_TAG, class extends HTMLElement {});
     }
@@ -96,12 +96,12 @@ describe('JobConversationModal', () => {
     document
       .querySelector(AIUR_CONVERSATION_TAG)!
       .dispatchEvent(
-        new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', checkpoint_id: 'm_3', option_id: 'stone' } }),
+        new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', command_id: 'm_3', option_id: 'stone' } }),
       );
 
     await waitFor(() =>
       expect(calls).toContainEqual({
-        url: '/api/v1/jobs/j_1/checkpoints/m_3/answer',
+        url: '/api/v1/jobs/j_1/commands/m_3/answer',
         method: 'POST',
         body: { option_id: 'stone' },
       }),

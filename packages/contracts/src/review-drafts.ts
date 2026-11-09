@@ -4,7 +4,7 @@ import { IsoTime } from './api.js';
 import { MAX_REVIEW_CARDS, ReviewReason } from './review.js';
 
 // A review deck's draft (#631): the votes saved on the server as the creator casts them, so leaving midway keeps them
-// and the Command is answered once every card has a vote. The key is the Command's checkpoint id and version, so a
+// and the Command is answered once every card has a vote. The key is the Command's id and version, so a
 // Command reopened at a new version starts with no votes.
 const OptionId = z.string().regex(/^[a-z0-9_-]{1,32}$/);
 

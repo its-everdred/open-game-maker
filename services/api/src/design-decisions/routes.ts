@@ -5,7 +5,7 @@ import type { DesignDecisionSummariesPage, DesignDecisionsPage } from '@ogm/cont
 import { bearerToken, hasInternalCredential } from '../app/internal-auth.js';
 import { HttpError } from '../app/errors.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
-import { answerCheckpoint } from '../checkpoints/answer.js';
+import { answerCommand } from '../job-commands/answer.js';
 import { authorizedGame } from '../games/authorize.js';
 import { contextTokenSecret, verifyContextToken } from '../new-game/token.js';
 import { createDesignDefaultSweep, designDefaultInterval } from './defaults.js';
@@ -27,7 +27,7 @@ export function designDefaultSweep(deps: AppDeps): ReturnType<typeof createDesig
     defaultMs: deps.config.designDefaultMs,
     intervalMs: designDefaultInterval(deps.config.designDefaultMs),
     answer: async ({ job, row, optionId }) => {
-      const outcome = await answerCheckpoint({ deps, job, row, optionId, source: 'default' });
+      const outcome = await answerCommand({ deps, job, row, optionId, source: 'default' });
       return outcome.kind === 'answered' ? { answered: true } : { answered: false, reason: outcome.kind };
     },
     log: deps.log,
@@ -37,9 +37,9 @@ export function designDefaultSweep(deps: AppDeps): ReturnType<typeof createDesig
 }
 
 export function setup(deps: AppDeps): void {
-  // The sweep is a background aiur loop like the checkpoint poller: an instance that does not poll aiur does not default
+  // The sweep is a background aiur loop like the Command poller: an instance that does not poll aiur does not default
   // Commands either. Tests drive `designDefaultSweep(deps).tick()` directly.
-  if (deps.config.checkpointPollMs === undefined) return;
+  if (deps.config.commandPollMs === undefined) return;
   designDefaultSweep(deps).start();
 }
 
