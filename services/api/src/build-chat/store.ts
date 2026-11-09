@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { BlobHash } from '@ogm/blob-store';
-import { BuildChatMessage, type ChatAttachment, type ChatCheckpoint } from '@ogm/contracts';
+import { BuildChatMessage, type ChatAttachment, type ChatCommand } from '@ogm/contracts';
 import type { Sqlite } from '@ogm/db';
 
 export type ChatActor = BuildChatMessage['actor'];
@@ -21,7 +21,7 @@ export type ChatRow = {
   width: number | null;
   height: number | null;
   durationMs: number | null;
-  checkpointJson: string | null;
+  commandJson: string | null;
   aiurTicket: string | null;
   aiurEventId: number | null;
   aiurTopic: string | null;
@@ -38,13 +38,13 @@ export type NewChatRow = {
   kind: ChatKind;
   text?: string;
   media?: StoredMedia;
-  checkpoint?: StoredCheckpoint;
+  command?: StoredCommand;
   aiur?: { ticket: string; eventId?: number; topic?: string };
   mirrorState?: MirrorState;
 };
 
-export type StoredCheckpoint = ChatCheckpoint & {
-  checkpoint_id?: string;
+export type StoredCommand = ChatCommand & {
+  command_id?: string;
   version?: number;
   // A decision mirrored from aiur: who it is for, and its short topic (see commands/audience.ts).
   audience?: 'creator';
@@ -63,7 +63,7 @@ export type MediaSigner = (hash: BlobHash) => Promise<string>;
 const columns = `
   seq, id, job_id AS jobId, at, actor, kind, text,
   media_hash AS mediaHash, poster_hash AS posterHash, width, height, duration_ms AS durationMs,
-  checkpoint_json AS checkpointJson, aiur_ticket AS aiurTicket, aiur_event_id AS aiurEventId,
+  command_json AS commandJson, aiur_ticket AS aiurTicket, aiur_event_id AS aiurEventId,
   aiur_topic AS aiurTopic, mirror_state AS mirrorState
 `;
 
@@ -79,7 +79,7 @@ export function insertChatRow(sqlite: Sqlite, input: NewChatRow): { row: ChatRow
     .prepare(
       `INSERT INTO build_chat_messages
        (id, job_id, at, actor, kind, text, media_hash, poster_hash, width, height, duration_ms,
-        checkpoint_json, aiur_ticket, aiur_event_id, aiur_topic, mirror_state)
+        command_json, aiur_ticket, aiur_event_id, aiur_topic, mirror_state)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT DO NOTHING`,
     )
@@ -95,7 +95,7 @@ export function insertChatRow(sqlite: Sqlite, input: NewChatRow): { row: ChatRow
       input.media?.width ?? null,
       input.media?.height ?? null,
       input.media?.durationMs ?? null,
-      input.checkpoint === undefined ? null : JSON.stringify(input.checkpoint),
+      input.command === undefined ? null : JSON.stringify(input.command),
       input.aiur?.ticket ?? null,
       input.aiur?.eventId ?? null,
       input.aiur?.topic ?? null,
@@ -108,30 +108,28 @@ export function getChatRow(sqlite: Sqlite, id: string): ChatRow | null {
   return (sqlite.prepare(`SELECT ${columns} FROM build_chat_messages WHERE id = ?`).get(id) as ChatRow) ?? null;
 }
 
-export function parseCheckpoint(row: ChatRow): StoredCheckpoint | null {
-  return row.checkpointJson === null ? null : (JSON.parse(row.checkpointJson) as StoredCheckpoint);
+export function parseCommand(row: ChatRow): StoredCommand | null {
+  return row.commandJson === null ? null : (JSON.parse(row.commandJson) as StoredCommand);
 }
 
-export function listCheckpoints(sqlite: Sqlite, jobId: string): ChatRow[] {
+export function listCommands(sqlite: Sqlite, jobId: string): ChatRow[] {
   return sqlite
-    .prepare(`SELECT ${columns} FROM build_chat_messages WHERE job_id = ? AND kind = 'checkpoint' ORDER BY seq ASC`)
+    .prepare(`SELECT ${columns} FROM build_chat_messages WHERE job_id = ? AND kind = 'command' ORDER BY seq ASC`)
     .all(jobId) as ChatRow[];
 }
 
-export function findCheckpoint(sqlite: Sqlite, jobId: string, identifier: string): ChatRow | null {
+export function findCommand(sqlite: Sqlite, jobId: string, identifier: string): ChatRow | null {
   return (
-    listCheckpoints(sqlite, jobId).find((row) => {
-      const checkpoint = parseCheckpoint(row);
-      return (
-        row.id === identifier || checkpoint?.checkpoint_id === identifier || checkpoint?.decision_id === identifier
-      );
+    listCommands(sqlite, jobId).find((row) => {
+      const command = parseCommand(row);
+      return row.id === identifier || command?.command_id === identifier || command?.decision_id === identifier;
     }) ?? null
   );
 }
 
 // A product question (#612) waits for a voice session and is never shown one by one, so the chat leaves its row out.
 export function shownInChat(row: ChatRow): boolean {
-  return parseCheckpoint(row)?.text_only !== true;
+  return parseCommand(row)?.text_only !== true;
 }
 
 export function listSince(sqlite: Sqlite, jobId: string, since: number, limit = 200): ChatRow[] {
@@ -158,17 +156,17 @@ export function lastPhase(sqlite: Sqlite, jobId: string): string | null {
   return row?.text ?? null;
 }
 
-// OGM-082 correlates and answers checkpoints. The row moves to the end of the job's sequence so `since` readers and
+// OGM-082 correlates and answers commands. The row moves to the end of the job's sequence so `since` readers and
 // the stream deliver it again; clients replace a row whose id they already hold.
-export function updateCheckpoint(sqlite: Sqlite, id: string, patch: Partial<StoredCheckpoint>): ChatRow | null {
+export function updateCommand(sqlite: Sqlite, id: string, patch: Partial<StoredCommand>): ChatRow | null {
   return sqlite.transaction(() => {
     const row = getChatRow(sqlite, id);
-    if (row?.checkpointJson == null) return null;
-    const checkpoint = { ...(JSON.parse(row.checkpointJson) as StoredCheckpoint), ...patch };
+    if (row?.commandJson == null) return null;
+    const command = { ...(JSON.parse(row.commandJson) as StoredCommand), ...patch };
     const { next } = sqlite.prepare('SELECT max(seq) + 1 AS next FROM build_chat_messages').get() as { next: number };
     sqlite
-      .prepare('UPDATE build_chat_messages SET checkpoint_json = ?, seq = ? WHERE id = ?')
-      .run(JSON.stringify(checkpoint), next, id);
+      .prepare('UPDATE build_chat_messages SET command_json = ?, seq = ? WHERE id = ?')
+      .run(JSON.stringify(command), next, id);
     sqlite.prepare("UPDATE sqlite_sequence SET seq = max(seq, ?) WHERE name = 'build_chat_messages'").run(next);
     return getChatRow(sqlite, id);
   })();
@@ -197,7 +195,7 @@ export async function toMessage(
     kind: row.kind,
     ...(row.text === null ? {} : { text: row.text }),
     ...(media === undefined ? {} : { media }),
-    ...(row.checkpointJson === null ? {} : { checkpoint: JSON.parse(row.checkpointJson) as unknown }),
+    ...(row.commandJson === null ? {} : { command: JSON.parse(row.commandJson) as unknown }),
     ...(attachments.length === 0 ? {} : { attachments }),
     ...(row.aiurTicket === null
       ? {}

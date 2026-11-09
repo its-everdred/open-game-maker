@@ -53,7 +53,7 @@ function command(decisionId: string, reviewNumber: number): GameCommand {
     job_id: null,
     ticket: '570',
     title: `Pick ${decisionId}`,
-    checkpoint_id: `cp_${decisionId}`,
+    command_id: `cp_${decisionId}`,
     decision_id: decisionId,
     version: 1,
     question: 'Which voice?',
@@ -213,7 +213,7 @@ describe('short game links', () => {
 });
 
 describe('the old review link', () => {
-  it('moves /game/<id>/review/<checkpoint> to the short form', async () => {
+  it('moves /game/<id>/review/<command> to the short form', async () => {
     serve([command('d_two', 2)]);
 
     const router = renderAt(`/game/${game.id}/review/cp_d_two`);

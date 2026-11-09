@@ -1,7 +1,7 @@
 import type { AiurClient, Decision } from '@ogm/aiur-client';
 import { decisionKeyFromMarker, waitKeyOfLabel, waitLabel, waitsFromText } from '@ogm/contracts';
 
-import { answeredOption } from '../checkpoints/correlate.js';
+import { answeredOption } from '../job-commands/correlate.js';
 import type { WaitingTicket, WaitTickets } from './tickets.js';
 
 // Releasing the tickets that wait on a decision (#680). When a decision is answered, every ticket labelled with its id

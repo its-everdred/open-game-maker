@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AgentOutboxLine, CheckpointOpenPayload } from '@ogm/contracts';
+import { AgentOutboxLine, CommandRequestPayload } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { readLedger } from '../src/ledger/index.js';
@@ -44,13 +44,13 @@ function game(): string {
   return root;
 }
 
-function openCheckpoint(root: string, argv: string[]) {
-  const raw = execFileSync('cat', [join(root, '.gm', 'outbox', 'checkpoint.jsonl')], { encoding: 'utf8' })
+function requestCommand(root: string, argv: string[]) {
+  const raw = execFileSync('cat', [join(root, '.gm', 'outbox', 'command.jsonl')], { encoding: 'utf8' })
     .split('\n')
     .filter((line) => line.trim())
     .map((line) => AgentOutboxLine.parse(JSON.parse(line)));
   const last = raw[raw.length - 1];
-  return CheckpointOpenPayload.parse(last.payload);
+  return CommandRequestPayload.parse(last.payload);
 }
 
 /**
@@ -65,8 +65,8 @@ describe('a rejected option never comes back', () => {
     // Session 1: the characters Command and the A–D look Command are both built on the same stand-ins.
     const characters = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--job',
         JOB_ID,
         '--question',
@@ -83,13 +83,13 @@ describe('a rejected option never comes back', () => {
       { cwd: root },
     );
     expect(characters).toMatchObject({ code: 0, err: [] });
-    const charactersCheckpoint = openCheckpoint(root, []);
-    expect(charactersCheckpoint.options[0]).toMatchObject({ id: 'a', provenance: { packs: ['stand-in'] } });
+    const charactersCommand = requestCommand(root, []);
+    expect(charactersCommand.options[0]).toMatchObject({ id: 'a', provenance: { packs: ['stand-in'] } });
 
     const look = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--job',
         JOB_ID,
         '--question',
@@ -114,7 +114,7 @@ describe('a rejected option never comes back', () => {
       { cwd: root },
     );
     expect(look).toMatchObject({ code: 0, err: [] });
-    const lookCheckpoint = openCheckpoint(root, []);
+    const lookCommand = requestCommand(root, []);
 
     // The creator's rejection: "those are not characters", because they were stand-ins, not KayKit.
     const rejection = await gm(
@@ -140,7 +140,7 @@ describe('a rejected option never comes back', () => {
         '--provenance',
         'b=@provenance/stand-in.json',
         '--command',
-        charactersCheckpoint.checkpoint_id,
+        charactersCommand.command_id,
         '--json',
       ],
       { cwd: root },
@@ -149,7 +149,7 @@ describe('a rejected option never comes back', () => {
     const written = JSON.parse(rejection.out[0]) as { entry: { id: string; withdrawn: Record<string, string[]> } };
     expect(written.entry.withdrawn.options).toEqual(expect.arrayContaining(['a', 'b', 'c', 'd']));
     expect(written.entry.withdrawn.commands).toEqual(
-      expect.arrayContaining([charactersCheckpoint.checkpoint_id, lookCheckpoint.checkpoint_id]),
+      expect.arrayContaining([charactersCommand.command_id, lookCommand.command_id]),
     );
 
     // Today's remaining rules land in the same ledger.
@@ -233,7 +233,7 @@ describe('a rejected option never comes back', () => {
         'options',
         'check',
         '--command',
-        lookCheckpoint.checkpoint_id,
+        lookCommand.command_id,
         '--option',
         'a=Chunky',
         '--provenance',
@@ -251,8 +251,8 @@ describe('a rejected option never comes back', () => {
     // Asking for options again: the same four are refused at open time...
     const refused = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--job',
         JOB_ID,
         '--question',
@@ -269,7 +269,7 @@ describe('a rejected option never comes back', () => {
       { cwd: root },
     );
     expect(refused.code).toBe(2);
-    expect(refused.err.join('\n')).toContain('refused to open a checkpoint');
+    expect(refused.err.join('\n')).toContain('refused to open a command');
 
     // ...and fresh KayKit options satisfy every rule and reach the creator.
     const fresh = await gm(
@@ -292,8 +292,8 @@ describe('a rejected option never comes back', () => {
 
     const reopened = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--job',
         JOB_ID,
         '--question',
@@ -310,6 +310,6 @@ describe('a rejected option never comes back', () => {
       { cwd: root },
     );
     expect(reopened).toMatchObject({ code: 0, err: [] });
-    expect(openCheckpoint(root, []).options.map((option) => option.id)).toEqual(['e', 'f']);
+    expect(requestCommand(root, []).options.map((option) => option.id)).toEqual(['e', 'f']);
   }, 60_000);
 });

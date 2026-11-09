@@ -33,8 +33,8 @@ Each element receives, as element properties:
 - `features` — whether the surface offers voice, dictation and attachments.
 - `commands` — for `<aiur-commands>` only, the list already fetched from that proxy.
 
-An answer comes back as an `aiur-answer` event with `{ job_id, checkpoint_id, option_id }`; Open Game Maker forwards it
-to the job's checkpoint route, which calls Aiur's canonical answer path with the Command's version.
+An answer comes back as an `aiur-answer` event with `{ job_id, command_id, option_id }`; Open Game Maker forwards it
+to the job's command route, which calls Aiur's canonical answer path with the Command's version.
 
 
 The conversation component should reuse Aiur's existing conversation API and `voice_converse` work, including [#4104](https://github.com/aiur-team/aiur/issues/4104), [#4143](https://github.com/aiur-team/aiur/issues/4143), and [#7485](https://github.com/aiur-team/aiur/issues/7485). It consumes the embeddable Commands boundary for inline pending Commands and the rich-media contract when media is present.

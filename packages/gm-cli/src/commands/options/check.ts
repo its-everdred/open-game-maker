@@ -10,7 +10,7 @@ export const optionsFlags = {
     multiple: true,
     help: 'option id and its provenance JSON or @file; repeat once per option',
   },
-  command: { type: 'string', help: 'the Command (checkpoint id) the options belong to' },
+  command: { type: 'string', help: 'the Command (command id) the options belong to' },
 } as const;
 
 /** Read `--option <id>=<label>` pairs and attach any `--provenance <id>=...` to them. */
@@ -29,7 +29,7 @@ export function readOptions(flags: Record<string, unknown>, root: string): Optio
   }
   const command = typeof flags.command === 'string' ? flags.command.trim() : '';
   if (command && !OPTION_ID.test(command) && !/^[A-Za-z0-9_-]{1,128}$/.test(command))
-    throw new UsageError(`invalid Command id "${command}"`, 'pass the checkpoint or decision id');
+    throw new UsageError(`invalid Command id "${command}"`, 'pass the command or decision id');
   return options.map((option) => ({
     ...option,
     ...(command ? { command } : {}),

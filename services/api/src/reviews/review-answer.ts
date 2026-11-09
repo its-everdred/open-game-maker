@@ -1,6 +1,6 @@
 import type { CommandReview, ReviewAnswerPayload } from '@ogm/contracts';
 
-// What a review deck's answer gives aiur's decision, shared by the two routes that can take one: a job's checkpoint
+// What a review deck's answer gives aiur's decision, shared by the two routes that can take one: a job's Command
 // route and the game's own route for a registered game's Command (#573). Both call aiur's canonical Decision API, so
 // the map must be built the same way or a registered game's review would read differently from a job's.
 export type ReviewDecisionFields = {

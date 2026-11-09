@@ -34,7 +34,7 @@
             "minLength": 1,
             "maxLength": 200
           },
-          "checkpoint_id": {
+          "command_id": {
             "type": "string"
           },
           "decision_id": {
@@ -211,7 +211,7 @@
           "job_id",
           "ticket",
           "title",
-          "checkpoint_id",
+          "command_id",
           "decision_id",
           "version",
           "question",

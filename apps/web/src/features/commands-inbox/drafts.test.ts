@@ -10,7 +10,7 @@ import { deckReducer, initialDeck, type DeckState } from './review';
 // saves must land in the order they were cast, and votes coming back from the server must never overwrite a deck this
 // tab already holds.
 
-const command = { checkpoint_id: 'cp_1', version: 3 } as GameCommand;
+const command = { command_id: 'cp_1', version: 3 } as GameCommand;
 const KEY_URL = '/api/v1/games/g_1/review-drafts/cp_1%3A3';
 
 type Pending = { body: unknown; resolve: (response: Response) => void };

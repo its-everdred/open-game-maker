@@ -16,7 +16,7 @@ function deckCommand(overrides: Partial<GameCommand> = {}): GameCommand {
     job_id: 'j_1',
     ticket: '478',
     title: 'Pick the voices',
-    checkpoint_id: 'cp_1',
+    command_id: 'cp_1',
     decision_id: 'd_1',
     version: 3,
     question: 'Which voices should Blobs use?',
@@ -48,7 +48,7 @@ function deckCommand(overrides: Partial<GameCommand> = {}): GameCommand {
 function characterCommand(): GameCommand {
   return deckCommand({
     job_id: null,
-    checkpoint_id: 'd_blobs',
+    command_id: 'd_blobs',
     decision_id: 'd_blobs',
     version: 1,
     title: 'Blobs character voices',
@@ -154,7 +154,7 @@ describe('ReviewDeck', () => {
     await waitFor(() => expect(onAnswered).toHaveBeenCalled());
     expect(answers()).toEqual([
       {
-        url: '/api/v1/jobs/j_1/checkpoints/cp_1/answer',
+        url: '/api/v1/jobs/j_1/commands/cp_1/answer',
         method: 'POST',
         body: { option_id: 'v1', review: { likes: ['v1', 'v3'], dislikes: [{ option_id: 'v2' }] } },
       },
@@ -454,7 +454,7 @@ function imageCommand(overrides: Partial<GameCommand> = {}): GameCommand {
     job_id: 'j_2',
     ticket: '570',
     title: 'Pick the look',
-    checkpoint_id: 'cp_2',
+    command_id: 'cp_2',
     decision_id: 'd_2',
     version: 1,
     question: 'Which look should the Blobs keep?',

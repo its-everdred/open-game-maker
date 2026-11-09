@@ -16,7 +16,7 @@ describe('gm-scope-options skill', () => {
     expect(text).toContain('genre, vibe, world, and players');
     expect(text).toContain('fewer than three concrete game nouns');
     expect(text).toContain('three clearly different takes');
-    expect(text).toContain('at most three checkpoints');
+    expect(text).toContain('at most three Commands');
     expect(text).toContain('## Acceptance');
     expect(text).toContain('observable keep and kill criteria');
     expect(text).toContain("defaults I'd reach for");

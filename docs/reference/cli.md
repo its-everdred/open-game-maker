@@ -129,25 +129,25 @@ The command reads the installed skills' `references/cards/` directories and prin
 alias, and substring matches are ranked in that order. `--list` shows each topic, engine, aliases, and optional set;
 an unknown topic exits 2 with a list hint. Pattern retrieval is offline and never summarizes or rewrites a card.
 
-## Build chat and checkpoints
+## Build chat and Commands
 
 ```text
 gm chat post --job <id> --text "<one line>" [--image <png>]
 gm chat post --job <id> --text "<one line>" --clip <mp4> --poster <png>
-gm checkpoint open [--job <id>] --question "<question>" --option <id>=<label> --option <id>=<label> [--media <id>=<chat-message-id>] [--playable <id>=<scenario query>] [--seconds <id>=<n>] [--lead-in <id>=<move>] [--branch <name>] [--provenance <id>=<json|@file>] [--recommend <id>] [--key <decision-key>] [--blocking]
-gm checkpoint wait <checkpoint-id|decision-id> [--timeout <seconds>]
+gm command request [--job <id>] --question "<question>" --option <id>=<label> --option <id>=<label> [--media <id>=<chat-message-id>] [--playable <id>=<scenario query>] [--seconds <id>=<n>] [--lead-in <id>=<move>] [--branch <name>] [--provenance <id>=<json|@file>] [--recommend <id>] [--key <decision-key>] [--blocking]
+gm command wait <command-id|decision-id> [--timeout <seconds>]
 ```
 
-`gm chat post` copies media into `.gm/outbox/media/` and prints the chat message id. `gm checkpoint open` prints
-the checkpoint id and the `decision.requested` `emit_event` call the agent must make. `gm checkpoint wait` prints
-the selected option id, exits 3 on timeout, and exits 4 when the checkpoint becomes moot.
-`gm checkpoint open` and `gm decide` raise every creator Command with `blocking: true`, with or without
+`gm chat post` copies media into `.gm/outbox/media/` and prints the chat message id. `gm command request` prints
+the Command id and the `decision.requested` `emit_event` call the agent must make. `gm command wait` prints
+the selected option id, exits 3 on timeout, and exits 4 when the Command becomes moot.
+`gm command request` and `gm decide` raise every creator Command with `blocking: true`, with or without
 `--blocking`, so aiur never retires a creator's pick unseen; revert to non-blocking by default once aiur #7872 is
 deployed.
 
-Without a build job (no `--job`, `GM_JOB` or `.gm/context/job.json`), `gm checkpoint open` writes nothing to the outbox
+Without a build job (no `--job`, `GM_JOB` or `.gm/context/job.json`), `gm command request` writes nothing to the outbox
 and refuses `--media`; the printed call carries each `--playable` slice, so the Command shows as playable cards in the
-game's review deck (see `packages/gm-cli/src/commands/checkpoint/README.md`). `gm decide` does the same.
+game's review deck (see `packages/gm-cli/src/commands/command/README.md`). `gm decide` does the same.
 
 `--key <decision-key>` (also on `gm decide`) names the Command for tickets that wait on it (`gm build park --on`), so
 a ticket can be parked before the question is asked. Name a key after its game, such as `blobs/diorama`: several games
@@ -155,7 +155,7 @@ share one instance repository.
 
 `--provenance <id>=<json|@file>` records what an option was built from — the packs and assets it used, its generator,
 when it was built, and its design aspect, kind, and view. The ledger check reads it; a game that carries a ledger
-refuses to open a checkpoint with an option the ledger rejects.
+refuses to request a Command with an option the ledger rejects.
 
 ## Record a creator rejection
 

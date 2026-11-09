@@ -6,7 +6,7 @@ import { registerTestApi } from '../../app/testHook';
 import { AiurConversation, jobScope } from '../aiur/embed';
 import { Bar } from './Bar';
 import { Chat } from './Chat';
-import { answerCheckpoint } from './checkpoints';
+import { answerJobCommand } from './commands';
 import { useDock } from './dock';
 import { JobList } from './JobList';
 import { isTerminal, useBudgetUnitLabel, useMyJobs } from './jobs';
@@ -90,7 +90,7 @@ export function BuildChatDock() {
                   selected.aiurIssueNumber === null ? null : String(selected.aiurIssueNumber),
                 )}
                 title={selected.plan.title}
-                onAnswer={(detail) => void answerCheckpoint(detail.job_id, detail.checkpoint_id, detail.option_id)}
+                onAnswer={(detail) => void answerJobCommand(detail.job_id, detail.command_id, detail.option_id)}
               >
                 {chat}
               </AiurConversation>

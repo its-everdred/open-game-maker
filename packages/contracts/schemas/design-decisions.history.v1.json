@@ -31,7 +31,7 @@
               }
             ]
           },
-          "checkpoint_id": {
+          "command_id": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200
@@ -126,7 +126,7 @@
           "game_id",
           "job_id",
           "ticket",
-          "checkpoint_id",
+          "command_id",
           "decision_id",
           "question",
           "options",

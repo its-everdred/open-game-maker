@@ -13,7 +13,7 @@ import { ReviewRowLink } from './ReviewRows';
 import './commands-inbox.css';
 
 // One game's open Commands (M3): the same list the embeddable `<aiur-commands>` component renders when aiur ships it.
-// Answering goes through the job's checkpoint route when a job owns the Command, and through the game's own route when
+// Answering goes through the job's Command route when a job owns the Command, and through the game's own route when
 // it does not; either way the answer lands in aiur's canonical Decision API. A Command whose options carry media (A3)
 // is a row: its first sample, a short title and its open, draft or sent state; a tap opens its deck on the review
 // screen, where the arrows walk the game's other questions.
@@ -32,7 +32,7 @@ export function CommandsInbox({
   if (commands.length === 0) return null;
 
   const answer = async (command: GameCommand, optionId: string) => {
-    setAnswering(command.checkpoint_id);
+    setAnswering(command.command_id);
     try {
       await answerCommand(gameId, command, optionId);
     } catch {
@@ -42,8 +42,8 @@ export function CommandsInbox({
     }
   };
   const fromComponent = (detail: AiurCommandAnswer) => {
-    // The checkpoint id is unique across the inbox; a Command with no job carries aiur's decision id as its checkpoint.
-    const command = commands.find((candidate) => candidate.checkpoint_id === detail.checkpoint_id);
+    // The Command id is unique across the inbox; a Command with no job carries aiur's decision id as its Command id.
+    const command = commands.find((candidate) => candidate.command_id === detail.command_id);
     if (command) void answer(command, detail.option_id);
   };
 
@@ -60,7 +60,7 @@ export function CommandsInbox({
         {commands.map((command) => {
           const jobId = command.job_id;
           return (
-            <li className="commands-inbox-item" key={command.checkpoint_id}>
+            <li className="commands-inbox-item" key={command.command_id}>
               {isReviewDeck(command) ? (
                 <ReviewRowLink command={command} href={deckHref(gameId, slug, command)} />
               ) : (
@@ -96,5 +96,5 @@ export function CommandsInbox({
 // The deck's own screen: the short link when the game has a slug and the Command a number, the legacy link otherwise.
 function deckHref(gameId: string, slug: string | null | undefined, command: GameCommand): string {
   if (slug && command.review_number !== undefined) return reviewPath(slug, command.review_number);
-  return `/game/${encodeURIComponent(gameId)}/review/${encodeURIComponent(command.checkpoint_id)}`;
+  return `/game/${encodeURIComponent(gameId)}/review/${encodeURIComponent(command.command_id)}`;
 }

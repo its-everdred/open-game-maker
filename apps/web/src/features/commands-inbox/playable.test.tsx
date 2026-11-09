@@ -26,7 +26,7 @@ function fallSpeedCommand(): GameCommand {
     job_id: 'j_1',
     ticket: '608',
     title: 'Fall speed',
-    checkpoint_id: 'cp_1',
+    command_id: 'cp_1',
     decision_id: 'd_1',
     version: 1,
     question: 'Which fall speed feels right?',

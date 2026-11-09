@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "checkpoint_id": {
+    "command_id": {
       "type": "string",
       "pattern": "^cp_[0-7][0-9A-HJKMNP-TV-Z]{25}$"
     },
@@ -166,11 +166,11 @@
     }
   },
   "required": [
-    "checkpoint_id",
+    "command_id",
     "question",
     "options",
     "blocking"
   ],
   "additionalProperties": false,
-  "$id": "https://open-game-maker-2000.local/schemas/chat.checkpoint-open-payload.v1.json"
+  "$id": "https://open-game-maker-2000.local/schemas/chat.command-request-payload.v1.json"
 }

@@ -64,6 +64,8 @@ describe('command registry', () => {
       'check static',
       'checkpoint open',
       'checkpoint wait',
+      'command request',
+      'command wait',
       'decide',
       'docs pattern',
       'energy',

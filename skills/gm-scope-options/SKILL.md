@@ -43,9 +43,9 @@ gm options check --option "a=Gather and craft" --option "b=Race and deliver" --o
 gm decide --topic "Core game loop" --question "Which game loop should I build?" --option "a=Gather and craft" --option "b=Race and deliver" --option "c=Defend and repair" --media a=<msg> --media b=<msg> --media c=<msg> --recommend a --reason "Fits the cozy pitch" --provenance a=@provenance/a.json --provenance b=@provenance/b.json --provenance c=@provenance/c.json --blocking
 ```
 
-Open at most three checkpoints during an edit or a single-ticket build. A new game from the New Game flow follows `gm-new-game-design` instead (no cap). Pass `--blocking` on every creator Command: aiur retires a
+Open at most three Commands during an edit or a single-ticket build. A new game from the New Game flow follows `gm-new-game-design` instead (no cap). Pass `--blocking` on every creator Command: aiur retires a
 non-blocking one 5 minutes after the ticket has no running agent, so the creator's pick expires unseen (`gm decide`
-and `gm checkpoint open` raise it blocking regardless). Revert this to non-blocking once aiur #7872 is deployed.
+and `gm command request` raise it blocking regardless). Revert this to non-blocking once aiur #7872 is deployed.
 Continue independent work either way. When the ticket cannot go on without the answer, give the Command a key
 (`gm decide --key <game>/<topic>`) and park on it (`gm build park <ticket> --on <key>`); the answer queues the ticket
 again with a `gm-decision-answer` comment holding the pick and any per-option notes. Apply that answer first.

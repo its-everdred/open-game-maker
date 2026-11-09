@@ -5,7 +5,7 @@
       "game_id": "g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01",
       "job_id": "j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f",
       "ticket": "42",
-      "checkpoint_id": "cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e72",
+      "command_id": "cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e72",
       "decision_id": "d_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e73",
       "question": "Which door should the harbour lantern room use?",
       "options": [
@@ -25,7 +25,7 @@
       "game_id": "g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01",
       "job_id": "j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f",
       "ticket": "42",
-      "checkpoint_id": "cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e72",
+      "command_id": "cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e72",
       "decision_id": "d_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e73",
       "question": "Which door should the harbour lantern room use?",
       "options": [

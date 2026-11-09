@@ -5,7 +5,7 @@ import { games } from './accounts.js';
 
 // A review deck's votes as the creator casts them (#631): each vote is saved here as it happens, so leaving midway, a
 // reload or another device keeps the votes, and the Command is answered once every card has one. One row per creator,
-// game and question; `draft_key` is the Command's checkpoint id and version, so a reopened Command starts clean.
+// game and question; `draft_key` is the Command's id and version, so a reopened Command starts clean.
 export const reviewDrafts = sqliteTable(
   'review_drafts',
   {

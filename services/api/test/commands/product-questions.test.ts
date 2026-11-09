@@ -4,8 +4,8 @@ import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
 import type { AppDeps } from '../../src/app/types.js';
-import { createInboxWriter } from '../../src/checkpoints/inbox.js';
-import { createCheckpointPoller } from '../../src/checkpoints/poller.js';
+import { createInboxWriter } from '../../src/job-commands/inbox.js';
+import { createCommandPoller } from '../../src/job-commands/poller.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
 // Kevin (2026-11-08): a words-only question is never shown to the creator one by one. Product questions queue per game,
@@ -145,7 +145,7 @@ describe('the product-question queue', () => {
     expect(await read(deps, '/me/commands')).toEqual({ commands: [], question_sessions: [] });
   });
 
-  // `gm ask` raises a plain decision with no checkpoint, so on a build's ticket it must be mirrored into the job and
+  // `gm ask` raises a plain decision with no command, so on a build's ticket it must be mirrored into the job and
   // still be counted as queued rather than shown as a words-only decision.
   it('mirrors a product question on a build’s ticket and queues it', async () => {
     const deps = seed();
@@ -194,7 +194,7 @@ describe('the product-question queue', () => {
       active: async () => [job],
     } as unknown as NonNullable<AppDeps['registry']['chatJobs']>;
     deps.registry.chatJobs = chatJobs;
-    const poller = createCheckpointPoller({
+    const poller = createCommandPoller({
       db: deps.db,
       sqlite: deps.sqlite,
       jobs: () => chatJobs,
@@ -216,7 +216,7 @@ describe('the product-question queue', () => {
     const chat = (await (
       await (await makeApp(deps)).app.request(`/api/v1/jobs/${ids.job}/chat/messages`, { headers: asUser(ids.user) })
     ).json()) as { messages: Array<{ kind: string }>; last_seq: number };
-    expect(chat.messages.filter(({ kind }) => kind === 'checkpoint')).toEqual([]);
+    expect(chat.messages.filter(({ kind }) => kind === 'command')).toEqual([]);
     expect(chat.last_seq).toBeGreaterThan(0);
   });
 });

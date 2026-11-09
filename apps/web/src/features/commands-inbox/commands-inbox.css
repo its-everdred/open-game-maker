@@ -1,4 +1,4 @@
-/* The game's open Commands (M3): the same rows checkpoint cards use, so the inbox reads as part of the studio. */
+/* The game's open Commands (M3): the same rows Command cards use, so the inbox reads as part of the studio. */
 .commands-inbox {
   display: grid;
   gap: 12px;

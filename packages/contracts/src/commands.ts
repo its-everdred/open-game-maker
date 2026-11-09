@@ -5,7 +5,7 @@ import { ChatMedia, OptionPlayable } from './chat.js';
 
 // The per-game Commands inbox (M3, A2a): one game's open aiur Commands in the shape the embeddable
 // `<aiur-commands>` component consumes (aiur#7487). A Command is one open aiur decision; a job's Command is answered
-// through the job's checkpoint route and a Command with no job — a registered game's, read from its own aiur instance —
+// through the job's Command route and a Command with no job — a registered game's, read from its own aiur instance —
 // through the game's answer route. Both call aiur's canonical answer path.
 export const CommandOption = z.object({
   id: z.string().regex(/^[a-z0-9_-]{1,32}$/),
@@ -24,7 +24,7 @@ export const CommandOption = z.object({
 export const MAX_COMMAND_OPTIONS = 12;
 
 // Marks a Command as a player-facing question (#595). Game Maker writes it into the decision's long context; the
-// creator's inbox, menu count and review deck show only Commands that carry it (or a gm checkpoint marker). Everything
+// creator's inbox, menu count and review deck show only Commands that carry it (or a gm command marker). Everything
 // else (engineering and operations questions) stays with the Executor. Until aiur exposes an audience field, this
 // marker is how a Command says who it is for.
 export const CREATOR_AUDIENCE_MARKER = '<!-- gm-audience:creator -->';
@@ -37,14 +37,14 @@ export const CREATOR_TEXT_ONLY_MARKER = '<!-- gm-question:text-only -->';
 
 export const GameCommand = z.object({
   // Null when the Command belongs to no job: a game registered from a repository that already exists reads its
-  // instance's open Commands, and its `checkpoint_id` is aiur's decision id.
+  // instance's open Commands, and its `command_id` is aiur's decision id.
   job_id: Id.nullable(),
   // The aiur ticket the Command belongs to; null until the job is linked to a ticket.
   ticket: z.string().nullable(),
   title: z.string().trim().min(1).max(200),
   // The decision's short topic (aiur's `short_summary`) when it has one: the line the menu's decision list shows.
   summary: z.string().trim().min(1).max(200).optional(),
-  checkpoint_id: z.string(),
+  command_id: z.string(),
   decision_id: z.string().min(1),
   version: z.number().int().positive(),
   question: z.string().trim().min(1).max(8000),

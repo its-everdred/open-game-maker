@@ -63,7 +63,7 @@ describe('a quick question session', () => {
       gameId: ids.game,
       jobId: ids.running,
       ticket: '7',
-      checkpointId: 'cp_settled',
+      commandId: 'cp_settled',
       decisionId: 'd_settled',
       question: 'How long is a run?',
       options: [

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { listCheckpoints, parseCheckpoint, updateCheckpoint } from '../../src/build-chat/store.js';
+import { listCommands, parseCommand, updateCommand } from '../../src/build-chat/store.js';
 import { listDesignDecisions } from '../../src/design-decisions/store.js';
 import { as, chatJob, jobTable, makeChatApp } from '../build-chat/setup.js';
 import {
@@ -10,7 +10,7 @@ import {
   PARENT_TICKET,
   SCOPE_JOB,
   fakeAiur,
-  insertOpenDesignCheckpoint,
+  insertOpenDesignCommand,
   seedDesignGame,
 } from './fixtures.js';
 
@@ -29,16 +29,16 @@ async function setup(kind: 'scope' | 'feature' = 'scope', options: { seed?: bool
 
 type App = Awaited<ReturnType<typeof setup>>['app'];
 
-function answer(app: App, optionId: string, checkpointId = CP_ID) {
-  return app.request(`/api/v1/jobs/${SCOPE_JOB}/checkpoints/${checkpointId}/answer`, {
+function answer(app: App, optionId: string, commandId = CP_ID) {
+  return app.request(`/api/v1/jobs/${SCOPE_JOB}/commands/${commandId}/answer`, {
     method: 'POST',
     headers: { ...json, ...as('owner') },
     body: JSON.stringify({ option_id: optionId }),
   });
 }
 
-function skip(app: App, checkpointId = CP_ID) {
-  return app.request(`/api/v1/jobs/${SCOPE_JOB}/checkpoints/${checkpointId}/skip`, {
+function skip(app: App, commandId = CP_ID) {
+  return app.request(`/api/v1/jobs/${SCOPE_JOB}/commands/${commandId}/skip`, {
     method: 'POST',
     headers: { ...json, ...as('owner') },
   });
@@ -47,7 +47,7 @@ function skip(app: App, checkpointId = CP_ID) {
 describe('design decisions recorded from the build chat', () => {
   it('records the player’s answer as the first decision for the Command', async () => {
     const { app, deps, client } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     const response = await answer(app, 'wood');
 
@@ -62,7 +62,7 @@ describe('design decisions recorded from the build chat', () => {
 
   it('answers with the recommendation when the player skips the question', async () => {
     const { app, deps } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     const response = await skip(app);
 
@@ -75,7 +75,7 @@ describe('design decisions recorded from the build chat', () => {
 
   it('records a later answer as a decision that supersedes the earlier one and tells the Executor', async () => {
     const { app, deps, client } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
     expect((await answer(app, 'iron')).status).toBe(200);
 
     const later = await answer(app, 'wood');
@@ -100,7 +100,7 @@ describe('design decisions recorded from the build chat', () => {
     expect(client.messages[0]!.text).toContain('"Wooden"');
     expect(client.messages[0]!.text).toContain('instead of "Iron"');
     // The aiur Command keeps the answer it was given; the history is what carries the later choice.
-    expect(parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
+    expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
       status: 'answered',
       option_id: 'iron',
     });
@@ -108,9 +108,9 @@ describe('design decisions recorded from the build chat', () => {
 
   it('tells the Executor about a later answer whose earlier one never reached the history', async () => {
     const { app, deps, client } = await setup();
-    const rowId = insertOpenDesignCheckpoint(deps);
+    const rowId = insertOpenDesignCommand(deps);
     // An answer that arrived through aiur alone — voice, the dashboard — with the poller not yet having recorded it.
-    updateCheckpoint(deps.sqlite, rowId, { status: 'answered', option_id: 'iron' });
+    updateCommand(deps.sqlite, rowId, { status: 'answered', option_id: 'iron' });
 
     const later = await answer(app, 'wood');
 
@@ -125,7 +125,7 @@ describe('design decisions recorded from the build chat', () => {
 
   it('answers a repeated answer as the answer already standing', async () => {
     const { app, deps, client } = await setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
     expect((await answer(app, 'wood')).status).toBe(200);
 
     const repeat = await answer(app, 'wood');
@@ -139,27 +139,27 @@ describe('design decisions recorded from the build chat', () => {
 
   it('refuses to skip a Command without a recommendation', async () => {
     const { app, deps } = await setup();
-    insertOpenDesignCheckpoint(deps, { recommend: null });
+    insertOpenDesignCommand(deps, { recommend: null });
 
     const response = await skip(app);
 
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: 'checkpoint_recommendation_missing' });
-    expect(parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({ status: 'open' });
+    expect(await response.json()).toMatchObject({ error: 'command_recommendation_missing' });
+    expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({ status: 'open' });
   });
 
   it('does not record a design decision for an edit’s Command', async () => {
     const { app, deps } = await setup('feature');
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     expect((await answer(app, 'wood')).status).toBe(200);
-    expect(parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({ status: 'answered' });
+    expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({ status: 'answered' });
     expect(listDesignDecisions(deps.db, GAME)).toEqual([]);
   });
 
   it('answers the Command even when the decision cannot be recorded', async () => {
     const { app, deps } = await setup('scope', { seed: false });
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     const response = await answer(app, 'wood');
 
@@ -167,7 +167,7 @@ describe('design decisions recorded from the build chat', () => {
     expect(await response.json()).toMatchObject({ status: 'answered', decision_id: DECISION_ID, option_id: 'wood' });
     expect(listDesignDecisions(deps.db, GAME)).toEqual([]);
     // The Command is answered and its card moves on; only the history write failed, and the operator can see why.
-    expect(parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
+    expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
       status: 'answered',
       option_id: 'wood',
     });

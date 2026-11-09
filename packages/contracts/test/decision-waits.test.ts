@@ -24,7 +24,7 @@ describe('decision waits', () => {
   });
 
   it('carries a key through a Command context alongside other markers', () => {
-    const context = `<!-- gm-checkpoint:cp_1 -->\n<!-- gm-audience:creator -->\n${decisionKeyMarker('blobs/diorama')}`;
+    const context = `<!-- gm-command:cp_1 -->\n<!-- gm-audience:creator -->\n${decisionKeyMarker('blobs/diorama')}`;
     expect(decisionKeyFromMarker(context)).toBe('blobs/diorama');
     expect(decisionKeyFromMarker('<!-- gm-audience:creator -->')).toBeNull();
     expect(decisionKeyFromMarker(undefined)).toBeNull();

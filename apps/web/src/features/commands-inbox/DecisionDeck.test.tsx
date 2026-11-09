@@ -29,7 +29,7 @@ const command = (id: string, gameId = 'g_blobs'): CreatorCommand => ({
   ticket: '12',
   title: `Question ${id}`,
   summary: `Topic ${id}`,
-  checkpoint_id: id,
+  command_id: id,
   decision_id: id,
   version: 1,
   question: `Which ${id}?`,

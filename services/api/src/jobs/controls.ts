@@ -25,7 +25,7 @@ const messageBody = z
   .strict();
 const decideBody = z
   .object({
-    checkpointId: z.string().min(1).max(200),
+    commandId: z.string().min(1).max(200),
     option: z.string().min(1).max(200).optional(),
     response: z.string().min(1).max(4_000).optional(),
   })
@@ -229,40 +229,40 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
       active(row);
       const body = await parseBody(c, decideBody);
       const deps = c.get('deps');
-      const checkpoint = deps.db
+      const command = deps.db
         .select()
-        .from(schema.checkpoints)
-        .where(and(eq(schema.checkpoints.decisionId, body.checkpointId), eq(schema.checkpoints.jobId, row.id)))
+        .from(schema.commands)
+        .where(and(eq(schema.commands.decisionId, body.commandId), eq(schema.commands.jobId, row.id)))
         .get();
-      if (!checkpoint) throw new HttpError(404, 'checkpoint_not_found');
-      if (checkpoint.status !== 'open') throw new HttpError(409, 'checkpoint_not_open');
+      if (!command) throw new HttpError(404, 'command_not_found');
+      if (command.status !== 'open') throw new HttpError(409, 'command_not_open');
       // A job that was never filed has no daemon ticket to decide on; `ticket` throws 409 as on the other routes.
       ticket(row);
       const client = await requireDaemon(services, deps, row.gameId);
 
       try {
-        await client.decide(checkpoint.decisionId, {
+        await client.decide(command.decisionId, {
           ...(body.option === undefined ? { response: body.response! } : { option: body.option }),
-          expected_version: checkpoint.version,
-          idempotency_key: `${checkpoint.decisionId}:${checkpoint.version}`,
-          rationale: 'Creator answered the checkpoint',
+          expected_version: command.version,
+          idempotency_key: `${command.decisionId}:${command.version}`,
+          rationale: 'Creator answered the command',
           confidence: 100,
           alternatives_considered: [],
           reversibility_belief: 'reversible',
         });
       } catch (error) {
         if (error instanceof AiurConfigError) {
-          deps.log({ event: 'admin-alert', code: 'checkpoints_unavailable', jobId: row.id });
-          throw new HttpError(503, 'checkpoints_unavailable');
+          deps.log({ event: 'admin-alert', code: 'commands_unavailable', jobId: row.id });
+          throw new HttpError(503, 'commands_unavailable');
         }
         controlError(error);
       }
 
       deps.db
-        .update(schema.checkpoints)
+        .update(schema.commands)
         .set({ status: 'answered', answeredAt: now().toISOString() })
-        .where(and(eq(schema.checkpoints.decisionId, checkpoint.decisionId), eq(schema.checkpoints.status, 'open')))
+        .where(and(eq(schema.commands.decisionId, command.decisionId), eq(schema.commands.status, 'open')))
         .run();
-      return c.json({ checkpointId: checkpoint.decisionId, status: 'answered' as const });
+      return c.json({ commandId: command.decisionId, status: 'answered' as const });
     });
 }

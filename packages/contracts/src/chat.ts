@@ -7,7 +7,7 @@ import { CommandReview } from './review.js';
 export const Ulid = z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
 export const ChatMessageId = z.union([Id, Ulid]);
 export const ChatActor = z.enum(['creator', 'agent', 'system']);
-export const ChatKind = z.enum(['text', 'image', 'clip', 'checkpoint', 'progress']);
+export const ChatKind = z.enum(['text', 'image', 'clip', 'command', 'progress']);
 
 export const ChatMedia = z.object({
   url: z.string().url(),
@@ -94,7 +94,7 @@ export function playablesFromMarker(text: string | null | undefined): Map<string
   }
 }
 
-export const ChatCheckpointOption = z.object({
+export const ChatCommandOption = z.object({
   id: z.string(),
   label: z.string(),
   media_id: z.string().optional(),
@@ -104,19 +104,19 @@ export const ChatCheckpointOption = z.object({
 
 // `decision_id` is "" until OGM-082 correlates it; `media_id` names a BuildChatMessage.id in the same job.
 // `pick` says how the answer is taken: 'one' asks for a single pick (a review's likes become the shortlist), 'many'
-// takes the likes and dislikes as the answer. Absent means 'one', which is what every older checkpoint is.
-export const ChatCheckpoint = z.object({
+// takes the likes and dislikes as the answer. Absent means 'one', which is what every older Command is.
+export const ChatCommand = z.object({
   decision_id: z.string(),
   question: z.string(),
   options: z
-    .array(ChatCheckpointOption)
-    // A review deck (A3) needs room for six voices or a 3x3 image mock. No floor: a stored checkpoint from an older
+    .array(ChatCommandOption)
+    // A review deck (A3) needs room for six voices or a 3x3 image mock. No floor: a stored Command from an older
     // daemon may carry a single option, and dropping it would lose the Command.
     .max(12),
   recommend: z.string().optional(),
   blocking: z.boolean().optional(),
   pick: z.enum(['one', 'many']).optional(),
-  // The Command's 2-5 word topic (`gm decide --topic`), its title in the inbox and modal. Older checkpoints have none.
+  // The Command's 2-5 word topic (`gm decide --topic`), its title in the inbox and modal. Older Commands have none.
   topic: z.string().optional(),
   status: z.enum(['open', 'answered', 'moot']),
   option_id: z.string().optional(),
@@ -150,7 +150,7 @@ export const BuildChatMessage = z.object({
   kind: ChatKind,
   text: z.string().optional(),
   media: ChatMedia.optional(),
-  checkpoint: ChatCheckpoint.optional(),
+  command: ChatCommand.optional(),
   attachments: z.array(ChatAttachment).max(MAX_CHAT_ATTACHMENTS).optional(),
   aiur: z
     .object({ ticket: z.string(), event_id: z.number().int().optional(), topic: z.string().optional() })
@@ -158,7 +158,7 @@ export const BuildChatMessage = z.object({
 });
 
 // One line of `<workspace>/.gm/outbox/*.jsonl`, written inside the no-network sandbox and shipped by the API's relay.
-// Known types: chat.post (this context), checkpoint.open (OGM-082), scope.agreed (OGM-088), narration.render (OGM-087).
+// Known types: chat.post (this context), command.request (OGM-082), scope.agreed (OGM-088), narration.render (OGM-087).
 export const AgentOutboxLine = z.object({
   v: z.literal(1),
   id: Ulid,
@@ -168,9 +168,9 @@ export const AgentOutboxLine = z.object({
   payload: z.record(z.string(), z.unknown()),
 });
 
-export const CheckpointOpenPayload = z
+export const CommandRequestPayload = z
   .object({
-    checkpoint_id: z.string().regex(/^cp_[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
+    command_id: z.string().regex(/^cp_[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
     question: z.string().trim().min(1).max(8000),
     options: z
       .array(
@@ -241,14 +241,14 @@ export const ChatMessagesPage = z.object({
 
 export type BuildChatMessage = z.infer<typeof BuildChatMessage>;
 export type ChatMedia = z.infer<typeof ChatMedia>;
-export type ChatCheckpoint = z.infer<typeof ChatCheckpoint>;
-export type ChatCheckpointOption = z.infer<typeof ChatCheckpointOption>;
+export type ChatCommand = z.infer<typeof ChatCommand>;
+export type ChatCommandOption = z.infer<typeof ChatCommandOption>;
 export type OptionAspect = z.infer<typeof OptionAspect>;
 export type OptionProvenance = z.infer<typeof OptionProvenance>;
 export type OptionPlayable = z.infer<typeof OptionPlayable>;
 export type ChatAttachment = z.infer<typeof ChatAttachment>;
 export type AgentOutboxLine = z.infer<typeof AgentOutboxLine>;
-export type CheckpointOpenPayload = z.infer<typeof CheckpointOpenPayload>;
+export type CommandRequestPayload = z.infer<typeof CommandRequestPayload>;
 export type ChatPostPayload = z.infer<typeof ChatPostPayload>;
 export type ChatPostBody = z.infer<typeof ChatPostBody>;
 export type ChatMessagesPage = z.infer<typeof ChatMessagesPage>;
@@ -256,7 +256,7 @@ export type ChatMessagesPage = z.infer<typeof ChatMessagesPage>;
 export const chatSchemas = {
   'chat.message.v1': BuildChatMessage,
   'chat.outbox-line.v1': AgentOutboxLine,
-  'chat.checkpoint-open-payload.v1': CheckpointOpenPayload,
+  'chat.command-request-payload.v1': CommandRequestPayload,
   'chat.option-provenance.v1': OptionProvenance,
   'chat.option-playable.v1': OptionPlayable,
   'chat.post-payload.v1': ChatPostPayload,

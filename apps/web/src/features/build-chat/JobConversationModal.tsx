@@ -1,7 +1,7 @@
 import { Dialog } from '../../components/Dialog';
 import { AiurConversation, jobScope, type AiurCommandAnswer } from '../aiur/embed';
 import { Chat } from './Chat';
-import { answerCheckpoint } from './checkpoints';
+import { answerJobCommand } from './commands';
 import { useConversation } from './conversation';
 import { useMyJobs } from './jobs';
 import './conversation-modal.css';
@@ -17,7 +17,7 @@ export function JobConversationModal() {
 
   const answer = (detail: AiurCommandAnswer) => {
     if (detail.job_id !== job.id) return;
-    void answerCheckpoint(detail.job_id, detail.checkpoint_id, detail.option_id);
+    void answerJobCommand(detail.job_id, detail.command_id, detail.option_id);
   };
 
   return (

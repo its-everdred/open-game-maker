@@ -20,7 +20,7 @@ export function ReviewRows({
   return (
     <ul className="review-rows" aria-label="Reviews">
       {commands.map((command) => (
-        <ReviewRow key={command.checkpoint_id} command={command} href={hrefOf(command)} />
+        <ReviewRow key={command.command_id} command={command} href={hrefOf(command)} />
       ))}
     </ul>
   );

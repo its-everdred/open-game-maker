@@ -29,7 +29,7 @@ async function media(root: string, count: number): Promise<string[]> {
 }
 
 function outboxLines(root: string) {
-  const file = join(root, '.gm', 'outbox', 'checkpoint.jsonl');
+  const file = join(root, '.gm', 'outbox', 'command.jsonl');
   if (!existsSync(file)) return [];
   return readFileSync(file, 'utf8')
     .trim()
@@ -80,7 +80,7 @@ describe('gm decide', () => {
 
     expect(result).toMatchObject({ code: 0, err: [] });
     const printed = JSON.parse(result.out[0]!) as {
-      checkpoint_id: string;
+      command_id: string;
       emit_event: { name: string; payload: Record<string, any> };
     };
     expect(printed.emit_event.name).toBe('decision.requested');
@@ -91,9 +91,9 @@ describe('gm decide', () => {
     expect(printed.emit_event.payload.options).toHaveLength(6);
 
     const [line] = outboxLines(root);
-    expect(line!.payload).toMatchObject({ checkpoint_id: printed.checkpoint_id, topic: 'Hero jump feel' });
+    expect(line!.payload).toMatchObject({ command_id: printed.command_id, topic: 'Hero jump feel' });
     expect(record(root).decisions).toEqual([
-      expect.objectContaining({ command: printed.checkpoint_id, topic: 'Hero jump feel', recommend: 'o0' }),
+      expect.objectContaining({ command: printed.command_id, topic: 'Hero jump feel', recommend: 'o0' }),
     ]);
   });
 
@@ -129,7 +129,7 @@ describe('gm decide', () => {
     const root = workspace();
     const ids = await media(root, 2);
     const first = await decide(root, ids);
-    const firstId = (JSON.parse(first.out[0]!) as { checkpoint_id: string }).checkpoint_id;
+    const firstId = (JSON.parse(first.out[0]!) as { command_id: string }).command_id;
 
     // Case and spacing do not make a new topic or question.
     const again = await decide(root, ids, [], 'hero  JUMP feel', 'how should the  hero jump?');

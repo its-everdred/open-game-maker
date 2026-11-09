@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { loadOutboxHandlers, type OutboxHandler } from '../../src/build-chat/outbox-handlers.js';
 import { createOutboxRelay, registerWorkspace, workspaceForJob } from '../../src/build-chat/outbox-relay.js';
-import { listSince } from '../../src/build-chat/store.js';
+import { listSince, parseCommand } from '../../src/build-chat/store.js';
 import { chatJob, FIXTURES, jobTable, JOB_ID, makeChatDeps, OTHER_JOB_ID } from './setup.js';
 
 const ULIDS = ['01JBX2Q7M3K8V5N4R6T9W0YZAB', '01JBX2Q7M3K8V5N4R6T9W0YZAC', '01JBX2Q7M3K8V5N4R6T9W0YZAD'];
@@ -188,5 +188,32 @@ describe('outbox relay', () => {
     } finally {
       r.stop();
     }
+  });
+  // A job running across the #571 upgrade still has `gm checkpoint open` lines in its outbox. Dropping them would lose
+  // the creator's question and leave the build parked, so the Command handler reads them for one release.
+  it('turns a pre-rename checkpoint.open line into a Command', async () => {
+    const { deps, relay, workspace, publish } = await setup();
+    const checkpointLine = {
+      v: 1,
+      id: ULIDS[0],
+      job_id: JOB_ID,
+      at: '2026-11-01T09:12:30Z',
+      type: 'checkpoint.open',
+      payload: {
+        checkpoint_id: 'cp_01JBX2R1A2B3C4D5E6F7G8H9JK',
+        question: 'Which door?',
+        options: [
+          { id: 'wood', label: 'Wooden' },
+          { id: 'iron', label: 'Iron' },
+        ],
+        blocking: true,
+      },
+    };
+    await appendFile(join(workspace, '.gm/outbox/checkpoint.jsonl'), `${JSON.stringify(checkpointLine)}\n`);
+    await relay().scan();
+    const [row] = listSince(deps.sqlite, JOB_ID, 0);
+    expect(row?.kind).toBe('command');
+    expect(parseCommand(row!)).toMatchObject({ command_id: 'cp_01JBX2R1A2B3C4D5E6F7G8H9JK', status: 'open' });
+    expect(publish).toHaveBeenCalledTimes(1);
   });
 });

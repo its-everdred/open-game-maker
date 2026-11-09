@@ -16,7 +16,7 @@ function fallSpeedCommand(): GameCommand {
     job_id: 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e91',
     ticket: '608',
     title: 'Fall speed',
-    checkpoint_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e92',
+    command_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e92',
     decision_id: 'd_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e93',
     version: 1,
     // An agent that still pastes a link gets it dropped: the deck never shows a URL as text.
@@ -131,7 +131,7 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await expect(page.getByRole('button', { name: 'Play Fast again' })).toBeVisible({ timeout: SECONDS * 1000 + 5_000 });
   await page.getByRole('button', { name: 'Like', exact: true }).click();
 
-  // The last vote answers through the job's checkpoint route with the whole map.
+  // The last vote answers through the job's Command route with the whole map.
   await expect(page.getByRole('heading', { name: 'Saved' })).toBeVisible();
   await capture(page, testInfo, 'playable-sent');
   expect(answerBodies).toEqual([
@@ -192,7 +192,7 @@ async function installApi(page: Page) {
       return json(route, { rev: 1, buildId: 'b_fall', doc: { schemaVersion: 1, globals: {}, entities: {} } });
     }
     if (path === '/api/v1/jobs' || path === '/api/v1/jobs/active') return json(route, { jobs: [] });
-    if (/\/jobs\/[^/]+\/checkpoints\/[^/]+\/answer$/.test(path)) {
+    if (/\/jobs\/[^/]+\/commands\/[^/]+\/answer$/.test(path)) {
       answerBodies.push(JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>);
       return json(route, { status: 'answered', decision_id: fallSpeedCommand().decision_id, option_id: 'fast' });
     }

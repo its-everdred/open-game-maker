@@ -115,9 +115,9 @@ const chat = [
   message('m_2', 'image', { text: 'Gate sketch', media: media(`${still}?a`) }),
   message('m_3', 'progress', { actor: 'system', text: 'Gate model placed' }),
   message('m_4', 'image', { text: 'Moonlit gate', media: media(`${still}?b`) }),
-  message('m_5', 'checkpoint', {
+  message('m_5', 'command', {
     text: 'Which gate looks right?',
-    checkpoint: {
+    command: {
       decision_id: '',
       question: 'Which gate looks right?',
       options: [
@@ -143,7 +143,7 @@ async function build(page, ready) {
   await page.route('**/api/v1/notifications/stream', (route) =>
     route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\n' }),
   );
-  await page.route('**/api/v1/jobs/*/checkpoints/budget', (route) => json(route, { used: 1, max: 3 }));
+  await page.route('**/api/v1/jobs/*/commands/budget', (route) => json(route, { used: 1, max: 3 }));
   await page.route('**/api/v1/jobs/*/chat*', async (route) => {
     if (route.request().method() === 'POST') {
       const { text } = route.request().postDataJSON();

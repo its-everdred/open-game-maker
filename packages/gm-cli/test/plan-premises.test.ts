@@ -10,13 +10,13 @@ import { gm, tempDir } from './helpers.js';
 const GAME = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 const JOB = 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 
-function decision(id: string, chosen: string, extra: { supersedes?: string; at?: string; checkpoint?: string } = {}) {
+function decision(id: string, chosen: string, extra: { supersedes?: string; at?: string; command?: string } = {}) {
   return {
     id,
     game_id: GAME,
     job_id: JOB,
     ticket: null,
-    checkpoint_id: extra.checkpoint ?? `cp_${id}`,
+    command_id: extra.command ?? `cp_${id}`,
     decision_id: `dec_${id}`,
     question: 'Which look?',
     options: [
@@ -158,9 +158,9 @@ describe('gm plan premises', () => {
         decision('D-01', 'a', { at: before }),
         decision('D-03', 'b', { at: before }),
         // Same Command, but its answer is b, which nobody rejected.
-        decision('D-05', 'b', { at: before, checkpoint: 'cp_D-01' }),
+        decision('D-05', 'b', { at: before, command: 'cp_D-01' }),
         // Picked a again after the rejection: the later answer stands.
-        decision('D-06', 'a', { at: '2099-01-01T00:00:00Z', checkpoint: 'cp_D-01' }),
+        decision('D-06', 'a', { at: '2099-01-01T00:00:00Z', command: 'cp_D-01' }),
       ],
     );
     expect(result.code).toBe(1);

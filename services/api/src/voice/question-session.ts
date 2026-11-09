@@ -4,8 +4,8 @@ import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
-import { findCheckpoint } from '../build-chat/store.js';
-import { answerCheckpoint } from '../checkpoints/answer.js';
+import { findCommand } from '../build-chat/store.js';
+import { answerCommand } from '../job-commands/answer.js';
 import { listProductQuestions } from '../commands/list.js';
 import { listDesignDecisions } from '../design-decisions/store.js';
 import { selectedOption } from './select-option.js';
@@ -55,7 +55,7 @@ export async function questionSession(deps: AppDeps, gameId: string): Promise<Qu
   };
 }
 
-// A spoken answer to one queued product question. A job's question answers through the job's checkpoint, so the chat,
+// A spoken answer to one queued product question. A job's question answers through the job's command, so the chat,
 // the decision history and aiur hold one record; a registered game's question answers through aiur as the creator.
 export async function answerProductQuestion(
   deps: AppDeps,
@@ -72,10 +72,10 @@ export async function answerProductQuestion(
   if (option === null) return { status: 'failed' };
 
   const chatJob = question.job_id === null ? null : await deps.registry.chatJobs?.get(question.job_id);
-  const row = chatJob ? findCheckpoint(deps.sqlite, chatJob.jobId, question.decision_id) : null;
+  const row = chatJob ? findCommand(deps.sqlite, chatJob.jobId, question.decision_id) : null;
   try {
     if (chatJob && row) {
-      const outcome = await answerCheckpoint({
+      const outcome = await answerCommand({
         deps,
         job: chatJob,
         row,

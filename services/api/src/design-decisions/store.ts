@@ -22,7 +22,7 @@ export type RecordDesignDecisionInput = {
   gameId: string;
   jobId: string;
   ticket: string | null;
-  checkpointId: string;
+  commandId: string;
   decisionId: string;
   question: string;
   options: { id: string; label: string }[];
@@ -44,7 +44,7 @@ export type RecordDesignDecisionResult = { decision: DesignDecision; created: bo
 export function recordDesignDecision(db: Db, input: RecordDesignDecisionInput): RecordDesignDecisionResult {
   return db.transaction((tx) => {
     // Every read runs through the same transaction as the write, so the sequence a row takes cannot race another writer.
-    const previous = previousRow(tx, input.gameId, input.checkpointId);
+    const previous = previousRow(tx, input.gameId, input.commandId);
     if (previous !== null && previous.chosen === input.chosen) {
       const promote = input.origin === 'default' && previous.origin !== 'default';
       const markSkipped = input.skipped === true && !previous.skipped;
@@ -67,7 +67,7 @@ export function recordDesignDecision(db: Db, input: RecordDesignDecisionInput): 
       number: nextNumber(tx, input.gameId),
       jobId: input.jobId,
       ticket: input.ticket,
-      checkpointId: input.checkpointId,
+      commandId: input.commandId,
       decisionId: input.decisionId,
       question: input.question,
       options: JSON.stringify(input.options),
@@ -100,7 +100,7 @@ export function tryRecordDesignDecision(
       event: 'design-decision-record-error',
       gameId: input.gameId,
       jobId: input.jobId,
-      checkpointId: input.checkpointId,
+      commandId: input.commandId,
       error: error instanceof Error ? error.name : 'unknown',
     });
     return null;
@@ -119,8 +119,8 @@ export function listDesignDecisions(db: Db, gameId: string): DesignDecision[] {
     .map(toDecision);
 }
 
-export function latestForCheckpoint(db: Db, gameId: string, checkpointId: string): DesignDecision | null {
-  const row = previousRow(db, gameId, checkpointId);
+export function latestForCommand(db: Db, gameId: string, commandId: string): DesignDecision | null {
+  const row = previousRow(db, gameId, commandId);
   return row === null ? null : toDecision(row);
 }
 
@@ -128,11 +128,11 @@ export function latestForCheckpoint(db: Db, gameId: string, checkpointId: string
 // helpers read through whatever handle the caller holds, so a transaction's reads stay inside it.
 type DecisionReads = Pick<Db, 'select'>;
 
-function previousRow(db: DecisionReads, gameId: string, checkpointId: string): DesignDecisionRow | null {
+function previousRow(db: DecisionReads, gameId: string, commandId: string): DesignDecisionRow | null {
   const row = db
     .select()
     .from(schema.designDecisions)
-    .where(and(eq(schema.designDecisions.gameId, gameId), eq(schema.designDecisions.checkpointId, checkpointId)))
+    .where(and(eq(schema.designDecisions.gameId, gameId), eq(schema.designDecisions.commandId, commandId)))
     .orderBy(desc(schema.designDecisions.number))
     .get();
   return row ?? null;
@@ -154,7 +154,7 @@ function toDecision(row: DesignDecisionRow): DesignDecision {
     game_id: row.gameId,
     job_id: row.jobId,
     ticket: row.ticket,
-    checkpoint_id: row.checkpointId,
+    command_id: row.commandId,
     decision_id: row.decisionId,
     question: row.question,
     options: JSON.parse(row.options) as DesignDecision['options'],

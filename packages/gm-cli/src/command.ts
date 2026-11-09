@@ -44,6 +44,8 @@ export type GmCommand = {
   usage?: string;
   example?: string;
   flags: FlagSpec;
+  /** Left out of `gm help`: an old name kept working for one release. */
+  hidden?: boolean;
   run(ctx: GmContext, args: string[], flags: Record<string, unknown>): Promise<number>;
 };
 

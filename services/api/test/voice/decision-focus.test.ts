@@ -19,7 +19,7 @@ function fixture() {
   const deps = worked();
   const options = (pairs: [string, string][]) => JSON.stringify(pairs.map(([id, label]) => ({ id, label })));
   deps.db
-    .insert(schema.checkpoints)
+    .insert(schema.commands)
     .values([
       {
         decisionId: 'd_goblins',
@@ -64,10 +64,10 @@ function fixture() {
   insertChatRow(deps.sqlite, {
     jobId: ids.running,
     actor: 'agent',
-    kind: 'checkpoint',
+    kind: 'command',
     text: 'Which hero look?',
-    checkpoint: {
-      checkpoint_id: 'cp-hero',
+    command: {
+      command_id: 'cp-hero',
       decision_id: 'd_hero',
       version: 2,
       question: 'Which hero look?',

@@ -41,7 +41,7 @@ beforeEach(() => {
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (url.includes('/checkpoints/')) {
+      if (url.includes('/commands/')) {
         return new Response(JSON.stringify(answerStatus === 200 ? { status: 'answered' } : { error: 'no' }), {
           status: answerStatus,
           headers: { 'content-type': 'application/json' },
@@ -74,7 +74,7 @@ describe('CommandsInbox', () => {
     expect(screen.queryByRole('list', { name: 'Requests' })).not.toBeInTheDocument();
   });
 
-  it('lists the open Commands with rich options and answers through the job checkpoint route', async () => {
+  it('lists the open Commands with rich options and answers through the job command route', async () => {
     renderInbox();
 
     const option = await screen.findByRole('button', { name: 'Stone arch' });
@@ -86,7 +86,7 @@ describe('CommandsInbox', () => {
 
     await waitFor(() =>
       expect(calls).toContainEqual({
-        url: '/api/v1/jobs/j_1/checkpoints/m_3/answer',
+        url: '/api/v1/jobs/j_1/commands/m_3/answer',
         method: 'POST',
         body: { option_id: 'stone' },
       }),
@@ -102,7 +102,7 @@ describe('CommandsInbox', () => {
   });
 
   it('answers a Command with no job through the game route and offers no conversation', async () => {
-    commands = [commandFixture({ job_id: null, checkpoint_id: 'd_1', decision_id: 'd_1' })];
+    commands = [commandFixture({ job_id: null, command_id: 'd_1', decision_id: 'd_1' })];
     renderInbox();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Stone arch' }));
@@ -148,7 +148,7 @@ describe('CommandsInbox', () => {
   // A Command with media on only some options keeps the plain list (#611). An aiur clip may carry no duration and no
   // poster; it is still a clip, never an image tag pointing at an mp4.
   it('shows an aiur clip in the option list as a clip', async () => {
-    const command = commandFixture({ job_id: null, checkpoint_id: 'd_1', decision_id: 'd_1' });
+    const command = commandFixture({ job_id: null, command_id: 'd_1', decision_id: 'd_1' });
     command.options = [
       {
         id: 'roll',
@@ -171,7 +171,7 @@ describe('CommandsInbox', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Wooden door' }));
 
-    await waitFor(() => expect(calls.some((call) => call.url.endsWith('/checkpoints/m_3/answer'))).toBe(true));
+    await waitFor(() => expect(calls.some((call) => call.url.endsWith('/commands/m_3/answer'))).toBe(true));
     expect(await screen.findByRole('button', { name: 'Wooden door' })).toBeEnabled();
   });
 });

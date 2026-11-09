@@ -9,7 +9,7 @@ function command(overrides: Partial<GameCommand> = {}): GameCommand {
     job_id: 'j_1',
     ticket: '570',
     title: 'Pick the voices',
-    checkpoint_id: 'cp_1',
+    command_id: 'cp_1',
     decision_id: 'd_1',
     version: 2,
     question: 'Which voice should the Blobs use?',
@@ -44,7 +44,7 @@ describe('review deep link', () => {
   });
 
   // A link built from either identifier resolves to the same Command, so a decision id from aiur's side lands too.
-  it('finds the Command by its checkpoint id or its decision id', () => {
+  it('finds the Command by its command id or its decision id', () => {
     const commands = [command()];
     expect(findCommand(commands, 'cp_1')).toBe(commands[0]);
     expect(findCommand(commands, 'd_1')).toBe(commands[0]);

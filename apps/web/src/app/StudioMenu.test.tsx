@@ -64,7 +64,7 @@ type TestDecision = {
   game_id: string;
   game_title: string;
   decision_id: string;
-  checkpoint_id: string;
+  command_id: string;
   job_id: string | null;
   title: string;
   summary?: string;
@@ -77,7 +77,7 @@ const decision = (id: string, overrides: Partial<TestDecision> = {}): TestDecisi
   game_id: 'game-blobs',
   game_title: 'Blobs',
   decision_id: id,
-  checkpoint_id: id,
+  command_id: id,
   job_id: null,
   title: `Question ${id}`,
   summary: `Topic ${id}`,
@@ -636,7 +636,7 @@ describe('StudioMenu', () => {
   it('clears unsent review drafts on sign out', async () => {
     state.session = { data: { user: { id: 'user-1' } } };
     auth.signOut.mockResolvedValueOnce(undefined);
-    const draft = { checkpoint_id: 'cp_1', version: 1 } as GameCommand;
+    const draft = { command_id: 'cp_1', version: 1 } as GameCommand;
     const { result } = renderHook(() => ({ edit: useDeckDraft(draft)[1], draft: useReviewDraft(draft) }));
     act(() => result.current.edit({ type: 'judge', optionId: 'a', verdict: 'like' }));
     expect(result.current.draft.deck.cards).toHaveLength(1);

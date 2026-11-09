@@ -97,7 +97,7 @@ export function optionalJobContext(options: { cwd: string; job?: string; environ
 
 export function appendOutboxLine(
   root: string,
-  file: 'chat.jsonl' | 'checkpoint.jsonl' | 'scope.jsonl',
+  file: 'chat.jsonl' | 'command.jsonl' | 'scope.jsonl',
   input: AgentOutboxLineValue,
 ): void {
   const line = `${JSON.stringify(AgentOutboxLine.parse(input))}\n`;

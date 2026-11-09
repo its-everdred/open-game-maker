@@ -3,7 +3,7 @@ import { MAX_COMMAND_OPTIONS } from '@ogm/contracts';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { alreadyAsked, appendDecision, DECISIONS_FILE, readDecisions } from '../../ledger/decisions.js';
 import { gameDir } from '../../outbox.js';
-import { decisionKeyFlag, KEY_FLAG, openCheckpoint, printEmitEvent } from '../checkpoint/open.js';
+import { decisionKeyFlag, KEY_FLAG, requestCommand, printEmitEvent } from '../command/request.js';
 
 function text(flags: Record<string, unknown>, name: string): string {
   const value = flags[name];
@@ -74,17 +74,17 @@ export const command: GmCommand = {
     if (earlier && flags.revisit !== true)
       throw new UsageError(
         `"${earlier.question}" was already asked under "${earlier.topic}" (${earlier.command}) and is in ${DECISIONS_FILE}`,
-        `use its answer (gm checkpoint wait ${earlier.command}); pass --revisit only when the creator reopened it`,
+        `use its answer (gm command wait ${earlier.command}); pass --revisit only when the creator reopened it`,
       );
 
-    const payload = openCheckpoint(ctx, flags, {
+    const payload = requestCommand(ctx, flags, {
       name: 'decide',
       maxOptions: MAX_COMMAND_OPTIONS,
       mediaOnEveryOption: true,
       topic,
     });
     appendDecision(dir, {
-      command: payload.checkpoint_id,
+      command: payload.command_id,
       topic,
       question: payload.question,
       options: payload.options.map(({ id }) => id),

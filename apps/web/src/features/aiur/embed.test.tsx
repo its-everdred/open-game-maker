@@ -55,12 +55,12 @@ describe('aiur embed adapter', () => {
 
     element!.dispatchEvent(
       new CustomEvent('aiur-answer', {
-        detail: { job_id: 'j_1', checkpoint_id: 'm_3', option_id: 'stone' },
+        detail: { job_id: 'j_1', command_id: 'm_3', option_id: 'stone' },
       }),
     );
 
     await waitFor(() =>
-      expect(onAnswer).toHaveBeenCalledWith({ job_id: 'j_1', checkpoint_id: 'm_3', option_id: 'stone' }),
+      expect(onAnswer).toHaveBeenCalledWith({ job_id: 'j_1', command_id: 'm_3', option_id: 'stone' }),
     );
   });
 
@@ -80,9 +80,9 @@ describe('aiur embed adapter', () => {
     expect(element).toHaveProperty('scope.stream', '/api/v1/jobs/j_1/chat');
 
     element!.dispatchEvent(
-      new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', checkpoint_id: 'm_3', option_id: 'wood' } }),
+      new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', command_id: 'm_3', option_id: 'wood' } }),
     );
-    expect(onAnswer).toHaveBeenCalledWith({ job_id: 'j_1', checkpoint_id: 'm_3', option_id: 'wood' });
+    expect(onAnswer).toHaveBeenCalledWith({ job_id: 'j_1', command_id: 'm_3', option_id: 'wood' });
   });
 
   it('scopes a job with no ticket to an empty ticket set', () => {
@@ -106,7 +106,7 @@ describe('aiur embed adapter', () => {
 
     fireEvent(
       document.querySelector(AIUR_COMMANDS_TAG)!,
-      new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', checkpoint_id: 'm_3', option_id: 'wood' } }),
+      new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', command_id: 'm_3', option_id: 'wood' } }),
     );
 
     expect(first).not.toHaveBeenCalled();

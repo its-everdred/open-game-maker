@@ -1,16 +1,17 @@
 import type { Decision } from '@ogm/aiur-client';
 import { CREATOR_AUDIENCE_MARKER, CREATOR_TEXT_ONLY_MARKER } from '@ogm/contracts';
 
-import { parseCheckpoint, type ChatRow, type StoredCheckpoint } from '../build-chat/store.js';
+import { parseCommand, type ChatRow, type StoredCommand } from '../build-chat/store.js';
 import { summaryOf } from '../commands/aiur.js';
 import { creatorAudience } from '../commands/audience.js';
 
-const marker = /gm-checkpoint:(cp_[0-7][0-9A-HJKMNP-TV-Z]{25})/;
+// `gm-checkpoint:` is the marker before #571 renamed it; Commands raised then are still open in aiur.
+const marker = /gm-(?:command|checkpoint):(cp_[0-7][0-9A-HJKMNP-TV-Z]{25})/;
 const openStatuses = new Set(['open', 'pending', 'deferred']);
 const answeredStatuses = new Set(['answered', 'decided', 'acknowledged', 'resolved']);
 const mootStatuses = new Set(['expired', 'dismissed', 'moot']);
 
-export function checkpointMarker(decision: Decision): string | null {
+export function commandMarker(decision: Decision): string | null {
   for (const source of [decision.context?.long_context_markdown, decision.context?.short_summary, decision.question]) {
     if (typeof source !== 'string') continue;
     const match = marker.exec(source);
@@ -20,11 +21,11 @@ export function checkpointMarker(decision: Decision): string | null {
 }
 
 // Whether the creator sees this Command (#595). Only player-facing questions reach the creator's inbox, menu count and
-// review deck: a decision Game Maker marked for the creator, or one opened through a gm checkpoint. Any other decision
+// review deck: a decision Game Maker marked for the creator, or one opened through `gm command request`. Any other decision
 // (an engineering or operations question an agent raised with plain `aiur command request`) stays with the Executor.
 // Aiur has no audience field yet, so a decision without the marker is treated as the Executor's.
 export function isForCreator(decision: Decision): boolean {
-  if (checkpointMarker(decision) !== null) return true;
+  if (commandMarker(decision) !== null) return true;
   return [decision.context?.long_context_markdown, decision.context?.short_summary, decision.question].some(
     (source) => typeof source === 'string' && source.includes(CREATOR_AUDIENCE_MARKER),
   );
@@ -81,7 +82,7 @@ function isNativeChoice(decision: Decision): boolean {
 export type CorrelationUpdate = {
   row: ChatRow;
   decision?: Decision;
-  patch: Partial<StoredCheckpoint>;
+  patch: Partial<StoredCommand>;
 };
 
 export type CorrelationPlan = {
@@ -90,23 +91,21 @@ export type CorrelationPlan = {
 };
 
 export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPlan {
-  const checkpoints = rows.flatMap((row) => {
-    const checkpoint = parseCheckpoint(row);
-    return checkpoint === null ? [] : [{ row, checkpoint }];
+  const commands = rows.flatMap((row) => {
+    const command = parseCommand(row);
+    return command === null ? [] : [{ row, command }];
   });
   const seen = new Set<string>();
   const create: Decision[] = [];
   const update: CorrelationUpdate[] = [];
 
   for (const decision of decisions) {
-    const linked = checkpoints.find(({ checkpoint }) => checkpoint.decision_id === decision.decision_id);
-    const checkpointId = checkpointMarker(decision);
-    const marked = checkpointId
-      ? checkpoints.find(({ checkpoint }) => checkpoint.checkpoint_id === checkpointId)
-      : undefined;
+    const linked = commands.find(({ command }) => command.decision_id === decision.decision_id);
+    const commandId = commandMarker(decision);
+    const marked = commandId ? commands.find(({ command }) => command.command_id === commandId) : undefined;
     const found = linked ?? marked;
     if (!found) {
-      if (checkpointId === null && statusOf(decision) === 'open' && isNativeChoice(decision) && isForCreator(decision))
+      if (commandId === null && statusOf(decision) === 'open' && isNativeChoice(decision) && isForCreator(decision))
         create.push(decision);
       continue;
     }
@@ -125,16 +124,16 @@ export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPl
         ...(optionId === undefined ? {} : { option_id: optionId }),
         // Who the decision is for and its topic follow aiur on every poll, so a row stored before aiur set them (or
         // before this app read them) catches up instead of staying hidden from the creator or topic-less. A builder's
-        // checkpoint keeps its job's title: `gm checkpoint open` sends the same placeholder topic for every question.
+        // Command keeps its job's title: `gm command request` sends the same placeholder topic for every question.
         audience: creatorAudience(decision),
         text_only: isTextOnly(decision) ? true : undefined,
-        summary: found.checkpoint.checkpoint_id === decision.decision_id ? summaryOf(decision) : undefined,
+        summary: found.command.command_id === decision.decision_id ? summaryOf(decision) : undefined,
       },
     });
   }
 
-  for (const { row, checkpoint } of checkpoints) {
-    if (checkpoint.status === 'open' && checkpoint.decision_id !== '' && !seen.has(row.id)) {
+  for (const { row, command } of commands) {
+    if (command.status === 'open' && command.decision_id !== '' && !seen.has(row.id)) {
       update.push({ row, patch: { status: 'moot' } });
     }
   }

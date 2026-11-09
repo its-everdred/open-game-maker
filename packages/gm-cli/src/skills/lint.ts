@@ -18,7 +18,7 @@ const NAMESPACED_COMMANDS = new Set([
   'packs',
   'maps',
   'docs',
-  'checkpoint',
+  'command',
   'chat',
   'options',
   'scope',

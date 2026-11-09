@@ -5,12 +5,12 @@ import { GameCommand, type CreatorCommandsPage, type Principal } from '@ogm/cont
 import { actorFromPrincipal } from '../accounts/families.js';
 import type { AppDeps } from '../app/types.js';
 import { getChatRuntime } from '../build-chat/routes.js';
-import { getChatRow, listCheckpoints, parseCheckpoint, toMessage, type MediaSigner } from '../build-chat/store.js';
+import { getChatRow, listCommands, parseCommand, toMessage, type MediaSigner } from '../build-chat/store.js';
 import { hasGameGrant, listGames, type GameRow } from '../games/games.js';
 import { listJobs } from '../jobs/repo.js';
 import { reviewNumbers } from '../reviews/numbers.js';
 import { gameCommandsFromAiur } from './aiur.js';
-import { isCreatorCheckpoint } from './audience.js';
+import { isCreatorCommand } from './audience.js';
 
 type UserPrincipal = Extract<Principal, { kind: 'user' }>;
 
@@ -20,7 +20,7 @@ async function optionMedia(deps: AppDeps, jobId: string, mediaId: string, sign: 
   return (await toMessage(row, sign)).media;
 }
 
-// One game's open player-facing Commands, newest first: its jobs' correlated checkpoints, plus the Commands its own aiur
+// One game's open player-facing Commands, newest first: its jobs' correlated Commands, plus the Commands its own aiur
 // instance holds when no job owns them. Each keeps the short review number it got the first time it was listed.
 export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<GameCommand[]> {
   const { sign } = getChatRuntime(deps);
@@ -31,14 +31,14 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
   );
 
   for (const job of jobs) {
-    for (const row of listCheckpoints(deps.sqlite, job.id)) {
-      const checkpoint = parseCheckpoint(row);
+    for (const row of listCommands(deps.sqlite, job.id)) {
+      const stored = parseCommand(row);
       // A Command is answerable only once aiur's decision is correlated (decision id and version known).
-      if (!checkpoint || checkpoint.status !== 'open') continue;
-      if (checkpoint.decision_id === '' || checkpoint.version === undefined) continue;
-      if (!isCreatorCheckpoint(checkpoint)) continue;
+      if (!stored || stored.status !== 'open') continue;
+      if (stored.decision_id === '' || stored.version === undefined) continue;
+      if (!isCreatorCommand(stored)) continue;
       const options = await Promise.all(
-        checkpoint.options.map(async (option) => {
+        stored.options.map(async (option) => {
           const media =
             option.media_id === undefined ? undefined : await optionMedia(deps, job.id, option.media_id, sign);
           return {
@@ -49,30 +49,30 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
           };
         }),
       );
-      // One malformed checkpoint row is left out of the inbox rather than failing every Command in the game.
+      // One malformed Command row is left out of the inbox rather than failing every Command in the game.
       const command = GameCommand.safeParse({
         job_id: job.id,
         ticket: job.aiurIssueNumber === null ? null : String(job.aiurIssueNumber),
-        // A Command's own topic titles it; an older checkpoint without one falls back to the job's title.
-        title: checkpoint.topic ?? job.plan.title,
-        ...(checkpoint.summary === undefined ? {} : { summary: checkpoint.summary }),
-        checkpoint_id: checkpoint.checkpoint_id ?? row.id,
-        decision_id: checkpoint.decision_id,
-        version: checkpoint.version,
-        question: checkpoint.question,
+        // A Command's own topic titles it; an older Command without one falls back to the job's title.
+        title: stored.topic ?? job.plan.title,
+        ...(stored.summary === undefined ? {} : { summary: stored.summary }),
+        command_id: stored.command_id ?? row.id,
+        decision_id: stored.decision_id,
+        version: stored.version,
+        question: stored.question,
         options,
-        ...(checkpoint.recommend === undefined ? {} : { recommend: checkpoint.recommend }),
-        blocking: checkpoint.blocking ?? false,
+        ...(stored.recommend === undefined ? {} : { recommend: stored.recommend }),
+        blocking: stored.blocking ?? false,
         // How the Command's answer is taken: a review deck's 'one' asks for a single pick from its likes.
-        pick: checkpoint.pick ?? 'one',
+        pick: stored.pick ?? 'one',
         opened_at: row.at,
-        ...(checkpoint.text_only ? { text_only: true } : {}),
+        ...(stored.text_only ? { text_only: true } : {}),
       });
       if (command.success) commands.push(command.data);
     }
   }
 
-  // A registered game's Commands belong to no job. A decision already listed from a job's checkpoint stays the
+  // A registered game's Commands belong to no job. A decision already listed from a job's Command stays the
   // job's, so one Command never appears twice.
   const listed = new Set(commands.map((command) => command.decision_id));
   for (const command of await gameCommandsFromAiur(deps, game.id, jobTickets, sign)) {

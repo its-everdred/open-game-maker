@@ -20,7 +20,7 @@ export const DesignDecision = z.object({
   job_id: Id,
   // The aiur ticket the Command belongs to, as the Commands inbox models it; null until the job is linked.
   ticket: z.string().trim().min(1).max(40).nullable(),
-  checkpoint_id: z.string().min(1).max(200),
+  command_id: z.string().min(1).max(200),
   decision_id: z.string().min(1).max(200),
   question: z.string().trim().min(1).max(8000),
   options: z.array(DesignDecisionOption).min(2).max(12),

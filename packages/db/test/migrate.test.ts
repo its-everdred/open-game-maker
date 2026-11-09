@@ -60,6 +60,7 @@ describe('migrate', () => {
         '20261108035442_game_reviews.sql',
         '20261108055645_energy.sql',
         '20261108155353_review_drafts.sql',
+        '20261109125710_command_rename.sql',
       ],
     });
     expect(migrate({ sqlite })).toEqual({ applied: [] });
@@ -106,18 +107,19 @@ describe('migrate', () => {
       'migration:20261108035442_game_reviews.sql',
       'migration:20261108055645_energy.sql',
       'migration:20261108155353_review_drafts.sql',
+      'migration:20261109125710_command_rename.sql',
     ]);
     sqlite.close();
   });
 
-  it('creates the aiur event, cursor, checkpoint and job projection tables', () => {
+  it('creates the aiur event, cursor, command and job projection tables', () => {
     const { sqlite } = openDb(':memory:');
     migrate({ sqlite });
     const tables = sqlite
       .prepare<[], { name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
       .all()
       .map(({ name }) => name);
-    expect(tables).toEqual(expect.arrayContaining(['aiur_events', 'aiur_cursors', 'checkpoints', 'job_projections']));
+    expect(tables).toEqual(expect.arrayContaining(['aiur_events', 'aiur_cursors', 'commands', 'job_projections']));
     const insert = sqlite.prepare(
       "INSERT OR IGNORE INTO aiur_events (daemon_slug, seq, topic, payload, observed_at) VALUES ('d', 1, 't', '{}', 'now')",
     );

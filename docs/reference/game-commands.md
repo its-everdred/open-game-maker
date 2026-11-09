@@ -15,7 +15,7 @@ game to its ticket identifiers and never receives aiur supervisor credentials.
       "job_id": "j_...",
       "ticket": "478",
       "title": "Build the moon gate",
-      "checkpoint_id": "cp_...",
+      "command_id": "cp_...",
       "decision_id": "d_...",
       "version": 3,
       "question": "Which gate should the courtyard use?",
@@ -32,8 +32,8 @@ game to its ticket identifiers and never receives aiur supervisor credentials.
 ```
 
 Commands are newest first. A Command appears only once aiur's decision is correlated, so `decision_id` and `version`
-are always present; answered, moot and uncorrelated checkpoints are left out. `summary` is the decision's short topic (aiur's
-`short_summary`) when it has one; a builder's checkpoint keeps its job's title instead, since `gm checkpoint open` sends
+are always present; answered, moot and uncorrelated Commands are left out. `summary` is the decision's short topic (aiur's
+`short_summary`) when it has one; a builder's Command keeps its job's title instead, since `gm command request` sends
 the same placeholder topic for every question. `media` is a signed blob URL, the same one the build chat renders for an
 option that carries an image, GIF, video or audio.
 
@@ -41,8 +41,8 @@ option that carries an image, GIF, video or audio.
 
 The inbox lists only Commands meant for the player. Engineering and operations questions go to the Executor and never
 reach a creator view. Aiur has no audience field yet, so a decision aiur holds counts as the player's only when it
-carries Game Maker's creator marker (`CREATOR_AUDIENCE_MARKER`, which `gm decide` writes) or a gm checkpoint marker;
-any other decision is left out. A builder's own `checkpoint.open` question is the player's by construction.
+carries Game Maker's creator marker (`CREATOR_AUDIENCE_MARKER`, which `gm decide` writes) or a gm command marker;
+any other decision is left out. A builder's own `command.request` question is the player's by construction.
 
 ## The menu's decision inbox
 
@@ -64,22 +64,22 @@ pushed or opened on its own.
 
 Opening the entry starts two-way voice on the `questions` target (`{ kind: "questions", game_id, creator_id }`). The
 agent is briefed with the queued questions, oldest first, and the game's decision record, and asks them one at a time.
-A clear spoken answer is saved to its Command at once, through the job's checkpoint when a build owns it and as the
+A clear spoken answer is saved to its Command at once, through the job's command when a build owns it and as the
 creator's own aiur answer otherwise. An ambiguous answer, a skip or a stop leaves the question queued.
 
 ## Answering
 
-Answer through the job's checkpoint route, not the inbox route:
-`POST /api/v1/jobs/:jobId/checkpoints/:checkpointId/answer` with `{ "option_id": "stone" }`. It validates the option
-against the job's checkpoint and calls aiur's canonical Decision API with the checkpoint's `version`, so an answer
-from the inbox, from the job conversation modal and from an inline checkpoint card are the same operation. A `409`
+Answer through the job's command route, not the inbox route:
+`POST /api/v1/jobs/:jobId/commands/:commandId/answer` with `{ "option_id": "stone" }`. It validates the option
+against the job's Command and calls aiur's canonical Decision API with the Command's `version`, so an answer
+from the inbox, from the job conversation modal and from an inline Command card are the same operation. A `409`
 means another writer answered first and the returned status is the winner's.
 
 ## Skipping a question
 
-`POST /api/v1/jobs/:jobId/checkpoints/:checkpointId/skip` takes the Command's recommended option without the player
+`POST /api/v1/jobs/:jobId/commands/:commandId/skip` takes the Command's recommended option without the player
 choosing, and records the decision as skipped. A Command without a recommendation cannot be skipped (`409`
-`checkpoint_recommendation_missing`).
+`command_recommendation_missing`).
 
 ## Design decisions
 
@@ -110,7 +110,7 @@ Executor and the design agent use. A token minted for another game's request is 
       "game_id": "g_...",
       "job_id": "j_...",
       "ticket": "42",
-      "checkpoint_id": "cp_...",
+      "command_id": "cp_...",
       "decision_id": "d_...",
       "question": "Which door?",
       "options": [

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { listCheckpoints, parseCheckpoint } from '../../src/build-chat/store.js';
-import { createInboxWriter } from '../../src/checkpoints/inbox.js';
-import { createCheckpointPoller } from '../../src/checkpoints/poller.js';
+import { listCommands, parseCommand } from '../../src/build-chat/store.js';
+import { createInboxWriter } from '../../src/job-commands/inbox.js';
+import { createCommandPoller } from '../../src/job-commands/poller.js';
 import { listDesignDecisions } from '../../src/design-decisions/store.js';
 import type { AppDeps } from '../../src/app/types.js';
 import { makeDeps } from '../helpers.js';
@@ -12,7 +12,7 @@ import {
   PARENT_TICKET,
   SCOPE_JOB,
   answeredDecision,
-  insertOpenDesignCheckpoint,
+  insertOpenDesignCommand,
   seedDesignGame,
 } from './fixtures.js';
 
@@ -44,7 +44,7 @@ function setup(kind: 'scope' | 'feature' = 'scope', options: { seed?: boolean } 
     message: async () => ({ request_id: 'r_test' }),
     progress: async () => [],
   });
-  const poller = createCheckpointPoller({
+  const poller = createCommandPoller({
     db: deps.db,
     sqlite: deps.sqlite,
     jobs: () => deps.registry.chatJobs,
@@ -56,17 +56,17 @@ function setup(kind: 'scope' | 'feature' = 'scope', options: { seed?: boolean } 
   return { deps, poller };
 }
 
-describe('checkpoint poller and design decisions', () => {
+describe('command poller and design decisions', () => {
   it('records an answer that reached aiur without this app answering it', async () => {
     const { deps, poller } = setup();
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     await poller.tick();
 
     expect(listDesignDecisions(deps.db, GAME)).toEqual([
       expect.objectContaining({
         id: 'D-01',
-        checkpoint_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e72',
+        command_id: 'cp_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e72',
         decision_id: DECISION_ID,
         chosen: 'wood',
         origin: 'player',
@@ -79,7 +79,7 @@ describe('checkpoint poller and design decisions', () => {
 
   it('records nothing for an edit’s Command', async () => {
     const { deps, poller } = setup('feature');
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     await poller.tick();
 
@@ -88,16 +88,16 @@ describe('checkpoint poller and design decisions', () => {
 
   it('still answers the card when the decision cannot be recorded', async () => {
     const { deps, poller } = setup('scope', { seed: false });
-    insertOpenDesignCheckpoint(deps);
+    insertOpenDesignCommand(deps);
 
     // A failed history write is not an aiur outage: the tick succeeds and the card still shows the answer.
     expect(await poller.tick()).toBe(false);
-    expect(parseCheckpoint(listCheckpoints(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
+    expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
       status: 'answered',
       option_id: 'wood',
     });
     expect(listDesignDecisions(deps.db, GAME)).toEqual([]);
-    expect(deps.lines.filter((line) => line.event === 'checkpoint-poll-error')).toEqual([]);
+    expect(deps.lines.filter((line) => line.event === 'command-poll-error')).toEqual([]);
     expect(deps.lines.filter((line) => line.event === 'design-decision-record-error')).toHaveLength(1);
   });
 });

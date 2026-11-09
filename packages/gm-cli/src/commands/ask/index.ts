@@ -5,7 +5,7 @@ import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { alreadyAsked, appendDecision, DECISIONS_FILE, readDecisions } from '../../ledger/decisions.js';
 import { strings } from '../../ledger/provenance.js';
 import { gameDir } from '../../outbox.js';
-import { MAX_QUESTION, pair, URL_TEXT } from '../checkpoint/open.js';
+import { MAX_QUESTION, pair, URL_TEXT } from '../command/request.js';
 
 function text(flags: Record<string, unknown>, name: string): string {
   const value = flags[name];
@@ -62,7 +62,7 @@ export const command: GmCommand = {
         `"${earlier.question}" was already asked under "${earlier.topic}" (${earlier.command}) and is in ${DECISIONS_FILE}`,
         'its answer is in the decision record once given; pass --revisit only when the creator reopened it',
       );
-    // The record keys every question by a checkpoint-shaped id; a product question has no checkpoint, so it gets its own.
+    // The record keys every question by a command-shaped id; a product question has no command, so it gets its own.
     const id = `cp_${ulid()}`;
     appendDecision(dir, {
       command: id,

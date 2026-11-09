@@ -32,7 +32,7 @@ export function recordReview(db: Db, input: RecordReviewInput): CommandReviewEnt
     .where(
       and(
         eq(schema.commandReviews.gameId, input.gameId),
-        eq(schema.commandReviews.checkpointId, input.command.checkpoint_id),
+        eq(schema.commandReviews.commandId, input.command.command_id),
       ),
     )
     .orderBy(desc(schema.commandReviews.at), desc(sql`rowid`))
@@ -45,7 +45,7 @@ export function recordReview(db: Db, input: RecordReviewInput): CommandReviewEnt
     jobId: input.command.job_id,
     ticket: input.command.ticket,
     title: input.command.title,
-    checkpointId: input.command.checkpoint_id,
+    commandId: input.command.command_id,
     decisionId: input.command.decision_id,
     question: input.command.question,
     optionId: input.optionId,
@@ -72,7 +72,7 @@ export function tryRecordReview(
       event: 'command-review-record-error',
       gameId: input.gameId,
       jobId: input.command.job_id,
-      checkpointId: input.command.checkpoint_id,
+      commandId: input.command.command_id,
       error: error instanceof Error ? error.name : 'unknown',
     });
     return null;
@@ -93,7 +93,7 @@ export function listReviews(db: Db, gameId: string): CommandReviewEntry[] {
 
 function card(command: GameCommand, id: string) {
   const option = command.options.find(({ id: candidate }) => candidate === id);
-  if (option === undefined) throw new Error(`review card ${id} is not an option of Command ${command.checkpoint_id}`);
+  if (option === undefined) throw new Error(`review card ${id} is not an option of Command ${command.command_id}`);
   return { option_id: option.id, label: option.label };
 }
 
@@ -133,7 +133,7 @@ function toEntry(row: CommandReviewRow): CommandReviewEntry {
     job_id: row.jobId,
     ticket: row.ticket,
     title: row.title,
-    checkpoint_id: row.checkpointId,
+    command_id: row.commandId,
     decision_id: row.decisionId,
     question: row.question,
     option_id: row.optionId,

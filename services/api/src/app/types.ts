@@ -32,7 +32,7 @@ export interface AppDeps {
     // Build chat: the relay starts only with a workspaces root; the progress poller only with a period.
     builderWorkspacesRoot?: string;
     chatPollMs?: number;
-    checkpointPollMs?: number;
+    commandPollMs?: number;
     // How long an open design Command waits for the player before its provisional default answers it.
     designDefaultMs: number;
     // How many queued product questions put a voice-session entry in the creator's inbox (#612); 5 when unset.

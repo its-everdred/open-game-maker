@@ -21,7 +21,7 @@ export const commandReviews = sqliteTable(
     // The aiur ticket the Command belongs to; null until the job is linked to one.
     ticket: text('ticket'),
     title: text('title').notNull(),
-    checkpointId: text('checkpoint_id').notNull(),
+    commandId: text('command_id').notNull(),
     decisionId: text('decision_id').notNull(),
     question: text('question').notNull(),
     // The option the Command was answered with: the tapped shortlist card, or the first like when it asks for many.
@@ -34,7 +34,7 @@ export const commandReviews = sqliteTable(
   },
   (table) => [
     index('command_reviews_game_at').on(table.gameId, table.at),
-    index('command_reviews_checkpoint').on(table.checkpointId),
+    index('command_reviews_command').on(table.commandId),
     check('command_reviews_likes_array', sql`json_type(${table.likes}) = 'array'`),
     check('command_reviews_dislikes_array', sql`json_type(${table.dislikes}) = 'array'`),
   ],

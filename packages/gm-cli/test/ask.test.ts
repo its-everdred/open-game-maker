@@ -49,8 +49,8 @@ describe('gm ask', () => {
     const context = emit_event.payload.context;
     expect(context.long_context_markdown).toContain(CREATOR_AUDIENCE_MARKER);
     expect(context.long_context_markdown).toContain(CREATOR_TEXT_ONLY_MARKER);
-    // No checkpoint marker: the Command is mirrored as a plain decision, not matched to an outbox row.
-    expect(context.long_context_markdown).not.toContain('gm-checkpoint:');
+    // No command marker: the Command is mirrored as a plain decision, not matched to an outbox row.
+    expect(context.long_context_markdown).not.toContain('gm-command:');
     expect(context.short_summary).toBe('Lives per run');
     expect(emit_event.payload.options).toHaveLength(2);
     const record = JSON.parse(readFileSync(join(root, 'design', 'decisions.json'), 'utf8')) as {

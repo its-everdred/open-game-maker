@@ -43,7 +43,7 @@ const command: GameCommand = {
   job_id: null,
   ticket: '12',
   title: 'Blobs staging',
-  checkpoint_id: 'dec_blobs',
+  command_id: 'dec_blobs',
   decision_id: 'dec_blobs',
   version: 1,
   question: 'How should the blobs rest?',

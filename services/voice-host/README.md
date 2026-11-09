@@ -2,7 +2,7 @@
 
 The voice host supervises one `voice_converse` instance and ElevenLabs Scribe sessions. It accepts short-lived OGM tokens on a loopback WebSocket, serves briefings from an in-memory cache, and forwards confirmed instruction drafts and final voice turns to the API. It stores no audio or transcript; final text follows the normal API chat-retention policy.
 
-At conversation start, the briefing includes every open Aiur Command for the current request, including older unanswered Commands. The agent reads those choices aloud and sends an explicit spoken choice through the same Aiur Decision API used by typed checkpoint replies. A new feature mentioned during the call stays separate and becomes its own change request.
+At conversation start, the briefing includes every open Aiur Command for the current request, including older unanswered Commands. The agent reads those choices aloud and sends an explicit spoken choice through the same Aiur Decision API used by typed Command replies. A new feature mentioned during the call stays separate and becomes its own change request.
 
 ## Reuse boundary
 

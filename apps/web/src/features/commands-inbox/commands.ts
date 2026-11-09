@@ -4,7 +4,7 @@ import type { CommandReview, CreatorCommandsPage, GameCommand, GameCommandsPage 
 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
-import { answerCheckpoint } from '../build-chat/checkpoints';
+import { answerJobCommand } from '../build-chat/commands';
 
 // The game's open aiur Commands (M3). Polling matches the build list: a Command opened by a running agent shows up
 // without a reload.
@@ -47,8 +47,8 @@ export function useCreatorCommands(creatorId: string | undefined) {
   };
 }
 
-// A Command a job owns answers through the job's checkpoint route. A Command with no job — a registered game's, read
-// from its own aiur instance — has no checkpoint to validate against, so it answers through the game's route with the
+// A Command a job owns answers through the job's Command route. A Command with no job — a registered game's, read
+// from its own aiur instance — has no Command to validate against, so it answers through the game's route with the
 // version the player saw. Both end at aiur's canonical Decision API, and a review deck's like/dislike map travels
 // either way so the game's ledger records it.
 export async function answerCommand(
@@ -64,7 +64,7 @@ export async function answerCommand(
       json: { option_id: optionId, version: command.version, ...carried },
     });
   } else {
-    await answerCheckpoint(command.job_id, command.checkpoint_id, optionId, review);
+    await answerJobCommand(command.job_id, command.command_id, optionId, review);
   }
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: gameCommandsQueryKey(gameId) }),

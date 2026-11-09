@@ -76,7 +76,7 @@ const deps: AppDeps = {
     vapidSubject: `mailto:${env.OGM_VAPID_SUBJECT}`,
     builderWorkspacesRoot: env.OGM_BUILDER_WORKSPACES_ROOT,
     chatPollMs: env.OGM_CHAT_POLL_MS,
-    checkpointPollMs: env.OGM_CHECKPOINT_POLL_MS,
+    commandPollMs: env.OGM_COMMAND_POLL_MS,
     designDefaultMs: env.OGM_DESIGN_DEFAULT_MS,
     voiceQuestionsAt: env.OGM_VOICE_QUESTIONS_AT,
     analyticsRetentionDays: env.OGM_ANALYTICS_RETENTION_DAYS,
@@ -166,7 +166,7 @@ const decisionWaits = createDecisionWaitPoller({
   tickets: createWaitTickets(env.OGM_INTAKE_GITHUB_TOKEN),
   log,
 });
-decisionWaits.start(env.OGM_CHECKPOINT_POLL_MS);
+decisionWaits.start(env.OGM_COMMAND_POLL_MS);
 const stopBriefingPush =
   env.OGM_VOICE_HOST_INTERNAL_URL && env.OGM_VOICE_INTERNAL_SECRET
     ? startBriefingPush({

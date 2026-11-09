@@ -1,6 +1,6 @@
 import type { Sqlite } from '@ogm/db';
 
-import { findCheckpoint, getChatRow, parseCheckpoint, type ChatRow } from '../build-chat/store.js';
+import { findCommand, getChatRow, parseCommand, type ChatRow } from '../build-chat/store.js';
 
 type BriefedCommand = { id: string; question: string; options: { id: string; label: string }[] };
 
@@ -12,20 +12,20 @@ export function decisionFocus(
   jobId: string,
   command: BriefedCommand,
 ): { title: string; text: string } {
-  const row = sqlite === undefined ? null : findCheckpoint(sqlite, jobId, command.id);
-  const checkpoint = row === null ? null : parseCheckpoint(row);
+  const row = sqlite === undefined ? null : findCommand(sqlite, jobId, command.id);
+  const saved = row === null ? null : parseCommand(row);
   const lines = [`The creator has this decision open and started voice from it: ${command.question}`];
   for (const option of command.options) {
-    const stored = checkpoint?.options.find(({ id }) => id === option.id);
+    const stored = saved?.options.find(({ id }) => id === option.id);
     const media = sqlite === undefined || stored?.media_id === undefined ? null : getChatRow(sqlite, stored.media_id);
     const details = [
       ...(media === null || media.jobId !== jobId ? [] : [mediaText(media)]),
       ...(stored?.provenance === undefined ? [] : [provenanceText(stored.provenance)]),
     ].filter((text) => text !== '');
-    const recommended = checkpoint?.recommend === option.id ? ' (the builder recommends it)' : '';
+    const recommended = saved?.recommend === option.id ? ' (the builder recommends it)' : '';
     lines.push(`- ${option.label}${recommended}${details.length === 0 ? '' : `: ${details.join('; ')}`}`);
   }
-  if (checkpoint?.pick === 'many') lines.push('The creator rates every card, so there is no single option to pick.');
+  if (saved?.pick === 'many') lines.push('The creator rates every card, so there is no single option to pick.');
   return { title: 'Open decision', text: lines.join('\n') };
 }
 
@@ -38,7 +38,7 @@ function mediaText(row: ChatRow): string {
   return `a still image, ${row.width}×${row.height}`;
 }
 
-function provenanceText(provenance: NonNullable<ReturnType<typeof parseCheckpoint>>['options'][number]['provenance']) {
+function provenanceText(provenance: NonNullable<ReturnType<typeof parseCommand>>['options'][number]['provenance']) {
   if (provenance === undefined) return '';
   const parts = [
     ...(provenance.kind === undefined ? [] : [provenance.kind]),

@@ -22,7 +22,7 @@ describe('analytics retention', () => {
     expect(() => loadApiEnv({ ...baseEnv, OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: '0' })).toThrow(
       /OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD/,
     );
-    expect(() => loadApiEnv({ ...baseEnv, OGM_CHECKPOINT_POLL_MS: '0' })).toThrow(/OGM_CHECKPOINT_POLL_MS/);
+    expect(() => loadApiEnv({ ...baseEnv, OGM_COMMAND_POLL_MS: '0' })).toThrow(/OGM_COMMAND_POLL_MS/);
     expect(() => loadApiEnv({ ...baseEnv, OGM_INTAKE_SWEEP_SECONDS: '0' })).toThrow(/OGM_INTAKE_SWEEP_SECONDS/);
   });
 

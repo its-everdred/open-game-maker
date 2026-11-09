@@ -10,17 +10,17 @@ import { gm, tempDir } from './helpers.js';
 const JOB_ID = 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 
 function workspace(): string {
-  const root = tempDir('gm-checkpoint-');
+  const root = tempDir('gm-command-');
   execFileSync('git', ['init', '-q'], { cwd: root });
   return root;
 }
 
-function checkpointLine(root: string) {
-  const raw = readFileSync(join(root, '.gm', 'outbox', 'checkpoint.jsonl'), 'utf8').trim();
+function commandLine(root: string) {
+  const raw = readFileSync(join(root, '.gm', 'outbox', 'command.jsonl'), 'utf8').trim();
   return AgentOutboxLine.parse(JSON.parse(raw));
 }
 
-describe('gm checkpoint open', () => {
+describe('gm command request', () => {
   it('writes two candidates with media and prints the correlated decision.requested call', async () => {
     const root = workspace();
     const events = join(root, 'events.jsonl');
@@ -29,8 +29,8 @@ describe('gm checkpoint open', () => {
 
     const result = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--job',
         JOB_ID,
         '--question',
@@ -50,13 +50,13 @@ describe('gm checkpoint open', () => {
 
     expect(result).toMatchObject({ code: 0, err: [] });
     const printed = JSON.parse(result.out[0]) as {
-      checkpoint_id: string;
+      command_id: string;
       emit_event: { name: string; payload: Record<string, unknown> };
     };
-    const line = checkpointLine(root);
-    expect(printed.checkpoint_id).toMatch(/^cp_[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
+    const line = commandLine(root);
+    expect(printed.command_id).toMatch(/^cp_[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
     expect(line.payload).toMatchObject({
-      checkpoint_id: printed.checkpoint_id,
+      command_id: printed.command_id,
       question: 'Which look?',
       options: [
         { id: 'a', label: 'Chunky', media_id: mediaId },
@@ -77,20 +77,20 @@ describe('gm checkpoint open', () => {
       },
     });
     expect((printed.emit_event.payload.context as { long_context_markdown: string }).long_context_markdown).toContain(
-      `gm-checkpoint:${printed.checkpoint_id}`,
+      `gm-command:${printed.command_id}`,
     );
     expect(JSON.parse(readFileSync(events, 'utf8'))).toMatchObject({
-      event: 'checkpoint.open',
+      event: 'command.request',
       job_id: JOB_ID,
       payload: { kind: 'direction_checkpoint' },
     });
   });
 
-  it('prints the checkpoint id followed by copyable emit_event JSON by default', async () => {
+  it('prints the command id followed by copyable emit_event JSON by default', async () => {
     const result = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--job',
         JOB_ID,
         '--question',
@@ -110,8 +110,8 @@ describe('gm checkpoint open', () => {
   it('exits 2 for an unknown media id', async () => {
     const result = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--job',
         JOB_ID,
         '--question',
@@ -134,8 +134,8 @@ describe('gm checkpoint open', () => {
     const root = workspace();
     const result = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--job',
         JOB_ID,
         '--question',
@@ -170,7 +170,7 @@ describe('gm checkpoint open', () => {
     // The slices also ride in aiur's own copy, so the Command plays wherever it is read from.
     const context = printed.emit_event.payload.context as { long_context_markdown: string };
     expect([...playablesFromMarker(context.long_context_markdown).keys()]).toEqual(['slow', 'fast']);
-    expect(checkpointLine(root).payload.options).toEqual([
+    expect(commandLine(root).payload.options).toEqual([
       {
         id: 'slow',
         label: 'Slow',
@@ -186,7 +186,7 @@ describe('gm checkpoint open', () => {
   // (#680); a key that could not be a GitHub label is refused before the Command is printed.
   it('stamps the decision key that waiting tickets name on the Command', async () => {
     const root = workspace();
-    const args = ['checkpoint', 'open', '--question', 'Which diorama?', '--option', 'a=Meadow', '--option', 'b=Table'];
+    const args = ['command', 'request', '--question', 'Which diorama?', '--option', 'a=Meadow', '--option', 'b=Table'];
     const result = await gm([...args, '--key', 'blobs/diorama', '--json'], { cwd: root });
     expect(result).toMatchObject({ code: 0, err: [] });
     const printed = JSON.parse(result.out[0]) as {
@@ -203,8 +203,8 @@ describe('gm checkpoint open', () => {
     const root = workspace();
     const result = await gm(
       [
-        'checkpoint',
-        'open',
+        'command',
+        'request',
         '--question',
         'Which fall speed feels right?',
         '--option',
@@ -225,7 +225,7 @@ describe('gm checkpoint open', () => {
     );
 
     expect(result).toMatchObject({ code: 0, err: [] });
-    expect(existsSync(join(root, '.gm', 'outbox', 'checkpoint.jsonl'))).toBe(false);
+    expect(existsSync(join(root, '.gm', 'outbox', 'command.jsonl'))).toBe(false);
     const printed = JSON.parse(result.out[0]) as {
       emit_event: { payload: { context: { long_context_markdown: string } } };
     };
@@ -262,7 +262,7 @@ describe('gm checkpoint open', () => {
     );
 
     expect(result).toMatchObject({ code: 0, err: [] });
-    expect(existsSync(join(root, '.gm', 'outbox', 'checkpoint.jsonl'))).toBe(false);
+    expect(existsSync(join(root, '.gm', 'outbox', 'command.jsonl'))).toBe(false);
     const printed = JSON.parse(result.out[0]) as {
       emit_event: { payload: { context: { short_summary: string; long_context_markdown: string } } };
     };
@@ -277,7 +277,7 @@ describe('gm checkpoint open', () => {
     const root = workspace();
     mkdirSync(join(root, '.gm', 'context'), { recursive: true });
     writeFileSync(join(root, '.gm', 'context', 'job.json'), '{}');
-    const result = await gm(['checkpoint', 'open', '--question', 'Which?', '--option', 'a=A', '--option', 'b=B'], {
+    const result = await gm(['command', 'request', '--question', 'Which?', '--option', 'a=A', '--option', 'b=B'], {
       cwd: root,
     });
     expect(result.code).toBe(2);
@@ -286,7 +286,7 @@ describe('gm checkpoint open', () => {
 
   it('exits 2 for chat media without a build job', async () => {
     const result = await gm(
-      ['checkpoint', 'open', '--question', 'Which?', '--option', 'a=A', '--option', 'b=B', '--media', 'a=m_1'],
+      ['command', 'request', '--question', 'Which?', '--option', 'a=A', '--option', 'b=B', '--media', 'a=m_1'],
       { cwd: workspace() },
     );
     expect(result.code).toBe(2);
@@ -309,7 +309,7 @@ describe('gm checkpoint open', () => {
     },
   ])('exits 2 for $name', async ({ extra, error }) => {
     const result = await gm(
-      ['checkpoint', 'open', '--job', JOB_ID, '--question', 'Which?', '--option', 'a=A', '--option', 'b=B', ...extra],
+      ['command', 'request', '--job', JOB_ID, '--question', 'Which?', '--option', 'a=A', '--option', 'b=B', ...extra],
       { cwd: workspace() },
     );
     expect(result.code).toBe(2);
@@ -322,7 +322,7 @@ describe('gm checkpoint open', () => {
     { name: 'with a link', question: 'Which? https://example.test/play', error: 'must not contain links' },
   ])('exits 2 for a question $name', async ({ question, error }) => {
     const result = await gm(
-      ['checkpoint', 'open', '--job', JOB_ID, '--question', question, '--option', 'a=A', '--option', 'b=B'],
+      ['command', 'request', '--job', JOB_ID, '--question', question, '--option', 'a=A', '--option', 'b=B'],
       { cwd: workspace() },
     );
     expect(result.code).toBe(2);
@@ -331,7 +331,7 @@ describe('gm checkpoint open', () => {
 
   it('exits 2 when fewer than two options are provided', async () => {
     const result = await gm(
-      ['checkpoint', 'open', '--job', JOB_ID, '--question', 'Which look?', '--option', 'a=Chunky'],
+      ['command', 'request', '--job', JOB_ID, '--question', 'Which look?', '--option', 'a=Chunky'],
       { cwd: workspace() },
     );
     expect(result.code).toBe(2);
@@ -339,15 +339,15 @@ describe('gm checkpoint open', () => {
   });
 });
 
-describe('gm checkpoint wait', () => {
+describe('gm command wait', () => {
   it('prints the selected option from an answered inbox file', async () => {
     const root = workspace();
-    const inbox = join(root, '.gm', 'inbox', 'checkpoints');
+    const inbox = join(root, '.gm', 'inbox', 'commands');
     mkdirSync(inbox, { recursive: true });
     writeFileSync(
       join(inbox, 'cp_demo.json'),
       JSON.stringify({
-        checkpoint_id: 'cp_demo',
+        command_id: 'cp_demo',
         decision_id: 'decision_demo',
         option_id: 'b',
         status: 'answered',
@@ -355,7 +355,7 @@ describe('gm checkpoint wait', () => {
       }),
     );
 
-    expect(await gm(['checkpoint', 'wait', 'cp_demo', '--timeout', '1'], { cwd: root })).toEqual({
+    expect(await gm(['command', 'wait', 'cp_demo', '--timeout', '1'], { cwd: root })).toEqual({
       code: 0,
       out: ['b'],
       err: [],
@@ -363,29 +363,29 @@ describe('gm checkpoint wait', () => {
   });
 
   it('exits 3 after the timeout', async () => {
-    const result = await gm(['checkpoint', 'wait', 'cp_missing', '--timeout', '1'], { cwd: workspace() });
+    const result = await gm(['command', 'wait', 'cp_missing', '--timeout', '1'], { cwd: workspace() });
     expect(result.code).toBe(3);
     expect(result.err).toEqual(['no answer after 1 s; make sure the emit_event call was made']);
   });
 
-  it('exits 4 when the checkpoint is moot', async () => {
+  it('exits 4 when the command is moot', async () => {
     const root = workspace();
-    const inbox = join(root, '.gm', 'inbox', 'checkpoints');
+    const inbox = join(root, '.gm', 'inbox', 'commands');
     mkdirSync(inbox, { recursive: true });
     writeFileSync(join(inbox, 'decision_demo.json'), JSON.stringify({ status: 'moot' }));
-    expect(await gm(['checkpoint', 'wait', 'decision_demo', '--timeout', '1'], { cwd: root })).toEqual({
+    expect(await gm(['command', 'wait', 'decision_demo', '--timeout', '1'], { cwd: root })).toEqual({
       code: 4,
       out: [],
-      err: ['checkpoint is moot'],
+      err: ['command is moot'],
     });
   });
 
   it('exits 1 instead of waiting when the inbox path cannot be read', async () => {
     const root = workspace();
-    const unreadable = join(root, '.gm', 'inbox', 'checkpoints', 'cp_unreadable.json');
+    const unreadable = join(root, '.gm', 'inbox', 'commands', 'cp_unreadable.json');
     mkdirSync(unreadable, { recursive: true });
 
-    const result = await gm(['checkpoint', 'wait', 'cp_unreadable', '--timeout', '1'], { cwd: root });
+    const result = await gm(['command', 'wait', 'cp_unreadable', '--timeout', '1'], { cwd: root });
 
     expect(result.code).toBe(1);
     expect(result.err[0]).toContain(`cannot read ${unreadable}`);

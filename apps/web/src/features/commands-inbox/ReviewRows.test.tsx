@@ -12,7 +12,7 @@ function command(overrides: Partial<GameCommand> = {}): GameCommand {
     job_id: 'j_1',
     ticket: '478',
     title: 'Pick the voices',
-    checkpoint_id: 'cp_1',
+    command_id: 'cp_1',
     decision_id: 'd_1',
     version: 1,
     question: 'Which voices should Blobs use?',
@@ -47,8 +47,8 @@ describe('ReviewRows', () => {
   // The inbox tells the creator at a glance which questions still need them: untouched, started or already sent.
   it('shows each question with its first sample, a short title and its open, draft or sent state', () => {
     const open = command();
-    const started = command({ checkpoint_id: 'cp_2', title: 'Pick the look', review_number: 2 });
-    const sent = command({ checkpoint_id: 'cp_3', title: 'Pick the music', review_number: 3 });
+    const started = command({ command_id: 'cp_2', title: 'Pick the look', review_number: 2 });
+    const sent = command({ command_id: 'cp_3', title: 'Pick the music', review_number: 3 });
     render(
       <MemoryRouter>
         <ReviewRows commands={[open, started, sent]} hrefOf={(c) => `/blobs/review/${c.review_number}`} />
