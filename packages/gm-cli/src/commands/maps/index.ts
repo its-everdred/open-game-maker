@@ -1,4 +1,4 @@
-import { buildIndex, buildMapIndex, writeMapIndex } from '@ogm/asset-cards';
+import { buildIndex, buildMapIndex, writeMapIndex, writeMapLayouts } from '@ogm/asset-cards';
 
 import { EXIT, type GmCommand } from '../../command.js';
 import { printJson, requireAssetsRoot } from '../../context.js';
@@ -15,7 +15,7 @@ export const command: GmCommand = {
     const index = await buildIndex(root);
     const { specs, invalid } = await indexedSpecs(root, index);
     const { maps, hidden } = buildMapIndex(index, specs);
-    const path = await writeMapIndex(root, maps);
+    const [path] = await Promise.all([writeMapIndex(root, maps), writeMapLayouts(root, maps, specs)]);
     const summary = {
       rows: maps.rows.length,
       maps: maps.rows.filter((row) => row.resource === 'map').length,

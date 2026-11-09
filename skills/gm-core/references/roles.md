@@ -11,7 +11,7 @@ into each game daemon's config, and `gm plan check` refuses a ticket whose roles
 |---|---|---|
 | `role:visual` | screens, HUD, menus, look and layout | gm-core, gm-verify, gm-ui-hud, gm-image-mock |
 | `role:3d` | models, scenes, cameras and 3D assets | gm-core, gm-3d, gm-verify |
-| `role:gameplay` | rules, controls, entities and game feel | gm-core, gm-input, gm-verify, gm-qa |
+| `role:gameplay` | rules, controls, entities, maps and game feel | gm-core, gm-input, gm-verify, gm-qa, gm-map-inspiration |
 | `role:audio` | music, sound effects and voice | gm-core, gm-audio, gm-voiceover |
 | `role:qa` | playtests, journeys and verification | gm-core, gm-qa, gm-verify |
 | `role:multiplayer` | rooms, shared state and netcode | gm-core, gm-multiplayer-ready, gm-qa |

@@ -10,6 +10,7 @@ import {
   writeFamilies,
   writeIndex,
   writeMapIndex,
+  writeMapLayouts,
   type CardIndex,
 } from '@ogm/asset-cards';
 import { FsBlobStore, type BlobHash } from '@ogm/blob-store';
@@ -108,7 +109,7 @@ async function runIndex(ctx: GmContext, flags: Record<string, unknown>): Promise
   // The map-inspiration index is derived from the same cards + layout specs, so one command keeps both current.
   const { specs } = await indexedSpecs(root, index);
   const { maps, hidden } = buildMapIndex(index, specs);
-  await writeMapIndex(root, maps);
+  await Promise.all([writeMapIndex(root, maps), writeMapLayouts(root, maps, specs)]);
 
   const summary = {
     cards: index.cards.length,

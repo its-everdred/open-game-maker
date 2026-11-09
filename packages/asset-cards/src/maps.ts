@@ -1,13 +1,15 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import type { MapLayoutSpec } from '@ogm/contracts';
+import { layoutMetrics, validateLayoutSpec, type MapLayoutSpec } from '@ogm/contracts';
 
 import { statusAllowed } from './search.js';
 import type { CardIndex, ResolvedCard } from './types.js';
 
 /** The map-inspiration index: layout columns, kept beside `cards.index.json`. */
 export const MAP_INDEX_PATH = join('index', 'maps.index.json');
+export const MAP_LAYOUTS_DIR = join('index', 'map-layouts');
 
 /** C3 §12 / the map-layout-spec feature vocabulary, plus the drawn structures a builder asks for by name. */
 export const MAP_FEATURES = [
@@ -80,6 +82,8 @@ export type LayoutRow = {
   features: string[];
   /** `spec` when the graph counts come from a validated layout spec, `card` when only code measurements exist. */
   from: 'spec' | 'card';
+  /** The selected validated spec, used to write a graph lookup without exposing its source path. */
+  layout_id: string | null;
 };
 
 export type MapIndex = { version: 1; built: string; vocab: string; rows: LayoutRow[] };
@@ -187,6 +191,7 @@ export function layoutRow(card: ResolvedCard, spec?: LayoutSpecRow): LayoutRow |
       flow: null,
       features: featuresOf(card),
       from: 'card',
+      layout_id: null,
     };
   }
   if (card.kind !== 'inspiration' || card.subkind !== 'map') return null;
@@ -213,6 +218,7 @@ export function layoutRow(card: ResolvedCard, spec?: LayoutSpecRow): LayoutRow |
     flow: null,
     features: featuresOf(card),
     from: spec ? 'spec' : 'card',
+    layout_id: spec?.id ?? null,
   };
   return { ...row, ...gridOf(card, spec), ...countsOf(card, spec) };
 }
@@ -250,6 +256,52 @@ export async function writeMapIndex(root: string, maps: MapIndex): Promise<strin
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(maps)}\n`);
   return path;
+}
+
+function mapLayoutPath(root: string, cardId: string): string {
+  const key = createHash('sha256').update(cardId).digest('hex');
+  return join(root, MAP_LAYOUTS_DIR, `${key}.json`);
+}
+
+/** Write one rights-gated derived graph per indexed map, keyed without exposing a source-library path. */
+export async function writeMapLayouts(root: string, maps: MapIndex, specs: MapLayoutSpec[]): Promise<number> {
+  const byId = new Map(specs.map((spec) => [spec.id, spec]));
+  const selected = maps.rows.flatMap((row) => {
+    if (row.resource !== 'map' || row.layout_id === null) return [];
+    const spec = byId.get(row.layout_id);
+    return spec ? [{ cardId: row.id, spec }] : [];
+  });
+  await mkdir(join(root, MAP_LAYOUTS_DIR), { recursive: true });
+  await Promise.all(
+    selected.map(({ cardId, spec }) => writeFile(mapLayoutPath(root, cardId), `${JSON.stringify(spec)}\n`)),
+  );
+  return selected.length;
+}
+
+/** Read one derived graph. Recheck its index binding and graph invariants so stale or modified caches fail closed. */
+export async function loadMapLayout(
+  root: string,
+  cardId: string,
+  expectedLayoutId: string,
+): Promise<MapLayoutSpec | null> {
+  try {
+    const result = validateLayoutSpec(JSON.parse(await readFile(mapLayoutPath(root, cardId), 'utf8')));
+    if (!result.ok) return null;
+    const spec = result.spec;
+    if (spec.source.card_id !== cardId || spec.id !== expectedLayoutId || spec.extraction.status === 'image-only') {
+      return null;
+    }
+    const metrics = layoutMetrics(spec);
+    const computed = spec.tags.computed;
+    const countsAgree = (['room_count', 'connection_count', 'loop_count', 'dead_end_count', 'secret_count'] as const).every(
+      (key) => metrics[key] === computed[key],
+    );
+    return countsAgree && metrics.endpoints_ok && metrics.areas_ok && metrics.total_area_cells === computed.total_area_cells
+      ? spec
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The map index, or an empty one: a missing file means "run `gm maps index`", never a scan. */

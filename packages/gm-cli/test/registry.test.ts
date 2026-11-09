@@ -74,6 +74,7 @@ describe('command registry', () => {
       'look evidence',
       'look sheet',
       'maps index',
+      'maps info',
       'maps search',
       'new',
       'options check',

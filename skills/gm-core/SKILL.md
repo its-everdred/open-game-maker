@@ -79,7 +79,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm assets search|facets|info` finds and inspects candidate cards.
 - `gm assets sheet` makes the labelled lineup; `gm assets use|vendor|register|variant|list|unused|why` records choices
   and derivatives; record an asset with `gm assets use` as soon as the code names it (the build fails on an unlisted id).
-- `gm maps search` finds map sources; `gm build assets` builds the selected asset manifest.
+- `gm-map-inspiration` owns agent-only map choice; `gm maps search|info` supplies layout facts and graphs.
 - `gm check`, `gm test`, and `gm run` are the definition-of-done gates.
 - `gm shot` captures evidence; `gm perf` checks frame and resource budgets.
 - `gm docs pattern` retrieves a mechanic card without loading a whole reference game.
@@ -88,13 +88,13 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm changes` summarizes the current game-repo diff.
 - `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 - `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.
-
 ## Load when…
 
 | Skill | Load when… |
 |---|---|
 | gm-core | Starting or resuming any Game Maker build. Your `role:*` labels inlined the rest (`references/roles.md`); find others with `gm skills search <words>`, `gm skills show <name>`. |
 | gm-asset-showcase | Building or verifying a pre-rendered asset-set showcase. |
+| gm-map-inspiration | Building the first map, a level, dungeon, world layout, or terrain. |
 | gm-asset-variants | Recolouring a model, attaching a prop to a rig joint, or making any variant of a library asset. |
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
 | gm-voiceover | Making a short consented local voice draft and caption timing. |
@@ -117,4 +117,4 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-pack-adapter | Changing shared pack code or proposing a promotion. |
 | vendor/phaser | Working in Phaser; load only the capability needed. |
 | vendor/threejs | Working in Three.js; load only the capability needed. |
-| vendor/gamedev | Needing a focused game-development reference; `.claude/skills/gm-core/references/roles.md` lists each role's picks. |
+| vendor/gamedev | Needing a focused game-development reference; `references/roles.md` lists each role's picks. |

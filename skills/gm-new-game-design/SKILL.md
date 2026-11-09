@@ -50,8 +50,10 @@ provenance (`--provenance <id>=@<file>.json`) when you offer it, so the check ca
   "modern" or "hybrid". Requests to see or hear something stay open review items until real evidence is shown.
 - **Music is a deliberate choice.** If the player has not picked music, offer mood-grouped samples and let them choose
   a collection; if they have, ask only how to apply it.
-- **Players choose consequences, agents choose technology.** Never ask the player to pick an engine, library or
-  package; offer the difference they would feel (tight vs. momentum-heavy movement).
+- **Players choose consequences, agents choose technology.** Never ask the player to pick an engine, library or package;
+  offer the difference they would feel (tight vs. momentum-heavy movement).
+  Never ask the creator to choose a map source, map pack or tileset. Gather only player-facing map needs such as biome,
+  features and scale.
 - **Compact and complete.** Steer toward a short campaign that is finished and replayable over a large one that will be
   a shallow sliver.
 - **No filler.** No repeated "checking…", no reading back long summaries, no "last question" while important items

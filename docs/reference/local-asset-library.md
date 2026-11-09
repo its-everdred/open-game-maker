@@ -49,6 +49,9 @@ Rows are gated on rights at build time: a map needs `derive-layout` in its resol
 
 The file is derived data: delete it and `gm maps index` rebuilds it from the cards. `gm packs index` refreshes it too. **Rights are checked when the index is built**, so re-run one of those commands after confirming a licence or changing a card's rights; until then the old rows stay served.
 
+After agent-side selection, `gm maps info <map-card-id> --json` reads the chosen map's validated abstract graph. It
+returns no source file or preview path; rendering comes from the game's chosen visual set, not the inspiration source.
+
 ## Hash blocklist and preview blobs
 `gm packs blocklist` hashes every file of each collection whose resolved `redistribution` is `none`: `packs/<id>/<version>/{originals,extracted}` (or all of `inspiration/<id>/`), every preview its cards reference, `derived/<id>/`, and the lines of its `collection_info.hash_manifest` (re-prefixed `manifest/<id>/`). It writes one sorted `sha256  bytes  path` line per file to `$OGM_BLOCKLIST_FILE`, else `private/blocklist/redistribution-none.txt`, with paths relative to `assets-local/`. The commit service refuses any file whose sha256 is listed. Re-runs only hash files whose size or mtime changed (`private/blocklist/cache.json`); `--no-cache` rehashes everything. Rights come from a fresh read of the cards, and an unreadable collection card makes the command exit 1.
 
