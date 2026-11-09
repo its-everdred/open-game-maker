@@ -66,6 +66,21 @@ export const MULTI_TIMINGS = {
   idleDisposeSec: 5,
 } as const;
 export const MULTI_UNCHECKED = ['WAN latency', 'a real phone'] as const;
+/**
+ * The room's `playing` is the service's phase, not the game's: a game still on its menu passes every transport step.
+ * Only a peer's avatar moving on another seat proves the game itself played online, so a run that never saw one fails.
+ */
+export const NOT_PLAYED =
+  "the game's online play was not exercised: no seat had a playerIndex entity to move, so the room ran but the game " +
+  'never started a match (start it when the room starts playing, or give each seat an avatar)';
+
+/** How long step 5 waits for avatars after the room plays: a game may run its own countdown before it spawns them. */
+export const AVATAR_WAIT_MS = 10_000;
+
+/** The run's error: an earlier failure stands; otherwise {@link NOT_PLAYED} when step 5 found no avatars to move. */
+export function playError(error: string | undefined, sawAvatars: boolean): string | undefined {
+  return error ?? (sawAvatars ? undefined : NOT_PLAYED);
+}
 
 const PIN = { gameId: 'multi-client', branchId: 'main', buildId: 'b1' } as const;
 const DRAFT_BUILD = 'b2';
@@ -401,7 +416,7 @@ export function avatarX(text: GameText, playerIndex: number): number | undefined
   return entity?.p?.[0];
 }
 
-/** Step 5 moves avatars; a game without any (a board game) cannot be judged by it. */
+/** Step 5 moves avatars; a game without any (a board game, or one still on its menu) fails with {@link NOT_PLAYED}. */
 export function hasAvatars(text: GameText): boolean {
   return Object.values(text.state?.entities ?? {}).some((entity) => typeof entity.playerIndex === 'number');
 }
@@ -467,6 +482,8 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
   const droppedSeats = new Set<number>();
   /** Checks this game cannot be judged by, named in the report instead of failed or silently skipped. */
   const unchecked: string[] = [];
+  /** Whether step 5 found avatars to move; a run without them goes on for its evidence but cannot pass. */
+  let avatars = false;
 
   /** The game declares its authority mode in its manifest; the room is created with the same one (D-NET-1). */
   const manifestNet = ((): { authority?: string; maxSeats?: number } => {
@@ -659,9 +676,8 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     await shoot(4);
 
     log('5 each peer moves its own avatar; the primary never moves');
-    /* Avatars may spawn a moment after playing; only a game that still has none is named unchecked. */
-    let avatars = false;
-    for (const giveUpAt = Date.now() + 2_000; !avatars && Date.now() < giveUpAt;) {
+    /* Avatars may spawn a while after playing; only a game that still has none is named unchecked, and fails. */
+    for (const giveUpAt = Date.now() + AVATAR_WAIT_MS; !avatars && Date.now() < giveUpAt;) {
       avatars = hasAvatars(await gameText(clients[0]!.page));
       if (!avatars) await clients[0]!.page.waitForTimeout(100);
     }
@@ -776,6 +792,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     await Promise.all(servers.map((server) => new Promise((done) => server.close(done))));
     rmSync(work, { recursive: true, force: true });
   }
+  error = playError(error, avatars);
 
   const budgets = unknownBudgets();
   const consoleList = consoleEntries.list();

@@ -21,8 +21,9 @@ into one run directory (`--out`, default `shots/qa`) so `gm qa look` sees the wh
    (phone, desktop, phone) join with what it read. Checks seats, the countdown within `countdownSpreadMs` on every
    client, seat 0's move seen by the others, and the last seat dropping and rejoining. Writes `room.png` (tiled) and
    `room.mp4` (stacked). `gm qa room --local` runs this game's local build through the seeded network simulator
-   (four clients, `--link bad` adds latency, loss and a drop) instead; it runs only from a core checkout, so a game
-   instance uses `--url`. Run `gm build assets` first so the build's asset manifest names every asset.
+   (four clients, `--link bad` adds latency, loss and a drop) instead, and fails when the game shows no `playerIndex`
+   avatar (still on its menu); it runs only from a core checkout, so a game instance uses `--url`. Run
+   `gm build assets` first so the build's asset manifest names every asset.
 4. `gm qa look`: writes `look/requests.json` (at most 6 images a request) from every expect that carries `look` and
    every rule in `design/feedback.json`. Open each request's images, answer each id in `look/answers.json` with
    `{"pass": true|false, "note": "..."}`, worst defect in the note. Never answer a still you did not open.
