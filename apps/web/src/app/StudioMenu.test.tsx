@@ -25,10 +25,12 @@ const sound = vi.hoisted(() => ({
 }));
 const auth = vi.hoisted(() => ({ signOut: vi.fn() }));
 const report = vi.hoisted(() => ({ sendReport: vi.fn() }));
+const jobControls = vi.hoisted(() => ({ setJobPaused: vi.fn() }));
 
 vi.mock('../features/build-chat/jobs', () => ({
   isTerminal: (value: string) => ['done', 'failed', 'cancelled'].includes(value),
   useMyJobs: () => state.jobs,
+  setJobPaused: jobControls.setJobPaused,
 }));
 vi.mock('../features/build-chat/Chat', () => ({
   Chat: ({ jobId }: { jobId?: string }) => <p>conversation {jobId}</p>,
@@ -88,6 +90,9 @@ type TestJob = {
   openRequestCount?: number;
   kind: 'new_game' | 'feature' | 'repair' | 'scope';
   plan: { title: string };
+  aiurRepo?: string | null;
+  aiurIssueNumber?: number | null;
+  pausedReason?: 'over_reservation' | 'budget_exhausted' | 'admin' | null;
   updatedAt: string;
   terminalAt: string | null;
 };
@@ -119,6 +124,7 @@ afterEach(() => {
   sound.setVolume.mockReset();
   auth.signOut.mockReset();
   report.sendReport.mockReset();
+  jobControls.setJobPaused.mockReset();
   vi.useRealTimers();
 });
 
@@ -474,6 +480,49 @@ describe('StudioMenu', () => {
       'data-success',
       'true',
     );
+  });
+
+  it('pauses and resumes a filed build from its row, and offers nothing aiur cannot act on', async () => {
+    // #662: the builds ring carries the same pause and resume as `gm build pause|resume`, both one aiur call.
+    const building = runningJob({ aiurRepo: 'acme/games', aiurIssueNumber: 211, pausedReason: null });
+    const held = runningJob({
+      id: 'job-held',
+      aiurRepo: 'acme/games',
+      aiurIssueNumber: 212,
+      pausedReason: 'admin',
+      stage: 'paused',
+      plan: { title: 'Paint the observatory' },
+    });
+    const budget = runningJob({
+      id: 'job-budget',
+      aiurRepo: 'acme/games',
+      aiurIssueNumber: 213,
+      pausedReason: 'budget_exhausted',
+      plan: { title: 'Light the beacon' },
+    });
+    const unfiled = runningJob({ id: 'job-unfiled', aiurIssueNumber: null, plan: { title: 'Dig the moat' } });
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.jobs = {
+      jobs: [building, held, budget, unfiled],
+      active: [building, held, budget, unfiled],
+      games: [{ id: 'game-1', title: 'Moon Vault' }],
+    };
+    jobControls.setJobPaused.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('daemon down'));
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
+
+    expect(screen.queryByRole('button', { name: 'Pause Light the beacon' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume Light the beacon' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause Dig the moat' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause Build the moon gate' }));
+    expect(jobControls.setJobPaused).toHaveBeenLastCalledWith('job-1', true);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pause Build the moon gate' })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Paint the observatory' }));
+    expect(jobControls.setJobPaused).toHaveBeenLastCalledWith('job-held', false);
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't resume");
   });
 
   it('opens the job’s conversation in a modal instead of leaving the screen', () => {

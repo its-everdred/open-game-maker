@@ -287,6 +287,44 @@
   color: var(--cream);
   text-decoration: none;
 }
+.studio-menu-job-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.studio-menu-job-control {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--night-3);
+  color: var(--cream);
+  cursor: pointer;
+}
+
+.studio-menu-job-control svg {
+  width: 20px;
+  height: 20px;
+}
+
+.studio-menu-job-control:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.studio-menu-job-error {
+  grid-column: 1 / -1;
+  padding: 0 2px;
+  color: var(--orange-b);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 button.studio-menu-job {
   width: 100%;
   border: 0;
