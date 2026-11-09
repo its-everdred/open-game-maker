@@ -25,6 +25,7 @@ import {
   toSeatMetrics,
   type LinkProfileName,
 } from './multi-client.ts';
+import { NO_FORFEIT } from './multi-client/run-options.ts';
 import { verifyReportSchema } from '../src/report.js';
 import { BAD_LINK, CLEAN_LINK } from '../src/link/schedule.js';
 
@@ -311,6 +312,30 @@ describe.skipIf(!enabled)('multi-client scenario (OGM_SCENARIOS=1)', () => {
       expect(seats[2]!.recoveries).toBeGreaterThanOrEqual(1);
       expect(report.probes.forfeitedSeat).toBe(3);
       if (softwareGl) expect(report.unchecked).toContain('latency bands on a software renderer');
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  }, 300_000);
+
+  it('runs a two-seat room with a chosen seed and a team start, and says the forfeit was skipped', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'gm-multi-client-two-'));
+    try {
+      const start = { name: 'duo', config: { teams: 'alternate' as const } };
+      const { report, seats, link } = await runMultiClient({
+        ...{ gameDir: TEMPLATE, out, softwareGl, link: 'bad', clients: 2, seed: 7, start },
+      });
+
+      expect(report.error).toBeUndefined();
+      expect(report.verdict).toBe('pass');
+      expect(report.clients).toBe(2);
+      expect(seats.map((seat) => seat.seat)).toEqual([0, 1]);
+      expect(link).toEqual({ ...BAD_LINK, seed: 7 });
+      expect(report.link?.seed).toBe(7);
+      /* The room's seat table, not the request: the team layout took effect. */
+      expect(report.probes).toMatchObject({ start: 'duo', 'start.teams': 'alternate', seatTeams: '0,1' });
+      expect(report.probes).toMatchObject({ rejoinedSeat: 1, draftSeats: 2 });
+      expect(report.probes.forfeitedSeat).toBeUndefined();
+      expect(report.unchecked).toContain(NO_FORFEIT);
     } finally {
       rmSync(out, { recursive: true, force: true });
     }

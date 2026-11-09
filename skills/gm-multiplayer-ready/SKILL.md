@@ -136,12 +136,12 @@ Run it after a conversion, after changing snapshots or input, and before calling
 pnpm --filter @ogm/gm-verify scenario multi-client --game <gameDir> --link bad --out shots/mp
 ```
 
-Four browsers take four seats in one protocol-2 room and it asserts: every seat welcomed within 2 s and seated 0–3, a
-private canary never reaches a watcher, the watchers' design equals the primary's at each rev, all four playing in
-500 ms of the start, each peer's input moving its own avatar while the primary's does not, a 3 s drop rejoining its seat
-and a longer one forfeiting it without ending the room, and a draft load reaching all four. The report carries
-`clients: 4` and one `seats[]` entry per seat (ticks, RTT, delay p95s, desyncs, recoveries). `--link clean` is the same
-steps unimpaired; `--link @<report.json>` replays from its seed. A v1 room uses `scenario two-client` instead.
+Four browsers (`--clients 2`/`3`) share a protocol-2 room; it asserts seats welcomed in 2 s from 0, no private canary at
+a watcher, watchers' design equal to the primary's per rev, all playing in 500 ms, each peer moving only its avatar, a
+3 s drop rejoining and a longer one forfeiting (two seats skip it, in `unchecked`) and drafts reaching every seat. The
+report has `clients` and `seats[]` (ticks, RTT, delay p95s, desyncs, recoveries). `--link clean` is unimpaired, `--link
+@<report.json>` replays its seed, `--seed <n>` sets `link.seed`. `--start <name>` uses that entry of `qa/starts.json`,
+only `teams`: `"none"` (all 0) or `"alternate"` (team n % 2); other seat teams fail; probes carry `start`, `seatTeams`.
 
 ## Done
 

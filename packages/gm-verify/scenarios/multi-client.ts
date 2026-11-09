@@ -1,9 +1,10 @@
 /**
- * Four-client verify (N6, netcode platform §8.3, research #499 §3.8).
+ * Multi-client verify (N6, netcode platform §8.3, research #499 §3.8).
  *
  *   pnpm --filter @ogm/gm-verify scenario multi-client --game <gameDir> [--link clean|bad|@<file>] [--out <dir>]
+ *     [--clients 2-4] [--seed <n>] [--start <name>]
  *
- * Four Playwright contexts against a scenario-owned local rooms service on protocol 2, through a seeded link simulator:
+ * Two to four (default four) Playwright contexts against a scenario-owned local rooms service on protocol 2, through a seeded link simulator:
  * latency, jitter, loss and reordering on the game's channels, plus scheduled socket drops that are real reconnects.
  * The two-client scenario is kept beside this one (D-N6-2) — it is the evidence path for the v1 `host-left` assertion.
  *
@@ -42,6 +43,14 @@ import type { Browser, BrowserContext, Page } from 'playwright';
 import { framesContaining, newCanary } from './two-client.ts';
 import type {} from './multi-client/harness.ts';
 import type { HarnessSnapshot } from './multi-client/harness.ts';
+import {
+  dropPlan,
+  expectedTeam,
+  NO_FORFEIT,
+  roomBody,
+  startProbes,
+  type StartConfig,
+} from './multi-client/run-options.ts';
 
 export type LinkProfileName = 'clean' | 'bad';
 
@@ -52,13 +61,19 @@ export type MultiClientOptions = {
   roomsDist?: string;
   /** `clean`, `bad`, or a profile object replayed from a report's `link` (research §3.8's `--link @<file>`). */
   link?: LinkProfileName | LinkConfig;
+  /** Seats in the room, 2-4 (default 4). */
+  clients?: number;
+  /** Replaces the link profile's seed. */
+  seed?: number;
+  /** A start configuration the game names in `qa/starts.json`, passed to the room when it is created. */
+  start?: { name: string; config: StartConfig };
   log?: (line: string) => void;
 };
 
 export type MultiClientResult = { report: VerifyReport; reportPath: string; seats: SeatMetrics[]; link: LinkConfig };
 
 export const LIMITS = { welcomeMs: 2_000, playSwitchMs: 500 } as const;
-/** `seatReconnectSec` is short so step 6 can prove a forfeit inside one run; seat 2 returns first, seat 3 does not. */
+/** `seatReconnectSec` is short so step 6 can prove a forfeit inside one run: one seat returns first, another does not. */
 export const MULTI_TIMINGS = {
   ownerReconnectSec: 2,
   playerReconnectSec: 1,
@@ -485,7 +500,9 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
   const frames: VerifyReport['frames'] = [];
   const ended: { roomId: string; reason: string }[] = [];
   const canary = newCanary();
-  const link = profileFor(options.link);
+  const link = { ...profileFor(options.link), ...(options.seed === undefined ? {} : { seed: options.seed }) };
+  const seatsInRun = SEATS.slice(0, options.clients ?? SEATS.length);
+  const plan = dropPlan(seatsInRun.length);
   const servers: Server[] = [];
   let rooms: ChildProcess | undefined;
   let browser: Browser | undefined;
@@ -516,7 +533,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
   })();
   const roomMode = manifestNet.authority ?? 'per-seat';
   const bands = bandsFor(link, gameTimingFor(manifestNet));
-  const roomSeats = Math.max(SEATS.length, Math.min(manifestNet.maxSeats ?? SEATS.length, 8));
+  const roomSeats = Math.max(seatsInRun.length, Math.min(manifestNet.maxSeats ?? SEATS.length, 8));
 
   const grantSecret = randomBytes(32).toString('hex');
   const internalSecret = randomBytes(32).toString('hex');
@@ -562,7 +579,12 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       const response = await fetch(`http://127.0.0.1:${roomsPort}/internal/rooms`, {
         method: 'POST',
         headers: { authorization: `Bearer ${internalSecret}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ ...PIN, ownerId: SEATS[0].sub, maxPlayers: roomSeats, protocol: 2, mode: roomMode }),
+        body: JSON.stringify(
+          roomBody(
+            { ...PIN, ownerId: SEATS[0].sub, maxPlayers: roomSeats, protocol: 2, mode: roomMode },
+            options.start?.config,
+          ),
+        ),
       });
       assert(response.status === 201, `room creation returned ${response.status}`);
       return ((await response.json()) as { roomId: string }).roomId;
@@ -586,7 +608,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
 
     browser = await launch(software);
     clients = [];
-    for (let index = 0; index < SEATS.length; index += 1)
+    for (let index = 0; index < seatsInRun.length; index += 1)
       clients.push(await openClient(browser, appUrl, consoleEntries, () => collecting));
     renderer = await rendererString(clients[0]!.page);
     stepStartedAt = Date.now();
@@ -595,7 +617,8 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       await client.page.evaluate((profile) => window.__multiHarness.setLink(profile), link);
     }
 
-    log('1 four seats join a v2 room');
+    if (options.start) Object.assign(probes, startProbes(options.start.name, options.start.config));
+    log(`1 ${clients.length} seats join a v2 room`);
     const welcomeMs: number[] = [];
     for (const [index, client] of clients.entries()) {
       const token = await grant(roomId, SEATS[index]!, index === 0 ? 'owner' : 'player');
@@ -607,7 +630,13 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       await until(client.page, () => window.__multiHarness.gameReady > 0, 30_000, `seat ${index} game`);
     }
     for (const [index, client] of clients.entries()) {
-      await until(client.page, () => window.__multiHarness.seats.length === 4, 10_000, `seat ${index} seat table`);
+      const count = clients.length;
+      await until(
+        client.page,
+        `window.__multiHarness.seats.filter((seat) => seat.userId !== '').length === ${count}`,
+        10_000,
+        `seat ${index} seat table`,
+      );
     }
     probes.welcomeMs = Math.max(...welcomeMs);
     welcomeMs.forEach((value, index) => {
@@ -617,10 +646,23 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       welcomeMs.every((value) => value <= LIMITS.welcomeMs),
       `a seat took ${Math.max(...welcomeMs)} ms to be welcomed (limit ${LIMITS.welcomeMs})`,
     );
-    const assigned = (await clients[0]!.page.evaluate(() =>
-      window.__multiHarness.seats.map((seat) => seat.seat),
-    )) as number[];
-    assert(JSON.stringify([...assigned].sort()) === '[0,1,2,3]', `seats assigned were ${assigned.join(',')}`);
+    const taken = (await clients[0]!.page.evaluate(() =>
+      window.__multiHarness.seats.filter((seat) => seat.userId !== '').map(({ seat, team }) => ({ seat, team })),
+    )) as { seat: number; team: number }[];
+    const assigned = taken.map((entry) => entry.seat);
+    const expected = JSON.stringify(clients.map((_, index) => index));
+    assert(JSON.stringify([...assigned].sort()) === expected, `seats assigned were ${assigned.join(',')}`);
+    /* The room's own seat table, so the report shows a start's team layout took effect rather than echoing the file. */
+    probes.seatTeams = [...taken]
+      .sort((left, right) => left.seat - right.seat)
+      .map((entry) => entry.team)
+      .join(',');
+    const teams = options.start?.config.teams;
+    const wrongTeam = taken.find((entry) => entry.team !== expectedTeam(entry.seat, teams));
+    assert(
+      wrongTeam === undefined,
+      `seat ${wrongTeam?.seat} is on team ${wrongTeam?.team} under teams ${teams ?? 'none'}`,
+    );
     await shoot(1);
 
     log('2 the primary places three entities; every watcher matches at each revision');
@@ -673,12 +715,12 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     assert(leaked === 0, `the canary leaked into ${leaked} watcher frame(s)`);
     await shoot(3);
 
-    log('4 the primary starts the match; all four reach playing');
+    log('4 the primary starts the match; every seat reaches playing');
     for (const client of clients) await client.page.evaluate(() => window.__multiHarness.ready(true));
     for (const [index, client] of clients.entries()) {
       await until(
         client.page,
-        () => window.__multiHarness.seats.every((seat) => seat.ready),
+        () => window.__multiHarness.seats.every((seat) => seat.userId === '' || seat.ready),
         10_000,
         `seat ${index} to see every seat ready`,
       );
@@ -701,7 +743,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       if (!avatars) await clients[0]!.page.waitForTimeout(100);
     }
     if (!avatars) unchecked.push('peer avatar moves (the game has no playerIndex entities)');
-    for (const playerIndex of avatars ? [1, 2, 3] : []) {
+    for (const playerIndex of avatars ? [...clients.keys()].slice(1) : []) {
       const primaryBefore = await playerX(clients[0]!.page, playerIndex);
       const primaryAnchor = await playerX(clients[0]!.page, 0);
       const mover = clients[playerIndex]!;
@@ -720,25 +762,32 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     probes.peerMovedPx = avatars;
     await shoot(5);
 
-    log('6 seat 2 drops for 3 s and returns; seat 3 drops past the window and forfeits');
-    droppedSeats.add(2);
-    await clients[2]!.page.evaluate(() => window.__multiHarness.drop(3_000));
-    await until(
-      clients[0]!.page,
-      () => window.__multiHarness.seatEvents.some((entry) => entry.event === 'net.seat.offline' && entry.seat === 2),
-      10_000,
-      'seat 2 offline',
+    log(
+      `6 seat ${plan.rejoin} drops for 3 s and returns; ${plan.forfeit === undefined ? 'no forfeit' : `seat ${plan.forfeit} forfeits`}`,
     );
-    droppedSeats.add(3);
-    await clients[3]!.page.evaluate(() => window.__multiHarness.drop(6_000));
-    await until(
-      clients[0]!.page,
-      () => window.__multiHarness.seatEvents.some((entry) => entry.event === 'net.seat.forfeit' && entry.seat === 3),
-      20_000,
-      'seat 3 forfeit',
-    );
+    droppedSeats.add(plan.rejoin);
+    await clients[plan.rejoin]!.page.evaluate(() => window.__multiHarness.drop(3_000));
+    const seatEvent = (event: string, seat: number) =>
+      `window.__multiHarness.seatEvents.some((entry) => entry.event === '${event}' && entry.seat === ${seat})`;
+    await until(clients[0]!.page, seatEvent('net.seat.offline', plan.rejoin), 10_000, `seat ${plan.rejoin} offline`);
     probes.reconnectMs = 3_000;
-    probes.forfeitMs = 6_000;
+    if (plan.forfeit === undefined) {
+      unchecked.push(NO_FORFEIT);
+      /* Without the forfeit's wait, step 7 would move the pin while the seat is down, and its rejoin would be refused. */
+      const back = `window.__multiHarness.seatEvents.findLastIndex((entry) => entry.seat === ${plan.rejoin}) ===
+        window.__multiHarness.seatEvents.findLastIndex((entry) => entry.seat === ${plan.rejoin} && entry.event === 'net.seat.online')`;
+      await until(clients[0]!.page, back, 10_000, `seat ${plan.rejoin} back online`);
+    } else {
+      droppedSeats.add(plan.forfeit);
+      await clients[plan.forfeit]!.page.evaluate(() => window.__multiHarness.drop(6_000));
+      await until(
+        clients[0]!.page,
+        seatEvent('net.seat.forfeit', plan.forfeit),
+        20_000,
+        `seat ${plan.forfeit} forfeit`,
+      );
+      probes.forfeitMs = 6_000;
+    }
     assert(
       (await clients[0]!.page.evaluate(() => window.__multiHarness.ended)) === undefined,
       'the room ended on a forfeit',
@@ -747,9 +796,9 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
 
     log('7 a draft load reaches every seat still in the room');
     await clients[0]!.page.evaluate((buildId) => window.__multiHarness.loadDraft(buildId), DRAFT_BUILD);
-    /* Seat 3 forfeited in step 6 and is no longer a member; the seats still seated must follow the pin. */
-    const live = clients.slice(0, 3);
-    for (const [index, client] of live.entries()) {
+    /* The forfeited seat is no longer a member; the seats still seated must follow the pin. */
+    for (const [index, client] of clients.entries()) {
+      if (index === plan.forfeit) continue;
       await until(
         client.page,
         `window.__multiHarness.pinBuildId === ${JSON.stringify(DRAFT_BUILD)}`,
@@ -759,7 +808,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       const sent = (await client.page.evaluate(() => window.__multiHarness.draftReadySent)) as string[];
       assert(sent.includes(DRAFT_BUILD), `seat ${index} did not report draft.ready`);
     }
-    probes.draftSeats = live.length;
+    probes.draftSeats = clients.length - (plan.forfeit === undefined ? 0 : 1);
     probes.draftPin = DRAFT_BUILD;
     stopSampling?.();
     stopSampling = undefined;
@@ -781,8 +830,8 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
      * first seconds after a rejoin are re-synchronisation rather than the steady state the band is about. A seat that
      * forfeited is out of the room altogether. Both are named in the report instead of being silently skipped.
      */
-    probes.forfeitedSeat = 3;
-    if (link.disconnects[0] !== undefined) probes.rejoinedSeat = link.disconnects[0].seat;
+    if (plan.forfeit !== undefined) probes.forfeitedSeat = plan.forfeit;
+    probes.rejoinedSeat = plan.rejoin;
     for (const entry of link.disconnects) droppedSeats.add(entry.seat);
     const hardware = !isSoftware(renderer);
     probes.hardwareRender = hardware;
@@ -790,7 +839,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
       const failures = judgeSeat(entry, bands, { latency: hardware });
       assert(failures.length === 0, failures.join('; '));
     }
-    for (const entry of seats.filter((seat) => droppedSeats.has(seat.seat) && seat.seat !== 3)) {
+    for (const entry of seats.filter((seat) => droppedSeats.has(seat.seat) && seat.seat !== plan.forfeit)) {
       assert(entry.recoveries >= 1, `seat ${entry.seat} dropped and never rejoined (recoveries ${entry.recoveries})`);
     }
     probes.seats = seats.length;
@@ -825,7 +874,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     console: consoleList,
     budgets,
     probes,
-    clients: SEATS.length,
+    clients: seatsInRun.length,
     seats,
     link,
     /*

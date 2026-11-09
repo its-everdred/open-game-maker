@@ -1,6 +1,7 @@
 /**
  * Scenario CLI: `pnpm --filter @ogm/gm-verify scenario <two-client|multi-client> --game <gameDir> [--out <dir>]`.
- * `multi-client` also takes `--link clean|bad|@<report.json>`. Prints the report path and summary; exits 1 unless the
+ * `multi-client` also takes `--link clean|bad|@<report.json>`, `--clients 2-4`, `--seed <n>` and `--start <name>` (a
+ * start configuration from the game's `qa/starts.json`). Prints the report path and summary; exits 1 unless the
  * verdict is pass.
  */
 import { readFileSync } from 'node:fs';
@@ -11,11 +12,19 @@ import { loadEnv } from '@ogm/config';
 import { linkProfileSchema, summaryLines } from '@ogm/gm-verify';
 
 import { runMultiClient, type LinkProfileName } from './multi-client.ts';
+import { parseClients, parseSeed, readStart } from './multi-client/run-options.ts';
 import { runTwoClient } from './two-client.ts';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
-  options: { game: { type: 'string' }, out: { type: 'string' }, link: { type: 'string' } },
+  options: {
+    game: { type: 'string' },
+    out: { type: 'string' },
+    link: { type: 'string' },
+    clients: { type: 'string' },
+    seed: { type: 'string' },
+    start: { type: 'string' },
+  },
 });
 const env = loadEnv('gm', { GM_VERIFY_SOFTWARE_GL: { kind: 'bool', required: false } });
 /* pnpm runs package scripts in the package directory; paths resolve against where it was invoked. */
@@ -42,11 +51,31 @@ function linkProfile(
 
 if (!values.game || (command !== 'two-client' && command !== 'multi-client')) {
   console.error(
-    'usage: scenario <two-client|multi-client> --game <gameDir> [--out <dir>] [--link clean|bad|@<report.json>]',
+    'usage: scenario <two-client|multi-client> --game <gameDir> [--out <dir>] [--link clean|bad|@<report.json>]' +
+      ' [--clients 2-4] [--seed <n>] [--start <name>]',
   );
   process.exit(2);
 }
 const gameDir = resolve(cwd, values.game);
+/** A bad `--clients`, `--seed` or `--start` is a usage error, reported before anything is built. */
+function usage<T>(read: () => T): T {
+  try {
+    return read();
+  } catch (caught) {
+    console.error(caught instanceof Error ? caught.message : String(caught));
+    process.exit(2);
+  }
+}
+if (command === 'two-client' && [values.clients, values.seed, values.start].some((value) => value !== undefined)) {
+  console.error('--clients, --seed and --start apply to multi-client only');
+  process.exit(2);
+}
+const clients = usage(() => parseClients(values.clients));
+const seed = usage(() => parseSeed(values.seed));
+const start =
+  values.start === undefined
+    ? undefined
+    : { name: values.start, config: usage(() => readStart(gameDir, values.start!)) };
 
 const { report, reportPath } =
   command === 'two-client'
@@ -56,6 +85,9 @@ const { report, reportPath } =
         out: out('shots/multi-client'),
         softwareGl,
         link: linkProfile(values.link),
+        clients,
+        ...(seed === undefined ? {} : { seed }),
+        ...(start === undefined ? {} : { start }),
         log,
       });
 for (const line of summaryLines(report)) console.log(line);
