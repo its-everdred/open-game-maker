@@ -15,6 +15,7 @@ type Issue = {
   title: string;
   labels: string[];
   pr?: { number: number; draft?: boolean; ci?: string | null };
+  closed?: boolean;
 };
 
 const ISSUES: Issue[] = [
@@ -22,17 +23,20 @@ const ISSUES: Issue[] = [
   { number: 12, title: 'Blobs coins', labels: ['game:blobs', 'agent:ci-wait'], pr: { number: 40, ci: 'FAILURE' } },
   { number: 20, title: 'Dusk Helm sails', labels: ['game:dusk-helm', 'agent:todo', 'agent:paused'] },
   { number: 30, title: 'Repo chore', labels: ['agent:todo'] },
+  { number: 40, title: 'Meadow follow-up', labels: ['game:meadow'] },
+  { number: 41, title: 'Meadow redo', labels: ['game:meadow', 'agent:done'], closed: true },
 ];
 
 let root: string;
 let aiurLog: string;
+let ghLog: string;
 let env: Record<string, string>;
 
 function node(issue: Issue) {
   return {
     number: issue.number,
     title: issue.title,
-    state: 'OPEN',
+    state: issue.closed ? 'CLOSED' : 'OPEN',
     labels: { nodes: issue.labels.map((name) => ({ name })) },
     closedByPullRequestsReferences: {
       nodes: issue.pr
@@ -59,6 +63,7 @@ function writeGh(bin: string): void {
     [
       "const fs = require('node:fs');",
       'const args = process.argv.slice(2);',
+      `if (args[0] !== 'api') { fs.appendFileSync(${JSON.stringify(join(root, 'gh.log'))}, JSON.stringify(args) + '\\n'); process.exit(0); }`,
       "const vars = Object.fromEntries(args.filter((a, i) => i > 0 && /^-[fF]$/.test(args[i - 1])).map((a) => [a.slice(0, a.indexOf('=')), a.slice(a.indexOf('=') + 1)]));",
       `const issues = JSON.parse(fs.readFileSync(${JSON.stringify(join(root, 'issues.json'))}, 'utf8'));`,
       "if (vars.name !== 'games') { console.error('Could not resolve to a Repository'); process.exit(1); }",
@@ -87,6 +92,16 @@ function writeAiur(bin: string): void {
   chmodSync(join(bin, 'aiur'), 0o755);
 }
 
+function ghWrites(): string[][] {
+  return existsSync(ghLog)
+    ? readFileSync(ghLog, 'utf8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as string[])
+    : [];
+}
+
 function aiurCalls(): string[] {
   return existsSync(aiurLog) ? readFileSync(aiurLog, 'utf8').trim().split('\n').filter(Boolean) : [];
 }
@@ -94,6 +109,7 @@ function aiurCalls(): string[] {
 beforeEach(() => {
   root = tempDir('gm-build-control-');
   aiurLog = join(root, 'aiur.log');
+  ghLog = join(root, 'gh.log');
   const bin = join(root, 'bin');
   mkdirSync(bin);
   writeGh(bin);
@@ -142,6 +158,43 @@ describe('gm build per-ticket controls', () => {
     const result = await gm(['build', 'pause', '11'], { env: { ...env, OGM_INSTANCE_REPO: '' } });
     expect(result.code).toBe(0);
     expect(aiurCalls()).toEqual(['pause 11']);
+  });
+});
+
+describe('gm build park --on', () => {
+  // The API releases a ticket by its `waits:` label and reads `--when` from the comment's marker (#680), so both must be
+  // written; a held ticket is still parked so its slot frees while it waits.
+  it('labels and comments the wait, then parks the held ticket', async () => {
+    const result = await gm(['build', 'park', '11', '--on', 'blobs/diorama'], { env });
+    expect(result.err).toEqual([]);
+    expect(result.code).toBe(0);
+    const writes = ghWrites();
+    expect(writes[0]).toEqual(expect.arrayContaining(['label', 'create', 'waits:blobs/diorama', '-R', 'acme/games']));
+    expect(writes[1]!.slice(0, 5)).toEqual(['issue', 'comment', '11', '-R', 'acme/games']);
+    expect(writes[1]!.at(-1)).toContain('<!-- gm-waits-on:{"key":"blobs/diorama"} -->');
+    expect(writes[2]).toEqual(['issue', 'edit', '11', '-R', 'acme/games', '--add-label', 'waits:blobs/diorama']);
+    expect(aiurCalls()).toEqual(['park 11']);
+  });
+
+  it('only labels follow-up work aiur does not hold, with the option that starts it', async () => {
+    for (const ticket of ['40', '41']) {
+      const result = await gm(['build', 'park', ticket, '--on', 'dec_0123456789abcdef', '--when', 'b'], { env });
+      expect(result.code).toBe(0);
+    }
+    const comments = ghWrites().filter(([verb, action]) => verb === 'issue' && action === 'comment');
+    expect(comments.map((args) => args.at(-1))).toEqual([
+      expect.stringContaining('<!-- gm-waits-on:{"key":"dec_0123456789abcdef","when":"b"} -->'),
+      expect.stringContaining('<!-- gm-waits-on:{"key":"dec_0123456789abcdef","when":"b"} -->'),
+    ]);
+    expect(aiurCalls()).toEqual([]);
+  });
+
+  it('refuses a key that cannot be a label, and --when without --on, before writing anything', async () => {
+    expect((await gm(['build', 'park', '11', '--on', 'Blobs Diorama'], { env })).code).toBe(2);
+    expect((await gm(['build', 'park', '11', '--when', 'b'], { env })).code).toBe(2);
+    expect((await gm(['build', 'park', '11', '--on', 'x', '--when', 'Big B'], { env })).code).toBe(2);
+    expect(ghWrites()).toEqual([]);
+    expect(aiurCalls()).toEqual([]);
   });
 });
 
