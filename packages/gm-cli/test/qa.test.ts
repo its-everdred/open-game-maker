@@ -8,7 +8,7 @@ import { journeySchema } from '@ogm/gm-verify';
 import { describe, expect, it } from 'vitest';
 
 import { COMMANDS_DIR, loadCommands } from '../src/cli.js';
-import { localRoomBlocker, scenarioScript } from '../src/commands/qa/room.js';
+import { localRoomBlocker, localScenarioArgs, scenarioScript } from '../src/commands/qa/room.js';
 import { extractCommands } from '../src/skills/lint.js';
 import { gm, tempDir } from './helpers.js';
 
@@ -58,19 +58,43 @@ describe('gm qa usage', () => {
     expect(result.err[0]).toContain('click needs text or selector');
   });
 
-  it('holds a room to 2-4 clients and a local room to the simulator four', async () => {
+  it('holds a room, local or not, to 2-4 clients', async () => {
     expect((await gm(['qa', 'room', '--url', BUILD, '--clients', '5', '--journey', 'x.json'])).err).toEqual([
       '--clients must be 2, 3 or 4. Try: gm qa room --clients 2',
     ]);
-    expect((await gm(['qa', 'room', '--local', '--clients', '2'])).err).toEqual([
-      '--local always seats 4 clients. Try: gm qa room --local',
+    expect((await gm(['qa', 'room', '--local', '--clients', '1'])).err).toEqual([
+      '--clients must be 2, 3 or 4. Try: gm qa room --local --clients 2',
+    ]);
+    /* The seed and start configuration belong to the simulator run; a hosted room would silently ignore them. */
+    expect((await gm(['qa', 'room', '--url', BUILD, '--seed', '7', '--journey', 'x.json'])).err).toEqual([
+      '--seed and --start apply to --local only. Try: gm qa room --local --seed 7',
     ]);
     expect((await gm(['qa', 'room', '--local', '--url', BUILD])).err).toEqual([
       '--local tests the local build, not --url. Try: gm qa room --local',
     ]);
   });
 
-  it('runs --local through the gm-verify four-client scenario that exists beside the package', () => {
+  it('passes seats, seed and start configuration to the local scenario, four seats by default', () => {
+    expect(localScenarioArgs('/g', '/o', { link: 'bad' })).toEqual([
+      'multi-client',
+      '--game',
+      '/g',
+      '--out',
+      '/o',
+      '--link',
+      'bad',
+      '--clients',
+      '4',
+    ]);
+    expect(localScenarioArgs('/g', '/o', { link: 'clean', clients: 2, seed: '7', start: '2v2' })).toEqual([
+      ...['multi-client', '--game', '/g', '--out', '/o', '--link', 'clean', '--clients', '2'],
+      ...['--seed', '7', '--start', '2v2'],
+    ]);
+  });
+
+  it('runs --local through the gm-verify multi-client scenario that exists beside the package', () => {
+    /* The scenario must accept what --local passes it. */
+    expect(readFileSync(scenarioScript(), 'utf8')).toMatch(/clients: \{ type: 'string' \}[\s\S]*seed[\s\S]*start/);
     expect(existsSync(scenarioScript())).toBe(true);
     expect(readFileSync(scenarioScript(), 'utf8')).toContain("'multi-client'");
     expect(localRoomBlocker(scenarioScript())).toBeUndefined();

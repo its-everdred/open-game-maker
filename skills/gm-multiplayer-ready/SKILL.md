@@ -141,7 +141,10 @@ private canary never reaches a watcher, the watchers' design equals the primary'
 500 ms of the start, each peer's input moving its own avatar while the primary's does not, a 3 s drop rejoining its seat
 and a longer one forfeiting it without ending the room, and a draft load reaching all four. The report carries
 `clients: 4` and one `seats[]` entry per seat (ticks, RTT, delay p95s, desyncs, recoveries). `--link clean` is the same
-steps unimpaired; `--link @<report.json>` replays from its seed. A v1 room uses `scenario two-client` instead.
+steps unimpaired; `--link @<report.json>` replays from its seed. `--clients 2` or `3` seats fewer (two seats rejoin the
+peer and skip the forfeit, named in `unchecked`); `--seed <n>` replaces the link seed (`link.seed` in the report);
+`--start <name>` creates the room with an entry of the game's `qa/starts.json`, such as `{"2v2": {"teams": "alternate"}}`
+(`teams`, `spectators`, `pauseOnDisconnect`; recorded as `start` probes). A v1 room uses `scenario two-client` instead.
 
 ## Done
 
