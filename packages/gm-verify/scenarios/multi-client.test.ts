@@ -17,6 +17,8 @@ import {
   judgeSeat,
   LIMITS,
   MULTI_UNCHECKED,
+  NOT_PLAYED,
+  playError,
   profileFor,
   runMultiClient,
   toSeatMetrics,
@@ -246,6 +248,13 @@ describe('step 5 and games without avatars', () => {
   it('finds no avatars in a board game, so step 5 is named unchecked instead of timing out', () => {
     expect(hasAvatars(text({ board: { p: [0, 0] }, piece: {} }))).toBe(false);
     expect(hasAvatars({})).toBe(false);
+  });
+
+  it('fails a run whose game never put an avatar on any seat, since the room playing is not the game playing', () => {
+    /* #651: Blobs stayed on character select; seats, desyncs and the drop all passed on the rooms transport alone. */
+    const menu = text({ title: { p: [0, 0] } });
+    expect(playError(hasAvatars(menu))).toBe(NOT_PLAYED);
+    expect(playError(hasAvatars(text({ a: { playerIndex: 0, p: [10, 0] } })))).toBeUndefined();
   });
 });
 

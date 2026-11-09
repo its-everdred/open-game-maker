@@ -66,6 +66,18 @@ export const MULTI_TIMINGS = {
   idleDisposeSec: 5,
 } as const;
 export const MULTI_UNCHECKED = ['WAN latency', 'a real phone'] as const;
+/**
+ * The room's `playing` is the service's phase, not the game's: a game still on its menu passes every transport step.
+ * Only a peer's avatar moving on another seat proves the game itself played online, so a run that never saw one fails.
+ */
+export const NOT_PLAYED =
+  "the game's online play was not exercised: no seat had a playerIndex entity to move, so the room ran but the game " +
+  'never started a match (start it when the room starts playing, or give each seat an avatar)';
+
+/** The run's error when nothing else failed: none if step 5 moved avatars, {@link NOT_PLAYED} if it found none. */
+export function playError(sawAvatars: boolean): string | undefined {
+  return sawAvatars ? undefined : NOT_PLAYED;
+}
 
 const PIN = { gameId: 'multi-client', branchId: 'main', buildId: 'b1' } as const;
 const DRAFT_BUILD = 'b2';
@@ -467,6 +479,8 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
   const droppedSeats = new Set<number>();
   /** Checks this game cannot be judged by, named in the report instead of failed or silently skipped. */
   const unchecked: string[] = [];
+  /** Whether step 5 found avatars to move; a run without them goes on for its evidence but cannot pass. */
+  let avatars = false;
 
   /** The game declares its authority mode in its manifest; the room is created with the same one (D-NET-1). */
   const manifestNet = ((): { authority?: string; maxSeats?: number } => {
@@ -660,7 +674,6 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
 
     log('5 each peer moves its own avatar; the primary never moves');
     /* Avatars may spawn a moment after playing; only a game that still has none is named unchecked. */
-    let avatars = false;
     for (const giveUpAt = Date.now() + 2_000; !avatars && Date.now() < giveUpAt;) {
       avatars = hasAvatars(await gameText(clients[0]!.page));
       if (!avatars) await clients[0]!.page.waitForTimeout(100);
@@ -776,6 +789,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     await Promise.all(servers.map((server) => new Promise((done) => server.close(done))));
     rmSync(work, { recursive: true, force: true });
   }
+  error ??= playError(avatars);
 
   const budgets = unknownBudgets();
   const consoleList = consoleEntries.list();
