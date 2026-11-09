@@ -4,7 +4,7 @@ import { GameCommand, playablesFromMarker } from '@ogm/contracts';
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import type { MediaSigner } from '../build-chat/store.js';
-import { isForCreator } from '../job-commands/correlate.js';
+import { isForCreator, isTextOnly } from '../job-commands/correlate.js';
 import { optionMediaFromAiur, type ResolvedOptionMedia } from './aiur-media.js';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
@@ -65,6 +65,7 @@ export function toGameCommand(
     ...(recommend === undefined ? {} : { recommend }),
     blocking: decision.blocking,
     opened_at: decision.created_at,
+    ...(isTextOnly(decision) ? { text_only: true } : {}),
   });
   return command.success ? command.data : null;
 }

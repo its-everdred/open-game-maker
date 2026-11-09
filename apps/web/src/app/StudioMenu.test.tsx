@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   jobs: { jobs: [] as TestJob[], active: [] as TestJob[], games: [] as Array<{ id: string; title: string }> },
   session: { data: null as { user: { id: string } } | null },
   decisions: [] as TestDecision[],
+  sessions: [] as Array<{ game_id: string; game_title: string; count: number }>,
   energy: { data: undefined as EnergyView | undefined },
 }));
 
@@ -37,7 +38,17 @@ vi.mock('../features/build-chat/Chat', () => ({
 }));
 vi.mock('../features/commands-inbox/commands', () => ({
   answerCommand: vi.fn(async () => undefined),
-  useCreatorCommands: (creatorId: string | undefined) => ({ commands: creatorId ? state.decisions : [] }),
+  useCreatorCommands: (creatorId: string | undefined) => ({
+    commands: creatorId ? state.decisions : [],
+    sessions: creatorId ? state.sessions : [],
+  }),
+}));
+vi.mock('../features/commands-inbox/QuestionSession', () => ({
+  QuestionSession: ({ session, creatorId }: { session: { game_title: string; count: number }; creatorId: string }) => (
+    <div role="dialog" aria-label={`Voice chat ${session.game_title}`}>
+      {creatorId} {session.count}
+    </div>
+  ),
 }));
 vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
@@ -119,6 +130,7 @@ afterEach(() => {
   state.jobs = { jobs: [], active: [], games: [] };
   state.session = { data: null };
   state.decisions = [];
+  state.sessions = [];
   state.energy = { data: undefined };
   sound.setMuted.mockReset();
   sound.setVolume.mockReset();
@@ -375,6 +387,28 @@ describe('StudioMenu', () => {
 
     expect(screen.getByRole('dialog', { name: 'Gate' })).toBeVisible();
     expect(screen.getByText('Which d2?')).toBeVisible();
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  // Kevin (#612): queued words-only questions are one entry, set apart from the decisions, and open only when tapped.
+  it('offers a game’s quick voice chat as one counted entry beside the decisions, opened only on a tap', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1')];
+    state.sessions = [{ game_id: 'game-castle', game_title: 'Castle', count: 6 }];
+    renderMenu('/games');
+
+    expect(screen.getByText('2', { selector: '.studio-menu-badge' })).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Decisions: 2' }));
+    const entry = screen.getByRole('button', { name: 'Castle wants a quick voice chat, 6 questions' });
+    expect(entry).toHaveClass('studio-menu-questions');
+    expect(entry.querySelector('.studio-menu-questions-count')).toHaveTextContent('6');
+    expect(screen.getByRole('button', { name: 'Topic d1, Blobs' })).not.toHaveClass('studio-menu-questions');
+
+    fireEvent.click(entry);
+
+    expect(screen.getByRole('dialog', { name: 'Voice chat Castle' })).toHaveTextContent('user-1 6');
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
   });
 

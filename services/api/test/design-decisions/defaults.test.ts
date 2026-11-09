@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { listCommands, parseCommand } from '../../src/build-chat/store.js';
+import { insertChatRow, listCommands, parseCommand } from '../../src/build-chat/store.js';
 import { answerCommand } from '../../src/job-commands/answer.js';
 import { designDefaultInterval, createDesignDefaultSweep } from '../../src/design-decisions/defaults.js';
 import { listDesignDecisions } from '../../src/design-decisions/store.js';
@@ -91,6 +91,34 @@ describe('design default sweep', () => {
     expect(client.messages[0]!.text).toContain('D-01');
     expect(client.messages[0]!.text).toContain('provisional default');
     expect(client.messages[0]!.text).toContain('"Iron"');
+  });
+
+  // A product question (#612) waits in its game's queue for a quick voice chat; a default would answer it unasked.
+  it('never defaults a product question', async () => {
+    const { deps, client, sweep } = await setup({ now: AFTER_WAIT });
+    insertChatRow(deps.sqlite, {
+      jobId: SCOPE_JOB,
+      at: NOW,
+      actor: 'agent',
+      kind: 'command',
+      command: {
+        command_id: DECISION_ID,
+        decision_id: DECISION_ID,
+        version: 2,
+        question: 'How many lives?',
+        options: [
+          { id: 'one', label: 'One' },
+          { id: 'three', label: 'Three' },
+        ],
+        recommend: 'three',
+        status: 'open',
+        text_only: true,
+      },
+    });
+
+    expect(await sweep.tick()).toBe(0);
+    expect(commandRow(deps)).toMatchObject({ status: 'open' });
+    expect(client.messages).toEqual([]);
   });
 
   it('leaves a Command open while its wait has not passed', async () => {

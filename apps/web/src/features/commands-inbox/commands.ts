@@ -25,6 +25,7 @@ export function useGameCommands(gameId: string | null | undefined) {
 }
 
 const NO_DECISIONS: CreatorCommandsPage['commands'] = [];
+const NO_SESSIONS: NonNullable<CreatorCommandsPage['question_sessions']> = [];
 export const creatorCommandsQueryKey = ['creator-commands'] as const;
 
 // The menu's decision inbox: the signed-in creator's player-facing Commands across all their games, in priority order.
@@ -38,7 +39,12 @@ export function useCreatorCommands(creatorId: string | undefined) {
     refetchInterval: POLL_MS,
     retry: false,
   });
-  return { ...query, commands: enabled ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS };
+  return {
+    ...query,
+    commands: enabled ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS,
+    // Games whose queued product questions offer a quick voice chat (ticket 612): one entry each, never opened on its own.
+    sessions: enabled ? (query.data?.question_sessions ?? NO_SESSIONS) : NO_SESSIONS,
+  };
 }
 
 // A Command a job owns answers through the job's Command route. A Command with no job — a registered game's, read

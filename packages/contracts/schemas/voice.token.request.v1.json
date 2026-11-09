@@ -69,6 +69,29 @@
             "creator_id"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "questions"
+            },
+            "game_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "creator_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "game_id",
+            "creator_id"
+          ],
+          "additionalProperties": false
         }
       ]
     }

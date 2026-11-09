@@ -366,6 +366,7 @@ export function Composer({
 }
 
 function voiceTargetKey(target: VoiceTarget): string {
+  if (target.kind === 'questions') return `questions:${target.game_id}:${target.creator_id}`;
   return target.kind === 'scope'
     ? `scope:${target.game_id}:${target.session_id}:${target.creator_id}`
     : `build:${target.game_id}:${target.job_id}:${target.ticket}:${target.creator_id}`;

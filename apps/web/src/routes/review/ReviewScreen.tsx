@@ -197,7 +197,7 @@ function ReviewScreen({
   // The Command's job is what gives the screen the app's voice support: the same build-chat voice target the composer
   // uses, naming this decision so the agent is briefed on it first. A Command without a job in hand keeps typing only.
   const { jobs } = useMyJobs();
-  const voiceTarget = useMemo<DecisionVoiceTarget | undefined>(() => {
+  const voiceTarget = useMemo<Extract<DecisionVoiceTarget, { kind: 'build' }> | undefined>(() => {
     const decision = shown ?? seen;
     const job = decision === undefined ? undefined : jobs.find((candidate) => candidate.id === decision.job_id);
     if (decision === undefined || job === undefined) return undefined;

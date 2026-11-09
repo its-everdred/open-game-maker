@@ -84,7 +84,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm shot` captures evidence; `gm perf` checks frame and resource budgets.
 - `gm docs pattern` retrieves a mechanic card without loading a whole reference game.
 - `gm chat post` sends the current still or clip to the build chat.
-- `gm decide` asks the creator; `gm command wait` waits, or park on it; a `gm-decision-answer` comment is the answer.
+- `gm decide` asks; `gm command wait` waits, or park on it; a `gm-decision-answer` comment answers. `gm ask` queues words.
 - `gm changes` summarizes the current game-repo diff.
 - `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 - `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.

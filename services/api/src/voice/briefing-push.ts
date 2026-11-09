@@ -9,6 +9,7 @@ import { budgetStatus } from '../budget/status.js';
 import { toUnits } from '../budget/units.js';
 import { parseCommandOptions } from '../job-commands/options.js';
 import { decisionFocus } from './decision-focus.js';
+import type { QuestionSession } from './question-session.js';
 
 export type { VoiceTarget } from '@ogm/contracts';
 
@@ -26,7 +27,14 @@ export type Briefing = BriefingPush & {
 
 // `sqlite` reads the build chat's Command rows, which carry each option's media; without it an open decision is
 // still named first, only without its cards' media.
-export type BriefingDeps = { db: Db; sqlite?: Sqlite; defaults: BudgetDefaults; now?: () => Date };
+// `questionSession` reads a game's queued product questions and decision record for a quick question session (#612).
+export type BriefingDeps = {
+  db: Db;
+  sqlite?: Sqlite;
+  defaults: BudgetDefaults;
+  now?: () => Date;
+  questionSession?: (gameId: string) => Promise<QuestionSession>;
+};
 
 export type PushDeps = BriefingDeps & {
   url: string;
@@ -40,7 +48,7 @@ const SIZES = ['small', 'medium', 'large', 'huge'] as const;
 const PAUSED = 'Build paused at its reservation: ask an admin to raise it, or trim';
 
 export const targetKey = (target: VoiceTarget) =>
-  `${target.kind}:${target.kind === 'scope' ? target.session_id : target.job_id}`;
+  `${target.kind}:${target.kind === 'scope' ? target.session_id : target.kind === 'build' ? target.job_id : `${target.game_id}:${target.creator_id}`}`;
 
 export function localTime(at: string, zone: string): string {
   try {
@@ -96,6 +104,8 @@ function budgetText(
 }
 
 export function jobFor(db: Db, target: VoiceTarget) {
+  // A question session belongs to the game, not to one build.
+  if (target.kind === 'questions') return undefined;
   if (target.kind === 'build') return db.select().from(schema.jobs).where(eq(schema.jobs.id, target.job_id)).get();
 
   const session = db
@@ -130,6 +140,8 @@ export async function buildBriefing(deps: BriefingDeps, target: VoiceTarget): Pr
     ? (deps.db.select().from(schema.jobProjections).where(eq(schema.jobProjections.jobId, job.id)).get()?.stageText ??
       job.state)
     : null;
+  const session =
+    target.kind === 'questions' && deps.questionSession ? await deps.questionSession(target.game_id) : undefined;
   const commandRows = job
     ? deps.db
         .select({
@@ -149,11 +161,15 @@ export async function buildBriefing(deps: BriefingDeps, target: VoiceTarget): Pr
     ...commandRows.filter(({ id }) => id === focusId),
     ...commandRows.filter(({ id }) => id !== focusId),
   ];
-  const questions = ordered.map(({ question }) => question);
-  const commands = ordered.flatMap(({ id, version, question, options }) => {
-    const parsed = parseCommandOptions(options);
-    return parsed === null ? [] : [{ id, version, question, options: parsed.map(({ id, label }) => ({ id, label })) }];
-  });
+  const commands =
+    session?.commands ??
+    ordered.flatMap(({ id, version, question, options }) => {
+      const parsed = parseCommandOptions(options);
+      return parsed === null
+        ? []
+        : [{ id, version, question, options: parsed.map(({ id, label }) => ({ id, label })) }];
+    });
+  const questions = session ? commands.map(({ question }) => question) : ordered.map(({ question }) => question);
   const focused = job && focusId !== undefined ? commands.find(({ id }) => id === focusId) : undefined;
   const focus = job && focused ? decisionFocus(deps.sqlite, job.id, focused) : undefined;
   let budget: { remaining: string; sizes: string } | undefined;
@@ -165,7 +181,9 @@ export async function buildBriefing(deps: BriefingDeps, target: VoiceTarget): Pr
   const paused = job?.state === 'paused_budget';
   const waitingOn = pendingWaitingOn(target) ?? (paused ? PAUSED : undefined);
   const budgetSummary = budget ? `${paused ? 'Build paused at its reservation. ' : ''}${budget.remaining}` : undefined;
-  const progress = stage ?? (target.kind === 'scope' ? 'Agreeing the scope' : 'No build running.');
+  const progress = session
+    ? `${session.commands.length} product questions queued`
+    : (stage ?? (target.kind === 'scope' ? 'Agreeing the scope' : 'No build running.'));
   const sections: Briefing['sections'] = [{ id: 'progress', text: progress }];
   if (budgetSummary && budget) {
     sections.unshift({ id: 'budget', text: `${budgetSummary}\n${budget.sizes}` });
@@ -177,12 +195,21 @@ export async function buildBriefing(deps: BriefingDeps, target: VoiceTarget): Pr
       target.kind === 'build' && job
         ? (JSON.parse(job.plan) as { title: string }).title
         : (game?.title ?? 'a new game'),
-    current_task: target.kind === 'scope' ? 'Agreeing the scope' : (stage ?? 'No build running'),
+    current_task:
+      target.kind === 'scope'
+        ? 'Agreeing the scope'
+        : target.kind === 'questions'
+          ? 'Quick questions'
+          : (stage ?? 'No build running'),
     next_steps: target.kind === 'scope' ? ['Confirm the plan', 'Start the build or queue it for the reset'] : [],
     ...(waitingOn ? { waiting_on: waitingOn } : {}),
     questions,
     commands,
-    extra: [...(focus ? [focus] : []), ...(budgetSummary ? [{ title: 'Budget', text: budgetSummary }] : [])],
+    extra: [
+      ...(focus ? [focus] : []),
+      ...(session ? [session.focus, session.record] : []),
+      ...(budgetSummary ? [{ title: 'Budget', text: budgetSummary }] : []),
+    ],
     sections,
     observed_at: now.toISOString(),
   };

@@ -59,6 +59,8 @@ export function createDesignDefaultSweep(deps: DesignDefaultsDeps) {
       if (command === null || command.status !== 'open') continue;
       // A Command with no correlated aiur decision or no recommendation cannot default: there is nothing to take.
       if (command.decision_id === '' || command.version === undefined) continue;
+      // A product question waits in its game's queue for a voice session (#612); it never takes a default.
+      if (command.text_only) continue;
       const recommended = command.recommend;
       if (recommended === undefined) continue;
       const openedMs = Date.parse(row.at);

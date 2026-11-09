@@ -72,6 +72,36 @@ describe('voice inside a decision', () => {
     expect(onLive).toHaveBeenLastCalledWith(false);
   });
 
+  // Kevin (#612): opening a quick question session starts the two-way chat; ending it does not start another.
+  it('starts a question session on its own once, and ends it on a press', async () => {
+    const { client } = fakeClient();
+    const created: VoiceClientOptions[] = [];
+    const onLive = vi.fn();
+    const questions: DecisionVoiceTarget = { kind: 'questions', game_id: 'g_1', creator_id: 'u_1' };
+    render(
+      <DecisionVoice
+        target={questions}
+        autoStart
+        onLive={onLive}
+        onSpeaking={vi.fn()}
+        onHeard={vi.fn()}
+        probe={available}
+        createVoiceClient={(options) => {
+          created.push(options);
+          return client;
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(onLive).toHaveBeenCalledWith(true));
+    expect(created).toEqual([expect.objectContaining({ target: questions })]);
+    fireEvent.click(screen.getByRole('button', { name: 'End voice' }));
+    expect(client.end).toHaveBeenCalled();
+    expect(onLive).toHaveBeenLastCalledWith(false);
+    expect(await screen.findByRole('button', { name: 'Start quick voice chat' })).toBeVisible();
+    expect(created).toHaveLength(1);
+  });
+
   // Leaving the decision while the token is still on its way must not open a microphone nobody can end.
   it('opens no call when the screen closes before the token arrives', async () => {
     let resolvePress: (value: unknown) => void = () => undefined;

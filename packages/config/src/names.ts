@@ -272,6 +272,12 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     doc: 'how long a New Game design Command stays open before its recommended option answers it (default 300000)',
   },
   {
+    name: 'OGM_VOICE_QUESTIONS_AT',
+    unit: 'api',
+    kind: 'int',
+    doc: 'queued product questions that offer the creator a quick voice chat (default 5)',
+  },
+  {
     name: 'OGM_PLATFORM_ISSUE_REPO',
     unit: 'commit',
     kind: 'string',

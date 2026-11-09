@@ -75,7 +75,7 @@ async function authorizedTarget(c: Context<ApiBindings>) {
     ) {
       throw new HttpError(403, 'job_not_in_game');
     }
-  } else {
+  } else if (target.kind === 'scope') {
     const session = db.select().from(schema.scopeSessions).where(eq(schema.scopeSessions.id, target.session_id)).get();
     if (!session || session.gameId !== game.id || session.creatorId !== principal.userId) {
       throw new HttpError(403, 'scope_not_in_game');

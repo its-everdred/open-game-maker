@@ -1,5 +1,5 @@
 import type { Decision } from '@ogm/aiur-client';
-import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, CREATOR_TEXT_ONLY_MARKER } from '@ogm/contracts';
 
 import { parseCommand, type ChatRow, type StoredCommand } from '../build-chat/store.js';
 import { summaryOf } from '../commands/aiur.js';
@@ -31,6 +31,17 @@ export function isForCreator(decision: Decision): boolean {
   );
 }
 
+// A product question (#612): a creator Command `gm ask` marked text-only. It queues for a voice session instead of
+// showing in the deck. The marker only counts on a decision that is the creator's.
+export function isTextOnly(decision: Decision): boolean {
+  return (
+    isForCreator(decision) &&
+    [decision.context?.long_context_markdown, decision.context?.short_summary, decision.question].some(
+      (source) => typeof source === 'string' && source.includes(CREATOR_TEXT_ONLY_MARKER),
+    )
+  );
+}
+
 // aiur marks a decision that takes several answers with `multi_select`; a review deck's answer is the likes and
 // dislikes rather than one card. Everything else asks for one pick.
 export function pickOf(decision: Decision): 'one' | 'many' {
@@ -59,7 +70,8 @@ function isNativeChoice(decision: Decision): boolean {
   const questionCount = decision.questions?.length;
   const multiSelect = decision.questions?.[0]?.multi_select === true;
   return (
-    decision.kind === 'native_question' &&
+    // `gm ask` raises a product question as a plain decision, with no checkpoint, so it is mirrored like a native one.
+    (decision.kind === 'native_question' || isTextOnly(decision)) &&
     decision.options.length >= 2 &&
     decision.options.length <= 5 &&
     (questionCount === undefined || questionCount === 1) &&
@@ -114,6 +126,7 @@ export function correlate(decisions: Decision[], rows: ChatRow[]): CorrelationPl
         // before this app read them) catches up instead of staying hidden from the creator or topic-less. A builder's
         // Command keeps its job's title: `gm command request` sends the same placeholder topic for every question.
         audience: creatorAudience(decision),
+        text_only: isTextOnly(decision) ? true : undefined,
         summary: found.command.command_id === decision.decision_id ? summaryOf(decision) : undefined,
       },
     });

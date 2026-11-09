@@ -16,8 +16,8 @@ import { appendOutboxLine, gameDir, knownChatMessageIds, optionalJobContext } fr
 const OPTION_ID = /^[a-z0-9_-]{1,32}$/;
 // The deck shows the question as one short line and never shows a link (#608): a gameplay question carries a playable
 // slice instead of a URL to go and try.
-const MAX_QUESTION = 120;
-const URL_TEXT = /[a-z][a-z0-9+.-]*:\/\/|\bwww\./i;
+export const MAX_QUESTION = 120;
+export const URL_TEXT = /[a-z][a-z0-9+.-]*:\/\/|\bwww\./i;
 
 export type CommandRequestPayload = {
   command_id: `cp_${string}`;
@@ -34,12 +34,12 @@ type EmitEventCall = {
   payload: Record<string, unknown>;
 };
 
-function pair(raw: string, flag: string): [string, string] {
+export function pair(raw: string, flag: string, help = 'gm help command request'): [string, string] {
   const separator = raw.indexOf('=');
   const id = raw.slice(0, separator).trim();
   const value = separator < 0 ? '' : raw.slice(separator + 1).trim();
   if (!OPTION_ID.test(id) || !value)
-    throw new UsageError(`--${flag} needs id=value with id matching [a-z0-9_-]{1,32}`, `gm help command request`);
+    throw new UsageError(`--${flag} needs id=value with id matching [a-z0-9_-]{1,32}`, help);
   return [id, value];
 }
 

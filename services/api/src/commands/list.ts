@@ -1,6 +1,6 @@
 import { authorize } from '@ogm/policy';
 
-import { GameCommand, type CreatorCommand, type Principal } from '@ogm/contracts';
+import { GameCommand, type CreatorCommandsPage, type Principal } from '@ogm/contracts';
 
 import { actorFromPrincipal } from '../accounts/families.js';
 import type { AppDeps } from '../app/types.js';
@@ -66,6 +66,7 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
         // How the Command's answer is taken: a review deck's 'one' asks for a single pick from its likes.
         pick: stored.pick ?? 'one',
         opened_at: row.at,
+        ...(stored.text_only ? { text_only: true } : {}),
       });
       if (command.success) commands.push(command.data);
     }
@@ -90,9 +91,32 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
     .map((command) => ({ ...command, review_number: numbers.get(command.decision_id)! }));
 }
 
+// How many queued product questions open a voice session when `OGM_VOICE_QUESTIONS_AT` is not set.
+export const DEFAULT_VOICE_QUESTIONS_AT = 5;
+
+// Product questions are asked in a voice session only when voice is configured; without it they are listed one by one
+// like any decision, so they always have a way to be answered.
+function voiceConfigured(deps: AppDeps): boolean {
+  return Boolean(deps.config.voiceTokenSecret && deps.config.voiceWsUrl);
+}
+
+// The decisions shown one by one: a product question (#612) waits in its game's queue for a voice session instead.
+export function shownOneByOne<T extends GameCommand>(deps: AppDeps, commands: T[]): T[] {
+  if (!voiceConfigured(deps)) return commands;
+  return commands.filter((command) => command.text_only !== true);
+}
+
+// A game's queued product questions, oldest first: the order a voice session asks them in.
+export async function listProductQuestions(deps: AppDeps, game: GameRow): Promise<GameCommand[]> {
+  return (await listGameCommands(deps, game))
+    .filter((command) => command.text_only === true)
+    .sort((left, right) => left.opened_at.localeCompare(right.opened_at));
+}
+
 // The menu's decision inbox: every game the caller may edit, in priority order. A Command that blocks its build comes
-// first, then the one that has waited longest.
-export async function listCreatorCommands(deps: AppDeps, principal: UserPrincipal): Promise<CreatorCommand[]> {
+// first, then the one that has waited longest. Product questions are not listed one by one: a game with at least the
+// threshold of them queued gets one voice-session entry instead (never pushed or opened on its own, #596).
+export async function listCreatorCommands(deps: AppDeps, principal: UserPrincipal): Promise<CreatorCommandsPage> {
   const actor = actorFromPrincipal(principal);
   const games = listGames(deps.db, principal.familyId, principal.userId).filter(
     (game) =>
@@ -118,9 +142,15 @@ export async function listCreatorCommands(deps: AppDeps, principal: UserPrincipa
       }
     }),
   );
-  return perGame
-    .flat()
-    .sort(
-      (left, right) => Number(right.blocking) - Number(left.blocking) || left.opened_at.localeCompare(right.opened_at),
-    );
+  const threshold = deps.config.voiceQuestionsAt ?? DEFAULT_VOICE_QUESTIONS_AT;
+  const questionSessions = !voiceConfigured(deps)
+    ? []
+    : games.flatMap((game, index) => {
+        const count = perGame[index]!.filter((command) => command.text_only === true).length;
+        return count >= threshold ? [{ game_id: game.id, game_title: game.title.slice(0, 200), count }] : [];
+      });
+  const commands = shownOneByOne(deps, perGame.flat()).sort(
+    (left, right) => Number(right.blocking) - Number(left.blocking) || left.opened_at.localeCompare(right.opened_at),
+  );
+  return { commands, question_sessions: questionSessions };
 }
