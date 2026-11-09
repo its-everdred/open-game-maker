@@ -63,13 +63,13 @@ describe('gm checkpoint open', () => {
         { id: 'b', label: 'Flat' },
       ],
       recommend: 'a',
-      blocking: false,
+      blocking: true,
     });
     expect(printed.emit_event).toMatchObject({
       name: 'decision.requested',
       payload: {
         question: 'Which look?',
-        blocking: false,
+        blocking: true,
         kind: 'direction_checkpoint',
         authority: 'supervisor_allowed',
         reversibility: 'reversible',

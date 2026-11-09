@@ -49,8 +49,8 @@ creator's choice; a choice shown with stand-ins is not a choice.
 
 **Ask, don't assume.** At any stage (a prototype, a failed review, a spec gap), before deciding anything a player would
 notice, ask with `gm decide`: a 2-5 word `--topic`, as many options as needed, each showing the thing itself (`--media`
-or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic; `design/decisions.json` refuses
-one already asked unless the creator reopens it (`--revisit`). At most three per edit; new games follow
+or `--playable`), `--recommend` with a `--reason`, and `--blocking` (until aiur #7872 ships). Related questions share a
+topic; `design/decisions.json` refuses one already asked unless the creator reopens it (`--revisit`). At most three per edit; new games follow
 gm-new-game-design. Engineering and operations questions never go to the creator: decide them or tell the Executor.
 Build the choice. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked. Done means
 `gm check`, `gm test`, and `gm run` are green and the PR's checklist is answered from the evidence sheet; look first.
