@@ -12,9 +12,11 @@ export function SignInScreen() {
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'), '/all');
   const magicCompleted = params.get('magic') === '1';
+  const googleFailed = params.has('error');
   const { data: session, isPending: sessionPending } = useSession();
   const [email, setEmail] = useState('');
-  const [googleAvailable, setGoogleAvailable] = useState(false);
+  // Null until the API says which methods it has; the email form is the fallback while Google is off.
+  const [googleAvailable, setGoogleAvailable] = useState<boolean | null>(null);
   const [passkeyAvailable, setPasskeyAvailable] = useState<boolean | null>(null);
   const [pending, setPending] = useState<Method | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -51,7 +53,8 @@ export function SignInScreen() {
     }
     let current = true;
     setPasskeyAvailable(true);
-    if (sessionPending || session) return () => undefined;
+    // Passkey autofill hangs off the email field, which only the fallback form has.
+    if (sessionPending || session || googleAvailable !== false) return () => undefined;
     const conditional = PublicKeyCredential.isConditionalMediationAvailable;
     if (!conditional) return () => undefined;
     void conditional.call(PublicKeyCredential).then(async (available) => {
@@ -61,7 +64,7 @@ export function SignInScreen() {
     return () => {
       current = false;
     };
-  }, [session, sessionPending]);
+  }, [googleAvailable, session, sessionPending]);
 
   useEffect(() => {
     if (!sessionPending && session && !magicCompleted) finish();
@@ -74,6 +77,7 @@ export function SignInScreen() {
   if (sessionPending || (session && (!magicCompleted || passkeyAvailable === null))) return null;
   if (session && magicCompleted && passkeyAvailable) return <PasskeyOffer onDone={finish} />;
   if (session && magicCompleted) return null;
+  if (googleAvailable === null) return null;
 
   async function run(method: Method, action: () => Promise<{ error: unknown }>) {
     setPending(method);
@@ -118,6 +122,62 @@ export function SignInScreen() {
     );
   }
 
+  const passkeyButton = passkeyAvailable && (
+    <button
+      className="auth-method"
+      disabled={pending !== null}
+      type="button"
+      onClick={() => void run('passkey', () => authClient.signIn.passkey())}
+    >
+      {pending === 'passkey' ? 'Opening passkey…' : 'Use a passkey'}
+    </button>
+  );
+  const errorMessage = error || (googleFailed ? 'Could not sign in with Google.' : '');
+  const errorAlert = errorMessage && (
+    <p className="auth-error" role="alert">
+      {errorMessage}
+    </p>
+  );
+
+  if (googleAvailable) {
+    const errorCallback = new URL('/signin', window.location.origin);
+    errorCallback.searchParams.set('next', next);
+    return (
+      <main className="auth-screen signin-screen">
+        <section className="auth-card">
+          <h1>Sign in</h1>
+          <div className="auth-methods">
+            <button
+              className="auth-primary"
+              disabled={pending !== null}
+              type="button"
+              onClick={() =>
+                void run('google', () =>
+                  authClient.signIn.social({
+                    provider: 'google',
+                    callbackURL: next,
+                    errorCallbackURL: `${errorCallback.pathname}${errorCallback.search}`,
+                  }),
+                )
+              }
+            >
+              {pending === 'google' ? 'Opening Google…' : 'Continue with Google'}
+            </button>
+          </div>
+          {passkeyButton && (
+            <>
+              <div className="auth-divider" aria-hidden="true">
+                <span>or</span>
+              </div>
+              <div className="auth-methods">{passkeyButton}</div>
+            </>
+          )}
+          {errorAlert}
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="auth-screen signin-screen">
       <section className="auth-card">
@@ -138,38 +198,15 @@ export function SignInScreen() {
             {pending === 'magic-link' ? 'Sending…' : 'Send sign-in link'}
           </button>
         </form>
-        <div className="auth-divider" aria-hidden="true">
-          <span>or</span>
-        </div>
-        <div className="auth-methods">
-          {passkeyAvailable && (
-            <button
-              className="auth-method"
-              disabled={pending !== null}
-              type="button"
-              onClick={() => void run('passkey', () => authClient.signIn.passkey())}
-            >
-              {pending === 'passkey' ? 'Opening passkey…' : 'Use a passkey'}
-            </button>
-          )}
-          {googleAvailable && (
-            <button
-              className="auth-method"
-              disabled={pending !== null}
-              type="button"
-              onClick={() =>
-                void run('google', () => authClient.signIn.social({ provider: 'google', callbackURL: next }))
-              }
-            >
-              {pending === 'google' ? 'Opening Google…' : 'Continue with Google'}
-            </button>
-          )}
-        </div>
-        {error && (
-          <p className="auth-error" role="alert">
-            {error}
-          </p>
+        {passkeyButton && (
+          <>
+            <div className="auth-divider" aria-hidden="true">
+              <span>or</span>
+            </div>
+            <div className="auth-methods">{passkeyButton}</div>
+          </>
         )}
+        {errorAlert}
       </section>
     </main>
   );

@@ -33,6 +33,8 @@ function renderSignIn(entry = '/signin') {
   );
 }
 
+const withoutGoogle = () => auth.getAuthCapabilities.mockResolvedValue({ providers: ['magic-link', 'passkey'] });
+
 function enablePasskeys() {
   vi.stubGlobal('PublicKeyCredential', {
     isConditionalMediationAvailable: vi.fn(async () => false),
@@ -56,10 +58,36 @@ afterEach(() => {
 });
 
 describe('SignInScreen', { timeout: 10_000 }, () => {
-  it('sends a magic link and shows the check-email state', async () => {
+  it('leads with Google and offers no email link when Google is configured', async () => {
+    enablePasskeys();
     renderSignIn('/signin?next=%2Fgames');
 
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'kim@example.com' } });
+    const google = await screen.findByRole('button', { name: 'Continue with Google' });
+    const buttons = screen.getAllByRole('button').map((button) => button.textContent);
+    expect(buttons).toEqual(['Continue with Google', 'Use a passkey']);
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
+
+    fireEvent.click(google);
+    expect(auth.authClient.signIn.social).toHaveBeenCalledWith({
+      provider: 'google',
+      callbackURL: '/games',
+      errorCallbackURL: '/signin?next=%2Fgames',
+    });
+    expect(auth.authClient.signIn.magicLink).not.toHaveBeenCalled();
+  });
+
+  it('says so when Google sends the creator back with an error', async () => {
+    renderSignIn('/signin?next=%2Fgames&error=unable_to_create_user');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not sign in with Google.');
+    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeEnabled();
+  });
+
+  it('sends a magic link and shows the check-email state', async () => {
+    withoutGoogle();
+    renderSignIn('/signin?next=%2Fgames');
+
+    fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'kim@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send sign-in link' }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('Check your email');
@@ -71,9 +99,10 @@ describe('SignInScreen', { timeout: 10_000 }, () => {
   it('keeps the sent confirmation tied to the submitted email', async () => {
     let resolve!: (value: { data: { status: boolean }; error: null }) => void;
     auth.authClient.signIn.magicLink.mockReturnValueOnce(new Promise((done) => (resolve = done)));
+    withoutGoogle();
     renderSignIn();
 
-    const input = screen.getByLabelText('Email');
+    const input = await screen.findByLabelText('Email');
     fireEvent.change(input, { target: { value: 'first@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send sign-in link' }));
     fireEvent.change(input, { target: { value: 'second@example.com' } });
@@ -83,31 +112,30 @@ describe('SignInScreen', { timeout: 10_000 }, () => {
     expect(screen.queryByText(/second@example.com/)).not.toBeInTheDocument();
   });
 
-  it('hides Google when the backend reports it unconfigured', async () => {
-    auth.getAuthCapabilities.mockResolvedValue({ providers: ['magic-link', 'passkey'] });
+  it('falls back to the email link while Google is not configured', async () => {
+    withoutGoogle();
     renderSignIn();
 
-    await waitFor(() => expect(auth.getAuthCapabilities).toHaveBeenCalled());
+    expect(await screen.findByLabelText('Email')).toBeVisible();
     expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
   });
 
-  it('calls passkey and Google sign-in when those methods are available', async () => {
+  it('calls passkey sign-in when passkeys are available', async () => {
     enablePasskeys();
     renderSignIn();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Use a passkey' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue with Google' }));
 
     expect(auth.authClient.signIn.passkey).toHaveBeenCalledWith();
-    expect(auth.authClient.signIn.social).toHaveBeenCalledWith(expect.objectContaining({ provider: 'google' }));
   });
 
   it('starts conditional passkey mediation only while the screen is mounted', async () => {
     const conditional = vi.fn(async () => true);
     vi.stubGlobal('PublicKeyCredential', { isConditionalMediationAvailable: conditional });
+    withoutGoogle();
     const view = renderSignIn();
 
-    expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'email webauthn');
+    expect(await screen.findByLabelText('Email')).toHaveAttribute('autocomplete', 'email webauthn');
     await waitFor(() => expect(auth.authClient.signIn.passkey).toHaveBeenCalledWith({ autoFill: true }));
 
     auth.authClient.signIn.passkey.mockClear();
