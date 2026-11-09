@@ -38,7 +38,7 @@ export const command: GmCommand = {
     if (!question || question.length > MAX_QUESTION || /[\r\n]/.test(question))
       throw new UsageError(`--question must be one line of at most ${MAX_QUESTION} characters`, 'shorten the question');
     const options = strings(flags, 'option').map((raw) => {
-      const [id, label] = pair(raw, 'option');
+      const [id, label] = pair(raw, 'option', 'gm help ask');
       return { id, label };
     });
     // A voice agent reads every option aloud, so the set stays short.
