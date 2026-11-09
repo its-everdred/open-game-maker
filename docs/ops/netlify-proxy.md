@@ -20,7 +20,8 @@ the full origin map.
 
 `ts.net` is never a trusted origin or the RP ID. Google stays off until `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
 are both set (GATE-GOOGLE-OAUTH). With Google on, the Sign-in page offers **Continue with Google** and a passkey;
-with it off, the page falls back to the email link. Invite emails still use magic links either way.
+with it off, the page falls back to the email link (unset both and restart the API to bring it back if Google sign-in
+breaks). Invite emails still use magic links either way.
 
 ## Google sign-in client (GATE-GOOGLE-OAUTH)
 

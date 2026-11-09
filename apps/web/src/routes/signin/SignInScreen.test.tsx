@@ -112,6 +112,22 @@ describe('SignInScreen', { timeout: 10_000 }, () => {
     expect(screen.queryByText(/second@example.com/)).not.toBeInTheDocument();
   });
 
+  it('does not blame Google for an expired email link', async () => {
+    withoutGoogle();
+    renderSignIn('/signin?next=%2Fgames&magic=1&error=INVALID_TOKEN');
+
+    expect(await screen.findByLabelText('Email')).toBeVisible();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the email link when the sign-in methods cannot be loaded', async () => {
+    auth.getAuthCapabilities.mockRejectedValue(new Error('offline'));
+    renderSignIn();
+
+    expect(await screen.findByLabelText('Email')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
+  });
+
   it('falls back to the email link while Google is not configured', async () => {
     withoutGoogle();
     renderSignIn();

@@ -12,7 +12,8 @@ export function SignInScreen() {
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'), '/all');
   const magicCompleted = params.get('magic') === '1';
-  const googleFailed = params.has('error');
+  // An expired invite link also returns here with `error`, but with `magic=1`.
+  const googleFailed = params.has('error') && !magicCompleted;
   const { data: session, isPending: sessionPending } = useSession();
   const [email, setEmail] = useState('');
   // Null until the API says which methods it has; the email form is the fallback while Google is off.
