@@ -38,7 +38,8 @@ Never report a visual result you haven't looked at. Reading code or logs is not 
 ## Deliver
 
 - `capture.mjs record` encodes H.264 `yuv420p`, 960 px wide, CRF 27, `+faststart` (a 2-minute clip is about 5-10 MB).
-  The Claude mobile app does not play WebM.
+  The Claude mobile app does not play WebM. A clip from any other encoder: check `ffprobe -show_entries stream=level`
+  and re-encode with `-level 3.1` when it is above 42 (a level 6.2 clip showed Kevin's phone a crossed-out play button).
 - Publish an artifact page: `tools/clips_page.py <dir> "title" "intro" clip.mp4="Heading|one line" ...` builds it with
   poster frames; files over the per-call limit get re-encoded smaller, not dropped.
 - Sound: `prototypes/title-city/tools/mix_sound.mjs` lays a scene's cues under a recording; check the balance with an
