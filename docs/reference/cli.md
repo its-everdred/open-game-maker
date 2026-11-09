@@ -298,6 +298,7 @@ gm maps index [--json]
 gm maps search [<words...>] [--rooms 3-5] [--loops N] [--secret] [--levels N] [--size <class>]
                [--type <map type|set>] [--biome <env>] [--feature <name>] [--scale <class>]
                [--grid <type>] [--flow <flow>] [--tilesets|--maps]
+gm maps info <map-card-id> [--json]
 ```
 
 `gm maps index` writes `assets-local/index/maps.index.json`: one row per inspiration map and tileset card an agent may
@@ -318,7 +319,8 @@ line (`2 of 2 (map 1, tileset 1) — biome: crypt 1, dungeon 1`) so a caller nar
 
 **A map row never carries a path.** Maps are chosen from the columns and facts here; there is no preview or tile key in
 the output and no preview command for an inspiration map, so an agent cannot end up looking at a four-thousand-file
-library. Contact sheets stay a human tool: `gm assets sheet`.
+library. Once an agent chooses a searchable map, `gm maps info` returns its validated abstract layout graph without a
+file or preview path. Contact sheets stay a human tool: `gm assets sheet`.
 
 ## Search the asset library
 

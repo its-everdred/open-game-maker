@@ -76,6 +76,7 @@ agent:
         - gm-input
         - gm-verify
         - gm-qa
+        - gm-map-inspiration
       role:audio:
         - gm-core
         - gm-audio

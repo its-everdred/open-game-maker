@@ -35,10 +35,13 @@ export { LICENSES, licenseFor, type LicenseRow } from './licenses.js';
 export {
   MAP_FEATURES,
   MAP_INDEX_PATH,
+  MAP_LAYOUTS_DIR,
   buildMapIndex,
   featuresOf,
   layoutRow,
+  loadMapLayout,
   loadMapIndex,
+  writeMapLayouts,
   writeMapIndex,
   type LayoutRow,
   type LayoutSpecRow,

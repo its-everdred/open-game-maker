@@ -35,7 +35,7 @@ sees, and how to tell it works. Unknowns go in "Open questions and defaults", ne
 ## 6. World and levels
 - Structure (levels, open map, rooms, procedural):
 - Level list for the prototype, then for the full game (name, goal, new element introduced):
-- Map sources (asset-pack tilesets, generated, hand-placed):
+- Map needs (biome, features, scale):
 
 ## 7. Characters and story
 - Main characters (role, look, asset source):
