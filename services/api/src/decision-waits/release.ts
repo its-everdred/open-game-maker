@@ -1,5 +1,5 @@
 import type { AiurClient, Decision } from '@ogm/aiur-client';
-import { decisionKeyFromMarker, waitsFromText } from '@ogm/contracts';
+import { decisionKeyFromMarker, waitKeyOfLabel, waitLabel, waitsFromText } from '@ogm/contracts';
 
 import { answeredOption } from '../checkpoints/correlate.js';
 import type { WaitingTicket, WaitTickets } from './tickets.js';
@@ -7,7 +7,7 @@ import type { WaitingTicket, WaitTickets } from './tickets.js';
 // Releasing the tickets that wait on a decision (#680). When a decision is answered, every ticket labelled with its id
 // or its key gets the answer written in, is reopened if closed, resumed if paused and queued, so its worker starts with
 // the answer in its first prompt (aiur reads issue comments after the workpad into it). A ticket that waits for one
-// option and got another is closed as not planned. Then the label is deleted. Only labelled tickets are touched.
+// option and got another is closed as not planned. Then its label is removed. Only labelled tickets are touched.
 
 // The answer the worker reads: a hidden marker naming the decision, then the answer as JSON.
 export const ANSWER_MARKER = (decisionId: string) => `<!-- gm-decision-answer:${decisionId} -->`;
@@ -73,6 +73,8 @@ export function keysOf(decision: Decision): string[] {
 
 const PAUSED = /:paused(?:-|$)/;
 
+export type Outcome = 'queued' | 'closed' | 'waiting';
+
 async function releaseTicket(
   client: AiurClient,
   tickets: WaitTickets,
@@ -80,7 +82,7 @@ async function releaseTicket(
   key: string,
   ticket: WaitingTicket,
   note: DecisionAnswerNote,
-): Promise<'queued' | 'closed'> {
+): Promise<Outcome> {
   const text = ticket.comments.join('\n');
   // The last wait the ticket declared on this key decides; a ticket labelled by hand waits for any answer.
   const when = waitsFromText(text)
@@ -94,6 +96,8 @@ async function releaseTicket(
     return 'closed';
   }
   if (!written) await tickets.comment(repo, ticket.number, answerComment(note));
+  // A ticket that also waits on another decision keeps waiting: it starts on the last answer, with every answer in it.
+  if (ticket.labels.some((label) => label !== waitLabel(key) && waitKeyOfLabel(label) !== null)) return 'waiting';
   if (!ticket.open) await tickets.setOpen(repo, ticket.number, true);
   const id = String(ticket.number);
   if (ticket.labels.some((label) => PAUSED.test(label))) await client.resume(id);
@@ -101,28 +105,26 @@ async function releaseTicket(
   return 'queued';
 }
 
-export type Released = { key: string; ticket: number; outcome: 'queued' | 'closed' };
+export type Released = { key: string; ticket: number; outcome: Outcome };
 
-// Releases what one answered decision holds in `repo`. `labelled` is the set of keys with a `waits:` label there (read
-// once per poll). Throws on the first failed write, leaving the label in place so the next poll finishes the job.
-export async function releaseDecision(
+// Releases the tickets of one game (`game:<slug>`; several games share a repository) that wait on `key`, with the
+// answer of `decision`. A ticket's own label is removed only after its release succeeded, so a failure part-way leaves
+// the rest labelled for the next poll, and a ticket labelled meanwhile is picked up then.
+export async function releaseKey(
   client: AiurClient,
   tickets: WaitTickets,
   repo: string,
-  labelled: ReadonlySet<string>,
+  slug: string,
+  key: string,
   decision: Decision,
 ): Promise<Released[]> {
   const note = answerNote(decision);
   const released: Released[] = [];
-  for (const key of keysOf(decision).filter((candidate) => labelled.has(candidate))) {
-    for (const ticket of await tickets.waiting(repo, key)) {
-      released.push({
-        key,
-        ticket: ticket.number,
-        outcome: await releaseTicket(client, tickets, repo, key, ticket, note),
-      });
-    }
-    await tickets.deleteLabel(repo, key);
+  for (const ticket of await tickets.waiting(repo, key)) {
+    if (!ticket.labels.includes(`game:${slug}`)) continue;
+    const outcome = await releaseTicket(client, tickets, repo, key, ticket, note);
+    await tickets.removeLabel(repo, ticket.number, key);
+    released.push({ key, ticket: ticket.number, outcome });
   }
   return released;
 }

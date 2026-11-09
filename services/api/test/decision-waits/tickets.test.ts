@@ -50,20 +50,20 @@ describe('wait tickets on GitHub', () => {
     expect(calls[0]!.url).toContain('state=all&labels=waits%3Ablobs%2Fdiorama');
   });
 
-  it('closes as not planned, reopens, and treats an already deleted label as done', async () => {
+  it('closes as not planned, reopens, and treats a label already off the ticket as done', async () => {
     const { impl, calls } = fakeFetch(({ method }) =>
       method === 'DELETE' ? { status: 404 } : { status: 200, body: {} },
     );
     const tickets = createWaitTickets('t', impl);
     await tickets.setOpen('acme/games', 7, false);
     await tickets.setOpen('acme/games', 7, true);
-    await tickets.deleteLabel('acme/games', 'blobs/diorama');
+    await tickets.removeLabel('acme/games', 7, 'blobs/diorama');
     expect(calls.map(({ method, body }) => [method, body])).toEqual([
       ['PATCH', { state: 'closed', state_reason: 'not_planned' }],
       ['PATCH', { state: 'open' }],
       ['DELETE', undefined],
     ]);
-    expect(calls[2]!.url).toMatch(/\/labels\/waits%3Ablobs%2Fdiorama$/);
+    expect(calls[2]!.url).toMatch(/\/issues\/7\/labels\/waits%3Ablobs%2Fdiorama$/);
   });
 
   it('fails a write GitHub refuses, so the release is retried', async () => {

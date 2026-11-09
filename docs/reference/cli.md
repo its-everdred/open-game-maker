@@ -247,8 +247,10 @@ and exits 1.
 `gm build park --on <decision-id|key>` parks a ticket until a creator decision is answered: gm labels it
 `waits:<key>` and comments the wait. When the decision is answered (in the app, by voice or on the aiur dashboard), the
 API's next poll writes the answer into the ticket as a `gm-decision-answer` JSON comment (the pick, its label and any
-per-option thumbs and notes), reopens it if closed, resumes it if paused and queues it (`aiur --todo`), then deletes the
-label. No Executor step is needed, and tickets without the label never move. A closed ticket, or one aiur has not
+per-option thumbs and notes), reopens it if closed, resumes it if paused and queues it (`aiur --todo`), then takes the
+label off. No Executor step is needed, and tickets without the label never move. Only the answering game's tickets
+(`game:<slug>`) are released; a ticket parked on several decisions starts on the last answer. A key names the newest
+Command that carries it, and a ticket parked on a decision already answered is released within a minute. A closed ticket, or one aiur has not
 queued, is follow-up work the answer starts and is only labelled; `--when <option>` starts it only when the answer picks
 that option and closes it as not planned otherwise.
 

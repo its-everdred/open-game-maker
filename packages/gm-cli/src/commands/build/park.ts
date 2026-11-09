@@ -34,7 +34,10 @@ export const command: GmCommand = {
   example: 'build park 211 --on blobs/diorama',
   flags: {
     repo: REPO_FLAG,
-    on: { type: 'string', help: 'the aiur decision id or decision key (gm decide --key) the ticket waits on' },
+    on: {
+      type: 'string',
+      help: 'decision id or key (gm decide --key); once answered, the ticket is queued with the answer',
+    },
     when: { type: 'string', help: 'start the ticket only when the answer picks this option' },
   },
   async run(ctx, args, flags) {
@@ -56,8 +59,13 @@ export const command: GmCommand = {
       throw new UsageError(`#${ticket.number} has no game: label, so it is not a build ticket`, 'label it game:<slug>');
     }
 
-    const label = waitLabel(key.data);
+    // A ticket aiur holds is parked first, so a refusal leaves no wait behind; follow-up work (closed, or never queued)
+    // has no agent to park. The label goes on last: once it is there an answer can release the ticket at the next
+    // poll, and a park after that would hold it again with its wait already spent.
     const n = String(ticket.number);
+    const held = ticket.open && stateLabel(ticket) !== '-';
+    const said = held ? aiur(ctx, ['park', n]) : '';
+    const label = waitLabel(key.data);
     gh(ctx, [
       'label',
       'create',
@@ -82,9 +90,6 @@ export const command: GmCommand = {
     ]);
     gh(ctx, ['issue', 'edit', n, '-R', repo, '--add-label', label]);
 
-    // A ticket aiur holds is parked as before; follow-up work (closed, or never queued) has no agent to park.
-    const held = ticket.open && stateLabel(ticket) !== '-';
-    const said = held ? aiur(ctx, ['park', n]) : '';
     if (ctx.json)
       printJson(ctx, { ok: true, ticket: ticket.number, game: ticket.game, waits_on: key.data, when, aiur: said });
     else ctx.out(`${said ? `${said}\n` : ''}#${ticket.number} waits on ${key.data}${when ? ` (${when})` : ''}`);

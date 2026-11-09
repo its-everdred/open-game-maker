@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AgentOutboxLine, playablesFromMarker } from '@ogm/contracts';
+import { AgentOutboxLine, decisionKeyFromMarker, playablesFromMarker } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { gm, tempDir } from './helpers.js';
@@ -182,6 +182,23 @@ describe('gm checkpoint open', () => {
 
   // A Blobs playtest is raised from an aiur workspace or the host (#639), where there is no build job. The Command
   // reaches the game's deck through aiur alone, so its slices must ride in the decision itself.
+  // Tickets parked with `gm build park --on blobs/diorama` are released when the Command carrying that key is answered
+  // (#680); a key that could not be a GitHub label is refused before the Command is printed.
+  it('stamps the decision key that waiting tickets name on the Command', async () => {
+    const root = workspace();
+    const args = ['checkpoint', 'open', '--question', 'Which diorama?', '--option', 'a=Meadow', '--option', 'b=Table'];
+    const result = await gm([...args, '--key', 'blobs/diorama', '--json'], { cwd: root });
+    expect(result).toMatchObject({ code: 0, err: [] });
+    const printed = JSON.parse(result.out[0]) as {
+      emit_event: { payload: { context: { long_context_markdown: string } } };
+    };
+    expect(decisionKeyFromMarker(printed.emit_event.payload.context.long_context_markdown)).toBe('blobs/diorama');
+
+    const refused = await gm([...args, '--key', 'x'.repeat(41), '--json'], { cwd: root });
+    expect(refused.code).toBe(2);
+    expect(refused.out).toEqual([]);
+  });
+
   it('raises a playable Command without a build job, carrying its slices in the decision', async () => {
     const root = workspace();
     const result = await gm(

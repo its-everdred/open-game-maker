@@ -2,7 +2,8 @@ import { waitKeyOfLabel, waitLabel } from '@ogm/contracts';
 
 // The GitHub side of decision waits (#680): which tickets of a game's repository carry a `waits:<key>` label, what their
 // comments say, and the writes a release makes. The API talks to GitHub with the intake bot's token, the one it already
-// files and labels game tickets with.
+// files and labels game tickets with. It is a small fetch client of its own rather than more methods on the builder's
+// IssuesClient because the generic part moves into aiur (aiur-team/aiur#7943) and this file goes with it.
 
 export type WaitingTicket = {
   number: number;
@@ -18,8 +19,8 @@ export interface WaitTickets {
   waiting(repo: string, key: string): Promise<WaitingTicket[]>;
   comment(repo: string, issue: number, body: string): Promise<void>;
   setOpen(repo: string, issue: number, open: boolean): Promise<void>;
-  // Deleting the label takes it off every ticket at once: the wait is over.
-  deleteLabel(repo: string, key: string): Promise<void>;
+  // Takes the ticket's `waits:<key>` label off once its release is done; the label itself stays for other tickets.
+  removeLabel(repo: string, issue: number, key: string): Promise<void>;
 }
 
 export class GitHubError extends Error {
@@ -93,11 +94,11 @@ export function createWaitTickets(token: string, fetchImpl: typeof fetch = globa
         open ? { state: 'open' } : { state: 'closed', state_reason: 'not_planned' },
       );
     },
-    async deleteLabel(repo, key) {
+    async removeLabel(repo, issue, key) {
       try {
-        await call('DELETE', `${repoPath(repo)}/labels/${encodeURIComponent(waitLabel(key))}`);
+        await call('DELETE', `${repoPath(repo)}/issues/${issue}/labels/${encodeURIComponent(waitLabel(key))}`);
       } catch (error) {
-        // Already gone: another release or a person removed it.
+        // Already off the ticket: a person removed it.
         if (!(error instanceof GitHubError && error.status === 404)) throw error;
       }
     },

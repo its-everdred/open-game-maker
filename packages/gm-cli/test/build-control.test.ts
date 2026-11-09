@@ -176,6 +176,15 @@ describe('gm build park --on', () => {
     expect(aiurCalls()).toEqual(['park 11']);
   });
 
+  // Parking after the label would let a poll release the ticket first and the park hold it again, wait spent.
+  it('records nothing when aiur refuses to park the held ticket', async () => {
+    const result = await gm(['build', 'park', '11', '--on', 'blobs/diorama'], {
+      env: { ...env, AIUR_FAIL: 'aiur: park refused: ticket is not paused' },
+    });
+    expect(result.code).toBe(1);
+    expect(ghWrites()).toEqual([]);
+  });
+
   it('only labels follow-up work aiur does not hold, with the option that starts it', async () => {
     for (const ticket of ['40', '41']) {
       const result = await gm(['build', 'park', ticket, '--on', 'dec_0123456789abcdef', '--when', 'b'], { env });

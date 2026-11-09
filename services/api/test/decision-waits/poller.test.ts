@@ -1,8 +1,8 @@
 import type { AiurClient, Decision } from '@ogm/aiur-client';
-import { decisionKeyMarker, waitLabel, waitMarker, type DecisionWait } from '@ogm/contracts';
+import { decisionKeyMarker, waitKeyOfLabel, waitLabel, waitMarker, type DecisionWait } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { createDecisionWaitPoller } from '../../src/decision-waits/poller.js';
+import { createDecisionWaitPoller, LABEL_REREAD_MS } from '../../src/decision-waits/poller.js';
 import type { WaitingTicket, WaitTickets } from '../../src/decision-waits/tickets.js';
 
 /*
@@ -42,29 +42,31 @@ function answered(option: string, response?: string, overrides: Partial<Decision
   });
 }
 
-type Ticket = WaitingTicket & { waits: string[] };
+type Seed = { number: number; open?: boolean; labels?: string[]; waits?: DecisionWait[]; game?: string };
 
-// An in-memory repository: labels, issues and their comments, with every write logged in order.
-function github(seed: { number: number; open?: boolean; labels?: string[]; waits?: DecisionWait[] }[]) {
-  const tickets: Ticket[] = seed.map(({ number, open = true, labels = [], waits = [] }) => ({
-    number,
-    open,
-    labels: [...labels, ...waits.map(({ key }) => waitLabel(key))],
-    waits: waits.map(({ key }) => key),
-    comments: waits.map((wait) => `Waits on decision.\n${waitMarker(wait)}`),
-  }));
+// An in-memory repository: issues with their labels and comments, every write logged in order. A ticket is `game:blobs`
+// unless it names another game.
+function github(seed: Seed[]) {
+  const tickets: WaitingTicket[] = [];
+  const add = ({ number, open = true, labels = [], waits = [], game = 'blobs' }: Seed) =>
+    tickets.push({
+      number,
+      open,
+      labels: [`game:${game}`, ...labels, ...waits.map(({ key }) => waitLabel(key))],
+      comments: waits.map((wait) => `Waits on decision.\n${waitMarker(wait)}`),
+    });
+  seed.forEach(add);
+  const find = (issue: number) => tickets.find(({ number }) => number === issue)!;
   const writes: string[] = [];
   const reads = { keys: 0 };
   let failComment: number | null = null;
   const api: WaitTickets = {
     async keys() {
       reads.keys += 1;
-      return [...new Set(tickets.flatMap(({ waits }) => waits))];
+      return [...new Set(tickets.flatMap(({ labels }) => labels.map(waitKeyOfLabel).filter((key) => key !== null)))];
     },
     async waiting(_repo, key) {
-      return tickets
-        .filter(({ waits }) => waits.includes(key))
-        .map(({ number, open, labels, comments }) => structuredClone({ number, open, labels, comments }));
+      return tickets.filter(({ labels }) => labels.includes(waitLabel(key))).map((ticket) => structuredClone(ticket));
     },
     async comment(_repo, issue, body) {
       if (failComment === issue) {
@@ -72,27 +74,18 @@ function github(seed: { number: number; open?: boolean; labels?: string[]; waits
         throw new Error('GitHub down');
       }
       writes.push(`comment #${issue}`);
-      tickets.find(({ number }) => number === issue)!.comments.push(body);
+      find(issue).comments.push(body);
     },
     async setOpen(_repo, issue, open) {
       writes.push(`${open ? 'reopen' : 'close'} #${issue}`);
-      tickets.find(({ number }) => number === issue)!.open = open;
+      find(issue).open = open;
     },
-    async deleteLabel(_repo, key) {
-      writes.push(`delete ${waitLabel(key)}`);
-      for (const ticket of tickets) {
-        ticket.waits = ticket.waits.filter((wait) => wait !== key);
-        ticket.labels = ticket.labels.filter((label) => label !== waitLabel(key));
-      }
+    async removeLabel(_repo, issue, key) {
+      writes.push(`unlabel #${issue} ${waitLabel(key)}`);
+      find(issue).labels = find(issue).labels.filter((label) => label !== waitLabel(key));
     },
   };
-  return {
-    api,
-    tickets,
-    writes,
-    reads,
-    failNextComment: (issue: number) => (failComment = issue),
-  };
+  return { api, tickets, find, add, writes, reads, failNextComment: (issue: number) => (failComment = issue) };
 }
 
 function aiur(decisions: () => Decision[]) {
@@ -116,15 +109,21 @@ function aiur(decisions: () => Decision[]) {
   return { client, calls, failNextTodo: () => (failTodo = true) };
 }
 
-function poller(gh: ReturnType<typeof github>, client: AiurClient) {
+function poller(
+  gh: ReturnType<typeof github>,
+  client: AiurClient,
+  daemons: () => Promise<{ slug: string; repo: string }[]> = async () => [{ slug: 'blobs', repo: REPO }],
+) {
   const log: Record<string, unknown>[] = [];
+  const clock = { now: 0 };
   const instance = createDecisionWaitPoller({
-    daemons: async () => [{ slug: 'blobs', repo: REPO }],
+    daemons,
     clientFor: async () => client,
     tickets: gh.api,
     log: (line) => log.push(line),
+    now: () => clock.now,
   });
-  return { tick: instance.tick, log };
+  return { tick: instance.tick, log, clock };
 }
 
 function answerJson(comment: string): Record<string, unknown> {
@@ -136,9 +135,9 @@ function answerJson(comment: string): Record<string, unknown> {
 describe('decision waits', () => {
   it('releases a ticket parked on a decision key on the first poll after the answer, with the answer written in', async () => {
     const gh = github([
-      { number: 211, labels: ['game:blobs', 'agent:paused'], waits: [{ key: 'blobs/diorama' }] },
-      { number: 212, labels: ['game:blobs', 'agent:in-progress'] },
-      { number: 213, labels: ['game:blobs', 'agent:paused'], waits: [{ key: 'blobs/staging' }] },
+      { number: 211, labels: ['agent:paused'], waits: [{ key: 'blobs/diorama' }] },
+      { number: 212, labels: ['agent:in-progress'] },
+      { number: 213, labels: ['agent:paused'], waits: [{ key: 'blobs/staging' }] },
     ]);
     let decisions = [decision()];
     const aiurFake = aiur(() => decisions);
@@ -152,12 +151,12 @@ describe('decision waits', () => {
     decisions = [answered('b', review)];
     await tick();
 
-    // Resumed (the pause dropped) and queued, the label gone; the tickets waiting on another decision did not move.
+    // Resumed (the pause dropped) and queued, its wait label off; the ticket waiting on another decision did not move.
     expect(aiurFake.calls).toEqual(['resume 211', 'todo 211']);
-    expect(gh.writes).toEqual(['comment #211', 'delete waits:blobs/diorama']);
-    expect(gh.tickets.find(({ number }) => number === 213)!.labels).toContain('waits:blobs/staging');
+    expect(gh.writes).toEqual(['comment #211', 'unlabel #211 waits:blobs/diorama']);
+    expect(gh.find(213).labels).toContain('waits:blobs/staging');
     // What the worker reads in its first prompt: the pick, its label and the per-option thumbs and notes.
-    expect(answerJson(gh.tickets[0]!.comments.at(-1)!)).toEqual({
+    expect(answerJson(gh.find(211).comments.at(-1)!)).toEqual({
       decision_id: 'dec_00000000000000aa',
       key: 'blobs/diorama',
       question: 'Which diorama?',
@@ -168,24 +167,87 @@ describe('decision waits', () => {
   });
 
   it('releases a ticket that waits on the decision id itself, without resuming one that is not paused', async () => {
-    const gh = github([{ number: 40, labels: ['game:blobs'], waits: [{ key: 'dec_00000000000000aa' }] }]);
+    const gh = github([{ number: 40, waits: [{ key: 'dec_00000000000000aa' }] }]);
     const aiurFake = aiur(() => [answered('a', undefined, { context: {} })]);
     await poller(gh, aiurFake.client).tick();
     expect(aiurFake.calls).toEqual(['todo 40']);
-    expect(gh.writes).toEqual(['comment #40', 'delete waits:dec_00000000000000aa']);
+    expect(gh.writes).toEqual(['comment #40', 'unlabel #40 waits:dec_00000000000000aa']);
   });
 
   it('routes the answer: reopens and queues the follow-up for the picked option, closes the one for the other', async () => {
     const gh = github([
-      { number: 50, open: false, labels: ['game:blobs', 'agent:done'], waits: [{ key: 'blobs/diorama', when: 'b' }] },
-      { number: 51, labels: ['game:blobs'], waits: [{ key: 'blobs/diorama', when: 'a' }] },
+      { number: 50, open: false, labels: ['agent:done'], waits: [{ key: 'blobs/diorama', when: 'b' }] },
+      { number: 51, waits: [{ key: 'blobs/diorama', when: 'a' }] },
     ]);
     const aiurFake = aiur(() => [answered('b')]);
     await poller(gh, aiurFake.client).tick();
 
     expect(aiurFake.calls).toEqual(['todo 50']);
-    expect(gh.writes).toEqual(['comment #50', 'reopen #50', 'comment #51', 'close #51', 'delete waits:blobs/diorama']);
-    expect(gh.tickets[1]!.comments.at(-1)).toContain('not `a`');
+    expect(gh.writes).toEqual([
+      'comment #50',
+      'reopen #50',
+      'unlabel #50 waits:blobs/diorama',
+      'comment #51',
+      'close #51',
+      'unlabel #51 waits:blobs/diorama',
+    ]);
+    expect(gh.find(51).comments.at(-1)).toContain('not `a`');
+  });
+
+  // Several games share one instance repository, and each game's aiur releases only its own tickets.
+  it("leaves another game's ticket on the same key for that game's own decision", async () => {
+    const gh = github([
+      { number: 211, labels: ['agent:paused'], waits: [{ key: 'blobs/diorama' }] },
+      { number: 300, labels: ['agent:paused'], waits: [{ key: 'blobs/diorama' }], game: 'dusk-helm' },
+    ]);
+    const aiurFake = aiur(() => [answered('a')]);
+    await poller(gh, aiurFake.client).tick();
+    expect(aiurFake.calls).toEqual(['resume 211', 'todo 211']);
+    expect(gh.find(300).labels).toContain('waits:blobs/diorama');
+  });
+
+  it('keeps a ticket that waits on two decisions parked until both are answered, with both answers written in', async () => {
+    const gh = github([
+      { number: 211, labels: ['agent:paused'], waits: [{ key: 'blobs/diorama' }, { key: 'blobs/staging' }] },
+    ]);
+    let decisions = [answered('a')];
+    const aiurFake = aiur(() => decisions);
+    const { tick } = poller(gh, aiurFake.client);
+    await tick();
+    expect(aiurFake.calls).toEqual([]);
+    expect(gh.writes).toEqual(['comment #211', 'unlabel #211 waits:blobs/diorama']);
+
+    const staging = answered('b', undefined, {
+      decision_id: 'dec_00000000000000bb',
+      context: { long_context_markdown: decisionKeyMarker('blobs/staging') },
+    });
+    decisions = [answered('a'), staging];
+    await tick();
+    expect(aiurFake.calls).toEqual(['resume 211', 'todo 211']);
+    expect(gh.find(211).comments.filter((body) => body.includes('gm-decision-answer:'))).toHaveLength(2);
+  });
+
+  it('releases a ticket parked after its decision was answered, at the next label read', async () => {
+    const gh = github([]);
+    const aiurFake = aiur(() => [answered('a')]);
+    const { tick, clock } = poller(gh, aiurFake.client);
+    await tick();
+    gh.add({ number: 211, labels: ['agent:paused'], waits: [{ key: 'blobs/diorama' }] });
+
+    await tick();
+    expect(gh.reads.keys).toBe(1);
+    clock.now = LABEL_REREAD_MS;
+    await tick();
+    expect(aiurFake.calls).toEqual(['resume 211', 'todo 211']);
+  });
+
+  it('waits on a question asked again under the same key, not on its earlier answer', async () => {
+    const gh = github([{ number: 211, labels: ['agent:paused'], waits: [{ key: 'blobs/diorama' }] }]);
+    const asked = decision({ decision_id: 'dec_00000000000000cc', created_at: '2026-11-09T12:00:00Z' });
+    const aiurFake = aiur(() => [answered('a'), asked]);
+    await poller(gh, aiurFake.client).tick();
+    expect(aiurFake.calls).toEqual([]);
+    expect(gh.writes).toEqual([]);
   });
 
   it('reads GitHub once per newly answered decision, not on every poll', async () => {
@@ -198,7 +260,7 @@ describe('decision waits', () => {
     expect(aiurFake.calls).toEqual(['resume 211', 'todo 211']);
   });
 
-  it('finishes a release that failed part-way on the next poll, without writing the answer twice', async () => {
+  it('finishes a release that failed part-way on the next poll, touching only the tickets still waiting', async () => {
     const gh = github([
       { number: 211, labels: ['agent:paused'], waits: [{ key: 'blobs/diorama' }] },
       { number: 214, labels: ['agent:paused'], waits: [{ key: 'blobs/diorama' }] },
@@ -208,24 +270,27 @@ describe('decision waits', () => {
 
     aiurFake.failNextTodo();
     await tick();
-    expect(log).toContainEqual(expect.objectContaining({ event: 'decision_wait_poll_error', slug: 'blobs' }));
-    expect(gh.writes).toEqual(['comment #211']);
-
-    gh.failNextComment(214);
-    await tick();
+    expect(log).toContainEqual(expect.objectContaining({ event: 'decision_wait_release_error', key: 'blobs/diorama' }));
     expect(gh.writes).toEqual(['comment #211']);
 
     await tick();
-    expect(gh.writes).toEqual(['comment #211', 'comment #214', 'delete waits:blobs/diorama']);
-    expect(aiurFake.calls).toEqual([
-      'resume 211',
-      'resume 211',
-      'todo 211',
-      'resume 211',
-      'todo 211',
-      'resume 214',
-      'todo 214',
+    expect(gh.writes).toEqual([
+      'comment #211',
+      'unlabel #211 waits:blobs/diorama',
+      'comment #214',
+      'unlabel #214 waits:blobs/diorama',
     ]);
-    expect(gh.tickets[0]!.comments.filter((body) => body.includes('gm-decision-answer:'))).toHaveLength(1);
+    // The answer is written once though the first attempt failed after writing it.
+    expect(gh.find(211).comments.filter((body) => body.includes('gm-decision-answer:'))).toHaveLength(1);
+    expect(aiurFake.calls).toEqual(['resume 211', 'resume 211', 'todo 211', 'resume 214', 'todo 214']);
+  });
+
+  it('logs a daemon list that cannot be read instead of failing the poll', async () => {
+    const gh = github([]);
+    const { tick, log } = poller(gh, aiur(() => []).client, async () => {
+      throw new Error('db closed');
+    });
+    await expect(tick()).resolves.toBeUndefined();
+    expect(log).toContainEqual(expect.objectContaining({ event: 'decision_wait_poll_error' }));
   });
 });
