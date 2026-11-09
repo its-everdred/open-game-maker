@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { installAuthRoutes } from './fixtures/auth-routes';
+import { GOOGLE_CHOOSER, installAuthRoutes } from './fixtures/auth-routes';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -15,6 +15,22 @@ test('Start goes straight to the magic-link sent state', async ({ page }) => {
   await page.getByLabel('Email').fill('kim@example.com');
   await sendButton.click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+});
+
+test('Start leads to Google when it is configured', async ({ page }) => {
+  await installAuthRoutes(page, { google: true });
+  await page.route('https://accounts.google.com/**', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<title>Google</title>' }),
+  );
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(page).toHaveURL(/\/signin\?next=%2Fall$/);
+  const google = page.getByRole('button', { name: 'Continue with Google' });
+  expect((await google.boundingBox())!.height).toBeGreaterThanOrEqual(64);
+  await expect(page.getByLabel('Email')).toHaveCount(0);
+  await google.click();
+  await expect(page).toHaveURL(GOOGLE_CHOOSER);
 });
 
 test('a protected route sends a signed-out visitor to sign in and preserves next', async ({ page }) => {

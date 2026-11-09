@@ -7,13 +7,27 @@ type PasskeyRegistrationTracker = {
   verifyGate?: Promise<void>;
 };
 
-type AuthFixture = { signedIn?: boolean; github?: string; passkeyRegistration?: PasskeyRegistrationTracker };
+type AuthFixture = {
+  signedIn?: boolean;
+  github?: string;
+  google?: boolean;
+  passkeyRegistration?: PasskeyRegistrationTracker;
+};
+
+export const GOOGLE_CHOOSER = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=test';
 
 export async function installAuthRoutes(page: Page, fixture: AuthFixture = {}) {
   await page.route('**/auth/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path === '/auth/providers') return json(route, { providers: ['magic-link', 'passkey'] });
+    if (path === '/auth/providers') {
+      return json(route, {
+        providers: fixture.google ? ['magic-link', 'passkey', 'google'] : ['magic-link', 'passkey'],
+      });
+    }
+    if (path === '/auth/sign-in/social' && request.method() === 'POST' && fixture.google) {
+      return json(route, { url: GOOGLE_CHOOSER, redirect: true });
+    }
     if (path === '/auth/get-session') {
       return json(
         route,

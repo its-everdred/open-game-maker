@@ -20,7 +20,7 @@ Fill the placeholders first: `<user>` is the account that runs OGM, `<tailnet-ho
   - ctx: OGM-008 docs/ops/hand-steps.md · T03 E03-8
 - [ ] `xdg-open https://github.com/settings/apps/new` — GATE-GITHUB-APP: create the OGM GitHub App and install it on the instance repository only (every game in an instance lives in that one repo); tick **Request user authorization (OAuth) during installation** and put its App id, PEM path, OAuth client id and client secret in `~/.config/ogm/env/ogm-commit.env`, and `OGM_INSTANCE_REPO` in `api.env` names the repo as `owner/repository`; permissions and the installation lookup are in [services/commit/README.md](../../services/commit/README.md)
   - ctx: OGM-008 docs/ops/hand-steps.md
-- [ ] `xdg-open https://console.cloud.google.com/apis/credentials` — GATE-GOOGLE-OAUTH: create an OAuth client (testing mode) for Google sign-in; passkey and magic link work without it
+- [ ] `xdg-open https://console.cloud.google.com/apis/credentials` — GATE-GOOGLE-OAUTH: create an OAuth client (testing mode) for Google sign-in, the main sign-in method; steps in [netlify-proxy.md](netlify-proxy.md#google-sign-in-client-gate-google-oauth); until then the page falls back to email links
   - ctx: OGM-008 docs/ops/hand-steps.md
 - [ ] `sudoedit /etc/systemd/journald.conf` — optional: set `SystemMaxUse=4G` and restart `systemd-journald`; the journal holds 2 GB today
   - ctx: OGM-008 docs/ops/hand-steps.md · T11 E11-14

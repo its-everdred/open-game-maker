@@ -115,6 +115,24 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new ScenarioFailure(message);
 }
 
+/** The SDK's defaults (`DEFAULT_INPUT_DELAY_TICKS`, `DEFAULT_SEAT_STATE_HZ`, the host's fixed `snapshotHz`). */
+const NET_DEFAULTS = { inputDelayTicks: 3, seatStateHz: 10, hostSnapshotHz: 20 } as const;
+
+export type ManifestNet = { authority?: string; maxSeats?: number; inputDelayTicks?: number; seatStateHz?: number };
+
+/**
+ * The timing {@link bandsFor} judges a game by, read from its manifest the way the SDK reads it. Only per-seat authority
+ * applies the manifest's `inputDelayTicks` and `seatStateHz`, and it publishes on whole 60 Hz ticks, so the rate is the
+ * one those ticks give (7 Hz publishes every 9 ticks, 150 ms). Host games keep the bands they were calibrated on.
+ */
+export function gameTimingFor(net: ManifestNet): { inputDelayTicks: number; snapshotHz: number } {
+  if (net.authority !== 'per-seat') {
+    return { inputDelayTicks: NET_DEFAULTS.inputDelayTicks, snapshotHz: NET_DEFAULTS.hostSnapshotHz };
+  }
+  const everyTicks = Math.max(1, Math.round(60 / (net.seatStateHz ?? NET_DEFAULTS.seatStateHz)));
+  return { inputDelayTicks: net.inputDelayTicks ?? NET_DEFAULTS.inputDelayTicks, snapshotHz: 60 / everyTicks };
+}
+
 export function profileFor(link: LinkProfileName | LinkConfig | undefined): LinkConfig {
   if (link === undefined) return BAD_LINK;
   if (typeof link === 'string') {
@@ -130,8 +148,9 @@ export function profileFor(link: LinkProfileName | LinkConfig | undefined): Link
  * exceeds the 150 ms event target — so the impairment is written into the bound instead of the run being excused.
  *
  * A remote update is more than the path: the sender's input sits in its jitter buffer before it is applied
- * (`inputDelayTicks` at 60 Hz) and the receiver only sees the snapshot that carries it (one interval at the manifest's
- * `snapshotHz`). Both are added, so the band says *why* it is wider than the path rather than padding a measured number.
+ * (`inputDelayTicks` at 60 Hz) and the receiver only sees the update that carries it (one interval at the game's
+ * publish rate: `seatStateHz` under per-seat authority, the host snapshot rate otherwise). Both are added, so the band
+ * says *why* it is wider than the path rather than padding a measured number.
  */
 export function bandsFor(link: LinkConfig, game = { inputDelayTicks: 3, snapshotHz: 20 }) {
   /*
@@ -484,7 +503,6 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
   const link = { ...profileFor(options.link), ...(options.seed === undefined ? {} : { seed: options.seed }) };
   const seatsInRun = SEATS.slice(0, options.clients ?? SEATS.length);
   const plan = dropPlan(seatsInRun.length);
-  const bands = bandsFor(link);
   const servers: Server[] = [];
   let rooms: ChildProcess | undefined;
   let browser: Browser | undefined;
@@ -503,10 +521,10 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
   let avatars = false;
 
   /** The game declares its authority mode in its manifest; the room is created with the same one (D-NET-1). */
-  const manifestNet = ((): { authority?: string; maxSeats?: number } => {
+  const manifestNet = ((): ManifestNet => {
     try {
       const manifest = JSON.parse(readFileSync(join(resolve(options.gameDir), 'gm.manifest.json'), 'utf8')) as {
-        net?: { authority?: string; maxSeats?: number };
+        net?: ManifestNet;
       };
       return manifest.net ?? {};
     } catch {
@@ -514,6 +532,7 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     }
   })();
   const roomMode = manifestNet.authority ?? 'per-seat';
+  const bands = bandsFor(link, gameTimingFor(manifestNet));
   const roomSeats = Math.max(seatsInRun.length, Math.min(manifestNet.maxSeats ?? SEATS.length, 8));
 
   const grantSecret = randomBytes(32).toString('hex');
