@@ -60,6 +60,12 @@ export async function cancelJob(jobId: string): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
 }
 
+// Pause and resume reach the ticket's agent through the game's aiur daemon (gm build pause|resume).
+export async function setJobPaused(jobId: string, paused: boolean): Promise<void> {
+  await api(`/jobs/${encodeURIComponent(jobId)}/${paused ? 'pause' : 'resume'}`, { method: 'POST' });
+  await queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
+}
+
 export function refreshJobsForNotification(kind: 'build.done' | 'job.started' | 'intake.report'): void {
   if (kind === 'build.done' || kind === 'job.started') {
     void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });

@@ -220,6 +220,33 @@ that both match the `@ogm/contracts` schemas the publisher and API read. The tem
 (a key defined in two files fails the build). The creator feedback ledger `design/feedback.json` is skipped, so a game
 that carries one still builds. Exits 1 naming each missing or invalid file.
 
+## Pause, resume and inspect build tickets
+
+```text
+gm build pause <ticket> | --game <slug>
+gm build resume <ticket> | --game <slug>
+gm build park <ticket>
+gm build requeue <ticket>
+gm build state <ticket> | --game <slug>
+gm build hold-pr <ticket>
+```
+
+Each action is one aiur call on the instance repository's build tickets: `pause`, `resume` and `park` run
+`aiur pause|resume|park <ticket>`, and `requeue` runs `aiur --todo <ticket>`. A ticket needs a `game:<slug>` label;
+one without is refused before aiur is called. `--game <slug>` pauses or resumes every open ticket labelled
+`game:<slug>` in a single aiur call and never uses `--all`, so other games stay as they are. aiur's refusal is printed
+and exits 1.
+
+`gm build state` reads the `agent:*` state labels, the open PR and its CI rollup from GitHub, and the ticket's status
+and pause reason from `aiur units --json`. When aiur cannot answer, the status shows `-` and the reason goes to stderr.
+Owner and injected skills show `-` until aiur serves its dispatch record. `--game` prints one line per open ticket.
+
+`gm build hold-pr` exits 2: aiur has no interface yet to take a ticket out of ci-wait without closing its PR, and gm
+never writes aiur lifecycle labels itself.
+
+The repository is `--repo <owner/repo>`, else `OGM_INSTANCE_REPO` from the environment or
+`~/.config/ogm/env/api.env`. `--json` prints one object.
+
 ## Build game assets
 
 ```text

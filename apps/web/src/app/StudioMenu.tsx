@@ -18,7 +18,7 @@ import { EnergyButton, EnergyDetail } from '../features/energy/EnergyButton';
 import { JobConversationModal } from '../features/build-chat/JobConversationModal';
 import { openConversation } from '../features/build-chat/conversation';
 import { resetReviewDrafts } from '../features/commands-inbox/drafts';
-import { isTerminal, useMyJobs } from '../features/build-chat/jobs';
+import { isTerminal, setJobPaused, useMyJobs } from '../features/build-chat/jobs';
 import { DecisionDeck } from '../features/commands-inbox/DecisionDeck';
 import { useCreatorCommands } from '../features/commands-inbox/commands';
 import { signOut } from '../lib/api/auth';
@@ -285,7 +285,7 @@ export function StudioMenu() {
                   const state = menuJobState(job);
                   const percent = buildPercent(job);
                   return (
-                    <li key={job.id}>
+                    <li key={job.id} className="studio-menu-job-row">
                       <button
                         className="studio-menu-job"
                         data-status={state}
@@ -305,6 +305,7 @@ export function StudioMenu() {
                           <span style={{ width: `${percent}%` }} />
                         </span>
                       </button>
+                      <PauseControl job={job} />
                     </li>
                   );
                 })}
@@ -423,6 +424,46 @@ function menuJobState(job: Job): MenuJobState {
     return 'not-started';
   }
   return 'active';
+}
+
+// A build aiur can pause: its ticket is filed and its agent is not held by the budget. Resume undoes only a pause made here.
+function pauseAction(job: Job): 'pause' | 'resume' | null {
+  if (!job.aiurRepo || typeof job.aiurIssueNumber !== 'number') return null;
+  if (!['filed', 'running'].includes(job.state)) return null;
+  if (job.pausedReason === 'admin') return 'resume';
+  if (job.pausedReason !== null || job.stage === 'parked') return null;
+  return 'pause';
+}
+
+function PauseControl({ job }: { job: Job }): ReactElement | null {
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const action = pauseAction(job);
+  if (action === null) return null;
+  return (
+    <>
+      <button
+        className="studio-menu-job-control"
+        type="button"
+        aria-label={`${action === 'pause' ? 'Pause' : 'Resume'} ${job.plan.title}`}
+        disabled={pending}
+        onClick={() => {
+          setPending(true);
+          setFailed(false);
+          setJobPaused(job.id, action === 'pause')
+            .catch(() => setFailed(true))
+            .finally(() => setPending(false));
+        }}
+      >
+        <Icon name={action === 'pause' ? 'pause' : 'play'} />
+      </button>
+      {failed ? (
+        <span className="studio-menu-job-error" role="alert">
+          {action === 'pause' ? "Couldn't pause" : "Couldn't resume"}
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 function isBuilding(job: Job): boolean {

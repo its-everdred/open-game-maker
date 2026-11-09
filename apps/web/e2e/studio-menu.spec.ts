@@ -28,8 +28,8 @@ const runningJob = {
   reservation: { amountMicroUsd: 1_000_000, sizeClass: 'small', confidence: 'high' },
   hardCapMicroUsd: 1_000_000,
   usageMicroUsd: 420_000,
-  aiurRepo: null,
-  aiurIssueNumber: null,
+  aiurRepo: 'its-everdred/open-games',
+  aiurIssueNumber: 211,
   aiurSpendCapMicroUsd: null,
   idempotencyKey: null,
   createdAt: '2026-11-03T18:00:00.000Z',
@@ -115,6 +115,7 @@ test('shows the active build ring and contextual build in the games menu', async
   await expect(page.getByRole('group', { name: 'Moon Vault builds' })).toBeVisible();
   const jobBar = page.getByRole('button', { name: /Add the moon gate.*Active.*Building the moon gate.*42%/ });
   await expect(jobBar).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pause Add the moon gate' })).toBeVisible();
   await expect(page.locator('.bug-fab')).toHaveCount(0);
   await capturePhone(page, testInfo, 'games-menu-builds');
 

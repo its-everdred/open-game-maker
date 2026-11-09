@@ -20,6 +20,8 @@ export const ICONS: Record<string, string> = {
   ),
   publish: line('<path d="M128 160V32M80 80l48-48 48 48M48 144v64h160v-64"/>'),
   rollback: line('<path d="M64 72v48h48M66 118a72 72 0 1 1-4 72"/>'),
+  pause: line('<path d="M96 64v128M160 64v128"/>'),
+  play: line('<path d="M88 56v144l112-72Z"/>'),
   replay: line('<path d="M192 72v48h-48M190 118a72 72 0 1 0 4 72"/>'),
   compare: line('<path d="M176 144l32 32-32 32M48 176h160M80 112 48 80l32-32M208 80H48"/>'),
   rpg: svg(
