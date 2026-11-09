@@ -43,6 +43,20 @@ describe('gm checkpoint alias', () => {
     });
   });
 
+  // A Command answered before the upgrade left its answer where the old waiter looked; an agent that waits again with
+  // the new CLI must still get it, or it times out and asks the creator a second time.
+  it('finds an answer written to the pre-rename inbox', async () => {
+    const root = workspace();
+    const inbox = join(root, '.gm', 'inbox', 'checkpoints');
+    mkdirSync(inbox, { recursive: true });
+    writeFileSync(join(inbox, 'cp_demo.json'), JSON.stringify({ status: 'answered', option_id: 'b' }));
+    expect(await gm(['command', 'wait', 'cp_demo', '--timeout', '1'], { cwd: root })).toEqual({
+      code: 0,
+      out: ['b'],
+      err: [],
+    });
+  });
+
   it('is left out of help', async () => {
     const help = (await gm(['help'])).out.join('\n');
     expect(help).toContain('command request');

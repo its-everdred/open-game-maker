@@ -23,6 +23,8 @@ export interface OutboxContext {
 
 export interface OutboxHandler {
   type: string;
+  /** Older line types the same handler still reads. */
+  aliasTypes?: readonly string[];
   handle(line: AgentOutboxLine, ctx: OutboxContext): Promise<void>;
 }
 
@@ -46,8 +48,10 @@ export async function loadOutboxHandlers(root?: URL): Promise<Map<string, Outbox
     if (typeof module.type !== 'string' || typeof module.handle !== 'function') {
       throw new Error(`${context}/outbox.${extension}: must export type and handle`);
     }
-    if (handlers.has(module.type)) throw new Error(`${context}/outbox.${extension}: ${module.type} is already handled`);
-    handlers.set(module.type, { type: module.type, handle: module.handle });
+    for (const type of [module.type, ...(module.aliasTypes ?? [])]) {
+      if (handlers.has(type)) throw new Error(`${context}/outbox.${extension}: ${type} is already handled`);
+      handlers.set(type, { type, handle: module.handle });
+    }
   }
   return handlers;
 }

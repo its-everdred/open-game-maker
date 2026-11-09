@@ -38,11 +38,15 @@ export function createInboxWriter(deps: InboxDeps) {
         return false;
       }
       missing.delete(jobId);
-      const directory = join(workspace, '.gm', 'inbox', 'commands');
-      await mkdir(directory, { recursive: true, mode: 0o700 });
-      await atomicJson(directory, record.command_id, record);
-      if (record.decision_id !== '' && record.decision_id !== record.command_id) {
-        await atomicJson(directory, record.decision_id, record);
+      // `gm checkpoint wait` from before #571 polls `.gm/inbox/checkpoints/`; a job parked across the upgrade still
+      // runs it. Write there too for one release, with the CLI alias; delete with it.
+      for (const name of ['commands', 'checkpoints']) {
+        const directory = join(workspace, '.gm', 'inbox', name);
+        await mkdir(directory, { recursive: true, mode: 0o700 });
+        await atomicJson(directory, record.command_id, record);
+        if (record.decision_id !== '' && record.decision_id !== record.command_id) {
+          await atomicJson(directory, record.decision_id, record);
+        }
       }
       return true;
     },

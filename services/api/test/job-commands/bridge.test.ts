@@ -381,8 +381,9 @@ describe('command routes and inbox', () => {
       status: 'answered',
       option_id: 'iron',
     });
-    for (const name of [CP_ID, DECISION_ID]) {
-      expect(JSON.parse(readFileSync(join(workspace, '.gm/inbox/commands', `${name}.json`), 'utf8'))).toMatchObject({
+    // `.gm/inbox/checkpoints` is where a waiter started before #571 looks; it is written for one release.
+    for (const name of [CP_ID, DECISION_ID].flatMap((id) => [`commands/${id}`, `checkpoints/${id}`])) {
+      expect(JSON.parse(readFileSync(join(workspace, '.gm/inbox', `${name}.json`), 'utf8'))).toMatchObject({
         command_id: CP_ID,
         decision_id: DECISION_ID,
         option_id: 'iron',

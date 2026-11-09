@@ -35,10 +35,13 @@ export const command: GmCommand = {
     if (args.length !== 1 || !COMMAND_ID.test(args[0] ?? ''))
       throw new UsageError('command wait needs one safe command or decision id', 'gm command wait <id>');
     const timeout = typeof flags.timeout === 'number' ? flags.timeout : 600;
-    const file = join(workspaceRoot(ctx.cwd), '.gm', 'inbox', 'commands', `${args[0]}.json`);
+    const inbox = join(workspaceRoot(ctx.cwd), '.gm', 'inbox');
+    // An answer written before #571 sits in `.gm/inbox/checkpoints/`; read it for one release, with the alias.
+    const file = join(inbox, 'commands', `${args[0]}.json`);
+    const legacy = join(inbox, 'checkpoints', `${args[0]}.json`);
     const deadline = Date.now() + timeout * 1000;
     for (;;) {
-      const found = answer(file);
+      const found = answer(file) ?? answer(legacy);
       if (found?.status === 'answered') {
         ctx.out(found.optionId);
         return EXIT.ok;

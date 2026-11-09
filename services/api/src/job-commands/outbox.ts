@@ -4,10 +4,19 @@ import type { OutboxContext } from '../build-chat/outbox-handlers.js';
 import { getChatRow, insertChatRow, type StoredCommand } from '../build-chat/store.js';
 
 export const type = 'command.request';
+// `gm checkpoint open` before #571 wrote `checkpoint.open` lines keyed `checkpoint_id`; a job running across the upgrade
+// still has them. Read them for one release, with the CLI alias; delete with it.
+export const aliasTypes = ['checkpoint.open'];
+
+function upgraded(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null || !('checkpoint_id' in payload)) return payload;
+  const { checkpoint_id, ...rest } = payload as Record<string, unknown>;
+  return { ...rest, command_id: checkpoint_id };
+}
 
 export async function handle(line: AgentOutboxLine, ctx: OutboxContext): Promise<void> {
   if (getChatRow(ctx.sqlite, line.id) !== null) return;
-  const payload = CommandRequestPayload.parse(line.payload);
+  const payload = CommandRequestPayload.parse(line.type === type ? line.payload : upgraded(line.payload));
   const options = payload.options.map((option) => {
     if (option.media_id === undefined) return option;
     const media = getChatRow(ctx.sqlite, option.media_id);

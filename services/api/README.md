@@ -90,7 +90,7 @@ blob already stored answers `200` without reading the body.
 
 Creator Commands use the same workspace pin. The API polls each active job's aiur Commands every
 `OGM_COMMAND_POLL_MS`, keeps the supervisor token server-side, and writes answered or moot results under
-`<workspace>/.gm/inbox/commands/` for the sandboxed `gm command wait` command.
+`<workspace>/.gm/inbox/commands/` for the sandboxed `gm command wait`.
 
 ```sh
 pnpm --filter @ogm/api build && pnpm --filter @ogm/api start   # or: pnpm --filter @ogm/api dev
