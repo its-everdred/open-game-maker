@@ -4,8 +4,10 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { loadIndex } from '@ogm/asset-cards';
 import type { AssetsLock } from '@ogm/contracts';
 
+import { creditForCard } from '../src/license-metadata.js';
 import { MAP, ORC, SHEET, SHEET_META, SYNTY, WALL, preparedLibrary, useOrc } from './assets-fixture.js';
 import { gm, tempDir } from './helpers.js';
 
@@ -57,18 +59,110 @@ describe('gm assets use', () => {
     });
   });
 
-  it('refuses a pack that carries incomplete credit metadata', async () => {
+  it('fills missing manifest credit fields from the collection card', async () => {
     const cwd = tempDir();
     const root = preparedLibrary();
     const path = join(root, 'packs/kenney-mini-dungeon/pack.json');
-    const pack = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-    delete pack.source;
-    writeFileSync(path, JSON.stringify(pack));
+    writeFileSync(
+      path,
+      JSON.stringify({
+        id: 'kenney-mini-dungeon',
+        vendor: 'legacy-vendor',
+        title: 'Legacy Mini Dungeon',
+        license: 'CC0-1.0',
+      }),
+    );
+
+    const result = await useOrc(cwd, root);
+
+    expect(result).toEqual({ code: 0, out: [], err: [] });
+    const lock = JSON.parse(readFileSync(join(cwd, 'assets.lock.json'), 'utf8')) as AssetsLock;
+    expect(lock.assets[0]?.credit).toEqual({
+      pack: 'kenney-mini-dungeon',
+      title: 'Mini Dungeon (Kenney)',
+      licenseSource: 'License.txt',
+      attribution: 'none required',
+      source: { label: 'kenney' },
+    });
+    expect(readFileSync(join(cwd, 'CREDITS.md'), 'utf8')).toContain(
+      '## CC0-1.0\n- CC0 assets from: kenney-mini-dungeon\n- Mini Dungeon (Kenney) — none required (licence: License.txt)',
+    );
+
+    const precedenceCwd = tempDir();
+    const precedenceRoot = preparedLibrary();
+    writeFileSync(
+      join(precedenceRoot, 'packs/kenney-mini-dungeon/pack.json'),
+      JSON.stringify({
+        license: 'CC0-1.0',
+        license_source: 'Pack-License.txt',
+        attribution: 'Pack attribution',
+        source: { label: 'Pack source' },
+      }),
+    );
+    expect(await useOrc(precedenceCwd, precedenceRoot)).toEqual({ code: 0, out: [], err: [] });
+    const precedenceLock = JSON.parse(readFileSync(join(precedenceCwd, 'assets.lock.json'), 'utf8')) as AssetsLock;
+    expect(precedenceLock.assets[0]?.credit).toMatchObject({
+      licenseSource: 'Pack-License.txt',
+      attribution: 'Pack attribution',
+      source: { label: 'Pack source' },
+    });
+
+    const invalidFields: Array<{ pack: Record<string, unknown>; field: string }> = [
+      { pack: { license: '' }, field: 'license' },
+      { pack: { license: 'CC0-1.0', license_source: null }, field: 'license_source' },
+      { pack: { license: 'CC0-1.0', attribution: ' ' }, field: 'attribution' },
+      { pack: { license: 'CC0-1.0', source: null }, field: 'source' },
+    ];
+    for (const { pack, field } of invalidFields) {
+      const invalidCwd = tempDir();
+      const invalidRoot = preparedLibrary();
+      writeFileSync(join(invalidRoot, 'packs/kenney-mini-dungeon/pack.json'), JSON.stringify(pack));
+
+      const invalid = await useOrc(invalidCwd, invalidRoot);
+
+      expect(invalid.code).toBe(2);
+      expect(invalid.err.join('\n')).toContain(`credit metadata is missing ${field}`);
+      expect(existsSync(join(invalidCwd, 'assets.lock.json'))).toBe(false);
+    }
+
+    const malformedCwd = tempDir();
+    const malformedRoot = preparedLibrary();
+    writeFileSync(join(malformedRoot, 'packs/kenney-mini-dungeon/pack.json'), '{');
+
+    const malformed = await useOrc(malformedCwd, malformedRoot);
+
+    expect(malformed.code).toBe(2);
+    expect(malformed.err.join('\n')).toContain(`${ORC}  missing-license-metadata`);
+    expect(existsSync(join(malformedCwd, 'assets.lock.json'))).toBe(false);
+  });
+
+  it('names the field still missing after combining manifest and card metadata', async () => {
+    const root = preparedLibrary();
+    const packPath = join(root, 'packs/kenney-mini-dungeon/pack.json');
+    writeFileSync(packPath, JSON.stringify({ license: 'CC0-1.0' }));
+    const index = await loadIndex(root);
+    const card = index.cards.find((candidate) => candidate.id === ORC);
+    const sourceCollection = index.collections['t1:kenney-mini-dungeon@2.0'];
+    if (card === undefined || sourceCollection === undefined) throw new Error('fixture card collection is missing');
+    const collection = structuredClone(sourceCollection);
+    delete collection.rights!.basis[0]!.ref;
+
+    const result = await creditForCard(root, card, collection);
+
+    expect(result.credit).toBeUndefined();
+    expect(result.detail).toBe('credit metadata is missing license_source');
+  });
+
+  it('still rejects a manifest licence that differs from the card', async () => {
+    const cwd = tempDir();
+    const root = preparedLibrary();
+    const path = join(root, 'packs/kenney-mini-dungeon/pack.json');
+    writeFileSync(path, JSON.stringify({ license: 'CC-BY-4.0' }));
 
     const result = await useOrc(cwd, root);
 
     expect(result.code).toBe(2);
-    expect(result.err.join('\n')).toContain(`${ORC}  missing-license-metadata`);
+    expect(result.err.join('\n')).toContain('credit metadata license CC-BY-4.0 differs from CC0-1.0');
     expect(existsSync(join(cwd, 'assets.lock.json'))).toBe(false);
   });
 
