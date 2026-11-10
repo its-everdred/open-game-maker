@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { api } from '../../lib/api/client';
 import { CommandsInbox } from '../../features/commands-inbox/CommandsInbox';
 import { openConversation } from '../../features/build-chat/conversation';
 import type { Branch } from './types';
@@ -17,6 +19,15 @@ type SpotlightProps = {
 };
 
 export function Spotlight({ game, branches, job, onPlay, onEdit, onClose }: SpotlightProps) {
+  const queryClient = useQueryClient();
+  const preference = useMutation({
+    mutationFn: (allowAiGeneratedAssets: boolean) =>
+      api(`/games/${encodeURIComponent(game.id)}`, {
+        method: 'PATCH',
+        json: { allowAiGeneratedAssets },
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['games'] }),
+  });
   const closeRef = useRef<HTMLButtonElement>(null);
   const activeBranch = branches.find((branch) => branch.name === 'main') ?? branches[0];
   const canOpen = Boolean(activeBranch?.latestBuildId) && job?.kind !== 'new_game';
@@ -50,6 +61,16 @@ export function Spotlight({ game, branches, job, onPlay, onEdit, onClose }: Spot
         )}
         {job && <p className="games-spotlight-job">{jobLabel(job)}</p>}
         <CommandsInbox gameId={game.id} slug={game.slug} onOpenJob={openConversation} />
+        <label className="games-ai-switch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={game.allowAiGeneratedAssets ?? true}
+            disabled={preference.isPending}
+            onChange={(event) => preference.mutate(event.currentTarget.checked)}
+          />
+          AI-generated assets
+        </label>
         <div className="games-versions">
           <ul aria-label="Versions">
             {branches.map((branch) => (

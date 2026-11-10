@@ -67,8 +67,9 @@ async function generatedProvenance(
     const lock = await readLock(gameDir(ctx.cwd, root));
     for (const entry of lock?.assets ?? []) {
       if (!referencedAssets.has(entry.id)) continue;
+      if (entry.meta?.generation === undefined) continue;
       unresolvedAssets.delete(entry.id);
-      if (entry.meta?.generation?.method === 'ai') generatedAssets.add(entry.id);
+      if (entry.meta.generation.method === 'ai') generatedAssets.add(entry.id);
     }
   } catch {
     // A lineup may be raised before its game has a valid asset lock; catalog metadata remains authoritative below.

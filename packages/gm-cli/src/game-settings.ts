@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CommandError } from './command.js';
-import { workspaceRoot } from './outbox.js';
+import { gameDir, workspaceRoot } from './outbox.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -49,7 +49,7 @@ export function allowsAiGeneratedAssets(cwd: string): boolean {
     return booleanSetting((context as JsonObject | undefined)?.allowAiGeneratedAssets, bundlePath);
   }
 
-  const gamePath = join(root, '.gm', 'game.json');
+  const gamePath = join(gameDir(cwd, root), '.gm', 'game.json');
   const game = readJson(gamePath);
   // Older games predate the preference, whose documented default is on.
   return booleanSetting(game?.allowAiGeneratedAssets, gamePath);

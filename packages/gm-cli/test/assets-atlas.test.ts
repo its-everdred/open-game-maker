@@ -183,20 +183,24 @@ describe('gm assets Pixel Art Atlas', () => {
 
   it('uses the host game preference when no job bundle exists', async () => {
     const assets = atlasLibrary();
-    const game = tempDir('gm-atlas-host-setting-');
-    execFileSync('git', ['init', '-q'], { cwd: game });
+    const root = tempDir('gm-atlas-host-setting-');
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    const game = join(root, 'games', 'blobs');
     mkdirSync(join(game, '.gm'), { recursive: true });
+    writeFileSync(join(game, 'gm.manifest.json'), '{}');
     writeFileSync(join(game, '.gm', 'game.json'), JSON.stringify({ allowAiGeneratedAssets: false }));
+    const nested = join(game, 'scenes', 'town');
+    mkdirSync(nested, { recursive: true });
 
     const result = await gm(['assets', 'search', 'red', 'potion'], {
-      cwd: game,
+      cwd: nested,
       env: { OGM_ASSETS_ROOT: assets },
     });
 
     expect(result).toMatchObject({ code: 0, out: [] });
     const refused = await gm(
       ['assets', 'use', 't1:angais-pixel-art-atlas/sprites/0@1.4m', '--family', 'pixel-art', '--pov', 'topdown'],
-      { cwd: game, env: { OGM_ASSETS_ROOT: assets } },
+      { cwd: nested, env: { OGM_ASSETS_ROOT: assets } },
     );
     expect(refused.code).toBe(2);
     expect(refused.err.join('\n')).toContain('ai-generated-disabled');

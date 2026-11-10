@@ -130,13 +130,16 @@ function choiceForFamily(family: CatalogFamily): StyleChoice {
 }
 
 function choiceFor(family: CatalogFamily, set: CatalogSet): StyleChoice {
+  // A mixed showcase cannot identify which pixels came from which pack.
+  // Use individual pack previews so generated content can be labeled or hidden.
+  const mixedProvenance = set.packs.some((pack) => pack.aiGenerated) && set.packs.some((pack) => !pack.aiGenerated);
   return {
     id: set.id,
     label: set.label,
     familyId: family.id,
     views: family.views,
     packs: set.packs,
-    ...(set.showcase ? { showcase: set.showcase } : {}),
+    ...(set.showcase && !mixedProvenance ? { showcase: set.showcase } : {}),
   };
 }
 

@@ -15,6 +15,7 @@ const family: CatalogFamily = {
       pickerFamilies: ['pixel-art'],
       vendors: ['kenney'],
       traits: {},
+      showcase: { stops: [] },
       packs: [
         { id: 'authored', name: 'Authored', thumbnailUrl: '/authored.png', aiGenerated: false },
         { id: 'generated', name: 'Generated', thumbnailUrl: '/generated.png', aiGenerated: true },
@@ -64,5 +65,7 @@ describe('styleChoices', () => {
       { id: 'authored', name: 'Authored', thumbnailUrl: '/authored.png', aiGenerated: false },
     ]);
     expect(setsForFamily([family], 'isometric-2d', true)[0]?.packs).toHaveLength(2);
+    expect(choices[0]?.showcase).toBeUndefined();
+    expect(setsForFamily([family], 'isometric-2d', true)[0]?.showcase).toBeUndefined();
   });
 });
