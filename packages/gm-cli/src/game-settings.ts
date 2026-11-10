@@ -44,6 +44,9 @@ export async function allowsAiGeneratedAssets(ctx: GmContext): Promise<boolean> 
   if (bundle === undefined && existsSync(join(root, '.gm', 'context', 'bundle.missing'))) {
     throw new CommandError('cannot read live AI-generated asset preference');
   }
+  if (bundle !== undefined && !ctx.blobApi) {
+    throw new CommandError('cannot read live AI-generated asset preference');
+  }
   if (ctx.blobApi && bundle !== undefined) {
     try {
       if (typeof bundle.gameId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(bundle.gameId)) throw new Error('invalid game');
@@ -60,14 +63,6 @@ export async function allowsAiGeneratedAssets(ctx: GmContext): Promise<boolean> 
       throw new CommandError('cannot read live AI-generated asset preference');
     }
   }
-  if (bundle !== undefined) {
-    const context = bundle.gameContext;
-    if (context !== undefined && (typeof context !== 'object' || context === null || Array.isArray(context))) {
-      throw new CommandError(`${bundlePath} has invalid gameContext`);
-    }
-    return booleanSetting((context as JsonObject | undefined)?.allowAiGeneratedAssets, bundlePath);
-  }
-
   const gamePath = join(gameDir(cwd, root), '.gm', 'game.json');
   const game = readJson(gamePath);
   // Older games predate the preference, whose documented default is on.

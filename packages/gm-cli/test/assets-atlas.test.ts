@@ -160,8 +160,8 @@ describe('gm assets Pixel Art Atlas', () => {
     const nested = join(game, 'scenes', 'town');
     mkdirSync(nested, { recursive: true });
     writeFileSync(
-      join(game, '.gm', 'context', 'bundle.json'),
-      JSON.stringify({ gameContext: { allowAiGeneratedAssets: false } }),
+      join(game, '.gm', 'game.json'),
+      JSON.stringify({ allowAiGeneratedAssets: false }),
     );
 
     const result = await gm(['assets', 'search', 'red', 'potion'], {
@@ -242,8 +242,8 @@ describe('gm assets Pixel Art Atlas', () => {
     writeFileSync(lockPath, JSON.stringify(lock));
     mkdirSync(join(game, '.gm', 'context'), { recursive: true });
     writeFileSync(
-      join(game, '.gm', 'context', 'bundle.json'),
-      JSON.stringify({ gameContext: { allowAiGeneratedAssets: false } }),
+      join(game, '.gm', 'game.json'),
+      JSON.stringify({ allowAiGeneratedAssets: false }),
     );
 
     const checked = await gm(['check', 'assets'], { cwd: game, env });

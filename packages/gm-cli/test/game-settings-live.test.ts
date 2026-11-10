@@ -31,6 +31,9 @@ describe('live game asset preference', () => {
     expect(await allowsAiGeneratedAssets(ctx)).toBe(true);
     await expect(allowsAiGeneratedAssets(ctx)).rejects.toThrow('cannot read live AI-generated asset preference');
     expect(fetchMock.mock.calls[0]?.[0].toString()).toContain('/internal/games/g1/ai-assets');
+    await expect(allowsAiGeneratedAssets({ ...ctx, blobApi: null })).rejects.toThrow(
+      'cannot read live AI-generated asset preference',
+    );
     unlinkSync(join(cwd, '.gm', 'context', 'bundle.json'));
     writeFileSync(join(cwd, '.gm', 'context', 'bundle.missing'), 'unavailable');
     await expect(allowsAiGeneratedAssets(ctx)).rejects.toThrow('cannot read live AI-generated asset preference');
