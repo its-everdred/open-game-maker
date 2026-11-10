@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { basename, join, relative, sep } from 'node:path';
+import { basename, join, relative, resolve, sep } from 'node:path';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
@@ -99,8 +99,16 @@ function judge(root: string, still: { path: string; blob: string }, looks: Look[
   const verdict = VERDICT.exec(last)?.[1]?.toLowerCase();
   if (verdict === 'pass') return { path, status: 'pass', detail: newest.answer! };
   if (verdict === 'fail')
-    return { path, status: 'fail', detail: `VERDICT: fail in ${newest.answer}; fix what it names, then look again` };
-  return { path, status: 'fail', detail: `${newest.answer} does not end in a VERDICT line` };
+    return {
+      path,
+      status: 'fail',
+      detail: `VERDICT: fail in ${newest.answer}; fix what it names, then look again\n${text.toString('utf8').trimEnd()}`,
+    };
+  return {
+    path,
+    status: 'fail',
+    detail: `${newest.answer} does not end in a VERDICT line\n${text.toString('utf8').trimEnd()}`,
+  };
 }
 
 /**
@@ -116,17 +124,31 @@ function sheets(root: string, game: string, looks: Look[]): StillResult[] {
       { path: 'review/decisions.json', status: 'fail', detail: error instanceof Error ? error.message : String(error) },
     ];
   }
-  return screens.map((screen) => {
-    const file = join(game, sheetPath(screen.name));
-    const path = relative(root, file).split(sep).join('/');
-    if (!existsSync(file))
-      return {
-        path,
-        status: 'missing' as const,
-        detail: `no sheet of "${screen.name}" beside its target: gm look sheet ${screen.name} --still <png>`,
-      };
-    return judge(root, { path, blob: blobId(readFileSync(file)) }, looks);
-  });
+  const targetDir = join(game, 'design/flow/screens/target');
+  const unrecorded: StillResult[] = existsSync(targetDir)
+    ? readdirSync(targetDir, { withFileTypes: true })
+        .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && /\.png$/i.test(entry.name))
+        .filter((entry) => !screens.some((screen) => resolve(game, screen.target) === resolve(targetDir, entry.name)))
+        .map((entry) => ({
+          path: relative(root, join(targetDir, entry.name)).split(sep).join('/'),
+          status: 'missing',
+          detail: `approved target "${basename(entry.name, '.png')}" is not recorded in review/decisions.json`,
+        }))
+    : [];
+  return [
+    ...unrecorded,
+    ...screens.map((screen) => {
+      const file = join(game, sheetPath(screen.name));
+      const path = relative(root, file).split(sep).join('/');
+      if (!existsSync(file))
+        return {
+          path,
+          status: 'missing' as const,
+          detail: `no sheet of "${screen.name}" beside its target: gm look sheet ${screen.name} --still <png>`,
+        };
+      return judge(root, { path, blob: blobId(readFileSync(file)) }, looks);
+    }),
+  ];
 }
 
 export const command: GmCommand = {

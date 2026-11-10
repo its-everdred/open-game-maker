@@ -7,7 +7,7 @@ A look request also appends its outcome (answer or error) to <workspace>/.gm-moc
 """
 import argparse, hashlib, json, os, sys, time, uuid
 
-VERDICT = '\n\nEnd your answer with one line, exactly `VERDICT: pass` or `VERDICT: fail`.'
+VERDICT = '\n\nList the differences to fix, worst first. End your answer with one line, exactly `VERDICT: pass` or `VERDICT: fail`.'
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--prompt-file', default=None, help='image prompt, or the line to speak for --kind voice')

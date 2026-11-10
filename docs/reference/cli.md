@@ -72,11 +72,15 @@ each answer or broker error to `.gm-mock/looks.jsonl` with the git blob id of ev
 `*.png`), each `tN.png` rendered there. The newest look on exactly those bytes decides: its answer's last line must be
 `VERDICT: pass`. A `VERDICT: fail`, an answer that does not end in a verdict, no look on those bytes, or no stills at all
 exits 1. A broker error or timeout (for example a 402) is reported as `blocked` and also exits 1; it is never a pass.
+For a failed look, the check prints the answer so its reported differences can guide the next fixes. New look requests
+ask for those differences worst first.
 
 A game records the render the creator approved for each screen in `review/decisions.json`
 (`{"screens": {"select": {"target": "review/mock-matrix/select.png"}}}`). `gm look sheet <screen> --still <png>` puts the
 still beside that target (`--target` overrides it) at one height in `look/<screen>.sheet.png`, and `gm look check`
 judges every such sheet like a still: a screen with no sheet, or whose sheet's newest look reads a mismatch, exits 1.
+Every PNG in `design/flow/screens/target/` must also be named as a target in that file; unrecorded targets fail the
+check and are listed by name.
 
 `gm look evidence --body <file>` reads a pull request body and exits 1 when it links a sheet, still or clip
 (`.png`, `.jpg`, `.gif`, `.webp`, `.mp4`, `.webm`) that is not committed at HEAD, from the repository root or the game
