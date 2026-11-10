@@ -26,6 +26,22 @@ describe('search', () => {
     expect(formatRow(hits[0])).toBe(`${ORC}  model/character  reviewed  chunky-low-poly  Orc`);
   });
 
+  it('includes AI-generated assets by default, marks rows, and can exclude them', () => {
+    const base = index.cards.find((card) => card.id === ORC);
+    if (!base) throw new Error('fixture model missing');
+    const generated = {
+      ...base,
+      generation: { method: 'ai' as const, tool: 'test generator' },
+    };
+    const only = { ...index, cards: [generated] };
+    expect(search(only, { words: ['orc'] }).map((card) => card.id)).toEqual([ORC]);
+    expect(formatRow(generated)).toContain('[AI-generated: test generator]');
+    expect(
+      formatRow({ ...generated, title: 'spoof\nrow', generation: { method: 'ai', tool: 'tool\u001b[2J\u200e' } }),
+    ).toContain('spoof?row  [AI-generated: tool?[2J?]');
+    expect(search(only, { words: ['orc'], excludeAiGenerated: true })).toEqual([]);
+  });
+
   it('defaults to in-game use: assets whose resolved rights lack it never show', () => {
     expect(ids({ words: [] })).not.toContain('t1:kenney-particle-pack/flame-01@1.1');
     expect(ids({ words: [], use: 'vision-input' })).toContain('t1:sidetrax-pack-60-battle/war-drums@v1');

@@ -29,6 +29,7 @@ Never choose from filenames. Render the candidates side by side, labelled with p
 `apps/web/title-town/tools/creatures.html` reads `apps/web/title-town/tools/creatures.json` (list of `{name, pack, path}` under
 `models/candidates/<pack>/`, each pack in its own folder because Kenney packs share `Textures/colormap.png`).
 Variants: `tools/lineup.html?set=...`. Look at the render, then show the creator when the choice is visible.
+Keep the `AI` badge emitted from a card's typed `generation` field visible in every lineup; never crop or relabel it away.
 
 ## Showcase a complete set
 

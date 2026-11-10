@@ -28,6 +28,7 @@ export const FILTER_FLAGS: FlagSpec = {
   'rig-id': { type: 'string', help: 'only cards on this rig or retargeting to it' },
   'same-rig-as': { type: 'string', help: 'only cards sharing or retargeting to the rig of this card id' },
   'include-draft': { type: 'boolean', default: false, help: 'also match draft cards of every kind' },
+  'exclude-ai-generated': { type: 'boolean', default: false, help: 'hide assets marked as AI-generated' },
   tier: { type: 'number', help: 'library tier 1, 2 or 3' },
   directions: { type: 'number', help: 'exact facing count of a directional sprite (8)' },
   collection: { type: 'string', help: 'only this collection id' },
@@ -51,7 +52,12 @@ function vocabulary<T extends string>(name: string, values: unknown, allowed: re
 export function toQuery(name: string, words: string[], flags: Record<string, unknown>): SearchQuery {
   const use = flags.use as string;
   if (!USES.includes(use as Use)) throw new UsageError(`unknown use "${use}"`, `gm ${name} --use in-game`);
-  const q: SearchQuery = { words, use: use as Use, includeDraft: flags['include-draft'] === true };
+  const q: SearchQuery = {
+    words,
+    use: use as Use,
+    includeDraft: flags['include-draft'] === true,
+    excludeAiGenerated: flags['exclude-ai-generated'] === true,
+  };
   if (typeof flags.kind === 'string') {
     const [kind, ...sub] = flags.kind.split('/');
     q.kind = kind;

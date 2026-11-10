@@ -33,6 +33,26 @@ describe('card schemas', () => {
     expect(validateCard(card)).toMatchObject({ ok: true });
   });
 
+  it('accepts a typed AI generation marker and rejects free-form methods', () => {
+    const card = structuredClone(
+      cardFixtureDocs().find(({ file }) => file === 'collection-kenney-mini-dungeon.json')?.doc,
+    ) as { schema: string; generation?: { method: string; tool: string } };
+    card.schema = 'ogm.asset-card/1.2';
+    card.generation = { method: 'ai', tool: 'Krea 2 Turbo + pixel-art LoRA' };
+    expect(validateCard(card)).toMatchObject({ ok: true });
+
+    card.generation.method = 'maybe-ai';
+    const result = validateCard(card);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join('\n')).toContain('generation');
+
+    card.generation = { method: 'ai', tool: 'spoof\nnext line' };
+    expect(validateCard(card)).toMatchObject({ ok: false });
+
+    card.generation = { method: 'ai', tool: 'spoof\u061cnext' };
+    expect(validateCard(card)).toMatchObject({ ok: false });
+  });
+
   it('accepts a sprite facing set and rejects an unknown facing', () => {
     const card = structuredClone(
       cardFixtureDocs().find(({ file }) => file === 'sprite-kenney-tiny-dungeon-knight.json')?.doc,

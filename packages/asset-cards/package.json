@@ -20,6 +20,7 @@
     "families:coverage": "tsc -b && node dist/families-coverage.js",
     "preindex:build": "pnpm --filter @ogm/contracts --filter @ogm/config build",
     "index:build": "tsc -b && node scripts/build-index.mjs",
+    "atlas:build": "tsc -b && node scripts/build-atlas.mjs",
     "licenses:emit": "tsc -b && node scripts/emit-licenses.mjs && prettier --write data/licenses.json"
   },
   "dependencies": {

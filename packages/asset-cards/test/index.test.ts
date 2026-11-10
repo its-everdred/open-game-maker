@@ -76,6 +76,20 @@ describe('buildIndex', () => {
     expect(resolved.resolved.provenance['describe.set']).toEqual({ by: 'collection' });
   });
 
+  it('inherits the collection generation marker onto the item card with provenance', () => {
+    type Card = Parameters<typeof resolve>[0];
+    const collection = JSON.parse(
+      readFileSync(join(FIXTURE, 'packs/kenney-mini-dungeon/collection.card.json'), 'utf8'),
+    ) as Card & { generation?: { method: 'ai'; tool: string } };
+    const asset = JSON.parse(
+      readFileSync(join(FIXTURE, 'packs/kenney-mini-dungeon/cards/character-orc.card.json'), 'utf8'),
+    ) as Card;
+    collection.generation = { method: 'ai', tool: 'test generator' };
+    const resolved = resolve(asset, { [collection.id]: collection });
+    expect(resolved.generation).toEqual({ method: 'ai', tool: 'test generator' });
+    expect(resolved.resolved.provenance.generation).toEqual({ by: 'collection' });
+  });
+
   it('never widens: an asset basis granting in-game inside a vision-input-only collection stays vision-input', async () => {
     const index = await buildIndex(FIXTURE);
     const drums = index.cards.find((card) => card.id === 't1:sidetrax-pack-60-battle/war-drums@v1');
@@ -108,5 +122,43 @@ describe('loadIndex', () => {
     expect(await isStale(root)).toBe(true);
     expect((await loadIndex(root)).vocab).not.toBe('from-disk');
     expect(JSON.parse(readFileSync(join(root, INDEX_PATH), 'utf8')).vocab).not.toBe('from-disk');
+  });
+
+  it('rebuilds an older cache format even when the cache file is newer than every card', async () => {
+    const root = libraryCopy();
+    const current = await loadIndex(root);
+    const old = { ...current, version: 1, vocab: 'old-cache' };
+    writeFileSync(join(root, INDEX_PATH), `${JSON.stringify(old)}\n`);
+    const future = new Date(Date.now() + 60_000);
+    utimesSync(join(root, INDEX_PATH), future, future);
+
+    expect(await isStale(root)).toBe(true);
+    const rebuilt = await loadIndex(root);
+    expect(rebuilt.version).toBe(2);
+    expect(rebuilt.vocab).not.toBe('old-cache');
+  });
+
+  it('keeps card trees marked indexignore out of the general index', async () => {
+    const root = libraryCopy();
+    const cards = join(root, 'packs/kenney-mini-dungeon/cards');
+    writeFileSync(join(cards, '.indexignore'), 'disk-backed search\n');
+
+    const index = await buildIndex(root);
+    expect(index.collections).toHaveProperty('t1:kenney-mini-dungeon@2.0');
+    expect(index.cards.some((card) => card.id === ORC)).toBe(false);
+  });
+
+  it('invalidates a cache when a card tree becomes indexignored', async () => {
+    const root = libraryCopy();
+    const current = await loadIndex(root);
+    expect(current.cards.some((card) => card.id === ORC)).toBe(true);
+
+    const cards = join(root, 'packs/kenney-mini-dungeon/cards');
+    writeFileSync(join(cards, '.indexignore'), 'disk-backed search\n');
+    const future = new Date(Date.now() + 60_000);
+    utimesSync(cards, future, future);
+
+    expect(await isStale(root)).toBe(true);
+    expect((await loadIndex(root)).cards.some((card) => card.id === ORC)).toBe(false);
   });
 });

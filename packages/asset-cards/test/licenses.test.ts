@@ -53,6 +53,10 @@ describe('licence table', () => {
     expect(licenseFor('CC0-1.0')?.id).toBe('CC0-1.0');
     expect(licenseFor('kaykit')?.id).toBe('CC0-1.0');
     expect(licenseFor('kenney')?.id).toBe('CC0-1.0');
+    expect(licenseFor('angais-pixel-art-atlas')).toMatchObject({
+      id: 'CC0-1.0',
+      pack_notes: { 'angais-pixel-art-atlas': expect.stringContaining('Krea 2 Community License') },
+    });
     expect(licenseFor('made-up')).toBeUndefined();
   });
 

@@ -1,13 +1,23 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-import { assetManifestSchema, assetsLockSchema, cachePlanSchema } from '../src/assets.js';
+import { assetManifestSchema, assetMetadataSchema, assetsLockSchema, cachePlanSchema } from '../src/assets.js';
 import { loadJson } from './helpers.js';
 import { emittedValidator } from './json-schema.js';
 
 type Manifest = { assets: Record<string, { file: Record<string, string> }> };
 
 describe('assets contract', () => {
+  it('carries the typed AI generation marker in lock and manifest metadata', () => {
+    expect(assetMetadataSchema.parse({ generation: { method: 'ai', tool: 'Krea 2 Turbo + pixel-art LoRA' } })).toEqual({
+      generation: { method: 'ai', tool: 'Krea 2 Turbo + pixel-art LoRA' },
+    });
+    expect(assetMetadataSchema.safeParse({ generation: { method: 'maybe-ai', tool: 'unknown' } }).success).toBe(false);
+    expect(assetMetadataSchema.safeParse({ generation: { method: 'ai', tool: 'spoof\u200enext' } }).success).toBe(
+      false,
+    );
+  });
+
   it('accepts the golden cache plan in both Zod and the emitted JSON Schema', () => {
     const doc = loadJson('fixtures/cache-plan.v1.json');
     expect(cachePlanSchema.safeParse(doc).success).toBe(true);

@@ -1,4 +1,4 @@
-import { info, loadIndex, type ResolvedCard } from '@ogm/asset-cards';
+import { cardById, loadIndex, type ResolvedCard } from '@ogm/asset-cards';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson, requireAssetsRoot } from '../../context.js';
@@ -39,7 +39,9 @@ export const command: GmCommand = {
   flags: {},
   async run(ctx, args) {
     if (args.length === 0) throw new UsageError('no card id given', 'gm assets info <id>');
-    const found = info(await loadIndex(requireAssetsRoot(ctx)), args);
+    const root = requireAssetsRoot(ctx);
+    const index = await loadIndex(root);
+    const found = args.map((id) => cardById(root, index, id) ?? { id, missing: true as const });
     const missing: string[] = [];
     for (const card of found) {
       if ('missing' in card) missing.push(card.id);

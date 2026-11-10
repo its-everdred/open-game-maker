@@ -18,7 +18,7 @@ export type ResolvedCard = AssetCard & {
 export type IndexError = { path: string; errors: string[] };
 
 export type CardIndex = {
-  version: 1;
+  version: 2;
   built: string;
   vocab: string;
   cards: ResolvedCard[];
@@ -51,6 +51,8 @@ export type SearchQuery = {
   rigId?: string;
   sameRigAs?: string;
   includeDraft?: boolean;
+  /** Hide assets whose typed generation marker says they were AI-generated. */
+  excludeAiGenerated?: boolean;
   tier?: number;
   /** Exact facing count a directional sprite must carry (`sprite.directions` length). */
   directions?: number;

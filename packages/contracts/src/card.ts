@@ -8,7 +8,7 @@ import type { AssetCard, MapLayoutSpec } from './card.generated.js';
 
 export type { AssetCard, Clip, Font, Geometry, Image, Look, MapLayoutSpec, Rig } from './card.generated.js';
 
-export const ASSET_CARD_SCHEMAS = ['ogm.asset-card/1.0', 'ogm.asset-card/1.1'] as const;
+export const ASSET_CARD_SCHEMAS = ['ogm.asset-card/1.0', 'ogm.asset-card/1.1', 'ogm.asset-card/1.2'] as const;
 
 const ajv = new Ajv2020({
   allErrors: true,

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -43,7 +43,10 @@ describe('gm assets search', () => {
   });
 
   it('exits 2 naming OGM_ASSETS_ROOT when no library can be found', async () => {
-    const result = await gm(['assets', 'search', 'orc']);
+    const result = await gm(['assets', 'search', 'orc'], {
+      cwd: mkdtempSync('/tmp/gm-no-assets-library-'),
+      env: { OGM_ASSETS_ROOT: '' },
+    });
     expect(result.code).toBe(2);
     expect(result.out).toEqual([]);
     expect(result.err).toHaveLength(1);

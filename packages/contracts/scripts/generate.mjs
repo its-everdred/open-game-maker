@@ -7,7 +7,7 @@ const schemas = [
   ['MapLayoutSpec', new URL('../schemas/map-layout-spec.schema.json', import.meta.url)],
 ];
 const parts = [];
-const metaBlocks = ['sprite', 'rig', 'kit', 'geometry'];
+const metaBlocks = ['sprite', 'rig', 'kit', 'geometry', 'generation'];
 
 // The card `$defs` that the asset lock/manifest `meta` re-uses, with every `$ref` they reach.
 // Nested refs (`#/$defs/vocab/x`) become flat keys (`vocab.x`) so zod's fromJSONSchema resolves them.

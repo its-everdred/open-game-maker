@@ -130,6 +130,11 @@ describe('style-families.json', () => {
       'quaternius-ultimate-monsters',
     ]);
     expect(setFor('kenney-tiny-dungeon')?.id).toBe('kenney-tiny');
+    expect(setFor('angais-pixel-art-atlas')).toMatchObject({
+      id: 'angais-pixel-art-atlas',
+      vendors: ['angais'],
+      traits: expect.objectContaining({ tile_grid: '16x16 px', palette: 'varied per subject' }),
+    });
     expect(setFor('kenney-tiny-town')?.id).toBe('kenney-tiny');
     expect(setFor('kenney-pixel-platformer')?.id).toBe('kenney-pixel-platformer');
     expect(setFor('limezu-modern-interiors')).toMatchObject({
@@ -140,7 +145,7 @@ describe('style-families.json', () => {
     expect(setFor('limezu-modern-interiors')?.packs).toContainEqual(
       expect.objectContaining({ id: 'limezu-modern-interiors' }),
     );
-    expect(loadFamilies().flatMap((f) => f.sets)).toHaveLength(10);
+    expect(loadFamilies().flatMap((f) => f.sets)).toHaveLength(11);
   });
 
   it('registers every imported SmallScaleInt pack in one measured isometric set', () => {

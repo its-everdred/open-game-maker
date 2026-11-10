@@ -889,6 +889,26 @@
                 ],
                 "additionalProperties": false,
                 "description": "3D facts, measured by code after B11 normalization (1 unit = 1 m, Y-up, origin at base)."
+              },
+              "generation": {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "const": "ai"
+                  },
+                  "tool": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e-\\u200f\\u202a-\\u202e\\u2066-\\u2069]+$"
+                  }
+                },
+                "required": [
+                  "method",
+                  "tool"
+                ],
+                "additionalProperties": false
               }
             },
             "additionalProperties": false

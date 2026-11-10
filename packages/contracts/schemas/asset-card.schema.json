@@ -6,7 +6,7 @@
   "type": "object",
   "required": ["schema", "vocab", "id", "card_type", "status", "title", "provenance"],
   "properties": {
-    "schema": { "enum": ["ogm.asset-card/1.0", "ogm.asset-card/1.1"] },
+    "schema": { "enum": ["ogm.asset-card/1.0", "ogm.asset-card/1.1", "ogm.asset-card/1.2"] },
     "vocab": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Date stamp of the vocabulary release the tags were checked against." },
     "id": { "type": "string" },
     "card_type": { "enum": ["asset", "collection"] },
@@ -17,6 +17,7 @@
     "collection": { "$ref": "#/$defs/collectionId", "description": "Asset cards: the collection this asset belongs to. Fields left out inherit from it (see C3 'Inheritance')." },
     "license": { "$ref": "#/$defs/spdxExpression" },
     "rights": { "$ref": "#/$defs/rights" },
+    "generation": { "$ref": "#/$defs/generation", "description": "How the asset content was generated. Collection values are inherited by member assets." },
     "source": { "$ref": "#/$defs/source" },
     "variants": { "type": "array", "items": { "$ref": "#/$defs/variant" } },
     "related": { "type": "array", "items": { "$ref": "#/$defs/relation" } },
@@ -120,6 +121,20 @@
     "bucketKey": { "type": "string", "pattern": "^[a-z0-9][a-z0-9/._-]*$", "not": { "pattern": "(^|/)\\.\\.?(?:/|$)" }, "description": "Relative key in the private asset library or instance bucket. Traversal segments, absolute paths, and URLs with credentials are forbidden." },
     "assetPath": { "type": "string", "pattern": "^(?!/)(?!\\.\\.(?:/|$))(?!.*\\/\\.\\.(?:\\/|$))[^\\\\]+$", "description": "Relative path inside the collection; traversal and backslashes are forbidden." },
     "assetPathList": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/assetPath" } },
+    "generation": {
+      "type": "object",
+      "required": ["method", "tool"],
+      "properties": {
+        "method": { "const": "ai" },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e-\\u200f\\u202a-\\u202e\\u2066-\\u2069]+$"
+        }
+      },
+      "additionalProperties": false
+    },
     "vec3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
     "hex": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
     "tag": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 40 },

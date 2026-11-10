@@ -1,4 +1,4 @@
-import { licenseFor, loadIndex } from '@ogm/asset-cards';
+import { cardById, licenseFor, loadIndex } from '@ogm/asset-cards';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { requireAssetsRoot } from '../../context.js';
@@ -23,8 +23,9 @@ export const command: GmCommand = {
   flags: {},
   async run(ctx, args) {
     if (args.length !== 1) throw new UsageError('why needs exactly one asset id', 'gm assets why <id>');
-    const index = await loadIndex(requireAssetsRoot(ctx));
-    const card = index.cards.find((candidate) => candidate.id === args[0]);
+    const root = requireAssetsRoot(ctx);
+    const index = await loadIndex(root);
+    const card = cardById(root, index, args[0]!);
     if (!card) throw new UsageError(`unknown card id ${args[0]}`, 'gm assets search <words> to find ids');
     const declared =
       card.rights ?? (card.collection === undefined ? undefined : index.collections[card.collection]?.rights);
