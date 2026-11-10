@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,7 +108,7 @@ describe('gm look check', { timeout: 60_000 }, () => {
     expect(result.err).toHaveLength(1);
     expect(result.err[0]).toMatch(
       new RegExp(
-        `^fail ${STILL}: VERDICT: fail in looks/first-[0-9a-f]{8}\\.look\\.md; fix what it names, then look again$`,
+        `^fail ${STILL}: VERDICT: fail in looks/first-[0-9a-f]{8}\\.look\\.md; fix what it names, then look again\\nThe HUD covers the player\\.`,
       ),
     );
   });
@@ -216,8 +216,9 @@ describe('gm look check', { timeout: 60_000 }, () => {
     expect(result.code).toBe(1);
     expect(result.err).toHaveLength(1);
     expect(result.err[0]).toMatch(
-      new RegExp(`^fail ${STILL}: looks/second-[0-9a-f]{8}\\.look\\.md does not end in a VERDICT line$`),
+      new RegExp(`^fail ${STILL}: looks/second-[0-9a-f]{8}\\.look\\.md does not end in a VERDICT line\\nVERDICT: pass`),
     );
+    expect(result.err[0]).toContain('Correction: the image did not load');
   });
 
   it('judges rendered stills in a repo that ignores *.png, and never passes with nothing to judge', async () => {
@@ -239,11 +240,55 @@ describe('gm look check', { timeout: 60_000 }, () => {
     const request = JSON.parse(await look(root, 'first', { answer: 'VERDICT: pass' })) as { prompt: string };
 
     expect(request.prompt).toMatch(/VERDICT: pass` or `VERDICT: fail`\.$/);
+    expect(request.prompt).toContain('List the differences to fix, worst first.');
   });
 });
 
 describe('gm look check with approved targets', { timeout: 60_000 }, () => {
   const SHEET = 'look/select.sheet.png';
+
+  it('requires each target file to be recorded before accepting its judged sheet', async () => {
+    const root = game();
+    const target = 'design/flow/screens/target/play.png';
+    mkdirSync(join(root, 'design/flow/screens/target'), { recursive: true });
+    writeFileSync(join(root, target), 'approved');
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+    const missing = await gm(['look', 'check'], { cwd: root });
+    expect(missing.code).toBe(1);
+    expect(missing.err.join('\n')).toContain('approved target "play" is not recorded');
+
+    mkdirSync(join(root, 'review'));
+    writeFileSync(join(root, 'review/decisions.json'), JSON.stringify({ screens: { play: { target } } }));
+    mkdirSync(join(root, 'look'));
+    writeFileSync(join(root, 'look/play.sheet.png'), 'sheet');
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    expect((await gm(['look', 'check'], { cwd: root })).code).toBe(0);
+  });
+
+  it('reports every target whose actual path is absent from the decisions', async () => {
+    const root = game();
+    mkdirSync(join(root, 'design/flow/screens/target'), { recursive: true });
+    writeFileSync(join(root, 'design/flow/screens/target/play.png'), 'play');
+    writeFileSync(join(root, 'design/flow/screens/target/title.png'), 'title');
+    mkdirSync(join(root, 'review'));
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"play":{"target":"design/target.png"}}}');
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+
+    const result = await gm(['look', 'check'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(result.err.join('\n')).toContain('approved target "play" is not recorded');
+    expect(result.err.join('\n')).toContain('approved target "title" is not recorded');
+  });
+
+  it('does not silently skip a symlinked target', async () => {
+    const root = game();
+    mkdirSync(join(root, 'design/flow/screens/target'), { recursive: true });
+    symlinkSync('../../../target.png', join(root, 'design/flow/screens/target/play.png'));
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+    const result = await gm(['look', 'check'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(result.err.join('\n')).toContain('approved target "play" is not recorded');
+  });
 
   // Kevin judged Blobs against its renders on an iPad (#642): a screen with an approved target is only checked when
   // its still sits beside that target, so a look can say "this looks nothing like the render".
@@ -278,6 +323,7 @@ describe('gm look check with approved targets', { timeout: 60_000 }, () => {
 
     expect(mismatch.code).toBe(1);
     expect(mismatch.err[0]).toMatch(new RegExp(`^fail ${SHEET}: VERDICT: fail in looks/sheet-`));
+    expect(mismatch.err[0]).toContain('The board is missing; the render shows it.');
     expect(match.code).toBe(0);
   });
 
