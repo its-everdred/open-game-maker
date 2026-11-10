@@ -1,4 +1,6 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,26 +32,63 @@ describe('acquireSlot', () => {
 
   it('gives up after waitMs', async () => {
     const runtimeDir = runtime();
-    await acquireSlot({ runtimeDir, slots: 1 });
+    const held = await acquireSlot({ runtimeDir, slots: 1 });
     await expect(acquireSlot({ runtimeDir, slots: 1, waitMs: 50, pollMs: 10 })).rejects.toThrow(/no free capture slot/);
+    held.release();
   });
 
-  it('reaps a slot whose holder PID is dead', async () => {
+  it('ignores a legacy slot with a foreign PID that is alive locally', async () => {
     const runtimeDir = runtime();
     const slot = join(runtimeDir, 'ogm-verify', 'slot-0');
     mkdirSync(slot, { recursive: true });
-    writeFileSync(join(slot, 'pid'), '2147483646');
-    const got = await acquireSlot({ runtimeDir, slots: 1, waitMs: 100 });
+    writeFileSync(join(slot, 'pid'), String(process.pid));
+    const got = await acquireSlot({ runtimeDir, slots: 1, waitMs: 1_000 });
     expect(got.slot).toBe(slot);
     got.release();
   });
 
-  it('keeps a slot whose holder is alive', async () => {
+  it('releases the kernel lock when a holder process dies', async () => {
     const runtimeDir = runtime();
-    const slot = join(runtimeDir, 'ogm-verify', 'slot-0');
-    mkdirSync(slot, { recursive: true });
-    writeFileSync(join(slot, 'pid'), String(process.ppid));
-    await expect(acquireSlot({ runtimeDir, slots: 1, waitMs: 50, pollMs: 10 })).rejects.toThrow();
+    const moduleUrl = new URL('../dist/semaphore.js', import.meta.url).href;
+    const script = `import { acquireSlot } from ${JSON.stringify(moduleUrl)};
+      await acquireSlot({ runtimeDir: ${JSON.stringify(runtimeDir)}, slots: 1 });
+      console.log('ready'); setInterval(() => {}, 1000);`;
+    const holder = spawn(process.execPath, ['--input-type=module', '-e', script], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    try {
+      await once(holder.stdout, 'data');
+      await expect(acquireSlot({ runtimeDir, slots: 1, waitMs: 50, pollMs: 10 })).rejects.toThrow(
+        /no free capture slot/,
+      );
+      holder.kill('SIGKILL');
+      await once(holder, 'exit');
+      // Simulate a stale namespace-local PID that happens to be alive here.
+      const legacySlot = join(runtimeDir, 'ogm-verify', 'slot-0');
+      mkdirSync(legacySlot, { recursive: true });
+      writeFileSync(join(legacySlot, 'pid'), String(process.pid));
+      const next = await acquireSlot({ runtimeDir, slots: 1, waitMs: 2_000, pollMs: 10 });
+      next.release();
+    } finally {
+      holder.kill('SIGKILL');
+    }
+  });
+
+  it('reports lock helper failures instead of treating them as contention', async () => {
+    const bin = runtime();
+    const fakeFlock = join(bin, 'flock');
+    writeFileSync(fakeFlock, '#!/bin/sh\nexit 1\n');
+    chmodSync(fakeFlock, 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path ?? ''}`;
+    try {
+      await expect(acquireSlot({ runtimeDir: runtime(), slots: 1, waitMs: 100, pollMs: 10 })).rejects.toThrow(
+        /capture lock helper exited with code 1/,
+      );
+    } finally {
+      if (path === undefined) delete process.env.PATH;
+      else process.env.PATH = path;
+    }
   });
 
   it('falls back to the per-user temp root when XDG_RUNTIME_DIR is unusable', async () => {
