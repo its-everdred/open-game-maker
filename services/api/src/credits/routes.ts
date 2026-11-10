@@ -80,7 +80,7 @@ export function creditsRoutes(assetsRoot?: string) {
     if (assetsRoot) {
       const index = await loadIndex(assetsRoot);
       const generatedPacks = new Set(
-      Object.values(index.collections)
+        Object.values(index.collections)
           .filter((card) => card.generation?.method === 'ai')
           .map((card) => packOf(card.id)),
       );

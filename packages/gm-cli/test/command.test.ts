@@ -156,7 +156,10 @@ describe('gm command request', () => {
     card.generation = { method: 'ai', tool: 'fixture generator' };
     writeFileSync(cardPath, JSON.stringify(card));
     const env = { OGM_ASSETS_ROOT: assets };
-    const used = await gm(['assets', 'use', assetId, '--family', 'chunky-low-poly', '--pov', 'iso'], { cwd: root, env });
+    const used = await gm(['assets', 'use', assetId, '--family', 'chunky-low-poly', '--pov', 'iso'], {
+      cwd: root,
+      env,
+    });
     expect(used, used.err.join('\n')).toMatchObject({ code: 0 });
     const lockPath = join(root, 'assets.lock.json');
     const lock = JSON.parse(readFileSync(lockPath, 'utf8')) as {
