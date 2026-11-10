@@ -46,6 +46,7 @@ export function collectScreenRoutes(routeModules: Record<string, ScreenModule>):
       if (screen.auth === 'required') {
         element = <RequireSession>{element}</RequireSession>;
       }
+      element = <GameMenuProvider>{element}</GameMenuProvider>;
 
       return {
         path: screen.path,
@@ -84,17 +85,15 @@ function AppChrome({ children }: { children: ReactNode }) {
   const gamePlay =
     matchPath('/g/:gameId', location.pathname) !== null && new URLSearchParams(location.search).get('mode') !== 'edit';
   return (
-    <GameMenuProvider>
-      <div className={`app-chrome${gamePlay ? ' is-game-playing' : ''}`}>
-        <StudioBackdrop />
-        <StudioLogo />
-        <StudioMenu />
-        <main>{children}</main>
-        <Toasts />
-        <div id="chat-dock-slot">
-          <BuildChatDock />
-        </div>
+    <div className={`app-chrome${gamePlay ? ' is-game-playing' : ''}`}>
+      <StudioBackdrop />
+      <StudioLogo />
+      <StudioMenu />
+      <main>{children}</main>
+      <Toasts />
+      <div id="chat-dock-slot">
+        <BuildChatDock />
       </div>
-    </GameMenuProvider>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { RESERVED_GAME_SLUGS } from '@ogm/contracts/browser';
 
 import { authClient } from '../lib/api/auth';
+import { useGameMenu } from './GameMenu';
 import { collectScreenRoutes, screenRouteObjects } from './router';
 import type { ScreenRoute } from './screen';
 
@@ -128,6 +129,26 @@ describe('screen route collection', () => {
     });
 
     expect(matchRoutes(routes, '/fixture')).not.toBeNull();
+  });
+
+  it('provides game menu state to bare routes', async () => {
+    const routes = collectScreenRoutes({
+      '../routes/__fixture__/route.tsx': {
+        route: {
+          path: '/fixture',
+          element: <BareMenuConsumer />,
+          chrome: 'bare',
+          auth: 'none',
+        },
+      },
+    });
+    const router = createMemoryRouter(routes, { initialEntries: ['/fixture'] });
+
+    render(<RouterProvider router={router} />);
+    const toggle = await screen.findByRole('button', { name: 'Open fixture menu' });
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveTextContent('Close fixture menu');
   });
 
   it('names a module that omits its route export', () => {
@@ -312,6 +333,15 @@ describe('screen route collection', () => {
 
 function BrokenPicker(): never {
   throw new Error('broken picker');
+}
+
+function BareMenuConsumer() {
+  const menu = useGameMenu();
+  return (
+    <button type="button" onClick={() => menu.setOpen((open) => !open)}>
+      {menu.open ? 'Close' : 'Open'} fixture menu
+    </button>
+  );
 }
 
 function StatefulScreen() {
