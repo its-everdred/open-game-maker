@@ -48,6 +48,12 @@ export function resolve(card: AssetCard, collections: Record<string, AssetCard>)
     provenance.license = { by: 'collection' };
   }
 
+  let generation = card.generation;
+  if (generation === undefined && parent?.generation !== undefined) {
+    generation = parent.generation;
+    provenance.generation = { by: 'collection' };
+  }
+
   const describe = card.describe ?? {};
   const parentDescribe = parent?.describe ?? {};
   const pick = <K extends 'style_family' | 'set' | 'pov_fit' | 'settings' | 'environments'>(key: K) => {
@@ -68,5 +74,5 @@ export function resolve(card: AssetCard, collections: Record<string, AssetCard>)
   if (povFit !== undefined) resolved.pov_fit = povFit;
   if (settings !== undefined) resolved.settings = settings;
   if (environments !== undefined) resolved.environments = environments;
-  return { ...card, resolved };
+  return { ...card, ...(generation === undefined ? {} : { generation }), resolved };
 }

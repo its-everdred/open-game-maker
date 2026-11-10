@@ -7,7 +7,9 @@ import { resolve } from './resolve.js';
 import type { CardIndex, IndexError, ResolvedCard } from './types.js';
 
 export const INDEX_PATH = join('index', 'cards.index.json');
+export const CARD_INDEX_VERSION = 2;
 const TOPS = ['packs', 'inspiration'];
+const INDEX_IGNORE = '.indexignore';
 
 async function entries(dir: string): Promise<string[]> {
   try {
@@ -24,6 +26,7 @@ export async function cardFiles(root: string): Promise<string[]> {
     for (const id of (await entries(join(root, top))).sort()) {
       const base = join(root, top, id);
       if ((await entries(base)).includes('collection.card.json')) files.push(join(base, 'collection.card.json'));
+      if ((await entries(join(base, 'cards'))).includes(INDEX_IGNORE)) continue;
       let nested: string[];
       try {
         nested = await readdir(join(base, 'cards'), { recursive: true });
@@ -77,7 +80,7 @@ export async function buildIndex(root: string): Promise<CardIndex> {
       .map((card) => card.vocab)
       .sort()
       .at(-1) ?? '';
-  return { version: 1, built: new Date().toISOString(), vocab, cards, collections, errors };
+  return { version: CARD_INDEX_VERSION, built: new Date().toISOString(), vocab, cards, collections, errors };
 }
 
 export async function writeIndex(root: string, index: CardIndex): Promise<string> {
@@ -87,26 +90,50 @@ export async function writeIndex(root: string, index: CardIndex): Promise<string
   return path;
 }
 
-/** True when the index file is missing or any card file is newer than it. */
-export async function isStale(root: string): Promise<boolean> {
+async function freshIndex(root: string): Promise<CardIndex | null> {
+  let index: CardIndex;
   let built: number;
   try {
+    const parsed = JSON.parse(await readFile(join(root, INDEX_PATH), 'utf8')) as Partial<CardIndex>;
+    if (
+      parsed.version !== CARD_INDEX_VERSION ||
+      !Array.isArray(parsed.cards) ||
+      typeof parsed.collections !== 'object' ||
+      parsed.collections === null ||
+      !Array.isArray(parsed.errors)
+    ) {
+      return null;
+    }
+    index = parsed as CardIndex;
     built = (await stat(join(root, INDEX_PATH))).mtimeMs;
   } catch {
-    return true;
+    return null;
+  }
+  for (const top of TOPS) {
+    for (const id of await entries(join(root, top))) {
+      try {
+        if ((await stat(join(root, top, id, 'cards'))).mtimeMs > built) return null;
+      } catch {
+        // A pack without a per-asset cards directory has no nested index inputs.
+      }
+    }
   }
   for (const file of await cardFiles(root)) {
-    if ((await stat(file)).mtimeMs > built) return true;
+    if ((await stat(file)).mtimeMs > built) return null;
   }
-  return false;
+  return index;
+}
+
+/** True when the index is missing, uses an older cache format, is malformed, or any card file is newer. */
+export async function isStale(root: string): Promise<boolean> {
+  return (await freshIndex(root)) === null;
 }
 
 /** Read the index, rebuilding and writing it first when it is missing or stale. */
 export async function loadIndex(root: string): Promise<CardIndex> {
-  if (await isStale(root)) {
-    const index = await buildIndex(root);
-    await writeIndex(root, index);
-    return index;
-  }
-  return JSON.parse(await readFile(join(root, INDEX_PATH), 'utf8')) as CardIndex;
+  const current = await freshIndex(root);
+  if (current) return current;
+  const index = await buildIndex(root);
+  await writeIndex(root, index);
+  return index;
 }

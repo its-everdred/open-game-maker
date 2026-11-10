@@ -1,7 +1,16 @@
 import { copyFile, lstat, mkdir, readFile, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { loadIndex, packOf, setFor, type ResolvedCard } from '@ogm/asset-cards';
+import {
+  ATLAS_PACK,
+  cardById,
+  isAtlasSpriteId,
+  loadIndex,
+  materializeAtlasSprite,
+  packOf,
+  setFor,
+  type ResolvedCard,
+} from '@ogm/asset-cards';
 import { povIdSchema, styleFamilyIdSchema, type AssetMetadata, type AssetsLock, type LockEntry } from '@ogm/contracts';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
@@ -95,6 +104,7 @@ function metadataFor(card: ResolvedCard): AssetMetadata | undefined {
     ...(card.rig === undefined ? {} : { rig: card.rig }),
     ...(card.kit === undefined ? {} : { kit: card.kit }),
     ...(card.geometry === undefined ? {} : { geometry: card.geometry }),
+    ...(card.generation === undefined ? {} : { generation: card.generation }),
   };
   return Object.keys(meta).length === 0 ? undefined : meta;
 }
@@ -216,7 +226,6 @@ export const command: GmCommand = {
     }
 
     const vendor = flags.vendor === true;
-    const destinationRoot = vendor ? safeDestination(ctx.cwd, flags.dest as string) : null;
     const visibility = await repoVisibility(ctx.cwd);
     const exception = typeof flags.exception === 'string' ? flags.exception.trim() : undefined;
     if (exception === '') {
@@ -236,11 +245,30 @@ export const command: GmCommand = {
       existing?: LockEntry;
       familyException: boolean;
       credit: NonNullable<LockEntry['credit']>;
+      destinationRoot: string | null;
     }> = [];
     for (const id of ids) {
-      const card = byId.get(id);
+      if (id.startsWith(`t1:${ATLAS_PACK}/subjects/`)) {
+        refusals.push({
+          code: 'rights',
+          rule: 'unknown-id',
+          id,
+          detail: 'Atlas subject summaries cannot be used; choose an individual /sprites/<row> search result',
+        });
+        continue;
+      }
+      let card = byId.get(id) ?? cardById(assetsRoot, index, id);
       if (!card || card.card_type !== 'asset') {
         refusals.push({ code: 'rights', rule: 'unknown-id', id, detail: 'asset is not present in the current index' });
+        continue;
+      }
+      if (packOf(card.id) === ATLAS_PACK && !isAtlasSpriteId(card.id)) {
+        refusals.push({
+          code: 'rights',
+          rule: 'unknown-id',
+          id,
+          detail: 'Atlas subject summaries cannot be used; choose an individual /sprites/<row> search result',
+        });
         continue;
       }
       const withoutException = refusalsForUse(card, lock, { placeholder: flags.placeholder === true, visibility });
@@ -284,16 +312,26 @@ export const command: GmCommand = {
         continue;
       }
       if (flags.refresh === true && existing) {
-        accepted.push({ card, files: [], existing, familyException, credit: metadata.credit });
+        accepted.push({ card, files: [], existing, familyException, credit: metadata.credit, destinationRoot: null });
         continue;
+      }
+      const atlas = packOf(card.id) === ATLAS_PACK ? await materializeAtlasSprite(assetsRoot, card) : undefined;
+      if (packOf(card.id) === ATLAS_PACK && atlas === undefined) {
+        refusals.push({ code: 'rights', rule: 'missing-file', id, detail: 'Atlas row could not be materialized' });
+        continue;
+      }
+      if (atlas) {
+        card = atlas.card;
+        byId.set(card.id, card);
       }
       const sources = await librarySources(assetsRoot, card, collection);
       if (sources.refusal) {
         refusals.push(sources.refusal);
         continue;
       }
-      if (destinationRoot !== null) {
-        const copies = vendorCopies(destinationRoot, card, sources.files).map((copy) => ({
+      const itemDestinationRoot = vendor || atlas ? safeDestination(ctx.cwd, flags.dest as string) : null;
+      if (itemDestinationRoot !== null) {
+        const copies = vendorCopies(itemDestinationRoot, card, sources.files).map((copy) => ({
           path: relative(ctx.cwd, copy.destination).replaceAll(sep, '/'),
           sha256: copy.sha256,
         }));
@@ -313,7 +351,14 @@ export const command: GmCommand = {
         }
         for (const copy of copies) vendoredBytes.set(copy.path, { id, sha256: copy.sha256 });
       }
-      accepted.push({ card, files: sources.files, existing, familyException, credit: metadata.credit });
+      accepted.push({
+        card,
+        files: sources.files,
+        existing,
+        familyException,
+        credit: metadata.credit,
+        destinationRoot: itemDestinationRoot,
+      });
     }
 
     if (refusals.length > 0 && flags.partial !== true) {
@@ -334,14 +379,14 @@ export const command: GmCommand = {
         };
       } else {
         const placed =
-          destinationRoot === null
+          item.destinationRoot === null
             ? item.files.map((file) => ({ path: file.path, sha256: file.sha256 }))
-            : await vendorFiles(ctx.cwd, vendorCopies(destinationRoot, item.card, item.files));
+            : await vendorFiles(ctx.cwd, vendorCopies(item.destinationRoot, item.card, item.files));
         const [primary, ...companions] = placed;
         located = {
           path: primary!.path,
           sha256: primary!.sha256,
-          source: destinationRoot === null ? 'library' : 'vendored',
+          source: item.destinationRoot === null ? 'library' : 'vendored',
           ...(companions.length === 0 ? {} : { files: companions }),
         };
       }

@@ -326,7 +326,7 @@ file or preview path. Contact sheets stay a human tool: `gm assets sheet`.
 
 ```text
 gm assets search <words...> [--family <id>] [--set <id>] [--kind <kind/subkind>] [--pov <id>] [--use <use>]
-                 [--directions <count>]
+                 [--directions <count>] [--exclude-ai-generated]
 ```
 
 `--set` restricts results to one exact curated compatibility set, such as `smallscaleint`. Inside a game repository,
@@ -334,6 +334,9 @@ the lockfile's family and compatible sets still apply unless the existing `--any
 `--directions <count>` keeps only directional sprites whose card records exactly that many facings, so "orc that can
 attack in 8 directions" is `gm assets search orc attack --directions 8`. A sprite card carries the count as the length
 of its `sprite.directions` list, in the order its sheet rows or per-direction files are read.
+AI-generated assets are included by default. Text results carry an `AI-generated: <tool>` marker; JSON results expose
+the typed `generation: { "method": "ai", "tool": "..." }` object.
+`--exclude-ai-generated` removes every card with that typed marker.
 
 ## Reference and vendor game assets
 
@@ -348,6 +351,8 @@ gm assets register <path> --made-by-agent [--from <id>...] --game <id>
 It refuses a card whose pack cannot supply `license`, `license_source`, explicit `attribution`, and `source` metadata.
 Every accepted entry copies that metadata into the lock and regenerates `CREDITS.md`. `gm check assets` rejects older or
 hand-edited entries that omit it. Each entry also names the curated set its pack belongs to (`set`), when it has one.
+Pixel Art Atlas rows are the exception to reference-only use: the selected 16x16 row and nearest-neighbour 2x and 4x
+PNGs are materialized into the game automatically, while the other 1.4 million rows remain in the library arrays.
 
 `assets.lock.json` is the game's asset list: the build ships only what it lists. `gm check assets`, and so
 `gm build assets` and `gm publish`, fail on an asset id that the game's `src/` or `index.html` names in a string

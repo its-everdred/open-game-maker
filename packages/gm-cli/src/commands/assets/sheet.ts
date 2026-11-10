@@ -1,6 +1,14 @@
 import { resolve } from 'node:path';
 
-import { SHEET_MAX, info, loadIndex, writeSheet, type ResolvedCard } from '@ogm/asset-cards';
+import {
+  SHEET_MAX,
+  cardById,
+  isAtlasSpriteId,
+  loadIndex,
+  materializeAtlasSprite,
+  writeSheet,
+  type ResolvedCard,
+} from '@ogm/asset-cards';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { requireAssetsRoot } from '../../context.js';
@@ -16,12 +24,19 @@ export const command: GmCommand = {
     if (args.length > SHEET_MAX)
       throw new UsageError(`at most ${SHEET_MAX} ids per sheet`, `gm assets sheet <up to ${SHEET_MAX} ids>`);
     const root = requireAssetsRoot(ctx);
-    const found = info(await loadIndex(root), args);
+    const index = await loadIndex(root);
+    const found = args.map((id) => cardById(root, index, id) ?? { id, missing: true as const });
     const missing = found.filter((card) => 'missing' in card).map((card) => card.id);
     if (missing.length > 0)
       throw new UsageError(`unknown card id ${missing.join(', ')}`, 'gm assets search <words> to find ids');
+    const cards = await Promise.all(
+      (found as ResolvedCard[]).map(async (card) => {
+        if (!isAtlasSpriteId(card.id)) return card;
+        return (await materializeAtlasSprite(root, card))?.card ?? card;
+      }),
+    );
     const out = resolve(ctx.cwd, flags.out as string);
-    const { cells } = await writeSheet(root, found as ResolvedCard[], out);
+    const { cells } = await writeSheet(root, cards, out);
     if (ctx.json) ctx.out(JSON.stringify({ out, cells }));
     else ctx.out(`wrote ${out} (${cells} cells)`);
     ctx.emit('assets.sheet', { args, out, cells });

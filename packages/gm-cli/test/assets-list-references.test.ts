@@ -33,7 +33,7 @@ describe("the game's asset list", () => {
     });
     expect(added.code).toBe(0);
     const lock = readLockFile(cwd);
-    expect(lock.minor).toBe(4);
+    expect(lock.minor).toBe(5);
     expect(lock.assets.find((entry) => entry.id === SYNTY)).toMatchObject({ set: 'synty-polygon' });
     expect(lock.assets.find((entry) => entry.id === ORC)).not.toHaveProperty('set');
   });

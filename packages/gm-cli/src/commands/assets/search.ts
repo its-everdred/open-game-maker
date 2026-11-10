@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { familyFor, formatRow, loadIndex, packOf, search, setFor } from '@ogm/asset-cards';
+import { ATLAS_PACK, familyFor, formatRow, loadIndex, packOf, search, searchAtlas, setFor } from '@ogm/asset-cards';
 
 import { FILTER_FLAGS, toQuery } from '../../assets-query.js';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
@@ -51,7 +51,8 @@ export const command: GmCommand = {
     reason: { type: 'string', help: "why the search leaves this game's family (logged)" },
   },
   async run(ctx, args, flags) {
-    const index = await loadIndex(requireAssetsRoot(ctx));
+    const assetsRoot = requireAssetsRoot(ctx);
+    const index = await loadIndex(assetsRoot);
     const q = toQuery('assets search', args, flags);
     // R55: inside a game repo, search stays in the lockfile's family (plus `any`) unless an exception is logged.
     const anyFamily = flags['any-family'] === true;
@@ -80,10 +81,28 @@ export const command: GmCommand = {
       throw new UsageError(`unknown card id "${q.sameRigAs}"`, 'gm assets search <words> to find an id');
     }
     if (leaves) ctx.emit('assets.family_exception', { family: gameFamily, reason, query: args.join(' ') });
-    const hits = search(index, { ...q, limit: ctx.limit });
+    const atlas = searchAtlas(assetsRoot, index, { ...q, limit: ctx.limit });
+    const atlasSubjectPrefix = `t1:${ATLAS_PACK}/subjects/`;
+    const indexed = search(
+      { ...index, cards: index.cards.filter((card) => !card.id.startsWith(atlasSubjectPrefix)) },
+      { ...q, limit: ctx.limit },
+    );
+    const hits: typeof indexed = [];
+    const seen = new Set<string>();
+    for (let at = 0; hits.length < ctx.limit && (at < indexed.length || at < atlas.length); at += 1) {
+      for (const card of [indexed[at], atlas[at]]) {
+        if (card && !seen.has(card.id) && hits.length < ctx.limit) {
+          seen.add(card.id);
+          hits.push(card);
+        }
+      }
+    }
     for (const card of hits) {
       if (ctx.json) printJson(ctx, card);
-      else ctx.out(formatRow(card));
+      else {
+        const subject = packOf(card.id) === ATLAS_PACK ? card.describe?.objects?.[0]?.replaceAll('-', ' ') : undefined;
+        ctx.out(`${formatRow(card)}${subject ? `  [subject: ${subject}]` : ''}`);
+      }
     }
     if (hits.length === 0 && !ctx.json) ctx.err('no hits. Try: fewer words, --include-draft, or gm assets facets');
     ctx.emit('assets.search', { args, flags: { ...flags, help: undefined }, hits: hits.length });

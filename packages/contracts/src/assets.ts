@@ -12,8 +12,9 @@ export type Tier = z.infer<typeof tierSchema>;
  * 2: build manifests use content-addressed `/a/` URLs and may be accompanied by a cache plan.
  * 3: lock entries may carry normalized legal-credit metadata.
  * 4: lock entries may name the curated asset set their pack belongs to (`set`).
+ * 5: lock entries may carry typed asset-generation provenance.
  */
-export const ASSETS_SCHEMA_MINOR = 4;
+export const ASSETS_SCHEMA_MINOR = 5;
 const minorSchema = z.number().int().min(0).optional();
 
 export const loadPhaseSchema = z.enum(['boot', 'ready', 'stream']);
@@ -93,7 +94,7 @@ const fileEntrySchema = z.looseObject({
   decoders: z.array(z.enum(['meshopt', 'draco', 'ktx2'])),
 });
 
-type CardMetadataBlock = 'sprite' | 'rig' | 'kit' | 'geometry';
+type CardMetadataBlock = 'sprite' | 'rig' | 'kit' | 'geometry' | 'generation';
 
 /** Re-uses the asset-card `$defs` block (generated from asset-card.schema.json), never a local copy. */
 function cardMetadataBlock<K extends CardMetadataBlock>(block: K): z.ZodType<NonNullable<AssetCard[K]>> {
@@ -125,6 +126,7 @@ export const assetMetadataSchema = z
     rig: cardMetadataBlock('rig').optional(),
     kit: cardMetadataBlock('kit').optional(),
     geometry: cardMetadataBlock('geometry').optional(),
+    generation: cardMetadataBlock('generation').optional(),
   })
   .superRefine((meta, ctx) => checkMetaStrings(meta, [], ctx));
 export type AssetMetadata = z.infer<typeof assetMetadataSchema>;

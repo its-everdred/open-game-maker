@@ -34,9 +34,14 @@ async function previewPath(root: string, card: ResolvedCard): Promise<string | n
 }
 
 async function cell(root: string, card: ResolvedCard): Promise<Buffer> {
+  const isAiGenerated = card.generation?.method === 'ai';
+  const ai = isAiGenerated
+    ? `<rect x="218" y="4" width="32" height="20" rx="3" fill="#ffcf66"/>` +
+      `<text x="225" y="19" font-family="sans-serif" font-size="13" font-weight="700" fill="#17141f">AI</text>`
+    : '';
   const label = Buffer.from(
     `<svg width="${CELL}" height="${LABEL}"><rect width="100%" height="100%" fill="#202020"/>` +
-      `<text x="6" y="19" font-family="sans-serif" font-size="15" fill="#f0f0f0">${escapeXml(labelOf(card.id).slice(0, 30))}</text></svg>`,
+      `<text x="6" y="19" font-family="sans-serif" font-size="15" fill="#f0f0f0">${escapeXml(labelOf(card.id).slice(0, isAiGenerated ? 24 : 30))}</text>${ai}</svg>`,
   );
   const path = await previewPath(root, card);
   const image = path

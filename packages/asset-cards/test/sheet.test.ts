@@ -38,4 +38,17 @@ describe('writeSheet', () => {
   it('labels cells with the id path segment', () => {
     expect(labelOf('t1:kenney-mini-dungeon/character-orc@2.0')).toBe('character-orc');
   });
+
+  it('puts a visible AI badge on generated assets in a lineup', async () => {
+    const root = libraryCopy();
+    const index = await buildIndex(root);
+    const card = index.cards.find((candidate) => candidate.id.startsWith('t1:kenney-mini-dungeon/'))!;
+    const out = join(mkdtempSync(join(tmpdir(), 'sheet-ai-')), 'sheet.png');
+    await writeSheet(root, [{ ...card, generation: { method: 'ai', tool: 'test generator' } }], out);
+    const badgePixel = await sharp(out)
+      .extract({ left: 246, top: 256 + 10, width: 1, height: 1 })
+      .raw()
+      .toBuffer();
+    expect([...badgePixel.subarray(0, 3)]).toEqual([255, 207, 102]);
+  });
 });

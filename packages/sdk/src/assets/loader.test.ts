@@ -174,7 +174,7 @@ describe('AssetLoader', () => {
     });
     await loader.load();
 
-    expect(ASSETS_SCHEMA_MINOR).toBe(4);
+    expect(ASSETS_SCHEMA_MINOR).toBe(5);
     expect(loader.resolve('content-addressed/model')).toMatchObject({
       file,
       url: `https://game.test/a/${digest}.glb`,

@@ -30,6 +30,27 @@ describe('asset credits', () => {
     expect(renderCredits(lock)).toContain('## CC-BY-4.0\n- Example Pack — Example Artist');
   });
 
+  it('renders the typed AI generation marker in game credits', () => {
+    const lock = {
+      assets: [entry({ meta: { generation: { method: 'ai', tool: 'Krea 2 Turbo + pixel-art LoRA' } } })],
+    };
+    expect(renderCredits(lock)).toContain('[AI-generated: Krea 2 Turbo + pixel-art LoRA]');
+  });
+
+  it('escapes Markdown syntax in an AI tool label', () => {
+    const lock = {
+      assets: [entry({ meta: { generation: { method: 'ai', tool: '[tool](https://example.invalid)' } } })],
+    };
+    expect(renderCredits(lock)).toContain('[AI-generated: \\[tool\\](https://example.invalid)]');
+  });
+
+  it('neutralizes bidirectional controls in an AI tool label', () => {
+    const lock = {
+      assets: [entry({ meta: { generation: { method: 'ai', tool: 'before\u200eafter' } } })],
+    };
+    expect(renderCredits(lock)).toContain('[AI-generated: before?after]');
+  });
+
   it('refuses missing or inconsistent metadata instead of publishing partial credits', () => {
     expect(() => creditsFromLock({ assets: [entry({ credit: undefined })] })).toThrow('missing credit metadata');
     expect(() =>

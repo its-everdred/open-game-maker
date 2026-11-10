@@ -72,6 +72,29 @@ export function creditsFromLock(lock: Pick<AssetsLock, 'assets'>): CreditsDocume
 
 /** Markdown checked into game repos and refreshed from the lock on every build. */
 export function renderCredits(lock: Pick<AssetsLock, 'assets'>): string {
+  const markdownText = (value: string): string =>
+    [...value]
+      .map((character) => {
+        const code = character.codePointAt(0)!;
+        return code <= 0x1f ||
+          (code >= 0x7f && code <= 0x9f) ||
+          code === 0x061c ||
+          code === 0x200e ||
+          code === 0x200f ||
+          (code >= 0x202a && code <= 0x202e) ||
+          (code >= 0x2066 && code <= 0x2069)
+          ? '?'
+          : character;
+      })
+      .join('')
+      .replace(/[\\`*_[\]<>]/g, '\\$&');
+  const generatedByPack = new Map<string, Set<string>>();
+  for (const entry of lock.assets) {
+    if (entry.credit === undefined || entry.meta?.generation?.method !== 'ai') continue;
+    const tools = generatedByPack.get(entry.credit.pack) ?? new Set<string>();
+    tools.add(entry.meta.generation.tool);
+    generatedByPack.set(entry.credit.pack, tools);
+  }
   const byLicense = new Map<string, CreditPack[]>();
   for (const pack of creditsFromLock(lock).packs) {
     const group = byLicense.get(pack.license) ?? [];
@@ -82,7 +105,11 @@ export function renderCredits(lock: Pick<AssetsLock, 'assets'>): string {
   const sections = [...byLicense]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([license, packs]) => {
-      const lines = packs.map((pack) => `- ${pack.title} — ${pack.attribution}`);
+      const lines = packs.map((pack) => {
+        const tools = generatedByPack.get(pack.pack);
+        const marker = tools ? ` [AI-generated: ${[...tools].sort().map(markdownText).join(', ')}]` : '';
+        return `- ${pack.title} — ${pack.attribution}${marker}`;
+      });
       if (license === 'CC0-1.0') lines.unshift(`- CC0 assets from: ${packs.map((pack) => pack.pack).join(', ')}`);
       return `## ${license}\n${lines.join('\n')}`;
     });

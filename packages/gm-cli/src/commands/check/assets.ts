@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 
-import { loadIndex } from '@ogm/asset-cards';
+import { cardById, loadIndex } from '@ogm/asset-cards';
 import type { BoundaryVerdict } from '@ogm/contracts';
 
 import { EXIT, type GmCommand } from '../../command.js';
@@ -86,23 +86,24 @@ export const command: GmCommand = {
       return refusals.length === 0 ? EXIT.ok : EXIT.failed;
     }
 
-    const index = lock.assets.some((entry) => !entry.id.startsWith('t3:'))
-      ? await loadIndex(requireAssetsRoot(ctx))
-      : { cards: [], collections: {} };
-    const byId = new Map(index.cards.map((card) => [card.id, card]));
+    const assetsRoot = lock.assets.some((entry) => !entry.id.startsWith('t3:')) ? requireAssetsRoot(ctx) : null;
+    const index = assetsRoot ? await loadIndex(assetsRoot) : null;
+    const collections = index?.collections ?? {};
+    const byId = new Map((index?.cards ?? []).map((card) => [card.id, card]));
     const publish = flags.publish === true;
     const currentVisibility = await repoVisibility(ctx.cwd, flags['repo-visibility']);
     /* `gm build assets` resolves files itself so a missing one fails only that asset; it passes `skipFiles`. */
     const checkFiles = flags.skipFiles !== true;
     const refusals: Refusal[] = [];
     for (const entry of lock.assets) {
-      const card = byId.get(entry.id);
+      const card = byId.get(entry.id) ?? (assetsRoot && index ? cardById(assetsRoot, index, entry.id) : undefined);
+      if (card) byId.set(card.id, card);
       if (checkFiles) {
         const resolution = await resolveEntry(entry, {
           cwd: ctx.cwd,
           assetsRoot: ctx.assetsRoot,
           blobRoot: ctx.blobRoot,
-          collections: index.collections,
+          collections,
         });
         if (!resolution.ok) {
           refusals.push({
@@ -123,7 +124,7 @@ export const command: GmCommand = {
           {
             publish,
             visibility: currentVisibility,
-            ...(card ? { currentRights: rightsForCard(card, index.collections) } : {}),
+            ...(card ? { currentRights: rightsForCard(card, collections) } : {}),
           },
         ).map((item) => ({ ...item, path: entry.path })),
       );

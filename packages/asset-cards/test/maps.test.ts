@@ -122,7 +122,7 @@ describe('featuresOf', () => {
 });
 
 function indexOf(cards: ResolvedCard[]): CardIndex {
-  return { version: 1, built: '', vocab: '2026-10-26', cards, collections: {}, errors: [] };
+  return { version: 2, built: '', vocab: '2026-10-26', cards, collections: {}, errors: [] };
 }
 
 describe('buildMapIndex', () => {

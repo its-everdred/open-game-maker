@@ -197,6 +197,20 @@
     },
     "sets": [
       {
+        "id": "angais-pixel-art-atlas",
+        "label": "Angais Pixel Art Atlas",
+        "vendors": ["angais"],
+        "traits": {
+          "pixel_size": "native 16x16 sprites",
+          "tile_grid": "16x16 px",
+          "palette": "varied per subject",
+          "outline_style": "mostly dark pixel outlines with subject-level variation",
+          "perspective": "mixed icon, front, topdown and side views",
+          "judgment": "Representative contact sheets were compared at native scale. Subjects are cohesive, but palette, outline and viewpoint vary across the broad synthetic atlas, so it remains an isolated set and is not declared compatible with authored packs."
+        },
+        "packs": [{ "id": "angais-pixel-art-atlas" }]
+      },
+      {
         "id": "limezu-modern",
         "label": "LimeZu Modern",
         "vendors": ["limezu"],

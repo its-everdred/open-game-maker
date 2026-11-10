@@ -15,6 +15,9 @@ const STATUS_RANK: Record<Status, number> = {
 };
 const TAGGED: Status[] = ['tagged', 'reviewed'];
 const MEASURED: Status[] = ['measured', 'tagged', 'reviewed'];
+const BIDI_CONTROLS = new Set([
+  0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069,
+]);
 // E05-3: models and sprites have no tagging pass yet, so their drafts are searchable by default.
 const UNTAGGED_OK: Status[] = ['draft', 'measured', 'tagged', 'reviewed'];
 
@@ -119,6 +122,7 @@ export function passes(index: CardIndex, card: ResolvedCard, q: SearchQuery): bo
   const use = q.use ?? 'in-game';
   if (card.status === 'quarantined' || card.status === 'rejected') return false;
   if (collectionOf(index, card)?.status === 'quarantined') return false;
+  if (q.excludeAiGenerated && card.generation?.method === 'ai') return false;
   if (!card.resolved.rights.uses.includes(use)) return false;
   if ((use === 'in-game' || use === 'placeholder') && kindsOf(card).includes('inspiration')) return false;
 
@@ -216,5 +220,13 @@ export function formatRow(card: ResolvedCard): string {
     card.card_type === 'asset'
       ? `${card.kind ?? '-'}/${card.subkind ?? '-'}`
       : `collection/${kindsOf(card).join('+') || '-'}`;
-  return [card.id, kind, card.status, card.resolved.style_family ?? '-', card.title].join('  ');
+  const safe = (value: string): string =>
+    [...value]
+      .map((character) => {
+        const code = character.codePointAt(0)!;
+        return code <= 0x1f || (code >= 0x7f && code <= 0x9f) || BIDI_CONTROLS.has(code) ? '?' : character;
+      })
+      .join('');
+  const generation = card.generation?.method === 'ai' ? `  [AI-generated: ${safe(card.generation.tool)}]` : '';
+  return `${[card.id, kind, card.status, card.resolved.style_family ?? '-', card.title].map(safe).join('  ')}${generation}`;
 }
