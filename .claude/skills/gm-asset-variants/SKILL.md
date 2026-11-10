@@ -13,7 +13,7 @@ Starting from an existing resource and making a variation of it is a normal step
 - Every variant gets a manifest entry that says what it was made from and how, so it can be rebuilt or traced back.
 - Variants inherit their sources' usage rights. A variant of a CC0 model is fine anywhere. A variant of a licensed pack (Synty, Sidetrax) stays under that pack's rights: personal use, never redistributed as a standalone file (see the asset card's `usage_rights`, C3 §5).
 - No cloud processing of paid assets. Variant tools run locally.
-- **No hand-made parts on pack models (Kevin, 2026-11-10).** Every added piece (a beard, a hat, a held prop) is a part from an installed pack in the same set (`gm assets search --set <set>`; KayKit has 20+ bits packs). Shapes built from primitives in code read as "agent-made" next to the pack's art (Blobs #149: a box beard and a teapot on the KayKit mage). If no pack part fits, change the concept to what the packs have; never model one.
+- **Added parts must look like the pack made them (Kevin, 2026-11-10).** Changing pack models and building new parts is fine. A part that reads as added is not: Blobs #149's beard and teapot on the KayKit mage were rigid, faceted and flat-coloured. Look for an existing part first: the game's main pack, then other packs in its set (`gm assets search --set <set>`). Build one only when none fits, and follow [Making a part that matches the pack](#making-a-part-that-matches-the-pack).
 
 ## Where variants go
 
@@ -31,6 +31,7 @@ Starting from an existing resource and making a variation of it is a normal step
    | `stack` | Keep the base and top, repeat (or remove) the middle floors. Triangles crossing a band edge are stretched. | Towers, walls, fences, anything with repeating bands |
    | `podium` | Set one model on top of another, scaled to the roof | Skyline variety, landmark buildings |
    | combine | Merge parts that share a texture (props on roofs, two halves) | New props from a kit's parts |
+   | attach | Parent a part to a bone (`head`, `handslot.r`) of a rigged character | Hats, beards, held props |
    | recolour | A **cloned** colour-map texture with swatches remapped to a palette | Keeping a palette across packs |
    | mirror | Flip on one axis (reverse triangle winding) | Cheap asymmetry |
    | audio | Trim, loop-point, pitch or filter a **copy** of the file | SFX families, music loops |
@@ -47,12 +48,23 @@ Starting from an existing resource and making a variation of it is a normal step
    - floating parts, missing faces, inside-out faces;
    - the scale against the source.
 
-   - **style:** a close-up at 2x play size beside an untouched character from the same pack. Pass only if someone who hasn't seen the source can't point at the added parts (shading, bevels, palette, proportions).
+   - **style:** run `scripts/style-check.py <variant.glb> <source.glb>...` (flat shading, off-atlas colour, coarse silhouette), then a close-up at 2x play size beside an untouched character from the same pack. Pass only if someone who hasn't seen the source can't point at the added parts (shading, bevels, palette, proportions).
 
    Fix the worst problem and rebuild. Don't ship a variant you haven't looked at.
    Then check the whole set in proportion, not one row at a time: `python3 -I scripts/assets/check_glb.py --lineup models/variants/*.glb` prints the to-scale positions and a scale bar for the lineup still. The same command without `--lineup` fails a variant that stands off its origin, is the wrong real height (`--height`), or blows a triangle or texture budget (`--budget`).
 6. **Use it.** The game loads `models/variants/manifest.json` and adds each variant to its set (the title prototype's `addVariants()`). Variants then mix with originals at random, so neither looks repeated.
 7. **Report.** One line per batch: how many variants, which sources, which operations, where the files are, and anything that didn't come out clean.
+
+## Making a part that matches the pack
+
+Before modelling anything, read the pack's style from its files, not its thumbnails: `style-check.py <pack model>` prints vertices per triangle, the colour method and the triangle density. KayKit, for example, shares vertices (0.7-1.0 per triangle), so it shades smooth; colours come from one texture atlas per character; and its forms are rounded, chunky and slightly oversized.
+
+- **Round, not rigid.** Start from rounded primitives (sphere, capsule, `LatheGeometry`, a box with `RoundedBoxGeometry`-style bevels, a subdivided `ExtrudeGeometry` with a bevel), never raw boxes and cones. Use enough segments to keep the silhouette as smooth as the base model's.
+- **Smooth shading.** Merge the vertices (`BufferGeometryUtils.mergeVertices`) and recompute the normals; never call `toNonIndexed()` or use flat normals. 3.00 vertices per triangle means every face is a flat facet, and that is what makes a part look added.
+- **The pack's colours, by UV.** Point the part's UVs at swatches of the base model's own atlas and reuse its material. Don't add new flat-colour materials. The colour then lights and tints like the rest of the model, and recolour variants still work.
+- **Proportions and fit.** Match the pack's chunkiness: thick strands, big soft shapes, no thin spikes or small detail. Sink the part slightly into the body so no gap or seam shows, and parent it to the right bone so it moves with the rig.
+- **A pack part as a starting point.** Reshaping an existing piece (scaling, bending or combining a KayKit hat brim, rock or leaf) keeps the pack's modelling for free. Prefer it over building from nothing.
+- **Look and compare.** `style-check.py` must pass. Then the close-up in step 4: if the part is the first thing you notice, it fails.
 
 ## Gotchas
 
