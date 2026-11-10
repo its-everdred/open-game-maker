@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CommandError } from './command.js';
@@ -41,6 +41,9 @@ export async function allowsAiGeneratedAssets(ctx: GmContext): Promise<boolean> 
   }
   const bundlePath = join(root, '.gm', 'context', 'bundle.json');
   const bundle = readJson(bundlePath);
+  if (bundle === undefined && existsSync(join(root, '.gm', 'context', 'bundle.missing'))) {
+    throw new CommandError('cannot read live AI-generated asset preference');
+  }
   if (ctx.blobApi && bundle !== undefined) {
     try {
       if (typeof bundle.gameId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(bundle.gameId)) throw new Error('invalid game');

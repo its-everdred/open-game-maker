@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MIGRATIONS_DIR, migrate } from '../src/migrate.js';
 import { openDb } from '../src/open.js';
 
-const MIGRATION = '20261110022103_allow_ai_generated_assets.sql';
+const MIGRATION = '20261110053451_allow_ai_generated_assets.sql';
 const dirs: string[] = [];
 
 afterEach(() => {

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -31,5 +31,8 @@ describe('live game asset preference', () => {
     expect(await allowsAiGeneratedAssets(ctx)).toBe(true);
     await expect(allowsAiGeneratedAssets(ctx)).rejects.toThrow('cannot read live AI-generated asset preference');
     expect(fetchMock.mock.calls[0]?.[0].toString()).toContain('/internal/games/g1/ai-assets');
+    unlinkSync(join(cwd, '.gm', 'context', 'bundle.json'));
+    writeFileSync(join(cwd, '.gm', 'context', 'bundle.missing'), 'unavailable');
+    await expect(allowsAiGeneratedAssets(ctx)).rejects.toThrow('cannot read live AI-generated asset preference');
   });
 });

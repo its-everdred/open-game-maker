@@ -8,7 +8,7 @@ import { MIGRATIONS_DIR, migrate } from '../src/migrate.js';
 import { openDb } from '../src/open.js';
 
 const RENAME = '20261109125710_command_rename.sql';
-const AI_SETTING = '20261110022103_allow_ai_generated_assets.sql';
+const AI_SETTING = '20261110053451_allow_ai_generated_assets.sql';
 const dirs: string[] = [];
 
 afterEach(() => {
