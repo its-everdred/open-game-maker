@@ -5,6 +5,29 @@ import { readCursor, startFeedConsumers, writeCursor, FEED_PATTERNS } from '../.
 import { daemon, harness, SLUG } from './helpers.js';
 
 const running: { stop(): Promise<void> }[] = [];
+const EXPORTED_CATALOG_PATTERNS = [
+  'ticket.*.lifecycle.changed',
+  'ticket.*.usage.changed',
+  'ticket.*.usage.spend_cap_reached',
+  'ticket.*.cancel.result',
+];
+
+function validPattern(pattern: string): boolean {
+  return pattern.split('.').every((segment) => segment === '*' || segment === '#' || /^[a-z0-9_-]+$/i.test(segment));
+}
+
+function narrows(requested: string, exported: string): boolean {
+  const request = requested.split('.');
+  const catalog = exported.split('.');
+  if (request.length !== catalog.length) return false;
+  return catalog.every((segment, index) => {
+    const candidate = request[index];
+    if (segment === '#') return true;
+    if (segment === '*') return candidate !== '#';
+    return candidate === segment;
+  });
+}
+
 afterEach(async () => {
   for (const feed of running.splice(0)) await feed.stop();
 });
@@ -16,7 +39,7 @@ function start(h: ReturnType<typeof harness>) {
 }
 
 describe('feed consumers', () => {
-  it('subscribes once per running daemon from the stored cursor with the four topic patterns', async () => {
+  it('subscribes once per running daemon from the stored cursor with the exported topic patterns', async () => {
     const h = harness([daemon(), { ...daemon('other-game', 'everdred-games/other'), status: 'stopped' }]);
     writeCursor(h.db, SLUG, 811, 'epoch-1', new Date());
     const feed = start(h);
@@ -27,10 +50,20 @@ describe('feed consumers', () => {
     expect(h.subscriptions[0]?.options).toMatchObject({ after: 811, patterns: FEED_PATTERNS });
     expect(FEED_PATTERNS).toEqual([
       'ticket.*.lifecycle.changed',
-      'ticket.*.usage.*',
+      'ticket.*.usage.changed',
+      'ticket.*.usage.spend_cap_reached',
       'ticket.*.cancel.result',
-      'ticket.*.agent.progress*',
     ]);
+  });
+
+  it('keeps every requested pattern valid and within the exported catalog', () => {
+    for (const pattern of FEED_PATTERNS) {
+      expect(validPattern(pattern), pattern).toBe(true);
+      expect(
+        EXPORTED_CATALOG_PATTERNS.some((exported) => narrows(pattern, exported)),
+        `${pattern} must narrow an exported catalog pattern`,
+      ).toBe(true);
+    }
   });
 
   it('starts from 0 when no cursor is stored, and hands records to the projection with the daemon slug', async () => {

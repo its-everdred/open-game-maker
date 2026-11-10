@@ -12,9 +12,9 @@ import type { DaemonStatus, GameDaemon } from '../fleet/types.js';
 
 export const FEED_PATTERNS = [
   'ticket.*.lifecycle.changed',
-  'ticket.*.usage.*',
+  'ticket.*.usage.changed',
+  'ticket.*.usage.spend_cap_reached',
   'ticket.*.cancel.result',
-  'ticket.*.agent.progress*',
 ];
 
 export const INTERVALS = {

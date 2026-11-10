@@ -51,6 +51,7 @@ export type FleetDeps = {
   now?: () => Date;
   portFree?: (port: number) => Promise<boolean>;
   alert?: (message: string) => void | Promise<void>;
+  readTokenStatus?: (daemon: string, missing: boolean) => void;
   preflight?: typeof preflight;
 };
 
@@ -65,6 +66,7 @@ export function createFleet(deps: FleetDeps) {
   const alert = deps.alert ?? (() => undefined);
   const checkPolicy = deps.preflight ?? preflight;
   const misses = createMissCounter();
+  const missingReadTokens = new Set<string>();
   const inFlight = new Map<string, Promise<EnsureResult>>();
   // Slugs this process is starting; a stored `starting` row outside this set was left by a previous process.
   const starting = new Set<string>();
@@ -86,10 +88,23 @@ export function createFleet(deps: FleetDeps) {
   const isStale = (row: DaemonRow) => row.status === 'starting' && !starting.has(row.slug);
 
   function clientFor(row: DaemonRow, token: string): AiurClient {
-    return createAiurClient(
-      { baseUrl: `http://127.0.0.1:${row.port}`, token, supervisorToken: env.supervisorToken },
-      deps.fetch,
-    );
+    return createAiurClient({ baseUrl: `http://127.0.0.1:${row.port}`, token }, deps.fetch);
+  }
+
+  function recordReadTokenStatus(daemon: string, missing: boolean): void {
+    if (missing === missingReadTokens.has(daemon)) return;
+    if (missing) missingReadTokens.add(daemon);
+    else missingReadTokens.delete(daemon);
+    deps.readTokenStatus?.(daemon, missing);
+  }
+
+  async function supervisedClientFor(row: DaemonRow, token: string): Promise<AiurClient | null> {
+    // An unreadable credential makes only this daemon unavailable until the file is repaired.
+    const supervisorToken =
+      (await readIfPresent(daemonPaths(env.home, row.slug).readToken).catch(() => null))?.trim() ?? '';
+    recordReadTokenStatus(row.slug, supervisorToken === '');
+    if (supervisorToken === '') return null;
+    return createAiurClient({ baseUrl: `http://127.0.0.1:${row.port}`, token, supervisorToken }, deps.fetch);
   }
 
   async function setStatus(row: DaemonRow, to: DaemonStatus, patch: Partial<DaemonRow> = {}): Promise<DaemonRow> {
@@ -293,7 +308,8 @@ export function createFleet(deps: FleetDeps) {
       if (!row || row.status === 'stopped') return null;
       const daemon = await toDaemon(row);
       if (!daemon.clientToken) return null;
-      return { daemon, client: clientFor(row, daemon.clientToken) };
+      const client = await supervisedClientFor(row, daemon.clientToken);
+      return client ? { daemon, client } : null;
     },
 
     async listDaemons(status?: DaemonStatus): Promise<GameDaemon[]> {

@@ -23,6 +23,7 @@ import { createChatJobDirectory } from './build-chat/job-directory.js';
 import { finishRun, startBuildSweep } from './builds/publish.js';
 import { gameSlugFor } from './games/games.js';
 import { createDaemonDirectory } from './jobs/daemons.js';
+import { recordDaemonReadTokenStatus } from './job-commands/health.js';
 import { activeJobs, activeJobsForSlug, byTicket } from './jobs/repo.js';
 import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projection.js';
 import { startScheduler } from './jobs/scheduler.js';
@@ -38,7 +39,6 @@ const env = loadApiEnv();
 const { sqlite, db } = openDb(join(env.OGM_DATA_DIR, 'ogm.sqlite3'));
 log({ event: 'migrated', ...migrate({ sqlite }) });
 const home = homedir();
-const daemonDirectory = createDaemonDirectory(db, home);
 const fleet = createFleet({
   store: createDbDaemonStore(db),
   activeJobs: async (gameSlug) => activeJobsForSlug(db, gameSlug),
@@ -51,7 +51,9 @@ const fleet = createFleet({
     apiPort: env.OGM_API_PORT,
   },
   alert: (message) => log({ event: 'daemon_alert', message }),
+  readTokenStatus: (daemon, missing) => recordDaemonReadTokenStatus(deps, daemon, missing),
 });
+const daemonDirectory = createDaemonDirectory(db, fleet);
 const issues = createIssuesClient({ token: env.OGM_INTAKE_GITHUB_TOKEN });
 
 const deps: AppDeps = {
@@ -159,7 +161,7 @@ const stopBuildSweep = startBuildSweep(deps, { graceMs: 30 * 60_000, intervalMs:
 // Tickets parked on a decision start as soon as it is answered, with no Executor step (#680).
 const decisionWaits = createDecisionWaitPoller({
   daemons: async () =>
-    (await daemonDirectory.fleet.listDaemons())
+    (await fleet.listDaemons())
       .filter(({ status }) => status === 'running' || status === 'idle')
       .map(({ slug, repo }) => ({ slug, repo })),
   clientFor: daemonDirectory.clientForSlug,
@@ -184,7 +186,7 @@ const usageReconciler = startUsageReconciler({
   ...lifecycleDeps,
   daemonFor: async (gameId) => {
     const slug = gameSlugFor(db, gameId);
-    return slug === null ? null : ((await daemonDirectory.fleet.daemonFor(slug))?.client ?? null);
+    return slug === null ? null : ((await fleet.daemonFor(slug))?.client ?? null);
   },
   applyUsage: createApplyUsage(lifecycleDeps),
   log,

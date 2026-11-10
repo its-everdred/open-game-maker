@@ -16,6 +16,11 @@ export function recordSupervisorTokenStatus(deps: AppDeps, daemon: string, missi
   else missingFor(deps).delete(daemon);
 }
 
+export function recordDaemonReadTokenStatus(deps: AppDeps, daemon: string, missing: boolean): void {
+  recordSupervisorTokenStatus(deps, daemon, missing);
+  deps.log({ event: 'daemon-read-token-status', daemon, status: missing ? 'missing' : 'present' });
+}
+
 export function commandHealthDetails(deps: AppDeps) {
   const daemons = [...missingFor(deps)].sort();
   return { ok: daemons.length === 0, missing_supervisor_token_daemons: daemons };
