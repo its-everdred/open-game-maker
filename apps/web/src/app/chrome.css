@@ -164,6 +164,20 @@
   margin-right: 58px;
 }
 
+/* Keep the game's centered pause panel clear on a short landscape phone. */
+@media (orientation: landscape) and (min-width: 760px) and (max-height: 430px) {
+  .app-chrome.is-game-playing .studio-menu-row {
+    width: 166px;
+    max-width: 166px;
+    max-height: calc(100svh - var(--safe-t) - 86px);
+    margin-top: 58px;
+    margin-right: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    pointer-events: auto;
+  }
+}
+
 .studio-menu-slot {
   display: grid;
   flex: none;
@@ -256,6 +270,15 @@
   background: var(--night-2);
   color: var(--cream);
   pointer-events: auto;
+}
+
+@media (orientation: landscape) and (min-width: 760px) and (max-height: 430px) {
+  .app-chrome.is-game-playing .studio-menu-sheet {
+    position: absolute;
+    top: 58px;
+    right: 176px;
+    max-height: calc(100svh - var(--safe-t) - 86px);
+  }
 }
 
 .studio-menu-sheet:empty {

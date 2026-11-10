@@ -15,6 +15,8 @@ test.describe.configure({ mode: 'serial' });
 
 const viewports = [
   { width: 390, height: 844 },
+  { width: 844, height: 390 },
+  { width: 820, height: 1180 },
   { width: 1180, height: 820 },
 ];
 
@@ -65,6 +67,28 @@ for (const viewport of viewports) {
       await expect(menuRow.getByRole('button', { name, exact: true })).toBeVisible();
     }
     await expectMenuSlotsNotToOverlap(menuRow);
+    if (viewport.width === 844) {
+      const buttons = menuRow.locator('button, a');
+      expect(await buttons.count()).toBeGreaterThan(10);
+      for (const button of await buttons.all()) {
+        await button.scrollIntoViewIfNeeded();
+        const box = await button.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.width).toBeGreaterThanOrEqual(44);
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+        expect(box!.x).toBeGreaterThanOrEqual(640);
+        expect(box!.y).toBeGreaterThanOrEqual(0);
+        expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
+        await expect(button).toBeInViewport({ ratio: 1 });
+      }
+      await menuRow.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await menuRow.getByRole('button', { name: 'Report a problem' }).click();
+      const report = page.getByRole('form', { name: 'Report a problem' });
+      await expect(report.getByRole('textbox', { name: 'What went wrong?' })).toBeInViewport({ ratio: 1 });
+      await report.getByRole('button', { name: 'Close' }).click();
+    }
     await expect.poll(() => fixtureMessages(page)).toContain('lifecycle.pause');
     await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
     await page.screenshot({
@@ -79,6 +103,9 @@ for (const viewport of viewports) {
     expect(await fixtureMessages(page)).not.toContain('lifecycle.resume');
     await page.getByRole('dialog', { name: 'Credits' }).getByRole('button', { name: 'Back' }).click();
     await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+
+    // The short-landscape case covers the play menu; the other sizes exercise the editor round trip.
+    if (viewport.width === 844) return;
 
     await menuRow.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.locator('.play-bar')).toBeVisible();
