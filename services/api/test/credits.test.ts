@@ -1,11 +1,16 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+import { buildIndex, writeIndex } from '@ogm/asset-cards';
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import { ensureMainBranch } from '../src/design/store.js';
+import { createApp } from '../src/app/app.js';
+import { creditsRoutes } from '../src/credits/routes.js';
 import { asUser, installUsers, makeApp, makeDeps } from './helpers.js';
 
 const now = '2026-11-02T20:00:00.000Z';
@@ -88,6 +93,25 @@ async function setup() {
 }
 
 describe('GET /api/v1/credits', () => {
+  it('badges an AI pack in credits from a legacy build using catalog provenance', async () => {
+    const { deps } = await setup();
+    const root = mkdtempSync(join(tmpdir(), 'ogm-credit-catalog-'));
+    cpSync(fileURLToPath(new URL('../../../packages/asset-cards/test/fixtures/library', import.meta.url)), root, {
+      recursive: true,
+    });
+    const index = await buildIndex(root);
+    const card = Object.values(index.collections)[0]!;
+    card.generation = { method: 'ai', tool: 'fixture generator' };
+    await writeIndex(root, index);
+    const packId = card.id.slice(3).split('@')[0]!;
+    addGame(deps, 'g_one', 'build_one', [pack(packId), pack('authored')]);
+    const app = createApp(deps);
+    app.route('/api/v1', creditsRoutes(root));
+    const response = await app.request('/api/v1/credits', { headers: asUser(owner) });
+    const body = (await response.json()) as { packs: Array<{ pack: string; aiGenerated?: boolean }> };
+    expect(body.packs.find((item) => item.pack === packId)?.aiGenerated).toBe(true);
+    expect(body.packs.find((item) => item.pack === 'authored')?.aiGenerated).toBeUndefined();
+  });
   it('deduplicates packs from every current family game and keeps private packs visible', async () => {
     const { app, deps } = await setup();
     addGame(deps, 'g_one', 'build_one', [pack('open')]);

@@ -137,6 +137,8 @@ describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
         title: 'Castle Run',
         visibility: 'private',
         repoVisibility: 'private',
+        githubOwner: 'everdred-games',
+        githubRepo: 'gm-g1',
         allowAiGeneratedAssets: false,
         createdAt: at,
       })
@@ -144,6 +146,12 @@ describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
 
     const context = (await (await get('/internal/jobs/by-ticket/12/bundle', SECRET_A)).json()).gameContext;
     expect(context.allowAiGeneratedAssets).toBe(false);
+    const path = '/internal/games/g1/ai-assets';
+    expect((await get(path)).status).toBe(401);
+    expect((await get(path, SECRET_B)).status).toBe(404);
+    expect(await (await get(path, SECRET_A)).json()).toEqual({ allowAiGeneratedAssets: false });
+    deps.db.update(schema.games).set({ allowAiGeneratedAssets: true }).run();
+    expect(await (await get(path, SECRET_A)).json()).toEqual({ allowAiGeneratedAssets: true });
   });
 
   it("carries the job creator's own preference, so the agent builds the way they asked", async () => {

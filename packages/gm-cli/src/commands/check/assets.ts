@@ -95,7 +95,7 @@ export const command: GmCommand = {
     const currentVisibility = await repoVisibility(ctx.cwd, flags['repo-visibility']);
     /* `gm build assets` resolves files itself so a missing one fails only that asset; it passes `skipFiles`. */
     const checkFiles = flags.skipFiles !== true;
-    const allowAiGenerated = allowsAiGeneratedAssets(ctx.cwd);
+    const allowAiGenerated = await allowsAiGeneratedAssets(ctx);
     const refusals: Refusal[] = [];
     for (const entry of lock.assets) {
       const card = byId.get(entry.id) ?? (assetsRoot && index ? cardById(assetsRoot, index, entry.id) : undefined);

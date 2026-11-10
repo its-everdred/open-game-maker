@@ -128,6 +128,23 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
         return c.body(new Uint8Array(bytes), 200, { 'content-type': row.mime });
       })
       // The live gameplay policy, for `gm policy` in any daemon workspace (the bundle holds it as of the job's start).
+      .get('/games/:id/ai-assets', async (c) => {
+        const repo = await daemonRepo(c);
+        if (!repo) return c.json({ error: { code: 'unauthenticated' } }, 401);
+        const game = c
+          .get('deps')
+          .db.select({
+            allow: schema.games.allowAiGeneratedAssets,
+            owner: schema.games.githubOwner,
+            repo: schema.games.githubRepo,
+          })
+          .from(schema.games)
+          .where(eq(schema.games.id, c.req.param('id')))
+          .get();
+        if (!game?.owner || !game.repo || `${game.owner}/${game.repo}`.toLowerCase() !== repo.toLowerCase())
+          return c.json({ error: { code: 'not_found' } }, 404);
+        return c.json({ allowAiGeneratedAssets: game.allow });
+      })
       .get('/gameplay', async (c) => {
         if (!(await daemonRepo(c))) return c.json({ error: { code: 'unauthenticated' } }, 401);
         return c.json({ paidApisDuringGameplay: paidApisDuringGameplay(c.get('deps').db) });

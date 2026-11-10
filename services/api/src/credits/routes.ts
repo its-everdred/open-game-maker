@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
+import { loadIndex, packOf } from '@ogm/asset-cards';
+import { loadEnv } from '@ogm/config';
 import { creditsDocumentSchema, mergeCreditsDocuments, type CreditsDocument } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { and, eq } from 'drizzle-orm';
@@ -32,48 +34,63 @@ async function readCredits(artifactPath: string): Promise<CreditsDocument> {
   }
 }
 
-const routes = new Hono<ApiBindings>().get('/credits', async (c) => {
-  const principal = requirePrincipal(c, ['user']);
-  const query = parseQuery(c, querySchema);
-  const db = c.get('deps').db;
-  const common = db
-    .select({ artifactPath: schema.builds.artifactPath })
-    .from(schema.games)
-    .innerJoin(schema.builds, eq(schema.builds.gameId, schema.games.id));
+export function creditsRoutes(assetsRoot?: string) {
+  return new Hono<ApiBindings>().get('/credits', async (c) => {
+    const principal = requirePrincipal(c, ['user']);
+    const query = parseQuery(c, querySchema);
+    const db = c.get('deps').db;
+    const common = db
+      .select({ artifactPath: schema.builds.artifactPath })
+      .from(schema.games)
+      .innerJoin(schema.builds, eq(schema.builds.gameId, schema.games.id));
 
-  const rows =
-    query.gameId !== undefined && query.buildId !== undefined
-      ? common
-          .where(
-            and(
-              eq(schema.games.familyId, principal.familyId),
-              eq(schema.games.id, query.gameId),
-              eq(schema.builds.id, query.buildId),
-              eq(schema.builds.status, 'tested'),
-              eq(schema.builds.artifact, 'present'),
-            ),
-          )
-          .all()
-      : common
-          .innerJoin(
-            schema.branches,
-            and(
-              eq(schema.branches.gameId, schema.games.id),
-              eq(schema.branches.name, 'main'),
-              eq(schema.branches.latestBuildId, schema.builds.id),
-            ),
-          )
-          .where(
-            and(
-              eq(schema.games.familyId, principal.familyId),
-              eq(schema.builds.status, 'tested'),
-              eq(schema.builds.artifact, 'present'),
-            ),
-          )
-          .all();
+    const rows =
+      query.gameId !== undefined && query.buildId !== undefined
+        ? common
+            .where(
+              and(
+                eq(schema.games.familyId, principal.familyId),
+                eq(schema.games.id, query.gameId),
+                eq(schema.builds.id, query.buildId),
+                eq(schema.builds.status, 'tested'),
+                eq(schema.builds.artifact, 'present'),
+              ),
+            )
+            .all()
+        : common
+            .innerJoin(
+              schema.branches,
+              and(
+                eq(schema.branches.gameId, schema.games.id),
+                eq(schema.branches.name, 'main'),
+                eq(schema.branches.latestBuildId, schema.builds.id),
+              ),
+            )
+            .where(
+              and(
+                eq(schema.games.familyId, principal.familyId),
+                eq(schema.builds.status, 'tested'),
+                eq(schema.builds.artifact, 'present'),
+              ),
+            )
+            .all();
 
-  if (query.gameId !== undefined && rows.length === 0) throw new HttpError(404, 'credits_not_found');
-  return c.json(mergeCreditsDocuments(await Promise.all(rows.map(({ artifactPath }) => readCredits(artifactPath)))));
-});
+    if (query.gameId !== undefined && rows.length === 0) throw new HttpError(404, 'credits_not_found');
+    const credits = mergeCreditsDocuments(await Promise.all(rows.map(({ artifactPath }) => readCredits(artifactPath))));
+    if (assetsRoot) {
+      const index = await loadIndex(assetsRoot);
+      const generatedPacks = new Set(
+      Object.values(index.collections)
+          .filter((card) => card.generation?.method === 'ai')
+          .map((card) => packOf(card.id)),
+      );
+      credits.packs = credits.packs.map((pack) =>
+        generatedPacks.has(pack.pack) ? { ...pack, aiGenerated: true } : pack,
+      );
+    }
+    return c.json(credits);
+  });
+}
 
-export default routes;
+const env = loadEnv('api', { OGM_ASSETS_ROOT: { kind: 'path', required: false } });
+export default creditsRoutes(env.OGM_ASSETS_ROOT);

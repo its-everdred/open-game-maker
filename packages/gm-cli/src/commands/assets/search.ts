@@ -55,7 +55,7 @@ export const command: GmCommand = {
     const assetsRoot = requireAssetsRoot(ctx);
     const index = await loadIndex(assetsRoot);
     const q = toQuery('assets search', args, flags);
-    if (!allowsAiGeneratedAssets(ctx.cwd)) q.excludeAiGenerated = true;
+    if (!(await allowsAiGeneratedAssets(ctx))) q.excludeAiGenerated = true;
     // R55: inside a game repo, search stays in the lockfile's family (plus `any`) unless an exception is logged.
     const anyFamily = flags['any-family'] === true;
     const reason = typeof flags.reason === 'string' ? flags.reason.trim() : '';

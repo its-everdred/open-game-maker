@@ -227,7 +227,7 @@ export const command: GmCommand = {
     }
 
     const vendor = flags.vendor === true;
-    const allowAiGenerated = allowsAiGeneratedAssets(ctx.cwd);
+    const allowAiGenerated = await allowsAiGeneratedAssets(ctx);
     const visibility = await repoVisibility(ctx.cwd);
     const exception = typeof flags.exception === 'string' ? flags.exception.trim() : undefined;
     if (exception === '') {

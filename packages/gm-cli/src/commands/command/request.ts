@@ -282,7 +282,7 @@ export async function requestCommand(
     ...(optionIsGenerated(provenance.get(id)) ? { aiGenerated: true } : {}),
     ...(playables.has(id) ? { playable: playables.get(id)! } : {}),
   }));
-  if (!allowsAiGeneratedAssets(ctx.cwd) && options.some((option) => option.aiGenerated === true)) {
+  if (!(await allowsAiGeneratedAssets(ctx)) && options.some((option) => option.aiGenerated === true)) {
     throw new UsageError(
       'AI-generated assets are turned off for this game',
       'remove generated packs and assets from every option, then ask again',
