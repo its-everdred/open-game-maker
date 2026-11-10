@@ -7,6 +7,7 @@ import type { BoundaryVerdict } from '@ogm/contracts';
 
 import { EXIT, type GmCommand } from '../../command.js';
 import { repoVisibility, requireAssetsRoot } from '../../context.js';
+import { allowsAiGeneratedAssets } from '../../game-settings.js';
 import { readLock } from '../../lock.js';
 import { scanReferences, unlisted, type References } from '../../references.js';
 import { repoPaths, resolveEntry } from '../../resolve.js';
@@ -94,9 +95,19 @@ export const command: GmCommand = {
     const currentVisibility = await repoVisibility(ctx.cwd, flags['repo-visibility']);
     /* `gm build assets` resolves files itself so a missing one fails only that asset; it passes `skipFiles`. */
     const checkFiles = flags.skipFiles !== true;
+    const allowAiGenerated = allowsAiGeneratedAssets(ctx.cwd);
     const refusals: Refusal[] = [];
     for (const entry of lock.assets) {
       const card = byId.get(entry.id) ?? (assetsRoot && index ? cardById(assetsRoot, index, entry.id) : undefined);
+      if (!allowAiGenerated && (entry.meta?.generation?.method === 'ai' || card?.generation?.method === 'ai')) {
+        refusals.push({
+          code: 'rights',
+          rule: 'ai-generated-disabled',
+          id: entry.id,
+          path: entry.path,
+          detail: 'this game has AI-generated assets turned off',
+        });
+      }
       if (card) byId.set(card.id, card);
       if (checkFiles) {
         const resolution = await resolveEntry(entry, {

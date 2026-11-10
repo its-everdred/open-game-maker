@@ -32,8 +32,16 @@ describe('asset credits', () => {
 
   it('renders the typed AI generation marker in game credits', () => {
     const lock = {
-      assets: [entry({ meta: { generation: { method: 'ai', tool: 'Krea 2 Turbo + pixel-art LoRA' } } })],
+      assets: [
+        entry(),
+        entry({
+          id: 't1:example-pack/generated-tree@1',
+          path: 'generated-tree.png',
+          meta: { generation: { method: 'ai', tool: 'Krea 2 Turbo + pixel-art LoRA' } },
+        }),
+      ],
     };
+    expect(creditsFromLock(lock).packs[0]).toMatchObject({ aiGenerated: true });
     expect(renderCredits(lock)).toContain('[AI-generated: Krea 2 Turbo + pixel-art LoRA]');
   });
 

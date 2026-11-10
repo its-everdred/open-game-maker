@@ -2729,6 +2729,9 @@
                               "thumbnail": {
                                 "type": "string"
                               },
+                              "aiGenerated": {
+                                "type": "boolean"
+                              },
                               "hint": {
                                 "type": "string",
                                 "maxLength": 200

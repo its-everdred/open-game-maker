@@ -16,6 +16,7 @@ import { povIdSchema, styleFamilyIdSchema, type AssetMetadata, type AssetsLock, 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { repoVisibility, requireAssetsRoot, resolveContainedPath } from '../../context.js';
 import { renderCredits } from '../../credits.js';
+import { allowsAiGeneratedAssets } from '../../game-settings.js';
 import { creditForCard } from '../../license-metadata.js';
 import { readLock, sha256File, upsertLock, writeGeneratedText, writeLock } from '../../lock.js';
 import { collectionParts, libraryRoot, repoPaths } from '../../resolve.js';
@@ -226,6 +227,7 @@ export const command: GmCommand = {
     }
 
     const vendor = flags.vendor === true;
+    const allowAiGenerated = allowsAiGeneratedAssets(ctx.cwd);
     const visibility = await repoVisibility(ctx.cwd);
     const exception = typeof flags.exception === 'string' ? flags.exception.trim() : undefined;
     if (exception === '') {
@@ -268,6 +270,15 @@ export const command: GmCommand = {
           rule: 'unknown-id',
           id,
           detail: 'Atlas subject summaries cannot be used; choose an individual /sprites/<row> search result',
+        });
+        continue;
+      }
+      if (!allowAiGenerated && card.generation?.method === 'ai') {
+        refusals.push({
+          code: 'rights',
+          rule: 'ai-generated-disabled',
+          id,
+          detail: 'this game has AI-generated assets turned off',
         });
         continue;
       }

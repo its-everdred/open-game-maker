@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { GameCommand } from '@ogm/contracts';
 
+import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
 import { answerCommand } from './commands';
@@ -420,12 +421,12 @@ function DeckCard({
       {card.playable !== undefined ? (
         <PlayableCard key={card.id} gameId={gameId} card={card} options={cards} />
       ) : media === undefined ? null : kind === 'audio' ? (
-        <div aria-label={card.label} className="review-deck-audio" role="img">
+        <div aria-label={withAiGeneratedLabel(card.label, card.aiGenerated)} className="review-deck-audio" role="img">
           <Icon name={playing ? 'soundOn' : 'soundOff'} />
         </div>
       ) : kind === 'video' ? (
         <video
-          aria-label={card.label}
+          aria-label={withAiGeneratedLabel(card.label, card.aiGenerated)}
           className="review-deck-media"
           muted
           playsInline
@@ -434,8 +435,14 @@ function DeckCard({
           src={media.url}
         />
       ) : (
-        <img alt={card.label} className="review-deck-media" draggable={false} src={media.url} />
+        <img
+          alt={withAiGeneratedLabel(card.label, card.aiGenerated)}
+          className="review-deck-media"
+          draggable={false}
+          src={media.url}
+        />
       )}
+      {card.aiGenerated ? <AiBadge /> : null}
       {/* Few words on a card: its letter, with the option's own label as the media's accessible name. A card
           with no media is its words, so it shows them. */}
       <p className="review-deck-label" aria-hidden={media === undefined ? undefined : 'true'}>
@@ -474,11 +481,20 @@ function MediaFullscreen({ card, onClose }: { card: Card; onClose(): void }) {
       backdropClassName="review-deck-fullscreen-backdrop"
       onClose={onClose}
     >
-      {mediaKindOf(media) === 'video' ? (
-        <video aria-label={card.label} controls playsInline poster={media.poster} src={media.url} />
-      ) : (
-        <img alt={card.label} src={media.url} />
-      )}
+      <div className="review-deck-fullscreen-media">
+        {mediaKindOf(media) === 'video' ? (
+          <video
+            aria-label={withAiGeneratedLabel(card.label, card.aiGenerated)}
+            controls
+            playsInline
+            poster={media.poster}
+            src={media.url}
+          />
+        ) : (
+          <img alt={withAiGeneratedLabel(card.label, card.aiGenerated)} src={media.url} />
+        )}
+        {card.aiGenerated ? <AiBadge /> : null}
+      </div>
       <button aria-label="Close" className="review-deck-fullscreen-close tap-secondary" onClick={onClose} type="button">
         Close
       </button>

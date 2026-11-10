@@ -36,6 +36,20 @@ describe('CommandCard', () => {
     expect(screen.getByText('The builder is waiting on this')).toBeVisible();
   });
 
+  it('badges a generated asset option', () => {
+    const generated = {
+      ...message,
+      command: {
+        ...message.command,
+        options: [{ id: 'wood', label: 'Wooden', aiGenerated: true }],
+      },
+    };
+    render(<CommandCard message={generated} onAnswer={vi.fn()} />);
+
+    expect(screen.getByLabelText('AI-generated')).toHaveTextContent('AI');
+    expect(screen.getByRole('button', { name: 'Wooden, AI-generated' })).toBeVisible();
+  });
+
   it('shows an unlinked command as waiting with no tappable choices', () => {
     render(
       <CommandCard message={{ ...message, command: { ...message.command, decision_id: '' } }} onAnswer={vi.fn()} />,

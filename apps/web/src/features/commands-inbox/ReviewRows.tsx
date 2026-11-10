@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 
 import type { GameCommand } from '@ogm/contracts';
 
+import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { Icon } from '../../components/Icon';
 import { reviewTitle } from '../../routes/review/title';
 import { draftState, useReviewDraft } from './drafts';
@@ -41,8 +42,14 @@ export function ReviewRowLink({ command, href }: { command: GameCommand; href: s
   const title = reviewTitle(withoutLinks(command.title));
   const total = command.options.length;
   const done = total === 0 ? 0 : Math.min(draft.deck.cards.length, total) / total;
+  const thumbnail = command.options.find((candidate) => candidate.media !== undefined);
   return (
-    <Link aria-label={`${title}, ${state}`} className="review-row-link" data-state={state} to={href}>
+    <Link
+      aria-label={withAiGeneratedLabel(`${title}, ${state}`, thumbnail?.aiGenerated)}
+      className="review-row-link"
+      data-state={state}
+      to={href}
+    >
       <RowThumb command={command} />
       <span className="review-row-title">{title}</span>
       {state === 'sent' ? (
@@ -61,10 +68,11 @@ export function ReviewRowLink({ command, href }: { command: GameCommand; href: s
 
 // The question's first sample: a still, a clip's poster (or its first frame), a sound mark for a voice deck, nothing for a text question.
 function RowThumb({ command }: { command: GameCommand }) {
-  const media = command.options.find((option) => option.media !== undefined)?.media;
+  const option = command.options.find((candidate) => candidate.media !== undefined);
+  const media = option?.media;
   const kind = media === undefined ? undefined : mediaKindOf(media);
   return (
-    <span className="review-row-thumb" aria-hidden="true">
+    <span className="review-row-thumb">
       {media === undefined ? null : kind === 'audio' ? (
         <Icon name="soundOn" />
       ) : kind === 'video' && media.poster === undefined ? (
@@ -72,6 +80,7 @@ function RowThumb({ command }: { command: GameCommand }) {
       ) : (
         <img alt="" src={media.poster ?? media.url} />
       )}
+      {option?.aiGenerated ? <AiBadge /> : null}
     </span>
   );
 }

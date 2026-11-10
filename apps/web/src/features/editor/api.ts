@@ -25,6 +25,7 @@ export type GameMetadata = {
   title: string;
   visibility: 'listed' | 'private';
   repoVisibility: 'public' | 'private';
+  allowAiGeneratedAssets: boolean;
 };
 
 export type DesignSnapshot = { rev: number; buildId: string; doc: DesignDoc };

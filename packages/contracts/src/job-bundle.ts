@@ -38,6 +38,7 @@ export const JobBundle = z
         pov: z.string(),
         genre: z.string(),
         multiplayer: z.boolean(),
+        allowAiGeneratedAssets: z.boolean().default(true),
         // The instance admin's "Allow paid APIs during gameplay" (default off): while false, design no live paid feature.
         paidApisDuringGameplay: z.boolean(),
         branch: z.literal('main'),

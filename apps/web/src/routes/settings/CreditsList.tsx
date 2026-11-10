@@ -1,4 +1,5 @@
 import type { CreditPack } from '@ogm/contracts/browser';
+import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 
 import './settings.css';
 
@@ -20,7 +21,10 @@ export function CreditsList({ packs }: { packs: readonly CreditPack[] }) {
             <ul>
               {entries.map((pack) => (
                 <li key={pack.pack}>
-                  <h4>{pack.title}</h4>
+                  <h4 aria-label={withAiGeneratedLabel(pack.title, pack.aiGenerated)}>
+                    {pack.title}
+                    {pack.aiGenerated ? <AiBadge /> : null}
+                  </h4>
                   <span>{pack.attribution}</span>
                   <span>Licence source: {pack.licenseSource}</span>
                   {pack.private ? <span>Private</span> : null}

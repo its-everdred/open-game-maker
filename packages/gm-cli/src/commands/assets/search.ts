@@ -6,6 +6,7 @@ import { ATLAS_PACK, familyFor, formatRow, loadIndex, packOf, search, searchAtla
 import { FILTER_FLAGS, toQuery } from '../../assets-query.js';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson, requireAssetsRoot } from '../../context.js';
+import { allowsAiGeneratedAssets } from '../../game-settings.js';
 
 /** The game's style family and compatibility sets inferred from `./assets.lock.json`. */
 function lockContext(cwd: string): { family: string; sets: string[]; packs: string[] } | undefined {
@@ -54,6 +55,7 @@ export const command: GmCommand = {
     const assetsRoot = requireAssetsRoot(ctx);
     const index = await loadIndex(assetsRoot);
     const q = toQuery('assets search', args, flags);
+    if (!allowsAiGeneratedAssets(ctx.cwd)) q.excludeAiGenerated = true;
     // R55: inside a game repo, search stays in the lockfile's family (plus `any`) unless an exception is logged.
     const anyFamily = flags['any-family'] === true;
     const reason = typeof flags.reason === 'string' ? flags.reason.trim() : '';

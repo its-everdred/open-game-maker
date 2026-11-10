@@ -122,7 +122,7 @@ function set(id: string, label: string): CatalogFamily['sets'][number] {
     pickerFamilies: [],
     vendors: ['fixture'],
     traits: {},
-    packs: [{ id: `${id}-pack`, name: `${label} pack`, thumbnailUrl: `/${id}.png` }],
+    packs: [{ id: `${id}-pack`, name: `${label} pack`, thumbnailUrl: `/${id}.png`, aiGenerated: false }],
   };
 }
 
@@ -133,6 +133,8 @@ function renderStep(onSelect = vi.fn()) {
       selected={[]}
       other={undefined}
       full={false}
+      allowAiGenerated
+      onAllowAiGeneratedChange={vi.fn()}
       onFull={vi.fn()}
       onOtherChange={vi.fn()}
       onSelect={onSelect}
@@ -166,6 +168,71 @@ describe('StyleStep', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select SmallScaleInt' }));
     expect(onSelect).toHaveBeenCalledWith('smallscaleint');
     expect(screen.getByRole('button', { name: 'Pixel art' })).toBeVisible();
+  });
+
+  it('badges generated pack thumbnails and hides them when the game setting is off', () => {
+    const generated = family('pixel-art', 'Pixel art', [
+      {
+        ...set('generated', 'Generated'),
+        packs: [
+          {
+            id: 'generated-pack',
+            name: 'Generated pack',
+            thumbnailUrl: '/generated.png',
+            aiGenerated: true,
+          },
+        ],
+      },
+      set('authored', 'Authored'),
+      {
+        ...set('mixed', 'Mixed'),
+        packs: [
+          { id: 'mixed-generated', name: 'Generated pack', thumbnailUrl: '/mixed-generated.png', aiGenerated: true },
+          { id: 'mixed-authored', name: 'Authored pack', thumbnailUrl: '/mixed-authored.png', aiGenerated: false },
+        ],
+      },
+    ]);
+    const onAllowAiGeneratedChange = vi.fn();
+    const view = render(
+      <StyleStep
+        families={[generated]}
+        selected={[]}
+        other={undefined}
+        full={false}
+        allowAiGenerated
+        onAllowAiGeneratedChange={onAllowAiGeneratedChange}
+        onFull={vi.fn()}
+        onOtherChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pixel art' }));
+    expect(screen.getByRole('button', { name: 'Generated, AI-generated' })).toContainElement(
+      screen.getAllByLabelText('AI-generated')[0],
+    );
+    expect(screen.getByRole('button', { name: 'Mixed, AI-generated' })).toContainElement(
+      screen.getAllByLabelText('AI-generated')[1],
+    );
+    fireEvent.click(screen.getByRole('switch', { name: 'AI-generated assets' }));
+    expect(onAllowAiGeneratedChange).toHaveBeenCalledWith(false);
+
+    view.rerender(
+      <StyleStep
+        families={[generated]}
+        selected={[]}
+        other={undefined}
+        full={false}
+        allowAiGenerated={false}
+        onAllowAiGeneratedChange={onAllowAiGeneratedChange}
+        onFull={vi.fn()}
+        onOtherChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Generated, AI-generated' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Authored' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Mixed' })).not.toContainElement(screen.queryByLabelText('AI-generated'));
   });
 
   it('opens a single-set family directly and wraps controls and arrow keys', () => {
@@ -259,6 +326,8 @@ describe('StyleStep', () => {
         selected={[]}
         other={undefined}
         full={false}
+        allowAiGenerated
+        onAllowAiGeneratedChange={vi.fn()}
         onFull={vi.fn()}
         onOtherChange={vi.fn()}
         onSelect={vi.fn()}

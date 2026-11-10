@@ -45,6 +45,7 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
             id: option.id,
             label: option.label,
             ...(media === undefined ? {} : { media }),
+            ...(option.aiGenerated === true ? { aiGenerated: true } : {}),
             ...(option.playable === undefined ? {} : { playable: option.playable }),
           };
         }),

@@ -50,11 +50,15 @@ function seedFamily(deps: ReturnType<typeof makeDeps>) {
     .run();
 }
 
-async function createGame(app: Awaited<ReturnType<typeof makeApp>>['app'], user = creator) {
+async function createGame(
+  app: Awaited<ReturnType<typeof makeApp>>['app'],
+  user = creator,
+  allowAiGeneratedAssets = true,
+) {
   return app.request('/api/v1/games', {
     method: 'POST',
     headers: { ...asUser(user.userId), 'content-type': 'application/json' },
-    body: JSON.stringify({ title: 'Castle Game', repoVisibility: 'private' }),
+    body: JSON.stringify({ title: 'Castle Game', repoVisibility: 'private', allowAiGeneratedAssets }),
   });
 }
 
@@ -87,6 +91,7 @@ describe('games routes', () => {
       githubRepo: 'games',
       githubPath: `games/${body.slug}`,
       repoUrl: 'https://github.com/instance/games',
+      allowAiGeneratedAssets: true,
     });
     await expect(deps.registry.gameResolver?.(body.id)).resolves.toEqual({
       familyId,
@@ -105,6 +110,27 @@ describe('games routes', () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: 'creator_required' });
     expect(provisioner.calls).toEqual([]);
+  });
+
+  it('stores and patches the per-game AI-generated asset setting', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const { app } = await makeApp(deps);
+    const created = await createGame(app, creator, false);
+    const body = (await created.json()) as { id: string; allowAiGeneratedAssets: boolean };
+    expect(body.allowAiGeneratedAssets).toBe(false);
+
+    const patched = await app.request(`/api/v1/games/${body.id}`, {
+      method: 'PATCH',
+      headers: { ...asUser(creator.userId), 'content-type': 'application/json' },
+      body: JSON.stringify({ allowAiGeneratedAssets: true }),
+    });
+
+    expect(patched.status).toBe(200);
+    expect((await patched.json()) as { allowAiGeneratedAssets: boolean }).toMatchObject({
+      allowAiGeneratedAssets: true,
+    });
   });
 
   it('creates a game for a creator who never connected GitHub', async () => {

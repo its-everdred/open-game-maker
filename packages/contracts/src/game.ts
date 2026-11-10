@@ -126,6 +126,7 @@ export const gameManifestSchema = z.looseObject({
         prefab: z.string().min(1),
         label,
         thumbnail: z.string().optional(),
+        aiGenerated: z.boolean().optional(),
         hint: help.optional(),
         category: z.string().min(1),
       }),

@@ -260,6 +260,13 @@
       "when": 1794229030542,
       "tag": "20261109125710_command_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1794277263350,
+      "tag": "20261110022103_allow_ai_generated_assets",
+      "breakpoints": true
     }
   ]
 }

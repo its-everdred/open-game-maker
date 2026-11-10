@@ -26,6 +26,7 @@ describe('CreditsScreen', () => {
               attribution: 'none required',
               source: { label: 'Vendor', url: 'https://example.test/open-pack' },
               private: false,
+              aiGenerated: true,
             },
             {
               pack: 'small-scale-int',
@@ -50,9 +51,12 @@ describe('CreditsScreen', () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Open Pack' }, { timeout: 5_000 })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Open Pack, AI-generated' }, { timeout: 5_000 })).toBeVisible();
     expect(screen.getByText('Licence source: License.txt')).toBeVisible();
     expect(screen.getByRole('link', { name: 'Vendor' })).toHaveAttribute('href', 'https://example.test/open-pack');
+    expect(screen.getByRole('heading', { name: 'Open Pack, AI-generated' })).toContainElement(
+      screen.getByLabelText('AI-generated'),
+    );
     expect(screen.getByText('SmallScaleInt Pack')).toBeVisible();
     expect(screen.queryByRole('link', { name: /download/i })).not.toBeInTheDocument();
     expect(screen.getByText('Fredoka')).toBeVisible();

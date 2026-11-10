@@ -11,7 +11,13 @@ const palette: GameManifest['palette'] = {
     { id: 'terrain', label: 'Terrain', kind: 'items' },
   ],
   items: [
-    { prefab: 'skeleton', label: 'Skeleton', category: 'actors', hint: 'A bony guard' },
+    {
+      prefab: 'skeleton',
+      label: 'Skeleton',
+      category: 'actors',
+      hint: 'A bony guard',
+      aiGenerated: true,
+    },
     { prefab: 'wall', label: 'Wall', category: 'terrain' },
   ],
 };
@@ -23,10 +29,11 @@ describe('Palette', () => {
     const onPick = vi.fn();
     render(<Palette palette={palette} onPick={onPick} />);
 
-    expect(screen.getByRole('button', { name: 'Skeleton' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Skeleton, AI-generated' })).toBeVisible();
+    expect(screen.getByLabelText('AI-generated')).toHaveTextContent('AI');
     fireEvent.click(screen.getByRole('tab', { name: 'Terrain' }));
     expect(screen.getByRole('button', { name: 'Wall' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Skeleton' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Skeleton, AI-generated' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Wall' }));
     expect(onPick).toHaveBeenCalledWith('wall');
   });

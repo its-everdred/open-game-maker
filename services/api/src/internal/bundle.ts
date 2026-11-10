@@ -81,6 +81,12 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           creatorId === undefined ? 'balanced' : readPreference(deps.db, creatorId),
         );
         const scopeSessionId = job.kind === 'scope' ? scopeSessions.getByJob(deps.db, job.jobId)?.id : undefined;
+        const allowAiGeneratedAssets =
+          deps.db
+            .select({ allow: schema.games.allowAiGeneratedAssets })
+            .from(schema.games)
+            .where(eq(schema.games.id, job.gameId))
+            .get()?.allow ?? true;
         const bundle = JobBundle.parse({
           v: 1,
           jobId: job.jobId,
@@ -92,6 +98,7 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           skillPackUrl: new URL(`/internal/skills/${encodeURIComponent(version)}.tgz`, c.req.url).href,
           gameContext: {
             ...job.game,
+            allowAiGeneratedAssets,
             paidApisDuringGameplay: paidApisDuringGameplay(deps.db),
             branch: 'main',
             lockfilePath: 'assets.lock.json',

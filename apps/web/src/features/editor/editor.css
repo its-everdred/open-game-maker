@@ -152,6 +152,7 @@
 }
 
 .palette-item {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 4px;

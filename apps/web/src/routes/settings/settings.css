@@ -78,6 +78,16 @@
   background: var(--paper-2);
 }
 
+.credits-list h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.credits-list .ai-badge {
+  position: static;
+}
+
 .credits-list a,
 .software-notices a {
   color: var(--aqua-b);

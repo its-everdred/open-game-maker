@@ -36,6 +36,7 @@ button.build-chat-option:disabled {
 }
 
 .command-option-media {
+  position: relative;
   display: block;
   width: 100%;
   overflow: hidden;

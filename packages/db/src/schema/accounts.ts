@@ -60,6 +60,7 @@ export const games = sqliteTable(
     forkedFromGameId: text('forked_from_game_id'),
     forkedFromReleaseId: text('forked_from_release_id'),
     forkable: integer('forkable', { mode: 'boolean' }).notNull().default(true),
+    allowAiGeneratedAssets: integer('allow_ai_generated_assets', { mode: 'boolean' }).notNull().default(true),
     createdAt: createdAt(),
     delistedAt: text('delisted_at'),
   },
@@ -74,6 +75,7 @@ export const games = sqliteTable(
       sql`(${table.forkedFromGameId} IS NULL AND ${table.forkedFromReleaseId} IS NULL) OR (${table.forkedFromGameId} IS NOT NULL AND ${table.forkedFromReleaseId} IS NOT NULL)`,
     ),
     check('games_forkable_check', sql`${table.forkable} IN (0, 1)`),
+    check('games_allow_ai_generated_assets_check', sql`${table.allowAiGeneratedAssets} IN (0, 1)`),
   ],
 );
 

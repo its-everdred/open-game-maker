@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
@@ -325,6 +327,104 @@ test('style detail fits its media and navigation into phone and desktop viewport
   });
 });
 
+test('Pixel Art Atlas is badged and the per-game setting filters and restores it', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  await installAuthRoutes(page, { signedIn: true, github: 'kim' });
+  await installNewRoutes(page);
+  await page.route('**/api/catalog/style-families', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(aiStyleCatalog) }),
+  );
+  await page.route('**/api/v1/me/commands', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"commands":[]}' }),
+  );
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1180, height: 820 },
+  ]) {
+    await test.step(`${viewport.width}x${viewport.height}`, async () => {
+      await page.setViewportSize(viewport);
+      await page.goto('/new?test&step=family', { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => window.__ogmHost?.get('new') !== undefined);
+      await page.getByRole('button', { name: 'Pixel art' }).dispatchEvent('click');
+
+      const atlas = page.getByRole('button', { name: 'Pixel Art Atlas, AI-generated' });
+      await expect(atlas).toBeVisible();
+      await expect(atlas.getByLabel('AI-generated')).toHaveText('AI');
+      await expect(page.getByRole('button', { name: 'Pixel Town' }).getByLabel('AI-generated')).toHaveCount(0);
+      await attachCdpScreenshot(page, testInfo, `pixel-art-atlas-${viewport.width}x${viewport.height}`);
+
+      const setting = page.getByRole('switch', { name: 'AI-generated assets' });
+      await expect(setting).toBeChecked();
+      await setting.dispatchEvent('click');
+      await expect(atlas).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Pixel Town' })).toBeVisible();
+
+      await setting.dispatchEvent('click');
+      await expect(
+        page.getByRole('button', { name: 'Pixel Art Atlas, AI-generated' }).getByLabel('AI-generated'),
+      ).toHaveText('AI');
+    });
+  }
+});
+
+const aiStyleCatalog = [
+  {
+    id: 'pixel-art',
+    label: 'Pixel art',
+    views: ['topdown', 'side'],
+    creationChoice: true,
+    packs: [],
+    sets: [
+      {
+        id: 'pixel-town',
+        label: 'Pixel Town',
+        pickerFamilies: [],
+        vendors: ['fixture'],
+        traits: { pixel_size: '16 px', judgment: 'fixture' },
+        packs: [
+          {
+            id: 'pixel-town',
+            name: 'Pixel Town',
+            thumbnailUrl: '/e2e/pixel.svg',
+            aiGenerated: false,
+          },
+        ],
+      },
+      {
+        id: 'angais-pixel-art-atlas',
+        label: 'Pixel Art Atlas',
+        pickerFamilies: [],
+        vendors: ['angais'],
+        traits: { pixel_size: '16 px', judgment: 'fixture' },
+        packs: [
+          {
+            id: 'angais-pixel-art-atlas',
+            name: 'Pixel Art Atlas',
+            thumbnailUrl: '/e2e/pixel.svg',
+            aiGenerated: true,
+          },
+        ],
+      },
+      {
+        id: 'smallscaleint',
+        label: 'SmallScaleInt',
+        pickerFamilies: [],
+        vendors: ['smallscaleint'],
+        traits: { perspective: 'isometric 2:1', judgment: 'fixture' },
+        packs: [
+          {
+            id: 'smallscaleint-knight',
+            name: 'Knight',
+            thumbnailUrl: '/e2e/knight.svg',
+            aiGenerated: false,
+          },
+        ],
+      },
+    ],
+  },
+];
+
 async function openReadyNewGame(page: Page): Promise<Locator> {
   await page.goto('/new?test&step=genre', { waitUntil: 'domcontentloaded' });
   const adventure = page.getByRole('button', { name: 'Adventure' });
@@ -344,6 +444,18 @@ async function attachScreenshot(page: Page, testInfo: TestInfo, name: string): P
     body: await page.screenshot({ animations: 'disabled', fullPage: true }),
     contentType: 'image/png',
   });
+}
+
+async function attachCdpScreenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
+  const session = await page.context().newCDPSession(page);
+  try {
+    const { data } = await session.send('Page.captureScreenshot', { format: 'png', fromSurface: true });
+    const path = testInfo.outputPath(`${name}.png`);
+    await writeFile(path, Buffer.from(data, 'base64'));
+    await testInfo.attach(name, { path, contentType: 'image/png' });
+  } finally {
+    await session.detach();
+  }
 }
 
 function newGameState(page: Page): Promise<NewGameTestApi | undefined> {

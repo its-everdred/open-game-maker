@@ -1,5 +1,6 @@
 import type { BuildChatMessage } from '@ogm/contracts';
 
+import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import './command-card.css';
 
 export type CommandBudget = { used: number; max: 1 | 3 };
@@ -32,7 +33,7 @@ function OptionContents({
   return (
     <>
       {media && (
-        <span className="command-option-media" aria-hidden="true">
+        <span className="command-option-media">
           {media.duration_ms === undefined ? (
             <img alt="" src={media.url} />
           ) : (
@@ -40,6 +41,7 @@ function OptionContents({
           )}
         </span>
       )}
+      {option.aiGenerated ? <AiBadge /> : null}
       <span className="command-option-label">{option.label}</span>
       {recommended && <span className="command-recommended">Builder&apos;s pick</span>}
     </>
@@ -75,7 +77,7 @@ export function CommandCard({ message, mediaById, budget, busy = false, onAnswer
             const selected = command.status === 'answered' && option.id === command.option_id;
             return (
               <button
-                aria-label={option.label}
+                aria-label={withAiGeneratedLabel(option.label, option.aiGenerated)}
                 aria-pressed={selected}
                 className="build-chat-option"
                 disabled={busy || command.status !== 'open'}

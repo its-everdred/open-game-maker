@@ -78,6 +78,32 @@ describe('ReviewRows', () => {
     expect(screen.getByRole('link', { name: 'Which of these two voices…, open' })).toBeInTheDocument();
   });
 
+  it('badges the generated asset represented by a row thumbnail', () => {
+    render(
+      <MemoryRouter>
+        <ReviewRows
+          commands={[
+            command({
+              options: [
+                {
+                  id: 'm1',
+                  label: 'Generated mock',
+                  media: { url: 'https://media.example.test/generated.png', width: 320, height: 320 },
+                  aiGenerated: true,
+                },
+                { id: 'm2', label: 'Authored mock' },
+              ],
+            }),
+          ]}
+          hrefOf={() => '/blobs/review/1'}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText('AI-generated')).toHaveTextContent('AI');
+    expect(screen.getByRole('link', { name: 'Pick the voices, open, AI-generated' })).toBeVisible();
+  });
+
   // An aiur clip may name its kind and carry no poster: its row shows the clip's first frame, never an image tag
   // pointing at an mp4 (a broken picture in the row). A link in the title never shows as text.
   it('shows a posterless clip as a clip and drops links from the title', () => {

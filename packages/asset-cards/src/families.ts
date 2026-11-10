@@ -79,7 +79,7 @@ export type StyleFamilyApi = {
   views: PovId[];
   creationChoice: boolean;
   coverage: Coverage;
-  packs: { id: string; name: string; thumbnailUrl: string | null }[];
+  packs: { id: string; name: string; thumbnailUrl: string | null; aiGenerated: boolean }[];
   sets: {
     id: string;
     label: string;
@@ -87,7 +87,7 @@ export type StyleFamilyApi = {
     vendors: string[];
     traits: StyleSetTraits;
     requiresPrivateRepository: boolean;
-    packs: { id: string; name: string; thumbnailUrl: string | null; compatibleWith: string[] }[];
+    packs: { id: string; name: string; thumbnailUrl: string | null; aiGenerated: boolean; compatibleWith: string[] }[];
     showcase?: StyleShowcase;
   }[];
 };

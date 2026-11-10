@@ -59,10 +59,15 @@ export function NewGameScreen() {
   const [gameId, setGameId] = useState<string>();
   const [createError, setCreateError] = useState('');
   const [createAttempt, setCreateAttempt] = useState(0);
+  const [creationStarted, setCreationStarted] = useState(false);
+  const [allowAiGeneratedAssets, setAllowAiGeneratedAssets] = useState(true);
   const ensureGame = useCreateGame();
   const catalog = useCatalog();
   const audio = useAudioStyles();
-  const families = useMemo(() => styleChoices(catalog.data ?? []), [catalog.data]);
+  const families = useMemo(
+    () => styleChoices(catalog.data ?? [], allowAiGeneratedAssets),
+    [allowAiGeneratedAssets, catalog.data],
+  );
   const audioFamilies = audio.data ?? [];
   const step = validStep(search.get('step'));
   const stepIndex = STEP_ORDER.indexOf(step);
@@ -87,10 +92,14 @@ export function NewGameScreen() {
   }, []);
 
   useEffect(() => {
-    if (step !== 'talk' || gameId) return;
+    if (step === 'talk') setCreationStarted(true);
+  }, [step]);
+
+  useEffect(() => {
+    if (!creationStarted) return;
     let current = true;
     setCreateError('');
-    void ensureGame(choices)
+    void ensureGame(choices, allowAiGeneratedAssets)
       .then((id) => {
         if (current) setGameId(id);
       })
@@ -100,7 +109,7 @@ export function NewGameScreen() {
     return () => {
       current = false;
     };
-  }, [choices, createAttempt, ensureGame, gameId, step]);
+  }, [allowAiGeneratedAssets, choices, createAttempt, creationStarted, ensureGame]);
 
   useEffect(() => {
     if (!limitFeedback) return;
@@ -214,6 +223,20 @@ export function NewGameScreen() {
                 selected={selected?.picks ?? []}
                 other={selected?.other}
                 full={count >= (current?.max ?? 1)}
+                allowAiGenerated={allowAiGeneratedAssets}
+                onAllowAiGeneratedChange={(allowed) => {
+                  setAllowAiGeneratedAssets(allowed);
+                  if (allowed) return;
+                  const allowedIds = new Set(styleChoices(catalog.data ?? [], false).map(({ id }) => id));
+                  setChoices((currentChoices) => {
+                    const family = currentChoices.family;
+                    if (!family) return currentChoices;
+                    return {
+                      ...currentChoices,
+                      family: { ...family, picks: family.picks.filter((id) => allowedIds.has(id)) },
+                    };
+                  });
+                }}
                 onFull={rejectLimit}
                 onOtherChange={(other) =>
                   setChoice('family', { picks: selected?.picks ?? [], ...(other ? { other } : {}) })

@@ -336,7 +336,8 @@ attack in 8 directions" is `gm assets search orc attack --directions 8`. A sprit
 of its `sprite.directions` list, in the order its sheet rows or per-direction files are read.
 AI-generated assets are included by default. Text results carry an `AI-generated: <tool>` marker; JSON results expose
 the typed `generation: { "method": "ai", "tool": "..." }` object.
-`--exclude-ai-generated` removes every card with that typed marker.
+`--exclude-ai-generated` removes every card with that typed marker. A game whose **AI-generated assets** setting is off
+applies the same filter automatically, and `gm assets use` refuses a flagged asset in that game.
 
 ## Reference and vendor game assets
 
