@@ -171,7 +171,7 @@ function SetTile({ choice, onOpen }: { choice: StyleChoice; onOpen(): void }) {
   const generated =
     showcasePreview === undefined
       ? previewPack?.aiGenerated === true
-      : choice.packs.length === 1 && choice.packs[0]?.aiGenerated === true;
+      : choice.packs.length > 0 && choice.packs.every((pack) => pack.aiGenerated);
   return (
     <button
       className="new-style-set tap-primary"
@@ -232,7 +232,7 @@ function ShowcaseDetail({
   const regionPosterUrl = region?.posterUrl;
   const sheetPosterUrl = sheetMedia?.posterUrl;
   const startSeconds = stop?.startSeconds ?? 0;
-  const aiGenerated = choice.packs.length === 1 && choice.packs[0]?.aiGenerated === true;
+  const aiGenerated = choice.packs.length > 0 && choice.packs.every((pack) => pack.aiGenerated);
 
   const seek = (index: number) => {
     const next = showcase.stops[Math.min(index, showcase.stops.length - 1)];

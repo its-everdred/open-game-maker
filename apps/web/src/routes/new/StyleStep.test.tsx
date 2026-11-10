@@ -235,6 +235,36 @@ describe('StyleStep', () => {
     expect(screen.getByRole('button', { name: 'Mixed' })).not.toContainElement(screen.queryByLabelText('AI-generated'));
   });
 
+  it('badges showcase media for a set containing multiple generated packs', () => {
+    const generated = family('pixel-art', 'Pixel art', [
+      {
+        ...set('generated', 'Generated'),
+        showcase: legacyShowcase,
+        packs: [
+          { id: 'a', name: 'A', aiGenerated: true },
+          { id: 'b', name: 'B', aiGenerated: true },
+        ],
+      },
+      set('authored', 'Authored'),
+    ]);
+    render(
+      <StyleStep
+        families={[generated]}
+        selected={[]}
+        other={undefined}
+        full={false}
+        allowAiGenerated
+        onAllowAiGeneratedChange={vi.fn()}
+        onFull={vi.fn()}
+        onOtherChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pixel art' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generated, AI-generated' }));
+    expect(screen.getAllByLabelText('AI-generated').length).toBeGreaterThan(0);
+  });
+
   it('opens a single-set family directly and wraps controls and arrow keys', () => {
     renderStep();
     fireEvent.click(screen.getByRole('button', { name: 'Isometric' }));
