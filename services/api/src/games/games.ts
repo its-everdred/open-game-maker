@@ -26,6 +26,7 @@ export function gameResponse(game: GameRow) {
         : null,
     createdAt: game.createdAt,
     delistedAt: game.delistedAt,
+    allowAiGeneratedAssets: game.allowAiGeneratedAssets,
   };
 }
 
@@ -78,7 +79,13 @@ export function hasGameGrant(db: Db, gameId: string, userId: string): boolean {
 
 export function createGameRow(
   db: Db,
-  input: { familyId: string; ownerId: string; title: string; repoVisibility: 'public' | 'private' },
+  input: {
+    familyId: string;
+    ownerId: string;
+    title: string;
+    repoVisibility: 'public' | 'private';
+    allowAiGeneratedAssets?: boolean;
+  },
 ): GameRow {
   const id = `g_${randomUUID()}`;
   const slug = assignSlug(db, input.title);
@@ -93,6 +100,7 @@ export function createGameRow(
     githubPath: gameFolder(slug),
     visibility: 'private',
     repoVisibility: input.repoVisibility,
+    allowAiGeneratedAssets: input.allowAiGeneratedAssets ?? true,
     createdAt: new Date().toISOString(),
   };
   db.insert(schema.games).values(row).run();

@@ -42,12 +42,23 @@ export function setup(deps: AppDeps): void {
 }
 
 const createBody = z
-  .object({ title: z.string().trim().min(1).max(120), repoVisibility: z.enum(['public', 'private']) })
+  .object({
+    title: z.string().trim().min(1).max(120),
+    repoVisibility: z.enum(['public', 'private']),
+    allowAiGeneratedAssets: z.boolean().default(true),
+  })
   .strict();
 const patchBody = z
-  .object({ title: z.string().trim().min(1).max(120).optional(), visibility: z.enum(['listed', 'private']).optional() })
+  .object({
+    title: z.string().trim().min(1).max(120).optional(),
+    visibility: z.enum(['listed', 'private']).optional(),
+    allowAiGeneratedAssets: z.boolean().optional(),
+  })
   .strict()
-  .refine((body) => body.title !== undefined || body.visibility !== undefined, { message: 'no changes' });
+  .refine(
+    (body) => body.title !== undefined || body.visibility !== undefined || body.allowAiGeneratedAssets !== undefined,
+    { message: 'no changes' },
+  );
 
 const routes = new Hono<ApiBindings>()
   .post('/games', async (c) => {
@@ -60,6 +71,7 @@ const routes = new Hono<ApiBindings>()
       ownerId: principal.userId,
       title: body.title,
       repoVisibility: body.repoVisibility,
+      allowAiGeneratedAssets: body.allowAiGeneratedAssets,
     });
     return c.json(gameResponse(await provisionGame(c.get('deps'), game)), 201);
   })

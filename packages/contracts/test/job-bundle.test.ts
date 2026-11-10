@@ -16,6 +16,7 @@ const base = {
     pov: 'side',
     genre: 'platformer',
     multiplayer: false,
+    allowAiGeneratedAssets: true,
     paidApisDuringGameplay: false,
     branch: 'main',
     lockfilePath: 'assets.lock.json',

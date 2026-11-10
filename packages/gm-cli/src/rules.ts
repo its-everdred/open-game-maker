@@ -2,6 +2,7 @@ import type { AssetsLock, LockEntry, Use } from '@ogm/contracts';
 import type { ResolvedCard } from '@ogm/asset-cards';
 
 export type RefusalRule =
+  | 'ai-generated-disabled'
   | 'needs-in-game'
   | 'placeholder-only'
   | 'no-redistribution'

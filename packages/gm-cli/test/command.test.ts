@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AgentOutboxLine, decisionKeyFromMarker, playablesFromMarker } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { gm, tempDir } from './helpers.js';
+import { preparedLibrary, WALL } from './assets-fixture.js';
+import { gm, library, tempDir } from './helpers.js';
 
 const JOB_ID = 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 
@@ -105,6 +106,150 @@ describe('gm command request', () => {
     expect(result.out[0]).toMatch(/^cp_/);
     expect(result.out[1]).toBe('Now call emit_event with this payload:');
     expect(JSON.parse(result.out[2])).toMatchObject({ name: 'decision.requested', message: 'Which look?' });
+  });
+
+  it('marks a lineup option whose provenance names a generated catalog pack', async () => {
+    const root = workspace();
+    const assets = library();
+    const collectionPath = join(assets, 'packs', 'kenney-mini-dungeon', 'collection.card.json');
+    const collection = JSON.parse(readFileSync(collectionPath, 'utf8')) as Record<string, unknown>;
+    collection.generation = { method: 'ai', tool: 'fixture generator' };
+    writeFileSync(collectionPath, JSON.stringify(collection));
+    const provenance = JSON.stringify({
+      packs: ['kenney-mini-dungeon'],
+      assets: [],
+      generator: 'gm shot',
+      built_at: '2026-11-09T00:00:00.000Z',
+    });
+
+    const result = await gm(
+      [
+        'command',
+        'request',
+        '--job',
+        JOB_ID,
+        '--question',
+        'Which look?',
+        '--option',
+        'a=Generated',
+        '--option',
+        'b=Authored',
+        '--provenance',
+        `a=${provenance}`,
+      ],
+      { cwd: root, env: { OGM_ASSETS_ROOT: assets } },
+    );
+
+    expect(result.code).toBe(0);
+    expect(commandLine(root).payload.options).toEqual([
+      { id: 'a', label: 'Generated', provenance: JSON.parse(provenance), aiGenerated: true },
+      { id: 'b', label: 'Authored' },
+    ]);
+  });
+
+  it('resolves generated asset cards when a legacy lock lacks generation metadata', async () => {
+    const root = workspace();
+    const assets = preparedLibrary();
+    const assetId = WALL;
+    const cardPath = join(assets, 'packs', 'kenney-mini-dungeon', 'cards', 'wall.card.json');
+    const card = JSON.parse(readFileSync(cardPath, 'utf8')) as Record<string, unknown>;
+    card.generation = { method: 'ai', tool: 'fixture generator' };
+    writeFileSync(cardPath, JSON.stringify(card));
+    const env = { OGM_ASSETS_ROOT: assets };
+    const used = await gm(['assets', 'use', assetId, '--family', 'chunky-low-poly', '--pov', 'iso'], {
+      cwd: root,
+      env,
+    });
+    expect(used, used.err.join('\n')).toMatchObject({ code: 0 });
+    const lockPath = join(root, 'assets.lock.json');
+    const lock = JSON.parse(readFileSync(lockPath, 'utf8')) as {
+      assets: Array<{ meta?: { generation?: unknown } }>;
+    };
+    for (const asset of lock.assets) {
+      if (asset.meta) delete asset.meta.generation;
+    }
+    writeFileSync(lockPath, JSON.stringify(lock));
+    const provenance = JSON.stringify({
+      packs: [],
+      assets: [assetId],
+      generator: 'gm shot',
+      built_at: '2026-11-09T00:00:00.000Z',
+    });
+    const args = [
+      'command',
+      'request',
+      '--job',
+      JOB_ID,
+      '--question',
+      'Which look?',
+      '--option',
+      'a=Generated',
+      '--option',
+      'b=Authored',
+      '--provenance',
+      `a=${provenance}`,
+    ];
+
+    expect((await gm(args, { cwd: root, env })).code).toBe(0);
+    expect(commandLine(root).payload.options[0]).toMatchObject({ id: 'a', aiGenerated: true });
+
+    rmSync(join(root, '.gm', 'outbox', 'command.jsonl'));
+    writeFileSync(join(root, '.gm', 'game.json'), JSON.stringify({ allowAiGeneratedAssets: false }));
+    const refused = await gm(args, { cwd: root, env });
+    expect(refused.code).toBe(2);
+    expect(refused.err.join('\n')).toContain('AI-generated assets are turned off for this game');
+    expect(existsSync(join(root, '.gm', 'outbox', 'command.jsonl'))).toBe(false);
+  });
+
+  it.each([
+    {
+      name: 'command request',
+      args: ['command', 'request', '--job', JOB_ID, '--question', 'Which look?'],
+    },
+    {
+      name: 'decide',
+      args: [
+        'decide',
+        '--job',
+        JOB_ID,
+        '--topic',
+        'Dungeon look',
+        '--question',
+        'Which look?',
+        '--recommend',
+        'a',
+        '--reason',
+        'It fits the dungeon',
+        '--playable',
+        'a=look=generated',
+        '--playable',
+        'b=look=authored',
+      ],
+    },
+  ])('refuses generated options when the game setting is off for $name', async ({ args }) => {
+    const root = workspace();
+    const assets = library();
+    const collectionPath = join(assets, 'packs', 'kenney-mini-dungeon', 'collection.card.json');
+    const collection = JSON.parse(readFileSync(collectionPath, 'utf8')) as Record<string, unknown>;
+    collection.generation = { method: 'ai', tool: 'fixture generator' };
+    writeFileSync(collectionPath, JSON.stringify(collection));
+    mkdirSync(join(root, '.gm'), { recursive: true });
+    writeFileSync(join(root, '.gm', 'game.json'), JSON.stringify({ allowAiGeneratedAssets: false }));
+    const provenance = JSON.stringify({
+      packs: ['kenney-mini-dungeon'],
+      assets: [],
+      generator: 'gm shot',
+      built_at: '2026-11-09T00:00:00.000Z',
+    });
+
+    const result = await gm(
+      [...args, '--option', 'a=Generated', '--option', 'b=Authored', '--provenance', `a=${provenance}`],
+      { cwd: root, env: { OGM_ASSETS_ROOT: assets } },
+    );
+
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('AI-generated assets are turned off for this game');
+    expect(existsSync(join(root, '.gm', 'outbox', 'command.jsonl'))).toBe(false);
   });
 
   it('exits 2 for an unknown media id', async () => {

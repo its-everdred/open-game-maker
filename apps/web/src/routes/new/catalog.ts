@@ -5,6 +5,7 @@ export type CatalogPack = {
   id: string;
   name: string;
   thumbnailUrl: string | null;
+  aiGenerated: boolean;
   compatibleWith?: string[];
 };
 
@@ -75,33 +76,47 @@ export function useCatalog() {
   });
 }
 
-export function styleChoices(families: CatalogFamily[]): StyleChoice[] {
+export function styleChoices(families: CatalogFamily[], allowAiGenerated = true): StyleChoice[] {
   return families.flatMap((family) => {
     if (!family.creationChoice) return [];
     if (family.sets.length === 0) {
-      return [choiceForFamily(family)];
+      const choice = allowedChoice(choiceForFamily(family), allowAiGenerated);
+      return choice ? [choice] : [];
     }
-    return family.sets.map((set) => choiceFor(family, set));
+    return family.sets.flatMap((set) => {
+      const choice = allowedChoice(choiceFor(family, set), allowAiGenerated);
+      return choice ? [choice] : [];
+    });
   });
 }
 
-export function pickerFamilies(families: CatalogFamily[]): PickerFamily[] {
+export function pickerFamilies(families: CatalogFamily[], allowAiGenerated = true): PickerFamily[] {
   return families
-    .filter((family) => family.creationChoice)
+    .filter((family) => family.creationChoice && setsForFamily(families, family.id, allowAiGenerated).length > 0)
     .map((family) => ({
       id: family.id,
       label: family.id === 'isometric-2d' ? 'Isometric' : family.label,
     }));
 }
 
-export function setsForFamily(families: CatalogFamily[], familyId: string): StyleChoice[] {
+export function setsForFamily(families: CatalogFamily[], familyId: string, allowAiGenerated = true): StyleChoice[] {
   const family = families.find((candidate) => candidate.id === familyId && candidate.creationChoice);
   if (!family) return [];
   const direct = family.sets.length > 0 ? family.sets.map((set) => choiceFor(family, set)) : [choiceForFamily(family)];
   const aliased = families.flatMap((owner) =>
     owner.sets.filter((set) => set.pickerFamilies.includes(familyId)).map((set) => choiceFor(owner, set)),
   );
-  return [...new Map([...direct, ...aliased].map((choice) => [choice.id, choice])).values()];
+  return [...new Map([...direct, ...aliased].map((choice) => [choice.id, choice])).values()].flatMap((choice) => {
+    const allowed = allowedChoice(choice, allowAiGenerated);
+    return allowed ? [allowed] : [];
+  });
+}
+
+function allowedChoice(choice: StyleChoice, allowAiGenerated: boolean): StyleChoice | undefined {
+  if (allowAiGenerated) return choice;
+  const packs = choice.packs.filter((pack) => !pack.aiGenerated);
+  if (choice.packs.length > 0 && packs.length === 0) return undefined;
+  return { ...choice, packs };
 }
 
 function choiceForFamily(family: CatalogFamily): StyleChoice {
@@ -115,13 +130,16 @@ function choiceForFamily(family: CatalogFamily): StyleChoice {
 }
 
 function choiceFor(family: CatalogFamily, set: CatalogSet): StyleChoice {
+  // A mixed showcase cannot identify which pixels came from which pack.
+  // Use individual pack previews so generated content can be labeled or hidden.
+  const mixedProvenance = set.packs.some((pack) => pack.aiGenerated) && set.packs.some((pack) => !pack.aiGenerated);
   return {
     id: set.id,
     label: set.label,
     familyId: family.id,
     views: family.views,
     packs: set.packs,
-    ...(set.showcase ? { showcase: set.showcase } : {}),
+    ...(set.showcase && !mixedProvenance ? { showcase: set.showcase } : {}),
   };
 }
 

@@ -27,6 +27,7 @@ const catalog = [
             id: 'smallscaleint-knight',
             name: 'Knight',
             thumbnailUrl: '/knight.webp',
+            aiGenerated: false,
             compatibleWith: [],
           },
         ],
@@ -206,6 +207,79 @@ describe('NewGameScreen', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
 
     await waitFor(() => expect(createCalls).toBe(2));
+  });
+
+  it('persists an asset-setting change made after game creation starts', async () => {
+    const writes: Array<{ path: string; method: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.endsWith('/api/catalog/audio-styles')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                families: [
+                  {
+                    id: 'chiptune',
+                    label: 'Chiptune',
+                    styles: [
+                      {
+                        id: 'chiptune-playful',
+                        label: 'Chiptune · Playful',
+                        style: 'chiptune',
+                        mood: 'playful',
+                        sampleUrl: '/sample.wav',
+                      },
+                    ],
+                  },
+                ],
+              }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            ),
+          );
+        }
+        if (path.endsWith('/api/catalog/style-families')) {
+          return Promise.resolve(
+            new Response(JSON.stringify(catalog), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+          );
+        }
+        if (path.endsWith('/api/v1/games') || path.endsWith('/api/v1/games/g_1')) {
+          writes.push({
+            path,
+            method: init?.method ?? 'GET',
+            body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>,
+          });
+          return Promise.resolve(
+            new Response(JSON.stringify({ id: 'g_1' }), {
+              status: path.endsWith('/games') ? 201 : 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+          );
+        }
+        return Promise.resolve(new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }));
+      }),
+    );
+    renderScreen('/new?step=talk');
+
+    await waitFor(() => expect(writes.some(({ method }) => method === 'POST')).toBe(true));
+    for (const heading of ['Point of view', 'Players', 'World', 'Sound', 'Style']) {
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+      await screen.findByRole('heading', { name: heading });
+    }
+    fireEvent.click(screen.getByRole('switch', { name: 'AI-generated assets' }));
+
+    await waitFor(() =>
+      expect(writes).toContainEqual({
+        path: expect.stringMatching(/\/api\/v1\/games\/g_1$/),
+        method: 'PATCH',
+        body: { allowAiGeneratedAssets: false },
+      }),
+    );
+    expect(writes.filter(({ method }) => method === 'POST')).toHaveLength(1);
   });
 
   it('plays an audio style sample and carries the pick into the next step', async () => {

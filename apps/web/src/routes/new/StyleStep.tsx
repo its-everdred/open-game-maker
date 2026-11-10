@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import { Icon } from '../../components/Icon';
+import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { pickerFamilies, setsForFamily, type CatalogFamily, type StyleChoice } from './catalog';
 import { FamilyStep } from './FamilyStep';
 import { OtherTile } from './OtherTile';
@@ -15,6 +16,8 @@ export function StyleStep({
   selected,
   other,
   full,
+  allowAiGenerated,
+  onAllowAiGeneratedChange,
   onFull,
   onOtherChange,
   onSelect,
@@ -23,6 +26,8 @@ export function StyleStep({
   selected: string[];
   other: string | undefined;
   full: boolean;
+  allowAiGenerated: boolean;
+  onAllowAiGeneratedChange(value: boolean): void;
   onFull(): void;
   onOtherChange(value: string | undefined): void;
   onSelect(id: string): void;
@@ -30,9 +35,12 @@ export function StyleStep({
   const [view, setView] = useState<View>({ kind: 'families' });
   const root = useRef<HTMLDivElement>(null);
   const focusTarget = useRef<FocusTarget | undefined>(undefined);
-  const familyOptions = useMemo(() => pickerFamilies(families), [families]);
+  const familyOptions = useMemo(() => pickerFamilies(families, allowAiGenerated), [allowAiGenerated, families]);
   const familyId = view.kind === 'families' ? undefined : view.familyId;
-  const visibleSets = useMemo(() => (familyId ? setsForFamily(families, familyId) : []), [families, familyId]);
+  const visibleSets = useMemo(
+    () => (familyId ? setsForFamily(families, familyId, allowAiGenerated) : []),
+    [allowAiGenerated, families, familyId],
+  );
 
   useEffect(() => {
     const target = focusTarget.current;
@@ -69,7 +77,7 @@ export function StyleStep({
   }, [cycle, view.kind]);
 
   const openFamily = (familyId: string) => {
-    const choices = setsForFamily(families, familyId);
+    const choices = setsForFamily(families, familyId, allowAiGenerated);
     if (choices.length === 1) {
       setView({ kind: 'detail', familyId, setId: choices[0]!.id });
       return;
@@ -89,6 +97,17 @@ export function StyleStep({
 
   return (
     <div className="new-style-step" ref={root}>
+      {view.kind !== 'detail' ? (
+        <label className="new-style-ai-switch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={allowAiGenerated}
+            onChange={(event) => onAllowAiGeneratedChange(event.currentTarget.checked)}
+          />
+          AI-generated assets
+        </label>
+      ) : null}
       {view.kind === 'families' ? (
         <div className="new-option-grid" role="group" aria-label="What should it look like?">
           <FamilyStep families={familyOptions} onOpen={openFamily} />
@@ -146,20 +165,23 @@ export function StyleStep({
 
 function SetTile({ choice, onOpen }: { choice: StyleChoice; onOpen(): void }) {
   const firstStop = choice.showcase?.stops[0];
-  const preview =
-    firstStop?.region?.gifUrl ??
-    firstStop?.region?.posterUrl ??
-    firstStop?.tileFallbackUrl ??
-    choice.packs.find((pack) => pack.thumbnailUrl)?.thumbnailUrl;
+  const previewPack = choice.packs.find((pack) => pack.thumbnailUrl);
+  const showcasePreview = firstStop?.region?.gifUrl ?? firstStop?.region?.posterUrl ?? firstStop?.tileFallbackUrl;
+  const preview = showcasePreview ?? previewPack?.thumbnailUrl;
+  const generated =
+    showcasePreview === undefined
+      ? previewPack?.aiGenerated === true
+      : choice.packs.length > 0 && choice.packs.every((pack) => pack.aiGenerated);
   return (
     <button
       className="new-style-set tap-primary"
       type="button"
-      aria-label={choice.label}
+      aria-label={withAiGeneratedLabel(choice.label, generated)}
       data-style-set={choice.id}
       onClick={onOpen}
     >
       {preview ? <img src={preview} alt="" /> : <Icon name="other" className="new-option-icon" />}
+      {generated ? <AiBadge /> : null}
     </button>
   );
 }
@@ -179,13 +201,19 @@ function ShowcaseDetail({
   const showcase = choice.showcase;
 
   if (!showcase) {
-    const preview = choice.packs.find((pack) => pack.thumbnailUrl)?.thumbnailUrl;
+    const previewPack = choice.packs.find((pack) => pack.thumbnailUrl);
+    const preview = previewPack?.thumbnailUrl;
     return (
       <div className="new-style-showcase-detail">
         <div className="new-style-showcase">
           <StyleArrow direction="previous" onClick={onPreviousStyle} />
           <div className="new-style-still new-style-region-track">
-            {preview ? <img src={preview} alt={`${choice.label} preview`} /> : <Icon name="other" />}
+            {preview ? (
+              <img src={preview} alt={withAiGeneratedLabel(`${choice.label} preview`, previewPack?.aiGenerated)} />
+            ) : (
+              <Icon name="other" />
+            )}
+            {previewPack?.aiGenerated ? <AiBadge /> : null}
           </div>
           <StyleArrow direction="next" onClick={onNextStyle} />
         </div>
@@ -204,6 +232,7 @@ function ShowcaseDetail({
   const regionPosterUrl = region?.posterUrl;
   const sheetPosterUrl = sheetMedia?.posterUrl;
   const startSeconds = stop?.startSeconds ?? 0;
+  const aiGenerated = choice.packs.length > 0 && choice.packs.every((pack) => pack.aiGenerated);
 
   const seek = (index: number) => {
     const next = showcase.stops[Math.min(index, showcase.stops.length - 1)];
@@ -245,6 +274,7 @@ function ShowcaseDetail({
                     sheet.current.currentTime = tile.current.currentTime;
                 }
           }
+          aiGenerated={aiGenerated}
         />
         <StyleArrow direction="next" onClick={onNextStyle} />
         <ShowcaseTrack
@@ -257,6 +287,7 @@ function ShowcaseDetail({
           startSeconds={outlineActive ? 0 : startSeconds}
           fallbackAlt={`${outlineActive ? showcase.outlineOptions?.label : (stop?.label ?? choice.label)} sprite sheets fallback`}
           videoRef={sheet}
+          aiGenerated={aiGenerated}
         />
       </div>
       <div className="new-style-scene-row">
@@ -273,7 +304,7 @@ function ShowcaseDetail({
             <button
               className="new-style-stop"
               type="button"
-              aria-label={candidate.label}
+              aria-label={withAiGeneratedLabel(candidate.label, aiGenerated)}
               aria-pressed={index === activeStop}
               onClick={() => seek(index)}
               key={candidate.id}
@@ -286,13 +317,14 @@ function ShowcaseDetail({
                   decoding="sync"
                 />
               ) : null}
+              {aiGenerated ? <AiBadge /> : null}
             </button>
           ))}
           {showcase.outlineOptions ? (
             <button
               className="new-style-stop"
               type="button"
-              aria-label={showcase.outlineOptions.label}
+              aria-label={withAiGeneratedLabel(showcase.outlineOptions.label, aiGenerated)}
               aria-pressed={outlineActive}
               onClick={() => seek(showcase.stops.length)}
             >
@@ -304,6 +336,7 @@ function ShowcaseDetail({
                   decoding="sync"
                 />
               ) : null}
+              {aiGenerated ? <AiBadge /> : null}
             </button>
           ) : null}
         </div>
@@ -344,6 +377,7 @@ function ShowcaseTrack({
   fallbackAlt,
   videoRef,
   onTimeUpdate,
+  aiGenerated,
 }: {
   className: string;
   label: string;
@@ -354,6 +388,7 @@ function ShowcaseTrack({
   fallbackAlt: string;
   videoRef: RefObject<HTMLVideoElement | null>;
   onTimeUpdate?(): void;
+  aiGenerated: boolean;
 }) {
   const [ready, setReady] = useState(false);
   return (
@@ -361,7 +396,7 @@ function ShowcaseTrack({
       {fallbackUrl || posterUrl ? (
         <img
           src={fallbackUrl ?? posterUrl}
-          alt={fallbackAlt}
+          alt={withAiGeneratedLabel(fallbackAlt, aiGenerated)}
           onError={(event) => {
             if (posterUrl && event.currentTarget.src !== new URL(posterUrl, window.location.href).href)
               event.currentTarget.src = posterUrl;
@@ -375,7 +410,7 @@ function ShowcaseTrack({
           ref={videoRef}
           src={videoUrl}
           poster={posterUrl}
-          aria-label={label}
+          aria-label={withAiGeneratedLabel(label, aiGenerated)}
           autoPlay
           loop
           muted
@@ -389,6 +424,7 @@ function ShowcaseTrack({
           onTimeUpdate={onTimeUpdate}
         />
       ) : null}
+      {aiGenerated ? <AiBadge /> : null}
     </div>
   );
 }

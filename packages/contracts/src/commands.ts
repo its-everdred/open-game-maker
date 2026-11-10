@@ -15,6 +15,8 @@ export const CommandOption = z.object({
   media: ChatMedia.extend({ kind: z.enum(['image', 'video', 'audio']).optional() }).optional(),
   // A sound that goes with a picture: a character card shows its portrait in `media` and plays its voice from here.
   audio: ChatMedia.optional(),
+  // The option shows at least one asset with typed AI-generation provenance.
+  aiGenerated: z.boolean().optional(),
   // Present when the option is a slice of the game to play (#608); the deck runs it in the card instead of a still.
   playable: OptionPlayable.optional(),
 });

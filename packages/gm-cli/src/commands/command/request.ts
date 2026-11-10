@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import {
   AgentOutboxLine,
   CREATOR_AUDIENCE_MARKER,
@@ -5,12 +8,17 @@ import {
   decisionKeyMarker,
   OptionPlayable,
   playableMarker,
+  type OptionProvenance,
+  validateCard,
 } from '@ogm/contracts';
+import { buildPackIndex, packOf } from '@ogm/asset-cards';
 import { ulid } from 'ulid';
 
 import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
+import { allowsAiGeneratedAssets } from '../../game-settings.js';
 import { checkOptions, readLedger } from '../../ledger/index.js';
 import { provenancePairs, strings } from '../../ledger/provenance.js';
+import { readLock } from '../../lock.js';
 import { appendOutboxLine, gameDir, knownChatMessageIds, optionalJobContext } from '../../outbox.js';
 
 const OPTION_ID = /^[a-z0-9_-]{1,32}$/;
@@ -22,11 +30,96 @@ export const URL_TEXT = /[a-z][a-z0-9+.-]*:\/\/|\bwww\./i;
 export type CommandRequestPayload = {
   command_id: `cp_${string}`;
   question: string;
-  options: { id: string; label: string; media_id?: string; provenance?: unknown; playable?: OptionPlayable }[];
+  options: {
+    id: string;
+    label: string;
+    media_id?: string;
+    provenance?: OptionProvenance;
+    aiGenerated?: boolean;
+    playable?: OptionPlayable;
+  }[];
   recommend?: string;
   blocking: boolean;
   topic?: string;
 };
+
+async function generatedProvenance(
+  ctx: GmContext,
+  root: string,
+  provenance: ReadonlyMap<string, OptionProvenance>,
+): Promise<{ assets: Set<string>; packs: Set<string> }> {
+  const generatedAssets = new Set<string>();
+  const generatedPacks = new Set<string>();
+  if (provenance.size === 0) return { assets: generatedAssets, packs: generatedPacks };
+
+  const referencedAssets = new Set([...provenance.values()].flatMap(({ assets }) => assets));
+  const referencedPacks = new Set([
+    ...[...provenance.values()].flatMap(({ packs }) => packs),
+    ...[...referencedAssets].flatMap((asset) => {
+      const pack = packOf(asset);
+      return pack ? [pack] : [];
+    }),
+  ]);
+  const unresolvedAssets = new Set(referencedAssets);
+  const unresolvedPacks = new Set(referencedPacks);
+
+  try {
+    const lock = await readLock(gameDir(ctx.cwd, root));
+    for (const entry of lock?.assets ?? []) {
+      if (!referencedAssets.has(entry.id)) continue;
+      if (entry.meta?.generation === undefined) continue;
+      unresolvedAssets.delete(entry.id);
+      if (entry.meta.generation.method === 'ai') generatedAssets.add(entry.id);
+    }
+  } catch {
+    // A lineup may be raised before its game has a valid asset lock; catalog metadata remains authoritative below.
+  }
+
+  if (ctx.assetsRoot === null) return { assets: generatedAssets, packs: generatedPacks };
+
+  await Promise.all(
+    [...referencedPacks].map(async (pack) => {
+      try {
+        const parsed = validateCard(
+          JSON.parse(await readFile(join(ctx.assetsRoot!, 'packs', pack, 'collection.card.json'), 'utf8')),
+        );
+        if (!parsed.ok || parsed.card.card_type !== 'collection') return;
+        unresolvedPacks.delete(pack);
+        if (parsed.card.generation?.method === 'ai') generatedPacks.add(pack);
+      } catch {
+        // Some catalog providers exist only in the prepared index; resolve those with individual assets below.
+      }
+    }),
+  );
+
+  if (unresolvedAssets.size === 0 && unresolvedPacks.size === 0) {
+    return { assets: generatedAssets, packs: generatedPacks };
+  }
+
+  const packsToScan = new Set([
+    ...unresolvedPacks,
+    ...[...unresolvedAssets].flatMap((asset) => {
+      const pack = packOf(asset);
+      return pack ? [pack] : [];
+    }),
+  ]);
+  // Commands are read-only and latency-sensitive: inspect only referenced packs, never the library-wide cache.
+  const index = await buildPackIndex(ctx.assetsRoot, [...packsToScan]);
+  for (const card of index.cards) {
+    if (unresolvedAssets.has(card.id)) {
+      unresolvedAssets.delete(card.id);
+      if (card.generation?.method === 'ai') generatedAssets.add(card.id);
+    }
+    const pack = card.card_type === 'collection' ? packOf(card.id) : undefined;
+    if (pack && unresolvedPacks.has(pack)) {
+      unresolvedPacks.delete(pack);
+      if (card.generation?.method === 'ai') generatedPacks.add(pack);
+    }
+    if (unresolvedAssets.size === 0 && unresolvedPacks.size === 0) break;
+  }
+
+  return { assets: generatedAssets, packs: generatedPacks };
+}
 
 type EmitEventCall = {
   name: 'decision.requested';
@@ -104,11 +197,11 @@ export type CommandRules = { name: string; maxOptions: number; mediaOnEveryOptio
 
 /** Validate the option flags, gate them through the feedback ledger and write the Command to the outbox (when a
  * build job is named). */
-export function requestCommand(
+export async function requestCommand(
   ctx: GmContext,
   flags: Record<string, unknown>,
   rules: CommandRules,
-): CommandRequestPayload {
+): Promise<CommandRequestPayload> {
   const question = typeof flags.question === 'string' ? flags.question.trim() : '';
   if (!question) throw new UsageError('--question is required', `gm ${rules.name} --question "<question>"`);
   if (question.length > MAX_QUESTION || /[\r\n]/.test(question))
@@ -174,14 +267,27 @@ export function requestCommand(
     if (!ids.includes(id)) throw new UsageError(`provenance names unknown option "${id}"`, 'use an id from --option');
   }
 
+  const { assets: generatedAssets, packs: generatedPacks } = await generatedProvenance(ctx, root, provenance);
+  const optionIsGenerated = (value: OptionProvenance | undefined): boolean =>
+    value !== undefined &&
+    (value.assets.some((asset) => generatedAssets.has(asset) || generatedPacks.has(packOf(asset) ?? '')) ||
+      value.packs.some((pack) => generatedPacks.has(pack)));
+
   const commandId = `cp_${ulid()}` as const;
   const options = optionPairs.map(([id, label]) => ({
     id,
     label,
     ...(media.has(id) ? { media_id: media.get(id)! } : {}),
     ...(provenance.has(id) ? { provenance: provenance.get(id)! } : {}),
+    ...(optionIsGenerated(provenance.get(id)) ? { aiGenerated: true } : {}),
     ...(playables.has(id) ? { playable: playables.get(id)! } : {}),
   }));
+  if (!(await allowsAiGeneratedAssets(ctx)) && options.some((option) => option.aiGenerated === true)) {
+    throw new UsageError(
+      'AI-generated assets are turned off for this game',
+      'remove generated packs and assets from every option, then ask again',
+    );
+  }
   // The ledger gate: an option the game's rejections already invalidated never reaches the creator.
   const verdict = checkOptions(
     options.map((option) => ({ ...option, command: commandId })),
@@ -271,7 +377,7 @@ export const command: GmCommand = {
     const key = decisionKeyFlag(flags);
     printEmitEvent(
       ctx,
-      requestCommand(ctx, flags, { name: 'command request', maxOptions: 5, mediaOnEveryOption: false }),
+      await requestCommand(ctx, flags, { name: 'command request', maxOptions: 5, mediaOnEveryOption: false }),
       undefined,
       key,
     );

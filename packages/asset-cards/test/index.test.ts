@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { INDEX_PATH, buildIndex, isStale, loadIndex, resolve, writeIndex } from '../src/index.js';
+import { INDEX_PATH, buildIndex, buildPackIndex, isStale, loadIndex, resolve, writeIndex } from '../src/index.js';
 import { FIXTURE, libraryCopy } from './helpers.js';
 
 const ORC = 't1:kenney-mini-dungeon/character-orc@2.0';
@@ -17,6 +17,18 @@ describe('buildIndex', () => {
     expect(index.cards).toHaveLength(19);
     expect(Object.keys(index.collections)).toHaveLength(6);
     expect(index.errors.map((error) => error.path).sort()).toEqual([
+      'packs/kenney-mini-dungeon/cards/broken-no-source.card.json',
+      'packs/kenney-mini-dungeon/cards/broken-status.card.json',
+    ]);
+  });
+
+  it('indexes only the named pack without walking the rest of the library', async () => {
+    const index = await buildPackIndex(FIXTURE, ['kenney-mini-dungeon']);
+
+    expect(index.cards.length).toBeGreaterThan(1);
+    expect(index.cards.every((card) => card.id.includes('kenney-mini-dungeon'))).toBe(true);
+    expect(Object.keys(index.collections)).toEqual(['t1:kenney-mini-dungeon@2.0']);
+    expect(index.errors.map(({ path }) => path)).toEqual([
       'packs/kenney-mini-dungeon/cards/broken-no-source.card.json',
       'packs/kenney-mini-dungeon/cards/broken-status.card.json',
     ]);

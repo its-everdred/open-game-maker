@@ -28,11 +28,9 @@ export async function handle(line: AgentOutboxLine, ctx: OutboxContext): Promise
       mediaId: option.media_id,
       reason: media === null ? 'media_unknown' : 'job_mismatch',
     });
-    return {
-      id: option.id,
-      label: option.label,
-      ...(option.playable === undefined ? {} : { playable: option.playable }),
-    };
+    const withoutMedia = { ...option };
+    delete withoutMedia.media_id;
+    return withoutMedia;
   });
   const command: StoredCommand = {
     command_id: payload.command_id,

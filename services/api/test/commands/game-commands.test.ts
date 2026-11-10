@@ -109,7 +109,13 @@ function command(
     status?: 'open' | 'answered' | 'moot';
     version?: number | undefined;
     at?: string;
-    options?: Array<{ id: string; label: string; media_id?: string; playable?: OptionPlayable }>;
+    options?: Array<{
+      id: string;
+      label: string;
+      media_id?: string;
+      aiGenerated?: boolean;
+      playable?: OptionPlayable;
+    }>;
     topic?: string;
   } = {},
 ) {
@@ -292,6 +298,25 @@ describe('game commands inbox', () => {
 
     expect(body.commands[0]!.options[0]).toEqual({ id: 'slow', label: 'Slow', playable: slow });
     expect(body.commands[0]!.options[1]!.playable?.scenario).toBe('scenario=sandbox&speed=fast');
+  });
+
+  it('carries an option’s generated-asset marker to every review surface', async () => {
+    const { app, deps } = await appWithJobs();
+    command(deps, ids.job, ULID, {
+      options: [
+        { id: 'generated', label: 'Generated mock', aiGenerated: true },
+        { id: 'authored', label: 'Authored mock' },
+      ],
+    });
+
+    const body = (await (await get(app, ids.game)).json()) as {
+      commands: Array<{ options: Array<{ id: string; aiGenerated?: boolean }> }>;
+    };
+
+    expect(body.commands[0]!.options).toEqual([
+      { id: 'generated', label: 'Generated mock', aiGenerated: true },
+      { id: 'authored', label: 'Authored mock' },
+    ]);
   });
 
   it('leaves out a malformed Command instead of failing the whole inbox', async () => {

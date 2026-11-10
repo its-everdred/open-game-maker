@@ -171,6 +171,9 @@
                 ],
                 "additionalProperties": false
               },
+              "aiGenerated": {
+                "type": "boolean"
+              },
               "playable": {
                 "type": "object",
                 "properties": {

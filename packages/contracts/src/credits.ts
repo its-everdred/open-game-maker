@@ -26,6 +26,7 @@ export type AssetCredit = z.infer<typeof assetCreditSchema>;
 export const creditPackSchema = assetCreditSchema.extend({
   license: z.string().trim().min(1),
   private: z.boolean(),
+  aiGenerated: z.boolean().optional(),
 });
 export type CreditPack = z.infer<typeof creditPackSchema>;
 
@@ -40,10 +41,15 @@ export function mergeCreditsDocuments(documents: readonly CreditsDocument[]): Cr
   const packs = new Map<string, CreditPack>();
   for (const pack of documents.flatMap((document) => document.packs)) {
     const previous = packs.get(pack.pack);
-    if (previous !== undefined && JSON.stringify(previous) !== JSON.stringify(pack)) {
+    const { aiGenerated: previousGenerated, ...previousIdentity } = previous ?? {};
+    const { aiGenerated: nextGenerated, ...nextIdentity } = pack;
+    if (previous !== undefined && JSON.stringify(previousIdentity) !== JSON.stringify(nextIdentity)) {
       throw new Error(`asset pack ${pack.pack} has inconsistent credit metadata`);
     }
-    packs.set(pack.pack, pack);
+    packs.set(pack.pack, {
+      ...pack,
+      ...(previousGenerated || nextGenerated ? { aiGenerated: true } : {}),
+    });
   }
   return {
     version: 1,
@@ -64,6 +70,7 @@ export function creditsFromLock(lock: Pick<AssetsLock, 'assets'>): CreditsDocume
           ...entry.credit,
           license: entry.license,
           private: entry.rights.audience === 'private',
+          ...(entry.meta?.generation?.method === 'ai' ? { aiGenerated: true } : {}),
         });
       }),
     },

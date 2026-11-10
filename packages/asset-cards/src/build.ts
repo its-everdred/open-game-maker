@@ -10,6 +10,7 @@ export const INDEX_PATH = join('index', 'cards.index.json');
 export const CARD_INDEX_VERSION = 2;
 const TOPS = ['packs', 'inspiration'];
 const INDEX_IGNORE = '.indexignore';
+const PACK_ID = /^[a-z0-9][a-z0-9-]*$/;
 
 async function entries(dir: string): Promise<string[]> {
   try {
@@ -19,32 +20,38 @@ async function entries(dir: string): Promise<string[]> {
   }
 }
 
+async function cardFilesFor(root: string, top: string, id: string): Promise<string[]> {
+  const files: string[] = [];
+  const base = join(root, top, id);
+  if ((await entries(base)).includes('collection.card.json')) files.push(join(base, 'collection.card.json'));
+  if ((await entries(join(base, 'cards'))).includes(INDEX_IGNORE)) return files;
+  let nested: string[];
+  try {
+    nested = await readdir(join(base, 'cards'), { recursive: true });
+  } catch {
+    return files;
+  }
+  for (const file of nested.filter((name) => name.endsWith('.card.json')).sort()) {
+    files.push(join(base, 'cards', file));
+  }
+  return files;
+}
+
 /** Card files: `<top>/<id>/collection.card.json` and `<top>/<id>/cards/**\/*.card.json`; extracted trees are never walked. */
 export async function cardFiles(root: string): Promise<string[]> {
   const files: string[] = [];
   for (const top of TOPS) {
     for (const id of (await entries(join(root, top))).sort()) {
-      const base = join(root, top, id);
-      if ((await entries(base)).includes('collection.card.json')) files.push(join(base, 'collection.card.json'));
-      if ((await entries(join(base, 'cards'))).includes(INDEX_IGNORE)) continue;
-      let nested: string[];
-      try {
-        nested = await readdir(join(base, 'cards'), { recursive: true });
-      } catch {
-        continue;
-      }
-      for (const file of nested.filter((name) => name.endsWith('.card.json')).sort()) {
-        files.push(join(base, 'cards', file));
-      }
+      files.push(...(await cardFilesFor(root, top, id)));
     }
   }
   return files;
 }
 
-export async function buildIndex(root: string): Promise<CardIndex> {
+async function buildFromFiles(root: string, files: readonly string[]): Promise<CardIndex> {
   const errors: IndexError[] = [];
   const valid: AssetCard[] = [];
-  for (const file of await cardFiles(root)) {
+  for (const file of files) {
     const path = relative(root, file);
     let doc: unknown;
     try {
@@ -81,6 +88,19 @@ export async function buildIndex(root: string): Promise<CardIndex> {
       .sort()
       .at(-1) ?? '';
   return { version: CARD_INDEX_VERSION, built: new Date().toISOString(), vocab, cards, collections, errors };
+}
+
+export async function buildIndex(root: string): Promise<CardIndex> {
+  return buildFromFiles(root, await cardFiles(root));
+}
+
+/** Resolve only named packs, without reading or writing the library-wide index. Invalid/path-like ids are ignored. */
+export async function buildPackIndex(root: string, packIds: readonly string[]): Promise<CardIndex> {
+  const files: string[] = [];
+  for (const id of [...new Set(packIds)].filter((candidate) => PACK_ID.test(candidate)).sort()) {
+    files.push(...(await cardFilesFor(root, 'packs', id)));
+  }
+  return buildFromFiles(root, files);
 }
 
 export async function writeIndex(root: string, index: CardIndex): Promise<string> {

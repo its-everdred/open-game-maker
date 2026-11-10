@@ -117,6 +117,16 @@ function vote(name: 'Like' | 'Dislike') {
 }
 
 describe('ReviewDeck', () => {
+  it('badges a generated asset card', () => {
+    const command = characterCommand();
+    command.options[0] = { ...command.options[0]!, aiGenerated: true };
+
+    renderDeck(command);
+
+    expect(screen.getByLabelText('AI-generated')).toHaveTextContent('AI');
+    expect(screen.getByAltText('pip voice, AI-generated')).toBeVisible();
+  });
+
   it('shows one card at a time and moves on when the creator likes it', () => {
     renderDeck();
 

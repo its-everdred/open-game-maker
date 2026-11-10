@@ -129,8 +129,13 @@ beforeEach(() => {
   commandsResponse = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith('/api/v1/games/g_2') && init?.method === 'PATCH') {
+        const preference = JSON.parse(String(init.body)) as { allowAiGeneratedAssets: boolean };
+        gamesResponse = gamesResponse.map((game) => (game.id === 'g_2' ? { ...game, ...preference } : game));
+        return json(gamesResponse.find((game) => game.id === 'g_2'));
+      }
       if (url.endsWith('/api/v1/games')) return json({ games: gamesResponse });
       if (url.includes('/api/v1/jobs')) return json({ jobs: jobsResponse });
       if (url.endsWith('/commands')) return json({ commands: commandsResponse });
@@ -152,6 +157,20 @@ afterEach(() => {
 });
 
 describe('GamesScreen', () => {
+  it('changes an existing game’s AI asset preference in both directions', async () => {
+    renderGames('/all?spotlight=g_2');
+    const toggle = await screen.findByRole('switch', { name: 'AI-generated assets' });
+    expect(toggle).toBeChecked();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+    const patches = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PATCH');
+    expect(patches.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+      { allowAiGeneratedAssets: false },
+      { allowAiGeneratedAssets: true },
+    ]);
+  });
   it('keeps the existing empty state when there are no games', async () => {
     gamesResponse = [];
     renderGames();

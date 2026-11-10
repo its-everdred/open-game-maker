@@ -99,6 +99,7 @@ export const ChatCommandOption = z.object({
   label: z.string(),
   media_id: z.string().optional(),
   provenance: OptionProvenance.optional(),
+  aiGenerated: z.boolean().optional(),
   playable: OptionPlayable.optional(),
 });
 
@@ -179,6 +180,7 @@ export const CommandRequestPayload = z
           label: z.string().trim().min(1).max(200),
           media_id: ChatMessageId.optional(),
           provenance: OptionProvenance.optional(),
+          aiGenerated: z.boolean().optional(),
           playable: OptionPlayable.optional(),
         }),
       )

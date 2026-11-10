@@ -1,0 +1,18 @@
+.ai-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 20px;
+  padding: 2px 6px;
+  border: 1px solid var(--gruvbox-bg0-h);
+  border-radius: 5px;
+  background: var(--gruvbox-purple);
+  color: var(--gruvbox-bg0-h);
+  font: 800 12px/1 var(--body);
+  letter-spacing: 0.04em;
+}

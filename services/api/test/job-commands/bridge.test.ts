@@ -136,8 +136,8 @@ describe('command outbox and budget', () => {
     expect(commandBudget(deps.sqlite, JOB_ID, 'new_game')).toEqual({ used: 1, max: 3 });
   });
 
-  // A playable option (#608) is played in the card, so its slice survives storage even when a stray media id is dropped.
-  it('keeps each option’s playable slice, including one whose media was rejected', async () => {
+  // A playable option (#608) is played in the card, so its slice and provenance survive when stray media is dropped.
+  it('keeps option provenance and playable slices when media is rejected', async () => {
     const deps = makeChatDeps();
     const otherMedia = insertChatRow(deps.sqlite, { jobId: OTHER_JOB_ID, actor: 'agent', kind: 'image' }).row!;
     const slow = { scenario: 'scenario=sandbox&speed=slow', seconds: 8, lead_in: 'one-chain' };
@@ -147,7 +147,19 @@ describe('command outbox and budget', () => {
       commandLine({
         options: [
           { id: 'wood', label: 'Slow', playable: slow },
-          { id: 'iron', label: 'Fast', media_id: otherMedia.id, playable: fast },
+          {
+            id: 'iron',
+            label: 'Fast',
+            media_id: otherMedia.id,
+            playable: fast,
+            provenance: {
+              packs: ['generated-pack'],
+              assets: [],
+              generator: 'gm shot',
+              built_at: '2026-11-09T00:00:00.000Z',
+            },
+            aiGenerated: true,
+          },
         ],
       }),
       {
@@ -163,7 +175,18 @@ describe('command outbox and budget', () => {
     const row = listSince(deps.sqlite, JOB_ID, 0).find(({ kind }) => kind === 'command')!;
     expect(parseCommand(row)?.options).toEqual([
       { id: 'wood', label: 'Slow', playable: slow },
-      { id: 'iron', label: 'Fast', playable: fast },
+      {
+        id: 'iron',
+        label: 'Fast',
+        playable: fast,
+        provenance: {
+          packs: ['generated-pack'],
+          assets: [],
+          generator: 'gm shot',
+          built_at: '2026-11-09T00:00:00.000Z',
+        },
+        aiGenerated: true,
+      },
     ]);
   });
 });

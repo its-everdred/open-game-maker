@@ -77,7 +77,7 @@ export const command: GmCommand = {
         `use its answer (gm command wait ${earlier.command}); pass --revisit only when the creator reopened it`,
       );
 
-    const payload = requestCommand(ctx, flags, {
+    const payload = await requestCommand(ctx, flags, {
       name: 'decide',
       maxOptions: MAX_COMMAND_OPTIONS,
       mediaOnEveryOption: true,

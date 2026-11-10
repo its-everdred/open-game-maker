@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -149,6 +150,100 @@ describe('gm assets Pixel Art Atlas', () => {
     expect(result.out).toHaveLength(2);
     expect(result.out.some((line) => line.includes('t1:kenney-mini-dungeon/wall@2.0'))).toBe(true);
     expect(result.out.some((line) => line.includes('t1:angais-pixel-art-atlas/sprites/0@1.4m'))).toBe(true);
+  });
+
+  it('automatically excludes generated assets for a game whose setting is off', async () => {
+    const assets = atlasLibrary();
+    const game = tempDir('gm-atlas-setting-');
+    execFileSync('git', ['init', '-q'], { cwd: game });
+    mkdirSync(join(game, '.gm', 'context'), { recursive: true });
+    const nested = join(game, 'scenes', 'town');
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(join(game, '.gm', 'game.json'), JSON.stringify({ allowAiGeneratedAssets: false }));
+
+    const result = await gm(['assets', 'search', 'red', 'potion'], {
+      cwd: nested,
+      env: { OGM_ASSETS_ROOT: assets },
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.out).toEqual([]);
+
+    const refused = await gm(
+      ['assets', 'use', 't1:angais-pixel-art-atlas/sprites/0@1.4m', '--family', 'pixel-art', '--pov', 'topdown'],
+      { cwd: nested, env: { OGM_ASSETS_ROOT: assets } },
+    );
+    expect(refused.code).toBe(2);
+    expect(refused.err.join('\n')).toContain('ai-generated-disabled');
+    expect(existsSync(join(game, 'assets.lock.json'))).toBe(false);
+  });
+
+  it('uses the host game preference when no job bundle exists', async () => {
+    const assets = atlasLibrary();
+    const root = tempDir('gm-atlas-host-setting-');
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    const game = join(root, 'games', 'blobs');
+    mkdirSync(join(game, '.gm'), { recursive: true });
+    writeFileSync(join(game, 'gm.manifest.json'), '{}');
+    writeFileSync(join(game, '.gm', 'game.json'), JSON.stringify({ allowAiGeneratedAssets: false }));
+    const nested = join(game, 'scenes', 'town');
+    mkdirSync(nested, { recursive: true });
+
+    const result = await gm(['assets', 'search', 'red', 'potion'], {
+      cwd: nested,
+      env: { OGM_ASSETS_ROOT: assets },
+    });
+
+    expect(result).toMatchObject({ code: 0, out: [] });
+    const refused = await gm(
+      ['assets', 'use', 't1:angais-pixel-art-atlas/sprites/0@1.4m', '--family', 'pixel-art', '--pov', 'topdown'],
+      { cwd: nested, env: { OGM_ASSETS_ROOT: assets } },
+    );
+    expect(refused.code).toBe(2);
+    expect(refused.err.join('\n')).toContain('ai-generated-disabled');
+  });
+
+  it('fails closed when a present game preference file is malformed', async () => {
+    const assets = atlasLibrary();
+    const game = tempDir('gm-atlas-bad-setting-');
+    execFileSync('git', ['init', '-q'], { cwd: game });
+    mkdirSync(join(game, '.gm', 'context'), { recursive: true });
+    writeFileSync(join(game, '.gm', 'context', 'bundle.json'), '{ not json');
+
+    const result = await gm(['assets', 'search', 'red', 'potion'], {
+      cwd: game,
+      env: { OGM_ASSETS_ROOT: assets },
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.out).toEqual([]);
+    expect(result.err.join('\n')).toContain('is not valid game context JSON');
+  });
+
+  it('fails the game asset gate when an existing flagged asset remains after the setting is turned off', async () => {
+    const assets = atlasLibrary();
+    const game = tempDir('gm-atlas-setting-check-');
+    execFileSync('git', ['init', '-q'], { cwd: game });
+    const env = { OGM_ASSETS_ROOT: assets };
+    const id = 't1:angais-pixel-art-atlas/sprites/0@1.4m';
+    expect(
+      (await gm(['assets', 'use', id, '--family', 'pixel-art', '--pov', 'topdown'], { cwd: game, env })).code,
+    ).toBe(0);
+    const lockPath = join(game, 'assets.lock.json');
+    const lock = JSON.parse(readFileSync(lockPath, 'utf8')) as {
+      assets: Array<{ meta?: { generation?: unknown } }>;
+    };
+    for (const asset of lock.assets) {
+      if (asset.meta) delete asset.meta.generation;
+    }
+    writeFileSync(lockPath, JSON.stringify(lock));
+    mkdirSync(join(game, '.gm', 'context'), { recursive: true });
+    writeFileSync(join(game, '.gm', 'game.json'), JSON.stringify({ allowAiGeneratedAssets: false }));
+
+    const checked = await gm(['check', 'assets'], { cwd: game, env });
+
+    expect(checked.code).toBe(1);
+    expect(checked.err.join('\n')).toContain(`${id}  ai-generated-disabled`);
   });
 
   it('inspects and previews a lazy Atlas row but refuses a subject summary as a sprite', async () => {

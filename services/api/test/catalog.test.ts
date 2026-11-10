@@ -27,6 +27,7 @@ const CREATOR = {
 async function library(
   thumbs: Record<string, { hash: string; visibility?: string }> = {},
   publicPacks: string[] = [],
+  generatedPacks: string[] = [],
 ): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'ogm-api-catalog-'));
   cpSync(FIXTURE, root, { recursive: true });
@@ -48,6 +49,11 @@ async function library(
       previews: { ...card.previews, blob: { thumb: hash } },
       ...(visibility ? { visibility } : {}),
     });
+  }
+  for (const pack of generatedPacks) {
+    const card = Object.values(index.collections).find((candidate) => candidate.id.startsWith(`t1:${pack}@`));
+    if (!card) throw new Error(`no fixture collection ${pack}`);
+    card.generation = { method: 'ai', tool: 'fixture generator' };
   }
   await writeIndex(root, index);
   return root;
@@ -169,7 +175,9 @@ const get = async (app: ReturnType<typeof appWith>['app'], headers: Record<strin
   app.request('/api/catalog/style-families', { headers });
 
 const packOf = (families: StyleFamilyApi[], id: string) =>
-  families.flatMap((f) => f.packs).find((pack) => pack.id === id);
+  families
+    .flatMap((family) => [...family.packs, ...family.sets.flatMap((set) => set.packs)])
+    .find((pack) => pack.id === id);
 
 const packsOfSet = (id: string) => {
   const set = loadFamilies()
@@ -227,6 +235,7 @@ describe('GET /api/catalog/style-families', () => {
       id: 'kenney-mini-dungeon',
       name: 'Mini Dungeon (Kenney)',
       thumbnailUrl: null,
+      aiGenerated: false,
     });
     expect(packOf(families, 'kenney-castle-kit')?.name).toBe('kenney-castle-kit');
     const tiny = families.find((family) => family.id === 'pixel-art')?.sets.find((set) => set.id === 'kenney-tiny');
@@ -275,6 +284,15 @@ describe('GET /api/catalog/style-families', () => {
     // Valid well past the server cache (5 min) plus the client max-age (300 s).
     expect(Number(new URL(url as string).searchParams.get('exp'))).toBeGreaterThan(Date.now() / 1000 + 86_400);
     expect(packOf(families, 'synty-polygon-goblin-war-camp')?.thumbnailUrl).toBeNull();
+  });
+
+  it('marks only packs whose resolved catalog card is AI-generated', async () => {
+    const root = await library({}, ['angais-pixel-art-atlas', 'limezu-modern-interiors'], ['angais-pixel-art-atlas']);
+    const { app } = appWith(root);
+    const families = (await (await get(app)).json()) as StyleFamilyApi[];
+
+    expect(packOf(families, 'angais-pixel-art-atlas')).toMatchObject({ aiGenerated: true });
+    expect(packOf(families, 'limezu-modern-interiors')).toMatchObject({ aiGenerated: false });
   });
 
   it('returns null when the imported thumb blob is not in the store or was imported as private', async () => {

@@ -15,7 +15,11 @@ const family: CatalogFamily = {
       pickerFamilies: ['pixel-art'],
       vendors: ['kenney'],
       traits: {},
-      packs: [],
+      showcase: { stops: [] },
+      packs: [
+        { id: 'authored', name: 'Authored', thumbnailUrl: '/authored.png', aiGenerated: false },
+        { id: 'generated', name: 'Generated', thumbnailUrl: '/generated.png', aiGenerated: true },
+      ],
     },
     {
       id: 'licensed-set',
@@ -51,5 +55,17 @@ describe('styleChoices', () => {
   it('returns only creation families and uses the picker label for Isometric', () => {
     expect(pickerFamilies([family])).toEqual([expect.objectContaining({ id: 'isometric-2d', label: 'Isometric' })]);
     expect(pickerFamilies([{ ...family, creationChoice: false }])).toEqual([]);
+  });
+
+  it('removes generated packs and choices when the game setting is off', () => {
+    const choices = setsForFamily([family], 'isometric-2d', false);
+
+    expect(choices.map(({ id }) => id)).toEqual(['public-set', 'licensed-set']);
+    expect(choices[0]?.packs).toEqual([
+      { id: 'authored', name: 'Authored', thumbnailUrl: '/authored.png', aiGenerated: false },
+    ]);
+    expect(setsForFamily([family], 'isometric-2d', true)[0]?.packs).toHaveLength(2);
+    expect(choices[0]?.showcase).toBeUndefined();
+    expect(setsForFamily([family], 'isometric-2d', true)[0]?.showcase).toBeUndefined();
   });
 });

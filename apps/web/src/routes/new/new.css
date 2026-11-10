@@ -197,6 +197,19 @@
   position: relative;
   min-width: 0;
 }
+.new-style-ai-switch {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0 auto 10px;
+  color: var(--muted);
+  font-weight: 700;
+}
+.new-style-ai-switch input {
+  accent-color: var(--gruvbox-purple);
+}
 .new-style-step:has(.new-style-detail) {
   min-height: 0;
 }
@@ -213,6 +226,7 @@
   gap: 14px;
 }
 .new-style-set {
+  position: relative;
   display: grid;
   grid-template-rows: 1fr;
   min-width: 0;
@@ -361,6 +375,7 @@
   cursor: pointer;
 }
 .new-style-stop {
+  position: relative;
   min-width: 0;
   aspect-ratio: 16 / 9;
   padding: 4px;

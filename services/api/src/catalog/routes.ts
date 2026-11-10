@@ -275,11 +275,15 @@ async function styleFamilies(assetsRoot: string | undefined, blobStore: BlobStor
       if (pack) byPack.set(pack, card);
     }
   }
-  const apiPack = async (id: string) => ({
-    id,
-    name: byPack.get(id)?.title ?? id,
-    thumbnailUrl: await thumbnailUrl(blobStore, byPack.get(id)),
-  });
+  const apiPack = async (id: string) => {
+    const card = byPack.get(id);
+    return {
+      id,
+      name: card?.title ?? id,
+      thumbnailUrl: await thumbnailUrl(blobStore, card),
+      aiGenerated: card?.generation?.method === 'ai',
+    };
+  };
   return Promise.all(
     loadFamilies().map(async (f) => ({
       id: f.id,

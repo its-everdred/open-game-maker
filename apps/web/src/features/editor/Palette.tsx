@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { GameManifest } from '@ogm/contracts/browser';
 
+import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { FocusZone } from '../../lib/input';
 import { EDITOR_FOCUS_ZONES } from './focus';
 
@@ -54,6 +55,7 @@ export function Palette({ palette, category, title, showTabs = true, onCategory,
               className="palette-item tap-primary"
               type="button"
               key={item.prefab}
+              aria-label={withAiGeneratedLabel(item.label, item.aiGenerated)}
               title={item.hint}
               onPointerDown={() => onPick(item.prefab)}
               onClick={(event) => {
@@ -61,6 +63,7 @@ export function Palette({ palette, category, title, showTabs = true, onCategory,
               }}
             >
               {item.thumbnail ? <img src={item.thumbnail} alt="" /> : null}
+              {item.aiGenerated ? <AiBadge /> : null}
               <span>{item.label}</span>
             </button>
           ))}

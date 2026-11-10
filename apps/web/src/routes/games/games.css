@@ -460,3 +460,15 @@
   background: var(--paper-2);
   color: var(--games-hi);
 }
+.games-ai-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.games-ai-switch input {
+  accent-color: var(--gruvbox-purple);
+}

@@ -106,6 +106,7 @@ describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
         pov: 'iso',
         genre: 'platformer',
         multiplayer: false,
+        allowAiGeneratedAssets: true,
         paidApisDuringGameplay: false,
         branch: 'main',
         lockfilePath: 'assets.lock.json',
@@ -121,6 +122,36 @@ describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
     const { energy } = JobBundle.parse(await (await get('/internal/jobs/by-ticket/12/bundle', SECRET_A)).json());
     expect(energy).toMatchObject({ level: 'healthy', windows: [{ window: 'day', usedPercent: 0 }, {}, {}] });
     expect(JSON.stringify(energy)).not.toMatch(/MicroUsd|provider/);
+  });
+
+  it("carries the game's AI-generated asset setting for gm searches", async () => {
+    const { deps, get } = await setup();
+    const at = new Date().toISOString();
+    deps.db.insert(schema.families).values({ id: 'f1', name: 'F', ownerUserId: 'u1', createdAt: at }).run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g1',
+        familyId: 'f1',
+        ownerId: 'u1',
+        title: 'Castle Run',
+        visibility: 'private',
+        repoVisibility: 'private',
+        githubOwner: 'everdred-games',
+        githubRepo: 'gm-g1',
+        allowAiGeneratedAssets: false,
+        createdAt: at,
+      })
+      .run();
+
+    const context = (await (await get('/internal/jobs/by-ticket/12/bundle', SECRET_A)).json()).gameContext;
+    expect(context.allowAiGeneratedAssets).toBe(false);
+    const path = '/internal/games/g1/ai-assets';
+    expect((await get(path)).status).toBe(401);
+    expect((await get(path, SECRET_B)).status).toBe(404);
+    expect(await (await get(path, SECRET_A)).json()).toEqual({ allowAiGeneratedAssets: false });
+    deps.db.update(schema.games).set({ allowAiGeneratedAssets: true }).run();
+    expect(await (await get(path, SECRET_A)).json()).toEqual({ allowAiGeneratedAssets: true });
   });
 
   it("carries the job creator's own preference, so the agent builds the way they asked", async () => {

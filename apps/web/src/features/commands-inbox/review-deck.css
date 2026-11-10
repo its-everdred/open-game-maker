@@ -285,6 +285,11 @@
   text-align: center;
 }
 
+.review-deck-fullscreen-media {
+  position: relative;
+  width: 100%;
+}
+
 .review-deck-fullscreen img,
 .review-deck-fullscreen video {
   display: block;

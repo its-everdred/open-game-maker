@@ -8,6 +8,7 @@ import { MIGRATIONS_DIR, migrate } from '../src/migrate.js';
 import { openDb } from '../src/open.js';
 
 const RENAME = '20261109125710_command_rename.sql';
+const AI_SETTING = '20261110053451_allow_ai_generated_assets.sql';
 const dirs: string[] = [];
 
 afterEach(() => {
@@ -42,7 +43,7 @@ describe('command rename migration', () => {
       VALUES ('m_2', 'j_1', '2026-11-08T10:01:00.000Z', 'agent', 'text', 'hello');
     `);
 
-    expect(migrate({ sqlite }).applied).toEqual([RENAME]);
+    expect(migrate({ sqlite }).applied).toEqual([RENAME, AI_SETTING]);
 
     expect(sqlite.prepare('SELECT decision_id, version, status FROM commands').all()).toEqual([
       { decision_id: 'd_1', version: 2, status: 'open' },
