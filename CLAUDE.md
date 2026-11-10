@@ -32,6 +32,7 @@ use. Work here the way those agents will work: dogfood the skills.
   each errored ticket (if "not resumable", drop `agent:error`/`agent:ci-red` with gh and `--todo`). A `dispatch_decline=dependency` is
   GitHub's native blocked-by list (`gh api repos/<r>/issues/<n>/dependencies/blocked_by`), not the body's "Depends on" line; queue the
   open blockers instead of re-`--todo`. When Actions is down, `executor/local-ci.sh <pr|main>` replays the workspace job locally. Open-Games (hosted Actions off for good): `executor/og-merge.sh <pr>` detached runs the local checks and merges on green; its log ends `exit=<n> og-merge <pr>` (a waiter that grepped a guessed marker, `ci-265`, sat 20 min on a finished run, 2026-11-09).
+  Every worker's `assets-local` is a symlink to this checkout's `assets-local` (Open-Games has none of its own: put evidence for its workers here). With the Open-Games build queue running, a ticket outside it sits in `build_queue_hold` until `aiur-main --todo <n>`, whatever labels gh set.
   Codex workers can write only `assets-local/sets` (and, on Open-Games, `assets-local/review`) through the workspace symlink: a ticket that writes elsewhere in the library needs its folder added to `writableRoots` in `.aiur/config` when it is filed (#686).
   A worker in `agent:human-review` whose workpad says the branch is pushed but governed `gh pr create` timed out: open the PR by
   hand from its branch (body from the workpad), relabel `agent:ci-wait`, report the timeout to Aiur. GitHub's merge queue is not
