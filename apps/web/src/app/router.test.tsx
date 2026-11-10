@@ -212,6 +212,29 @@ describe('screen route collection', () => {
     expect(screen.getByRole('button', { name: 'Unmute' })).toBeVisible();
   });
 
+  it('marks only the game root in play mode as full-screen chrome', async () => {
+    const routes = collectScreenRoutes({
+      '../routes/game/route.tsx': {
+        route: {
+          path: '/g/:gameId',
+          element: <h1>Game</h1>,
+          chrome: 'app',
+          auth: 'none',
+          children: [{ path: 'versions', element: <h1>Versions</h1> }],
+        },
+      },
+    });
+    const router = createMemoryRouter(routes, { initialEntries: ['/g/game'] });
+
+    render(<RouterProvider router={router} />);
+
+    expect(document.querySelector('.app-chrome')).toHaveClass('is-game-playing');
+    await router.navigate('/g/game?mode=edit');
+    await waitFor(() => expect(document.querySelector('.app-chrome')).not.toHaveClass('is-game-playing'));
+    await router.navigate('/g/game/versions');
+    await waitFor(() => expect(document.querySelector('.app-chrome')).not.toHaveClass('is-game-playing'));
+  });
+
   it('retries a crashed screen', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     let crashing = true;

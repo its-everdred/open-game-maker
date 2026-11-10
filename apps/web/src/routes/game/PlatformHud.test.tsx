@@ -38,63 +38,110 @@ function frameHarness() {
 
 const saveContext = { branch: 'main', buildId: 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ' };
 
-/** The host's play bar slot, outside the game stage. */
-function pauseSlot() {
-  const slot = document.createElement('span');
-  document.body.append(slot);
-  return slot;
-}
-
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();
 });
 
 describe('PlatformHud', () => {
-  it('puts Pause in the host slot, never over the game stage, so it cannot cover game UI', () => {
-    const test = frameHarness();
-    const slot = pauseSlot();
-    const { container } = render(
-      <PlatformHud
-        build="draft"
-        frame={test.frame}
-        gameId="game"
-        pauseSlot={slot}
-        saveContext={saveContext}
-        saves={false}
-      />,
-    );
-
-    const pause = screen.getByRole('button', { name: 'Pause' });
-    expect(slot).toContainElement(pause);
-    expect(container).not.toContainElement(pause);
-  });
-
-  it('pauses and resumes with one lifecycle message per action and restores focus', async () => {
+  it('renders no separate Pause control while the game menu is closed', () => {
     const test = frameHarness();
     render(
       <PlatformHud
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused={false}
         saveContext={saveContext}
         saves={false}
+        onResume={vi.fn()}
       />,
     );
 
-    const pause = screen.getByRole('button', { name: 'Pause' });
-    fireEvent.click(pause);
+    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Paused' })).not.toBeInTheDocument();
+  });
+
+  it('pauses and resumes once as the game menu opens and closes', async () => {
+    const test = frameHarness();
+    const onResume = vi.fn();
+    const view = render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused={false}
+        saveContext={saveContext}
+        saves={false}
+        onResume={onResume}
+      />,
+    );
+
+    view.rerender(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves={false}
+        onResume={onResume}
+      />,
+    );
     expect(screen.getByRole('dialog', { name: 'Paused' })).toBeVisible();
-    /* Pause sits in the play bar, outside the dialog's shade, so a second press must not pause again. */
-    fireEvent.click(pause);
     expect(test.frame.pause).toHaveBeenCalledOnce();
     const resume = screen.getByRole('button', { name: 'Resume' });
     await waitFor(() => expect(resume).toHaveFocus());
     fireEvent.click(resume);
 
+    expect(onResume).toHaveBeenCalledOnce();
+    view.rerender(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused={false}
+        saveContext={saveContext}
+        saves={false}
+        onResume={onResume}
+      />,
+    );
     expect(test.frame.resume).toHaveBeenCalledOnce();
-    await waitFor(() => expect(pause).toHaveFocus());
+    expect(screen.queryByRole('dialog', { name: 'Paused' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a replacement game frame paused while the menu remains open', () => {
+    const first = frameHarness();
+    const replacement = frameHarness();
+    const view = render(
+      <PlatformHud
+        build="draft"
+        frame={first.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves={false}
+        onResume={vi.fn()}
+      />,
+    );
+
+    expect(first.frame.pause).toHaveBeenCalledOnce();
+    view.rerender(
+      <PlatformHud
+        build="draft"
+        frame={replacement.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves={false}
+        onResume={vi.fn()}
+      />,
+    );
+
+    expect(first.frame.resume).toHaveBeenCalledOnce();
+    expect(replacement.frame.pause).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(replacement.frame.resume).toHaveBeenCalledOnce();
   });
 
   it('leaves through the screen-owned navigation action', () => {
@@ -105,14 +152,14 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused
         saveContext={saveContext}
         saves={false}
+        onResume={vi.fn()}
         onLeave={onLeave}
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
 
     expect(onLeave).toHaveBeenCalledOnce();
@@ -125,13 +172,13 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused
         saveContext={saveContext}
         saves
         saveApi={{ list: vi.fn().mockResolvedValue({ available: false }), read: vi.fn(), write: vi.fn() }}
+        onResume={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
 
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Save slots' })).not.toBeInTheDocument());
   });
@@ -152,13 +199,13 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused
         saveContext={saveContext}
         saves
         saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read, write: vi.fn() }}
+        onResume={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
     const load = await screen.findByRole('button', { name: 'Load' });
 
     expect(load).toBeEnabled();
@@ -180,12 +227,13 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused={false}
         saveContext={saveContext}
         saves
         saveSchema={3}
         migratesFrom={2}
         saveApi={{ list, read: vi.fn(), write: vi.fn() }}
+        onResume={vi.fn()}
       />,
     );
 
@@ -200,10 +248,11 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused={false}
         saveContext={saveContext}
         saves
         saveApi={{ list, read: vi.fn(), write: vi.fn() }}
+        onResume={vi.fn()}
       />,
     );
 
@@ -220,23 +269,24 @@ describe('PlatformHud', () => {
       read: vi.fn().mockResolvedValue(save),
       write: vi.fn(),
     };
+    const onResume = vi.fn();
     render(
       <PlatformHud
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused
         saveContext={saveContext}
         saves
         saveApi={saveApi}
         toast={toast}
+        onResume={onResume}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Load' }));
 
     await waitFor(() => expect(test.frame.restoreSave).toHaveBeenCalledWith(save));
-    expect(test.frame.resume).toHaveBeenCalledOnce();
+    expect(onResume).toHaveBeenCalledOnce();
     expect(toast).not.toHaveBeenCalledWith('Load failed');
 
     test.saveLoadError('save version is not supported');
@@ -252,13 +302,13 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused
         saveContext={saveContext}
         saves
         saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read: vi.fn(), write }}
+        onResume={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
 
     expect(await screen.findByRole('button', { name: 'Auto save' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 1' })).toBeVisible();
@@ -291,10 +341,11 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused={false}
         saveContext={saveContext}
         saves
         saveApi={{ list, read: vi.fn(), write }}
+        onResume={vi.fn()}
       />,
     );
     await waitFor(() => expect(list).toHaveBeenCalledOnce());
@@ -321,11 +372,12 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused={false}
         saveContext={saveContext}
         saves
         saveApi={{ list, read: vi.fn(), write }}
         toast={toast}
+        onResume={vi.fn()}
       />,
     );
     await waitFor(() => expect(list).toHaveBeenCalledOnce());
@@ -346,10 +398,11 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused={false}
         saveContext={saveContext}
         saves={false}
         toast={toast}
+        onResume={vi.fn()}
       />,
     );
 
@@ -384,14 +437,14 @@ describe('PlatformHud', () => {
         build="draft"
         frame={test.frame}
         gameId="game"
-        pauseSlot={pauseSlot()}
+        paused
         saveContext={saveContext}
         saves={false}
         creditsApi={credits}
+        onResume={vi.fn()}
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
     fireEvent.click(screen.getByRole('button', { name: 'Credits' }));
 
     expect(await screen.findByText('Synty Pack')).toBeVisible();

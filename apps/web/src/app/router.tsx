@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { createBrowserRouter, Navigate, useLocation, type RouteObject } from 'react-router';
+import { createBrowserRouter, matchPath, Navigate, useLocation, type RouteObject } from 'react-router';
 
 import { BuildChatDock } from '../features/build-chat/BuildChatDock';
 import { useSession } from '../lib/api/session';
 import { Toasts, useNotificationFeed } from '../lib/notify';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
+import { GameMenuProvider } from './GameMenu';
 import type { ScreenRoute } from './screen';
 import { StudioBackdrop, StudioLogo } from './StudioChrome';
 import { StudioMenu } from './StudioMenu';
@@ -79,16 +80,21 @@ function sessionReturnPath(pathname: string, search: string): string {
 
 function AppChrome({ children }: { children: ReactNode }) {
   useNotificationFeed();
+  const location = useLocation();
+  const gamePlay =
+    matchPath('/g/:gameId', location.pathname) !== null && new URLSearchParams(location.search).get('mode') !== 'edit';
   return (
-    <div className="app-chrome">
-      <StudioBackdrop />
-      <StudioLogo />
-      <StudioMenu />
-      <main>{children}</main>
-      <Toasts />
-      <div id="chat-dock-slot">
-        <BuildChatDock />
+    <GameMenuProvider>
+      <div className={`app-chrome${gamePlay ? ' is-game-playing' : ''}`}>
+        <StudioBackdrop />
+        <StudioLogo />
+        <StudioMenu />
+        <main>{children}</main>
+        <Toasts />
+        <div id="chat-dock-slot">
+          <BuildChatDock />
+        </div>
       </div>
-    </div>
+    </GameMenuProvider>
   );
 }

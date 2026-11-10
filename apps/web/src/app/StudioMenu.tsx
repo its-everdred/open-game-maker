@@ -32,6 +32,7 @@ import { useSession } from '../lib/api/session';
 import { getVolume, onChange, setMuted, setVolume, status } from '../lib/sound';
 import { useAdminMe } from '../routes/admin/api';
 import { requireAdmin } from '../routes/admin/guard';
+import { useGameMenu, type GameMenuAction } from './GameMenu';
 import { VolumeCircle } from './VolumeCircle';
 
 const RECENT_BUILD_MS = 5 * 60 * 1000;
@@ -44,14 +45,15 @@ type Sheet = 'volume' | 'bug' | 'builds' | 'decisions' | 'energy';
 export function StudioMenu() {
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
   const location = useLocation();
+  const { controls, open, setOpen } = useGameMenu();
   const { data: session } = useSession();
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
   const builds = useMyJobs();
   const decisions = useCreatorCommands(creatorId);
   const sound = useSyncExternalStore(onChange, status);
-  const [open, setOpen] = useState(false);
   const [volume, setLocalVolume] = useState(getVolume);
   const [announcement, setAnnouncement] = useState('');
   const [buildClock, setBuildClock] = useState(0);
@@ -75,7 +77,15 @@ export function StudioMenu() {
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target;
+      if (
+        !(target instanceof Node) ||
+        root.current?.contains(target) ||
+        (target instanceof Element && target.closest('[data-studio-menu-boundary]'))
+      ) {
+        return;
+      }
+      setOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -88,6 +98,11 @@ export function StudioMenu() {
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('keydown', escape);
     };
+  }, [open]);
+
+  useEffect(() => {
+    if (wasOpen.current && !open) trigger.current?.focus();
+    wasOpen.current = open;
   }, [open]);
 
   useEffect(() => {
@@ -140,6 +155,12 @@ export function StudioMenu() {
 
   // Nearest the menu button first; the row runs right to left.
   const circles: ReactElement[] = [];
+  if (controls) {
+    circles.push(
+      ...controls.actions.map((action) => <MenuAction key={action.id} action={action} close={close} />),
+      ...controls.extras,
+    );
+  }
   if (openDecisions > 0) {
     circles.push(
       <button
@@ -212,6 +233,9 @@ export function StudioMenu() {
       />,
     );
   }
+  // Game extras can own in-flight operations (for example room creation), so only those controls stay mounted while
+  // the tray is folded. The rest of the menu keeps its original open-only DOM lifetime.
+  const renderedCircles = open ? circles : (controls?.extras ?? []);
   if (session) {
     circles.push(<MenuLink key="credits" label="Credits" icon="credits" to="/settings/credits" close={close} />);
     if (requireAdmin(admin.data ?? null) === 'ok') {
@@ -355,6 +379,7 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
+        data-game-play={controls !== undefined}
         data-building={buildingJobs.length > 0}
         data-blocking={blocked}
         aria-label="Menu"
@@ -382,18 +407,16 @@ export function StudioMenu() {
       <span className="sr" role="status" aria-live="polite">
         {announcement}
       </span>
-      {open ? (
-        <div className="studio-menu-tray">
-          <div id="studio-menu-panel" className="studio-menu-row" role="group" aria-label="Menu">
-            {circles.map((circle, index) => (
-              <span key={circle.key} className="studio-menu-slot" style={{ '--i': index } as CSSProperties}>
-                {circle}
-              </span>
-            ))}
-          </div>
-          {sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
+      <div className="studio-menu-tray" hidden={!open}>
+        <div id="studio-menu-panel" className="studio-menu-row" role="group" aria-label="Menu">
+          {renderedCircles.map((circle, index) => (
+            <span key={circle.key} className="studio-menu-slot" style={{ '--i': index } as CSSProperties}>
+              {circle}
+            </span>
+          ))}
         </div>
-      ) : null}
+        {open && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
+      </div>
       <JobConversationModal />
       {deck && deck.creatorId === creatorId ? (
         <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />
@@ -415,6 +438,24 @@ function MenuLink({ label, icon, to, close }: { label: string; icon: string; to:
       <MenuRing />
       <Icon name={icon} />
     </Link>
+  );
+}
+
+function MenuAction({ action, close }: { action: GameMenuAction; close(): void }) {
+  return (
+    <button
+      className="menu-circle"
+      type="button"
+      aria-label={action.label}
+      disabled={action.disabled}
+      onClick={() => {
+        close();
+        action.onSelect();
+      }}
+    >
+      <MenuRing />
+      <Icon name={action.icon} />
+    </button>
   );
 }
 

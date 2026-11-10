@@ -8,6 +8,10 @@ const line = (body: string) =>
 
 export const ICONS: Record<string, string> = {
   menu: line('<path d="M40 72h176M40 128h176M40 184h176"/>'),
+  games: line(
+    '<rect x="40" y="40" width="72" height="72" rx="12"/><rect x="144" y="40" width="72" height="72" rx="12"/><rect x="40" y="144" width="72" height="72" rx="12"/><rect x="144" y="144" width="72" height="72" rx="12"/>',
+  ),
+  edit: line('<path d="m48 176-8 40 40-8L200 88l-32-32Z"/><path d="m144 80 32 32"/>'),
   credits: line(
     '<path d="M32 48h72a32 32 0 0 1 32 32v136H64a32 32 0 0 0-32 32Zm192 0h-72a32 32 0 0 0-32 32v136h72a32 32 0 0 1 32 32Z"/>',
   ),

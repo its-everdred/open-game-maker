@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
 import type { StoreApi } from 'zustand/vanilla';
 
 import type { Entity, ReapplyReport } from '@ogm/contracts/browser';
 
 import type { OgmHost } from '../../app/testHook';
+import { useGameMenu, useGameMenuControls } from '../../app/GameMenu';
 import { useDock } from '../../features/build-chat/dock';
 import { gameJobsQueryKey } from '../../features/build-chat/jobs';
 import {
@@ -77,6 +78,7 @@ export function GameScreen() {
   const { gameId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { open: menuOpen, setOpen: setMenuOpen } = useGameMenu();
   const branch = searchParams.get('v')?.trim() || 'main';
   const roomId = searchParams.get('room')?.trim() || undefined;
   const mode: 'play' | 'edit' = searchParams.get('mode') === 'edit' ? 'edit' : 'play';
@@ -101,7 +103,6 @@ export function GameScreen() {
   const [frameController, setFrameController] = useState<GameFrameController>();
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
-  const [pauseSlot, setPauseSlot] = useState<HTMLSpanElement | null>(null);
   const [sessionStore, setSessionStore] = useState<StoreApi<EditorSessionState>>();
   const [sessionView, setSessionView] = useState<EditorSessionState>();
   const [editStartup, setEditStartup] = useState<EditorSessionState['saved']>();
@@ -297,13 +298,16 @@ export function GameScreen() {
     },
     [mode, searchParams, setSearchParams],
   );
-  const requestMode = (nextMode: 'play' | 'edit') => {
-    if (room.snapshot?.role === 'peer') return;
-    if (room.snapshot?.role === 'host') {
-      room.session?.send({ t: 'phase', to: nextMode === 'play' ? 'playing' : 'editing' });
-    }
-    setMode(nextMode);
-  };
+  const requestMode = useCallback(
+    (nextMode: 'play' | 'edit') => {
+      if (room.snapshot?.role === 'peer') return;
+      if (room.snapshot?.role === 'host') {
+        room.session?.send({ t: 'phase', to: nextMode === 'play' ? 'playing' : 'editing' });
+      }
+      setMode(nextMode);
+    },
+    [room.session, room.snapshot?.role, setMode],
+  );
   const leaveRoom = useCallback(async () => {
     try {
       await room.session?.leave();
@@ -325,16 +329,53 @@ export function GameScreen() {
     },
     [searchParams, setSearchParams],
   );
-  const extraProps: GameExtraProps = {
-    gameId,
-    branchId: branch,
-    buildId: activeSnapshot?.buildId,
-    mode,
-    onRoomCreated: activateRoom,
-    onRoomLeave: leaveRoom,
-    roomSession: room.session,
-    roomSnapshot: room.snapshot,
-  };
+  const askForChange = useCallback(() => {
+    if (room.snapshot?.role === 'peer') return;
+    requestMode('edit');
+    useDock.getState().startEdit({ gameId, branchId: jobBranch, title: game.data?.title ?? '' });
+  }, [game.data?.title, gameId, jobBranch, requestMode, room.snapshot?.role]);
+  const closeMenu = useCallback(() => setMenuOpen(false), [setMenuOpen]);
+  const extraProps: GameExtraProps = useMemo(
+    () => ({
+      gameId,
+      branchId: branch,
+      buildId: activeSnapshot?.buildId,
+      mode,
+      onNavigate: closeMenu,
+      onRoomCreated: activateRoom,
+      onRoomLeave: leaveRoom,
+      roomSession: room.session,
+      roomSnapshot: room.snapshot,
+    }),
+    [activeSnapshot?.buildId, activateRoom, branch, closeMenu, gameId, leaveRoom, mode, room.session, room.snapshot],
+  );
+  const playMenuControls = useMemo(
+    () =>
+      mode === 'play'
+        ? {
+            actions: [
+              { id: 'games', label: 'Games', icon: 'games', onSelect: () => void leaveRoom() },
+              {
+                id: 'edit',
+                label: 'Edit',
+                icon: 'edit',
+                disabled: room.snapshot?.role === 'peer',
+                onSelect: () => requestMode('edit'),
+              },
+              {
+                id: 'ask-change',
+                label: 'Ask for a change',
+                icon: 'speak',
+                disabled: room.snapshot?.role === 'peer',
+                onSelect: askForChange,
+              },
+            ],
+            extras: gameExtraElements('topbar', extraProps),
+          }
+        : undefined,
+    [askForChange, extraProps, leaveRoom, mode, requestMode, room.snapshot?.role],
+  );
+  useGameMenuControls(playMenuControls);
 
   const hudShown =
     mode === 'play' &&
@@ -344,32 +385,20 @@ export function GameScreen() {
 
   return (
     <section className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}`} aria-label="Play and edit">
-      <PlayEditBar
-        title={game.data?.title ?? ''}
-        mode={mode}
-        saved={mode === 'edit' ? savedLabel(editStartup ?? sessionView?.saved) : undefined}
-        build={build}
-        playLabel={frameState.manifest?.playLabel}
-        onBack={() => void leaveRoom()}
-        onMode={requestMode}
-        onAsk={() => {
-          if (room.snapshot?.role === 'peer') return;
-          requestMode('edit');
-          useDock.getState().startEdit({ gameId, branchId: jobBranch, title: game.data?.title ?? '' });
-        }}
-      >
-        <GameExtras placement="topbar" {...extraProps} />
-        {mode === 'play' ? (
-          <span className="platform-pause-slot" ref={setPauseSlot}>
-            {/* Holds Pause's space until the HUD mounts, so the bar's buttons do not shift when the game loads. */}
-            {hudShown ? null : (
-              <button className="platform-pause tap-primary" type="button" tabIndex={-1} aria-hidden="true" disabled>
-                Pause
-              </button>
-            )}
-          </span>
-        ) : null}
-      </PlayEditBar>
+      {mode === 'edit' ? (
+        <PlayEditBar
+          title={game.data?.title ?? ''}
+          mode={mode}
+          saved={savedLabel(editStartup ?? sessionView?.saved)}
+          build={build}
+          playLabel={frameState.manifest?.playLabel}
+          onBack={() => void leaveRoom()}
+          onMode={requestMode}
+          onAsk={askForChange}
+        >
+          <GameExtras placement="topbar" {...extraProps} />
+        </PlayEditBar>
+      ) : null}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
         {mode === 'play' && frameController !== undefined ? (
@@ -405,12 +434,13 @@ export function GameScreen() {
             build={build}
             frame={frameRef.current}
             gameId={gameId}
-            pauseSlot={pauseSlot}
+            paused={menuOpen && roomId === undefined}
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
             saves={frameState.manifest.saves}
             saveSchema={frameState.manifest.saveSchema}
             migratesFrom={frameState.manifest.migratesFrom}
             onLeave={() => void leaveRoom()}
+            onResume={() => setMenuOpen(false)}
           />
         ) : null}
         <GameExtras placement="hud" {...extraProps} />
@@ -539,6 +569,11 @@ function reportUpdateFailure(): void {
 }
 
 function GameExtras({ placement, ...props }: GameExtraProps & { placement: 'topbar' | 'hud' | 'overlay' }) {
-  const extras = gameExtras.filter((extra) => extra.placement === placement);
-  return extras.map(({ id, Component }) => <Component key={id} {...props} />);
+  return gameExtraElements(placement, props);
+}
+
+function gameExtraElements(placement: 'topbar' | 'hud' | 'overlay', props: GameExtraProps) {
+  return gameExtras
+    .filter((extra) => extra.placement === placement)
+    .map(({ id, Component }) => <Component key={id} {...props} />);
 }

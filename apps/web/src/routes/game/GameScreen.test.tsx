@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OgmHost } from '../../app/testHook';
+import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 
 type MockFrameState = {
   bridgeState: 'connecting' | 'ready' | 'error';
@@ -53,6 +54,8 @@ const host = vi.hoisted(() => {
     }),
     onScreen: vi.fn(() => vi.fn()),
     pick: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
     select: vi.fn(),
     sendRoomMessage: vi.fn(),
     setMode: vi.fn(),
@@ -77,18 +80,70 @@ vi.mock('../../features/editor/frame', () => host);
 import { useDock } from '../../features/build-chat/dock';
 import { GameScreen } from './GameScreen';
 
+function GameMenuProbe() {
+  const { controls, open, setOpen } = useGameMenu();
+  return (
+    <aside data-testid="game-menu-probe">
+      <button type="button" aria-label="Menu" onClick={() => setOpen(!open)} />
+      {open && controls ? (
+        <div role="group" aria-label="Menu">
+          {controls.actions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              aria-label={action.label}
+              disabled={action.disabled}
+              onClick={action.onSelect}
+            />
+          ))}
+          {controls.extras}
+        </div>
+      ) : null}
+    </aside>
+  );
+}
+
 function renderGame(entry = '/g/game') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[entry]}>
-        <Routes>
-          <Route path="/g/:gameId" element={<GameScreen />} />
-          <Route path="/all" element={<h1>Games destination</h1>} />
-        </Routes>
+        <GameMenuProvider>
+          <GameMenuProbe />
+          <Routes>
+            <Route path="/g/:gameId" element={<GameScreen />} />
+            <Route path="/all" element={<h1>Games destination</h1>} />
+          </Routes>
+        </GameMenuProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+async function readyPlayFrame() {
+  await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+  act(() => {
+    host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+      bridgeState: 'ready',
+      dropped: 0,
+      manifest: {
+        id: 'cellar',
+        sdk: '^1',
+        title: 'Goblin Cellar',
+        inputs: { actions: {} },
+        presentation: { orientation: 'any', minLogical: { w: 320, h: 180 }, fit: 'responsive' },
+        view: 'main',
+        dimension: '2d',
+        capabilities: [],
+        palette: { categories: [], items: [] },
+        tools: [],
+        gizmos: {},
+        saves: false,
+        overrides: { aliases: {}, retired: [] },
+      },
+    });
+  });
+  await waitFor(() => expect(host.controller.setSettings).toHaveBeenCalled());
 }
 
 beforeEach(() => {
@@ -131,14 +186,22 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
-  it('defaults to main/play and preserves the prototype bar ordering', async () => {
+  it('defaults to a full-screen play view with the host actions only inside the menu', async () => {
     const { container } = renderGame();
 
-    expect(await screen.findByText('Goblin Cellar')).toBeVisible();
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
     expect(container.querySelector('.game-screen.is-playing')).toBeVisible();
+    expect(container.querySelector('.play-bar')).not.toBeInTheDocument();
+    expect(screen.queryByText('Goblin Cellar')).not.toBeInTheDocument();
+    expect(screen.queryByText('Draft')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Games' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    expect(screen.getByRole('button', { name: 'Games' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Ask for a change' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Invite' })).toBeVisible();
-    const buttons = screen.getAllByRole('button').map((button) => button.textContent?.trim());
-    expect(buttons.slice(0, 4)).toEqual(['Games', '▶ Play', '✎ Edit', 'Ask for a change']);
     await waitFor(() =>
       expect(host.mountGameFrame).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -153,18 +216,22 @@ describe('GameScreen', () => {
 
   it('shares mode in the query and acquires an edit lease', async () => {
     const { container } = renderGame();
-    await screen.findByText('Goblin Cellar');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
     await waitFor(() => expect(editorApi.acquireLease).toHaveBeenCalledWith('game', 'main', expect.any(String)));
     expect(host.controller.setMode).toHaveBeenCalledWith('edit');
     expect(container.querySelector('.game-screen.is-editing')).toBeVisible();
+    expect(container.querySelector('.play-bar')).toBeVisible();
+    expect(screen.getByText('Goblin Cellar')).toBeVisible();
   });
 
   it('asks for a change in the build chat for this game and branch', async () => {
     renderGame();
-    await screen.findByText('Goblin Cellar');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Ask for a change' }));
 
@@ -181,7 +248,8 @@ describe('GameScreen', () => {
       { id: 'b_side', name: 'side' },
     ];
     renderGame('/g/game?v=b_main');
-    await screen.findByText('Goblin Cellar');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Ask for a change' }));
 
@@ -204,7 +272,7 @@ describe('GameScreen', () => {
       value: { buildId: 'build' },
     });
 
-    renderGame();
+    renderGame('/g/game?mode=edit');
 
     expect(await screen.findByText('Published')).toBeVisible();
     await waitFor(() =>
@@ -215,6 +283,7 @@ describe('GameScreen', () => {
   it('disposes the frame before returning to Games', async () => {
     renderGame();
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Games' }));
 
     expect(await screen.findByRole('heading', { name: 'Games destination' })).toBeVisible();
@@ -225,7 +294,7 @@ describe('GameScreen', () => {
     editorApi.getDesignSnapshot.mockImplementation(() => new Promise(() => undefined));
 
     renderGame();
-    await screen.findByText('Goblin Cellar');
+    await waitFor(() => expect(editorApi.getGame).toHaveBeenCalled());
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 180));
     });
@@ -282,6 +351,31 @@ describe('GameScreen', () => {
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledTimes(2));
   });
 
+  it('pauses a solo game while the menu is open and resumes it when the menu closes', async () => {
+    renderGame();
+    await readyPlayFrame();
+
+    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    await waitFor(() => expect(host.controller.pause).toHaveBeenCalledOnce());
+    expect(screen.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(host.controller.resume).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('opens the menu without pausing a room game', async () => {
+    renderGame('/g/game?room=room-1&test');
+    await readyPlayFrame();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
+    expect(host.controller.pause).not.toHaveBeenCalled();
+  });
+
   it('exposes live game state directly under the test hook', async () => {
     const baseHost: OgmHost = {
       version: 1,
@@ -325,7 +419,7 @@ describe('GameScreen', () => {
         pin: { gameId: 'game', branchId: 'main', buildId: 'build' },
         ownerId: 'owner',
         editorSessionId: 'owner-session',
-        phase: 'editing',
+        phase: 'playing',
         phaseAt: 1_000,
         playRev: 5,
         lastRev: 5,
@@ -334,9 +428,13 @@ describe('GameScreen', () => {
         presence: { selection: [], privateMode: false },
       },
     });
-    await waitFor(() => expect((window.__ogmHost as OgmHost & { game?: { mode: string } }).game?.mode).toBe('edit'));
+    await waitFor(() => expect((window.__ogmHost as OgmHost & { game?: { mode: string } }).game?.mode).toBe('play'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ask for a change' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
+    const ask = screen.getByRole('button', { name: 'Ask for a change' });
+    expect(ask).toBeDisabled();
+    fireEvent.click(ask);
 
     expect(useDock.getState().draft).toBeUndefined();
   }, 10_000);
