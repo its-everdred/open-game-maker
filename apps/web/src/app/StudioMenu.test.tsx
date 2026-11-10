@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,7 +7,63 @@ import type { GameCommand } from '@ogm/contracts';
 import type { EnergyView } from '@ogm/contracts/browser';
 
 import { useDeckDraft, useReviewDraft } from '../features/commands-inbox/drafts';
+import { GameMenuProvider, useGameMenuControls } from './GameMenu';
 import { StudioMenu } from './StudioMenu';
+
+function TestStudioMenu() {
+  return (
+    <GameMenuProvider>
+      <StudioMenu />
+    </GameMenuProvider>
+  );
+}
+
+function TestPlayControls({ onEdit }: { onEdit(): void }) {
+  const controls = useMemo(
+    () => ({
+      actions: [
+        { id: 'games', label: 'Games', icon: 'games', onSelect: vi.fn() },
+        { id: 'edit', label: 'Edit', icon: 'edit', onSelect: onEdit },
+        { id: 'ask', label: 'Ask for a change', icon: 'speak', onSelect: vi.fn() },
+      ],
+      extras: [
+        <button key="fork" className="menu-circle" type="button" aria-label="Fork">
+          ↗
+        </button>,
+      ],
+    }),
+    [onEdit],
+  );
+  useGameMenuControls(controls);
+  return null;
+}
+
+function PendingExtra() {
+  const [pending, setPending] = useState(false);
+  return (
+    <button
+      className="menu-circle"
+      type="button"
+      aria-label={pending ? 'Invite pending' : 'Invite'}
+      disabled={pending}
+      onClick={() => setPending(true)}
+    >
+      ↗
+    </button>
+  );
+}
+
+function TestPendingControls() {
+  const controls = useMemo(
+    () => ({
+      actions: [],
+      extras: [<PendingExtra key="invite" />],
+    }),
+    [],
+  );
+  useGameMenuControls(controls);
+  return null;
+}
 
 const state = vi.hoisted(() => ({
   admin: { data: undefined as { platformRole: 'maintainer' | 'admin' | 'none' } | undefined },
@@ -253,6 +310,73 @@ describe('StudioMenu', () => {
     );
   });
 
+  it('puts play actions in the icon row and returns focus to the glass menu button after selection', async () => {
+    const onEdit = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/g/game-1']}>
+        <GameMenuProvider>
+          <StudioMenu />
+          <TestPlayControls onEdit={onEdit} />
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Menu' });
+    await waitFor(() => expect(trigger).toHaveAttribute('data-game-play', 'true'));
+
+    fireEvent.click(trigger);
+
+    expect(circleNames().slice(0, 4)).toEqual(['Games', 'Edit', 'Ask for a change', 'Fork']);
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveTextContent(/^$/);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(onEdit).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it('keeps an in-flight game extra mounted while the menu is folded', async () => {
+    render(
+      <MemoryRouter initialEntries={['/g/game-1']}>
+        <GameMenuProvider>
+          <StudioMenu />
+          <TestPendingControls />
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Menu' });
+    await waitFor(() => expect(trigger).toHaveAttribute('data-game-play', 'true'));
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+    expect(screen.getByRole('button', { name: 'Invite pending' })).toBeDisabled();
+
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('button', { name: 'Invite pending' })).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole('button', { name: 'Invite pending' })).toBeDisabled();
+  });
+
+  it('keeps registered interaction boundaries inside the open menu', () => {
+    render(
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          <button type="button" data-studio-menu-boundary>
+            Pause action
+          </button>
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Pause action' }));
+    expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
   it('rings what is left of the tightest Energy window and opens the windows, then settings', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.energy = {
@@ -313,7 +437,7 @@ describe('StudioMenu', () => {
     state.jobs = { jobs: [finished], active: [], games: [{ id: 'game-1', title: 'Moon Vault' }] };
     remounted.rerender(
       <MemoryRouter initialEntries={['/games']}>
-        <StudioMenu />
+        <TestStudioMenu />
       </MemoryRouter>,
     );
 
@@ -425,7 +549,7 @@ describe('StudioMenu', () => {
     state.session = { data: { user: { id: 'user-2' } } };
     view.rerender(
       <MemoryRouter initialEntries={['/games']}>
-        <StudioMenu />
+        <TestStudioMenu />
       </MemoryRouter>,
     );
 
@@ -435,7 +559,7 @@ describe('StudioMenu', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     view.rerender(
       <MemoryRouter initialEntries={['/games']}>
-        <StudioMenu />
+        <TestStudioMenu />
       </MemoryRouter>,
     );
     expect(screen.queryByRole('dialog', { name: 'Topic d1' })).not.toBeInTheDocument();
@@ -704,7 +828,7 @@ function ringOf(circle: HTMLElement) {
 function renderMenu(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <StudioMenu />
+      <TestStudioMenu />
     </MemoryRouter>,
   );
 }

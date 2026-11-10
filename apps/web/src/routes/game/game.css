@@ -384,25 +384,6 @@
   pointer-events: none;
 }
 
-.platform-pause-slot {
-  display: contents;
-}
-
-.platform-pause[aria-hidden='true'] {
-  visibility: hidden;
-}
-
-.platform-pause {
-  min-width: 64px;
-  min-height: 64px;
-  border: 3px solid var(--ink);
-  border-radius: 999px;
-  background: var(--paper-2);
-  color: var(--ink);
-  box-shadow: var(--pop-sm);
-  padding-inline: 14px;
-}
-
 .platform-pause-shade {
   z-index: 7;
   display: grid;

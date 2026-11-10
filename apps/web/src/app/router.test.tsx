@@ -6,6 +6,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { RESERVED_GAME_SLUGS } from '@ogm/contracts/browser';
 
 import { authClient } from '../lib/api/auth';
+import { useGameMenu } from './GameMenu';
 import { collectScreenRoutes, screenRouteObjects } from './router';
 import type { ScreenRoute } from './screen';
 
@@ -130,6 +131,26 @@ describe('screen route collection', () => {
     expect(matchRoutes(routes, '/fixture')).not.toBeNull();
   });
 
+  it('provides game menu state to bare routes', async () => {
+    const routes = collectScreenRoutes({
+      '../routes/__fixture__/route.tsx': {
+        route: {
+          path: '/fixture',
+          element: <BareMenuConsumer />,
+          chrome: 'bare',
+          auth: 'none',
+        },
+      },
+    });
+    const router = createMemoryRouter(routes, { initialEntries: ['/fixture'] });
+
+    render(<RouterProvider router={router} />);
+    const toggle = await screen.findByRole('button', { name: 'Open fixture menu' });
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveTextContent('Close fixture menu');
+  });
+
   it('names a module that omits its route export', () => {
     expect(() => collectScreenRoutes({ '../routes/broken/route.tsx': {} })).toThrow('../routes/broken/route.tsx');
   });
@@ -212,6 +233,29 @@ describe('screen route collection', () => {
     expect(screen.getByRole('button', { name: 'Unmute' })).toBeVisible();
   });
 
+  it('marks only the game root in play mode as full-screen chrome', async () => {
+    const routes = collectScreenRoutes({
+      '../routes/game/route.tsx': {
+        route: {
+          path: '/g/:gameId',
+          element: <h1>Game</h1>,
+          chrome: 'app',
+          auth: 'none',
+          children: [{ path: 'versions', element: <h1>Versions</h1> }],
+        },
+      },
+    });
+    const router = createMemoryRouter(routes, { initialEntries: ['/g/game'] });
+
+    render(<RouterProvider router={router} />);
+
+    expect(document.querySelector('.app-chrome')).toHaveClass('is-game-playing');
+    await router.navigate('/g/game?mode=edit');
+    await waitFor(() => expect(document.querySelector('.app-chrome')).not.toHaveClass('is-game-playing'));
+    await router.navigate('/g/game/versions');
+    await waitFor(() => expect(document.querySelector('.app-chrome')).not.toHaveClass('is-game-playing'));
+  });
+
   it('retries a crashed screen', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     let crashing = true;
@@ -289,6 +333,15 @@ describe('screen route collection', () => {
 
 function BrokenPicker(): never {
   throw new Error('broken picker');
+}
+
+function BareMenuConsumer() {
+  const menu = useGameMenu();
+  return (
+    <button type="button" onClick={() => menu.setOpen((open) => !open)}>
+      {menu.open ? 'Close' : 'Open'} fixture menu
+    </button>
+  );
 }
 
 function StatefulScreen() {

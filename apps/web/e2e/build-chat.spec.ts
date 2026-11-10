@@ -282,8 +282,10 @@ test('asking for a change with no build running starts an edit job and streams i
 
   await page.goto('/g/game?test');
   await expect.poll(() => jobResponses).toBeGreaterThan(0);
-  // Waiting for the empty jobs response lets the live game frame start moving the toolbar; this test targets refresh.
-  await page.getByRole('button', { name: 'Ask for a change' }).click({ force: true });
+  // Waiting for the empty jobs response lets the live game frame start moving the menu controls; this test targets
+  // refresh rather than their registration timing.
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Ask for a change' }).click();
   await expect(page.getByRole('heading', { name: 'Goblin Cellar' })).toBeVisible();
 
   await page.getByRole('textbox', { name: 'Message the builder' }).fill('Make the door glow');

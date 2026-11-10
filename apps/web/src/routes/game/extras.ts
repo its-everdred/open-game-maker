@@ -10,6 +10,7 @@ export type GameExtraProps = {
   branchId: string;
   buildId?: string;
   mode: 'play' | 'edit';
+  onNavigate?: () => void;
   onRoomCreated?: (room: CreatedRoom) => void;
   onRoomLeave?: () => void | Promise<void>;
   roomSession?: RoomSession;

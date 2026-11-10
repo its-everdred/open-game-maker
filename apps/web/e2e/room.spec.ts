@@ -157,7 +157,8 @@ test('copies a fresh owner invite when the share sheet is unavailable', async ({
   await page.goto('/g/game?test');
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
 
-  await page.getByRole('button', { name: 'Invite' }).click({ force: true });
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Invite' }).click();
   await expect(page.getByText('Copied')).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('/join/');
 });

@@ -27,13 +27,17 @@
 }
 
 .game-screen.is-playing {
-  grid-template-columns: 0 minmax(0, 1fr) 0;
-  grid-template-rows: 62px minmax(0, 1fr) 0;
-  grid-template-areas:
-    'top top top'
-    '. stage .'
-    '. . .';
-  column-gap: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'stage';
+  padding: 0;
+  gap: 0;
+}
+
+.game-screen.is-playing .game-stage {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .game-screen .play-bar,
@@ -60,14 +64,6 @@
 }
 
 .game-screen .play-bar > * {
-  flex: none;
-}
-
-/* The bar scrolls sideways when it overflows; Pause stays pinned at its visible end. */
-.game-screen .play-bar .platform-pause {
-  position: sticky;
-  right: 0;
-  z-index: 1;
   flex: none;
 }
 
@@ -360,7 +356,6 @@
   pointer-events: none;
 }
 
-.game-screen .platform-pause,
 .game-screen .update-indicator,
 .game-screen .platform-pause-dialog,
 .game-screen .room-phase-card,
@@ -386,12 +381,10 @@
 
   .game-screen.is-playing {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) 0 0;
-    grid-template-areas:
-      'top'
-      'stage'
-      '.'
-      '.';
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'stage';
+    padding: 0;
+    gap: 0;
   }
 
   .game-screen .play-bar {

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 
 import type { CreditsDocument, PlayerSettings, SaveData, SaveListQuery, SaveSlot } from '@ogm/contracts/browser';
 
@@ -35,8 +34,8 @@ type PlatformHudProps = {
   build: 'draft' | 'published';
   frame: GameFrameController;
   gameId: string;
-  /** Host space outside the game (the play bar) that holds the Pause button, so it never covers the game. */
-  pauseSlot: HTMLElement | null;
+  /** The global game menu pauses solo play while it is open; room play remains live. */
+  paused: boolean;
   saveContext: SaveContext;
   saves: boolean;
   /** The running build's save schema; absent when the build did not report one. */
@@ -47,6 +46,7 @@ type PlatformHudProps = {
   toast?: (message: string) => void;
   creditsApi?: (gameId: string, buildId: string) => Promise<CreditsDocument>;
   onLeave?(): void;
+  onResume(): void;
 };
 
 const defaultSaveApi: PlatformSaveApi = { list: getOptionalSaves, read: getSave, write: putSave };
@@ -62,7 +62,7 @@ export function PlatformHud({
   build,
   frame,
   gameId,
-  pauseSlot,
+  paused,
   saveContext,
   saves,
   saveSchema,
@@ -71,8 +71,8 @@ export function PlatformHud({
   toast = pushToast,
   creditsApi = defaultCreditsApi,
   onLeave,
+  onResume,
 }: PlatformHudProps) {
-  const [paused, setPaused] = useState(false);
   const [slots, setSlots] = useState<SaveSlot[]>();
   const [savesAvailable, setSavesAvailable] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SaveSlotId>('auto');
@@ -80,10 +80,8 @@ export function PlatformHud({
   const [page, setPage] = useState<'pause' | 'credits'>('pause');
   const [credits, setCredits] = useState<CreditsDocument>();
   const [creditsFailed, setCreditsFailed] = useState(false);
-  const pauseRef = useRef<HTMLButtonElement>(null);
   const resumeRef = useRef<HTMLButtonElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
-  const wasPausedRef = useRef(false);
   const slotsRef = useRef(slots);
   const selectedSlotRef = useRef(selectedSlot);
   const saveContextRef = useRef(saveContext);
@@ -158,13 +156,17 @@ export function PlatformHud({
   }, [build, frame, gameId, migratesFrom, saveApi, saveSchema, savesAvailable, toast]);
 
   useEffect(() => {
-    if (paused) {
-      wasPausedRef.current = true;
-      (page === 'credits' ? backRef : resumeRef).current?.focus();
-    } else if (wasPausedRef.current) {
-      pauseRef.current?.focus();
-    }
+    if (paused) (page === 'credits' ? backRef : resumeRef).current?.focus();
   }, [page, paused]);
+
+  useEffect(() => {
+    if (!paused) {
+      setPage('pause');
+      return;
+    }
+    frame.pause();
+    return () => frame.resume();
+  }, [frame, paused]);
 
   useEffect(() => {
     setCredits(undefined);
@@ -187,14 +189,8 @@ export function PlatformHud({
     };
   }, [credits, creditsApi, gameId, page, saveContext.buildId]);
 
-  const pause = () => {
-    frame.pause();
-    setPaused(true);
-  };
   const resume = () => {
-    frame.resume();
-    setPage('pause');
-    setPaused(false);
+    onResume();
   };
   const load = async () => {
     const slot = slots?.find((candidate) => candidate.slotId === selectedSlot);
@@ -209,24 +205,11 @@ export function PlatformHud({
 
   return (
     <div className="platform-hud">
-      {pauseSlot
-        ? createPortal(
-            <button
-              ref={pauseRef}
-              className="platform-pause tap-primary"
-              type="button"
-              disabled={paused}
-              onClick={pause}
-            >
-              Pause
-            </button>,
-            pauseSlot,
-          )
-        : null}
       {paused ? (
         <div className="platform-pause-shade">
           <div
             className="platform-pause-dialog"
+            data-studio-menu-boundary
             role="dialog"
             aria-modal="true"
             aria-label={page === 'credits' ? 'Credits' : 'Paused'}
