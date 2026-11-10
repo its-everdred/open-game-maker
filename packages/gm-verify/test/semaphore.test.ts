@@ -53,10 +53,14 @@ describe('acquireSlot', () => {
     const script = `import { acquireSlot } from ${JSON.stringify(moduleUrl)};
       await acquireSlot({ runtimeDir: ${JSON.stringify(runtimeDir)}, slots: 1 });
       console.log('ready'); setInterval(() => {}, 1000);`;
-    const holder = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const holder = spawn(process.execPath, ['--input-type=module', '-e', script], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     try {
       await once(holder.stdout, 'data');
-      await expect(acquireSlot({ runtimeDir, slots: 1, waitMs: 50, pollMs: 10 })).rejects.toThrow(/no free capture slot/);
+      await expect(acquireSlot({ runtimeDir, slots: 1, waitMs: 50, pollMs: 10 })).rejects.toThrow(
+        /no free capture slot/,
+      );
       holder.kill('SIGKILL');
       await once(holder, 'exit');
       // Simulate a stale namespace-local PID that happens to be alive here.
@@ -78,8 +82,9 @@ describe('acquireSlot', () => {
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path ?? ''}`;
     try {
-      await expect(acquireSlot({ runtimeDir: runtime(), slots: 1, waitMs: 100, pollMs: 10 }))
-        .rejects.toThrow(/capture lock helper exited with code 1/);
+      await expect(acquireSlot({ runtimeDir: runtime(), slots: 1, waitMs: 100, pollMs: 10 })).rejects.toThrow(
+        /capture lock helper exited with code 1/,
+      );
     } finally {
       if (path === undefined) delete process.env.PATH;
       else process.env.PATH = path;

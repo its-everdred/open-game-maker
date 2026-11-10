@@ -21,10 +21,16 @@ function tryTake(slot: string): Promise<ChildProcessWithoutNullStreams | undefin
     const child = spawn('flock', ['-n', '-E', '75', `${slot}.lock`, 'sh', '-c', 'printf "locked\\n"; cat >/dev/null']);
     let settled = false;
     child.once('error', (error) => {
-      if (!settled) { settled = true; reject(error); }
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
     });
     child.stdout.once('data', () => {
-      if (!settled) { settled = true; resolve(child); }
+      if (!settled) {
+        settled = true;
+        resolve(child);
+      }
     });
     child.once('exit', (code) => {
       if (!settled) {
