@@ -241,8 +241,8 @@ describe('StyleStep', () => {
         ...set('generated', 'Generated'),
         showcase: legacyShowcase,
         packs: [
-          { id: 'a', name: 'A', aiGenerated: true },
-          { id: 'b', name: 'B', aiGenerated: true },
+          { id: 'a', name: 'A', thumbnailUrl: '/a.png', aiGenerated: true },
+          { id: 'b', name: 'B', thumbnailUrl: '/b.png', aiGenerated: true },
         ],
       },
       set('authored', 'Authored'),
