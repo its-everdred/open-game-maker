@@ -30,8 +30,8 @@ list it under unchecked.
 ## Look
 
 - Capture the touch phone and tablet stills, both orientations. Read every tile and name the worst defect first.
-- Use a timeline for motion; a follow camera is drawn twice so its lag can settle.
-- Use `--inputs` and closer `--frames` around small events instead of judging them from a wide shot.
+- Motion: a timeline (a follow camera is drawn twice to settle its lag); small events: `--inputs`, closer `--frames`.
+- A target to match? A failed look is the next round's to-do list: work in rounds with `close-the-gap.md` here.
 - Check the title, main play state, first action, HUD, and any changed scene or screen.
 - Treat the sheet as the source of truth. Do not infer appearance from scene objects or source code.
 - A model looks black, flat, or wrong? Open `.claude/skills/vendor/gamedev/threejs-materials-lighting/SKILL.md`.
