@@ -36,6 +36,14 @@ list it under unchecked.
 - Treat the sheet as the source of truth. Do not infer appearance from scene objects or source code.
 - A model looks black, flat, or wrong? Open `.claude/skills/vendor/gamedev/threejs-materials-lighting/SKILL.md`.
 
+## Close the gap to a target
+
+A failed look is the next round's to-do list, not a verdict. Each round: the sheet beside the target, the differences
+worst first, and for each what would close it (camera, light, material, layout, a kit piece, a shader); fix the top one
+to three, then a new sheet. Keep each round's sheet in `review/<ticket>/rounds/` so the creator sees it move closer.
+A difference that needs something outside the ticket (a missing kit piece, an engine feature) gets its own ticket with
+the sheet, and the rest keeps closing. Never stop at "fail", and never accept a difference for the creator.
+
 ## Judge a set as a set
 
 A set of assets is judged whole: one beautiful item beside an off-style one is a failed set. Score cohesion, reference
