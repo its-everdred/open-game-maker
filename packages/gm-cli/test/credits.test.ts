@@ -75,7 +75,7 @@ describe('credits rendering', () => {
     };
 
     expect(renderCredits(lock)).toBe(
-      '# Credits\n\n## CC0-1.0\n- CC0 assets from: kenney-mini-dungeon\n- Mini Dungeon (Kenney) — none required\n\n## LicenseRef-made-by-agent\n- Made for this game — none required\n\n## LicenseRef-studio\n- Studio assets — Studio A\n',
+      '# Credits\n\n## CC0-1.0\n- CC0 assets from: kenney-mini-dungeon\n- Mini Dungeon (Kenney) — none required (licence: License.txt)\n\n## LicenseRef-made-by-agent\n- Made for this game — none required (licence: created for this game)\n\n## LicenseRef-studio\n- Studio assets — Studio A (licence: Studio agreement)\n',
     );
   });
 });

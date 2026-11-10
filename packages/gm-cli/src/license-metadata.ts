@@ -14,6 +14,8 @@ type CreditFields = {
   source?: unknown;
 };
 
+const invalidPackDocument = Symbol('invalid pack document');
+
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -69,28 +71,38 @@ function normalize(
     : { detail: `credit metadata is invalid: ${parsed.error.issues[0]?.message}` };
 }
 
-async function packDocument(assetsRoot: string, slug: string): Promise<unknown | null> {
+async function packDocument(assetsRoot: string, slug: string): Promise<unknown | null | typeof invalidPackDocument> {
   try {
     return JSON.parse(await readFile(join(assetsRoot, 'packs', slug, 'pack.json'), 'utf8')) as unknown;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    return { invalid: error instanceof Error ? error.message : String(error) };
+    return invalidPackDocument;
   }
 }
 
-function cardCreditFields(card: ResolvedCard, collection: ResolvedCard): CreditFields | null {
+function cardCreditFields(card: ResolvedCard, collection: ResolvedCard): CreditFields {
   const declared = card.rights ?? collection.rights;
   const license = card.license ?? collection.license;
   const licenseSource = declared?.basis.find((basis) => basis.type === 'license' && basis.ref)?.ref;
   const attribution = declared?.attribution ?? declared?.basis.find((basis) => basis.type === 'license')?.attribution;
   const vendor = collection.collection_info?.vendor;
-  if (license === undefined || licenseSource === undefined || attribution === undefined || vendor === undefined)
-    return null;
   return {
     license,
     license_source: licenseSource,
     attribution: attribution === null ? 'none required' : attribution,
-    source: { label: vendor },
+    source: vendor === undefined ? undefined : { label: vendor },
+  };
+}
+
+function withCardFallback(pack: unknown, card: CreditFields): unknown {
+  const fields = record(pack) as CreditFields | null;
+  if (fields === null) return pack;
+  const licenseSource = fields.license_source === undefined ? fields.licenseSource : fields.license_source;
+  return {
+    license: fields.license === undefined ? card.license : fields.license,
+    license_source: licenseSource === undefined ? (card.license_source ?? card.licenseSource) : licenseSource,
+    attribution: fields.attribution === undefined ? card.attribution : fields.attribution,
+    source: fields.source === undefined ? card.source : fields.source,
   };
 }
 
@@ -102,8 +114,8 @@ export async function creditForCard(
 ): Promise<{ credit?: AssetCredit; detail?: string }> {
   const { slug } = collectionParts(card.id);
   const pack = await packDocument(assetsRoot, slug);
-  const value = pack ?? cardCreditFields(card, collection);
-  if (value === null) return { detail: 'card and pack.json have no complete credit metadata' };
+  const cardFields = cardCreditFields(card, collection);
+  const value = pack === null ? cardFields : withCardFallback(pack, cardFields);
   return normalize(value, slug, collection.title, card.resolved.license);
 }
 
