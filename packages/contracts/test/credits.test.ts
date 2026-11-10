@@ -27,7 +27,7 @@ describe('asset credits', () => {
     const lock = { assets: [entry(), entry({ id: 't1:example-pack/tree@1', path: 'tree.png' })] };
 
     expect(creditsFromLock(lock).packs).toHaveLength(1);
-    expect(renderCredits(lock)).toContain('## CC-BY-4.0\n- Example Pack — Example Artist');
+    expect(renderCredits(lock)).toContain('## CC-BY-4.0\n- Example Pack — Example Artist (licence: License.txt)');
   });
 
   it('renders the typed AI generation marker in game credits', () => {

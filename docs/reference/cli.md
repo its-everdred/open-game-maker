@@ -349,9 +349,11 @@ gm assets register <path> --made-by-agent [--from <id>...] --game <id>
 ```
 
 `gm assets use` normally records library references in `assets.lock.json` without copying bytes into the game repo.
-It refuses a card whose pack cannot supply `license`, `license_source`, explicit `attribution`, and `source` metadata.
-Every accepted entry copies that metadata into the lock and regenerates `CREDITS.md`. `gm check assets` rejects older or
-hand-edited entries that omit it. Each entry also names the curated set its pack belongs to (`set`), when it has one.
+It reads `license`, `license_source`, explicit `attribution`, and `source` from the pack manifest first, then fills only
+absent fields from the asset or collection card. Explicit blank or invalid manifest values still fail, and the manifest
+licence must agree with the card. Every accepted entry copies the combined metadata into the lock and regenerates
+`CREDITS.md`; incomplete combined metadata is refused. `gm check assets` rejects older or hand-edited entries that omit
+it. Each entry also names the curated set its pack belongs to (`set`), when it has one.
 Pixel Art Atlas rows are the exception to reference-only use: the selected 16x16 row and nearest-neighbour 2x and 4x
 PNGs are materialized into the game automatically, while the other 1.4 million rows remain in the library arrays.
 

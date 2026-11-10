@@ -115,7 +115,7 @@ export function renderCredits(lock: Pick<AssetsLock, 'assets'>): string {
       const lines = packs.map((pack) => {
         const tools = generatedByPack.get(pack.pack);
         const marker = tools ? ` [AI-generated: ${[...tools].sort().map(markdownText).join(', ')}]` : '';
-        return `- ${pack.title} — ${pack.attribution}${marker}`;
+        return `- ${pack.title} — ${pack.attribution} (licence: ${markdownText(pack.licenseSource)})${marker}`;
       });
       if (license === 'CC0-1.0') lines.unshift(`- CC0 assets from: ${packs.map((pack) => pack.pack).join(', ')}`);
       return `## ${license}\n${lines.join('\n')}`;
