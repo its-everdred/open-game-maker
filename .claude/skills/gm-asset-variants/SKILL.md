@@ -13,6 +13,7 @@ Starting from an existing resource and making a variation of it is a normal step
 - Every variant gets a manifest entry that says what it was made from and how, so it can be rebuilt or traced back.
 - Variants inherit their sources' usage rights. A variant of a CC0 model is fine anywhere. A variant of a licensed pack (Synty, Sidetrax) stays under that pack's rights: personal use, never redistributed as a standalone file (see the asset card's `usage_rights`, C3 §5).
 - No cloud processing of paid assets. Variant tools run locally.
+- **No hand-made parts on pack models (Kevin, 2026-11-10).** Every added piece (a beard, a hat, a held prop) is a part from an installed pack in the same set (`gm assets search --set <set>`; KayKit has 20+ bits packs). Shapes built from primitives in code read as "agent-made" next to the pack's art (Blobs #149: a box beard and a teapot on the KayKit mage). If no pack part fits, change the concept to what the packs have; never model one.
 
 ## Where variants go
 
@@ -45,6 +46,8 @@ Starting from an existing resource and making a variation of it is a normal step
    - seams where bands meet;
    - floating parts, missing faces, inside-out faces;
    - the scale against the source.
+
+   - **style:** a close-up at 2x play size beside an untouched character from the same pack. Pass only if someone who hasn't seen the source can't point at the added parts (shading, bevels, palette, proportions).
 
    Fix the worst problem and rebuild. Don't ship a variant you haven't looked at.
    Then check the whole set in proportion, not one row at a time: `python3 -I scripts/assets/check_glb.py --lineup models/variants/*.glb` prints the to-scale positions and a scale bar for the lineup still. The same command without `--lineup` fails a variant that stands off its origin, is the wrong real height (`--height`), or blows a triangle or texture budget (`--budget`).
