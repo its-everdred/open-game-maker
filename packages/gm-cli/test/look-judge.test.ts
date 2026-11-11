@@ -9,7 +9,7 @@ describe('gm look judge', () => {
   it('uses the broker response and gates later tiers', async () => {
     const cwd = tempDir('gm-judge-');
     execFileSync('git', ['init', '-q', cwd]);
-    const pack = join(cwd, 'skills');
+    const pack = join(cwd, '.claude/skills');
     const dir = join(pack, 'gm-image-mock/scripts');
     mkdirSync(dir, { recursive: true });
     writeFileSync(

@@ -5,7 +5,7 @@ import { join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { workspaceRoot } from '../../outbox.js';
-import { locateSkillPack } from '../../skills/pack.js';
+import { catalogRoot } from '../../skills/catalog.js';
 
 const exec = promisify(execFile);
 const prompt = `The first two images are the source target and candidate. The third image is their comparison sheet: its panels show target, candidate, difference heatmap, and 50% overlay. Judge these four tiers in order: silhouette and shape, light and colour, materials and shine, fine detail. Score each from 0 to 10. A later tier counts only if the previous tier is at least 7. Return a JSON object with exactly these keys: tiers (array of four numbers in order), differences (array of concrete differences describing position, size or colour, worst first). No markdown around JSON.`;
@@ -25,7 +25,7 @@ export const command: GmCommand = {
     const id = randomUUID();
     const question = join(scratch, `${id}.txt`);
     await writeFile(question, prompt);
-    const script = join(locateSkillPack(ctx.cwd, ctx.skillsDir), 'gm-image-mock', 'scripts', 'request-mock.py');
+    const script = join(catalogRoot(root, ctx.skillsDir), 'gm-image-mock', 'scripts', 'request-mock.py');
     try {
       const manifest = JSON.parse(await readFile(`${ref}.json`, 'utf8')) as {
         target: string;
