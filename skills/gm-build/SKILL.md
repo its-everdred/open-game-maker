@@ -16,8 +16,9 @@ description: Install and build a Game Maker repo inside the network-off sandbox.
    mobile per scene). If the boot set exceeds its budget, trim it instead of waiting for the budget to change.
 4. Run the `gm-core` done gates before handing off.
 
-For Python image work, run `gm py -- <script> [arguments]`. It provisions a managed environment with numpy, Pillow,
-scipy and scikit-image on first use, then reuses it. Pass Python flags after `--` as well.
+For Python image work, run `gm py -- <script> [arguments]`. Before starting the offline sandbox, provision the managed
+numpy, Pillow, scipy and scikit-image environment on the host with `gm py setup`. Use `--env <directory>` on setup and
+the runner if the sandbox needs a different shared path. Pass Python flags after `--`; the runner never installs packages.
 
 The sandbox has no package-registry network. Never run `npm install` or `pnpm add`, and never weaken offline or
 lockfile enforcement. If a required dependency is absent, ask an aiur native question with the package name, exact version, and reason.

@@ -24,7 +24,8 @@ credits; the build ships only listed assets and fails naming any id the code use
 release, run `gm assets unused` (entries the code no longer names) and say in your report why each one stays.
 Register optional match assets with `--phase lazy:<group>` so they load only when needed.
 Each match bundle has its own lazy-group budget. Trim an over-budget boot set instead of waiting. Register every kept
-asset in the blob store as you go with `gm assets register`, and push the updated lock with it.
+agent-made or derived asset in the blob store as you go with `gm assets register <path> --made-by-agent`, and push the
+updated lock with it. Use `gm assets use` for installed library assets.
 
 ## Show a lineup
 

@@ -12,7 +12,7 @@ use. Work here the way those agents will work: dogfood the skills.
   scene's arguments and an iframe's attributes here); render or run the change before moving on.
 - **Sprite Forge skills** (`agent-sprite-forge` plugin, project scope in `.claude/settings.json`: generate2dsprite,
   generate2dmap, video2dsprite, generate2dmedia, codeart2d): run their scripts with
-  `~/.local/share/ogm/forge-venv/bin/python` (no `python` on PATH). No API key is configured, so `route_media.py` falls
+  `gm py --` (provision with `gm py setup` on the host). No API key is configured, so `route_media.py` falls
   back to the signed-in Codex CLI; never add a provider key (it counts as consent to spend) and ask Kevin before any
   generation. Never send paid-pack assets to it as references (no cloud processing of paid assets).
 - **Self-improvement:** keep the hourly `meta-improve` listener running (a silent background shell, `scripts/listen.sh`
