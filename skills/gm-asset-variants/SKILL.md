@@ -52,7 +52,7 @@ order: try installed packs and mirrors first, then vary a selected source before
 ## 2D art: Sprite Forge
 
 2D games use the Sprite Forge skills in `.claude/skills/vendor/sprite-forge/`: open the named skill's `SKILL.md` and
-run its tools from the repo root with the Python the Executor names (else `python3`) where it says `python`
+run its tools from the repo root with `gm py --` where it says `python`
 (`<skill-dir>` is that skill's folder). They need numpy, Pillow and scipy; if those are missing, tell the Executor and
 never install them. When no pack sprite or map fits (tier 4), `generate2dsprite` makes characters, props and FX and
 `generate2dmap` tilemaps, prop packs and parallax. These rules win over the vendored text, including its "a configured

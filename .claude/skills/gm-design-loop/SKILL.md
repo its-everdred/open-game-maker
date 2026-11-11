@@ -39,7 +39,8 @@ or the documented stall procedure applies. Include the score JSON and side-by-si
 6. **Deliver for a phone.** MP4 clips on an artifact page with posters and one line per option, then the specific
    questions (which option, what to change). Deploy only when the creator says so.
 7. **Persist decisions** where the next agent will find them: the scene list and taste in memory, product-level
-   decisions in the scope. Lessons about the process itself go through `meta-improve`.
+   decisions in the scope. Maintain `games/<game>/design/MEDIA.md` as an index of the game's concept art and current
+   media, updating it as media changes. Lessons about the process itself go through `meta-improve`.
 
 ## Taste and pushback
 
