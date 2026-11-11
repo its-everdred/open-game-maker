@@ -16,7 +16,7 @@ into each game daemon's config, and `gm plan check` refuses a ticket whose roles
 | `role:qa` | playtests, journeys and verification | gm-core, gm-qa, gm-verify |
 | `role:multiplayer` | rooms, shared state and netcode | gm-core, gm-multiplayer-ready, gm-qa |
 | `role:game-design` | scope, flow, plans and creator options | gm-core, gm-new-game-design, gm-new-game-plan, gm-image-mock, gm-scope-options |
-| `role:assets` | pack adapters, variants and showcases | gm-core, gm-asset-variants, gm-pack-adapter, gm-asset-showcase |
+| `role:assets` | pack adapters, variants and showcases | gm-core, gm-verify, gm-asset-variants, gm-pack-adapter, gm-asset-showcase |
 
 ## The game label
 

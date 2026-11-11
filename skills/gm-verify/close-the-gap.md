@@ -16,3 +16,13 @@ the sheet, and the rest keeps closing. Never stop at "fail", and never accept a 
   first (one pine reused at three depths and three shades read as a forest; a new pine broke the 2 MB mobile tier).
 - A near-level camera puts background depth on the screen's vertical axis: a prop's base shows at the height of its
   distance behind the subject, so a backdrop that should rise behind something stands between its foot and its top.
+
+## Judge a set as a set
+
+A set of assets is judged whole: one beautiful item beside an off-style one is a failed set. Score cohesion, reference
+fidelity, brief, mesh quality, texture quality, assembly (parts seated and connected, nothing hovering), scale (real
+size alone and relative to the others), and labels, most damaging problem first. Pass only with no category below 6 and
+an average of 7 or more; name at most five fixes. Put proportion in front of you with a to-scale lineup and a scale bar
+side by side, not a grid of thumbnails at unrelated scales. `python3 -I scripts/assets/set_critic.py` holds the bar,
+the fixes cap, the round cap and the deliverable gate; the rubric and the reason for each are in
+`docs/research/anykit-lessons-2026-11.md`.
