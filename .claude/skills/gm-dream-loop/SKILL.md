@@ -19,7 +19,9 @@ approved style and composition, including stylized art. Search the existing asse
 3. Work in the judge's gated order: silhouette and shape, light and colour, material and shine, then fine detail. A
    later tier counts only after the preceding tiers reach 7. Fix the largest concrete differences first, then capture,
    score and judge again. Measure important positions and sizes as fractions of the image instead of relying on prose.
-4. Stop when every tier is at least 8. If three iterations fail to gain 0.5, make one structural change and recheck;
+4. Stop when every tier is at least 8. To detect a stall, compare the first tier below 8 with that same tier in the
+   previous verdict; count a newly unlocked tier as progress. If three consecutive iterations gain less than 0.5 on
+   the applicable tier and unlock no tier, make one structural change and recheck;
    if that also stalls, raise a Command with the scored sheet and the remaining differences.
    Include the latest score JSON, judge JSON and sheet in ready evidence. Never claim a broker failure is a pass.
 
