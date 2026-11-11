@@ -4,19 +4,16 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export type Image = { pixels: Buffer; width: number; height: number };
 
 export async function image(path: string, crop?: Rect): Promise<Image> {
-  let input = sharp(path).removeAlpha().toColourspace('srgb');
+  let input = sharp(path).flatten({ background: '#000000' }).toColourspace('srgb');
   if (crop) input = input.extract({ left: crop.x, top: crop.y, width: crop.w, height: crop.h });
   const { data, info } = await input.raw().toBuffer({ resolveWithObject: true });
   return { pixels: data, width: info.width, height: info.height };
 }
 
-export async function resize(path: string, width: number, height: number): Promise<Image> {
-  const { data, info } = await sharp(path)
-    .removeAlpha()
-    .toColourspace('srgb')
-    .resize(width, height, { fit: 'fill' })
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+export async function resize(path: string, width: number, height: number, crop?: Rect): Promise<Image> {
+  let input = sharp(path).flatten({ background: '#000000' }).toColourspace('srgb');
+  if (crop) input = input.extract({ left: crop.x, top: crop.y, width: crop.w, height: crop.h });
+  const { data, info } = await input.resize(width, height, { fit: 'fill' }).raw().toBuffer({ resolveWithObject: true });
   return { pixels: data, width: info.width, height: info.height };
 }
 

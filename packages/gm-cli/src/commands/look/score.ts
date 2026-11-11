@@ -16,7 +16,7 @@ export const command: GmCommand = {
   summary: 'compare a candidate image with a concept locally',
   usage: '<target.png> <candidate.png> [--crop x,y,w,h] [--region name=x,y,w,h] [--out sheet.png]',
   flags: {
-    crop: { type: 'string', help: 'target crop in pixels' },
+    crop: { type: 'string', help: 'crop both inputs in pixels' },
     region: { type: 'string', multiple: true, help: 'named region in normalized pixels' },
     out: { type: 'string', help: 'output sheet path' },
   },
@@ -24,8 +24,9 @@ export const command: GmCommand = {
     if (args.length !== 2) throw new UsageError('provide target and candidate images', 'gm help look score');
     const target = resolve(ctx.cwd, args[0]!),
       candidate = resolve(ctx.cwd, args[1]!);
-    const a = await image(target, typeof flags.crop === 'string' ? rect(flags.crop) : undefined);
-    const b = await resize(candidate, a.width, a.height);
+    const crop = typeof flags.crop === 'string' ? rect(flags.crop) : undefined;
+    const a = await image(target, crop);
+    const b = await resize(candidate, a.width, a.height, crop);
     const regions = (Array.isArray(flags.region) ? (flags.region as string[]) : []).map((entry) => {
       const at = entry.indexOf('=');
       if (at < 1) throw new UsageError('region needs name=x,y,w,h', 'gm help look score');

@@ -67,9 +67,9 @@ default `~/.config/ogm/qa/storage.json`, minted on the host by `ops/bin/ogm-qa-s
 for the game build from `./dist`. `--frame bare` captures the game page alone, as before.
 
 `gm look score <target.png> <candidate.png>` compares images locally and prints JSON. It writes `look-score.png` (or
-`--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The target crop
+`--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The crop applied to both inputs
 `--crop x,y,w,h` and repeatable `--region name=x,y,w,h` use pixel coordinates; regions refer to the cropped target.
-Use a settled capture with the same camera. The candidate is resized to the target. SSIM, colour histogram distance,
+Use a settled capture with the same camera. Both images are flattened on black, and the candidate is resized to the target. SSIM, colour histogram distance,
 and edge IoU are reported; unavailable perceptual scoring is noted in the JSON. `gm look judge <sheet.png> --rubric
 tiers` sends the sheet and its unchanged sources through the existing look broker, which applies its normal reference
 restrictions. Its JSON reports the four tier scores and concrete differences. Later tiers are uncounted until preceding
