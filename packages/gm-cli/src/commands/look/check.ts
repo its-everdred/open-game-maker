@@ -5,7 +5,7 @@ import { basename, join, relative, resolve, sep } from 'node:path';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
-import { reviewScreens, sheetPath } from '../../look/screens.js';
+import { reviewScreens, SCREEN, sheetPath } from '../../look/screens.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 import { STILL } from '../shot/index.js';
 
@@ -155,25 +155,160 @@ export const command: GmCommand = {
   name: 'look check',
   summary: 'fail unless every still, and every screen sheet beside its approved target, has a passing look answer',
   example: 'look check',
-  flags: {},
-  async run(ctx, args) {
-    if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help look check');
+  usage: '[--changed [<base>] | --all] [--screen <id> ...]',
+  flags: {
+    changed: { type: 'boolean', help: 'check changes against base (default origin/main)' },
+    all: { type: 'boolean', help: 'audit every still and screen' },
+    screen: { type: 'string', multiple: true, help: 'also check a named screen' },
+  },
+  async run(ctx, args, flags) {
+    if (args.length > (flags.changed ? 1 : 0) || (flags.changed && flags.all))
+      throw new UsageError('invalid look check arguments', 'gm help look check');
+    const named = (flags.screen as string[] | undefined) ?? [];
+    if (named.some((name) => !SCREEN.test(name))) throw new UsageError('invalid screen id', 'gm help look check');
     const root = workspaceRoot(ctx.cwd);
     const looks = readLooks(root);
     const game = gameDir(ctx.cwd, root);
     const committed = committedStills(game);
     const stills = committed.length > 0 ? committed : renderedStills(root, game);
     const results = [...stills.map((still) => judge(root, still, looks)), ...sheets(root, game, looks)];
-    const blocked = results.some((result) => result.status === 'blocked');
+    let selected = results;
+    let inherited: StillResult[] = [];
+    if (flags.changed) {
+      const base = args[0] ?? 'origin/main';
+      let changed: string[];
+      let ancestor: string;
+      try {
+        ancestor = execFileSync('git', ['merge-base', base, 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+        changed = execFileSync('git', ['diff', '--name-only', '-z', ancestor, 'HEAD', '--'], {
+          cwd: root,
+          encoding: 'utf8',
+        })
+          .split('\0')
+          .filter(Boolean);
+      } catch {
+        throw new UsageError(`cannot diff against ${base}`, 'provide a valid base to gm look check --changed');
+      }
+      let screens: ReturnType<typeof reviewScreens> = [];
+      try {
+        screens = reviewScreens(game);
+      } catch {
+        // sheets() already reports malformed decisions as a failing result.
+      }
+      const screenNames = new Set(named);
+      const decisionsPath = relative(root, join(game, 'review/decisions.json')).split(sep).join('/');
+      if (
+        changed.includes(decisionsPath) &&
+        existsSync(join(game, 'review/decisions.json')) &&
+        !results.some((result) => result.path === 'review/decisions.json')
+      ) {
+        let oldScreens: Record<string, unknown> = {};
+        try {
+          oldScreens =
+            (
+              JSON.parse(
+                execFileSync('git', ['show', `${ancestor}:${decisionsPath}`], {
+                  cwd: root,
+                  encoding: 'utf8',
+                  stdio: ['ignore', 'pipe', 'ignore'],
+                }),
+              ) as { screens?: Record<string, unknown> }
+            ).screens ?? {};
+        } catch {
+          /* A new decisions file has no previous screens. */
+        }
+        const current = JSON.parse(readFileSync(join(game, 'review/decisions.json'), 'utf8')) as {
+          screens?: Record<string, unknown>;
+        };
+        for (const name of Object.keys(current.screens ?? {})) {
+          if (JSON.stringify(current.screens?.[name]) !== JSON.stringify(oldScreens[name])) screenNames.add(name);
+        }
+      }
+      for (const screen of screens) {
+        const paths = [screen.target, sheetPath(screen.name)].map((path) =>
+          relative(root, resolve(game, path)).split(sep).join('/'),
+        );
+        if (paths.some((path) => changed.includes(path))) screenNames.add(screen.name);
+      }
+      const targetDir = relative(root, join(game, 'design/flow/screens/target')).split(sep).join('/') + '/';
+      for (const path of changed) {
+        if (!path.startsWith(targetDir)) continue;
+        const match = /^([^/]+)\.png$/i.exec(path.slice(targetDir.length));
+        if (match) screenNames.add(match[1]!);
+      }
+      const selectedPaths = new Set(changed);
+      // Ignored renders cannot appear in a Git diff; treat all current renders as in scope.
+      if (committed.length === 0) for (const still of stills) selectedPaths.add(still.path);
+      for (const screen of screens) {
+        const target = resolve(game, screen.target);
+        const targetPath = relative(root, target).split(sep).join('/');
+        if (!changed.includes(targetPath)) continue;
+        const sheet = join(game, sheetPath(screen.name));
+        const sheetResult = results.find((result) => result.path === relative(root, sheet).split(sep).join('/'));
+        if (!sheetResult || !existsSync(sheet) || !existsSync(target)) continue;
+        let valid = false;
+        try {
+          const manifest = JSON.parse(readFileSync(`${sheet}.json`, 'utf8')) as { sheet?: string; target?: string };
+          const hash = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+          valid = manifest.sheet === hash(sheet) && manifest.target === hash(target);
+        } catch {
+          /* Missing or invalid input record requires a fresh sheet. */
+        }
+        if (!valid) {
+          sheetResult.status = 'missing';
+          sheetResult.detail = `target changed; regenerate the sheet with gm look sheet ${screen.name} --still <png> and look again`;
+        }
+      }
+      for (const name of screenNames) {
+        selectedPaths.add(
+          relative(root, join(game, sheetPath(name)))
+            .split(sep)
+            .join('/'),
+        );
+        selectedPaths.add(
+          relative(root, join(game, 'design/flow/screens/target', `${name}.png`))
+            .split(sep)
+            .join('/'),
+        );
+      }
+      for (const name of named) {
+        if (
+          !screens.some((screen) => screen.name === name) &&
+          !results.some(
+            (result) =>
+              result.path ===
+              relative(root, join(game, 'design/flow/screens/target', `${name}.png`))
+                .split(sep)
+                .join('/'),
+          )
+        )
+          results.push({
+            path: relative(root, join(game, sheetPath(name)))
+              .split(sep)
+              .join('/'),
+            status: 'missing',
+            detail: `no approved target for screen "${name}"`,
+          });
+      }
+      selected = results.filter((result) => selectedPaths.has(result.path) || result.path === 'review/decisions.json');
+      inherited = results.filter((result) => !selected.includes(result) && result.status !== 'pass');
+    }
+    const blocked = selected.some((result) => result.status === 'blocked');
     // Nothing judged is not a pass: the gate is green only when at least one still was looked at.
-    const ok = results.length > 0 && results.every((result) => result.status === 'pass');
-    if (ctx.json) printJson(ctx, { ok, blocked, stills: results });
+    const ok = (flags.changed || selected.length > 0) && selected.every((result) => result.status === 'pass');
+    if (ctx.json) printJson(ctx, { ok, blocked, stills: selected, ...(flags.changed ? { inherited } : {}) });
     else {
-      for (const result of results.filter((r) => r.status !== 'pass'))
+      for (const result of selected.filter((r) => r.status !== 'pass'))
         ctx.err(`${result.status} ${result.path}: ${result.detail}`);
-      if (results.length === 0) ctx.err('no tN.png stills to judge: run gm run, then look at its stills');
+      if (inherited.length > 0) {
+        ctx.err('inherited:');
+        for (const result of inherited) ctx.err(`${result.status} ${result.path}: ${result.detail}`);
+      }
+      if (!flags.changed && results.length === 0)
+        ctx.err('no tN.png stills to judge: run gm run, then look at its stills');
       if (blocked) ctx.err('look gate blocked: the look broker failed; report the PR as blocked, never as a pass');
-      else if (ok) ctx.out(`look ok: ${results.length} ${committed.length > 0 ? 'committed' : 'rendered'} stills pass`);
+      else if (ok)
+        ctx.out(`look ok: ${selected.length} ${committed.length > 0 ? 'committed' : 'rendered'} stills pass`);
     }
     return ok ? EXIT.ok : EXIT.failed;
   },

@@ -92,6 +92,11 @@ describe('renderRepoTemplate', () => {
     expect(workflow.name).toBe('ci');
     expect(Object.keys(workflow.jobs)).toEqual(['required']);
     expect(workflow.jobs.required.name).toBe('required');
+    expect(
+      workflow.jobs.required.steps.find((step: { uses?: string }) => step.uses === 'actions/checkout@v4').with[
+        'fetch-depth'
+      ],
+    ).toBe(0);
     expect(workflow.env.GM_VERIFY_SOFTWARE_GL).toBe('1');
     const runs = workflow.jobs.required.steps.flatMap((step: { run?: string }) => (step.run ? [step.run] : []));
     expect(runs).toEqual(expect.arrayContaining(['pnpm install --frozen-lockfile', 'pnpm run check', 'pnpm run test']));

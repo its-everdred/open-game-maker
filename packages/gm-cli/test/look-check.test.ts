@@ -244,6 +244,135 @@ describe('gm look check', { timeout: 60_000 }, () => {
   });
 });
 
+describe('changed look checks', () => {
+  it('checks ignored rendered stills even though Git cannot list them in the diff', async () => {
+    const root = game({ commitStills: false });
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.out[0]!).stills[0].path).toBe(STILL);
+  });
+
+  it('does not accept an old sheet when its approved target changes', async () => {
+    const root = game();
+    mkdirSync(join(root, 'review'), { recursive: true });
+    mkdirSync(join(root, 'look'), { recursive: true });
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"play":{"target":"design/target.png"}}}');
+    writeFileSync(join(root, 'look/play.sheet.png'), 'old sheet');
+    commit(root);
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    writeFileSync(join(root, 'design/target.png'), 'new target');
+    commit(root);
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.out[0]!).stills[0].detail).toContain('target changed; regenerate');
+  });
+
+  it('ignores changes made only on the base branch', async () => {
+    const root = game();
+    git(root, 'branch', 'base');
+    git(root, 'switch', '-q', 'base');
+    writeFileSync(join(root, STILL), 'base-only');
+    commit(root);
+    git(root, 'switch', '-q', '-');
+    writeFileSync(join(root, 'ticket.txt'), 'ticket');
+    commit(root);
+    const result = await gm(['look', 'check', '--changed', 'base', '--json'], { cwd: root });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.out[0]!).stills).toEqual([]);
+    expect(JSON.parse(result.out[0]!).inherited[0].path).toBe(STILL);
+  });
+
+  it('ignores another game changing a same-named target', async () => {
+    const root = game();
+    mkdirSync(join(root, 'games/a/review'), { recursive: true });
+    writeFileSync(join(root, 'games/a/gm.manifest.json'), '{}');
+    writeFileSync(join(root, 'games/a/review/decisions.json'), '{"screens":{"play":{"target":"design/target.png"}}}');
+    mkdirSync(join(root, 'games/b/design/flow/screens/target'), { recursive: true });
+    commit(root);
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    writeFileSync(join(root, 'games/b/design/flow/screens/target/play.png'), 'other game');
+    commit(root);
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: join(root, 'games/a') });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.out[0]!).stills).toEqual([]);
+    expect(
+      JSON.parse(result.out[0]!).inherited.some(
+        (item: { path: string }) => item.path === 'games/a/look/play.sheet.png',
+      ),
+    ).toBe(true);
+  });
+
+  it('selects only screens whose decision changed', async () => {
+    const root = game();
+    mkdirSync(join(root, 'review'), { recursive: true });
+    const decisions = join(root, 'review/decisions.json');
+    writeFileSync(
+      decisions,
+      JSON.stringify({ screens: { play: { target: 'design/target.png' }, title: { target: 'design/title.png' } } }),
+    );
+    commit(root);
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    writeFileSync(
+      decisions,
+      JSON.stringify({ screens: { play: { target: 'design/new.png' }, title: { target: 'design/title.png' } } }),
+    );
+    commit(root);
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    const report = JSON.parse(result.out[0]!);
+    expect(result.code).toBe(1);
+    expect(report.stills.map((item: { path: string }) => item.path)).toEqual(['look/play.sheet.png']);
+    expect(report.inherited.some((item: { path: string }) => item.path === 'look/title.sheet.png')).toBe(true);
+  });
+
+  it('selects changed targets and explicitly named screens', async () => {
+    const root = game();
+    mkdirSync(join(root, 'review'), { recursive: true });
+    mkdirSync(join(root, 'design/flow/screens/target'), { recursive: true });
+    writeFileSync(join(root, 'design/flow/screens/target/play.png'), 'play');
+    writeFileSync(join(root, 'design/flow/screens/target/title.png'), 'title');
+    writeFileSync(
+      join(root, 'review/decisions.json'),
+      JSON.stringify({
+        screens: {
+          play: { target: 'design/flow/screens/target/play.png' },
+          title: { target: 'design/flow/screens/target/title.png' },
+        },
+      }),
+    );
+    commit(root);
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    writeFileSync(join(root, 'design/flow/screens/target/play.png'), 'changed');
+    commit(root);
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.out[0]!);
+    expect(report.stills.map((r: { path: string }) => r.path)).toEqual(['look/play.sheet.png']);
+    expect(report.inherited.some((r: { path: string }) => r.path === 'look/title.sheet.png')).toBe(true);
+    const named = await gm(['look', 'check', '--changed', base, '--screen', 'title', '--json'], { cwd: root });
+    expect(JSON.parse(named.out[0]!).stills.map((r: { path: string }) => r.path)).toContain('look/title.sheet.png');
+  });
+
+  it('gates changed stills and reports inherited missing answers separately', async () => {
+    const root = game();
+    mkdirSync(join(root, 'shots/other'), { recursive: true });
+    writeFileSync(join(root, 'shots/other/t2.png'), 'old');
+    commit(root);
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    writeFileSync(join(root, STILL), 'new');
+    commit(root);
+    const missing = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(missing.code).toBe(1);
+    expect(JSON.parse(missing.out[0]!).stills.map((r: { path: string }) => r.path)).toEqual([STILL]);
+    await look(root, 'changed', { answer: 'VERDICT: pass' });
+    const passed = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(passed.code).toBe(0);
+    expect(JSON.parse(passed.out[0]!).inherited[0].path).toBe('shots/other/t2.png');
+    expect((await gm(['look', 'check', '--all'], { cwd: root })).code).toBe(1);
+  });
+});
+
 describe('gm look check with approved targets', { timeout: 60_000 }, () => {
   const SHEET = 'look/select.sheet.png';
 
