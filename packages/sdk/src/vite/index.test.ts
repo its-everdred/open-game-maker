@@ -47,6 +47,14 @@ describe('foldDesignFiles', () => {
     });
   });
 
+  it('excludes visual scope evidence from the published design', () => {
+    const dir = designDir({
+      'a.json': { schemaVersion: 1, globals: { width: 10 }, entities: { [A]: entity(A) } },
+      'look-scope.json': { source: 'commit', screens: { play: { sheet: 'evidence' } } },
+    });
+    expect(foldDesignFiles(dir)).toEqual({ schemaVersion: 1, globals: { width: 10 }, entities: { [A]: entity(A) } });
+  });
+
   it('refuses an entity defined by two files instead of silently keeping one', () => {
     const doc = { schemaVersion: 1, globals: {}, entities: { [A]: entity(A) } };
     expect(() => foldDesignFiles(designDir({ 'a.json': doc, 'b.json': doc }))).toThrow(

@@ -52,7 +52,10 @@ export const command: GmCommand = {
       mkdirSync(dirname(out), { recursive: true });
       verify.sideBySide([still, target], out, false);
       const hash = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
-      writeFileSync(`${out}.json`, JSON.stringify({ sheet: hash(out), target: hash(target) }) + '\n');
+      writeFileSync(
+        `${out}.json`,
+        JSON.stringify({ sheet: hash(out), target: hash(target), still: hash(still) }) + '\n',
+      );
     } catch (error) {
       if (error instanceof verify.FfmpegMissingError) throw new UsageError(error.message, verify.FFMPEG_HINT);
       ctx.err(error instanceof Error ? error.message : String(error));

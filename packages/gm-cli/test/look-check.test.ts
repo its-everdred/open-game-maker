@@ -1,11 +1,13 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { captureMetadataPath } from '../src/look/run-provenance.js';
 import { gm, tempDir } from './helpers.js';
 
 const REQUEST_MOCK = fileURLToPath(new URL('../../../skills/gm-image-mock/scripts/request-mock.py', import.meta.url));
@@ -35,6 +37,14 @@ function game({ stillBytes = 'frame-a', commitStills = true } = {}): string {
 function commit(root: string): void {
   git(root, 'add', '-A');
   git(root, 'commit', '-qm', 'stills');
+}
+
+function capture(root: string, path: string): void {
+  const data = readFileSync(join(root, path));
+  const blob = createHash('sha1').update(`blob ${data.length}\0`).update(data).digest('hex');
+  const file = captureMetadataPath(root, join(root, path));
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ source: git(root, 'rev-parse', 'HEAD').trim(), blob }));
 }
 
 type Broker = { answer: string } | { error: string } | 'silent';
@@ -244,7 +254,213 @@ describe('gm look check', { timeout: 60_000 }, () => {
   });
 });
 
-describe('changed look checks', () => {
+describe('changed look checks', { timeout: 60_000 }, () => {
+  it('fails closed for visual paths without a scope and permits nonvisual changes', async () => {
+    const root = game();
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    writeFileSync(join(root, 'gameplay.ts'), 'gameplay');
+    commit(root);
+    expect((await gm(['look', 'check', '--changed', base], { cwd: root })).code).toBe(0);
+    mkdirSync(join(root, 'src/scenes'), { recursive: true });
+    writeFileSync(join(root, 'src/scenes/play.ts'), 'screen');
+    commit(root);
+    const missing = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(missing.code).toBe(1);
+    expect(
+      JSON.parse(missing.out[0]!).stills.some((item: { path: string }) => item.path === 'design/look-scope.json'),
+    ).toBe(true);
+  });
+
+  it.each(['{}', 'null'])('reports malformed scope %s as a failure', async (value) => {
+    const root = game();
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    writeFileSync(join(root, 'design/look-scope.json'), value);
+    commit(root);
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(
+      JSON.parse(result.out[0]!).stills.some(
+        (item: { detail: string }) => item.detail === 'invalid visual scope manifest',
+      ),
+    ).toBe(true);
+  });
+
+  it('replays scoped screen evidence in a fresh checkout', async () => {
+    const root = game();
+    git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    mkdirSync(join(root, 'review'), { recursive: true });
+    mkdirSync(join(root, 'look'), { recursive: true });
+    mkdirSync(join(root, 'design/flow/screens/target'), { recursive: true });
+    writeFileSync(join(root, '.gitignore'), '*.png\nlook/*.json\n');
+    writeFileSync(join(root, 'design/flow/screens/target/play.png'), 'target');
+    writeFileSync(
+      join(root, 'review/decisions.json'),
+      '{"screens":{"play":{"target":"design/flow/screens/target/play.png"}}}',
+    );
+    writeFileSync(join(root, 'look/play.sheet.png'), 'sheet');
+    const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+    writeFileSync(
+      join(root, 'look/play.sheet.png.json'),
+      JSON.stringify({ sheet: hash('sheet'), target: hash('target'), still: hash('frame-a') }),
+    );
+    commit(root);
+    writeFileSync(join(root, STILL), 'new capture');
+    writeFileSync(
+      join(root, 'look/play.sheet.png.json'),
+      JSON.stringify({ sheet: hash('sheet'), target: hash('target'), still: hash('new capture') }),
+    );
+    mkdirSync(join(root, 'shots/ignored'), { recursive: true });
+    writeFileSync(join(root, 'shots/ignored/t2.png'), 'ignored still');
+    capture(root, STILL);
+    capture(root, 'shots/ignored/t2.png');
+    git(root, 'add', STILL);
+    git(root, 'commit', '-qm', 'capture still');
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+    await look(root, 'ignored', { answer: 'VERDICT: pass' }, ['shots/ignored/t2.png']);
+    const provenance = captureMetadataPath(root, join(root, STILL));
+    const recordedCapture = readFileSync(provenance, 'utf8');
+    writeFileSync(provenance, JSON.stringify({ ...JSON.parse(recordedCapture), source: '0'.repeat(40) }));
+    expect((await gm(['look', 'scope', 'add', 'play', '--still', STILL], { cwd: root })).code).toBe(2);
+    writeFileSync(provenance, recordedCapture);
+    expect((await gm(['look', 'scope', 'add', 'play'], { cwd: root })).code).toBe(2);
+    expect(
+      (await gm(['look', 'scope', 'add', 'play', '--still', STILL, '--still', 'shots/ignored/t2.png'], { cwd: root }))
+        .code,
+    ).toBe(0);
+    git(root, 'add', 'design/look-scope.json');
+    git(root, 'commit', '-qm', 'record scope');
+    const clone = tempDir('gm-look-clone-');
+    git(clone, 'clone', '-q', root, '.');
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: clone });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.out[0]!).stills.some((item: { status: string }) => item.status === 'pass')).toBe(true);
+    mkdirSync(join(clone, 'shots/ignored'), { recursive: true });
+    writeFileSync(join(clone, 'shots/ignored/t2.png'), 'different still');
+    expect((await gm(['look', 'check', '--changed', base], { cwd: clone })).code).toBe(1);
+    rmSync(join(clone, 'shots/ignored'), { recursive: true });
+    mkdirSync(join(clone, '.gm-mock'));
+    writeFileSync(
+      join(clone, '.gm-mock/looks.jsonl'),
+      JSON.stringify({ time: 1, ok: true, refs: [{ path: 'other.png', blob: 'irrelevant' }] }) + '\n',
+    );
+    expect((await gm(['look', 'check', '--changed', base], { cwd: clone })).code).toBe(0);
+    const replayedScope = JSON.parse(readFileSync(join(clone, 'design/look-scope.json'), 'utf8'));
+    const proof = replayedScope.screens.play.proof;
+    const lookLog = join(clone, '.gm-mock/looks.jsonl');
+    writeFileSync(
+      lookLog,
+      JSON.stringify({ time: proof.time - 1, ok: false, refs: proof.refs, error: 'older error' }) + '\n',
+    );
+    expect((await gm(['look', 'check', '--changed', base], { cwd: clone })).code).toBe(0);
+    writeFileSync(
+      lookLog,
+      JSON.stringify({ time: proof.time + 1, ok: false, refs: proof.refs, error: 'new error' }) + '\n',
+    );
+    expect((await gm(['look', 'check', '--changed', base], { cwd: clone })).code).toBe(1);
+    rmSync(join(clone, '.gm-mock'), { recursive: true });
+    const staleClone = tempDir('gm-look-stale-');
+    git(staleClone, 'clone', '-q', root, '.');
+    mkdirSync(join(staleClone, 'src/screens'), { recursive: true });
+    writeFileSync(join(staleClone, 'src/screens/title.ts'), 'changed after recording');
+    commit(staleClone);
+    const stale = await gm(['look', 'check', '--changed', base, '--json'], { cwd: staleClone });
+    expect(stale.code).toBe(1);
+    expect(
+      JSON.parse(stale.out[0]!).stills.some((item: { detail: string }) =>
+        item.detail.includes('visual scope is stale'),
+      ),
+    ).toBe(true);
+    git(clone, 'switch', '-qc', 'advanced-base', base);
+    writeFileSync(join(clone, 'unrelated.txt'), 'base change');
+    commit(clone);
+    git(clone, 'switch', '-q', '-');
+    git(clone, 'merge', '-q', '--no-edit', 'advanced-base');
+    expect((await gm(['look', 'check', '--changed', 'advanced-base'], { cwd: clone })).code).toBe(0);
+    const scopeFile = join(clone, 'design/look-scope.json');
+    const scope = JSON.parse(readFileSync(scopeFile, 'utf8'));
+    scope.screens.play.stills = [];
+    writeFileSync(scopeFile, JSON.stringify(scope));
+    git(clone, 'add', 'design/look-scope.json');
+    git(clone, 'commit', '-qm', 'omit still');
+    const omitted = await gm(['look', 'check', '--changed', base, '--json'], { cwd: clone });
+    expect(omitted.code).toBe(1);
+    scope.screens.play.stills = [null];
+    writeFileSync(scopeFile, JSON.stringify(scope));
+    git(clone, 'add', 'design/look-scope.json');
+    git(clone, 'commit', '-qm', 'malformed still');
+    const malformed = await gm(['look', 'check', '--changed', base, '--json'], { cwd: clone });
+    expect(malformed.code).toBe(1);
+    expect(
+      JSON.parse(malformed.out[0]!).stills.some((item: { detail: string }) =>
+        item.detail.includes('invalid still evidence'),
+      ),
+    ).toBe(true);
+  });
+
+  it('replays scoped evidence for a tracked symlink target', async () => {
+    const root = game();
+    git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    mkdirSync(join(root, 'review'));
+    mkdirSync(join(root, 'look'));
+    mkdirSync(join(root, 'design/flow/screens/target'), { recursive: true });
+    writeFileSync(join(root, '.gitignore'), 'look/*.png\nlook/*.json\n');
+    writeFileSync(join(root, 'review/mock.png'), 'target');
+    symlinkSync('mock.png', join(root, 'review/mock-link.png'));
+    symlinkSync('../../../../review/mock-link.png', join(root, 'design/flow/screens/target/play.png'));
+    writeFileSync(
+      join(root, 'review/decisions.json'),
+      '{"screens":{"play":{"target":"design/flow/screens/target/play.png"}}}',
+    );
+    commit(root);
+    writeFileSync(join(root, 'look/play.sheet.png'), 'sheet');
+    const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+    writeFileSync(
+      join(root, 'look/play.sheet.png.json'),
+      JSON.stringify({ sheet: hash('sheet'), target: hash('target'), still: hash('frame-a') }),
+    );
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+    capture(root, STILL);
+    expect((await gm(['look', 'scope', 'add', 'play', '--still', STILL], { cwd: root })).code).toBe(0);
+    git(root, 'add', 'design/look-scope.json');
+    git(root, 'commit', '-qm', 'scope');
+    const clone = tempDir('gm-look-link-');
+    git(clone, 'clone', '-q', root, '.');
+    expect((await gm(['look', 'check', '--changed', base], { cwd: clone })).code).toBe(0);
+  });
+
+  it('rejects scoped evidence if a previously tracked target is deleted', async () => {
+    const root = game();
+    git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    mkdirSync(join(root, 'review'));
+    mkdirSync(join(root, 'look'));
+    writeFileSync(join(root, '.gitignore'), 'look/*.png\nlook/*.json\n');
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"play":{"target":"design/target.png"}}}');
+    commit(root);
+    writeFileSync(join(root, 'look/play.sheet.png'), 'sheet');
+    const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+    writeFileSync(
+      join(root, 'look/play.sheet.png.json'),
+      JSON.stringify({ sheet: hash('sheet'), target: hash('target'), still: hash('frame-a') }),
+    );
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+    capture(root, STILL);
+    expect((await gm(['look', 'scope', 'add', 'play', '--still', STILL], { cwd: root })).code).toBe(0);
+    git(root, 'add', 'design/look-scope.json');
+    git(root, 'commit', '-qm', 'scope');
+    rmSync(join(root, 'design/target.png'));
+    git(root, 'add', '-u');
+    git(root, 'commit', '-qm', 'delete target');
+    const clone = tempDir('gm-look-deleted-');
+    git(clone, 'clone', '-q', root, '.');
+    expect((await gm(['look', 'check', '--changed', base], { cwd: clone })).code).toBe(1);
+  });
+
   it('checks ignored rendered stills even though Git cannot list them in the diff', async () => {
     const root = game({ commitStills: false });
     const base = git(root, 'rev-parse', 'HEAD').trim();
@@ -266,7 +482,24 @@ describe('changed look checks', () => {
     commit(root);
     const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
     expect(result.code).toBe(1);
-    expect(JSON.parse(result.out[0]!).stills[0].detail).toContain('target changed; regenerate');
+    expect(JSON.parse(result.out[0]!).stills[0].detail).toContain('regenerate the sheet for the current target');
+  });
+
+  it('requires a fresh sheet when a screen decision changes its target path', async () => {
+    const root = game();
+    mkdirSync(join(root, 'review'), { recursive: true });
+    mkdirSync(join(root, 'look'), { recursive: true });
+    writeFileSync(join(root, 'design/new.png'), 'new target');
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"play":{"target":"design/target.png"}}}');
+    writeFileSync(join(root, 'look/play.sheet.png'), 'old sheet');
+    commit(root);
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"play":{"target":"design/new.png"}}}');
+    commit(root);
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.out[0]!).stills[0].detail).toContain('regenerate the sheet for the current target');
   });
 
   it('fails when a changed approved target is deleted', async () => {
@@ -364,7 +597,10 @@ describe('changed look checks', () => {
     const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
     expect(result.code).toBe(1);
     const report = JSON.parse(result.out[0]!);
-    expect(report.stills.map((r: { path: string }) => r.path)).toEqual(['look/play.sheet.png']);
+    expect(report.stills.map((r: { path: string }) => r.path)).toEqual([
+      'look/play.sheet.png',
+      'design/look-scope.json',
+    ]);
     expect(report.inherited.some((r: { path: string }) => r.path === 'look/title.sheet.png')).toBe(true);
     const named = await gm(['look', 'check', '--changed', base, '--screen', 'title', '--json'], { cwd: root });
     expect(JSON.parse(named.out[0]!).stills.map((r: { path: string }) => r.path)).toContain('look/title.sheet.png');
@@ -373,18 +609,35 @@ describe('changed look checks', () => {
   it('gates changed stills and reports inherited missing answers separately', async () => {
     const root = game();
     mkdirSync(join(root, 'shots/other'), { recursive: true });
+    mkdirSync(join(root, 'review'), { recursive: true });
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"play":{"target":"design/target.png"}}}');
     writeFileSync(join(root, 'shots/other/t2.png'), 'old');
     commit(root);
+    git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
     const base = git(root, 'rev-parse', 'HEAD').trim();
     writeFileSync(join(root, STILL), 'new');
     commit(root);
     const missing = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
     expect(missing.code).toBe(1);
-    expect(JSON.parse(missing.out[0]!).stills.map((r: { path: string }) => r.path)).toEqual([STILL]);
+    expect(JSON.parse(missing.out[0]!).stills.map((r: { path: string }) => r.path)).toContain(STILL);
+    mkdirSync(join(root, 'look'));
+    writeFileSync(join(root, 'look/play.sheet.png'), 'sheet');
+    const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+    writeFileSync(
+      join(root, 'look/play.sheet.png.json'),
+      JSON.stringify({ sheet: hash('sheet'), target: hash('target'), still: hash('new') }),
+    );
     await look(root, 'changed', { answer: 'VERDICT: pass' });
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    capture(root, STILL);
+    expect((await gm(['look', 'scope', 'add', 'play', '--still', STILL], { cwd: root })).code).toBe(0);
+    git(root, 'add', 'design/look-scope.json');
+    git(root, 'commit', '-qm', 'scope');
     const passed = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
     expect(passed.code).toBe(0);
-    expect(JSON.parse(passed.out[0]!).inherited[0].path).toBe('shots/other/t2.png');
+    expect(
+      JSON.parse(passed.out[0]!).inherited.some((item: { path: string }) => item.path === 'shots/other/t2.png'),
+    ).toBe(true);
     expect((await gm(['look', 'check', '--all'], { cwd: root })).code).toBe(1);
   });
 });

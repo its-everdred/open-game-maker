@@ -13,11 +13,11 @@ Never report a visual result you have not looked at. Code, logs, and a passing c
 2. Run `gm test --ticks 3600`; fix every L1 failure. `gm test` exits on its own; never wrap it in a wait; on a stall exit, read the diagnostic.
 3. Fix the first new console error before investigating anything after it.
 4. Run `gm options check` on any option set before it reaches the creator; a rejection in `design/feedback.json` blocks it.
-5. Only then run `gm run --frames 0,2,5` (the host frame's top bar, Pause and touch overlay, at 390x844, 844x390,
+5. Commit tracked visual changes, then run `gm run --verify-source --frames 0,2,5` (the host frame's top bar, Pause and touch overlay, at 390x844, 844x390,
    820x1180 and 1180x820; `--viewport all` adds desktop) and make the sheet with `gm shot --sheet shots/`.
-6. After your last `gm run` and commit, look at each still:
+6. After your last `gm run`, look at each still:
    `python3 .claude/skills/gm-image-mock/scripts/request-mock.py --kind look --out looks --ref <still> --ref <target> --prompt-file <questions>`.
-   Make each ticket screen's comparison with `gm look sheet <screen> --still <png>` and look at the sheet. The visual gate is `gm look check --changed --screen <id>` (repeat `--screen` for every ticket screen), plus `gm look score`/`gm look judge` on those screens.
+   Make each ticket screen's comparison with `gm look sheet <screen> --still <png>` and look at the sheet. After committing visual changes, run `gm look scope add <screen> --still <png>` for each ticket screen (repeat `--still` for its looked-at stills), commit `design/look-scope.json`, then run `gm look check --changed` plus `gm look score`/`gm look judge` on those screens.
 7. Commit every file the PR links under `review/<ticket>/`; `gm look evidence --body <pr-body.md>` fails otherwise.
 
 A report budget whose status is `over` blocks the PR. Name the tier and the measured value. `unknown` is not green:

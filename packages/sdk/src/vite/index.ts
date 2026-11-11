@@ -22,9 +22,10 @@ export const CREDITS_FILE = 'credits.json';
 /**
  * Files a game keeps in `design/` that are not design docs. The creator feedback ledger (#567) and the decision record
  * (#595) are game data — the creator's rejections and the questions already put to them — so the build must not fold
- * them into the published design doc. The build folds every other `*.json` there.
+ * them into the published design doc. The visual scope is verification evidence, not a design doc. The build folds
+ * every other `*.json` there.
  */
-export const DESIGN_DIR_NON_DOCS = ['feedback.json', 'decisions.json'];
+export const DESIGN_DIR_NON_DOCS = ['feedback.json', 'decisions.json', 'look-scope.json'];
 
 export function regenerateCredits(lockFile: string, creditsFile: string): CreditsDocument {
   let raw: unknown;

@@ -73,6 +73,7 @@ describe('command registry', () => {
       'look check',
       'look evidence',
       'look judge',
+      'look scope add',
       'look score',
       'look sheet',
       'maps index',

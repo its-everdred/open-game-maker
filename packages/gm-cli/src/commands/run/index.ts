@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir, setPriority } from 'node:os';
 import { join, relative, resolve } from 'node:path';
@@ -8,6 +9,7 @@ import { isLoopbackUrl } from '@ogm/gm-verify/server';
 
 import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { printJson } from '../../context.js';
+import { prepareVerifiedSource, recordRunProvenance } from '../../look/run-provenance.js';
 import { gameDir } from '../../outbox.js';
 import { readEnvFile } from '../publish/index.js';
 
@@ -193,6 +195,7 @@ export const command: GmCommand = {
   example: 'run --frames 0,2,5 --record 10s --out shots/',
   flags: {
     headless: { type: 'boolean', default: true, help: 'run Chromium without a display server' },
+    'verify-source': { type: 'boolean', help: 'build the committed game before a capture for visual scope' },
     url: { type: 'string', help: 'loopback game URL; otherwise serve ./dist' },
     frame: {
       type: 'string',
@@ -234,6 +237,17 @@ export const command: GmCommand = {
 
     if (url && !isLoopbackUrl(url))
       throw new UsageError('--url is loopback only', 'gm run --url http://127.0.0.1:8000/');
+    let source: string | undefined;
+    if (flags['verify-source']) {
+      if (url || frame === 'app')
+        throw new UsageError(
+          'source verification requires the local game build',
+          'omit --url and use --frame host or bare',
+        );
+      source = prepareVerifiedSource(ctx.cwd, () =>
+        execFileSync('pnpm', ['run', 'build'], { cwd: ctx.cwd, stdio: 'ignore' }),
+      );
+    }
     const verify = await import('@ogm/gm-verify');
     const inputs = loadInputs(ctx, flags.inputs, verify.readInputScript);
     const budgets = loadBudgetOverrides(ctx, flags.budgets, verify.readBudgetOverrides, 'run');
@@ -263,7 +277,9 @@ export const command: GmCommand = {
       });
       try {
         const report = await verify.waitForReport(dir);
-        return finish(ctx, report, resolve(dir, 'report.json'));
+        const reportPath = resolve(dir, 'report.json');
+        recordRunProvenance(ctx.cwd, reportPath, report.frames, source);
+        return finish(ctx, report, reportPath);
       } catch (error) {
         ctx.err(error instanceof Error ? error.message : String(error));
         return EXIT.failed;
@@ -306,6 +322,7 @@ export const command: GmCommand = {
         slots: { runtimeDir: ctx.config.runtimeDir },
         warn: ctx.err,
       });
+      recordRunProvenance(ctx.cwd, result.reportPath, result.report.frames, source);
       return finish(ctx, result.report, result.reportPath, result.ffmpegMissing);
     } finally {
       await server?.close();
