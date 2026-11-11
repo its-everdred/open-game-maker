@@ -15,6 +15,7 @@ class BackfillTest(unittest.TestCase):
         sha = 'a' * 40
         self.assertIsNotNone(backfill.ready_line(f'Executor: goo sheet ready {sha}. Sheet: assets-local/review/x.png'))
         self.assertIsNone(backfill.ready_line(f'Executor: sheet not ready {sha}.'))
+        self.assertIsNone(backfill.ready_line(f"Executor: sheet isn't ready {sha}."))
         self.assertIsNone(backfill.ready_line('- work is not yet ready'))
 
     def test_edited_post_uses_revision_time(self):

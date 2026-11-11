@@ -22,7 +22,7 @@ SKILLS = re.compile(r'^\s*skills(?: used)?\s*:\s*(.+)$', re.I | re.M)
 def ready_line(body):
     for line in body.splitlines():
         text = line.strip().strip('*').strip()
-        if re.search(r'\bnot(?:\s+yet)?\s+ready\b', text, re.I):
+        if re.search(r"\b(?:not|never|isn't|wasn't)(?:\s+yet)?\s+ready\b", text, re.I):
             continue
         if re.fullmatch(r'(?:#{1,6}\s*)?ready(?:\s*[:—–-]\s*.*)?', text, re.I):
             return text
