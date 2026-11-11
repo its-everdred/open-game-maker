@@ -97,6 +97,7 @@ agent:
         - gm-scope-options
       role:assets:
         - gm-core
+        - gm-verify
         - gm-asset-variants
         - gm-pack-adapter
         - gm-asset-showcase

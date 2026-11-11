@@ -36,6 +36,15 @@ list it under unchecked.
 - Treat the sheet as the source of truth. Do not infer appearance from scene objects or source code.
 - A model looks black, flat, or wrong? Open `.claude/skills/vendor/gamedev/threejs-materials-lighting/SKILL.md`.
 
+## Matching concept art
+
+On every iteration, capture a settled view with the same camera and size. Measure the concept directly: express sizes
+and positions as fractions of a cell. Run `gm look score <target.png> <candidate.png>` and
+`gm look judge <sheet.png> --rubric tiers`. Fix the highest-ranked differences and repeat. Stop when all tiers pass
+at 8 or more. If three iterations gain less than 0.5, make one larger structural change; if progress stalls again,
+raise a Command with the scored sheet. Ready posts include the score JSON and side-by-side. Do not ask the Executor or
+creator to judge differences the scorer can judge. Follow the look broker's consent and licence restrictions.
+
 ## Judge a set as a set
 
 A set of assets is judged whole: one beautiful item beside an off-style one is a failed set. Score cohesion, reference
