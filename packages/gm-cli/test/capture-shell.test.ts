@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireSlot } from '@ogm/gm-verify';
 import { describe, expect, it } from 'vitest';
@@ -20,6 +20,8 @@ describe('gm capture shell', () => {
     const pnpm = join(bin, 'pnpm');
     mkdirSync(join(root, 'shots'));
     writeFileSync(join(root, 'shots', 'ingame-390x844.png'), 'stale');
+    writeFileSync(join(root, 'outside'), 'protected');
+    symlinkSync(join(root, 'outside'), join(root, 'shots', 'play-390x844.png'));
     writeFileSync(
       pnpm,
       '#!/bin/sh\nprintf "%s\\n" "$*|$GM_SHELL_DIST|$GM_SHELL_TAPS" >> "$LOG"\nif [ "$2" = playwright ]; then mkdir -p "$GM_SHELL_OUT"; for s in 390x844 844x390 820x1180 1180x820; do printf new > "$GM_SHELL_OUT/play-$s.png"; done; fi\n',
@@ -30,6 +32,8 @@ describe('gm capture shell', () => {
       env: { PATH: `${bin}:${process.env.PATH}`, LOG: log, XDG_RUNTIME_DIR: root },
     });
     expect(result.code).toBe(0);
+    expect(readFileSync(join(root, 'outside'), 'utf8')).toBe('protected');
+    expect(readFileSync(join(root, 'shots', 'play-390x844.png'), 'utf8')).toBe('new');
     expect(existsSync(join(root, 'shots', 'ingame-390x844.png'))).toBe(false);
     const calls = readFileSync(log, 'utf8');
     expect(calls).toContain(`vite build`);

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -126,13 +126,21 @@ export const command: GmCommand = {
           throw new CommandError(`shell capture did not produce play-${size}.png`);
       const out = resolve(ctx.cwd, flags.out);
       mkdirSync(out, { recursive: true });
-      for (const size of sizes) {
-        for (const prefix of ['play', 'ingame', 'menu']) {
-          const name = `${prefix}-${size}.png`;
-          const source = resolve(env.GM_SHELL_OUT, name);
-          if (existsSync(source)) copyFileSync(source, resolve(out, name));
-          else rmSync(resolve(out, name), { force: true });
+      const publish = mkdtempSync(resolve(out, '.gm-shell-publish-'));
+      try {
+        for (const size of sizes) {
+          for (const prefix of ['play', 'ingame', 'menu']) {
+            const name = `${prefix}-${size}.png`;
+            const source = resolve(env.GM_SHELL_OUT, name);
+            if (existsSync(source)) {
+              const staged = resolve(publish, name);
+              copyFileSync(source, staged);
+              renameSync(staged, resolve(out, name));
+            } else rmSync(resolve(out, name), { force: true });
+          }
         }
+      } finally {
+        rmSync(publish, { recursive: true, force: true });
       }
       ctx.out('App-shell captures complete (mocked sign-in; not production or Safari).');
       return EXIT.ok;
