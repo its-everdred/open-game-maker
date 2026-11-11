@@ -34,6 +34,14 @@ axes, material slots, textures, animation names, and triangle count before the g
 Blender MCP is optional operator tooling. Document the upstream server when an operator wants an interactive session,
 but do not install its add-on, edit MCP configuration, open a local control socket, or make a build depend on it.
 
+## Matcap reference
+
+For a stylized surface such as goo, a matcap maps the view-space surface normal and eye direction into a 2D
+material-capture texture. It can reproduce a painted highlight cheaply, but its baked lighting follows the camera
+rather than the scene lights. Compare it against the concept from several camera angles before choosing it over a
+lit material. The MIT-licensed [hughsk/matcap](https://github.com/hughsk/matcap) GLSL implementation is a reference
+for the lookup; check the rights of any matcap image separately before using it.
+
 ## Prepare an item for a set
 
 A model is ready for a game when it is the right size and stands on its own origin, not when the export finished. For
