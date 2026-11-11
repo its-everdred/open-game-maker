@@ -7,14 +7,12 @@ description: Load first in every Game Maker build. Routes the work, keeps the br
 
 ## The job
 
-Build the game in `gm scope`. The scope owns the WHAT: theme, art, names, palette, and mechanics. Templates,
-skills, pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in
-the build chat instead.
+Build the game in `gm scope`. The scope owns the WHAT: theme, art, names, palette, and mechanics. Templates, skills,
+pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in the build chat instead.
 
-Before coding, write a five-line plan and a short list titled "defaults I'd reach for." Drop each default or justify
-it against the scope. Templates are engine scaffolds, not game designs: do not inherit a theme, entity, HUD, name,
-or mechanic from them. Play spends no paid API unless `gm policy` says an admin turned it on (default off): bake LLM,
-voice and media content at build time, and never put a provider key in the game; publishing refuses both.
+Before coding, write a five-line plan and a short list titled "defaults I'd reach for." Drop each default or justify it
+against the scope. Templates are scaffolds, not game designs: do not inherit a theme, entity, HUD, name, or mechanic.
+Play spends no paid API unless `gm policy` says an admin turned it on (default off): bake LLM, voice and media at build time; never put a provider key in the game. Publishing refuses both.
 
 ## Keep the layers honest
 
@@ -99,6 +97,8 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
 | gm-voiceover | Making a short consented local voice draft and caption timing. |
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |
+| gm-dream-loop | Matching a game render to approved concept art. |
+| gm-reference-qa | Reviewing a 3D asset against its reference. |
 | gm-build | Installing or building in the network-off sandbox. |
 | gm-verify | Checking behavior, visuals, accessibility, performance, or evidence. |
 | gm-qa | QA-ing a hosted build like a player: phone and desktop, journeys, rooms across devices, report. |
