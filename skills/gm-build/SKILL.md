@@ -12,7 +12,12 @@ description: Install and build a Game Maker repo inside the network-off sandbox.
    `design/*.json` (a key defined in two design files fails the build).
 3. Read the build output from `dist/` and the resolved asset inventory from `assets/manifest.json`.
    Lazy groups have separate mobile and desktop byte budgets, configurable in `.gm/game.json` under `budgets.lazy`.
+   Each per-match bundle is its own lazy group with its own budget; set and report it (up to 1.5 MB compressed on
+   mobile per scene). If the boot set exceeds its budget, trim it instead of waiting for the budget to change.
 4. Run the `gm-core` done gates before handing off.
+
+For Python image work, run `gm py -- <script> [arguments]`. It provisions a managed environment with numpy, Pillow,
+scipy and scikit-image on first use, then reuses it. Pass Python flags after `--` as well.
 
 The sandbox has no package-registry network. Never run `npm install` or `pnpm add`, and never weaken offline or
 lockfile enforcement. If a required dependency is absent, ask an aiur native question with the package name, exact version, and reason.
