@@ -13,7 +13,7 @@ from datetime import datetime
 WORKSPACE = re.compile(r'[/\\]\.aiur[/\\]w[/\\][^/\\]+[/\\]([^/\\]+)[/\\](\d+)', re.I)
 SKILL_SCRIPT = re.compile(r'(?:^|[\s/\\])skills[/\\]([\w:.-]+)[/\\]scripts[/\\]', re.I)
 SKILL_PATH = re.compile(r'(?:^|[\s/\\])skills[/\\]([\w:.-]+)[/\\]SKILL\.md', re.I)
-def observe_command(row, command):
+def observe_command(row, command, source=None, skip_look=False):
     # Nested commands and heredocs require a shell parser that can prove which
     # branch executed. Keep them unattributed rather than counting examples.
     if any(marker in command for marker in ('<<', '$(', '`', '\n', '&&', '||')):
@@ -45,8 +45,13 @@ def observe_command(row, command):
             add_unique(row, 'acting', SKILL_SCRIPT.findall(script))
             if script.endswith('/style-check.py'):
                 add_unique(row, 'acting', ['gm-asset-variants'])
-        if words[:2] == ['gm', 'look'] and len(words) > 2 and words[2] in ('score', 'judge'):
+        if not skip_look and words[:2] == ['gm', 'look'] and len(words) > 2 and words[2] in ('score', 'judge'):
             add_unique(row, 'actions', ['gm look score/judge'])
+            counts = row.setdefault('look_score_sources', {})
+            key = hashlib.sha256((source or 'direct').encode()).hexdigest()
+            counts[key] = counts.get(key, 0) + 1
+            row['look_score_calls'] = max(counts.values())
+            row['look_score_complete'] = False
 
 
 
@@ -64,7 +69,7 @@ def empty_row(repo, ticket, turn, timestamp):
     return {'repo': repo, 'ticket': ticket, 'turn_id': turn, 'time': timestamp,
             'labels': None, 'backend': None, 'model': None, 'effort': None,
             'mapped': [], 'read': [], 'acting': [], 'actions': [], 'tool_time_ms': {},
-            'tokens': None, 'images_viewed': None, 'kills_aborts': None}
+            'tokens': None, 'images_viewed': None, 'kills_aborts': None, 'look_score_calls': 0, 'look_score_complete': False}
 
 
 def add_unique(row, key, values):
@@ -81,13 +86,14 @@ def update(row, record, context):
         row['effort'] = record.get('effort') or row['effort']
         for item in message.get('content', []):
             if isinstance(item, dict) and item.get('type') == 'tool_use':
-                update(row, {'type': 'response_item', 'payload': {'type': 'function_call', 'name': item.get('name', ''), 'arguments': json.dumps(item.get('input', {}))}}, context)
+                item_context = {**context, '_skip_look': item.get('_skip_look', not bool(item.get('id')))}
+                update(row, {'type': 'response_item', 'payload': {'type': 'function_call', 'name': item.get('name', ''), 'arguments': json.dumps(item.get('input', {}))}}, item_context)
                 if item.get('name') == 'Skill':
                     name = item.get('input', {}).get('skill')
                     if name:
                         add_unique(row, 'read', [name])
     if record.get('role') == 'command':
-        observe_command(row, str(record.get('body') or ''))
+        observe_command(row, str(record.get('body') or ''), context.get('_source'))
     payload = record.get('payload') or {}
     if not isinstance(payload, dict):
         return
@@ -110,7 +116,7 @@ def update(row, record, context):
         start, end = payload.get('started_at_ms'), payload.get('completed_at_ms')
         category = item.get('type', 'unknown') if isinstance(item, dict) else 'unknown'
         if category == 'CommandExecution' and isinstance(item.get('command'), str):
-            observe_command(row, item['command'])
+            observe_command(row, item['command'], context.get('_source'))
         if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end >= start and ('tool' in category.lower() or category == 'CommandExecution'):
             row['tool_time_ms'][category] = row['tool_time_ms'].get(category, 0) + end - start
     if kind == 'response_item' and typ in ('function_call', 'custom_tool_call', 'local_shell_call'):
@@ -123,17 +129,23 @@ def update(row, record, context):
                 args = {}
             command = args.get('command') if isinstance(args, dict) else None
             if isinstance(command, str):
-                observe_command(row, command)
+                observe_command(row, command, context.get('_source'), context.get('_skip_look', False))
         if 'read' in name.lower():
             add_unique(row, 'read', SKILL_PATH.findall(content))
         if name in ('view_image', 'image') or 'view_image' in content:
             row['images_viewed'] = (row['images_viewed'] or 0) + 1
     if (kind == 'response_item' and typ == 'message' and payload.get('role') == 'user') or kind == 'user':
         message_content = payload.get('content', []) if kind == 'response_item' else (record.get('message') or {}).get('content', [])
-        content = json.dumps(message_content, ensure_ascii=False)
-        match = re.search(r'Mapped skills \(load first\)(.*?)(?:Other installed skills|Authoritative integration branch)', content, re.I | re.S)
+        if isinstance(message_content, str):
+            content = message_content
+        elif isinstance(message_content, list):
+            content = '\n'.join(item.get('text', '') for item in message_content if isinstance(item, dict) and isinstance(item.get('text'), str))
+        else:
+            content = ''
+        match = re.search(r'^###\s+Mapped skills \(load first\)[^\n]*\n(.*?)(?=^###\s+Other installed skills|^##\s+Authoritative integration branch|\Z)', content, re.I | re.S | re.M)
         if match:
-            add_unique(row, 'mapped', re.findall(r'`([\w:.-]+)`', match.group(1)))
+            add_unique(row, 'mapped', re.findall(r'^####\s+`([\w:.-]+)`\s+—\s+mapped\b', match.group(1), re.I | re.M))
+
 
 
 def open_db(path):
@@ -142,6 +154,8 @@ def open_db(path):
       (path TEXT PRIMARY KEY, device INTEGER, inode INTEGER, offset INTEGER, context TEXT);
       CREATE TABLE IF NOT EXISTS message_usage
       (path TEXT, message_id TEXT, tokens INTEGER, PRIMARY KEY(path,message_id));
+      CREATE TABLE IF NOT EXISTS observed_tool_calls
+      (path TEXT, call_id TEXT, PRIMARY KEY(path,call_id));
       CREATE TABLE IF NOT EXISTS errors
       (path TEXT, offset INTEGER, message TEXT, PRIMARY KEY(path,offset));
       CREATE TABLE IF NOT EXISTS ticket_labels
@@ -159,7 +173,7 @@ def fingerprint(source, offset):
     return hashlib.sha256(source.read(min(offset, 256))).hexdigest()
 
 
-def ingest(db, path, initial_context=None):
+def ingest(db, path, initial_context=None, end_offset=None):
     path = str(Path(path).resolve())
     with open(path, 'rb') as source, db:
         db.execute('BEGIN IMMEDIATE')
@@ -174,9 +188,12 @@ def ingest(db, path, initial_context=None):
         else:
             offset, context = 0, dict(initial_context or {})
         source.seek(offset)
+        context['_source'] = path
         rows = {}
         while True:
-            line = source.readline()
+            if end_offset is not None and source.tell() >= end_offset:
+                break
+            line = source.readline() if end_offset is None else source.readline(end_offset - source.tell())
             if not line or not line.endswith(b'\n'):
                 break
             try:
@@ -211,6 +228,24 @@ def ingest(db, path, initial_context=None):
                 if key not in rows:
                     existing = db.execute('SELECT row FROM turns WHERE repo=? AND ticket=? AND turn_id=?', key).fetchone()
                     rows[key] = json.loads(existing[0]) if existing else empty_row(*key, record.get('timestamp'))
+                if record.get('type') == 'assistant' and isinstance(record.get('message'), dict):
+                    message = record['message']
+                    items = []
+                    for item in message.get('content', []):
+                        if isinstance(item, dict) and item.get('type') == 'tool_use':
+                            call_id = item.get('id')
+                            args = item.get('input') or {}
+                            command = args.get('command') if isinstance(args, dict) else None
+                            probe = empty_row('', 0, '', None)
+                            if item.get('name') in ('Bash', 'bash') and isinstance(command, str):
+                                observe_command(probe, command)
+                            skip_look = not call_id
+                            if call_id and probe['look_score_calls']:
+                                inserted = db.execute('INSERT OR IGNORE INTO observed_tool_calls VALUES (?,?)', (path, call_id)).rowcount
+                                skip_look = not bool(inserted)
+                            item = {**item, '_skip_look': skip_look}
+                        items.append(item)
+                    record = {**record, 'message': {**message, 'content': items}}
                 update(rows[key], record, context)
                 if record.get('type') == 'assistant' and isinstance(record.get('message'), dict):
                     message = record['message']

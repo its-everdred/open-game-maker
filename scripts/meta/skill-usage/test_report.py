@@ -21,6 +21,12 @@ class ReportTest(unittest.TestCase):
             self.assertNotIn('game<script>', html)
             self.assertIn('Iteration 1', html)
 
+    def test_look_calls_show_partial_as_lower_bound(self):
+        turns = [{'repo': 'game', 'ticket': 1, 'turn_id': 't', 'look_score_calls': 2, 'turn_fields_complete': False}]
+        self.assertIn('<td>≥2</td>', report.render(turns, []))
+        turns[0]['mapped'] = ['skill']
+        self.assertIn('<th>skill</th><td>0</td><td>≥1</td>', report.render(turns, []))
+
     def test_mapped_only_turns_do_not_count_as_used_tokens(self):
         turns = [{'repo': 'game', 'ticket': 1, 'mapped': ['skill'], 'read': [], 'acting': [], 'tokens': 100}]
         html = report.render(turns, [])

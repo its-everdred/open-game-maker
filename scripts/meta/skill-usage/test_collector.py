@@ -100,6 +100,61 @@ class CollectorTest(unittest.TestCase):
         self.assertEqual(row['acting'], ['gm-asset-variants'])
         self.assertEqual(row['actions'], ['gm look score/judge'])
 
+    def test_mapped_skills_exclude_inlined_skill_prose(self):
+        row = collector.empty_row('open-games', 1, 't', None)
+        text = '### Mapped skills (load first)\n#### `gm-verify` — mapped by label:game\nUse `--frames` inside skill text.\n### Other installed skills\n- `fake`\nUse `--frames`.'
+        collector.update(row, {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': text}]}}, {})
+        self.assertEqual(row['mapped'], ['gm-verify'])
+
+    def test_counts_look_calls_in_one_command(self):
+        row = collector.empty_row('open-games', 1, 't', None)
+        collector.observe_command(row, 'gm look score a b; gm look judge c')
+        self.assertEqual(row['look_score_calls'], 2)
+
+    def test_mirrored_sources_do_not_double_count(self):
+        row = collector.empty_row('open-games', 1, 't', None)
+        collector.observe_command(row, 'gm look score a b', 'rollout')
+        collector.observe_command(row, 'gm look score a b', 'events')
+        self.assertEqual(row['look_score_calls'], 1)
+        self.assertFalse(row['look_score_complete'])
+        collector.observe_command(row, 'gm look judge c', 'rollout')
+        self.assertEqual(row['look_score_calls'], 2)
+
+    def test_repeated_claude_tool_snapshot_counts_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / 'rollout.jsonl'
+            call = {'type': 'assistant', 'message': {'id': 'message', 'content': [{'type': 'tool_use', 'id': 'call', 'name': 'Bash', 'input': {'command': 'gm look score a b'}}]}}
+            with path.open('w') as f:
+                record(f, {'type': 'user', 'promptId': 'turn', 'cwd': '/x/.aiur/w/example/open-games/285'})
+                record(f, call)
+                record(f, call)
+            db = collector.open_db(root / 'state.db')
+            self.addCleanup(db.close)
+            collector.ingest(db, path)
+            row = json.loads(db.execute('SELECT row FROM turns').fetchone()[0])
+            self.assertEqual(row['look_score_calls'], 1)
+            self.assertFalse(row['look_score_complete'])
+
+    def test_claude_partial_snapshots_keep_later_skill_and_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / 'rollout.jsonl'
+            def call(call_id, name, input_data):
+                return {'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'id': call_id, 'name': name, 'input': input_data}]}}
+            with path.open('w') as f:
+                record(f, {'type': 'user', 'promptId': 'turn', 'cwd': '/x/.aiur/w/example/open-games/285'})
+                record(f, call('skill', 'Skill', {}))
+                record(f, call('skill', 'Skill', {'skill': 'gm-verify'}))
+                record(f, call('bash', 'Bash', {}))
+                record(f, call('bash', 'Bash', {'command': 'gm look judge image'}))
+            db = collector.open_db(root / 'state.db')
+            self.addCleanup(db.close)
+            collector.ingest(db, path)
+            row = json.loads(db.execute('SELECT row FROM turns').fetchone()[0])
+            self.assertEqual(row['read'], ['gm-verify'])
+            self.assertEqual(row['look_score_calls'], 1)
+
     def test_claude_skill_call_and_replaced_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

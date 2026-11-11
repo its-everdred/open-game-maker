@@ -28,10 +28,20 @@ def scan_ticket(db, owner, repo, ticket, asset_root):
     since = existing[0] if existing and existing[1] == 3 else '2026-11-08T00:00:00Z'
     endpoint = f'repos/{owner}/{repo}/issues/{ticket}/comments?per_page=100&since={quote(since, safe="")}'
     watermark = (datetime.now(timezone.utc) - timedelta(seconds=2)).isoformat().replace('+00:00', 'Z')
-    result = subprocess.run(['gh', 'api', endpoint, '--paginate', '--slurp'], capture_output=True, text=True, timeout=120)
+    result = subprocess.run(['gh', 'api', endpoint, '--paginate'], capture_output=True, text=True, timeout=120)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or f'gh exited {result.returncode}')
-    comments = [comment for page in json.loads(result.stdout) for comment in page]
+    decoder = json.JSONDecoder()
+    comments = []
+    remaining = result.stdout.strip()
+    if not remaining:
+        raise ValueError('empty comment page response')
+    while remaining:
+        page, end = decoder.raw_decode(remaining)
+        if not isinstance(page, list):
+            raise ValueError('expected a comment page array')
+        comments.extend(page)
+        remaining = remaining[end:].lstrip()
     errors = backfill.collect(db, comments, repo, ticket, asset_root)
     # An unresolved file must be retried; do not advance past its post.
     if not errors:

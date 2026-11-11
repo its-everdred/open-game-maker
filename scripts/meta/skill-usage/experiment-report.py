@@ -97,9 +97,15 @@ def render(turns, artifacts, inventory=None):
         matches = skill_index[skill]
         used = [row for row in matches if skill in row.get('read', []) or skill in row.get('acting', [])]
         mapped = sum(skill in row.get('mapped', []) for row in matches)
+        if any(row.get('turn_fields_complete') is False for row in turns):
+            mapped = f'≥{mapped}'
         count = len({(row['repo'], row['ticket']) for row in used})
         tokens = [row['tokens'] for row in used if row.get('tokens') is not None]
         out.append(f'<tr><th>{escape(skill)}</th><td>{count}</td><td>{mapped}</td><td>{len(used)}</td><td>{sum(tokens) if tokens else "Unknown"}</td><td>{escape(', '.join(deltas[skill]) or 'Unknown')}</td></tr>')
+    out.append('</table><h2>Look-score calls per turn</h2><table><tr><th>Ticket</th><th>Turn</th><th>Calls</th></tr>')
+    for row in turns:
+        count = row.get('look_score_calls')
+        out.append(f'<tr><td>{escape(row["repo"])} #{row["ticket"]}</td><td>{escape(str(row.get("turn_id", "Unknown")))}</td><td>{(f"≥{count}" if (row.get("turn_fields_complete") is False or row.get("look_score_complete") is False) else count) if count is not None else "Unknown"}</td></tr>')
     out.append('</table><h2>Visual iterations</h2>')
     for key in tickets:
         frames = sorted((row for row in by_ticket[key] if row.get('iteration') is not None), key=lambda row: row['iteration'])
