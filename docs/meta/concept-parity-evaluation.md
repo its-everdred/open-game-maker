@@ -46,7 +46,9 @@ assume the NVIDIA-dependent Hunyuan3D or TRELLIS backends are available.
 - `visual-pixel-perfect` was removed from aura-frog in commit `469df09fb26b9b11e48af570f5f32442ca1a96d7`;
   its last parent is `e47d23b3377e88792bedcd96d9475b948be38b96`. The marketplace page points to a path that no longer
   exists on the default branch. The repository reports MIT, but review the historical file and its license before
-  adapting or redistributing it.
+  adapting or redistributing it. The historical comparison script expects equal dimensions, creates a Node script in
+  `/tmp`, and uses CommonJS `require` for pixelmatch; the local probe instead normalized inputs and used the v7 ESM
+  API. Therefore the probe exercises pixelmatch, not the upstream shell script or its auto-fix loop.
 - `godot-create-3d-assets` is an additional MIT-licensed candidate found in GitHub search. It targets Godot 4 and a
   Godot MCP with bounded jobs, whereas these cases use the project's Three.js workflow. Godot was not on this worker's
   PATH, so it has not been run on the cases and is not an evidence-backed winner.
