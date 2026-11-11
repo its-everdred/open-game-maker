@@ -100,10 +100,10 @@ describe('gm skills config', () => {
       '    by_label:',
       '      "game:blobs": [gm-core, gm-set-kaykit]',
       '      "game:sketch": [gm-core]',
-      '      "role:visual": [gm-core, gm-verify, gm-ui-hud, gm-image-mock]',
+      '      "role:visual": [gm-core, gm-verify, gm-ui-hud, gm-image-mock, gm-dream-loop]',
     ]);
     expect(result.out).toContain(
-      '      "role:assets": [gm-core, gm-verify, gm-asset-variants, gm-pack-adapter, gm-asset-showcase]',
+      '      "role:assets": [gm-core, gm-verify, gm-asset-variants, gm-pack-adapter, gm-asset-showcase, gm-dream-loop]',
     );
     expect(result.out).toContain('      "role:gameplay": [gm-core, gm-input, gm-verify, gm-qa, gm-map-inspiration]');
   });

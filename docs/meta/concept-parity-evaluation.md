@@ -56,7 +56,8 @@ assume the NVIDIA-dependent Hunyuan3D or TRELLIS backends are available.
 - GitHub search also found `arjun988/blender-skills` (repository MIT license, last pushed 2026-11-06). Its
   `qa-review` skill asks for multi-angle screenshots, reference comparison and a severity-ordered ship verdict. It
   does not specify a numeric parity score, and its viewport capture depends on Blender MCP. It has not been run on the
-  three cases; it is a candidate, not a selected winner.
+  three cases through the look broker as a checklist prompt; see the results below. Its native MCP viewport transport
+  remains unverified.
 
 ## Dream-loop broker probe
 
@@ -65,8 +66,7 @@ After the Executor confirmed the images' provenance, a workspace copy of `goo-pi
 fully passed and a fail verdict. Its differences included the pinched silhouette, highlight placement, and material;
 they were specific enough to suggest edits, though some background and crop observations need human verification. This
 is one case, not a ranking or an evaluation of the full loop. The record did not expose token counts. The result reported
-`cost_usd: 0.0500243` despite the stated no-spend expectation, so further broker calls were stopped. Do not infer that
-this path is free from the request interface. The broker source copies the Claude CLI `total_cost_usd` result into this field and runs its second-login CLI with the API key removed; it does not establish how the account is billed. The other cases and candidates remain untested through the broker.
+`cost_usd: 0.0500243` and further calls were paused pending clarification. The Executor confirmed this is an informational usage estimate on the existing subscription, not incremental spending. The broker source copies the Claude CLI `total_cost_usd` result into this field and runs its second-login CLI with the API key removed.
 
 ## Core local scorer probe
 
@@ -83,8 +83,7 @@ configured, so LPIPS was skipped. No vision tokens were used. These are individu
 
 The scores are affected by the framing, pose and background differences described above; the play inputs also have
 different aspect ratios. The bead, run and piece-match sheets have not been registered to an equivalent view, so the
-required iteration ranking is not established. The core judge remains untested here because its broker path reported
-a charge on the earlier probe. A later single serial run measured end-to-end CLI times (including process startup and file writing) of 6.174 s for goo, 7.663 s for play, and 5.753 s for Mossbeard. These are not repeated benchmarks.
+required iteration ranking is not established. The core judge was subsequently run through the existing broker; see the vision comparisons below. A later single serial run measured end-to-end CLI times (including process startup and file writing) of 6.174 s for goo, 7.663 s for play, and 5.753 s for Mossbeard. These are not repeated benchmarks.
 
 ## Provisional goo iteration ranking
 
@@ -103,3 +102,28 @@ Both metrics rank runs below beads, contrary to the supplied review order, while
 probe is not a fair validation of either metric: the crops differ in framing, neighbors, orientation and size, and the
 piece-match candidate is a different close-up. Preserve those caveats when interpreting the reversal; a controlled
 fixed-camera sequence is needed to establish whether either metric tracks the reviews.
+
+## Fresh-context vision comparisons
+
+The Executor confirmed that the broker uses the existing subscription and that `cost_usd` is an informational usage
+estimate, not incremental spending. Each request used workspace copies of the confirmed permitted images. The broker
+runs a separate Claude CLI session per request; these observations are one run each, not repeatability measurements.
+The broker result does not expose token counts. All three methods ran from this sandbox through the existing broker.
+
+| Method | Goo | Play | Mossbeard | Goo iteration result | Runtime and output |
+|---|---|---|---|---|---|
+| Dream-loop prompt | 3/10 | 1/10 | 2/10 | All 3/10; named beads, runs, piece-match in review order, with beads and runs described as tied | Play 24.16 s; sequence 27.18 s; other timings unavailable after restart. Detailed, concrete fixes; some image interpretation errors. |
+| Visual-verdict prompt | 52/100 | 22/100 | 22/100 | 58, 52, 45: reversed review order | Goo 18.14 s, play 24.18 s, Mossbeard 21.18 s, sequence 39.14 s. Useful differences, but the Mossbeard `category_match` was a string rather than the required boolean. |
+| Blender QA checklist prompt | NO-SHIP | NO-SHIP | NO-SHIP | No numeric score; ranked piece-match, runs, beads, the reverse of the review order | Goo 21.14 s, play 21.17 s, Mossbeard 18.11 s. It provided severity-ranked actions but did not use native MCP capture. |
+| Core `gm look judge` | shape 5/10 | shape 1/10 | shape 2/10 | shape 6, 4, 4: runs below beads, piece-match tied with runs | Goo 60.26 s, play 28.64 s, Mossbeard 24.59 s; sequence 23.89 s, 24.20 s, 18.21 s. Later tiers were gated. Concrete differences included an unwanted heatmap observation. |
+
+All cases returned fail or revise. The play images show different game states and aspect ratios; the Mossbeard card
+includes a scene and frame absent from the model still. In the sequence, two mirrored, tight crops include neighboring
+pieces while the final piece is a different close-up. The dream sequence response also incorrectly described the
+reference's orientation. These are not controlled comparisons, and no method demonstrated a reliable numerical ranking
+matching the reviews. The dream-loop workflow is the provisional choice for orchestration because it names tiered,
+actionable fixes and its stated ordering matched the reviews; its tied scores and observed mistakes require inspection,
+not automatic acceptance. Core score/judge supplies the project integration and machine-readable evidence.
+
+Blender MCP is an authoring interface, not a parity scorer; no scores or token counts apply. The local method check and
+failed headless transport attempts above do not establish that its interactive workflow runs here. The `qa-review` checklist was adapted and tested as a broker prompt on the three pairs, without its unverified MCP viewport transport. Its reversed provisional ranking and lack of numeric scores mean it is supplementary QA, not the parity scorer.
