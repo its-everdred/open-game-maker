@@ -52,6 +52,9 @@ logical-input script, checks a save-state round trip, writes a HUD still, runs `
 `--json` emits the L1 gate result and report path. The deadline defaults to 120 seconds plus one second per 30 ticks,
 capped at 20 minutes; `--deadline` overrides it in seconds. The command reports progress every 10 seconds and stops after
 90 seconds without tick progress. On a stall, inspect `stall.json` and the available frame images in the output directory.
+On Linux, `gm test` selects SwiftShader when no GPU render device is available. Set `GM_VERIFY_SOFTWARE_GL=1` to force
+SwiftShader or `GM_VERIFY_SOFTWARE_GL=0` to request the GPU. A failed HUD capture reports that it captures the whole page
+and writes `hud-dom.html` in the output directory when the page remains responsive.
 
 `gm run` captures deterministic stills, timelines, clips, and browser budgets. It writes `report.json` plus
 `state.json` containing the final `renderGameToText()` value when that hook is available; sameness evals use the state
