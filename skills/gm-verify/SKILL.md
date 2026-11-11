@@ -13,15 +13,13 @@ Never report a visual result you have not looked at. Code, logs, and a passing c
 2. Run `gm test --ticks 3600`; fix every L1 failure. `gm test` exits on its own; never wrap it in a wait; on a stall exit, read the diagnostic.
 3. Fix the first new console error before investigating anything after it.
 4. Run `gm options check` on any option set before it reaches the creator; a rejection in `design/feedback.json` blocks it.
-5. Commit tracked visual changes, then run `gm run --verify-source --frames 0,2,5` (the host frame's top bar, Pause and touch overlay, at 390x844, 844x390,
-   820x1180 and 1180x820; `--viewport all` adds desktop) and make the sheet with `gm shot --sheet shots/`.
+5. Commit tracked visual changes, then run `gm run --verify-source --frames 0,2,5` (host frame's top bar, Pause and touch overlay at 390x844, 844x390, 820x1180 and 1180x820; `--viewport all` adds desktop) and make the sheet with `gm shot --sheet shots/`.
 6. After your last `gm run`, look at every still you added:
    `python3 .claude/skills/gm-image-mock/scripts/request-mock.py --kind look --out looks --ref <still> --ref <target> --prompt-file <questions>`.
    Make each ticket screen's comparison with `gm look sheet <screen> --still <png>` and look at the sheet. After committing any tracked captured stills, run `gm look scope add <screen> --still <png>` for each ticket screen (repeat `--still` for its looked-at stills), commit `design/look-scope.json`, then run `gm look check --changed` plus `gm look score`/`gm look judge` on those screens. Inherited gaps do not block. If the look broker fails, report the gate as blocked, never as a pass.
 7. Commit every file the PR links under `review/<ticket>/`; `gm look evidence --body <pr-body.md>` fails otherwise.
 
-A report budget whose status is `over` blocks the PR. Name the tier and the measured value. `unknown` is not green:
-list it under unchecked.
+A report budget whose status is `over` blocks the PR. Name the tier and measured value. List `unknown` under unchecked.
 
 ## Look
 
@@ -64,18 +62,14 @@ Copy this into the PR and answer every line from the sheet:
 
 The scoped visual gate, `gm check`, `gm test`, console errors, and budgets block.
 
-Run `gm look score` and `gm look judge` on your own changed screens against their targets. Fix failures in your
-screens; inherited gaps do not block this change. Experiment tickets also post their captures on the issue.
+Run `gm look score` and `gm look judge` on your changed screens against their targets. Fix failures; inherited gaps do not block. Experiment tickets also post captures on the issue.
 
 ## Rules
 
 - Bind local servers to `127.0.0.1`, never `0.0.0.0`.
 - GPU Chromium is the default. Use SwiftShader only when the environment requires it and record that fact.
-- Wait up to 10 minutes for a capture slot. If a capture process stays at 0% CPU for 10 minutes, kill that process
-  by PID and retry once. If GPU startup stalls, rerun with `GM_VERIFY_SOFTWARE_GL=1` and record the fallback.
-- For app-shell touch stills without a QA account, use `gm capture shell --web <apps/web> --dist <game/dist> --out <directory>`;
-  repeat `--tap <text>` for successive game actions. The local shell mocks sign-in and game APIs, so
-  report it as a local capture, not a production or Safari check.
+- Wait up to 10 minutes for a capture slot. If a capture process stays at 0% CPU for 10 minutes, kill it by PID and retry once. If GPU startup stalls, rerun with `GM_VERIFY_SOFTWARE_GL=1` and record the fallback.
+- For app-shell touch stills without a QA account, use `gm capture shell --web <apps/web> --dist <game/dist> --out <directory>`; repeat `--tap <text>` for successive game actions. The shell mocks sign-in and game APIs: report it as local, not production or Safari.
 - After every `gm run`, send exactly one current still or clip with `gm chat post`.
 - Never install software or add a paid visual judge to verify a game.
 - Always list `iPhone Safari` and `sound` as unchecked unless an operator actually checked them.
