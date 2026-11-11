@@ -15,6 +15,16 @@ spec.loader.exec_module(scan)
 
 
 class ScanPostsTest(unittest.TestCase):
+    def test_paginated_arrays_are_combined_without_slurp(self):
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        artifacts.ensure_schema(db)
+        reply = SimpleNamespace(returncode=0, stdout='[{"id":1}][{"id":2}]', stderr='')
+        with patch.object(scan.subprocess, 'run', return_value=reply) as run, patch.object(scan.backfill, 'collect', return_value=[]) as collect:
+            scan.scan_ticket(db, 'owner', 'open-games', 1, Path('.'))
+        self.assertNotIn('--slurp', run.call_args.args[0])
+        self.assertEqual([c['id'] for c in collect.call_args.args[1]], [1, 2])
+
     def test_missing_file_does_not_advance_comment_cursor(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -24,13 +34,13 @@ class ScanPostsTest(unittest.TestCase):
             artifacts.ensure_schema(db)
             comment = {'id': 1, 'body': 'Ready\nassets-local/review/missing.png',
                        'created_at': '2026-11-10T00:00:00Z', 'updated_at': '2026-11-10T00:00:00Z'}
-            reply = SimpleNamespace(returncode=0, stdout=json.dumps([[comment]]), stderr='')
+            reply = SimpleNamespace(returncode=0, stdout=json.dumps([comment]), stderr='')
             with patch.object(scan.subprocess, 'run', return_value=reply):
                 errors = scan.scan_ticket(db, 'owner', 'open-games', 285, root)
             self.assertTrue(errors)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM comment_cursors').fetchone()[0], 0)
             comment['body'] = 'Ready'
-            reply.stdout = json.dumps([[comment]])
+            reply.stdout = json.dumps([comment])
             with patch.object(scan.subprocess, 'run', return_value=reply):
                 self.assertEqual(scan.scan_ticket(db, 'owner', 'open-games', 285, root), [])
             since, version = db.execute('SELECT since,version FROM comment_cursors').fetchone()

@@ -10,7 +10,7 @@ Do not commit that directory: rollout and artifact records can contain local pat
 - `scan-posts.py` incrementally checks issue comments for review files and imports recoverable media; only explicit ready posts count as iterations, while other references remain unclassified. Unresolved files keep their cursor pending.
 - `backfill-posts.py --repo <repo> --ticket <number> <comments.json>` imports candidate paths from an issue-comment JSON export. It marks attribution as historical inference and refuses files modified after the comment; missing or changed files are reported.
 - `experiment-report.py` writes a self-contained `report.html`, embedding available images and videos. Missing values remain unknown, and attribution alone does not prove that a skill caused an outcome.
-- `collect.sh` runs both scanners and refreshes the report; it is silent on success and serializes invocations with a local lock. After this change merges, the Executor will add it to the host hourly audit and meta-improve pass.
+- `collect.sh` runs both scanners and refreshes the report; it is silent on success and serializes invocations with a local lock. After merge, the Executor adds it to the host auto-update loop hourly; it is silent unless it fails.
 
 Complete malformed records are recorded as errors with their file and byte offset; collectors return failure until the data gap is resolved. Incomplete trailing lines are retried on the next run. If a file is replaced or truncated, collection refuses to replay it on top of existing aggregates: rebuild the local ledger into a fresh state directory after preserving any artifact records. Do not delete the original logs. Cursor commits and aggregates are transactional, but the JSONL exports are derived files and can be regenerated.
 
@@ -21,3 +21,7 @@ Run the focused checks with:
 ```sh
 python3 -m unittest discover -s scripts/meta/skill-usage -p 'test_*.py'
 ```
+
+To repair historical mapped skills and look-score counts, run `flock assets-local/experiments/skills/collect.lock python3 scripts/meta/skill-usage/backfill-turn-fields.py`. Interrupted replays resume from a temporary database in the state directory; if the parser changes, remove `backfill-replay.sqlite3` and restart. Use `--allow-missing` only when sources are unavailable or records are malformed: recovered fields are lower bounds, marked by `turn_fields_complete: false` (and ≥ in the report).
+
+Calls recorded by multiple sources for a turn use the largest per-source count, avoiding double-counting mirrored commands; the report marks counts with ≥ because distinct calls may be split across sources or occur in shell syntax the scanner cannot prove executed.
