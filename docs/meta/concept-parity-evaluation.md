@@ -64,7 +64,7 @@ fully passed and a fail verdict. Its differences included the pinched silhouette
 they were specific enough to suggest edits, though some background and crop observations need human verification. This
 is one case, not a ranking or an evaluation of the full loop. The record did not expose token counts. The result reported
 `cost_usd: 0.0500243` despite the stated no-spend expectation, so further broker calls were stopped. Do not infer that
-this path is free from the request interface. The other cases and candidates remain untested through the broker.
+this path is free from the request interface. The broker source copies the Claude CLI `total_cost_usd` result into this field and runs its second-login CLI with the API key removed; it does not establish how the account is billed. The other cases and candidates remain untested through the broker.
 
 ## Core local scorer probe
 
@@ -82,7 +82,7 @@ configured, so LPIPS was skipped. No vision tokens were used. These are individu
 The scores are affected by the framing, pose and background differences described above; the play inputs also have
 different aspect ratios. The bead, run and piece-match sheets have not been registered to an equivalent view, so the
 required iteration ranking is not established. The core judge remains untested here because its broker path reported
-a charge on the earlier probe. Runtime was not isolated while other tests were running.
+a charge on the earlier probe. A later single serial run measured end-to-end CLI times (including process startup and file writing) of 6.174 s for goo, 7.663 s for play, and 5.753 s for Mossbeard. These are not repeated benchmarks.
 
 ## Provisional goo iteration ranking
 
