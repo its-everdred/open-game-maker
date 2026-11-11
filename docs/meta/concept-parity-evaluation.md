@@ -2,7 +2,7 @@
 
 This is an in-progress evaluation for core #707. Do not treat a candidate as a winner until the same cases have been
 run with comparable inputs and the required ranking, actionable differences, runtime, token use, and headless behavior
-have been recorded. The core score and judge from #706 are still pending.
+have been recorded. The core scorer and judge from #706 have landed; see the local scorer probe below.
 
 ## Inputs and constraints
 
@@ -60,3 +60,21 @@ they were specific enough to suggest edits, though some background and crop obse
 is one case, not a ranking or an evaluation of the full loop. The record did not expose token counts. The result reported
 `cost_usd: 0.0500243` despite the stated no-spend expectation, so further broker calls were stopped. Do not infer that
 this path is free from the request interface. The other cases and candidates remain untested through the broker.
+
+## Core local scorer probe
+
+After #709 merged, `gm look score` ran without a broker on all three local pairs. Goo used the two 464 × 464 halves
+of the pair; Mossbeard used the 384 × 688 card crop and current still; the play target and current still were passed
+at their original dimensions, with the scorer stretching the candidate to the target size. No perceptual adapter was
+configured, so LPIPS was skipped. No vision tokens were used. These are individual measurements, not a ranking.
+
+| Case | SSIM | Colour histogram distance | Edge IoU |
+|---|---:|---:|---:|
+| Goo | 0.5284 | 0.4973 | 0.0901 |
+| Play screen | 0.0280 | 0.3982 | 0.0278 |
+| Mossbeard | 0.0802 | 0.6960 | 0.0267 |
+
+The scores are affected by the framing, pose and background differences described above; the play inputs also have
+different aspect ratios. The bead, run and piece-match sheets have not been registered to an equivalent view, so the
+required iteration ranking is not established. The core judge remains untested here because its broker path reported
+a charge on the earlier probe. Runtime was not isolated while other tests were running.
