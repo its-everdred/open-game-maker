@@ -1,11 +1,23 @@
 import { spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { resolveContainedPath } from '../../context.js';
+
+function rejectSymlinkDirectories(path: string): void {
+  for (let current = path; ; current = dirname(current)) {
+    try {
+      if (lstatSync(current).isSymbolicLink())
+        throw new UsageError('output directory contains a symlink', 'choose an output directory without symlinks');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (dirname(current) === current) break;
+  }
+}
 
 export async function runChild(
   cwd: string,
@@ -66,6 +78,7 @@ export const command: GmCommand = {
       throw new UsageError('invalid timeout or port', 'gm help capture shell');
     const web = resolve(ctx.cwd, flags.web);
     const dist = resolve(ctx.cwd, flags.dist);
+    rejectSymlinkDirectories(resolve(ctx.cwd, flags.out));
     for (const name of ['index.html', 'design/design.json']) {
       const file = await resolveContainedPath(dist, resolve(dist, name)).catch(() => null);
       if (
@@ -125,7 +138,9 @@ export const command: GmCommand = {
         if (!existsSync(resolve(env.GM_SHELL_OUT, `play-${size}.png`)))
           throw new CommandError(`shell capture did not produce play-${size}.png`);
       const out = resolve(ctx.cwd, flags.out);
+      rejectSymlinkDirectories(out);
       mkdirSync(out, { recursive: true });
+      rejectSymlinkDirectories(out);
       const publish = mkdtempSync(resolve(out, '.gm-shell-publish-'));
       try {
         for (const size of sizes) {
