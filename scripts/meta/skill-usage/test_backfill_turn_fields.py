@@ -95,3 +95,17 @@ class BackfillTest(unittest.TestCase):
             db.commit()
             with self.assertRaisesRegex(ValueError, 'live checkpoints changed'):
                 backfill.backfill(db, replay_path=replay_path)
+
+    def test_malformed_records_require_opt_in_and_mark_lower_bounds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'rollout.jsonl'
+            source.write_text(json.dumps({'type': 'user', 'promptId': 't', 'cwd': '/x/.aiur/w/a/open-games/1', 'message': {'content': 'gm look'}}) + '\n' + '{bad}\n')
+            db = collector.open_db(root / 'state.db')
+            self.addCleanup(db.close)
+            collector.ingest(db, source)
+            with self.assertRaisesRegex(ValueError, 'malformed'):
+                backfill.backfill(db)
+            gaps = backfill.backfill(db, allow_missing=True)
+            self.assertEqual(len(gaps), 1)
+            self.assertFalse(json.loads(db.execute('SELECT row FROM turns').fetchone()[0])['turn_fields_complete'])

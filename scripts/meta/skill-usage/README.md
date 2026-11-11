@@ -22,6 +22,6 @@ Run the focused checks with:
 python3 -m unittest discover -s scripts/meta/skill-usage -p 'test_*.py'
 ```
 
-To repair historical mapped skills and look-score counts, run `flock assets-local/experiments/skills/collect.lock python3 scripts/meta/skill-usage/backfill-turn-fields.py`. Interrupted replays resume from a temporary database in the state directory; if the parser changes, remove `backfill-replay.sqlite3` and restart. Use `--allow-missing` only when sources are unavailable: recovered fields are lower bounds, marked by `turn_fields_complete: false` (and ≥ in the report).
+To repair historical mapped skills and look-score counts, run `flock assets-local/experiments/skills/collect.lock python3 scripts/meta/skill-usage/backfill-turn-fields.py`. Interrupted replays resume from a temporary database in the state directory; if the parser changes, remove `backfill-replay.sqlite3` and restart. Use `--allow-missing` only when sources are unavailable or records are malformed: recovered fields are lower bounds, marked by `turn_fields_complete: false` (and ≥ in the report).
 
 Calls recorded by multiple sources for a turn use the largest per-source count, avoiding double-counting mirrored commands; the report marks counts with ≥ because distinct calls may be split across sources or occur in shell syntax the scanner cannot prove executed.

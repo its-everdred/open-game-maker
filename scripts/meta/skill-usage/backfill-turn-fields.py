@@ -71,8 +71,9 @@ def backfill(db, allow_missing=False, replay_path=None):
             subprocess.run([sys.executable, '-c', command, str(replay_path), path, json.dumps(initial), str(offset)],
                            check=True, env={**os.environ, 'PYTHONPATH': str(Path(__file__).parent)})
         errors = replay.execute('SELECT path,offset,message FROM errors').fetchall()
-        if errors:
+        if errors and not allow_missing:
             raise ValueError(f'replay has {len(errors)} malformed records; original ledger unchanged')
+        incomplete = bool(missing or errors)
         repaired = {(repo, ticket, turn): json.loads(row) for repo, ticket, turn, row in replay.execute('SELECT repo,ticket,turn_id,row FROM turns')}
         with db:
             db.executemany('INSERT OR IGNORE INTO observed_tool_calls VALUES (?,?)', replay.execute('SELECT path,call_id FROM observed_tool_calls'))
@@ -82,10 +83,10 @@ def backfill(db, allow_missing=False, replay_path=None):
                 row['mapped'] = observed['mapped'] if observed else []
                 row['look_score_calls'] = observed['look_score_calls'] if observed else 0
                 row['look_score_sources'] = observed.get('look_score_sources', {}) if observed else {}
-                row['look_score_complete'] = not missing and (observed is None or observed.get('look_score_complete', False))
-                row['turn_fields_complete'] = not missing
+                row['look_score_complete'] = not incomplete and (observed is None or observed.get('look_score_complete', False))
+                row['turn_fields_complete'] = not incomplete
                 db.execute('UPDATE turns SET row=? WHERE repo=? AND ticket=? AND turn_id=?', (json.dumps(row, sort_keys=True), repo, ticket, turn))
-        return missing
+        return missing + [f'{path}:{offset}: {message}' for path, offset, message in errors]
     finally:
         replay.close()
         if temporary:
@@ -95,7 +96,7 @@ def backfill(db, allow_missing=False, replay_path=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, default=Path('assets-local/experiments/skills'))
-    parser.add_argument('--allow-missing', action='store_true', help='Export lower bounds when checkpointed sources are absent')
+    parser.add_argument('--allow-missing', action='store_true', help='Export lower bounds when checkpointed sources are absent or malformed')
     args = parser.parse_args()
     db = collector.open_db(args.state_dir / 'state.sqlite3')
     try:
@@ -103,7 +104,7 @@ def main():
         missing = backfill(db, args.allow_missing, replay_path)
         replay_path.unlink(missing_ok=True)
         if missing:
-            print(f'Partial backfill: {len(missing)} source files missing; fields are lower bounds.')
+            print(f'Partial backfill: {len(missing)} source files or malformed records; fields are lower bounds.')
         collector.export(db, args.state_dir / 'ledger.jsonl')
     finally:
         db.close()
