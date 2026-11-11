@@ -69,6 +69,16 @@ describe('gm capture shell', () => {
     expect(result.err.join('\n')).toContain('missing index.html');
   });
 
+  it('rejects an output directory symlink before running the build', async () => {
+    const root = tempDir();
+    fixture(root);
+    mkdirSync(join(root, 'elsewhere'));
+    symlinkSync(join(root, 'elsewhere'), join(root, 'shots'));
+    const result = await gm(['capture', 'shell', '--web', '.', '--dist', 'dist', '--out', 'shots'], { cwd: root });
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('output directory contains a symlink');
+  });
+
   it('releases the slot when Playwright fails', async () => {
     const root = tempDir();
     fixture(root);
