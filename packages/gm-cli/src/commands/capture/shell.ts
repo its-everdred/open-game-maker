@@ -93,6 +93,7 @@ export const command: GmCommand = {
     const env = {
       ...ctx.env,
       VITE_GAMES_ORIGIN: 'http://127.0.0.1:10000',
+      GM_SHELL_TEST_FAST: '0',
       GM_SHELL_DIST: dist,
       GM_SHELL_OUT: resolve(temp, 'shots'),
       GM_SHELL_WEB_DIST: temp,

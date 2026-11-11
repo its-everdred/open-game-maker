@@ -10,6 +10,8 @@ const env = process.env;
 const dist = resolve(env.GM_SHELL_DIST!);
 const out = resolve(env.GM_SHELL_OUT!);
 const taps = JSON.parse(env.GM_SHELL_TAPS ?? '[]') as string[];
+// The direct browser harness uses a short delay for its synthetic fixtures; gm capture shell forces the real delay.
+const settleMs = env.GM_SHELL_TEST_FAST === '1' ? 1_000 : 14_000;
 const design = JSON.parse(readFileSync(resolve(dist, 'design/design.json'), 'utf8')) as unknown;
 const build = 'b_01BX5ZZKBKACTAV9WEVGEMMVRZ';
 mkdirSync(out, { recursive: true });
@@ -32,6 +34,12 @@ for (const [width, height] of [
     try {
       const page = await context.newPage();
       const failedGameFiles: string[] = [];
+      const pageErrors: string[] = [];
+      page.on('pageerror', (error) => pageErrors.push(error.message));
+      const checkErrors = () => {
+        if (failedGameFiles.length) throw new Error(`game resources failed: ${failedGameFiles.join(', ')}`);
+        if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join(', ')}`);
+      };
       page.on('console', (message) => {
         if (message.type() === 'error') console.error(message.text());
       });
@@ -62,18 +70,18 @@ for (const [width, height] of [
       const response = await entry;
       if (!response.ok()) throw new Error(`game entry failed: ${response.status()}`);
       await page.locator('.game-frame iframe').waitFor({ state: 'visible', timeout: 30_000 });
-      await page.waitForTimeout(14_000);
-      if (failedGameFiles.length) throw new Error(`game resources failed: ${failedGameFiles.join(', ')}`);
+      await page.waitForTimeout(settleMs);
+      checkErrors();
       await page.screenshot({ path: resolve(out, `play-${width}x${height}.png`) });
       const game = page.frameLocator('.game-frame iframe');
       for (const text of taps) {
         await game.getByText(text, { exact: true }).first().tap({ timeout: 10_000 });
         await page.waitForTimeout(1_200);
       }
-      if (failedGameFiles.length) throw new Error(`game resources failed: ${failedGameFiles.join(', ')}`);
+      checkErrors();
       if (taps.length) {
         await page.waitForTimeout(9_000);
-        if (failedGameFiles.length) throw new Error(`game resources failed: ${failedGameFiles.join(', ')}`);
+        checkErrors();
         await page.screenshot({ path: resolve(out, `ingame-${width}x${height}.png`) });
       }
       const menu = page.getByRole('button', { name: 'Menu' });
