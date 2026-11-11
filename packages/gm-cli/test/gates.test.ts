@@ -121,12 +121,35 @@ describe('gm check', () => {
 describe('gm test', () => {
   it('passes ticks, inputs and output through to L1 and prints the report path', async () => {
     const cwd = tempDir();
-    const result = await gm(['test', '--ticks', '3600', '--inputs', 'script.json', '--out', 'proof'], { cwd });
+    const result = await gm(
+      ['test', '--ticks', '3600', '--deadline', '30', '--inputs', 'script.json', '--out', 'proof'],
+      { cwd },
+    );
 
     expect(result).toEqual({ code: 0, out: ['/game/shots/test/report.json  L1 pass'], err: [] });
     expect(state.l1Options).toEqual(
-      expect.objectContaining({ ticks: 3_600, inputs: [], outDir: join(cwd, 'proof'), source: 'gm test' }),
+      expect.objectContaining({
+        ticks: 3_600,
+        deadlineMs: 30_000,
+        inputs: [],
+        outDir: join(cwd, 'proof'),
+        source: 'gm test',
+      }),
     );
+  });
+
+  it('only invokes a backstop supplied by the executable', async () => {
+    const backstop = vi.fn();
+    await gm(['test'], { onTestTimeout: backstop });
+    const options = state.l1Options as { onTimeout: (reason: string) => void };
+    options.onTimeout('stalled at tick 0');
+    expect(backstop).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a non-positive deadline', async () => {
+    const result = await gm(['test', '--deadline', '0']);
+    expect(result.code).toBe(2);
+    expect(result.err[0]).toContain('--deadline must be a positive number');
   });
 
   it('prints failed checks, exits one, and supports JSON', async () => {

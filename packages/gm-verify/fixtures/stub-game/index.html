@@ -35,6 +35,7 @@
     ready: true,
     marks: [],
     advanceTime(ms) {
+      if (q.has('stall')) return new Promise(() => {});
       if (throwOnAdvance) throw new TypeError('Cannot advance crashed game state');
       const throwAt = Number(q.get('throwAt'));
       if (q.has('throwAt') && Number.isFinite(throwAt) && Math.floor((t + ms) / stepMs) >= throwAt) {

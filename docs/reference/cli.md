@@ -35,7 +35,7 @@ set in `gm.lock.json`, pins the exact `@gm/pack-<set>` version, and installs onl
 gm check [--json]
 gm check static [--json]
 gm check hooks [--json]
-gm test [--inputs <script.json>] [--ticks <count>] [--serve <dir>] [--out <dir>] [--json]
+gm test [--inputs <script.json>] [--ticks <count>] [--deadline <seconds>] [--serve <dir>] [--out <dir>] [--json]
 gm run [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
 gm look sheet <screen> --still <png> [--target <png>]
 gm look check [--json]
@@ -49,7 +49,9 @@ gate result.
 `gm test` serves the built game from `dist/` on `127.0.0.1`, advances 3,600 fixed ticks by default, applies an optional
 logical-input script, checks a save-state round trip, writes a HUD still, runs `promises/*.spec.ts`, and writes
 `shots/test/report.json`. A failed or unavailable check exits 1. `--serve`, `--ticks`, and `--out` override the defaults;
-`--json` emits the L1 gate result and report path.
+`--json` emits the L1 gate result and report path. The deadline defaults to 120 seconds plus one second per 30 ticks,
+capped at 20 minutes; `--deadline` overrides it in seconds. The command reports progress every 10 seconds and stops after
+90 seconds without tick progress. On a stall, inspect `stall.json` and the available frame images in the output directory.
 
 `gm run` captures deterministic stills, timelines, clips, and browser budgets. It writes `report.json` plus
 `state.json` containing the final `renderGameToText()` value when that hook is available; sameness evals use the state

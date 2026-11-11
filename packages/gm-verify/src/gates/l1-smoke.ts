@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
@@ -21,6 +20,8 @@ import { acquireSlot, type SemaphoreOptions } from '../semaphore.js';
 import { isLoopbackUrl, serveStatic } from '../server.js';
 import type { GateCheck, GateResult } from './index.js';
 import { pngStddev } from './png-variance.js';
+import { runPromiseProcess, type SpawnOptions, type SpawnResult } from './promise-process.js';
+import { L1Watchdog, writeStallDiagnostic } from './l1-watchdog.js';
 
 const STEP_MS = 1000 / 60;
 const DEFAULT_TICKS = 3_600;
@@ -37,6 +38,12 @@ export type RunL1Options = ActivityContext & {
   slots?: SemaphoreOptions;
   readyTimeoutMs?: number;
   minStddev?: number;
+  /** Overall deadline in milliseconds. */
+  deadlineMs?: number;
+  progress?: (line: string) => void;
+  onTimeout?: (reason: string) => void;
+  /** Test seam for the no-progress timeout; defaults to 90 seconds. */
+  stallTimeoutMs?: number;
 };
 
 function slash(path: string): string {
@@ -58,12 +65,13 @@ function promiseFiles(root: string): string[] {
   return files.sort();
 }
 
-type SpawnResult = { status: number | null; stdout: string; stderr: string; error?: Error };
 type PromiseRunnerOptions = {
   replay?: (bundle: ReplayBundle, options: ReplayOptions) => Promise<ReplayResult>;
-  spawn?: (command: string, args: string[], options: { cwd: string; encoding: 'utf8'; timeout: number }) => SpawnResult;
+  spawn?: (command: string, args: string[], options: SpawnOptions) => SpawnResult | Promise<SpawnResult>;
   software?: boolean;
   wallClockMs?: number;
+  deadlineAt?: number;
+  signal?: AbortSignal;
 };
 
 type PromiseReplay = {
@@ -90,6 +98,7 @@ export async function runPromiseSpecs(root: string, options: PromiseRunnerOption
   const results: Record<string, Pick<ReplayResult, 'class' | 'errorsSeen'>> = {};
   try {
     for (const file of files) {
+      if (options.signal?.aborted) throw new Error('promise specs cancelled');
       const jsonPath = replayFile(file);
       if (!existsSync(jsonPath)) continue;
       let promise: PromiseReplay;
@@ -125,6 +134,7 @@ export async function runPromiseSpecs(root: string, options: PromiseRunnerOption
       results[replayPromiseKey(promise)] = { class: result.class, errorsSeen: result.errorsSeen };
     }
 
+    if (options.signal?.aborted) throw new Error('promise specs cancelled');
     const setupPath = join(privateDir, 'setup.mjs');
     const configPath = join(privateDir, 'vitest.config.mjs');
     writeFileSync(setupPath, `globalThis.__GM_PROMISE_RESULTS__ = ${JSON.stringify(results)};\n`);
@@ -132,13 +142,14 @@ export async function runPromiseSpecs(root: string, options: PromiseRunnerOption
       configPath,
       `export default { test: { root: ${JSON.stringify(root)}, setupFiles: [${JSON.stringify(setupPath)}], fileParallelism: false } };\n`,
     );
-    const result = (options.spawn ?? spawnSync)(
+    const result = await (options.spawn ?? runPromiseProcess)(
       'pnpm',
       ['exec', 'vitest', 'run', '--config', configPath, ...relativeFiles],
       {
         cwd: root,
         encoding: 'utf8',
-        timeout: 5 * 60_000,
+        signal: options.signal,
+        timeout: Math.max(1, Math.min(5 * 60_000, options.deadlineAt ? options.deadlineAt - Date.now() : 5 * 60_000)),
       },
     );
     if (result.error)
@@ -181,24 +192,53 @@ async function openWithRetry(
   }
 }
 
-async function advance(game: OpenedGame, ticks: number, inputs: InputScript | undefined): Promise<GateCheck> {
+async function advance(
+  game: OpenedGame,
+  ticks: number,
+  inputs: InputScript | undefined,
+  watchdog: L1Watchdog,
+  outDir: string,
+): Promise<GateCheck> {
   const targetMs = ticks * STEP_MS;
   let elapsed = 0;
+  let lastFrameAt = 0;
+  const rememberFrame = async () => {
+    try {
+      await watchdog.wait(game.page.screenshot({ path: join(outDir, 'last-frame.png'), timeout: 1_000 }));
+    } catch (error) {
+      if (watchdog.controller.signal.aborted) throw error;
+    }
+    lastFrameAt = Date.now();
+  };
+  const advanceTo = async (target: number) => {
+    while (elapsed < target) {
+      const next = Math.min(target, elapsed + 60 * STEP_MS);
+      await watchdog.wait(game.hooks.advanceTime(next - elapsed));
+      elapsed = next;
+      const state = await watchdog.wait(game.hooks.text());
+      if (state) watchdog.progressed(state.tick);
+      if (Date.now() - lastFrameAt >= 10_000) await rememberFrame();
+    }
+  };
   try {
+    await rememberFrame();
+    watchdog.startTicks();
     for (const step of [...(inputs ?? [])].sort((a, b) => a.t - b.t)) {
       const at = step.t * 1000;
       if (at > targetMs) return { id: 'ticks', ok: false, detail: `input at ${step.t}s exceeds ${ticks} ticks` };
-      if (at > elapsed) await game.hooks.advanceTime(at - elapsed);
-      elapsed = Math.max(elapsed, at);
-      await game.hooks.inject(toFrame(step));
+      if (at > elapsed) await advanceTo(at);
+      await watchdog.wait(game.hooks.inject(toFrame(step)));
     }
-    if (targetMs > elapsed) await game.hooks.advanceTime(targetMs - elapsed);
-    const text = await game.hooks.text();
+    if (targetMs > elapsed) await advanceTo(targetMs);
+    const text = await watchdog.wait(game.hooks.text());
     if (!text) return { id: 'ticks', ok: false, detail: 'unavailable: __gm.renderGameToText' };
     if (text.tick !== ticks) return { id: 'ticks', ok: false, detail: `expected tick ${ticks}, got ${text.tick}` };
     return { id: 'ticks', ok: true, detail: `tick ${text.tick}` };
   } catch (error) {
+    if (watchdog.controller.signal.aborted) throw error;
     return { id: 'ticks', ok: false, detail: error instanceof Error ? error.message : String(error) };
+  } finally {
+    watchdog.endTicks();
   }
 }
 
@@ -262,16 +302,37 @@ export async function runL1(root: string, options: RunL1Options = {}): Promise<G
 
   mkdirSync(outDir, { recursive: true });
   playtesting({ ...options, source: options.source ?? 'gm test' }, 'start');
+  const watchdog = new L1Watchdog(
+    ticks,
+    options.deadlineMs ?? Math.min(1_200_000, 120_000 + (ticks / 30) * 1_000),
+    options.progress,
+    options.onTimeout,
+    options.stallTimeoutMs,
+  );
   try {
     let url = options.url;
     if (url && !isLoopbackUrl(url)) throw new Error('unavailable: URL is not loopback');
     if (!url) {
-      server = await serveStatic(resolve(root, options.serveDir ?? 'dist'));
+      server = await watchdog.wait(serveStatic(resolve(root, options.serveDir ?? 'dist')), (late) => {
+        void late.close();
+      });
       url = server.url;
     }
-    slot = await acquireSlot(options.slots);
-    browser = await launch(options.software ?? false);
-    const opened = await openWithRetry(browser, url, options.readyTimeoutMs ?? READY_TIMEOUT_MS);
+    watchdog.setStage('waiting for slot');
+    slot = await watchdog.wait(acquireSlot({ ...options.slots, signal: watchdog.controller.signal }), (late) =>
+      late.release(),
+    );
+    watchdog.setStage('slot acquired');
+    options.progress?.(`tick 0/${ticks} (slot acquired)`);
+    browser = await watchdog.wait(launch(options.software ?? false), (late) => {
+      void late.close();
+    });
+    const opened = await watchdog.wait(
+      openWithRetry(browser, url, options.readyTimeoutMs ?? READY_TIMEOUT_MS),
+      (late) => {
+        void late.game.close();
+      },
+    );
     game = opened.game;
     const bootErrors = game.console.list().filter((entry) => entry.level === 'error');
     checks.push(
@@ -283,9 +344,13 @@ export async function runL1(root: string, options: RunL1Options = {}): Promise<G
           }
         : { id: 'boot', ok: false, detail: `console error: ${bootErrors[0]!.text}` },
     );
-    checks.push(await advance(game, ticks, options.inputs));
-    checks.push(await roundTrip(game));
-    checks.push(await hudStill(game, join(outDir, 'hud.png'), ticks, options.minStddev ?? DEFAULT_STDDEV));
+    checks.push(await advance(game, ticks, options.inputs, watchdog, outDir));
+    watchdog.setStage('round trip');
+    checks.push(await watchdog.wait(roundTrip(game)));
+    watchdog.setStage('HUD screenshot');
+    checks.push(
+      await watchdog.wait(hudStill(game, join(outDir, 'hud.png'), ticks, options.minStddev ?? DEFAULT_STDDEV)),
+    );
     const smokeError = game.console.list().find((entry) => entry.level === 'error');
     if (smokeError && bootErrors.length === 0) {
       const ticksCheck = checks.find((check) => check.id === 'ticks');
@@ -296,20 +361,63 @@ export async function runL1(root: string, options: RunL1Options = {}): Promise<G
     }
   } catch (error) {
     hardError = error instanceof Error ? error.message : String(error);
+    if (hardError.startsWith('stalled at tick')) await writeStallDiagnostic(outDir, game, hardError).catch(() => {});
     checks.push({ id: 'boot', ok: false, detail: hardError });
     for (const id of ['ticks', 'round-trip', 'hud-still'] as const)
       checks.push({ id, ok: false, detail: 'unavailable: boot failed' });
   } finally {
-    const probes = game ? await game.hooks.probes().catch(() => ({})) : {};
+    if (hardError) slot?.release();
+    let probes: Record<string, number | string | boolean> = {};
+    if (game && !hardError) {
+      try {
+        probes = await watchdog.wait(game.hooks.probes());
+      } catch (error) {
+        if (watchdog.controller.signal.aborted) {
+          hardError = error instanceof Error ? error.message : String(error);
+          checks.push({ id: 'boot', ok: false, detail: hardError });
+          await writeStallDiagnostic(outDir, game, hardError).catch(() => {});
+        }
+      }
+    }
     const consoleEntries = game?.console.list() ?? [];
     const renderer = game?.renderer ?? 'unknown';
     const usedSoftware = game?.software ?? options.software ?? false;
-    await game?.close().catch(() => {});
-    await browser?.close().catch(() => {});
+    // Normal cleanup may use the remaining deadline; failed runs release promptly.
+    const cleanup = Promise.allSettled([game?.close(), browser?.close(), server?.close()]);
+    if (hardError) {
+      await Promise.race([cleanup, new Promise<void>((resolve) => setTimeout(resolve, 1_000))]);
+    } else {
+      watchdog.setStage('browser cleanup');
+      try {
+        await watchdog.wait(cleanup);
+      } catch (error) {
+        hardError = error instanceof Error ? error.message : String(error);
+        checks.push({ id: 'boot', ok: false, detail: hardError });
+        await writeStallDiagnostic(outDir, game, hardError).catch(() => {});
+      }
+    }
     slot?.release();
-    await server?.close().catch(() => {});
 
-    checks.push(await runPromiseSpecs(root, { software: options.software }));
+    if (!hardError) {
+      watchdog.setStage('promise specs');
+      try {
+        checks.push(
+          await watchdog.wait(
+            runPromiseSpecs(root, {
+              software: options.software,
+              wallClockMs: Math.max(1, watchdog.endAt - Date.now()),
+              deadlineAt: watchdog.endAt,
+              signal: watchdog.controller.signal,
+            }),
+          ),
+        );
+      } catch (error) {
+        hardError = error instanceof Error ? error.message : String(error);
+        checks.push({ id: 'promises', ok: false, detail: hardError });
+        await writeStallDiagnostic(outDir, game, hardError).catch(() => {});
+      }
+    }
+    watchdog.close();
     if (browser) {
       const ok = checks.every((check) => check.ok);
       const report: VerifyReport = {

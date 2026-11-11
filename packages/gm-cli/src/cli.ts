@@ -29,6 +29,7 @@ export const COMMANDS_DIR = fileURLToPath(new URL('./commands/', import.meta.url
 
 export type RunOptions = {
   cwd?: string;
+  onTestTimeout?: () => void;
   env?: Record<string, string | undefined>;
   commandsDir?: string;
   home?: string;
@@ -98,6 +99,7 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
         verifyQueue: env.GM_VERIFY_QUEUE === true,
         runtimeDir: env.XDG_RUNTIME_DIR,
       },
+      onTestTimeout: options.onTestTimeout,
       json: flags.json === true,
       limit: flags.limit as number,
       fields:

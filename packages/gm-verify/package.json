@@ -31,7 +31,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p scenarios/tsconfig.json && tsc -p shell/tsconfig.json",
     "pretest": "pnpm --filter @ogm/contracts --filter @ogm/room-protocol build && pnpm build && node scripts/emit-schema.mjs --check",
     "test": "vitest run",
-    "pretest:browser": "pnpm --filter @ogm/contracts build",
+    "pretest:browser": "pnpm --filter @ogm/contracts --filter @ogm/iframe-bridge --filter @gm/host build && pnpm build",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "lint": "eslint src scenarios shell",
     "scenario": "pnpm --filter @ogm/contracts --filter @ogm/config --filter @ogm/room-protocol --filter @ogm/iframe-bridge --filter @gm/host --filter @ogm/design-log --filter @gm/sdk --filter @ogm/rooms build && pnpm build && node scenarios/scenario.ts"
