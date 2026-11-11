@@ -123,6 +123,19 @@ function setup(
 }
 
 describe('evictAssetCaches', () => {
+  it('does not charge unrequested lazy hashes against the cache budget', async () => {
+    const game = build({
+      gameId: 'game',
+      buildId: 'only',
+      hashes: ['boot', 'lazy'],
+      bytes: 1010,
+      hashBytes: { boot: 10, lazy: 1000 },
+    });
+    const { dependencies, ledger, blobs } = setup([game], { blobHashes: ['boot'], quota: 400 });
+    await evictAssetCaches(dependencies);
+    expect(ledger.builds.has(game.key)).toBe(true);
+    expect(blobs.urls.has('https://games.test/a/boot.webp')).toBe(true);
+  });
   it('keeps a shared hash while any retained build references it', async () => {
     const stale = build({
       gameId: 'game',

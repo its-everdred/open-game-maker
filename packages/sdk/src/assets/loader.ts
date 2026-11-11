@@ -1,4 +1,4 @@
-import { assetManifestSchema, type AssetManifest, type Tier } from '@ogm/contracts/assets';
+import { assetManifestSchema, cachePlanSchema, type AssetManifest, type Tier } from '@ogm/contracts/assets';
 import {
   ImageBitmapLoader,
   SRGBColorSpace,
@@ -11,6 +11,8 @@ import {
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 
 import {
+  ASSET_CACHE_NAME,
+  CACHE_LOCK_NAME,
   matchCachedAsset,
   prepare as prepareCache,
   type LedgerBuild,
@@ -91,6 +93,13 @@ export class AssetLoader {
   readonly #cacheStorage: Pick<CacheStorage, 'open'> | undefined;
   readonly #files = new Map<string, Promise<ArrayBuffer>>();
   readonly #gltfs = new Map<string, Promise<GLTF>>();
+  readonly #groups = new Map<string, Promise<void>>();
+  readonly #groupProgress = new Map<
+    string,
+    { loaded: number; total?: number; listeners: Set<(progress: { loaded: number; total: number }) => void> }
+  >();
+  readonly #groupFiles = new Map<string, Set<string>>();
+  readonly #groupTokens = new Map<string, symbol>();
   #manifest: AssetManifest | undefined;
   #manifestPromise: Promise<AssetManifest> | undefined;
   #renderer: WebGLRenderer | undefined;
@@ -142,6 +151,112 @@ export class AssetLoader {
 
   async preload(ids: string[]): Promise<void> {
     await Promise.all(ids.map((id) => this.#fetchFile(this.resolve(id).file)));
+  }
+
+  /** Load a lazy group. Progress is reported in completed files, including cached files. */
+  loadGroup(name: string, onProgress?: (progress: { loaded: number; total: number }) => void): Promise<void> {
+    const existing = this.#groups.get(name);
+    if (existing) {
+      const progress = this.#groupProgress.get(name)!;
+      if (onProgress) {
+        progress.listeners.add(onProgress);
+        if (progress.total !== undefined) onProgress({ loaded: progress.loaded, total: progress.total });
+      }
+      return existing;
+    }
+    const progress = {
+      loaded: 0,
+      total: undefined as number | undefined,
+      listeners: new Set<(value: { loaded: number; total: number }) => void>(),
+    };
+    if (onProgress) progress.listeners.add(onProgress);
+    this.#groupProgress.set(name, progress);
+    const token = Symbol(name);
+    this.#groupTokens.set(name, token);
+    const request = this.#loadGroup(name, token, (value) => {
+      progress.loaded = value.loaded;
+      progress.total = value.total;
+      for (const listener of progress.listeners) listener(value);
+    }).catch((error: unknown) => {
+      if (this.#groups.get(name) === request) this.unloadGroup(name);
+      throw error;
+    });
+    this.#groups.set(name, request);
+    return request;
+  }
+
+  unloadGroup(name: string): void {
+    this.#groups.delete(name);
+    this.#groupProgress.delete(name);
+    this.#groupTokens.delete(name);
+    const files = this.#groupFiles.get(name);
+    this.#groupFiles.delete(name);
+    for (const file of files ?? []) {
+      this.#releaseFile(file);
+    }
+  }
+
+  #releaseFile(file: string): void {
+    if ([...this.#groupFiles.values()].some((files) => files.has(file))) return;
+    this.#files.delete(file);
+    this.#gltfs.delete(file);
+  }
+
+  async #loadGroup(
+    name: string,
+    token: symbol,
+    onProgress?: (progress: { loaded: number; total: number }) => void,
+  ): Promise<void> {
+    const manifest = await this.load();
+    const ids = Object.entries(manifest.assets)
+      .filter(([, asset]) => asset.phase === `lazy:${name}`)
+      .map(([id]) => id);
+    if (ids.length === 0) throw new Error(`Unknown asset group: ${name}`);
+    const files = new Set(ids.map((id) => this.resolve(id).file));
+    const response = await this.#fetch(this.#planUrl);
+    if (response.ok && !response.headers.get('content-type')?.toLowerCase().includes('text/html')) {
+      const plan = cachePlanSchema.parse(await response.json());
+      for (const entry of plan.entries) {
+        if (
+          entry.ids?.some((id) => ids.includes(id)) &&
+          (entry.tiers.includes('*') || entry.tiers.includes(this.tier)) &&
+          (entry.assetPhasesByTier?.[this.tier]?.includes(`lazy:${name}`) ?? true)
+        )
+          files.add(entry.url);
+      }
+    } else if (!response.ok && response.status !== 404)
+      throw new Error(`Failed to load cache plan: HTTP ${response.status}`);
+    if (this.#groupTokens.get(name) !== token) throw new Error(`Asset group load canceled: ${name}`);
+    this.#groupFiles.set(name, files);
+    let loaded = 0;
+    onProgress?.({ loaded, total: files.size });
+    try {
+      const fetchFiles = async () => {
+        const results = await Promise.allSettled(
+          [...files].map(async (file) => {
+            const bytes = await this.#fetchFile(file);
+            const storage = this.#cacheStorage ?? globalThis.caches;
+            if (storage) {
+              try {
+                const cache = await storage.open(ASSET_CACHE_NAME);
+                await cache.put(new URL(file, this.#manifestUrl).toString(), new Response(bytes.slice(0)));
+              } catch {
+                // Loading remains usable when browser storage is unavailable or full.
+              }
+            }
+            onProgress?.({ loaded: ++loaded, total: files.size });
+          }),
+        );
+        const failure = results.find((result) => result.status === 'rejected');
+        if (failure?.status === 'rejected') throw failure.reason;
+      };
+      const locks = globalThis.navigator?.locks;
+      if (locks) await locks.request(CACHE_LOCK_NAME, { mode: 'shared' }, fetchFiles);
+      else await fetchFiles();
+      if (this.#groupTokens.get(name) !== token) throw new Error(`Asset group load canceled: ${name}`);
+    } finally {
+      if (this.#groupTokens.get(name) !== token) for (const file of files) this.#releaseFile(file);
+    }
   }
 
   async mesh(id: string): Promise<Mesh> {
@@ -214,11 +329,16 @@ export class AssetLoader {
     if (existing) return existing;
 
     const url = new URL(file, this.#manifestUrl).toString();
-    const request = matchCachedAsset(url, this.#cacheStorage).then(async (cached) => {
-      const response = cached ?? (await this.#fetch(url));
-      if (!response.ok) throw new Error(`Failed to fetch asset file ${url}: HTTP ${response.status}`);
-      return response.arrayBuffer();
-    });
+    const request = matchCachedAsset(url, this.#cacheStorage)
+      .then(async (cached) => {
+        const response = cached ?? (await this.#fetch(url));
+        if (!response.ok) throw new Error(`Failed to fetch asset file ${url}: HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .catch((error: unknown) => {
+        if (this.#files.get(file) === request) this.#files.delete(file);
+        throw error;
+      });
     this.#files.set(file, request);
     return request;
   }

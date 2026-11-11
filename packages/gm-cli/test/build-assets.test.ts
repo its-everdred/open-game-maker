@@ -430,6 +430,29 @@ describe('gm build assets', () => {
     expect(human.err.every((line) => line.startsWith('desktop budget exceeded:'))).toBe(true);
   }, 40_000);
 
+  it('budgets lazy groups independently and honors game overrides on cached builds', async () => {
+    const cwd = tempDir('gm-build-phases-');
+    writeAsset(cwd, 'assets/image/a.png', await png(16, 16));
+    writeLock(cwd, [{ id: 't3:fixture/a', path: 'assets/image/a.png' }]);
+    updateLockEntry(cwd, 't3:fixture/a', { phase: 'lazy:backdrop-nim' });
+    mkdirSync(join(cwd, '.gm'), { recursive: true });
+    writeFileSync(join(cwd, '.gm/game.json'), JSON.stringify({ budgets: { lazy: { backdrop: { mobile: 0 } } } }));
+    const first = await gm(['build', 'assets', '--json'], { cwd, env: {} });
+    expect(first.code).toBe(1);
+    const output = JSON.parse(first.out[0]!) as {
+      manifest: AssetManifest;
+      reports: Array<{ tier: string; phase?: string; bytes: number; exceeded: Array<{ metric: string }> }>;
+    };
+    expect(output.manifest.assets['t3:fixture/a']?.phase).toBe('lazy:backdrop-nim');
+    expect(output.reports.find((r) => r.tier === 'mobile' && r.phase === 'boot')?.bytes).toBe(0);
+    expect(
+      output.reports.find((r) => r.tier === 'mobile' && r.phase === 'lazy:backdrop-nim')?.exceeded.map((x) => x.metric),
+    ).toContain('bytes');
+    writeFileSync(join(cwd, '.gm/game.json'), JSON.stringify({ budgets: { lazy: { backdrop: { mobile: 100000 } } } }));
+    const second = await gm(['build', 'assets', '--json'], { cwd, env: {} });
+    expect(second.code).toBe(0);
+  });
+
   it.skipIf(toktxAvailable)('exits 2 and names toktx when --ktx2 cannot find the tool', async () => {
     const result = await gm(['build', 'assets', '--ktx2'], { env: {} });
     expect(result.code).toBe(2);

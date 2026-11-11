@@ -69,7 +69,8 @@ export function assembleManifest(
     }
     for (const [id, asset] of Object.entries(result.assets)) {
       if (assets[id]) throw new Error(`asset built more than once: ${id}`);
-      assets[id] = asset;
+      const item = job.items.find((candidate) => candidate.entry.id === id);
+      assets[id] = { ...asset, phase: item?.entry.phase ?? 'boot' };
     }
   }
   for (const id of expectedIds) {
@@ -127,9 +128,11 @@ export function assembleManifest(
   }
   for (const [url, ids] of companionIds) {
     const current = usage.get(url);
-    /* A sheet is not a per-tier file: when it also serves as one, keep that file's tiers and only add the ids. */
-    if (current) for (const id of ids) current.ids.add(id);
-    else usage.set(url, { tiers: new Set<Tier | '*'>(['*']), ids: new Set(ids) });
+    /* A companion is required on every tier, even if it also serves as a tier-specific primary. */
+    if (current) {
+      current.tiers.add('*');
+      for (const id of ids) current.ids.add(id);
+    } else usage.set(url, { tiers: new Set<Tier | '*'>(['*']), ids: new Set(ids) });
   }
   const entries = Object.entries(details)
     .sort(([left], [right]) => left.localeCompare(right))
@@ -152,6 +155,21 @@ export function assembleManifest(
         phase: phaseFor(kind),
         tiers: entryTiers,
         ids: [...fileUsage.ids].sort(),
+        assetPhasesByTier: Object.fromEntries(
+          tiers.map((tier) => [
+            tier,
+            [
+              ...new Set(
+                [...fileUsage.ids]
+                  .filter((id) => {
+                    const asset = manifest.assets[id];
+                    return asset && ((asset.file[tier] ?? asset.file['*']) === url || companionIds.get(url)?.has(id));
+                  })
+                  .map((id) => manifest.assets[id]?.phase ?? 'boot'),
+              ),
+            ].sort(),
+          ]),
+        ),
       };
     });
   const totals: CachePlan['totals'] = {

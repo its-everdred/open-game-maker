@@ -22,6 +22,7 @@ Use anything in the library. The moment the game's code names an asset, record i
 made: `gm assets register <path>`). That writes the game's asset list (`assets.lock.json`: id, licence, set) and its
 credits; the build ships only listed assets and fails naming any id the code uses that the list lacks. Before a
 release, run `gm assets unused` (entries the code no longer names) and say in your report why each one stays.
+Register optional match assets with `--phase lazy:<group>` so they load only when needed.
 
 ## Show a lineup
 

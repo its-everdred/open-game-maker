@@ -4,6 +4,7 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { loadIndex } from '@ogm/asset-cards';
 import type { AssetCredit, LockEntry } from '@ogm/contracts';
+import { assetPhaseSchema } from '@ogm/contracts/assets';
 
 import { putBlob } from '../../blobs.js';
 import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
@@ -80,7 +81,16 @@ function derivedLicense(sourceLicenses: string[]): string {
 }
 
 /** Move a game-repo file into the blob store and record it as a t3 lock entry derived from `from`; returns its id. */
-export async function registerFile(ctx: GmContext, path: string, from: string[], game: unknown): Promise<string> {
+export async function registerFile(
+  ctx: GmContext,
+  path: string,
+  from: string[],
+  game: unknown,
+  phase?: unknown,
+): Promise<string> {
+  const parsedPhase = assetPhaseSchema.optional().safeParse(phase);
+  if (!parsedPhase.success)
+    throw new UsageError('invalid asset phase', 'gm assets register <path> --made-by-agent --phase lazy:<group>');
   const file = await safeRelativePath(ctx.cwd, path);
   let lock = await readLock(ctx.cwd);
   if (lock === null)
@@ -125,8 +135,10 @@ export async function registerFile(ctx: GmContext, path: string, from: string[],
   const bytes = await readFile(file.absolute);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   await putBlob(ctx, bytes, sha256, MIME[extname(file.relative).toLowerCase()] ?? 'application/octet-stream');
+  const assetPhase = parsedPhase.data ?? lock.assets.find((entry) => entry.id === id)?.phase;
   lock = upsertLock(lock, {
     id,
+    ...(assetPhase === undefined ? {} : { phase: assetPhase }),
     sha256,
     source: 'blob',
     path: file.relative,
@@ -153,6 +165,7 @@ export const command: GmCommand = {
     'made-by-agent': { type: 'boolean', default: false, help: 'confirm this output was made by an agent' },
     from: { type: 'string', multiple: true, help: 'source asset id; repeat for multiple sources' },
     game: { type: 'string', help: 'game id when .gm/game.json does not exist' },
+    phase: { type: 'string', help: 'boot or lazy:<group>' },
   },
   async run(ctx, args, flags) {
     if (args.length !== 1)
@@ -160,7 +173,7 @@ export const command: GmCommand = {
     if (flags['made-by-agent'] !== true) {
       throw new UsageError('--made-by-agent is required', 'gm assets register <path> --made-by-agent');
     }
-    await registerFile(ctx, args[0]!, repeated(flags.from), flags.game);
+    await registerFile(ctx, args[0]!, repeated(flags.from), flags.game, flags.phase);
     return EXIT.ok;
   },
 };

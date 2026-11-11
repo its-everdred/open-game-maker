@@ -13,12 +13,16 @@ export type Tier = z.infer<typeof tierSchema>;
  * 3: lock entries may carry normalized legal-credit metadata.
  * 4: lock entries may name the curated asset set their pack belongs to (`set`).
  * 5: lock entries may carry typed asset-generation provenance.
+ * 6: lock and manifest entries may name a lazy asset phase.
  */
-export const ASSETS_SCHEMA_MINOR = 5;
+export const ASSETS_SCHEMA_MINOR = 6;
 const minorSchema = z.number().int().min(0).optional();
 
 export const loadPhaseSchema = z.enum(['boot', 'ready', 'stream']);
 export type LoadPhase = z.infer<typeof loadPhaseSchema>;
+
+/** Game asset residency, independent of the cache plan's ready/stream scheduling. */
+export const assetPhaseSchema = z.string().regex(/^(?:boot|lazy:[a-z0-9]+(?:[._-][a-z0-9]+)*)$/);
 
 export const cacheEntryKindSchema = z.enum([
   'code',
@@ -44,6 +48,7 @@ export const cachePlanEntrySchema = z.looseObject({
   phase: loadPhaseSchema,
   tiers: z.array(tierOrWildcardSchema).min(1),
   ids: z.array(z.string().min(1)).optional(),
+  assetPhasesByTier: z.partialRecord(tierSchema, z.array(assetPhaseSchema)).optional(),
 });
 export type CachePlanEntry = z.infer<typeof cachePlanEntrySchema>;
 
@@ -132,6 +137,7 @@ export const assetMetadataSchema = z
 export type AssetMetadata = z.infer<typeof assetMetadataSchema>;
 
 const assetEntrySchema = z.looseObject({
+  phase: assetPhaseSchema.optional(),
   /** Per-tier file names (or `*` for every tier); the loader never derives names. */
   file: z.partialRecord(z.enum([...tierSchema.options, '*']), z.string().min(1)),
   mesh: z.string().optional(),
@@ -217,6 +223,7 @@ const lockAssetIdSchema = z
   );
 
 const lockEntrySchema = z.looseObject({
+  phase: assetPhaseSchema.optional(),
   id: lockAssetIdSchema,
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   path: z.string().min(1),

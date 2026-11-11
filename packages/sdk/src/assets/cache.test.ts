@@ -139,6 +139,38 @@ function setup(cachePlan: CachePlan, cacheStorage = new MemoryCacheStorage()): T
 }
 
 describe('prepare asset cache', () => {
+  it('does not fetch lazy-only entries during ready or stream preparation', async () => {
+    const ready = { ...entry('a', 4), assetPhasesByTier: { desktop: ['boot'] } };
+    const lazy = { ...entry('b', 4), assetPhasesByTier: { desktop: ['lazy:backdrop-nim'] } };
+    const lazyStream = { ...entry('c', 4, 'stream'), assetPhasesByTier: { desktop: ['lazy:backdrop-nim'] } };
+    const context = setup(plan([ready, lazy, lazyStream]));
+    await prepare({ plan: 'https://game.test/assets/cache-plan.json', tier: 'desktop', send: context.send }, context);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(context.requestOrder.some((url) => url.includes(ready.url))).toBe(true);
+    expect(context.requestOrder.some((url) => url.includes(lazy.url))).toBe(false);
+    expect(context.requestOrder.some((url) => url.includes(lazyStream.url))).toBe(false);
+  });
+
+  it('uses phase ownership for the selected tier when a file is shared', async () => {
+    const shared = {
+      ...entry('d', 4),
+      assetPhasesByTier: { desktop: ['boot'], mobile: ['lazy:backdrop-nim'] },
+    };
+    const context = setup(plan([shared]));
+    await prepare({ plan: 'https://game.test/assets/cache-plan.json', tier: 'mobile', send: context.send }, context);
+    expect(context.requestOrder.some((url) => url.includes(shared.url))).toBe(false);
+  });
+
+  it('retains lazy hashes in the build ledger for future cache eviction', async () => {
+    const lazy = { ...entry('e', 4), assetPhasesByTier: { mobile: ['lazy:backdrop-nim'] } };
+    const context = setup(plan([lazy]));
+    await prepare({ plan: 'https://game.test/assets/cache-plan.json', tier: 'mobile', send: context.send }, context);
+    const database = await openDB(context.databaseName, 1);
+    const row = (await database.get('builds', 'game/build')) as LedgerBuild;
+    database.close();
+    expect(row.hashes).toContain(lazy.sha256);
+    expect(context.requestOrder.some((url) => url.includes(lazy.url))).toBe(false);
+  });
   it('fetches a cold ready set six at a time with monotonic byte progress', async () => {
     const entries = Array.from({ length: 7 }, (_, index) => entry(String(index + 1), index + 1));
     const cachePlan = plan(entries);

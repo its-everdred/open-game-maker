@@ -98,11 +98,12 @@ function buildHashes(build: EvictionLedgerBuild): [string, number][] {
   return [...new Set(build.hashes)].map((hash) => [hash, build.hashBytes?.[hash] ?? 0]);
 }
 
-function retainedUsage(builds: EvictionLedgerBuild[], retained: Set<string>) {
+function retainedUsage(builds: EvictionLedgerBuild[], retained: Set<string>, cachedHashes: Set<string>) {
   const hashes = new Map<string, { bytes: number; references: number }>();
   for (const build of builds) {
     if (!retained.has(build.key)) continue;
     for (const [hash, bytes] of buildHashes(build)) {
+      if (!hash.startsWith('legacy:') && !cachedHashes.has(hash)) continue;
       const existing = hashes.get(hash);
       hashes.set(hash, {
         bytes: Math.max(existing?.bytes ?? 0, bytes),
@@ -113,9 +114,14 @@ function retainedUsage(builds: EvictionLedgerBuild[], retained: Set<string>) {
   return hashes;
 }
 
-function enforceBudget(builds: EvictionLedgerBuild[], retained: Set<string>, quota: number | undefined): void {
+function enforceBudget(
+  builds: EvictionLedgerBuild[],
+  retained: Set<string>,
+  quota: number | undefined,
+  cachedHashes: Set<string>,
+): void {
   const budget = Math.min(CACHE_EVICTION_POLICY.maxBytes, (quota ?? Infinity) * CACHE_EVICTION_POLICY.quotaRatio);
-  const usage = retainedUsage(builds, retained);
+  const usage = retainedUsage(builds, retained, cachedHashes);
   let bytes = [...usage.values()].reduce((total, hash) => total + hash.bytes, 0);
   if (bytes <= budget) return;
 
@@ -176,8 +182,12 @@ export async function evictAssetCaches(dependencies: CacheEvictionDependencies):
     if (!lock) return;
 
     const [builds, estimate] = await Promise.all([dependencies.ledger.list(), dependencies.storage.estimate()]);
+    const blobs = await dependencies.caches.open(ASSET_CACHE_NAME);
+    const cachedHashes = new Set(
+      (await blobs.keys()).map(blobHash).filter((hash): hash is string => hash !== undefined),
+    );
     const retained = retainedBuilds(builds, (dependencies.now ?? Date.now)());
-    enforceBudget(builds, retained, estimate.quota);
+    enforceBudget(builds, retained, estimate.quota, cachedHashes);
     await deleteUnretainedEntries(dependencies, builds, retained);
 
     const dropped = builds.filter((build) => !retained.has(build.key)).map((build) => build.key);
