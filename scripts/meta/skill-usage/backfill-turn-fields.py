@@ -23,8 +23,8 @@ def has_relevant_records(source, limit):
         chunk = source.read(min(1024 * 1024, remaining))
         if not chunk:
             break
-        data = overlap + chunk
-        if b'Mapped skills (load first)' in data or b'look' in data:
+        data = (overlap + chunk).lower()
+        if b'mapped skills (load first)' in data or b'look' in data:
             return True
         overlap = data[-32:]
         remaining -= len(chunk)
@@ -70,7 +70,7 @@ def backfill(db, allow_missing=False, replay_path=None):
                        'collector.ingest(db,sys.argv[2],json.loads(sys.argv[3]),end_offset=int(sys.argv[4])); db.close()')
             subprocess.run([sys.executable, '-c', command, str(replay_path), path, json.dumps(initial), str(offset)],
                            check=True, env={**os.environ, 'PYTHONPATH': str(Path(__file__).parent)})
-        errors = replay.execute('SELECT path,offset,message FROM errors').fetchall()
+        errors = sorted(set(replay.execute('SELECT path,offset,message FROM errors').fetchall()) | set(db.execute('SELECT path,offset,message FROM errors').fetchall()))
         if errors and not allow_missing:
             raise ValueError(f'replay has {len(errors)} malformed records; original ledger unchanged')
         incomplete = bool(missing or errors)

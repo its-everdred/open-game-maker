@@ -109,3 +109,21 @@ class BackfillTest(unittest.TestCase):
             gaps = backfill.backfill(db, allow_missing=True)
             self.assertEqual(len(gaps), 1)
             self.assertFalse(json.loads(db.execute('SELECT row FROM turns').fetchone()[0])['turn_fields_complete'])
+
+    def test_skipped_source_errors_still_mark_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'rollout.jsonl'
+            source.write_text(json.dumps({'type': 'user', 'promptId': 't', 'cwd': '/x/.aiur/w/a/open-games/1'}) + '\n{bad}\n')
+            db = collector.open_db(root / 'state.db')
+            self.addCleanup(db.close)
+            collector.ingest(db, source)
+            with self.assertRaisesRegex(ValueError, 'malformed'):
+                backfill.backfill(db)
+            self.assertEqual(len(backfill.backfill(db, allow_missing=True)), 1)
+            self.assertFalse(json.loads(db.execute('SELECT row FROM turns').fetchone()[0])['turn_fields_complete'])
+
+    def test_prefilter_accepts_case_insensitive_headings(self):
+        from io import BytesIO
+        content = b'### MAPPED SKILLS (LOAD FIRST)\n'
+        self.assertTrue(backfill.has_relevant_records(BytesIO(content), len(content)))
