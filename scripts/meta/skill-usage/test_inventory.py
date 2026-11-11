@@ -40,6 +40,43 @@ class InventoryTest(unittest.TestCase):
             self.assertEqual(rows[1]['date_added'], '2026-11-10')
             self.assertEqual(rows[1]['date_added_basis'], 'first detected')
 
+    def test_prior_urls_are_sanitized_even_when_removed(self):
+        prior = [{'name': 'demo', 'source': 'test/demo', 'status': 'removed', 'url': 'https://github.com/example/demo?token=secret'}]
+        result = inventory.discover([], prior, '2026-11-10')
+        self.assertIsNone(result[0]['url'])
+
+    def test_source_url_rejects_credentials_and_queries(self):
+        self.assertIsNone(inventory.safe_github_url('https://github.com/example/demo.git?token=secret'))
+        self.assertIsNone(inventory.safe_github_url('https://name:secret@github.com/example/demo'))
+        self.assertIsNone(inventory.safe_github_url('https://github.com:bad/example/demo'))
+        self.assertEqual(inventory.safe_github_url('https://github.com/example/demo.git'), 'https://github.com/example/demo')
+
+    def test_plugin_registry_source_and_local_license(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cache = home / 'cache' / 'plugin'
+            skill = cache / 'skills' / 'demo'
+            skill.mkdir(parents=True)
+            (skill / 'SKILL.md').write_text('---\nname: demo\n---\n')
+            (cache / 'LICENSE').write_text('MIT License\n')
+            registry = home / '.claude/plugins'
+            registry.mkdir(parents=True)
+            (registry / 'installed_plugins.json').write_text(__import__('json').dumps({'plugins': {'demo@market': [{'installPath': str(cache), 'version': '1', 'installedAt': '2026-11-08T00:00:00Z'}]}}))
+            market = home / 'market'
+            (market / '.claude-plugin').mkdir(parents=True)
+            (market / '.claude-plugin/marketplace.json').write_text(__import__('json').dumps({'plugins': [{'name': 'demo', 'source': {'source': 'url', 'url': 'https://github.com/example/demo.git'}}]}))
+            (registry / 'known_marketplaces.json').write_text(__import__('json').dumps({'market': {'installLocation': str(market), 'source': {'source': 'github', 'repo': 'example/market'}}}))
+            roots, dates, prefixes, sources = inventory.installed_plugin_roots(home)
+            self.assertEqual(len(roots), 1)
+            source, _ = roots[0]
+            self.assertEqual(sources[source][1], 'https://github.com/example/demo')
+            self.assertEqual(inventory.identify_license(skill, cache), 'MIT')
+            self.assertEqual(dates[source], '2026-11-08')
+            self.assertEqual(prefixes, ['claude-installed'])
+            (market / '.claude-plugin/marketplace.json').write_text(__import__('json').dumps({'plugins': [{'name': 'demo', 'source': '../outside'}]}))
+            self.assertEqual(inventory.plugin_source_url('demo', {'installLocation': str(market), 'source': {'source': 'github', 'repo': 'example/market'}}), (True, None))
+            self.assertEqual(inventory.plugin_source_url('demo', {}), (False, None))
+
     def test_removed_plugin_registry_entry_is_retained_as_removed(self):
         prior = [{'name': 'demo', 'source': 'claude-installed/demo/1/skills/demo', 'status': 'installed'}]
         rows = inventory.discover([], prior, '2026-11-10', ['claude-installed'])
