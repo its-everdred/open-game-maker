@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { homedir, setPriority } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
@@ -8,6 +9,12 @@ import { isLoopbackUrl } from '@ogm/gm-verify/server';
 
 import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { printJson } from '../../context.js';
+import {
+  captureOutputPaths,
+  hasCaptureSymlink,
+  prepareVerifiedSource,
+  recordRunProvenance,
+} from '../../look/run-provenance.js';
 import { gameDir } from '../../outbox.js';
 import { readEnvFile } from '../publish/index.js';
 
@@ -193,6 +200,7 @@ export const command: GmCommand = {
   example: 'run --frames 0,2,5 --record 10s --out shots/',
   flags: {
     headless: { type: 'boolean', default: true, help: 'run Chromium without a display server' },
+    'verify-source': { type: 'boolean', help: 'build the committed game before a capture for visual scope' },
     url: { type: 'string', help: 'loopback game URL; otherwise serve ./dist' },
     frame: {
       type: 'string',
@@ -234,6 +242,42 @@ export const command: GmCommand = {
 
     if (url && !isLoopbackUrl(url))
       throw new UsageError('--url is loopback only', 'gm run --url http://127.0.0.1:8000/');
+    let source: string | undefined;
+    if (flags['verify-source']) {
+      if (url || frame === 'app')
+        throw new UsageError(
+          'source verification requires the local game build',
+          'omit --url and use --frame host or bare',
+        );
+      const out = resolve(ctx.cwd, flags.out as string);
+      const game = gameDir(ctx.cwd);
+      const outputPath = relative(game, out).split('\\').join('/');
+      if (
+        !outputPath ||
+        outputPath === '..' ||
+        outputPath.startsWith('../') ||
+        /^(?:src|public|assets|design|node_modules|dist)(?:\/|$)/i.test(outputPath)
+      )
+        throw new UsageError('source-verified output must be outside build input directories', 'use --out shots');
+      let outputPart = game;
+      for (const part of outputPath.split('/')) {
+        outputPart = join(outputPart, part);
+        let isLink = false;
+        try {
+          isLink = lstatSync(outputPart).isSymbolicLink();
+        } catch {
+          /* A new output directory has no entry yet. */
+        }
+        if (isLink) throw new UsageError('source-verified output cannot traverse a symlink', 'use --out shots');
+      }
+      if (hasCaptureSymlink(out))
+        throw new UsageError('source-verified output cannot contain a symlink', 'use a clean --out directory');
+      source = prepareVerifiedSource(
+        ctx.cwd,
+        () => execFileSync('pnpm', ['run', 'build'], { cwd: ctx.cwd, stdio: 'ignore' }),
+        captureOutputPaths(ctx.cwd, out),
+      );
+    }
     const verify = await import('@ogm/gm-verify');
     const inputs = loadInputs(ctx, flags.inputs, verify.readInputScript);
     const budgets = loadBudgetOverrides(ctx, flags.budgets, verify.readBudgetOverrides, 'run');
@@ -263,7 +307,15 @@ export const command: GmCommand = {
       });
       try {
         const report = await verify.waitForReport(dir);
-        return finish(ctx, report, resolve(dir, 'report.json'));
+        const reportPath = resolve(dir, 'report.json');
+        recordRunProvenance(
+          ctx.cwd,
+          reportPath,
+          report.frames,
+          source,
+          [report.timeline, report.clip].filter((path): path is string => path !== undefined),
+        );
+        return finish(ctx, report, reportPath);
       } catch (error) {
         ctx.err(error instanceof Error ? error.message : String(error));
         return EXIT.failed;
@@ -306,6 +358,13 @@ export const command: GmCommand = {
         slots: { runtimeDir: ctx.config.runtimeDir },
         warn: ctx.err,
       });
+      recordRunProvenance(
+        ctx.cwd,
+        result.reportPath,
+        result.report.frames,
+        source,
+        [result.report.timeline, result.report.clip].filter((path): path is string => path !== undefined),
+      );
       return finish(ctx, result.report, result.reportPath, result.ffmpegMissing);
     } finally {
       await server?.close();

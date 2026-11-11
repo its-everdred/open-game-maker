@@ -36,9 +36,10 @@ gm check [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--deadline <seconds>] [--serve <dir>] [--out <dir>] [--json]
-gm run [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
+gm run [--verify-source] [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
 gm look sheet <screen> --still <png> [--target <png>]
-gm look check [--json]
+gm look check [--changed [<base>] | --all] [--screen <id> ...] [--json]
+gm look scope add <screen> --still <png> [--still <png> ...] [--base <base>]
 gm look evidence --body <file> [--json]
 ```
 
@@ -82,7 +83,7 @@ tiers` sends the sheet and its unchanged sources through the existing look broke
 restrictions. Its JSON reports the four tier scores and concrete differences. Later tiers are uncounted until preceding
 tiers reach 7, and the verdict passes only when all reach 8.
 
-`gm look check` gates the PR on the vision look requests (`gm-image-mock`, `request-mock.py --kind look`), which log
+`gm look check --changed` gates the PR on changed stills and targets against `origin/main` (or the supplied base), plus repeatable `--screen` IDs. Other failures are reported as inherited and do not fail the gate. Visual path changes require a current `design/look-scope.json`: after committing visual changes, capturing fresh stills with `gm run --verify-source`, and committing any tracked stills, use `gm look scope add <screen> --still <png>` for each screen and its looked-at stills, then commit the manifest. CI can replay its recorded images, answers and look references. The manifest is reviewable evidence, not a cryptographically authenticated broker signature. `--all` audits everything. `gm look check` gates on the vision look requests (`gm-image-mock`, `request-mock.py --kind look`), which log
 each answer or broker error to `.gm-mock/looks.jsonl` with the git blob id of every image they judged. It judges each
 `tN.png` still committed at HEAD in the game folder (outside `review/`, which holds PR evidence), or, when none is committed (an instance repository ignores
 `*.png`), each `tN.png` rendered there. The newest look on exactly those bytes decides: its answer's last line must be

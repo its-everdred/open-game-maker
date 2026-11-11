@@ -1,4 +1,6 @@
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -89,6 +91,35 @@ describe('gm check', () => {
 
     expect(await gm(['check'])).toEqual({ code: 0, out: [], err: [] });
     expect(state.l0Options).toBeUndefined();
+  }, 60_000);
+
+  it('includes changed look failures and inherited gaps in game reports', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    writeFileSync(join(root, 'gm.manifest.json'), '{}');
+    mkdirSync(join(root, 'shots/a'), { recursive: true });
+    mkdirSync(join(root, 'shots/b'), { recursive: true });
+    writeFileSync(join(root, 'shots/a/t2.png'), 'a');
+    writeFileSync(join(root, 'shots/b/t2.png'), 'b');
+    git('add', '-A');
+    git('commit', '-qm', 'base');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    writeFileSync(join(root, 'shots/a/t2.png'), 'changed');
+    git('add', '-A');
+    git('commit', '-qm', 'change');
+    const json = await gm(['check', '--json'], { cwd: root });
+    expect(json.code).toBe(1);
+    const report = JSON.parse(json.out[0]!);
+    expect(report.ok).toBe(false);
+    expect(report.look.stills[0].path).toBe('shots/a/t2.png');
+    expect(report.look.inherited[0].path).toBe('shots/b/t2.png');
+    const text = await gm(['check'], { cwd: root });
+    expect(text.code).toBe(1);
+    expect(text.err.join('\n')).toContain('inherited:');
+    expect(text.err.join('\n')).toContain('shots/a/t2.png');
   }, 60_000);
 
   it('prints failures only as file:line diagnostics and exits one', async () => {

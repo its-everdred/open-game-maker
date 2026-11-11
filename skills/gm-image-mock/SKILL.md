@@ -73,7 +73,7 @@ A painted mock can promise what the engine cannot draw. Before the picked mock b
    to the creator as a question with options, never silently swapped for primitives.
 3. **Evidence matches the mock's moment:** the same mode, board size and situation (a chain mid-clear), from the same
    camera.
-4. **The look check gates the push:** any `VERDICT: fail` or unanswered question on the head's stills means no PR; a
+4. **The look check gates the push:** any `VERDICT: fail` or unanswered question on changed stills or explicitly selected screens means no PR; a
    broker error (such as 402) is a blocker to report, not a pass.
 
 ## Show

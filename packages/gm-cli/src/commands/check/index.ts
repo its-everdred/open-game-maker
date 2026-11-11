@@ -1,7 +1,12 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
 import type { GateResult, RunL0Options } from '@ogm/gm-verify';
 
 import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { command as assetsCommand } from './assets.js';
+import { command as lookCommand } from '../look/check.js';
+import { gameDir } from '../../outbox.js';
 
 export function printGate(ctx: GmContext, result: GateResult): number {
   if (ctx.json) ctx.out(JSON.stringify(result));
@@ -39,11 +44,44 @@ export const command: GmCommand = {
       [],
       {},
     );
-    const gateCode = printGate(ctx, gate);
+    let lookCode: number = EXIT.ok;
+    let lookReport: unknown;
+    let game = ctx.cwd;
+    try {
+      game = gameDir(ctx.cwd);
+    } catch {
+      // The static gate also works outside a game repository.
+    }
+    if (existsSync(join(game, 'gm.manifest.json'))) {
+      const lookOut: string[] = [];
+      lookCode = await lookCommand.run({ ...ctx, json: true, fields: null, out: (line) => lookOut.push(line) }, [], {
+        changed: true,
+      });
+      lookReport = JSON.parse(lookOut.join('\n'));
+      if (!ctx.json) {
+        const report = lookReport as {
+          stills: { status: string; path: string; detail: string }[];
+          inherited: { status: string; path: string; detail: string }[];
+        };
+        for (const item of report.stills.filter((item) => item.status !== 'pass'))
+          ctx.err(`${item.status} ${item.path}: ${item.detail}`);
+        if (report.inherited.length > 0) {
+          ctx.err('inherited:');
+          for (const item of report.inherited) ctx.err(`${item.status} ${item.path}: ${item.detail}`);
+        }
+      }
+    }
+    const gateCode =
+      ctx.json && lookReport !== undefined
+        ? (ctx.out(
+            JSON.stringify({ ...gate, ok: gate.ok && assetCode === EXIT.ok && lookCode === EXIT.ok, look: lookReport }),
+          ),
+          gate.ok ? EXIT.ok : EXIT.failed)
+        : printGate(ctx, gate);
     if (assetCode !== EXIT.ok) {
       out.forEach(ctx.out);
       err.forEach(ctx.err);
     }
-    return gateCode === EXIT.ok && assetCode === EXIT.ok ? EXIT.ok : EXIT.failed;
+    return gateCode === EXIT.ok && assetCode === EXIT.ok && lookCode === EXIT.ok ? EXIT.ok : EXIT.failed;
   },
 };

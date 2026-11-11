@@ -13,16 +13,12 @@ Never report a visual result you have not looked at. Code, logs, and a passing c
 2. Run `gm test --ticks 3600`; fix every L1 failure. `gm test` exits on its own; never wrap it in a wait; on a stall exit, read the diagnostic.
 3. Fix the first new console error before investigating anything after it.
 4. Run `gm options check` on any option set before it reaches the creator; a rejection in `design/feedback.json` blocks it.
-5. Only then run `gm run --frames 0,2,5` (the host frame's top bar, Pause and touch overlay, at 390x844, 844x390,
+5. Commit tracked visual changes, then run `gm run --verify-source --frames 0,2,5` (the host frame's top bar, Pause and touch overlay, at 390x844, 844x390,
    820x1180 and 1180x820; `--viewport all` adds desktop) and make the sheet with `gm shot --sheet shots/`.
-6. After your last `gm run` and commit, look at each still:
+6. After your last `gm run`, look at each still:
    `python3 .claude/skills/gm-image-mock/scripts/request-mock.py --kind look --out looks --ref <still> --ref <target> --prompt-file <questions>`.
-   Then, before opening or updating the PR, run `gm look check`: every committed still (or, when none is committed,
-   every rendered `tN.png`) needs a passing answer for its current bytes. If it says `blocked`, the look broker failed
-   (a 402, say): report the work as blocked, never as a pass.
-7. Each screen with an approved render in `review/decisions.json` needs `gm look sheet <screen> --still <png>` (the
-   still beside its target), looked at like a still; `gm look check` fails on a missing sheet or a mismatch.
-8. Commit every file the PR links under `review/<ticket>/`; `gm look evidence --body <pr-body.md>` fails otherwise.
+   Make each ticket screen's comparison with `gm look sheet <screen> --still <png>` and look at the sheet. After committing any tracked captured stills, run `gm look scope add <screen> --still <png>` for each ticket screen (repeat `--still` for its looked-at stills), commit `design/look-scope.json`, then run `gm look check --changed` plus `gm look score`/`gm look judge` on those screens.
+7. Commit every file the PR links under `review/<ticket>/`; `gm look evidence --body <pr-body.md>` fails otherwise.
 
 A report budget whose status is `over` blocks the PR. Name the tier and the measured value. `unknown` is not green:
 list it under unchecked.

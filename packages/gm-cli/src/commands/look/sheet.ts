@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
@@ -50,6 +51,11 @@ export const command: GmCommand = {
     try {
       mkdirSync(dirname(out), { recursive: true });
       verify.sideBySide([still, target], out, false);
+      const hash = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+      writeFileSync(
+        `${out}.json`,
+        JSON.stringify({ sheet: hash(out), target: hash(target), still: hash(still) }) + '\n',
+      );
     } catch (error) {
       if (error instanceof verify.FfmpegMissingError) throw new UsageError(error.message, verify.FFMPEG_HINT);
       ctx.err(error instanceof Error ? error.message : String(error));
