@@ -24,7 +24,7 @@ def has_relevant_records(source, limit):
         if not chunk:
             break
         data = (overlap + chunk).lower()
-        if b'mapped skills (load first)' in data or b'look' in data:
+        if b'mapped skills (load first)' in data or b'look' in data or b'\\u' in data:
             return True
         overlap = data[-32:]
         remaining -= len(chunk)

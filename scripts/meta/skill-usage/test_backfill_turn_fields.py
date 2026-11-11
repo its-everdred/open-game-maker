@@ -127,3 +127,5 @@ class BackfillTest(unittest.TestCase):
         from io import BytesIO
         content = b'### MAPPED SKILLS (LOAD FIRST)\n'
         self.assertTrue(backfill.has_relevant_records(BytesIO(content), len(content)))
+        escaped = b'gm \\u006cook'
+        self.assertTrue(backfill.has_relevant_records(BytesIO(escaped), len(escaped)))
