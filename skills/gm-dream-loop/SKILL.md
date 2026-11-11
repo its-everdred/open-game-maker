@@ -22,7 +22,8 @@ approved style and composition, including stylized art. Search the existing asse
 4. Stop when every tier is at least 8. To detect a stall, compare the first tier below 8 with that same tier in the
    previous verdict; count a newly unlocked tier as progress. If three consecutive iterations gain less than 0.5 on
    the applicable tier and unlock no tier, make one structural change and recheck. For example, `[6,null,null,null]`
-   to `[7,5,null,null]` unlocks the second tier and counts as progress; then compare that second tier on later runs;
+   to `[7,5,null,null]` unlocks the second tier and counts as progress; continue comparing the first tier until it
+   reaches 8, then compare the second tier;
    if that also stalls, raise a Command with the scored sheet and the remaining differences.
    Include the latest score JSON, judge JSON and sheet in ready evidence. Publish a sanitized copy of the score JSON
    with workspace-relative or placeholder paths; keep the original score and provenance sidecar local for the judge.
