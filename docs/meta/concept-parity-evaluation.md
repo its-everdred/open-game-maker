@@ -55,7 +55,7 @@ assume the NVIDIA-dependent Hunyuan3D or TRELLIS backends are available.
 
 - GitHub search also found `arjun988/blender-skills` (repository MIT license, last pushed 2026-11-06). Its
   `qa-review` skill asks for multi-angle screenshots, reference comparison and a severity-ordered ship verdict. It
-  does not specify a numeric parity score, and its viewport capture depends on Blender MCP. It has not been run on the
+  does not specify a numeric parity score, and its viewport capture depends on Blender MCP. It was run on the
   three cases through the look broker as a checklist prompt; see the results below. Its native MCP viewport transport
   remains unverified.
 
