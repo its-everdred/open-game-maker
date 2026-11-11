@@ -36,6 +36,38 @@ function lockEntry(cwd: string, id: string) {
 }
 
 describe('gm assets register keeps tier-3 bytes in the blob store (D-ASSETS-REFERENCE)', () => {
+  it('records a lazy phase and rejects malformed phases before moving bytes', async () => {
+    const { cwd, root } = await gameRepo();
+    const env = { OGM_ASSETS_ROOT: root, OGM_BLOB_ROOT: tempDir('gm-blobs-') };
+    writeAsset(cwd, 'assets/image/a.png', 'image');
+    const invalid = await gm(
+      ['assets', 'register', 'assets/image/a.png', '--made-by-agent', '--game', 'g1', '--phase', 'lazy:'],
+      { cwd, env },
+    );
+    expect(invalid.code).not.toBe(0);
+    expect(existsSync(join(cwd, 'assets/image/a.png'))).toBe(true);
+    const valid = await gm(
+      ['assets', 'register', 'assets/image/a.png', '--made-by-agent', '--game', 'g1', '--phase', 'lazy:backdrop-nim'],
+      { cwd, env },
+    );
+    expect(valid.code).toBe(0);
+    expect(lockEntry(cwd, 't3:g1/image/a')?.phase).toBe('lazy:backdrop-nim');
+    writeAsset(cwd, 'assets/image/a.png', 'new image');
+    expect(
+      (await gm(['assets', 'register', 'assets/image/a.png', '--made-by-agent', '--game', 'g1'], { cwd, env })).code,
+    ).toBe(0);
+    expect(lockEntry(cwd, 't3:g1/image/a')?.phase).toBe('lazy:backdrop-nim');
+    writeAsset(cwd, 'assets/image/a.png', 'third image');
+    expect(
+      (
+        await gm(['assets', 'register', 'assets/image/a.png', '--made-by-agent', '--game', 'g1', '--phase', 'boot'], {
+          cwd,
+          env,
+        })
+      ).code,
+    ).toBe(0);
+    expect(lockEntry(cwd, 't3:g1/image/a')?.phase).toBe('boot');
+  });
   it('moves the file into the blob store and leaves only a blob-sourced lock entry in the repo', async () => {
     const { cwd, root } = await gameRepo();
     const blobRoot = tempDir('gm-blobs-');

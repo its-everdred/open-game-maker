@@ -1,5 +1,14 @@
 # Game SDK
 
+## Lazy asset groups
+
+Register assets with `--phase lazy:backdrop-nim`; unmarked assets belong to boot. During the match countdown, call
+`await assets.loadGroup('backdrop-nim', ({ loaded, total }) => updateProgress(loaded, total))` before using the backdrop.
+Repeated calls reuse the loaded group; call `assets.unloadGroup('backdrop-nim')` when the match ends to release the SDK's
+in-memory file and model cache. Lazy budgets default to 1.5 MiB mobile and 4 MiB desktop per group. Override byte limits
+in `.gm/game.json`, for example `{"budgets":{"lazy":{"backdrop":{"mobile":1572864,"desktop":4194304}}}}`;
+the `backdrop` entry applies to `backdrop-*` groups, and an exact group name takes precedence.
+
 ## Trusted host origin
 
 Set the optional game-manifest `hostOrigin` to the exact HTTP(S) origin allowed to frame a build. `boot` prefers an

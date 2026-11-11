@@ -120,7 +120,7 @@ export async function planBuild(
       continue;
     }
     const textureKey = declaredKit ? 'declared-kit' : facts.textureKeys.join(',');
-    const groupKey = `${kitFolder(item)}\0${textureKey}`;
+    const groupKey = `${kitFolder(item)}\0${textureKey}\0${item.entry.phase ?? 'boot'}`;
     const group = kitGroups.get(groupKey) ?? [];
     group.push(item);
     kitGroups.set(groupKey, group);

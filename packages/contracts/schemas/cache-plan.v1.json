@@ -91,6 +91,24 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "assetPhasesByTier": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "desktop",
+                "mobile",
+                "low"
+              ]
+            },
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(?:boot|lazy:[a-z0-9]+(?:[._-][a-z0-9]+)*)$"
+              }
+            }
           }
         },
         "required": [

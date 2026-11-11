@@ -11,6 +11,7 @@ description: Install and build a Game Maker repo inside the network-off sandbox.
    `dist/manifest.json` or `dist/design/design.json` when either is missing or invalid: fix `src/manifest.ts` or
    `design/*.json` (a key defined in two design files fails the build).
 3. Read the build output from `dist/` and the resolved asset inventory from `assets/manifest.json`.
+   Lazy groups have separate mobile and desktop byte budgets, configurable in `.gm/game.json` under `budgets.lazy`.
 4. Run the `gm-core` done gates before handing off.
 
 The sandbox has no package-registry network. Never run `npm install` or `pnpm add`, and never weaken offline or

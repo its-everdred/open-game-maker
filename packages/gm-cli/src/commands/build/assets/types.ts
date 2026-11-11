@@ -9,6 +9,7 @@ export type LicenseEntry = {
 };
 
 export type ManifestAssetEntry = {
+  phase?: string;
   file: Partial<Record<Tier | '*', string>>;
   mesh?: string;
   bounds?: [number, number, number];
@@ -74,6 +75,7 @@ export type BuildFailure = { id: string; message: string };
 
 export type AssetBudgetReport = {
   tier: Tier;
+  phase: string;
   bytes: number;
   files: number;
   tris: number;

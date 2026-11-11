@@ -79,6 +79,10 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
+          "phase": {
+            "type": "string",
+            "pattern": "^(?:boot|lazy:[a-z0-9]+(?:[._-][a-z0-9]+)*)$"
+          },
           "file": {
             "type": "object",
             "propertyNames": {

@@ -114,7 +114,11 @@ export async function prepare(
   if (!response.ok) throw new Error(`Failed to load cache plan ${planUrl}: HTTP ${response.status}`);
   if (response.headers.get('content-type')?.toLowerCase().includes('text/html')) return undefined;
   const plan = cachePlanSchema.parse(await response.json());
-  const selected = plan.entries.filter((entry) => entry.tiers.includes('*') || entry.tiers.includes(options.tier));
+  const selected = plan.entries.filter(
+    (entry) =>
+      (entry.tiers.includes('*') || entry.tiers.includes(options.tier)) &&
+      (entry.assetPhasesByTier?.[options.tier]?.includes('boot') ?? true),
+  );
   const run = async () => {
     const ready = await fetchPhase(
       selected.filter((entry) => entry.phase === 'ready'),
@@ -363,6 +367,7 @@ async function recordPlay(
     const transaction = database.transaction('builds', 'readwrite');
     const previous = await transaction.store.get(key);
     const playedAt = (dependencies.dateNow ?? Date.now)();
+    // Retain lazy hashes too: they may enter the shared cache after prepare has recorded this build.
     const selected = plan.entries.filter((entry) => entry.tiers.includes('*') || entry.tiers.includes(tier));
     await transaction.store.put({
       key,

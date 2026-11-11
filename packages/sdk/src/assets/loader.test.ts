@@ -131,6 +131,184 @@ function fetchFor(value: unknown = manifest) {
 }
 
 describe('AssetLoader', () => {
+  it('treats a case-insensitive HTML plan fallback as absent', async () => {
+    const grouped = structuredClone(manifest);
+    grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('manifest.json')) return Response.json(grouped);
+      if (String(input).endsWith('cache-plan.json'))
+        return new Response('<html></html>', { headers: { 'content-type': 'Text/HTML' } });
+      return new Response(fileBytes);
+    });
+    const loader = new AssetLoader({
+      manifestUrl: 'https://game.test/assets/manifest.json',
+      tier: 'desktop',
+      fetch: fetcher,
+    });
+    await expect(loader.loadGroup('backdrop-nim')).resolves.toBeUndefined();
+  });
+  it('waits for sibling fetches before rejecting a failed group load', async () => {
+    const grouped = structuredClone(manifest);
+    grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';
+    grouped.assets['audio/theme']!.phase = 'lazy:backdrop-nim';
+    let finish!: (response: Response) => void;
+    const sibling = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('manifest.json')) return Response.json(grouped);
+      if (url.endsWith('cache-plan.json')) return new Response(null, { status: 404 });
+      if (url.endsWith('sound.ogg')) return sibling;
+      return new Response(null, { status: 500 });
+    });
+    const loader = new AssetLoader({
+      manifestUrl: 'https://game.test/assets/manifest.json',
+      tier: 'desktop',
+      fetch: fetcher,
+    });
+    const pending = loader.loadGroup('backdrop-nim');
+    const failed = expect(pending).rejects.toThrow('HTTP 500');
+    let settled = false;
+    void pending.catch(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('sound.ogg'))).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    finish(new Response(fileBytes));
+    await failed;
+  });
+  it('rejects an unloaded group before its plan is available', async () => {
+    const grouped = structuredClone(manifest);
+    grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';
+    let finishPlan!: (response: Response) => void;
+    let planStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      planStarted = resolve;
+    });
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('manifest.json')) return Response.json(grouped);
+      if (String(input).endsWith('cache-plan.json')) {
+        planStarted();
+        return new Promise<Response>((resolve) => {
+          finishPlan = resolve;
+        });
+      }
+      return new Response(fileBytes);
+    });
+    const loader = new AssetLoader({
+      manifestUrl: 'https://game.test/assets/manifest.json',
+      tier: 'desktop',
+      fetch: fetcher,
+    });
+    const pending = loader.loadGroup('backdrop-nim');
+    const canceled = expect(pending).rejects.toThrow('Asset group load canceled');
+    await started;
+    loader.unloadGroup('backdrop-nim');
+    finishPlan(new Response(null, { status: 404 }));
+    await canceled;
+  });
+  it('reports progress to a joining caller and survives unload during a pending load', async () => {
+    const grouped = structuredClone(manifest);
+    grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';
+    let finish!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    let fetchCount = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('manifest.json')) return Response.json(grouped);
+      if (String(input).endsWith('cache-plan.json')) return new Response(null, { status: 404 });
+      return ++fetchCount === 1 ? pending : new Response(fileBytes);
+    });
+    const loader = new AssetLoader({
+      manifestUrl: 'https://game.test/assets/manifest.json',
+      tier: 'desktop',
+      fetch: fetcher,
+    });
+    let firstLoad!: Promise<void>;
+    const started = new Promise<void>((resolve) => {
+      firstLoad = loader.loadGroup('backdrop-nim', ({ loaded }) => {
+        if (loaded === 0) resolve();
+      });
+    });
+    await started;
+    const joined: number[] = [];
+    const first = loader.loadGroup('backdrop-nim', ({ loaded }) => joined.push(loaded));
+    const canceled = expect(firstLoad).rejects.toThrow('Asset group load canceled');
+    loader.unloadGroup('backdrop-nim');
+    const replacement = loader.loadGroup('backdrop-nim');
+    finish(new Response(fileBytes));
+    await Promise.all([canceled, expect(first).rejects.toThrow('Asset group load canceled'), replacement]);
+    expect(joined).toEqual([0, 1]);
+    await loader.loadGroup('backdrop-nim');
+    expect(fetchCount).toBe(2);
+  });
+  it('makes lazy bytes available to other consumers through the shared cache', async () => {
+    const grouped = structuredClone(manifest);
+    const path = `/a/${'a'.repeat(64)}.glb`;
+    grouped.files[path] = { bytes: 4, decoders: [] };
+    grouped.assets['castle/tower-base'] = {
+      ...grouped.assets['castle/tower-base']!,
+      file: { '*': path },
+      phase: 'lazy:backdrop-nim',
+    };
+    const stored = new Map<string, Response>();
+    const cacheStorage = {
+      open: async () =>
+        ({
+          match: async (url: string) => stored.get(url)?.clone(),
+          put: async (url: string, value: Response) => {
+            stored.set(url, value);
+          },
+        }) as unknown as Cache,
+    };
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('manifest.json')
+        ? Response.json(grouped)
+        : String(input).endsWith('cache-plan.json')
+          ? new Response(null, { status: 404 })
+          : new Response(fileBytes),
+    );
+    const loader = new AssetLoader({
+      manifestUrl: 'https://game.test/assets/manifest.json',
+      tier: 'desktop',
+      fetch: fetcher,
+      cacheStorage,
+    });
+    await loader.loadGroup('backdrop-nim');
+    expect(await stored.get(`https://game.test${path}`)?.clone().arrayBuffer()).toEqual(fileBytes);
+    loader.unloadGroup('backdrop-nim');
+    await loader.loadGroup('backdrop-nim');
+    expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith(path))).toHaveLength(1);
+  });
+  it('loads, caches and unloads a lazy group with progress', async () => {
+    const grouped = structuredClone(manifest);
+    grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('manifest.json')) return Response.json(grouped);
+      if (url.endsWith('cache-plan.json')) return new Response(null, { status: 404 });
+      return new Response(fileBytes);
+    });
+    const loader = new AssetLoader({
+      manifestUrl: 'https://game.test/assets/manifest.json',
+      tier: 'desktop',
+      fetch: fetcher,
+    });
+    const progress: number[] = [];
+    await loader.loadGroup('backdrop-nim', (value) => progress.push(value.loaded));
+    const late: number[] = [];
+    await loader.loadGroup('backdrop-nim', (value) => late.push(value.loaded));
+    expect(progress).toEqual([0, 1]);
+    expect(late).toEqual([1]);
+    expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('kit-castle.3f9a1c.glb'))).toHaveLength(1);
+    loader.unloadGroup('backdrop-nim');
+    await loader.loadGroup('backdrop-nim');
+    expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('kit-castle.3f9a1c.glb'))).toHaveLength(2);
+    await expect(loader.loadGroup('missing')).rejects.toThrow('Unknown asset group');
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     gltfSpies.parse.mockResolvedValue({
@@ -174,7 +352,7 @@ describe('AssetLoader', () => {
     });
     await loader.load();
 
-    expect(ASSETS_SCHEMA_MINOR).toBe(5);
+    expect(ASSETS_SCHEMA_MINOR).toBe(6);
     expect(loader.resolve('content-addressed/model')).toMatchObject({
       file,
       url: `https://game.test/a/${digest}.glb`,

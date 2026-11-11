@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 import { loadIndex } from '@ogm/asset-cards';
 import { tierSchema, type Tier } from '@ogm/contracts';
@@ -58,10 +59,10 @@ function printReports(ctx: Parameters<GmCommand['run']>[0], reports: AssetBudget
   ctx.out('tier  bytes  files  tris  gpuTexMB  maxTexture');
   for (const report of reports) {
     ctx.out(
-      `${report.tier}  ${report.bytes}  ${report.files}  ${report.tris}  ${report.gpuTexMB.toFixed(2)}  ${report.maxTexture}`,
+      `${report.tier} ${report.phase ?? 'boot'}  ${report.bytes}  ${report.files}  ${report.tris}  ${report.gpuTexMB.toFixed(2)}  ${report.maxTexture}`,
     );
     for (const item of report.tier === budgetTier ? report.exceeded : []) {
-      ctx.err(`${report.tier} budget exceeded: ${item.metric} ${item.value} > ${item.limit}`);
+      ctx.err(`${report.tier} budget exceeded: ${report.phase ?? 'boot'} ${item.metric} ${item.value} > ${item.limit}`);
     }
   }
 }
@@ -196,10 +197,41 @@ export const command: GmCommand = {
       results,
       lock.assets.map((entry) => entry.id),
     );
-    const reports = tiers.map((tier) => budgetReport(manifest, details, tier));
+    let lazyBudgets: Record<string, { mobile?: number; desktop?: number }> = {};
+    try {
+      const game = JSON.parse(await readFile(join(ctx.cwd, '.gm/game.json'), 'utf8')) as {
+        budgets?: { lazy?: typeof lazyBudgets };
+      };
+      lazyBudgets = game.budgets?.lazy ?? {};
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const phases = [
+      'boot',
+      ...new Set(
+        Object.values(manifest.assets)
+          .map((asset) => asset.phase ?? 'boot')
+          .filter((phase) => phase !== 'boot'),
+      ),
+    ];
+    const reports = tiers.flatMap((tier) =>
+      phases.map((phase) => {
+        const group = phase.slice('lazy:'.length);
+        const configured = lazyBudgets[group] ?? lazyBudgets[group.split('-')[0]!];
+        const limit =
+          phase === 'boot'
+            ? undefined
+            : tier === 'desktop'
+              ? (configured?.desktop ?? 4 * 1024 * 1024)
+              : (configured?.mobile ?? 1.5 * 1024 * 1024);
+        if (limit !== undefined && (!Number.isFinite(limit) || limit < 0))
+          throw new Error(`Invalid budget for ${phase}`);
+        return budgetReport(manifest, details, tier, phase, limit, cachePlan);
+      }),
+    );
     await writeIfChanged(join(manifestDir, 'budget.json'), `${JSON.stringify(reports, null, 2)}\n`, ctx.cwd);
     await writeManifest(ctx.cwd, manifestDir, manifest, cachePlan);
-    const selected = reports.find((report) => report.tier === budgetTier)!;
+    const selected = reports.filter((report) => report.tier === budgetTier);
     const payload = {
       tiers,
       files: Object.keys(manifest.files).length,
@@ -211,6 +243,6 @@ export const command: GmCommand = {
     ctx.emit('assets.build', payload);
     if (ctx.json) ctx.out(JSON.stringify({ manifest, reports, cache: { hits: cacheHits, misses: cacheMisses } }));
     else printReports(ctx, reports, budgetTier);
-    return selected.exceeded.length > 0 ? EXIT.failed : EXIT.ok;
+    return selected.some((report) => report.exceeded.length > 0) ? EXIT.failed : EXIT.ok;
   },
 };

@@ -42,6 +42,10 @@
       "items": {
         "type": "object",
         "properties": {
+          "phase": {
+            "type": "string",
+            "pattern": "^(?:boot|lazy:[a-z0-9]+(?:[._-][a-z0-9]+)*)$"
+          },
           "id": {
             "type": "string",
             "pattern": "^(?:t[12]:[a-z0-9][a-z0-9-]*\\/[a-z0-9][a-z0-9/._-]*@[A-Za-z0-9._-]+|t3:[A-Za-z0-9][A-Za-z0-9_-]*\\/[a-z0-9][a-z0-9/._-]*)$"
