@@ -19,7 +19,7 @@ describe('ticket roles', () => {
       'role:qa': ['gm-core', 'gm-qa', 'gm-verify'],
       'role:multiplayer': ['gm-core', 'gm-multiplayer-ready', 'gm-qa'],
       'role:game-design': ['gm-core', 'gm-new-game-design', 'gm-new-game-plan', 'gm-image-mock', 'gm-scope-options'],
-      'role:assets': ['gm-core', 'gm-asset-variants', 'gm-pack-adapter', 'gm-asset-showcase'],
+      'role:assets': ['gm-core', 'gm-verify', 'gm-asset-variants', 'gm-pack-adapter', 'gm-asset-showcase'],
     });
   });
 

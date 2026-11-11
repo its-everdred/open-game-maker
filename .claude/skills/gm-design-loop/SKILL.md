@@ -7,6 +7,10 @@ description: Use for any creator request to make or change part of a game, scene
 
 The creator talks; the agent designs. Designing is the product's core loop, so do it the same way every time.
 
+When copying concept art, follow the matching-concept loop in `gm-verify` on every iteration: measure positions and
+sizes as fractions of a cell, score and judge the settled capture, fix the top differences, and repeat until it passes
+or the documented stall procedure applies. Include the score JSON and side-by-side in ready posts.
+
 ## The loop
 
 1. **Restate** the ask in one line, plus the constraints already known: the creator's taste and past decisions

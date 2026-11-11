@@ -66,6 +66,17 @@ stylesheets, at 390x844, 844x390, 820x1180 and 1180x820 with touch on (`--viewpo
 default `~/.config/ogm/qa/storage.json`, minted on the host by `ops/bin/ogm-qa-signin`) and answers the app's requests
 for the game build from `./dist`. `--frame bare` captures the game page alone, as before.
 
+`gm look score <target.png> <candidate.png>` compares images locally and prints JSON. It writes `look-score.png` (or
+`--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The crop applied to both inputs
+`--crop x,y,w,h` and repeatable `--region name=x,y,w,h` use pixel coordinates; regions refer to the cropped target. When none are named, a 3-by-3 grid supplies the worst five regions.
+Use a settled capture with the same camera. Both images are flattened on black, and the candidate is resized to the target. SSIM, colour histogram distance,
+and edge IoU are reported. An optional `--perceptual <executable>` invokes a local LPIPS adapter with two normalized PNG paths; the adapter prints
+a numeric distance and must use local model weights without network calls. Without that flag, or if the adapter fails,
+the perceptual score is skipped with a note. `gm look judge <sheet.png> --rubric
+tiers` sends the sheet and its unchanged sources through the existing look broker, which applies its normal reference
+restrictions. Its JSON reports the four tier scores and concrete differences. Later tiers are uncounted until preceding
+tiers reach 7, and the verdict passes only when all reach 8.
+
 `gm look check` gates the PR on the vision look requests (`gm-image-mock`, `request-mock.py --kind look`), which log
 each answer or broker error to `.gm-mock/looks.jsonl` with the git blob id of every image they judged. It judges each
 `tN.png` still committed at HEAD in the game folder (outside `review/`, which holds PR evidence), or, when none is committed (an instance repository ignores
