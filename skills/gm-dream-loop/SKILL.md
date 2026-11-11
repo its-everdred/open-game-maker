@@ -20,7 +20,7 @@ approved style and composition, including stylized art. Search the existing asse
    later tier counts only after the preceding tiers reach 7. Fix the largest concrete differences first, then capture,
    score and judge again. Measure important positions and sizes as fractions of the image instead of relying on prose.
 4. Stop when every tier is at least 8 and inspection confirms matched subject and framing with no unresolved visible
-   mismatch. If the judge passed a bad capture or missed a defect, fix the capture or defect and judge again. To detect a stall, compare the first tier below 8 with that same tier in the
+   mismatch. If the judge passed a bad capture or missed a defect, fix the capture or defect and judge again. To detect a stall, select the first tier below 8 and compare its value at the
    start of a three-iteration window with its best value in that window; reset the window when a tier unlocks or
    the first tier below 8 changes. If the gain is less than 0.5 after three iterations and no tier unlocks, make one
    structural change and recheck. For example, `[6,null,null,null]`
