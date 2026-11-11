@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -81,7 +81,7 @@ export const command: GmCommand = {
       ...ctx.env,
       VITE_GAMES_ORIGIN: 'http://127.0.0.1:10000',
       GM_SHELL_DIST: dist,
-      GM_SHELL_OUT: resolve(ctx.cwd, flags.out),
+      GM_SHELL_OUT: resolve(temp, 'shots'),
       GM_SHELL_WEB_DIST: temp,
       GM_SHELL_PORT: String(port),
       GM_SHELL_TAPS: JSON.stringify(flags.tap ?? []),
@@ -94,9 +94,6 @@ export const command: GmCommand = {
     const { acquireSlot } = await import('@ogm/gm-verify');
     let slot: Awaited<ReturnType<typeof acquireSlot>> | undefined;
     try {
-      const out = resolve(ctx.cwd, flags.out);
-      for (const size of ['390x844', '844x390', '820x1180', '1180x820'])
-        for (const prefix of ['play', 'ingame', 'menu']) rmSync(resolve(out, `${prefix}-${size}.png`), { force: true });
       for (const commandArgs of [
         ['run', 'build:deps'],
         ['exec', 'vite', 'build', '--outDir', temp, '--emptyOutDir'],
@@ -117,12 +114,26 @@ export const command: GmCommand = {
       if (captureTime <= 0) return EXIT.timeout;
       const result = await runChild(
         web,
-        ['exec', 'playwright', 'test', '--config', 'e2e/shell-capture.config.ts'],
+        ['exec', 'playwright', 'test', '--config', 'e2e/shell-capture.config.ts', '--max-failures=1'],
         env,
         captureTime,
         abort.signal,
       );
       if (result !== 0) return result;
+      const sizes = ['390x844', '844x390', '820x1180', '1180x820'];
+      for (const size of sizes)
+        if (!existsSync(resolve(env.GM_SHELL_OUT, `play-${size}.png`)))
+          throw new CommandError(`shell capture did not produce play-${size}.png`);
+      const out = resolve(ctx.cwd, flags.out);
+      mkdirSync(out, { recursive: true });
+      for (const size of sizes) {
+        for (const prefix of ['play', 'ingame', 'menu']) {
+          const name = `${prefix}-${size}.png`;
+          const source = resolve(env.GM_SHELL_OUT, name);
+          if (existsSync(source)) copyFileSync(source, resolve(out, name));
+          else rmSync(resolve(out, name), { force: true });
+        }
+      }
       ctx.out('App-shell captures complete (mocked sign-in; not production or Safari).');
       return EXIT.ok;
     } catch (error) {

@@ -20,7 +20,10 @@ describe('gm capture shell', () => {
     const pnpm = join(bin, 'pnpm');
     mkdirSync(join(root, 'shots'));
     writeFileSync(join(root, 'shots', 'ingame-390x844.png'), 'stale');
-    writeFileSync(pnpm, '#!/bin/sh\nprintf "%s\\n" "$*|$GM_SHELL_DIST|$GM_SHELL_TAPS" >> "$LOG"\n');
+    writeFileSync(
+      pnpm,
+      '#!/bin/sh\nprintf "%s\\n" "$*|$GM_SHELL_DIST|$GM_SHELL_TAPS" >> "$LOG"\nif [ "$2" = playwright ]; then mkdir -p "$GM_SHELL_OUT"; for s in 390x844 844x390 820x1180 1180x820; do printf new > "$GM_SHELL_OUT/play-$s.png"; done; fi\n',
+    );
     chmodSync(pnpm, 0o755);
     const result = await gm(['capture', 'shell', '--web', '.', '--dist', 'dist', '--out', 'shots', '--tap', 'Play'], {
       cwd: root,
@@ -30,7 +33,9 @@ describe('gm capture shell', () => {
     expect(existsSync(join(root, 'shots', 'ingame-390x844.png'))).toBe(false);
     const calls = readFileSync(log, 'utf8');
     expect(calls).toContain(`vite build`);
-    expect(calls).toContain(`playwright test --config e2e/shell-capture.config.ts|${join(root, 'dist')}|["Play"]`);
+    expect(calls).toContain(
+      `playwright test --config e2e/shell-capture.config.ts --max-failures=1|${join(root, 'dist')}|["Play"]`,
+    );
   });
 
   it('stops a stuck build at the requested timeout', async () => {
@@ -39,6 +44,8 @@ describe('gm capture shell', () => {
     const bin = join(root, 'bin');
     mkdirSync(bin);
     const pnpm = join(bin, 'pnpm');
+    mkdirSync(join(root, 'shots'));
+    writeFileSync(join(root, 'shots', 'play-390x844.png'), 'previous');
     writeFileSync(pnpm, '#!/bin/sh\nsleep 20\n');
     chmodSync(pnpm, 0o755);
     const result = await gm(['capture', 'shell', '--web', '.', '--dist', 'dist', '--out', 'shots', '--timeout', '1'], {
@@ -46,6 +53,7 @@ describe('gm capture shell', () => {
       env: { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: root },
     });
     expect(result.code).toBe(3);
+    expect(readFileSync(join(root, 'shots', 'play-390x844.png'), 'utf8')).toBe('previous');
   });
 
   it('rejects a build with no game entry', async () => {
