@@ -39,12 +39,12 @@ function commit(root: string): void {
   git(root, 'commit', '-qm', 'stills');
 }
 
-function capture(root: string, path: string): void {
+function capture(root: string, path: string, outputs: Record<string, string> = {}): void {
   const data = readFileSync(join(root, path));
   const blob = createHash('sha1').update(`blob ${data.length}\0`).update(data).digest('hex');
   const file = captureMetadataPath(root, join(root, path));
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify({ source: git(root, 'rev-parse', 'HEAD').trim(), blob }));
+  writeFileSync(file, JSON.stringify({ source: git(root, 'rev-parse', 'HEAD').trim(), blob, outputs }));
 }
 
 type Broker = { answer: string } | { error: string } | 'silent';
@@ -312,9 +312,13 @@ describe('changed look checks', { timeout: 60_000 }, () => {
     );
     mkdirSync(join(root, 'shots/ignored'), { recursive: true });
     writeFileSync(join(root, 'shots/ignored/t2.png'), 'ignored still');
-    capture(root, STILL);
-    capture(root, 'shots/ignored/t2.png');
-    git(root, 'add', STILL);
+    const state = Buffer.from('{}');
+    writeFileSync(join(root, 'shots/state.json'), state);
+    const stateBlob = createHash('sha1').update(`blob ${state.length}\0`).update(state).digest('hex');
+    const outputs = { 'shots/state.json': stateBlob };
+    capture(root, STILL, outputs);
+    capture(root, 'shots/ignored/t2.png', outputs);
+    git(root, 'add', STILL, 'shots/state.json');
     git(root, 'commit', '-qm', 'capture still');
     await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
     await look(root, 'still', { answer: 'VERDICT: pass' });
@@ -397,6 +401,32 @@ describe('changed look checks', { timeout: 60_000 }, () => {
         item.detail.includes('invalid still evidence'),
       ),
     ).toBe(true);
+  });
+
+  it('rejects a looked-at capture made before a visual source change', async () => {
+    const root = game();
+    git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+    mkdirSync(join(root, 'review'));
+    mkdirSync(join(root, 'look'));
+    writeFileSync(join(root, '.gitignore'), 'look/*.png\nlook/*.json\n');
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"play":{"target":"design/target.png"}}}');
+    commit(root);
+    writeFileSync(join(root, 'look/play.sheet.png'), 'sheet');
+    const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+    writeFileSync(
+      join(root, 'look/play.sheet.png.json'),
+      JSON.stringify({ sheet: hash('sheet'), target: hash('target'), still: hash('frame-a') }),
+    );
+    capture(root, STILL);
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    await look(root, 'still', { answer: 'VERDICT: pass' });
+    mkdirSync(join(root, 'src/scenes'), { recursive: true });
+    writeFileSync(join(root, 'src/scenes/play.ts'), 'new visual source');
+    git(root, 'add', 'src/scenes/play.ts');
+    git(root, 'commit', '-qm', 'change screen');
+    const result = await gm(['look', 'scope', 'add', 'play', '--still', STILL], { cwd: root });
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('stale capture');
   });
 
   it('replays scoped evidence for a tracked symlink target', async () => {

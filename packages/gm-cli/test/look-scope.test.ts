@@ -36,10 +36,13 @@ it('rejects a retargeted intermediate directory symlink', () => {
   expect(trackedTargetMatches(root, source, 'design/targets/play.png', hash)).toBe(false);
 });
 
-
 it('finds visual entrypoints and asset files outside named asset directories', () => {
   const root = tempDir('gm-visual-paths-');
-  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root, encoding: 'utf8' });
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], {
+      cwd: root,
+      encoding: 'utf8',
+    });
   git('init', '-q');
   writeFileSync(join(root, 'README.md'), 'base');
   git('add', '-A');
