@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { UsageError, type GmCommand } from '../../command.js';
 import { niceCapture } from '../run/index.js';
 import { printGate } from '../check/index.js';
+import { testSoftwareRenderer } from '../../test-renderer.js';
 
 export const command: GmCommand = {
   name: 'test',
@@ -45,7 +46,7 @@ export const command: GmCommand = {
         ctx.err(`${reason}; writing diagnostic to ${resolve(ctx.cwd, flags.out as string)}`);
         ctx.onTestTimeout?.();
       },
-      software: ctx.config.verifySoftwareGl,
+      software: testSoftwareRenderer(ctx.config.verifySoftwareGlConfigured ? ctx.config.verifySoftwareGl : undefined),
       slots: { runtimeDir: ctx.config.runtimeDir },
       eventsFile: ctx.config.eventsFile,
       jobId: ctx.config.jobId,

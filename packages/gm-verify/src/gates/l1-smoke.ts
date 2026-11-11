@@ -20,6 +20,7 @@ import { acquireSlot, type SemaphoreOptions } from '../semaphore.js';
 import { isLoopbackUrl, serveStatic } from '../server.js';
 import type { GateCheck, GateResult } from './index.js';
 import { pngStddev } from './png-variance.js';
+import { captureHud } from './hud-capture.js';
 import { runPromiseProcess, type SpawnOptions, type SpawnResult } from './promise-process.js';
 import { L1Watchdog, writeStallDiagnostic } from './l1-watchdog.js';
 
@@ -270,7 +271,7 @@ async function roundTrip(game: OpenedGame): Promise<GateCheck> {
 async function hudStill(game: OpenedGame, path: string, ticks: number, minStddev: number): Promise<GateCheck> {
   try {
     await game.hooks.renderAt(ticks * STEP_MS);
-    const screenshot = await game.page.screenshot({ path, type: 'png' });
+    const screenshot = await captureHud(game.page, path);
     const stddev = pngStddev(screenshot);
     const detail = `pixel stddev ${stddev.toFixed(2)} (minimum ${minStddev})`;
     return { id: 'hud-still', ok: stddev > minStddev, detail };
@@ -324,7 +325,7 @@ export async function runL1(root: string, options: RunL1Options = {}): Promise<G
     );
     watchdog.setStage('slot acquired');
     options.progress?.(`tick 0/${ticks} (slot acquired)`);
-    browser = await watchdog.wait(launch(options.software ?? false), (late) => {
+    browser = await watchdog.wait(launch(options.software ?? false, true), (late) => {
       void late.close();
     });
     const opened = await watchdog.wait(

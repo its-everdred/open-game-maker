@@ -10,6 +10,7 @@ export type GmConfig = {
   aiurRunId?: string;
   sandbox?: boolean;
   verifySoftwareGl: boolean;
+  verifySoftwareGlConfigured?: boolean;
   verifyQueue: boolean;
   runtimeDir?: string;
 };

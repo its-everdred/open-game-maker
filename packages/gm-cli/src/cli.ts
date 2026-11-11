@@ -96,6 +96,7 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
         aiurRunId: env.AIUR_TICKET_BRANCH,
         sandbox: env.OGM_SANDBOX === true,
         verifySoftwareGl: env.GM_VERIFY_SOFTWARE_GL === true,
+        verifySoftwareGlConfigured: env.GM_VERIFY_SOFTWARE_GL !== undefined,
         verifyQueue: env.GM_VERIFY_QUEUE === true,
         runtimeDir: env.XDG_RUNTIME_DIR,
       },
