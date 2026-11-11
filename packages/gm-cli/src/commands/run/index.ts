@@ -9,7 +9,12 @@ import { isLoopbackUrl } from '@ogm/gm-verify/server';
 
 import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { printJson } from '../../context.js';
-import { captureOutputPaths, prepareVerifiedSource, recordRunProvenance } from '../../look/run-provenance.js';
+import {
+  captureOutputPaths,
+  hasCaptureSymlink,
+  prepareVerifiedSource,
+  recordRunProvenance,
+} from '../../look/run-provenance.js';
 import { gameDir } from '../../outbox.js';
 import { readEnvFile } from '../publish/index.js';
 
@@ -265,6 +270,8 @@ export const command: GmCommand = {
         }
         if (isLink) throw new UsageError('source-verified output cannot traverse a symlink', 'use --out shots');
       }
+      if (hasCaptureSymlink(out))
+        throw new UsageError('source-verified output cannot contain a symlink', 'use a clean --out directory');
       source = prepareVerifiedSource(
         ctx.cwd,
         () => execFileSync('pnpm', ['run', 'build'], { cwd: ctx.cwd, stdio: 'ignore' }),

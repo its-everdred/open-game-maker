@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect, it } from 'vitest';
@@ -172,4 +172,10 @@ it('refuses verified output in a build input directory', async () => {
   const linked = await gm(['run', '--verify-source', '--out', 'captures'], { cwd: root });
   expect(linked.code).toBe(2);
   expect(linked.err.join('\n')).toContain('cannot traverse a symlink');
+  rmSync(join(root, 'captures'));
+  mkdirSync(join(root, 'captures/phone'), { recursive: true });
+  symlinkSync('../../public/state.json', join(root, 'captures/phone/t2.png'));
+  const nested = await gm(['run', '--verify-source', '--out', 'captures'], { cwd: root });
+  expect(nested.code).toBe(2);
+  expect(nested.err.join('\n')).toContain('cannot contain a symlink');
 });

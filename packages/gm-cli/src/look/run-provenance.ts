@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { sha256 } from './scope.js';
@@ -55,6 +55,16 @@ export function cleanHead(cwd: string, outputPaths: string[] = []): string | und
   } catch {
     return undefined;
   }
+}
+
+/** Refuse an output tree that can redirect a capture through a symlink. */
+export function hasCaptureSymlink(out: string): boolean {
+  if (!existsSync(out)) return false;
+  for (const entry of readdirSync(out, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) return true;
+    if (entry.isDirectory() && hasCaptureSymlink(join(out, entry.name))) return true;
+  }
+  return false;
 }
 
 /** Only unchanged files recorded by a previous verified run may be excluded before a rebuild. */
