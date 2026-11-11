@@ -59,7 +59,7 @@ it(
   'sends all score sources through the real look request and handles broker answers',
   { timeout: 30_000 },
   async () => {
-    const { copyFileSync, existsSync, readdirSync, readFileSync } = await import('node:fs');
+    const { copyFileSync, existsSync, readdirSync, readFileSync, symlinkSync, unlinkSync } = await import('node:fs');
     const { fileURLToPath } = await import('node:url');
     const { setTimeout: sleep } = await import('node:timers/promises');
     const cwd = tempDir('gm-judge-protocol-');
@@ -73,7 +73,11 @@ it(
     await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } })
       .png()
       .toFile(join(cwd, 'a.png'));
-    expect((await gm(['look', 'score', 'a.png', 'a.png'], { cwd })).code).toBe(0);
+    copyFileSync(join(cwd, 'a.png'), join(cwd, 'b.png'));
+    symlinkSync('a.png', join(cwd, 'alias.png'));
+    expect((await gm(['look', 'score', 'alias.png', 'a.png'], { cwd })).code).toBe(0);
+    unlinkSync(join(cwd, 'alias.png'));
+    symlinkSync('b.png', join(cwd, 'alias.png'));
     async function request(answer: string | null) {
       const promise = gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers'], { cwd });
       const requests = join(cwd, '.gm-mock/requests');
@@ -85,7 +89,6 @@ it(
       if (!name) throw new Error('no broker request');
       const file = join(requests, name);
       const req = JSON.parse(readFileSync(file, 'utf8')) as { id: string; refs: string[]; out: string };
-      const { unlinkSync } = await import('node:fs');
       unlinkSync(file);
       expect(req.refs.slice(0, 2)).toEqual(['a.png', 'a.png']);
       expect(req.refs[2]).toMatch(/^\.gm-mock\/judge\/.+\.png$/);

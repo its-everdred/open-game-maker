@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import sharp from 'sharp';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
@@ -24,8 +24,10 @@ export const command: GmCommand = {
   },
   async run(ctx, args, flags) {
     if (args.length !== 2) throw new UsageError('provide target and candidate images', 'gm help look score');
-    const target = resolve(ctx.cwd, args[0]!),
-      candidate = resolve(ctx.cwd, args[1]!);
+    const [target, candidate] = await Promise.all([
+      realpath(resolve(ctx.cwd, args[0]!)),
+      realpath(resolve(ctx.cwd, args[1]!)),
+    ]);
     const crop = typeof flags.crop === 'string' ? rect(flags.crop) : undefined;
     const [targetBytes, candidateBytes] = await Promise.all([readFile(target), readFile(candidate)]);
     const a = await image(targetBytes, crop);

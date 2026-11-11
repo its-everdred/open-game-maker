@@ -76,6 +76,7 @@ describe('gm look score', () => {
     symlinkSync('a.png', join(cwd, 'alias.png'));
     const result = await gm(['look', 'score', 'a.png', 'a.png', '--out', 'alias.png'], { cwd });
     expect(result.code).toBe(2);
+    expect(result.err.join()).toContain('output must not overwrite an input');
     expect((await sharp(join(cwd, 'a.png')).metadata()).width).toBe(4);
   });
   it('rejects out-of-bounds regions', async () => {
@@ -85,5 +86,6 @@ describe('gm look score', () => {
       .toFile(join(cwd, 'a.png'));
     const result = await gm(['look', 'score', 'a.png', 'a.png', '--region', 'bad=3,3,2,2'], { cwd });
     expect(result.code).toBe(2);
+    expect(result.err.join()).toContain('region exceeds image bounds');
   });
 });
