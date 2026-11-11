@@ -12,16 +12,17 @@ approved style and composition, including stylized art. Search the existing asse
 1. Use the approved concept and a render of the same subject, view, aspect ratio, size and game state. Fix the camera
    and let the scene settle. Capture a Playwright still using the repository's browser flags; keep inputs and evidence
    locally and obey the asset and broker privacy rules in `gm-image-mock`.
-2. Run `gm look score <target.png> <candidate.png> --out <sheet.png>`, then
-   `gm look judge <sheet.png> --rubric tiers`. The broker supplies a fresh-context comparison. Save the score JSON,
-   sheet and judge JSON together for every iteration. Read the result and inspect the actual images: a model can mistake
+2. Run `gm look score <target.png> <candidate.png> --out <sheet.png> > <score.json>`, then
+   `gm look judge <sheet.png> --rubric tiers > <judge.json>`. The broker supplies a fresh-context comparison. Keep
+   both JSON outputs, the sheet, and its `<sheet.png>.json` provenance sidecar together for every iteration. Read the result and inspect the actual images: a model can mistake
    a crop, game state, orientation or background for an asset defect. Do not treat a numerical score as proof alone.
 3. Work in the judge's gated order: silhouette and shape, light and colour, material and shine, then fine detail. A
    later tier counts only after the preceding tiers reach 7. Fix the largest concrete differences first, then capture,
    score and judge again. Measure important positions and sizes as fractions of the image instead of relying on prose.
 4. Stop when every tier is at least 8. To detect a stall, compare the first tier below 8 with that same tier in the
    previous verdict; count a newly unlocked tier as progress. If three consecutive iterations gain less than 0.5 on
-   the applicable tier and unlock no tier, make one structural change and recheck;
+   the applicable tier and unlock no tier, make one structural change and recheck. For example, `[6,null,null,null]`
+   to `[7,5,null,null]` unlocks the second tier and counts as progress; then compare that second tier on later runs;
    if that also stalls, raise a Command with the scored sheet and the remaining differences.
    Include the latest score JSON, judge JSON and sheet in ready evidence. Never claim a broker failure is a pass.
 
