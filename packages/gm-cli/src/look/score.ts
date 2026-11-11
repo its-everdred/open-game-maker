@@ -3,17 +3,20 @@ import sharp from 'sharp';
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Image = { pixels: Buffer; width: number; height: number };
 
-export async function image(path: string, crop?: Rect): Promise<Image> {
+export async function image(path: string | Buffer, crop?: Rect): Promise<Image> {
   let input = sharp(path).flatten({ background: '#000000' }).toColourspace('srgb');
   if (crop) input = input.extract({ left: crop.x, top: crop.y, width: crop.w, height: crop.h });
   const { data, info } = await input.raw().toBuffer({ resolveWithObject: true });
   return { pixels: data, width: info.width, height: info.height };
 }
 
-export async function resize(path: string, width: number, height: number, crop?: Rect): Promise<Image> {
-  let input = sharp(path).flatten({ background: '#000000' }).toColourspace('srgb');
+export async function resize(path: string | Buffer, width: number, height: number, crop?: Rect): Promise<Image> {
+  let input = sharp(path)
+    .flatten({ background: '#000000' })
+    .toColourspace('srgb')
+    .resize(width, height, { fit: 'fill' });
   if (crop) input = input.extract({ left: crop.x, top: crop.y, width: crop.w, height: crop.h });
-  const { data, info } = await input.resize(width, height, { fit: 'fill' }).raw().toBuffer({ resolveWithObject: true });
+  const { data, info } = await input.raw().toBuffer({ resolveWithObject: true });
   return { pixels: data, width: info.width, height: info.height };
 }
 
@@ -65,7 +68,7 @@ export function metrics(a: Image, b: Image, rect: Rect) {
   };
 }
 
-export async function sheet(a: Image, b: Image, out: string) {
+export async function sheet(a: Image, b: Image) {
   const heat = Buffer.alloc(a.pixels.length),
     overlay = Buffer.alloc(a.pixels.length);
   for (let i = 0; i < heat.length; i += 3) {
@@ -79,8 +82,8 @@ export async function sheet(a: Image, b: Image, out: string) {
   const panels = await Promise.all(
     [a.pixels, b.pixels, heat, overlay].map((pixels) => sharp(pixels, { raw }).png().toBuffer()),
   );
-  await sharp({ create: { width: a.width * 4, height: a.height, channels: 3, background: '#000' } })
+  return sharp({ create: { width: a.width * 4, height: a.height, channels: 3, background: '#000' } })
     .composite(panels.map((input, i) => ({ input, left: i * a.width, top: 0 })))
     .png()
-    .toFile(out);
+    .toBuffer();
 }

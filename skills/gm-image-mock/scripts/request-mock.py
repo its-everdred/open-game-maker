@@ -21,6 +21,7 @@ ap.add_argument('--ref', action='append', default=[], help='workspace-relative r
 ap.add_argument('--aspect', default='9:16')
 ap.add_argument('--model', default=None, help='image model id (default: the broker\'s)')
 ap.add_argument('--name', default=None, help='file stem for the image (default: a random id)')
+ap.add_argument('--no-look-log', action='store_true', help='do not update the still look gate')
 ap.add_argument('--wait', type=int, default=600, help='seconds to wait for the broker')
 a = ap.parse_args()
 
@@ -62,7 +63,7 @@ os.rename(tmp, tmp[:-4] + '.json')
 
 
 def log_look(entry):
-    if a.kind != 'look':
+    if a.kind != 'look' or a.no_look_log:
         return
     line = {'id': rid, 'time': time.time(), 'refs': [{'path': p, 'blob': b} for p, b in zip(req['refs'], blobs)], **entry}
     with open(os.path.join(root, '.gm-mock', 'looks.jsonl'), 'a', encoding='utf-8') as f:

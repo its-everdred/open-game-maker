@@ -1,14 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { workspaceRoot } from '../../outbox.js';
 import { catalogRoot } from '../../skills/catalog.js';
+import { image, resize, sheet, type Rect } from '../../look/score.js';
+import sharp from 'sharp';
 
 const exec = promisify(execFile);
-const prompt = `The first two images are the source target and candidate. The third image is their comparison sheet: its panels show target, candidate, difference heatmap, and 50% overlay. Judge these four tiers in order: silhouette and shape, light and colour, materials and shine, fine detail. Score each from 0 to 10. A later tier counts only if the previous tier is at least 7. Return a JSON object with exactly these keys: tiers (array of four numbers in order), differences (array of concrete differences describing position, size or colour, worst first). No markdown around JSON.`;
+const prompt = `The first two images are source references for policy checks only. Judge only the first two panels of the third image, the comparison sheet; its remaining panels show a difference heatmap and 50% overlay. Judge these four tiers in order: silhouette and shape, light and colour, materials and shine, fine detail. Score each from 0 to 10. A later tier counts only if the previous tier is at least 7. Return a JSON object with exactly these keys: tiers (array of four numbers in order), differences (array of concrete differences describing position, size or colour, worst first). No markdown around JSON.`;
 
 export const command: GmCommand = {
   name: 'look judge',
@@ -26,29 +28,37 @@ export const command: GmCommand = {
     const question = join(scratch, `${id}.txt`);
     await writeFile(question, prompt);
     const script = join(catalogRoot(root, ctx.skillsDir), 'gm-image-mock', 'scripts', 'request-mock.py');
+    const snapshot = join(scratch, `${id}.png`);
     try {
       const manifest = JSON.parse(await readFile(`${ref}.json`, 'utf8')) as {
         target: string;
         candidate: string;
         sheet: string;
         hashes: string[];
+        crop: Rect | null;
       };
       if (manifest.sheet !== ref || !Array.isArray(manifest.hashes) || manifest.hashes.length !== 3)
         throw new Error('invalid score sheet provenance');
       const paths = [manifest.target, manifest.candidate, ref];
+      const bytes = await Promise.all(paths.map((path) => readFile(path)));
       for (let i = 0; i < paths.length; i++) {
-        const hash = createHash('sha256')
-          .update(await readFile(paths[i]!))
-          .digest('hex');
+        const hash = createHash('sha256').update(bytes[i]!).digest('hex');
         if (hash !== manifest.hashes[i]) throw new Error('score sheet or source changed: run gm look score again');
       }
+      const target = await image(bytes[0]!, manifest.crop ?? undefined);
+      const dimensions = await sharp(bytes[0]!).metadata();
+      if (!dimensions.width || !dimensions.height) throw new Error('target dimensions unavailable');
+      const candidate = await resize(bytes[1]!, dimensions.width, dimensions.height, manifest.crop ?? undefined);
+      if (!(await sheet(target, candidate)).equals(bytes[2]!)) throw new Error('sheet does not match its sources');
+      await writeFile(snapshot, bytes[2]!, { flag: 'wx', mode: 0o600 });
       const result = await exec(
         'python3',
         [
           script,
           '--kind',
           'look',
-          ...paths.flatMap((path) => ['--ref', path]),
+          '--no-look-log',
+          ...[paths[0]!, paths[1]!, snapshot].flatMap((path) => ['--ref', path]),
           '--prompt-file',
           question,
           '--out',
@@ -86,6 +96,8 @@ export const command: GmCommand = {
     } catch (error) {
       ctx.err(error instanceof Error ? error.message : String(error));
       return EXIT.failed;
+    } finally {
+      await rm(snapshot, { force: true });
     }
   },
 };

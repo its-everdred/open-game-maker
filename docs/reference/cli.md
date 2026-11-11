@@ -68,9 +68,11 @@ for the game build from `./dist`. `--frame bare` captures the game page alone, a
 
 `gm look score <target.png> <candidate.png>` compares images locally and prints JSON. It writes `look-score.png` (or
 `--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The crop applied to both inputs
-`--crop x,y,w,h` and repeatable `--region name=x,y,w,h` use pixel coordinates; regions refer to the cropped target.
+`--crop x,y,w,h` and repeatable `--region name=x,y,w,h` use pixel coordinates; regions refer to the cropped target. When none are named, a 3-by-3 grid supplies the worst five regions.
 Use a settled capture with the same camera. Both images are flattened on black, and the candidate is resized to the target. SSIM, colour histogram distance,
-and edge IoU are reported; unavailable perceptual scoring is noted in the JSON. `gm look judge <sheet.png> --rubric
+and edge IoU are reported. An optional `--perceptual <executable>` invokes a local LPIPS adapter with two normalized PNG paths; the adapter prints
+a numeric distance and must use local model weights without network calls. Without that flag, or if the adapter fails,
+the perceptual score is skipped with a note. `gm look judge <sheet.png> --rubric
 tiers` sends the sheet and its unchanged sources through the existing look broker, which applies its normal reference
 restrictions. Its JSON reports the four tier scores and concrete differences. Later tiers are uncounted until preceding
 tiers reach 7, and the verdict passes only when all reach 8.
