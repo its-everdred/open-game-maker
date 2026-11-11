@@ -7,7 +7,13 @@ import { setTimeout as sleep } from 'node:timers/promises';
 export const HOST_SLOTS = 2;
 export const SLOT_WAIT_MS = 10 * 60_000;
 
-export type SemaphoreOptions = { runtimeDir?: string; slots?: number; waitMs?: number; pollMs?: number };
+export type SemaphoreOptions = {
+  runtimeDir?: string;
+  slots?: number;
+  waitMs?: number;
+  pollMs?: number;
+  signal?: AbortSignal;
+};
 
 /** `$XDG_RUNTIME_DIR/ogm-verify`, else a per-user directory under the temp dir. */
 export function lockRoot(runtimeDir: string | undefined): string {
@@ -16,10 +22,20 @@ export function lockRoot(runtimeDir: string | undefined): string {
 
 // The child keeps the kernel lock until its stdin closes, including when the parent dies.
 // Lock files are never unlinked: removing a locked inode would allow a second holder.
-function tryTake(slot: string): Promise<ChildProcessWithoutNullStreams | undefined> {
+function tryTake(slot: string, signal?: AbortSignal): Promise<ChildProcessWithoutNullStreams | undefined> {
   return new Promise((resolve, reject) => {
     const child = spawn('flock', ['-n', '-E', '75', `${slot}.lock`, 'sh', '-c', 'printf "locked\\n"; cat >/dev/null']);
     let settled = false;
+    const abort = () => {
+      if (!settled) {
+        settled = true;
+        child.kill();
+        reject(new Error('capture slot acquisition cancelled'));
+      }
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    child.once('close', () => signal?.removeEventListener('abort', abort));
+    if (signal?.aborted) abort();
     child.once('error', (error) => {
       if (!settled) {
         settled = true;
@@ -29,6 +45,7 @@ function tryTake(slot: string): Promise<ChildProcessWithoutNullStreams | undefin
     child.stdout.once('data', () => {
       if (!settled) {
         settled = true;
+        signal?.removeEventListener('abort', abort);
         resolve(child);
       }
     });
@@ -58,7 +75,8 @@ export async function acquireSlot(options: SemaphoreOptions = {}): Promise<{ slo
   for (;;) {
     for (let i = 0; i < slots; i += 1) {
       const slot = join(root, `slot-${i}`);
-      const holder = await tryTake(slot);
+      if (options.signal?.aborted) throw new Error('capture slot acquisition cancelled');
+      const holder = await tryTake(slot, options.signal);
       if (holder) {
         let held = true;
         return {
@@ -72,7 +90,7 @@ export async function acquireSlot(options: SemaphoreOptions = {}): Promise<{ slo
       }
     }
     if (Date.now() >= deadline) throw new Error(`no free capture slot after ${options.waitMs ?? SLOT_WAIT_MS} ms`);
-    await sleep(pause);
+    await sleep(pause, undefined, { signal: options.signal });
     pause = Math.min(pause * 2, 2_000);
   }
 }

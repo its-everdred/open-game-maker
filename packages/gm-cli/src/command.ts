@@ -19,6 +19,8 @@ export type GmContext = {
   assetsRoot: string | null;
   skillsDir: string | null;
   config: GmConfig;
+  /** Executable-only backstop for a wedged browser transport. */
+  onTestTimeout?: () => void;
   json: boolean;
   limit: number;
   fields: string[] | null;

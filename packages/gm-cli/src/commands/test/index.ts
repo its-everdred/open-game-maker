@@ -7,11 +7,12 @@ import { printGate } from '../check/index.js';
 export const command: GmCommand = {
   name: 'test',
   summary: 'run the deterministic browser smoke gate',
-  usage: '[--inputs script.json] [--ticks 3600] [--serve dist] [--json]',
+  usage: '[--inputs script.json] [--ticks 3600] [--deadline seconds] [--serve dist] [--json]',
   example: 'test --ticks 3600',
   flags: {
     inputs: { type: 'string', help: 'logical input script JSON' },
     ticks: { type: 'number', default: 3_600, help: 'fixed simulation ticks to advance' },
+    deadline: { type: 'number', help: 'overall deadline in seconds' },
     serve: { type: 'string', default: 'dist', help: 'built game directory to serve on loopback' },
     out: { type: 'string', default: 'shots/test', help: 'gate report and HUD still directory' },
   },
@@ -19,6 +20,8 @@ export const command: GmCommand = {
     if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help test');
     const ticks = flags.ticks as number;
     if (ticks < 1) throw new UsageError('--ticks must be at least 1', 'gm test --ticks 3600');
+    if (flags.deadline !== undefined && (!Number.isFinite(flags.deadline) || (flags.deadline as number) <= 0))
+      throw new UsageError('--deadline must be a positive number of seconds', 'gm help test');
     const verify = await import('@ogm/gm-verify');
     let inputs;
     if (typeof flags.inputs === 'string') {
@@ -36,6 +39,12 @@ export const command: GmCommand = {
       outDir: resolve(ctx.cwd, flags.out as string),
       ...(inputs ? { inputs } : {}),
       ticks,
+      ...(flags.deadline !== undefined ? { deadlineMs: (flags.deadline as number) * 1_000 } : {}),
+      progress: ctx.json ? ctx.err : ctx.out,
+      onTimeout: (reason: string) => {
+        ctx.err(`${reason}; writing diagnostic to ${resolve(ctx.cwd, flags.out as string)}`);
+        ctx.onTestTimeout?.();
+      },
       software: ctx.config.verifySoftwareGl,
       slots: { runtimeDir: ctx.config.runtimeDir },
       eventsFile: ctx.config.eventsFile,
