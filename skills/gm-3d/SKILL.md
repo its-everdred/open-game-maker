@@ -34,6 +34,8 @@ axes, material slots, textures, animation names, and triangle count before the g
 Blender MCP is optional operator tooling. Document the upstream server when an operator wants an interactive session,
 but do not install its add-on, edit MCP configuration, open a local control socket, or make a build depend on it.
 
+For stylized goo shading, see [matcap reference](references/matcap.md).
+
 ## Prepare an item for a set
 
 A model is ready for a game when it is the right size and stands on its own origin, not when the export finished. For

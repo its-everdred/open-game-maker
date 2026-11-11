@@ -12,14 +12,21 @@ describe('ticket roles', () => {
   it('reads the role table Kevin set from gm-core/references/roles.md', () => {
     const byLabel = Object.fromEntries(readRoles().map((role) => [role.label, role.skills]));
     expect(byLabel).toEqual({
-      'role:visual': ['gm-core', 'gm-verify', 'gm-ui-hud', 'gm-image-mock'],
-      'role:3d': ['gm-core', 'gm-3d', 'gm-verify'],
+      'role:visual': ['gm-core', 'gm-verify', 'gm-ui-hud', 'gm-image-mock', 'gm-dream-loop'],
+      'role:3d': ['gm-core', 'gm-3d', 'gm-verify', 'gm-dream-loop'],
       'role:gameplay': ['gm-core', 'gm-input', 'gm-verify', 'gm-qa', 'gm-map-inspiration'],
       'role:audio': ['gm-core', 'gm-audio', 'gm-voiceover'],
       'role:qa': ['gm-core', 'gm-qa', 'gm-verify'],
       'role:multiplayer': ['gm-core', 'gm-multiplayer-ready', 'gm-qa'],
       'role:game-design': ['gm-core', 'gm-new-game-design', 'gm-new-game-plan', 'gm-image-mock', 'gm-scope-options'],
-      'role:assets': ['gm-core', 'gm-verify', 'gm-asset-variants', 'gm-pack-adapter', 'gm-asset-showcase'],
+      'role:assets': [
+        'gm-core',
+        'gm-verify',
+        'gm-asset-variants',
+        'gm-pack-adapter',
+        'gm-asset-showcase',
+        'gm-dream-loop',
+      ],
     });
   });
 
