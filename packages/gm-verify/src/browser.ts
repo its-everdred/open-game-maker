@@ -29,7 +29,9 @@ export function isSoftware(renderer: string): boolean {
 }
 
 export function launch(software: boolean, disableGpuCompositing = false): Promise<Browser> {
-  const args = software ? [...SOFTWARE_ARGS, ...(disableGpuCompositing ? ['--disable-gpu-compositing'] : [])] : GPU_ARGS;
+  const args = software
+    ? [...SOFTWARE_ARGS, ...(disableGpuCompositing ? ['--disable-gpu-compositing'] : [])]
+    : GPU_ARGS;
   return chromium.launch({ headless: true, args });
 }
 
