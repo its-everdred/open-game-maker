@@ -7,6 +7,11 @@ import { checkSkill, extractCommands, extractSdkNames } from '../src/skills/lint
 import { tempDir } from './helpers.js';
 
 describe('skill reference lint', () => {
+  it('recognizes capture and Python subcommands while retaining the Python runner', () => {
+    expect(
+      extractCommands('Use `gm capture shell --web path`, `gm py setup`, `gm py -- -c code`, and `gm py script.py`.'),
+    ).toEqual(['gm capture shell', 'gm py setup', 'gm py']);
+  });
   it('extracts inline gm invocations and sdk paths without duplicates', () => {
     const markdown = [
       'Run `gm run --inputs inputs.json`, then call `sdk.audio.unlock` with an `ActionFrame`.',
