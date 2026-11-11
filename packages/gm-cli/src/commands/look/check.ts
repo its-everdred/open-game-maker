@@ -245,7 +245,13 @@ export const command: GmCommand = {
         if (!changed.includes(targetPath)) continue;
         const sheet = join(game, sheetPath(screen.name));
         const sheetResult = results.find((result) => result.path === relative(root, sheet).split(sep).join('/'));
-        if (!sheetResult || !existsSync(sheet) || !existsSync(target)) continue;
+        if (!sheetResult) continue;
+        if (!existsSync(target)) {
+          sheetResult.status = 'missing';
+          sheetResult.detail = `approved target is missing: ${screen.target}`;
+          continue;
+        }
+        if (!existsSync(sheet)) continue;
         let valid = false;
         try {
           const manifest = JSON.parse(readFileSync(`${sheet}.json`, 'utf8')) as { sheet?: string; target?: string };

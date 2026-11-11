@@ -269,6 +269,22 @@ describe('changed look checks', () => {
     expect(JSON.parse(result.out[0]!).stills[0].detail).toContain('target changed; regenerate');
   });
 
+  it('fails when a changed approved target is deleted', async () => {
+    const root = game();
+    mkdirSync(join(root, 'review'), { recursive: true });
+    mkdirSync(join(root, 'look'), { recursive: true });
+    writeFileSync(join(root, 'review/decisions.json'), '{"screens":{"play":{"target":"design/target.png"}}}');
+    writeFileSync(join(root, 'look/play.sheet.png'), 'old sheet');
+    commit(root);
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    await look(root, 'sheet', { answer: 'VERDICT: pass' }, ['look/play.sheet.png']);
+    rmSync(join(root, 'design/target.png'));
+    commit(root);
+    const result = await gm(['look', 'check', '--changed', base, '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.out[0]!).stills[0].detail).toContain('approved target is missing');
+  });
+
   it('ignores changes made only on the base branch', async () => {
     const root = game();
     git(root, 'branch', 'base');
