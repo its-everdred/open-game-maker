@@ -37,7 +37,7 @@ The upstream repository and its license report MIT. On 2026-11-10, its addon at 
 `2e4b0bc294694b1570d76ed01be657c22e6d02a0` was imported into factory Blender 4.3.2 locally. Calling
 `BlenderMCPServer().get_scene_info()` directly returned the three default scene objects. This is a method smoke test,
 not an MCP protocol test. Its server explicitly refuses to start with `blender --background`; a virtual-display
-attempt did not return a result and was interrupted. No addon was installed and no cloud backend was configured. The
+attempt did not return a result and was interrupted; a second attempt with software GL timed out after 45 seconds without output. No addon was installed and no cloud backend was configured. The
 MCP workflow has not yet been tested on the three comparisons. `nvidia-smi` was unavailable in this workspace; do not
 assume the NVIDIA-dependent Hunyuan3D or TRELLIS backends are available.
 
@@ -50,6 +50,11 @@ assume the NVIDIA-dependent Hunyuan3D or TRELLIS backends are available.
 - `godot-create-3d-assets` is an additional MIT-licensed candidate found in GitHub search. It targets Godot 4 and a
   Godot MCP with bounded jobs, whereas these cases use the project's Three.js workflow. Godot was not on this worker's
   PATH, so it has not been run on the cases and is not an evidence-backed winner.
+
+- GitHub search also found `arjun988/blender-skills` (repository MIT license, last pushed 2026-11-06). Its
+  `qa-review` skill asks for multi-angle screenshots, reference comparison and a severity-ordered ship verdict. It
+  does not specify a numeric parity score, and its viewport capture depends on Blender MCP. It has not been run on the
+  three cases; it is a candidate, not a selected winner.
 
 ## Dream-loop broker probe
 
@@ -78,3 +83,21 @@ The scores are affected by the framing, pose and background differences describe
 different aspect ratios. The bead, run and piece-match sheets have not been registered to an equivalent view, so the
 required iteration ranking is not established. The core judge remains untested here because its broker path reported
 a charge on the earlier probe. Runtime was not isolated while other tests were running.
+
+## Provisional goo iteration ranking
+
+A further exploratory comparison used `concept-goo-crop.png` (116 × 116) as target. To select a similar L-shaped
+piece, the beads sheet was cropped at `(1228, 620, 110, 110)` and the runs sheet at `(625, 620, 106, 110)`; both
+crops were mirrored horizontally. The candidate from the right half of `goo-piece-match.png` was used whole. The core
+scorer stretched each candidate to 116 × 116. Pixelmatch used nearest-neighbor scaling and threshold 0.1.
+
+| Iteration | Core SSIM (higher is closer) | Pixel mismatch (lower is closer) |
+|---|---:|---:|
+| Beads | 0.1884 | 76.90% |
+| Runs | 0.1277 | 79.84% |
+| Piece match | 0.5298 | 66.00% |
+
+Both metrics rank runs below beads, contrary to the supplied review order, while ranking piece match highest. This
+probe is not a fair validation of either metric: the crops differ in framing, neighbors, orientation and size, and the
+piece-match candidate is a different close-up. Preserve those caveats when interpreting the reversal; a controlled
+fixed-camera sequence is needed to establish whether either metric tracks the reviews.
