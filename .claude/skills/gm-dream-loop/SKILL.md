@@ -24,7 +24,9 @@ approved style and composition, including stylized art. Search the existing asse
    the applicable tier and unlock no tier, make one structural change and recheck. For example, `[6,null,null,null]`
    to `[7,5,null,null]` unlocks the second tier and counts as progress; then compare that second tier on later runs;
    if that also stalls, raise a Command with the scored sheet and the remaining differences.
-   Include the latest score JSON, judge JSON and sheet in ready evidence. Never claim a broker failure is a pass.
+   Include the latest score JSON, judge JSON and sheet in ready evidence. Publish a sanitized copy of the score JSON
+   with workspace-relative or placeholder paths; keep the original score and provenance sidecar local for the judge.
+   Never claim a broker failure is a pass.
 
 The upstream reference is `NousResearch/hermes-agent`, `optional-skills/creative/dream-loop`, commit
 `78abaafcccec20a546c94e8734a70e38c08a6a69`; its MIT license is included alongside this file.
