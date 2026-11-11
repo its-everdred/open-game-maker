@@ -25,8 +25,8 @@ approved style and composition, including stylized art. Search the existing asse
    the first tier below 8 changes. If the gain is less than 0.5 after three iterations and no tier unlocks, make one
    structural change and recheck. For example, `[6,null,null,null]`
    to `[7,5,null,null]` unlocks the second tier and counts as progress; continue comparing the first tier until it
-   reaches 8, then compare the second tier;
-   if that also stalls, raise a Command with the scored sheet and the remaining differences.
+   reaches 8, then compare the second tier. Three gains of 0.4 in the same tier total 1.2 and are not a stall;
+   if the structural change also stalls, raise a Command with the scored sheet and the remaining differences.
    Include the latest score JSON, judge JSON and sheet in ready evidence. Publish a sanitized copy of the score JSON
    with workspace-relative or placeholder paths; keep the original score and provenance sidecar local for the judge.
    Never claim a broker failure is a pass.
