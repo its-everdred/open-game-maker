@@ -31,6 +31,7 @@ for (const [width, height] of [
     });
     try {
       const page = await context.newPage();
+      const failedGameFiles: string[] = [];
       page.on('console', (message) => {
         if (message.type() === 'error') console.error(message.text());
       });
@@ -43,10 +44,14 @@ for (const [width, height] of [
         const path = new URL(route.request().url()).pathname;
         const suffix = path.includes(`/${build}/`) ? path.split(`/${build}/`)[1] : path.slice(1);
         const file = captureFile(dist, suffix || 'index.html');
-        if (!file) return route.abort();
+        if (!file) {
+          failedGameFiles.push(path);
+          return route.abort();
+        }
         try {
           await route.fulfill({ path: file });
         } catch {
+          failedGameFiles.push(path);
           await route.abort();
         }
       });
@@ -58,14 +63,17 @@ for (const [width, height] of [
       if (!response.ok()) throw new Error(`game entry failed: ${response.status()}`);
       await page.locator('.game-frame iframe').waitFor({ state: 'visible', timeout: 30_000 });
       await page.waitForTimeout(14_000);
+      if (failedGameFiles.length) throw new Error(`game resources failed: ${failedGameFiles.join(', ')}`);
       await page.screenshot({ path: resolve(out, `play-${width}x${height}.png`) });
       const game = page.frameLocator('.game-frame iframe');
       for (const text of taps) {
         await game.getByText(text, { exact: true }).first().tap({ timeout: 10_000 });
         await page.waitForTimeout(1_200);
       }
+      if (failedGameFiles.length) throw new Error(`game resources failed: ${failedGameFiles.join(', ')}`);
       if (taps.length) {
         await page.waitForTimeout(9_000);
+        if (failedGameFiles.length) throw new Error(`game resources failed: ${failedGameFiles.join(', ')}`);
         await page.screenshot({ path: resolve(out, `ingame-${width}x${height}.png`) });
       }
       const menu = page.getByRole('button', { name: 'Menu' });
