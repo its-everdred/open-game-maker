@@ -6,6 +6,116 @@ import { describe, expect, it } from 'vitest';
 import { gm, tempDir } from './helpers.js';
 
 describe('gm look judge', () => {
+  it('reports medians and spread across three broker runs', async () => {
+    const cwd = tempDir('gm-judge-median-');
+    execFileSync('git', ['init', '-q', cwd]);
+    const pack = join(cwd, '.claude/skills');
+    const dir = join(pack, 'gm-image-mock/scripts');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'request-mock.py'),
+      `import json, os, sys
+out = sys.argv[sys.argv.index('--out') + 1]
+counter = os.path.join(out, 'counter')
+n = int(open(counter).read()) if os.path.exists(counter) else 0
+open(counter, 'w').write(str(n + 1))
+p = os.path.join(out, 'answer.txt')
+open(p, 'w').write(json.dumps({'tiers': [[6, 8, 8, 8], [8, 9, 9, 9], [7, 10, 10, 10]][n], 'differences': []}))
+print(p)
+`,
+    );
+    await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } })
+      .png()
+      .toFile(join(cwd, 'a.png'));
+    expect((await gm(['look', 'score', 'a.png', 'a.png'], { cwd })).code).toBe(0);
+    const result = await gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers'], {
+      cwd,
+      env: { GM_SKILLS_DIR: pack },
+    });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.out[0]!)).toMatchObject({ tiers: [7, 9, 9, 9], spread: [1, 1, 1, 1] });
+    const again = await gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers'], {
+      cwd,
+      env: { GM_SKILLS_DIR: pack },
+    });
+    expect(again.out).toEqual(result.out);
+  });
+
+  it('reports spreads covering the median difference for near-identical captures', async () => {
+    const cwd = tempDir('gm-judge-near-');
+    execFileSync('git', ['init', '-q', cwd]);
+    const pack = join(cwd, '.claude/skills');
+    const dir = join(pack, 'gm-image-mock/scripts');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'request-mock.py'),
+      `import json, os, sys
+out = sys.argv[sys.argv.index('--out') + 1]
+counter = os.path.join(out, 'counter')
+n = int(open(counter).read()) if os.path.exists(counter) else 0
+open(counter, 'w').write(str(n + 1))
+p = os.path.join(out, 'answer.txt')
+value = [7, 8, 9, 8, 9, 10][n]
+open(p, 'w').write(json.dumps({'tiers': [value] * 4, 'differences': []}))
+print(p)
+`,
+    );
+    const pixels = Buffer.alloc(8 * 8 * 3, 100);
+    await sharp(pixels, { raw: { width: 8, height: 8, channels: 3 } })
+      .png()
+      .toFile(join(cwd, 'a.png'));
+    pixels[0] = 101;
+    await sharp(pixels, { raw: { width: 8, height: 8, channels: 3 } })
+      .png()
+      .toFile(join(cwd, 'b.png'));
+    const judge = async (candidate: string) => {
+      expect((await gm(['look', 'score', 'a.png', candidate], { cwd })).code).toBe(0);
+      const result = await gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers'], {
+        cwd,
+        env: { GM_SKILLS_DIR: pack },
+      });
+      expect(result.code).toBe(0);
+      return JSON.parse(result.out[0]!) as { tiers: number[]; spread: number[] };
+    };
+    const first = await judge('a.png');
+    const second = await judge('b.png');
+    for (let i = 0; i < 4; i++)
+      expect(Math.abs(first.tiers[i]! - second.tiers[i]!)).toBeLessThanOrEqual(
+        Math.max(first.spread[i]!, second.spread[i]!),
+      );
+  });
+
+  it('returns one cached verdict for concurrent judgments', async () => {
+    const cwd = tempDir('gm-judge-race-');
+    execFileSync('git', ['init', '-q', cwd]);
+    const pack = join(cwd, '.claude/skills');
+    const dir = join(pack, 'gm-image-mock/scripts');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'request-mock.py'),
+      `import json, os, sys, time
+out = sys.argv[sys.argv.index('--out') + 1]
+time.sleep(0.3)
+p = os.path.join(out, str(os.getpid()) + '.txt')
+n = 7 if os.getpid() % 2 else 9
+open(p, 'w').write(json.dumps({'tiers': [n] * 4, 'differences': [str(os.getpid())]}))
+print(p)
+`,
+    );
+    await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } })
+      .png()
+      .toFile(join(cwd, 'a.png'));
+    expect((await gm(['look', 'score', 'a.png', 'a.png'], { cwd })).code).toBe(0);
+    const args = ['look', 'judge', 'look-score.png', '--rubric', 'tiers', '--runs', '1'];
+    const [first, second] = await Promise.all([
+      gm(args, { cwd, env: { GM_SKILLS_DIR: pack } }),
+      gm(args, { cwd, env: { GM_SKILLS_DIR: pack } }),
+    ]);
+    expect(first.code).toBe(0);
+    expect(second.code).toBe(0);
+    expect(first.out).toEqual(second.out);
+  });
+
   it('uses the broker response and gates later tiers', async () => {
     const cwd = tempDir('gm-judge-');
     execFileSync('git', ['init', '-q', cwd]);
@@ -31,6 +141,13 @@ describe('gm look judge', () => {
       verdict: 'revise',
       differences: ['Shape is too wide'],
     });
+    const repeated = await gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers'], {
+      cwd,
+      env: { GM_SKILLS_DIR: pack },
+    });
+    expect(repeated.out).toEqual(result.out);
+    const rescored = await gm(['look', 'score', 'a.png', 'a.png'], { cwd });
+    expect(JSON.parse(rescored.out[0]!).judge_spread).toEqual([0, null, null, null]);
     const { createHash } = await import('node:crypto');
     const { readFileSync } = await import('node:fs');
     const manifestPath = join(cwd, 'look-score.png.json');
@@ -79,7 +196,10 @@ it(
     unlinkSync(join(cwd, 'alias.png'));
     symlinkSync('b.png', join(cwd, 'alias.png'));
     async function request(answer: string | null) {
-      const promise = gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers'], { cwd });
+      mkdirSync(join(cwd, '.gm-mock/judge'), { recursive: true });
+      for (const name of readdirSync(join(cwd, '.gm-mock/judge')).filter((n) => n.startsWith('verdict-')))
+        unlinkSync(join(cwd, '.gm-mock/judge', name));
+      const promise = gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers', '--runs', '1'], { cwd });
       const requests = join(cwd, '.gm-mock/requests');
       let name: string | undefined;
       for (let i = 0; i < 200 && !name; i++) {

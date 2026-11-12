@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { judgeCacheKey } from './judge.js';
 import sharp from 'sharp';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { image, metrics, resize, sheet, type Rect } from '../../look/score.js';
@@ -76,6 +78,7 @@ export const command: GmCommand = {
     const sheetBytes = await sheet(a, b);
     await writeFile(output, sheetBytes);
     const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+    const hashes = [digest(targetBytes), digest(candidateBytes), digest(sheetBytes)];
     await writeFile(
       `${output}.json`,
       JSON.stringify({
@@ -83,11 +86,32 @@ export const command: GmCommand = {
         candidate,
         sheet: output,
         crop: crop ?? null,
-        hashes: [digest(targetBytes), digest(candidateBytes), digest(sheetBytes)],
+        hashes,
       }),
     );
+    let root: string | null = null;
+    try {
+      root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+        cwd: ctx.cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+    } catch {
+      /* scoring also works outside a workspace */
+    }
+    const cached =
+      root === null
+        ? null
+        : await readFile(join(root, '.gm-mock', 'judge', `verdict-${judgeCacheKey(hashes)}.json`), 'utf8').catch(
+            (error: NodeJS.ErrnoException) => {
+              if (error.code === 'ENOENT') return null;
+              throw error;
+            },
+          );
+    const judgeSpread: unknown = cached === null ? null : (JSON.parse(cached) as { spread: unknown }).spread;
     ctx.out(
       JSON.stringify({
+        judge_spread: judgeSpread,
         target,
         candidate,
         sheet: output,

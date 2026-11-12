@@ -22,12 +22,12 @@ approved style and composition, including stylized art. Search the existing asse
 4. Stop when every tier is at least 8 and inspection confirms matched subject and framing with no unresolved visible
    mismatch. If the judge passed a bad capture or missed a defect, fix the capture or defect and judge again. To detect a stall, select the first tier below 8 and compare its value at the
    start of a three-iteration window with its best value in that window; reset the window when a tier unlocks or
-   the first tier below 8 changes. If the gain is less than 0.5 after three iterations and no tier unlocks, make one
+   the first tier below 8 changes. If the gain between medians is less than 0.5 or smaller than either judgment’s reported tier spread after three iterations and no tier unlocks, make one
    structural change and recheck. For example, `[6,null,null,null]`
    to `[7,5,null,null]` unlocks the second tier and counts as progress; continue comparing the first tier until it
    reaches 8, then compare the second tier. Three gains of 0.4 in the same tier total 1.2 and are not a stall;
    if the structural change also stalls, raise a Command with the scored sheet and the remaining differences.
-   Include the latest score JSON, judge JSON and sheet in ready evidence. Publish a sanitized copy of the score JSON
+   After judging, rerun `gm look score` to include the cached default-run `judge_spread` in its JSON; it is null until that judgment exists. The spread is the largest absolute deviation from each tier median among the sampled runs, not a guarantee for a new image. Include the latest score JSON, judge JSON and sheet in ready evidence. Publish a sanitized copy of the score JSON
    with workspace-relative or placeholder paths; keep the original score and provenance sidecar local for the judge.
    Never claim a broker failure is a pass.
 
