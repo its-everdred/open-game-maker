@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const session = vi.hoisted(() => ({ data: undefined as unknown }));
 
 vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: session.data }) }));
-vi.mock('../../lib/sound', () => ({ set: vi.fn() }));
+const setSound = vi.hoisted(() => vi.fn());
+vi.mock('../../lib/sound', () => ({ set: setSound }));
 vi.mock('./TitleTown', () => ({ TitleTown: () => null }));
 vi.mock('../../app/StudioMenu', () => ({ StudioMenu: () => null }));
 vi.mock('../../lib/input', async () => {
@@ -49,6 +50,15 @@ afterEach(() => {
 describe('title screen', () => {
   beforeEach(() => {
     session.data = undefined;
+  });
+
+  it('stops title music when leaving and starts it again on return', () => {
+    const view = renderTitle();
+    expect(setSound).toHaveBeenLastCalledWith('title');
+    view.unmount();
+    expect(setSound).toHaveBeenLastCalledWith('off');
+    renderTitle();
+    expect(setSound).toHaveBeenLastCalledWith('title');
   });
 
   it('sends a signed-out creator to sign in and then straight to the games screen', async () => {

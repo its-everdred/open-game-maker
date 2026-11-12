@@ -14,7 +14,10 @@ export function TitleScreen({ townSrc }: { townSrc?: string }) {
   const navigate = useNavigate();
   useInitialFocus('title-menu');
 
-  useEffect(() => set('title'), []);
+  useEffect(() => {
+    set('title');
+    return () => set('off');
+  }, []);
 
   return (
     <div className="title-screen">

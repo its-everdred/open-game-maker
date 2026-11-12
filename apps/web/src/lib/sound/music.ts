@@ -90,7 +90,7 @@ async function playMusic(def: (typeof MUSIC)['title'] | null, fade: number): Pro
 let want: 'title' | 'menu' | 'off' = 'off';
 export function set(next: 'title' | 'menu' | 'off', fade = 1.6): void {
   want = next;
-  if (ctx.state !== 'running') return;
+  if (ctx.state !== 'running' && next !== 'off') return;
   void playMusic(next === 'off' ? null : MUSIC[next], fade);
 }
 
