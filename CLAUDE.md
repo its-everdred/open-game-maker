@@ -31,7 +31,7 @@ use. Work here the way those agents will work: dogfood the skills.
   release at `~/.aiur/ogm-release`, built from `~/github/aiur` main), from this checkout, never `scripts/aiurdev` (it targets
   the aiur checkout's own daemon) and never the npm `aiur` (a different fork). Kevin's NUC daemon for aiur-team/aiur runs on
   this host too (instance 5c1b32aea9): never stop or restart it. The OGM daemon is instance e110d74831 on 127.0.0.1:4010.
-  Executor state: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/handoff.md`.
+  Executor state: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/handoff.md`. Every `executor/` script named here lives in that directory, not in this checkout: run them from there (a detached `executor/og-merge.sh 316` started here died on "No such file", unnoticed for an hour, 2026-11-11).
   Repo is `its-everdred/open-game-maker` since 2026-11-02 (public; the old `-2000` name redirects). A rename breaks the daemon's
   tracker writes (agents exit, tickets go `agent:error` "tracker retry exhausted"): fix `.aiur/config` `repo:` at once, then `resume`
   each errored ticket (if "not resumable", drop `agent:error`/`agent:ci-red` with gh and `--todo`). A `dispatch_decline=dependency` is
