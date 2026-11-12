@@ -89,6 +89,24 @@ describe('ext', () => {
     expect(played[0]!.start).toHaveBeenCalled();
   });
 
+  it('stops town sources and ignores loads that finish after the town leaves', async () => {
+    const { sound, ctx } = await loadSound();
+    sound.unlock();
+    await flush();
+    const before = ctx.sources.length;
+    sound.extLoop('/town/models/sounds/fire.mp3', 0.4);
+    sound.ext('/town/models/sounds/tick.mp3', 0.5, 1);
+    await flush();
+    await flush();
+    const playing = ctx.sources.slice(before).filter((source) => source.start.mock.calls.length > 0);
+    sound.extLoop('/town/models/sounds/late.mp3', 0.4);
+    sound.extSilence();
+    await flush();
+    await flush();
+    expect(playing.every((source) => source.stop.mock.calls.length === 1)).toBe(true);
+    expect(ctx.sources.slice(before).filter((source) => source.start.mock.calls.length > 0)).toHaveLength(2);
+  });
+
   it('silences every town loop when the town goes away', async () => {
     const { sound, ctx } = await loadSound();
     sound.unlock();
@@ -107,6 +125,19 @@ describe('ext', () => {
 });
 
 describe('music fallback', () => {
+  it('stops the title track when leaving while audio is suspended', async () => {
+    const { sound, ctx } = await loadSound();
+    sound.unlock();
+    sound.set('title', 0);
+    await flush();
+    await flush();
+    const title = ctx.sources.at(-1)!;
+    await ctx.suspend();
+    sound.set('off', 0);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(title.stop).toHaveBeenCalledOnce();
+  });
+
   it('treats the SPA HTML fallback as a missing track without trying to decode it', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
