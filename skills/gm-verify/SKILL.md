@@ -38,7 +38,7 @@ and positions as fractions of a cell. Run `gm look score <target.png> <candidate
 `gm look judge <sheet.png> --rubric tiers`. Fix the highest-ranked differences and repeat. Stop when all tiers pass
 at 8 or more. If three iterations fail to beat the best score so far by at least the larger of 0.5 and the reported tier spread, change technique (a different renderer,
 library or layout, not another layer or parameter on the same one); if that stalls too, return to the best checkpoint
-and raise a Command with the scored sheet (Blobs #309 ran 40 trials at 4.2-5.4 and #310 58 at SSIM 0.12, 2026-11-11). After judging, rerun `gm look score` to include the cached default-run `judge_spread` in its JSON; it is null until that judgment exists. The spread is the largest absolute deviation from each tier median among the sampled runs, not a guarantee for a new image. Ready posts include the score JSON and side-by-side. Do not ask the Executor or
+and raise one Command with the scored sheet (Blobs #309 ran 40 trials at 4.2-5.4 and #310 58 at SSIM 0.12, 2026-11-11). Choosing the next technique is yours: if you can name a recommended option, take it and note it in the workpad (#310 raised five blocking Commands in 90 minutes, each with a sound recommendation, 2026-11-12). After judging, rerun `gm look score` to include the cached default-run `judge_spread` in its JSON; it is null until that judgment exists. The spread is the largest absolute deviation from each tier median among the sampled runs, not a guarantee for a new image. Ready posts include the score JSON and side-by-side. Do not ask the Executor or
 creator to judge differences the scorer can judge. Follow the look broker's consent and licence restrictions.
 
 ## Binary visual checklist
