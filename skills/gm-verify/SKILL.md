@@ -36,8 +36,9 @@ A report budget whose status is `over` blocks the PR. Name the tier and measured
 On every iteration, capture a settled view with the same camera and size. Measure the concept directly: express sizes
 and positions as fractions of a cell. Run `gm look score <target.png> <candidate.png>` and
 `gm look judge <sheet.png> --rubric tiers`. Fix the highest-ranked differences and repeat. Stop when all tiers pass
-at 8 or more. If three iterations gain less than 0.5, make one larger structural change; if progress stalls again,
-raise a Command with the scored sheet. Ready posts include the score JSON and side-by-side. Do not ask the Executor or
+at 8 or more. If three iterations fail to beat the best score so far by 0.5, change technique (a different renderer,
+library or layout, not another layer or parameter on the same one); if that stalls too, return to the best checkpoint
+and raise a Command with the scored sheet (Blobs #309 ran 40 trials at 4.2-5.4 and #310 58 at SSIM 0.12, 2026-11-11). Ready posts include the score JSON and side-by-side. Do not ask the Executor or
 creator to judge differences the scorer can judge. Follow the look broker's consent and licence restrictions.
 
 ## Binary visual checklist
