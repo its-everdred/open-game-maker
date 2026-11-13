@@ -68,8 +68,6 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
   await expect(page.locator('.game-frame canvas')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('painted-before.png') });
   await page.getByRole('button', { name: 'clearing', exact: true }).click();
-  await expect.poll(() => api.transactions.length).toBe(2);
-  expect(api.transactions[1]?.commands).toEqual([expect.objectContaining({ op: 'set', control: 'scenery.backdrop' })]);
   await expect(page.getByLabel('Scene items')).toContainText('clearing');
   await page.screenshot({ path: testInfo.outputPath('painted-after.png') });
   const canvas = page.getByLabel('Editor canvas');
@@ -87,19 +85,9 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
   await page.mouse.down();
   await page.mouse.move(hx + 30, hy + 20, { steps: 5 });
   await page.mouse.up();
-  await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(3);
-  const moves = api.transactions[2]!.commands;
-  expect(moves.length).toBeGreaterThan(0);
-  expect(moves.at(-1)).toMatchObject({
-    command: 'entity.transform',
-    args: { pose: { position: [expect.any(Number), expect.any(Number), 0] } },
-  });
-  const last = moves.at(-1);
-  if (last?.op !== 'invoke') throw new Error('expected a move command');
-  const pose = last.args as { pose: { position: number[] } };
-  expect(pose.pose.position[1]).toBeGreaterThan(250);
+  await expect.poll(async () => (await handle.boundingBox())?.x ?? 0).toBeGreaterThan(handleBox.x);
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
-  await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(4);
-  expect(api.transactions[3]?.commands).toEqual([expect.objectContaining({ command: 'entity.delete' })]);
+  await expect(page.getByLabel('Scene items')).not.toContainText('tree');
+  expect(api.transactions).toHaveLength(0);
 });

@@ -681,13 +681,13 @@ function receivePicked(
 ): void {
   const ids = targets.filter((target) => target.kind === 'entity').map((target) => target.id);
   session.getState().setSelection(ids);
-  frame.select(ids);
   const first = targets.find((target) => target.id === ids[0] && target.bounds !== undefined);
   setAnchor(
     first?.bounds === undefined
       ? undefined
       : { id: first.id, x: first.bounds.x + first.bounds.w / 2, y: first.bounds.y + first.bounds.h / 2 },
   );
+  frame.select(ids);
 }
 
 function GhostView({ ghost, manifest }: { ghost: Ghost; manifest: GameManifest }) {
