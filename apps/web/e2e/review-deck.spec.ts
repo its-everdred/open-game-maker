@@ -37,7 +37,7 @@ function silentWav(seconds: number): Buffer {
   return Buffer.concat([header, data]);
 }
 
-// Two seconds: long enough that the autoplay check runs while the sample is still playing on a fast desktop run.
+// Two seconds: long enough to verify playback advances while keeping the sample short.
 const WAV = silentWav(2);
 
 // A still per card, drawn as an SVG so the image deck needs no binary fixtures.
@@ -153,7 +153,7 @@ test('judges the 6-card voice deck and answers once every card has a vote', asyn
   await expect(page.locator('.review-deck-length').first()).toHaveText('0:02');
   // The sample really loaded and really played.
   await expect.poll(() => audio.evaluate((element) => element.duration)).toBeGreaterThan(0.5);
-  await expect(audio.evaluate((element) => element.paused)).resolves.toBe(false);
+  await expect.poll(() => audio.evaluate((element) => element.currentTime)).toBeGreaterThan(0);
   // The card is the width of the phone it is judged on, not a thumbnail in a list.
   const card = await deck.locator('.review-deck-card').boundingBox();
   expect(card!.width).toBeGreaterThan(280);

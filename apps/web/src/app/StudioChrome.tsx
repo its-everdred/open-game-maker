@@ -15,7 +15,7 @@ export function StudioBackdrop() {
 export function StudioLogo() {
   return (
     <Link className="studio-logo" to="/" aria-label="Open Game Maker 2000">
-      <InstanceLogo defaultSource="/art/gm.webp" alt="" />
+      <InstanceLogo defaultSource="/proto/art/gm.webp" alt="" />
     </Link>
   );
 }

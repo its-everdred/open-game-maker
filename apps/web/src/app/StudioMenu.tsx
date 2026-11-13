@@ -70,6 +70,7 @@ export function StudioMenu() {
   const isShowcase = Boolean(matchPath('/g/showcase/:id', location.pathname));
   const game = isShowcase ? null : matchPath('/g/:gameId/*', location.pathname);
   const isGameView = Boolean(game || isShowcase);
+  const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
   const { workers, feeds } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
   const reviews = useWorkerReviews(
@@ -108,7 +109,6 @@ export function StudioMenu() {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setOpen(false);
-      trigger.current?.focus();
     };
     document.addEventListener('pointerdown', outside);
     document.addEventListener('keydown', escape);
@@ -116,12 +116,18 @@ export function StudioMenu() {
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('keydown', escape);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
   useEffect(() => {
-    if (wasOpen.current && !open) trigger.current?.focus();
+    if (wasOpen.current && !open) {
+      const soundTrigger = hasStudioHeader
+        ? root.current?.querySelector<HTMLButtonElement>('.studio-library-volume button')
+        : null;
+      (soundTrigger ?? trigger.current)?.focus();
+      setSheet(undefined);
+    }
     wasOpen.current = open;
-  }, [open]);
+  }, [hasStudioHeader, open, sheet]);
 
   useEffect(() => {
     if (deck && deck.creatorId !== creatorId) setDeck(undefined);
@@ -240,7 +246,7 @@ export function StudioMenu() {
   if (session) {
     circles.push(<EnergyButton key="energy" open={sheet === 'energy'} onToggle={() => toggleSheet('energy')} />);
   }
-  circles.push(
+  const volumeCircle = (
     <VolumeCircle
       key="volume"
       sound={sound}
@@ -248,10 +254,26 @@ export function StudioMenu() {
       onVolume={changeVolume}
       onMute={setMuted}
       sliderOpen={sheet === 'volume'}
-      onSlider={() => setSheet('volume')}
-    />,
-    <BugButton key="bug" open={sheet === 'bug'} onToggle={() => toggleSheet('bug')} />,
+      menuOpen={hasStudioHeader && open}
+      decisionCount={hasStudioHeader && !open ? openDecisions : 0}
+      blocked={hasStudioHeader && blocked}
+      building={hasStudioHeader && buildingJobs.length > 0}
+      onMenu={
+        hasStudioHeader
+          ? () => {
+              setOpen(true);
+              setSheet(undefined);
+            }
+          : undefined
+      }
+      onSlider={() => {
+        setOpen(true);
+        setSheet('volume');
+      }}
+    />
   );
+  if (!hasStudioHeader) circles.push(volumeCircle);
+  circles.push(<BugButton key="bug" open={sheet === 'bug'} onToggle={() => toggleSheet('bug')} />);
   if (gamePath) {
     circles.push(
       <MenuLink key="versions" label="Versions" icon="versions" to={`${gamePath}/versions`} close={close} />,
@@ -415,6 +437,12 @@ export function StudioMenu() {
 
   return (
     <div ref={root} className="studio-menu-control">
+      {hasStudioHeader && <div className="studio-library-volume">{volumeCircle}</div>}
+      {hasStudioHeader && (
+        <span id="studio-header-menu-hint" className="sr">
+          Long press or Shift+F10 opens the menu
+        </span>
+      )}
       {!isGameView && (
         <BuildTracker workers={workers} reviews={reviews} finished={visibleFinished} onDismiss={dismissFinished} />
       )}
@@ -427,6 +455,7 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
+        hidden={hasStudioHeader}
         style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}
@@ -443,7 +472,7 @@ export function StudioMenu() {
       >
         <span className="studio-menu-ring" aria-hidden="true" />
         <Icon name={controls?.button?.icon ?? 'menu'} />
-        {openDecisions > 0 && !open ? (
+        {openDecisions > 0 && !open && !hasStudioHeader ? (
           <span className="studio-menu-badge" aria-hidden="true">
             {openDecisions}
           </span>

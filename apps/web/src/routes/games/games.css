@@ -225,6 +225,10 @@
   background: transparent;
 }
 
+.games-screen:not(:has(.games-spotlight)) .games-floor {
+  padding-top: calc(var(--safe-t) + 76px);
+}
+
 .games-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
@@ -627,6 +631,9 @@
   clip-path: none;
   mask-size: 100% 100%;
   mask-repeat: no-repeat;
+}
+.showcase-spotlight .games-spotlight-media .game-cover::after {
+  display: none;
 }
 .showcase-ambient {
   position: absolute;

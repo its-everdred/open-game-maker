@@ -30,8 +30,7 @@ function availableArt(name: string): Promise<boolean> {
   });
 }
 function loadScenes(): Promise<SceneModule> {
-  const url = '/proto/scenes.js';
-  return (sceneModule ??= (import(/* @vite-ignore */ url) as Promise<SceneModule>).catch((error: unknown) => {
+  return (sceneModule ??= (import('virtual:showcase-scenes') as Promise<SceneModule>).catch((error: unknown) => {
     sceneModule = undefined;
     throw error;
   }));
