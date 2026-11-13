@@ -6,6 +6,7 @@ import {
   getOptionalPublished,
   getDesignSnapshot,
   getFallbackPalette,
+  getScenerySource,
   getEditorPreviews,
   getPreviewDesign,
   NO_BUILD_ID,
@@ -66,6 +67,15 @@ describe('editor API classifications', () => {
     vi.stubGlobal('fetch', fetch);
     await expect(getFallbackPalette(gameId)).resolves.toEqual(value);
     expect(fetch).toHaveBeenCalledWith(`/api/v1/games/${gameId}/editor/fallback`, expect.anything());
+  });
+  it('requests palette assets for the selected build', async () => {
+    const fetch = vi.fn().mockResolvedValue(response(200, { scene: {}, assets: [] }));
+    vi.stubGlobal('fetch', fetch);
+    await getScenerySource(gameId, 'main', 'build/one');
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/v1/games/${gameId}/scenery/source?branch=main&build=build%2Fone`,
+      expect.anything(),
+    );
   });
   it('represents an unbuilt snapshot with the reserved empty build id', async () => {
     const doc = { schemaVersion: 1, globals: {}, entities: {} };

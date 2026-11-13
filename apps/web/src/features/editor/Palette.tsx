@@ -6,6 +6,8 @@ import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { FocusZone } from '../../lib/input';
 import { EDITOR_FOCUS_ZONES } from './focus';
 import { SceneryThumbnail } from './SceneryThumbnail';
+import { TerrainThumbnail } from './TerrainThumbnail';
+import { sceneryAsset } from './scenery-asset';
 
 type PaletteProps = {
   palette: GameManifest['palette'];
@@ -15,6 +17,7 @@ type PaletteProps = {
   onCategory?(id: string): void;
   onPick(prefab: string): void;
   sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
+  buildPinnedAssets?: boolean;
 };
 
 export function Palette({
@@ -25,6 +28,7 @@ export function Palette({
   onCategory,
   onPick,
   sceneryAssets,
+  buildPinnedAssets,
 }: PaletteProps) {
   const [localCategory, setLocalCategory] = useState(palette.categories[0]?.id ?? '');
   const active = category ?? localCategory;
@@ -61,13 +65,7 @@ export function Palette({
         {palette.items
           .filter((item) => item.category === active)
           .map((item) => {
-            const asset =
-              typeof item.assetSha === 'string' && item.prefab.startsWith('scenery:')
-                ? sceneryAssets?.find(
-                    (candidate) =>
-                      candidate.id === item.prefab.slice('scenery:'.length) && candidate.sha256 === item.assetSha,
-                  )
-                : undefined;
+            const asset = sceneryAsset(item, sceneryAssets, buildPinnedAssets);
             return (
               <button
                 className="palette-item tap-primary"
@@ -86,7 +84,9 @@ export function Palette({
                   <img src={asset.url} alt="" />
                 ) : asset ? (
                   <SceneryThumbnail key={asset.url} url={asset.url} />
-                ) : null}
+                ) : (
+                  <TerrainThumbnail prefab={item.prefab} />
+                )}
                 {item.aiGenerated ? <AiBadge /> : null}
                 <span>{item.label}</span>
               </button>

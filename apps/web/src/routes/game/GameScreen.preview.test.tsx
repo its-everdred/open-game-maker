@@ -335,7 +335,15 @@ describe('GameScreen previews', () => {
           capabilities: [],
           palette: {
             categories: [{ id: 'actors', label: 'Actors', kind: 'items' }],
-            items: [{ prefab: 'skeleton', label: 'Skeleton', category: 'actors' }],
+            items: [
+              {
+                prefab: 'skeleton',
+                label: 'Skeleton',
+                category: 'actors',
+                thumbnail: 'art/skeleton.png',
+                assetId: 'asset',
+              },
+            ],
           },
           tools: ['place'],
           gizmos: {},
@@ -346,7 +354,9 @@ describe('GameScreen previews', () => {
         },
       }),
     );
+    await waitFor(() => expect(editorApi.getScenerySource).toHaveBeenCalledWith('game', 'main', 'preview-1'));
     const item = await screen.findByRole('button', { name: 'Skeleton' });
+    expect(item.querySelector('img')).toHaveAttribute('src', 'http://127.0.0.1:10000/p/game/pv-1/art/skeleton.png');
     fireEvent.pointerDown(item, { pointerId: 1 });
     const canvas = screen.getByLabelText('Editor canvas');
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
@@ -442,6 +452,36 @@ describe('GameScreen previews', () => {
     await waitFor(() => expect(editorApi.getScenerySource).toHaveBeenCalledWith('game', 'b_side'));
     expect(preview.mountSceneryPreview).not.toHaveBeenCalled();
   });
+  it('offers the starter brushes when the game and fallback have no items', async () => {
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    act(() =>
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          id: 'game',
+          capabilities: ['scenery'],
+          palette: { categories: [{ id: 'light', label: 'Light', kind: 'panel' }], items: [] },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 100, h: 100 } },
+          dimension: '2d',
+          view: 'main',
+          saves: false,
+        },
+      }),
+    );
+    const grass = await screen.findByRole('button', { name: 'Grass' });
+    expect(screen.getByRole('button', { name: 'Light' })).toBeVisible();
+    fireEvent.pointerDown(grass, { pointerId: 1 });
+    const canvas = await screen.findByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
+    fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
+    await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+    expect(fallbackAdmission.admitJob.mock.calls[0]?.[0].plan.summary).toContain('scenery-band:grass');
+  });
   it.each(['t3:fixture/tree', 'scope:0'])(
     'submits fallback item %s as a build request without a design transaction',
     async (prefab) => {
@@ -526,6 +566,50 @@ describe('GameScreen previews', () => {
       }),
     );
     expect(host.mountGameFrame).toHaveBeenCalledOnce();
+  });
+  it('loads locked palette assets for a game without scenery capability', async () => {
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledOnce());
+    act(() =>
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: [],
+          palette: {
+            categories: [{ id: 'monsters', label: 'Monsters', kind: 'items' }],
+            items: [{ prefab: 'goblin1', label: 'Goblin', category: 'monsters', assetId: 'orc', assetSha: 'hash' }],
+          },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 640, h: 360 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    await waitFor(() => expect(editorApi.getScenerySource).toHaveBeenCalledWith('game', 'main', 'build'));
+    expect(host.mountGameFrame).toHaveBeenCalledOnce();
+  });
+  it('pins a native scenery palette to the running build', async () => {
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledOnce());
+    act(() =>
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: ['scenery'],
+          palette: { categories: [], items: [{ prefab: 'scenery:lantern', label: 'Lantern', category: 'props' }] },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 640, h: 360 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    await waitFor(() => expect(editorApi.getScenerySource).toHaveBeenCalledWith('game', 'main', 'build'));
   });
   it('opens no-build scenery without saving a design transaction', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({

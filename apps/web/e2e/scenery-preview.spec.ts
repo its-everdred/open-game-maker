@@ -43,7 +43,12 @@ test('opens a no-build diorama and requests a locked item', async ({ page }, tes
   const canvas = page.getByLabel('Editor canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('.game-frame canvas')).toBeVisible();
-  await expect(page.locator('.scenery-thumbnail img')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Trees', exact: true }).locator('.scenery-thumbnail img')).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByRole('button', { name: 'tree', exact: true }).locator('.scenery-thumbnail img')).toBeVisible({
+    timeout: 30_000,
+  });
   await page.screenshot({ path: testInfo.outputPath('scenery-palette.png') });
   await page.getByRole('button', { name: 'tree', exact: true }).click();
   await canvas.click({ position: { x: 180, y: 200 } });

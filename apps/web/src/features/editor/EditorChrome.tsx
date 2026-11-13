@@ -25,6 +25,7 @@ type EditorChromeProps = {
   manifest: GameManifest;
   session: EditorSessionState;
   sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
+  buildPinnedAssets?: boolean;
   onCommand(command: EditorCommand): void;
   onTool(tool: string): void;
   onUndo(): void;
@@ -42,6 +43,7 @@ export function EditorChrome({
   manifest,
   session,
   sceneryAssets,
+  buildPinnedAssets,
   onCommand,
   onTool,
   onUndo,
@@ -53,7 +55,12 @@ export function EditorChrome({
   onCanvasChange,
   onRequestLight,
 }: EditorChromeProps) {
-  const [category, setCategory] = useState(manifest.palette.categories[0]?.id ?? '');
+  const [category, setCategory] = useState(
+    () =>
+      manifest.palette.categories.find((candidate) =>
+        manifest.palette.items.some((item) => item.category === candidate.id),
+      )?.id ?? '',
+  );
   const [pickedPrefab, setPickedPrefab] = useState<string>();
   const [snap, setSnap] = useState<SnapPrefs>(() => loadSnapPrefs(gameId, manifest.grid?.size ?? 1));
   const [toolsTarget, setToolsTarget] = useState<HTMLElement | null>(null);
@@ -77,7 +84,10 @@ export function EditorChrome({
     }
     return { categories, items };
   }, [manifest.palette, sceneryAssets, session.doc.globals]);
-  const activeCategory = palette.categories.find((candidate) => candidate.id === category) ?? palette.categories[0];
+  const activeCategory =
+    palette.categories.find((candidate) => candidate.id === category) ??
+    palette.categories.find((candidate) => palette.items.some((item) => item.category === candidate.id)) ??
+    palette.categories[0];
   const picked = palette.items.find((item) => item.prefab === pickedPrefab);
   useLayoutEffect(() => {
     if (pickedPrefab !== undefined && picked === undefined) setPickedPrefab(undefined);
@@ -127,6 +137,8 @@ export function EditorChrome({
       <Rail
         categories={palette.categories}
         items={palette.items}
+        sceneryAssets={sceneryAssets}
+        buildPinnedAssets={buildPinnedAssets}
         active={activeCategory?.id ?? ''}
         onChange={setCategory}
       />
@@ -137,6 +149,7 @@ export function EditorChrome({
           title={activeCategory.label}
           showTabs={false}
           sceneryAssets={sceneryAssets}
+          buildPinnedAssets={buildPinnedAssets}
           onCategory={setCategory}
           onPick={(prefab) => {
             if (prefab.startsWith('scenery-backdrop:')) {

@@ -304,6 +304,54 @@ describe('no-build scenery source', () => {
     expect(side.assets[0].sha256).toBe(sideLock.assets[0].sha256);
     const sideAsset = await app.request(side.assets[0].url, { headers: asUser(ids.creator) });
     expect(Buffer.from(await sideAsset.arrayBuffer())).toEqual(branchModel);
+    deps.db
+      .insert(schema.builds)
+      .values({
+        id: 'published-build',
+        gameId: ids.game,
+        branchId: 'side-branch',
+        gitSha: git('rev-parse', 'side').toString().trim(),
+        sdkVersion: '1',
+        saveSchemaVersion: 0,
+        achievementCatalogHash: 'hash',
+        status: 'tested',
+        artifact: 'present',
+        artifactPath: 'build',
+        createdAt: now,
+      })
+      .run();
+    const buildResponse = await app.request(`${url}?build=published-build`, { headers: asUser(ids.creator) });
+    expect(buildResponse.status).toBe(200);
+    const built = await buildResponse.json();
+    expect(built.assets[0].sha256).toBe(sideLock.assets[0].sha256);
+    const builtAsset = await app.request(built.assets[0].url, { headers: asUser(ids.creator) });
+    expect(Buffer.from(await builtAsset.arrayBuffer())).toEqual(branchModel);
+    const previewId = 'preview-12345678-1234-1234-1234-123456789abc';
+    const previewDir = join(deps.config.gamesRoot, '.previews', ids.game);
+    mkdirSync(previewDir, { recursive: true });
+    writeFileSync(
+      join(previewDir, '12.json'),
+      JSON.stringify({
+        gameId: ids.game,
+        ticket: '12',
+        branchId: 'side-branch',
+        buildId: previewId,
+        sha: git('rev-parse', 'side').toString().trim(),
+        createdAt: now,
+        answered: false,
+        accessId: 'pv-test',
+        accessExpiresAt: '2099-01-01T00:00:00Z',
+      }),
+    );
+    const previewResponse = await app.request(`${url}?build=${previewId}`, { headers: asUser(ids.creator) });
+    expect(previewResponse.status).toBe(200);
+    const preview = await previewResponse.json();
+    expect(preview.assets[0].sha256).toBe(sideLock.assets[0].sha256);
+    const previewAsset = await app.request(preview.assets[0].url, { headers: asUser(ids.creator) });
+    expect(Buffer.from(await previewAsset.arrayBuffer())).toEqual(branchModel);
+    expect((await app.request(`${url}?build=${previewId}`, { headers: asUser(ids.other) })).status).toBe(403);
+    expect((await app.request(`${url}?build=unknown`, { headers: asUser(ids.creator) })).status).toBe(404);
+    expect((await app.request(`${url}?build=published-build`, { headers: asUser(ids.other) })).status).toBe(403);
     writeFileSync(join(game, 'scenery.json'), '{invalid');
     expect((await app.request(fallbackUrl, { headers: asUser(ids.creator) })).status).toBe(200);
     expect((await app.request(url, { headers: asUser(ids.creator) })).status).toBe(404);

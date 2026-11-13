@@ -48,6 +48,34 @@ function Screen() {
 afterEach(cleanup);
 
 describe('EditorChrome', () => {
+  it('opens the first category with a placeable starter item', () => {
+    const starter = {
+      ...manifest,
+      palette: {
+        categories: [
+          { id: 'trees', label: 'Trees', kind: 'items' },
+          { id: 'water', label: 'Ground', kind: 'items' },
+        ],
+        items: [{ prefab: 'scenery-band:grass', label: 'Grass', category: 'water' }],
+      },
+    } as GameManifest;
+    render(
+      <EditorChrome
+        gameId="game"
+        manifest={starter}
+        session={session}
+        onCommand={vi.fn()}
+        onTool={vi.fn()}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={vi.fn()}
+        onInstanceCount={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Ground' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Grass' })).toBeVisible();
+  });
   it('puts editing tools into the menu target when the app provides one', () => {
     const { container } = render(
       <>

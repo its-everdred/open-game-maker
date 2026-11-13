@@ -41,6 +41,8 @@ import { ReapplyCard } from '../../features/editor/ReapplyCard';
 import type { EditorSessionState } from '../../features/editor/session';
 import { useEditorSession } from '../../features/editor/use-editor-session';
 import { mountSceneryPreview } from '../../features/editor/scenery-preview';
+import { resolvePaletteThumbnails } from '../../features/editor/palette-thumbnails';
+import { starterPalette } from '../../features/editor/starter-palette';
 import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
 import { energyRefusalText } from '../../features/energy/api';
@@ -151,13 +153,20 @@ export function GameScreen() {
     retry: false,
   });
   const waitingForStage = noBuild && !waitingForPreview && !activePreview && stage.isPending;
+  const hasPaletteAssetIds = !!frameState.manifest?.palette?.items.some((item) => typeof item.assetId === 'string');
+  const hasSceneryPrefabs = !!frameState.manifest?.palette?.items.some((item) => item.prefab.startsWith('scenery:'));
+  const paletteBuildId =
+    hasPaletteAssetIds || hasSceneryPrefabs
+      ? (activePreview?.buildId ?? (!noBuild ? activeSnapshot?.buildId : undefined))
+      : undefined;
   const scenerySource = useQuery({
-    queryKey: ['scenery-source', gameId, jobBranch],
-    queryFn: () => getScenerySource(gameId, jobBranch),
+    queryKey: ['scenery-source', gameId, jobBranch, paletteBuildId],
+    queryFn: () =>
+      paletteBuildId ? getScenerySource(gameId, jobBranch, paletteBuildId) : getScenerySource(gameId, jobBranch),
     enabled:
       gameId !== '' &&
       ((noBuild && !waitingForPreview && !waitingForStage && !activePreview) ||
-        (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
+        (mode === 'edit' && (!!frameState.manifest?.capabilities.includes('scenery') || hasPaletteAssetIds))),
     retry: false,
     refetchInterval: noBuild && !activePreview ? 5_000 : false,
   });
@@ -192,25 +201,42 @@ export function GameScreen() {
   const previewSource = noBuild && !activePreview && !activeStage ? scenerySource.data : undefined;
   const previewSourceError = noBuild && !activePreview && !activeStage && scenerySource.isError;
   const nativePalette = frameState.manifest?.palette;
-  const nativePaletteEmpty =
-    nativePalette !== undefined && nativePalette.categories.length === 0 && nativePalette.items.length === 0;
+  const nativePaletteEmpty = nativePalette !== undefined && nativePalette.items.length === 0;
   const fallback = useQuery({
     queryKey: ['editor-fallback', gameId],
     queryFn: () => getFallbackPalette(gameId),
     enabled: gameId !== '' && mode === 'edit' && nativePaletteEmpty,
     retry: false,
   });
-  const fallbackActive = nativePaletteEmpty && fallback.data?.mode === 'request';
+  const fallbackActive = nativePaletteEmpty && fallback.isSuccess;
+  const fallbackPalette = useMemo(() => {
+    const base = fallback.data?.palette.items.length ? fallback.data.palette : starterPalette;
+    const panels = (nativePalette?.categories ?? []).filter(
+      (category) => category.kind === 'panel' && !base.categories.some((candidate) => candidate.id === category.id),
+    );
+    return panels.length ? { ...base, categories: [...base.categories, ...panels] } : base;
+  }, [fallback.data, nativePalette]);
   const sideBranch =
     branches.data?.some(({ id, name }) => (id === branch || name === branch) && name !== 'main') === true;
   const sidePreview = noBuild && sideBranch && !fallbackActive && !activeStage;
   const requestOnly = fallbackActive || (noBuild && !sidePreview);
   const editorManifest = useMemo(() => {
     if (!frameState.manifest) return undefined;
-    return fallbackActive && fallback.data
-      ? { ...frameState.manifest, palette: fallback.data.palette }
-      : frameState.manifest;
-  }, [frameState.manifest, fallbackActive, fallback.data]);
+    const manifest = fallbackActive ? { ...frameState.manifest, palette: fallbackPalette } : frameState.manifest;
+    const buildId = activePreview?.accessId ?? activeSnapshot?.buildId;
+    if (mode !== 'edit' || fallbackActive || !buildId || (noBuild && !activePreview)) return manifest;
+    return resolvePaletteThumbnails(manifest, gamesOrigin, gameId, buildId, !!activePreview);
+  }, [
+    frameState.manifest,
+    fallbackActive,
+    fallbackPalette,
+    activePreview,
+    activeSnapshot?.buildId,
+    noBuild,
+    gamesOrigin,
+    gameId,
+    mode,
+  ]);
   const submitEditRequest = useCallback(
     (request: CreateJobRequest) => {
       if (request.branchId !== 'main') {
@@ -260,7 +286,7 @@ export function GameScreen() {
         if (!mapped) return;
         point = mapped;
       }
-      const palette = fallbackActive ? fallback.data?.palette : frameState.manifest?.palette;
+      const palette = fallbackActive ? fallbackPalette : frameState.manifest?.palette;
       const item = palette?.items.find((candidate) => candidate.prefab === prefab);
       if (!item || fallbackInFlight.current) return;
       try {
@@ -283,7 +309,7 @@ export function GameScreen() {
           return;
         }
         const request =
-          fallbackActive && !prefab.startsWith('scope:')
+          fallbackActive && !prefab.startsWith('scope:') && !prefab.startsWith('scenery-band:')
             ? fallbackEditRequest(target, { assetId: prefab, name: item.label, ...point }, key)
             : previewEditRequest(target, { prefab, name: item.label, ...point }, key);
         submitEditRequest(request);
@@ -291,7 +317,7 @@ export function GameScreen() {
         pushToast('The build could not be started.');
       }
     },
-    [activeStage, fallback.data, fallbackActive, frameState.manifest, gameId, jobBranch, submitEditRequest],
+    [activeStage, fallbackPalette, fallbackActive, frameState.manifest, gameId, jobBranch, submitEditRequest],
   );
   const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
@@ -611,7 +637,9 @@ export function GameScreen() {
             manifest={editorManifest}
             session={sessionStore}
             snap={canvasOptions.snap}
-            onRequestPlacement={requestOnly ? requestFallbackPlacement : undefined}
+            onRequestPlacement={
+              requestOnly && (noBuild || canvasOptions.prefab !== undefined) ? requestFallbackPlacement : undefined
+            }
             onRequestDelete={
               noBuild && !sidePreview
                 ? (entity) =>
@@ -688,6 +716,7 @@ export function GameScreen() {
           gameId={gameId}
           manifest={editorManifest}
           sceneryAssets={scenerySource.data?.assets}
+          buildPinnedAssets={!!paletteBuildId && !activePreview && !!scenerySource.data}
           session={sessionView}
           onSelection={(ids) => frameRef.current?.select(ids)}
           onRequestLight={noBuild && !sidePreview ? requestLight : undefined}
