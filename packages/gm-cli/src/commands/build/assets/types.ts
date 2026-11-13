@@ -40,6 +40,7 @@ export type FreshJobResult = JobResult & { buffers: Record<string, Buffer> };
 export type GltfFacts = {
   triangles: number;
   rigged: boolean;
+  animated: boolean;
   textureKeys: string[];
 };
 

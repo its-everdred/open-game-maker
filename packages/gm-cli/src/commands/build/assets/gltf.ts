@@ -60,6 +60,7 @@ function validFacts(value: unknown): value is GltfFacts {
   return (
     typeof facts.triangles === 'number' &&
     typeof facts.rigged === 'boolean' &&
+    typeof facts.animated === 'boolean' &&
     Array.isArray(facts.textureKeys) &&
     facts.textureKeys.every((key) => typeof key === 'string')
   );
@@ -72,7 +73,7 @@ export async function inspectGltf(
 ): Promise<{ facts: GltfFacts; sourceHash: string }> {
   const bytes = await readFile(path);
   const sourceHash = sha256(bytes);
-  const recipeHash = sha256('gltf-facts-v1|gltf-transform-4.5.1|meshoptimizer-1.3.0|sharp-0.35.5');
+  const recipeHash = sha256('gltf-facts-v2|gltf-transform-4.5.1|meshoptimizer-1.3.0|sharp-0.35.5');
   const cachePath = join(cwd, '.gm/cache/assets/facts', `${sourceHash}-${recipeHash}.json`);
   if (useCache) {
     try {
@@ -88,6 +89,10 @@ export async function inspectGltf(
   const facts = {
     triangles: triangles(document),
     rigged: document.getRoot().listSkins().length > 0,
+    animated: document
+      .getRoot()
+      .listAnimations()
+      .some((animation) => animation.listChannels().some((channel) => channel.getTargetNode() !== null)),
     textureKeys: (await textureMeasurements(document)).textureKeys,
   };
   if (useCache) await writeIfChanged(cachePath, `${JSON.stringify(facts, null, 2)}\n`, cwd);
