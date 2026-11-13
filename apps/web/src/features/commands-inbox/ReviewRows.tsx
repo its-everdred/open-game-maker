@@ -32,11 +32,10 @@ export function ReviewRows({
 
 function ReviewRow({ command, href, actions }: { command: GameCommand; href: string; actions?: ReactNode }) {
   const sent = useIsSent(command);
-  if (actions !== undefined && sent) return null;
   return (
     <li className="review-row">
       <ReviewRowLink command={command} href={href} />
-      {actions}
+      {sent ? null : actions}
     </li>
   );
 }

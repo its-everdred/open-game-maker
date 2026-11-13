@@ -44,6 +44,19 @@ afterEach(() => {
 });
 
 describe('ReviewRows', () => {
+  it('keeps a sent review visible while removing its inline actions', () => {
+    const item = command();
+    render(
+      <MemoryRouter>
+        <ReviewRows commands={[item]} hrefOf={() => '/blobs/review/1'} actions={() => <button>Choose</button>} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Choose' })).toBeInTheDocument();
+    act(() => markSent(item));
+    expect(screen.getByRole('link', { name: 'Pick the voices, sent' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Choose' })).not.toBeInTheDocument();
+  });
+
   // The inbox tells the creator at a glance which questions still need them: untouched, started or already sent.
   it('shows each question with its first sample, a short title and its open, draft or sent state', () => {
     const open = command();
