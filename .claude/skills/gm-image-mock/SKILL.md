@@ -49,15 +49,16 @@ ask a model for one. The vendored video-to-game tools read it locally with ffmpe
    seconds of a recorded take.
 
 No fal and no provider key: never add or ask for one. Upstream's fal generation is not vendored; pictures come from
-the packs, gm-asset-variants and the mock broker below.
+the packs, gm-asset-variants and the generation routes below.
 
 ## Generate
 
-Run `python3 <this skill>/scripts/request-mock.py --prompt-file <file> --out <dir> [--ref <workspace path>]... [--aspect 9:16]`.
-The host's mock broker generates the image and writes it into `<dir>`; the script waits and prints the paths. You never
-hold a provider key. References must be workspace files from free-licence packs (the broker refuses anything else; no
-paid pack ever leaves the host). Keep each prompt self-contained: the kit description, the screen, the moment, the
-palette, the HUD.
+Use `image_gen.imagegen` first for mockups and logos when it is available. Otherwise run
+`python3 <this skill>/scripts/request-mock.py --prompt-file <file> --out <dir> [--ref <workspace path>]... [--aspect 9:16]`.
+The host's mock broker writes the image into `<dir>`; the script waits and prints the paths. You never hold a provider
+key. For either route, reference only creator-supplied art and free-licence images; never send paid-pack files or
+renders. The broker may impose stricter reference restrictions. Mark outputs as AI-generated. Keep each prompt
+self-contained: the kit description, the screen, the moment, the palette, the HUD.
 
 Budget: one image per option per view, then regenerate only the ones that came out wrong. Look at every image before
 sending it (gm-verify). If your tools cannot show you an image (a shell-only agent), ask a vision model:
