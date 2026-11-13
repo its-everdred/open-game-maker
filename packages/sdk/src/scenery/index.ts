@@ -3,3 +3,4 @@ export { createScenery, frameScenery, type PlayArea, type SceneryRenderOptions }
 export { SceneryHistory, snapToGround } from './edit.js';
 export { sceneryFromDesign, sceneryToDesign } from './design.js';
 export { sceneryPalette, type SceneryPaletteItem } from './palette.js';
+export { createSceneryController } from './controller.js';

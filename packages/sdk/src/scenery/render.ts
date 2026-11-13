@@ -11,6 +11,13 @@ import {
 } from 'three';
 import type { Scenery } from './data.js';
 
+const generatedTerrain = new WeakSet<Object3D>();
+
+/** Internal ownership check for generated terrain geometry. */
+export function isSceneryTerrain(object: Object3D): boolean {
+  return generatedTerrain.has(object);
+}
+
 /** The protected rectangle is in world X/Z coordinates. */
 export interface PlayArea {
   minX: number;
@@ -84,6 +91,8 @@ export async function createScenery(options: SceneryRenderOptions): Promise<Grou
       mesh.position.copy(start).add(end).multiplyScalar(0.5);
       mesh.rotation.y = Math.atan2(end.x - start.x, end.z - start.z);
       mesh.userData.sceneryId = band.id;
+      mesh.userData.sceneryTerrain = true;
+      generatedTerrain.add(mesh);
       mesh.updateMatrixWorld(true);
       if (overlaps(new Box3().setFromObject(mesh), options.playArea)) {
         mesh.geometry.dispose();

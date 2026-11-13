@@ -109,7 +109,7 @@ the game. `gm scenery list`, `gm scenery add <id> <asset-id> --position x,y,z`, 
 x,y,z` read and update the same file. `gm scenery render --out scenery.png` captures a standalone still using the locked models, even before a game build exists.
 
 `@gm/sdk/scenery` exports `createScenery` for a Three.js group, `frameScenery` for a camera, and `SceneryHistory` for
-undoable edits. Pass a `loadAsset` callback that supplies a fresh object for each placement. Declare the game's world-space
+undoable edits. `createSceneryController` swaps the rendered group when an edit finishes loading, ignoring stale loads. Pass a `loadAsset` callback that supplies a fresh object for each placement. Declare the game's world-space
 X/Z play-area rectangle to omit any item or terrain segment whose bounds intersect it. The renderer owns terrain geometry
 and materials; the caller owns loaded assets and is responsible for disposing the group when finished.
 
