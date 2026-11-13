@@ -201,6 +201,8 @@ describe('no-build scenery source', () => {
     expect((await app.request(stageUrl, { headers: asUser(ids.other) })).status).toBe(403);
     const stage = await app.request(stageUrl, { headers: asUser(ids.creator) });
     expect(await stage.json()).toMatchObject({ stage: { kind: 'image', url: expect.stringContaining('/sha256/') } });
+    const otherBranch = await app.request(`${stageUrl}?branch=other`, { headers: asUser(ids.creator) });
+    expect(await otherBranch.json()).toEqual({ stage: null });
     rmSync(join(game, 'assets.lock.json'));
     const scopeOnly = await app.request(fallbackUrl, { headers: asUser(ids.creator) });
     expect(scopeOnly.status).toBe(200);

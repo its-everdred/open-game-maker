@@ -75,6 +75,33 @@ afterEach(() => {
 });
 
 describe('GizmoOverlay', () => {
+  it('does not send a request when a placement is cancelled or interrupted by another pointer', () => {
+    const test = harness();
+    const request = vi.fn();
+    render(
+      <GizmoOverlay
+        activePrefab="t3:fixture/tree"
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+        onRequestPlacement={request}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 1 });
+    fireEvent.pointerCancel(canvas, { pointerId: 1 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    fireEvent.pointerDown(canvas, { pointerId: 2 });
+    fireEvent.pointerDown(canvas, { pointerId: 3 });
+    fireEvent.pointerUp(canvas, { pointerId: 2 });
+    fireEvent.pointerUp(canvas, { pointerId: 3 });
+    expect(request).not.toHaveBeenCalled();
+    fireEvent.pointerDown(canvas, { pointerId: 4, clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(canvas, { pointerId: 4, clientX: 50, clientY: 50 });
+    expect(request).toHaveBeenCalledOnce();
+  });
   it('routes a fallback placement to an agent request without changing the live design', () => {
     const test = harness();
     const request = vi.fn();

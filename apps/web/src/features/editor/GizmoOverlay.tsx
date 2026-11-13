@@ -105,6 +105,7 @@ export function GizmoOverlay({
   const dropRequestedRef = useRef(false);
   const projectionSequence = useRef(0);
   const requestPointerRef = useRef<number | undefined>(undefined);
+  const requestInterruptedRef = useRef(false);
   const projectingRef = useRef(false);
   const [ghost, setGhost] = useState<Ghost>();
   const [anchor, setAnchor] = useState<{ id: string; x: number; y: number }>();
@@ -145,6 +146,7 @@ export function GizmoOverlay({
       if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
       dragRef.current = undefined;
       requestPointerRef.current = undefined;
+      requestInterruptedRef.current = false;
     },
     [activePrefab, frame],
   );
@@ -214,7 +216,11 @@ export function GizmoOverlay({
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (session.getState().readOnly && !(allowReadOnlyRequests && onRequestPlacement)) return;
     if (onRequestPlacement && activePrefab !== undefined) {
-      if (requestPointerRef.current !== undefined) return;
+      if (requestPointerRef.current !== undefined) {
+        requestInterruptedRef.current = true;
+        return;
+      }
+      requestInterruptedRef.current = false;
       requestPointerRef.current = event.pointerId;
       capturePointer(event.currentTarget, event.pointerId);
       return;
@@ -420,14 +426,21 @@ export function GizmoOverlay({
     if (requestPointerRef.current !== undefined) {
       if (requestPointerRef.current !== event.pointerId) return;
       requestPointerRef.current = undefined;
-      if ((!session.getState().readOnly || allowReadOnlyRequests) && activePrefab && onRequestPlacement) {
+      if (
+        !requestInterruptedRef.current &&
+        (!session.getState().readOnly || allowReadOnlyRequests) &&
+        activePrefab &&
+        onRequestPlacement
+      ) {
         onRequestPlacement(
           activePrefab,
           normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()),
         );
       }
+      requestInterruptedRef.current = false;
       return;
     }
+    if (onRequestPlacement) return;
     touchesRef.current.delete(event.pointerId);
     if (terrain.up(event)) return;
     const pinch = pinchRef.current;

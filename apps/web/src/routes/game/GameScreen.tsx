@@ -38,7 +38,7 @@ import { ReapplyCard } from '../../features/editor/ReapplyCard';
 import type { EditorSessionState } from '../../features/editor/session';
 import { useEditorSession } from '../../features/editor/use-editor-session';
 import { mountSceneryPreview } from '../../features/editor/scenery-preview';
-import { mountStagePreview } from '../../features/editor/stage-preview';
+import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
 import { energyRefusalText } from '../../features/energy/api';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
@@ -128,7 +128,12 @@ export function GameScreen() {
     refetchInterval: 5_000,
     retry: false,
   });
-  const candidatePreview = noBuild ? previews.data?.previews[0] : undefined;
+  const candidatePreview = noBuild
+    ? previews.data?.previews.find((preview) => {
+        const matches = jobs.data?.jobs.filter((job) => String(job.aiurIssueNumber) === preview.ticket) ?? [];
+        return matches.length === 1 && matches[0]?.branchId === jobBranch;
+      })
+    : undefined;
   const previewDesign = useQuery({
     queryKey: ['preview-design', gameId, candidatePreview?.buildId],
     queryFn: () => getPreviewDesign(gameId, candidatePreview!.ticket, candidatePreview!.buildId),
@@ -136,17 +141,41 @@ export function GameScreen() {
     retry: false,
   });
   const waitingForPreview =
-    noBuild && (previews.isPending || (candidatePreview !== undefined && previewDesign.isPending));
+    noBuild && (previews.isPending || jobs.isPending || (candidatePreview !== undefined && previewDesign.isPending));
   const activePreview = candidatePreview && previewDesign.data ? candidatePreview : undefined;
   const stage = useQuery({
-    queryKey: ['editor-stage', gameId],
-    queryFn: () => getEditorStage(gameId),
+    queryKey: ['editor-stage', gameId, jobBranch],
+    queryFn: () => getEditorStage(gameId, jobBranch),
     enabled: gameId !== '' && noBuild && !waitingForPreview && !activePreview,
     refetchInterval: 60_000,
     retry: false,
   });
   const waitingForStage = noBuild && !waitingForPreview && !activePreview && stage.isPending;
-  const activeStage = noBuild && !activePreview ? (stage.data?.stage ?? undefined) : undefined;
+  const scenerySource = useQuery({
+    queryKey: ['scenery-source', gameId],
+    queryFn: () => getScenerySource(gameId),
+    enabled:
+      gameId !== '' &&
+      ((noBuild && !waitingForPreview && !waitingForStage && !activePreview) ||
+        (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
+    retry: false,
+    refetchInterval: noBuild && !activePreview ? 5_000 : false,
+  });
+  const hasScenery =
+    (scenerySource.data?.scene.items.length ?? 0) > 0 ||
+    (scenerySource.data?.scene.terrain.length ?? 0) > 0 ||
+    Object.values(activeSnapshot?.doc.entities ?? {}).some((entity) => entity.prefab.startsWith('scenery:'));
+  const waitingForScenery =
+    noBuild &&
+    !waitingForPreview &&
+    !waitingForStage &&
+    !activePreview &&
+    stage.data?.stage?.kind === 'image' &&
+    scenerySource.isPending;
+  const activeStage =
+    noBuild && !activePreview && !waitingForScenery && !(hasScenery && stage.data?.stage?.kind === 'image')
+      ? (stage.data?.stage ?? undefined)
+      : undefined;
   const requestOnlySnapshot = useMemo(
     () =>
       activePreview && previewDesign.data
@@ -156,14 +185,6 @@ export function GameScreen() {
           : undefined,
     [activePreview?.buildId, previewDesign.data, activeStage, activeSnapshot],
   );
-  const scenerySource = useQuery({
-    queryKey: ['scenery-source', gameId],
-    queryFn: () => getScenerySource(gameId),
-    enabled:
-      gameId !== '' &&
-      ((noBuild && !waitingForPreview && !waitingForStage && !activePreview && !activeStage) ||
-        (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
-  });
   const previewSource = noBuild && !activePreview && !activeStage ? scenerySource.data : undefined;
   const previewSourceError = noBuild && !activePreview && !activeStage && scenerySource.isError;
   const nativePalette = frameState.manifest?.palette;
@@ -185,6 +206,16 @@ export function GameScreen() {
   }, [frameState.manifest, fallbackActive, fallback.data]);
   const requestFallbackPlacement = useCallback(
     (prefab: string, point: { x: number; y: number }) => {
+      if (activeStage) {
+        const media = containerRef.current?.querySelector('img, video');
+        if (!(media instanceof HTMLImageElement || media instanceof HTMLVideoElement)) return;
+        const width = media instanceof HTMLImageElement ? media.naturalWidth : media.videoWidth;
+        const height = media instanceof HTMLImageElement ? media.naturalHeight : media.videoHeight;
+        const rect = media.getBoundingClientRect();
+        const mapped = containedStagePoint(point, rect.width, rect.height, width, height);
+        if (!mapped) return;
+        point = mapped;
+      }
       const palette = fallbackActive ? fallback.data?.palette : frameState.manifest?.palette;
       const item = palette?.items.find((candidate) => candidate.prefab === prefab);
       if (!item || fallbackInFlight.current) return;
@@ -214,7 +245,7 @@ export function GameScreen() {
         pushToast('The build could not be started.');
       }
     },
-    [fallback.data, fallbackActive, frameState.manifest, gameId, jobBranch, queryClient],
+    [activeStage, fallback.data, fallbackActive, frameState.manifest, gameId, jobBranch, queryClient],
   );
   const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
@@ -268,6 +299,7 @@ export function GameScreen() {
     if (container === null || snapshot === undefined || gameId === '') return;
     if (waitingForPreview) return;
     if (waitingForStage) return;
+    if (waitingForScenery) return;
     if (activePreview && !previewDesign.data) return;
     if (snapshot.buildId === NO_BUILD_ID && !activePreview && !activeStage && previewSource === undefined) {
       if (previewSourceError) setFrameState({ bridgeState: 'error', dropped: 0 });
@@ -320,6 +352,7 @@ export function GameScreen() {
     previewSourceError,
     waitingForPreview,
     waitingForStage,
+    waitingForScenery,
     activeStage,
     activePreview?.buildId,
     activePreview?.accessId,
