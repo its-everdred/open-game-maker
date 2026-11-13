@@ -214,7 +214,7 @@ export const command: GmCommand = {
     frame: {
       type: 'string',
       default: 'host',
-      help: 'host: the game in the host frame (top bar, Pause, touch overlay); app: the signed-in app; bare: the game alone',
+      help: 'host: the game in the host frame (menu, Pause, touch overlay); app: the signed-in app; bare: the game alone',
     },
     app: { type: 'string', help: 'app play URL (default OGM_APP_ORIGIN/play/<gm.manifest.json id>)' },
     storage: { type: 'string', help: 'signed-in storage state (default ~/.config/ogm/qa/storage.json)' },

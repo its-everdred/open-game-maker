@@ -41,12 +41,12 @@ export type RunVerifyOptions = ActivityContext & {
   outDir: string;
   viewport: ViewportSet;
   /**
-   * `host` (the default): the game mounted through `@gm/host` under a copy of the play screen's top bar and Pause;
+   * `host` (the default): the game mounted through `@gm/host` with the play screen's menu and Pause;
    * `app`: the signed-in app (`app`), the local build standing in for the hosted one; `bare`: the game page alone.
    */
   frame?: 'host' | 'app' | 'bare';
   app?: { url: string; storageState: string };
-  /** The title the host frame's top bar shows. */
+  /** Retained for callers that supply a title to the host frame. */
   title?: string;
   tier: Tier;
   rig?: ViewId;
