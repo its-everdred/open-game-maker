@@ -26,6 +26,9 @@ export function createPaintedScenery(scene: Phaser.Scene, resolveUrl: (id: strin
         image.src = resolveUrl(id);
       });
       textures.set(id, pending);
+      void pending.catch(() => {
+        if (textures.get(id) === pending) textures.delete(id);
+      });
     }
     return pending;
   }

@@ -4,15 +4,20 @@ import { readFileSync } from 'node:fs';
 import { AssetsLockSchema } from '@ogm/contracts/assets';
 import { sceneryPalette, type SceneryPaletteItem } from '@gm/sdk/scenery';
 
-import { gmBuildArtifacts } from '@gm/sdk/vite';
+import { gmBuildArtifacts, sceneryArtifact } from '@gm/sdk/vite';
 
 import { manifest } from './src/manifest.js';
 
 const lock = AssetsLockSchema.parse(
   JSON.parse(readFileSync(fileURLToPath(new URL('./assets.lock.json', import.meta.url)), 'utf8')),
 );
+const scenery = sceneryArtifact(
+  fileURLToPath(new URL('.', import.meta.url)),
+  fileURLToPath(new URL('./assets.lock.json', import.meta.url)),
+);
+const painted = scenery ? Boolean(JSON.parse(scenery).backdrop) : false;
 const items: SceneryPaletteItem[] = lock.assets
-  .filter((entry) => /\.(?:glb|gltf)$/i.test(entry.path))
+  .filter((entry) => (painted ? /\.(?:png|jpe?g|webp)$/i.test(entry.path) : /\.(?:glb|gltf)$/i.test(entry.path)))
   .map((entry) => {
     const name = (entry.id.split('/').at(-1) ?? entry.id).split('@')[0]!.replace(/[-_.]+/g, ' ');
     const category = /tree|bush|foliage/i.test(name)
@@ -22,7 +27,13 @@ const items: SceneryPaletteItem[] = lock.assets
         : /water|stream|river/i.test(name)
           ? 'water'
           : 'props';
-    return { assetId: entry.id, name, category, sha256: entry.sha256 };
+    return {
+      assetId: entry.id,
+      name,
+      category,
+      sha256: entry.sha256,
+      ...(/\.(?:png|jpe?g|webp)$/i.test(entry.path) ? { tag: 'painted-sprite' } : {}),
+    };
   });
 const palette = sceneryPalette(items, lock.assets);
 const buildManifest = {
@@ -37,6 +48,7 @@ const buildManifest = {
 export default defineConfig(({ mode }) => ({
   define: {
     __GM_SCENERY_PALETTE__: JSON.stringify(palette),
+    __GM_PAINTED_SCENERY__: JSON.stringify(painted),
     __GM_BUILD__: JSON.stringify(mode === 'published' ? 'published' : mode === 'test' ? 'test' : 'draft'),
   },
   resolve: {

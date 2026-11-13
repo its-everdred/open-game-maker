@@ -30,7 +30,7 @@ describe('painted scenery in the 2D template', () => {
           prefab: 'scenery:tree',
           level: 'main',
           origin: 'creator',
-          props: { pose: { position: [200, 180, 0] } },
+          props: { pose: { position: [200, 180, 0] }, 'scenery.parallax': 0.5 },
         },
       },
     });
@@ -46,8 +46,11 @@ describe('painted scenery in the 2D template', () => {
     } as unknown as AssetLoader;
     const update = vi.fn();
     context.updateScenery = update;
+    context.sceneryScreen = vi.fn(() => ({ x: 0.25, y: 0.5 }));
     instance.applyDesign(next, []);
     expect(update).toHaveBeenCalled();
+    expect(instance.worldToScreen?.(id)).toEqual({ x: 0.25, y: 0.5 });
+    expect(context.sceneryScreen).toHaveBeenCalledWith([200, 180, 0], 0.5);
     expect(instance.validatePlacement?.('scenery:tree', { position: [1, 2, 0] }).ok).toBe(true);
     expect(instance.validatePlacement?.('scenery:missing', { position: [1, 2, 0] }).ok).toBe(false);
     instance.dispose();

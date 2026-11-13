@@ -21,6 +21,7 @@ export function sceneryToDesign(scene: Scenery, doc: DesignDoc, stableId: (itemI
   if (scene.backdrop) next.globals['scenery.backdrop'] = scene.backdrop;
   next.globals[SETTINGS] = {
     version: scene.version,
+    ...(scene.viewport ? { viewport: scene.viewport } : {}),
     terrain: scene.terrain,
     lighting: scene.lighting,
     camera: scene.camera,

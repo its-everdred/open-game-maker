@@ -29,7 +29,7 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
               {
                 id: 'tree-1',
                 assetId: 'tree',
-                position: [200, 180, 0],
+                position: [200, 250, 0],
                 rotation: [0, 0, 0],
                 scale: [1, 1, 1],
                 layer: 'mid',
@@ -63,8 +63,9 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
   await page.screenshot({ path: testInfo.outputPath('painted-after.png') });
   const canvas = page.getByLabel('Editor canvas');
   const bounds = (await canvas.boundingBox())!;
-  const x = bounds.x + (200 / 360) * bounds.height;
-  const y = bounds.y + bounds.height / 2;
+  const scale = Math.min(bounds.width / 640, bounds.height / 480);
+  const x = bounds.x + (bounds.width - 640 * scale) / 2 + 200 * scale;
+  const y = bounds.y + (bounds.height - 480 * scale) / 2 + 250 * scale;
   await page.mouse.click(x, y);
   const handle = page.getByRole('button', { name: 'Move scenery:tree', exact: true });
   await expect(handle).toBeVisible();
@@ -85,7 +86,7 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
   const last = moves.at(-1);
   if (last?.op !== 'invoke') throw new Error('expected a move command');
   const pose = last.args as { pose: { position: number[] } };
-  expect(pose.pose.position[1]).toBeGreaterThan(180);
+  expect(pose.pose.position[1]).toBeGreaterThan(250);
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(4);

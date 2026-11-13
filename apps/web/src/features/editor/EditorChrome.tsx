@@ -130,6 +130,8 @@ export function EditorChrome({
           onCategory={setCategory}
           onPick={(prefab) => {
             if (prefab.startsWith('scenery-backdrop:')) {
+              setPickedPrefab(undefined);
+              onTool('select');
               const settings =
                 session.doc.globals['scenery.backdrop'] ??
                 (session.doc.globals['scenery.settings'] as { backdrop?: unknown } | undefined)?.backdrop;

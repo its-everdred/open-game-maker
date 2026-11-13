@@ -23,7 +23,11 @@ export function mountPaintedPreview(
     sdk: '*',
     title: 'Scenery',
     inputs: { actions: {} },
-    presentation: { orientation: 'any', minLogical: { w: 640, h: 360 }, fit: 'responsive' },
+    presentation: {
+      orientation: 'any',
+      minLogical: { w: source.scene.viewport?.width ?? 640, h: source.scene.viewport?.height ?? 480 },
+      fit: 'fixed',
+    },
     view: 'fixed',
     dimension: '2d',
     capabilities: ['editor.project', 'scenery'],
@@ -60,18 +64,24 @@ export function mountPaintedPreview(
   let doc = initial;
   let scene: Scenery = source.scene;
   let disposed = false;
-  const dimensions = () => ({
-    width: (360 * Math.max(1, container.clientWidth)) / Math.max(1, container.clientHeight),
-    height: 360,
-  });
-  const draw = () => {
-    if (disposed) return;
+  // A scene records the logical viewport used by its game; old scenes use the 2D template default.
+  const dimensions = () => scene.viewport ?? { width: 640, height: 480 };
+  const framing = () => {
     const width = Math.max(1, container.clientWidth),
       height = Math.max(1, container.clientHeight);
+    const view = dimensions();
+    const scale = Math.min(width / view.width, height / view.height);
+    return { width, height, scale, x: (width - view.width * scale) / 2, y: (height - view.height * scale) / 2 };
+  };
+  const draw = () => {
+    if (disposed) return;
+    const { width, height, scale, x, y } = framing();
     canvas.width = width;
     canvas.height = height;
     const view = dimensions();
-    context.setTransform(width / view.width, 0, 0, height / view.height, 0, 0);
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, width, height);
+    context.setTransform(scale, 0, 0, scale, x, y);
     context.clearRect(0, 0, view.width, view.height);
     drawPaintedScenery(context, scene, images, view);
   };
@@ -112,9 +122,11 @@ export function mountPaintedPreview(
       if (!disposed) onState({ bridgeState: 'error', dropped: 0 });
     });
   const hit = (x: number, y: number): TargetRef[] => {
-    const view = dimensions(),
-      px = x * view.width,
-      py = y * view.height;
+    const frame = framing();
+    const px = (x * frame.width - frame.x) / frame.scale;
+    const py = (y * frame.height - frame.y) / frame.scale;
+    const view = dimensions();
+    if (px < 0 || py < 0 || px > view.width || py > view.height) return [];
     const layers = { back: 0, mid: 1, front: 2 };
     const ordered = [...scene.items].sort((a, b) => layers[b.layer] - layers[a.layer] || b.position[2] - a.position[2]);
     for (const item of ordered) {
@@ -143,18 +155,21 @@ export function mountPaintedPreview(
     },
     pickAt: async (x, y) => hit(x, y),
     project: async (x, y) => {
+      const frame = framing();
+      const px = (x * frame.width - frame.x) / frame.scale,
+        py = (y * frame.height - frame.y) / frame.scale;
       const view = dimensions();
-      return [x * view.width, y * view.height, 0];
+      return px >= 0 && py >= 0 && px <= view.width && py <= view.height ? [px, py, 0] : null;
     },
     select: (ids) => {
       const pose = ids[0] ? (doc.entities[ids[0]]?.props.pose as { position?: number[] } | undefined) : undefined;
       if (!pose?.position) return;
-      const view = dimensions();
+      const frame = framing();
       for (const callback of screens)
         callback({
           id: ids[0]!,
-          x: (pose.position[0]! / view.width) * container.clientWidth,
-          y: (pose.position[1]! / view.height) * container.clientHeight,
+          x: frame.x + pose.position[0]! * frame.scale,
+          y: frame.y + pose.position[1]! * frame.scale,
         });
     },
     camera: noop,

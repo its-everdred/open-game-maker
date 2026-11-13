@@ -28,6 +28,12 @@ export class Level extends Phaser.Scene {
       const loader = context.sceneryAssets;
       const scenery = createPaintedScenery(this, (id) => loader.resolve(id).url);
       context.pickScenery = scenery.pick;
+      context.sceneryScreen = (position, parallax) =>
+        context.view?.worldToScreen([
+          position[0] + this.cameras.main.scrollX * (1 - parallax),
+          position[1] + this.cameras.main.scrollY * (1 - parallax),
+          position[2],
+        ]) ?? null;
       context.updateScenery = () => {
         if (!context.design.globals['scenery.settings']) return;
         const backdrop = context.design.globals['scenery.backdrop'] as { assetId?: unknown } | undefined;
@@ -48,6 +54,7 @@ export class Level extends Phaser.Scene {
         this.scale.off(Phaser.Scale.Events.RESIZE, scenery.resize);
         context.updateScenery = undefined;
         context.pickScenery = undefined;
+        context.sceneryScreen = undefined;
         scenery.dispose();
       });
     }

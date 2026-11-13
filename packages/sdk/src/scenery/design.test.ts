@@ -24,6 +24,7 @@ describe('scenery design adapter', () => {
   it('preserves painted backdrop and parallax through the design document', () => {
     const painted = ScenerySchema.parse({
       ...scene,
+      viewport: { width: 640, height: 480 },
       backdrop: {
         assetId: 'forest',
         landscape: { fit: 'cover', anchor: [0.5, 1] },

@@ -2,7 +2,7 @@ import type { ActionValue, HostApi, Viewport } from '@ogm/contracts';
 import type { Runtime, StepListener } from '@gm/sdk/core';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_DESIGN, createGame, type GameSave, type LevelDesign } from '../src/game.js';
 
@@ -82,6 +82,14 @@ function typescriptFiles(directory: string): string[] {
 }
 
 describe('game-3d simulation', () => {
+  it('passes the selected entity to the projection adapter', async () => {
+    const { controller, instance } = await mount();
+    const screenToWorld = vi.fn(() => [1, 2, 3] as [number, number, number]);
+    controller.attachScene({ pick: () => [], screenToWorld, worldToScreen: () => null });
+    instance.setSelection?.(['e_01K8ZTEMP00000000000000001']);
+    expect(instance.screenToWorld?.(0.2, 0.3)).toEqual([1, 2, 3]);
+    expect(screenToWorld).toHaveBeenCalledWith(0.2, 0.3, 'e_01K8ZTEMP00000000000000001');
+  });
   it('notifies scenery listeners and protects the play area', async () => {
     const { controller, instance } = await mount();
     const seen: LevelDesign[] = [];
@@ -96,6 +104,16 @@ describe('game-3d simulation', () => {
     controller.setSceneryAssetValidator((asset) => asset === 'tree');
     expect(instance.validatePlacement?.('scenery:tree', { position: [0, 0, 0] }).ok).toBe(false);
     expect(instance.validatePlacement?.('scenery:tree', { position: [8, 0, 0] }).ok).toBe(true);
+    instance.applyDesign(
+      controller.module.designSchema.parse({
+        ...next,
+        globals: { ...next.globals, 'scenery.backdrop': { assetId: 'forest' } },
+      }),
+      [],
+    );
+    expect(instance.validatePlacement?.('scenery:tree', { position: [0, 0, 0] }).ok).toBe(false);
+    controller.setSceneryImageValidator((asset) => asset === 'tree');
+    expect(instance.validatePlacement?.('scenery:tree', { position: [0, 0, 0] }).ok).toBe(true);
     unsubscribe();
   });
 

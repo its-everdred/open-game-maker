@@ -30,6 +30,7 @@ describe('scenery data', () => {
   it('validates a locked backdrop and preserves item parallax', () => {
     const painted = {
       ...scene,
+      viewport: { width: 640, height: 480 },
       backdrop: {
         assetId: 'forest',
         landscape: { fit: 'cover', anchor: [0.5, 1] },
@@ -39,6 +40,7 @@ describe('scenery data', () => {
     };
     expect(parseScenery(painted, [{ id: 'tree' }, { id: 'forest' }])).toEqual(painted);
     expect(() => parseScenery(painted, [{ id: 'tree' }])).toThrow('Scenery asset is not in the lock: forest');
+    expect(ScenerySchema.safeParse({ ...painted, viewport: { width: 0, height: 480 } }).success).toBe(false);
   });
   it('rejects unsupported versions and invalid transforms', () => {
     expect(ScenerySchema.safeParse({ ...scene, version: 2 }).success).toBe(false);

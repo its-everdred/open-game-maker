@@ -6,6 +6,44 @@ import { createPaintedScenery } from './painted-scenery.js';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Phaser painted scenery', () => {
+  it('retries a failed image load on a later update', async () => {
+    let attempts = 0;
+    class FakeImage {
+      onload?: () => void;
+      onerror?: () => void;
+      set src(_value: string) {
+        attempts++;
+        queueMicrotask(() => (attempts === 1 ? this.onerror?.() : this.onload?.()));
+      }
+    }
+    vi.stubGlobal('Image', FakeImage);
+    const object: Record<string, unknown> = { texture: { getSourceImage: () => ({ width: 100, height: 100 }) } };
+    for (const name of ['setOrigin', 'setScrollFactor', 'setDepth', 'setPosition', 'setDisplaySize'])
+      object[name] = vi.fn().mockReturnValue(object);
+    object.destroy = vi.fn();
+    const scene = {
+      add: { image: () => object },
+      cameras: { main: { width: 200, height: 100 } },
+      textures: { addImage: vi.fn(), remove: vi.fn() },
+    } as unknown as Phaser.Scene;
+    const data = ScenerySchema.parse({
+      version: 1,
+      backdrop: {
+        assetId: 'forest',
+        landscape: { fit: 'cover', anchor: [0.5, 0.5] },
+        portrait: { fit: 'cover', anchor: [0.5, 0.5] },
+      },
+      items: [],
+      terrain: [],
+      lighting: 'night',
+      camera: { position: [0, 0, 1], target: [0, 0, 0], zoom: 1 },
+    });
+    const scenery = createPaintedScenery(scene, (id) => `/assets/${id}.png`);
+    await expect(scenery.update(data)).rejects.toThrow('scenery image unavailable');
+    await expect(scenery.update(data)).resolves.toBeUndefined();
+    expect(attempts).toBe(2);
+    scenery.dispose();
+  });
   it('loads locked image URLs, positions and layers the objects, and disposes them', async () => {
     class FakeImage {
       onload?: () => void;

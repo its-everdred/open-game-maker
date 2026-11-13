@@ -96,6 +96,7 @@ export interface TemplateContext {
   sceneryAssets?: AssetLoader;
   updateScenery?: () => void;
   pickScenery?: (x: number, y: number) => string[];
+  sceneryScreen?: (position: [number, number, number], parallax: number) => { x: number; y: number } | null;
   advance(dt: number, frames: ActionFrame[]): void;
 }
 
@@ -274,7 +275,10 @@ export const game: GameModule<PlatformDesign, PlatformSave> = {
         if (entity?.prefab.startsWith('scenery:')) {
           const pose = (entity.props as Record<string, unknown>).pose as
             { position?: [number, number, number] } | undefined;
-          return pose?.position ? (context.view?.worldToScreen(pose.position) ?? null) : null;
+          const parallax = (entity.props as Record<string, unknown>)['scenery.parallax'];
+          return pose?.position
+            ? (context.sceneryScreen?.(pose.position, typeof parallax === 'number' ? parallax : 1) ?? null)
+            : null;
         }
         const player = playerById(context.state, id);
         if (player) {

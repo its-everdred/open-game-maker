@@ -128,6 +128,7 @@ Lock the backdrop and each transparent cut-out image as separate assets. Add the
 ```json
 {
   "version": 1,
+  "viewport": { "width": 640, "height": 480 },
   "backdrop": {
     "assetId": "forest-background",
     "landscape": { "fit": "cover", "anchor": [0.5, 1] },
@@ -143,7 +144,8 @@ Lock the backdrop and each transparent cut-out image as separate assets. Add the
 }
 ```
 
-The fit rule is chosen by viewport aspect; anchors range from 0 (left/top) to 1 (right/bottom). Item positions and
+Set `viewport` to the game's logical size; the 2D template and no-build preview default to 640×480. The fit rule is
+chosen by viewport aspect; anchors range from 0 (left/top) to 1 (right/bottom). Item positions and
 image dimensions use game pixels, centred on the item; Z orders items within each back/mid/front layer. Scale multiplies
 the image's intrinsic size, rotation Z is in radians, and parallax is the fraction of camera movement applied to the
 item (1 follows the world, 0 stays fixed). The backdrop always stays behind the items. The editor can swap a locked

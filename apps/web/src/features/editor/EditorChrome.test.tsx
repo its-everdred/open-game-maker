@@ -101,6 +101,8 @@ describe('EditorChrome', () => {
   it('swaps the backdrop and lists placed scenery', () => {
     const submit = vi.fn();
     const setSelection = vi.fn();
+    const onTool = vi.fn();
+    const onCanvasChange = vi.fn();
     const backdrop = {
       assetId: 'forest',
       landscape: { fit: 'cover', anchor: [0.5, 0.5] },
@@ -111,7 +113,10 @@ describe('EditorChrome', () => {
       capabilities: ['scenery'],
       palette: {
         categories: [{ id: 'backdrops', label: 'Backdrops', kind: 'items' }],
-        items: [{ prefab: 'scenery-backdrop:clearing', label: 'Clearing', category: 'backdrops' }],
+        items: [
+          { prefab: 'scenery-backdrop:clearing', label: 'Clearing', category: 'backdrops' },
+          { prefab: 'scenery:tree', label: 'Tree', category: 'backdrops' },
+        ],
       },
     } as GameManifest;
     const scenerySession = {
@@ -130,7 +135,8 @@ describe('EditorChrome', () => {
         manifest={sceneryManifest}
         session={scenerySession}
         onCommand={vi.fn()}
-        onTool={vi.fn()}
+        onTool={onTool}
+        onCanvasChange={onCanvasChange}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
         onDelete={vi.fn()}
@@ -138,7 +144,11 @@ describe('EditorChrome', () => {
         onInstanceCount={vi.fn()}
       />,
     );
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Tree' }));
+    expect(onCanvasChange).toHaveBeenLastCalledWith(expect.objectContaining({ prefab: 'scenery:tree' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Clearing' }));
+    expect(onCanvasChange).toHaveBeenLastCalledWith(expect.objectContaining({ prefab: undefined }));
+    expect(onTool).toHaveBeenLastCalledWith('select');
     expect(submit).toHaveBeenCalledWith(
       expect.objectContaining({
         patches: [

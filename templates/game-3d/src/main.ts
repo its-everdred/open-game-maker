@@ -98,6 +98,13 @@ async function start() {
         return false;
       }
     });
+    controller.setSceneryImageValidator((id) => {
+      try {
+        return /\.(?:png|jpe?g|webp)(?:\?|$)/i.test(loader.resolve(id).url);
+      } catch {
+        return false;
+      }
+    });
     document.documentElement.dataset.bootStage = 'runtime';
 
     const canvas = document.querySelector<HTMLCanvasElement>('#game');
@@ -200,7 +207,14 @@ async function start() {
       const local = (payload as { local?: unknown }).local;
       if (typeof local === 'number') cameraRigs?.setLocalPlayerIndex(local);
     });
-    controller.attachScene(sceneHandle);
+    controller.attachScene({
+      pick: (x, y) => [...sceneHandle!.pick(x, y), ...(scenery.isPainted() ? scenery.pick(x, y) : [])],
+      screenToWorld: (x, y, selected) =>
+        scenery.isPainted() && (!selected || scenery.screen(selected))
+          ? scenery.project(x, y)
+          : sceneHandle!.screenToWorld(x, y),
+      worldToScreen: (id) => scenery.screen(id) ?? sceneHandle!.worldToScreen(id),
+    });
     document.documentElement.dataset.bootStage = 'physics';
     await controller.attachPhysics(runtime);
     runtime.setRenderInfoProvider(rendererHandle.info);
@@ -208,6 +222,7 @@ async function start() {
     const resize = (width: number, height: number, dpr: number) => {
       rendererHandle?.resize(width, height, dpr);
       sceneHandle?.resize(width, height);
+      scenery.resize(width, height);
       if (editorCamera) frameEditorCamera(editorCamera.camera as OrthographicCamera);
     };
     const viewport = runtime.host.viewport.current();
@@ -219,6 +234,7 @@ async function start() {
     runtime.onFrame(() => {
       sceneHandle?.setCamera(viewCamera());
       sceneHandle?.sync(controller.state());
+      if (sceneHandle) scenery.draw(sceneHandle.camera.position.x, sceneHandle.camera.position.z);
       if (rendererHandle && sceneHandle) rendererHandle.renderer.render(sceneHandle.scene, sceneHandle.camera);
     });
     sceneHandle.sync(controller.state());

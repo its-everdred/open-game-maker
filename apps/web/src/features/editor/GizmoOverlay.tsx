@@ -350,8 +350,13 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
             projection.pending = false;
             if (origin && target) {
               const initial = poseFromProps(drag.entity.props.pose);
+              const painted =
+                Boolean(session.getState().doc.globals['scenery.backdrop']) &&
+                manifest.palette.items.some(
+                  (item) => item.prefab === drag.entity.prefab && item.tag === 'painted-sprite',
+                );
               const pose = projectedPose(
-                manifest.dimension === '2d'
+                manifest.dimension === '2d' || painted
                   ? [
                       initial.position[0] + target[0] - origin[0],
                       initial.position[1] + target[1] - origin[1],
@@ -364,7 +369,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
                     ],
                 snap,
               );
-              if (manifest.dimension === '2d') pose.position[2] = initial.position[2];
+              if (manifest.dimension === '2d' || painted) pose.position[2] = initial.position[2];
               else pose.position[1] = initial.position[1];
               if (initial.rotationY !== undefined) pose.rotationY = initial.rotationY;
               const intent = updateEntityPoseIntent(drag.doc, drag.entity.id, pose, `Moved ${drag.entity.prefab}`);
