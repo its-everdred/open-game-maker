@@ -59,8 +59,9 @@ export async function createScenery(options: SceneryRenderOptions): Promise<Grou
   const sun = new DirectionalLight(sunColor, sunIntensity);
   sun.position.set(4, 8, 5);
   root.add(sun);
-  for (const item of options.scene.items) {
-    const object = await options.loadAsset(item.assetId);
+  const objects = await Promise.all(options.scene.items.map((item) => options.loadAsset(item.assetId)));
+  for (const [index, item] of options.scene.items.entries()) {
+    const object = objects[index]!;
     object.position.fromArray(item.position);
     object.rotation.set(...item.rotation);
     object.scale.fromArray(item.scale);

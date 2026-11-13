@@ -41,6 +41,23 @@ describe('createScenery', () => {
     ).rejects.toThrow('play area');
   });
 
+  it('starts asset loads together', async () => {
+    const started: string[] = [];
+    const resolvers: Array<(object: Mesh) => void> = [];
+    const loading = createScenery({
+      scene,
+      loadAsset: (id) => {
+        started.push(id);
+        return new Promise<Mesh>((resolve) => {
+          resolvers.push(resolve);
+        });
+      },
+    });
+    expect(started).toHaveLength(2);
+    for (const resolve of resolvers) resolve(new Mesh());
+    await loading;
+  });
+
   it('renders transformed assets and terrain while protecting the play area', async () => {
     const group = await createScenery({
       scene,
