@@ -70,7 +70,7 @@ export function StudioMenu() {
   const isShowcase = Boolean(matchPath('/g/showcase/:id', location.pathname));
   const game = isShowcase ? null : matchPath('/g/:gameId/*', location.pathname);
   const isGameView = Boolean(game || isShowcase);
-  const hasStudioHeader = location.pathname === '/all' || location.pathname === '/new';
+  const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
   const { workers, feeds } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
   const reviews = useWorkerReviews(
@@ -120,10 +120,9 @@ export function StudioMenu() {
 
   useEffect(() => {
     if (wasOpen.current && !open) {
-      const soundTrigger =
-        hasStudioHeader && sheet === 'volume'
-          ? root.current?.querySelector<HTMLButtonElement>('.studio-library-volume button')
-          : null;
+      const soundTrigger = hasStudioHeader
+        ? root.current?.querySelector<HTMLButtonElement>('.studio-library-volume button')
+        : null;
       (soundTrigger ?? trigger.current)?.focus();
       setSheet(undefined);
     }
@@ -255,6 +254,18 @@ export function StudioMenu() {
       onVolume={changeVolume}
       onMute={setMuted}
       sliderOpen={sheet === 'volume'}
+      menuOpen={hasStudioHeader && open}
+      decisionCount={hasStudioHeader && !open ? openDecisions : 0}
+      blocked={hasStudioHeader && blocked}
+      building={hasStudioHeader && buildingJobs.length > 0}
+      onMenu={
+        hasStudioHeader
+          ? () => {
+              setOpen(true);
+              setSheet(undefined);
+            }
+          : undefined
+      }
       onSlider={() => {
         setOpen(true);
         setSheet('volume');
@@ -439,6 +450,7 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
+        hidden={hasStudioHeader}
         style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}
@@ -455,7 +467,7 @@ export function StudioMenu() {
       >
         <span className="studio-menu-ring" aria-hidden="true" />
         <Icon name={controls?.button?.icon ?? 'menu'} />
-        {openDecisions > 0 && !open ? (
+        {openDecisions > 0 && !open && !hasStudioHeader ? (
           <span className="studio-menu-badge" aria-hidden="true">
             {openDecisions}
           </span>

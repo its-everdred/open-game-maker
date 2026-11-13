@@ -87,7 +87,9 @@ test('keeps sound clickable while the library menu is expanded', async ({ page }
   await page.goto('/all?test');
   const sound = page.locator('.studio-library-volume button');
   await expect(sound).toBeVisible();
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Menu', exact: true })).toHaveCount(0);
+  await sound.click({ button: 'right' });
+  await expect(page.getByRole('group', { name: 'Menu' })).toBeVisible();
   const hit = await sound.evaluate((element) => {
     const box = element.getBoundingClientRect();
     return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
@@ -156,13 +158,13 @@ test('shows the active build ring and contextual build in the games menu', async
   await installGamesMenuApi(page, blobsDecisions().slice(1));
   await page.goto('/all');
 
-  const trigger = page.getByRole('button', { name: 'Menu' });
+  const trigger = page.locator('.studio-library-volume button');
   await expect(trigger).toHaveAttribute('data-building', 'true');
   await expect(page.locator('.studio-menu-control [role="status"]')).toHaveText('Building Moon Vault');
   await expect(page.locator('.studio-menu-badge')).toHaveText('2');
   await capturePhone(page, testInfo, 'games-menu-building');
 
-  await trigger.click();
+  await trigger.click({ button: 'right' });
   await capturePhone(page, testInfo, 'games-menu-open');
   await page.getByRole('button', { name: 'Jobs: 42%' }).click();
   await expect(page.getByRole('group', { name: 'Moon Vault builds' })).toBeVisible();
@@ -187,12 +189,12 @@ test('counts the open decisions and walks through each one from the menu', async
   const answered = await installGamesMenuApi(page, blobsDecisions());
   await page.goto('/all');
 
-  const trigger = page.getByRole('button', { name: 'Menu' });
+  const trigger = page.locator('.studio-library-volume button');
   await expect(page.locator('.studio-menu-badge')).toHaveText('3');
   await expect(trigger).toHaveAttribute('data-blocking', 'true');
   await capturePhone(page, testInfo, 'decisions-badge');
 
-  await trigger.click();
+  await trigger.click({ button: 'right' });
   await page.getByRole('button', { name: 'Decisions: 3' }).click();
   const topics = page.getByRole('list', { name: 'Decisions' }).locator('strong');
   await expect(topics).toHaveText(['Blob colours', 'Jump feel', 'Level length']);
@@ -228,7 +230,7 @@ test('rings Energy in the menu and opens its windows, then its settings', async 
   await installGamesMenuApi(page);
   await page.goto('/all');
 
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.locator('.studio-library-volume button').click({ button: 'right' });
   await page.getByRole('button', { name: 'Energy: Limited' }).click();
   const detail = page.getByRole('link', { name: 'Energy settings' });
   await expect(detail).toContainText('20% left');
@@ -241,15 +243,12 @@ test('rings Energy in the menu and opens its windows, then its settings', async 
   await capturePhone(page, testInfo, 'settings-energy');
 });
 
-// Kevin (2026-11-08): the circles open in one row beside the menu button, at its height, in portrait and landscape.
+// The prototype header keeps sound and builds visible; menu actions open beneath them.
 for (const [orientation, viewport] of [
   ['portrait', { width: 390, height: 844 }],
   ['landscape', { width: 844, height: 390 }],
 ] as const) {
-  test(`lays the circles out in a row beside the menu button in ${orientation}`, async ({
-    page,
-    isMobile,
-  }, testInfo) => {
+  test(`lays the circles out below the sound button in ${orientation}`, async ({ page, isMobile }, testInfo) => {
     testInfo.setTimeout(90_000);
     test.skip(!isMobile, 'phone layout acceptance path');
     await page.setViewportSize(viewport);
@@ -258,20 +257,19 @@ for (const [orientation, viewport] of [
     await installGamesMenuApi(page, blobsDecisions().slice(1));
     await page.goto('/all');
 
-    const trigger = page.getByRole('button', { name: 'Menu' });
+    const trigger = page.locator('.studio-library-volume button');
     await expect(trigger).toHaveAttribute('data-building', 'true');
     await capturePhone(page, testInfo, `${orientation}-closed`);
 
-    await trigger.click();
+    await trigger.click({ button: 'right' });
     const circles = page.getByRole('group', { name: 'Menu' }).locator('.menu-circle');
     await expect(circles.first()).toHaveAttribute('aria-label', 'Decisions: 2');
     await expect(circles.nth(1)).toHaveAttribute('aria-label', 'Jobs: 42%');
     await page.waitForTimeout(500);
     const menuBox = (await trigger.boundingBox())!;
     const first = (await circles.first().boundingBox())!;
-    expect(Math.abs(first.y - menuBox.y)).toBeLessThan(1);
+    expect(first.y).toBeGreaterThanOrEqual(menuBox.y + menuBox.height);
     expect(first.height).toBeCloseTo(menuBox.height, 0);
-    expect(first.x + first.width).toBeLessThan(menuBox.x);
     await capturePhone(page, testInfo, `${orientation}-open`);
 
     await page.getByRole('button', { name: 'Jobs: 42%' }).click();
@@ -302,7 +300,7 @@ test('keeps the phone menu row clear of style media', async ({ page, isMobile },
   await page.waitForFunction(() => window.__ogmHost?.get('new') !== undefined);
   await page.getByRole('button', { name: 'Isometric' }).dispatchEvent('click');
 
-  const menu = page.getByRole('button', { name: 'Menu' });
+  const menu = page.locator('.studio-library-volume button');
   const media = page.locator('.new-style-track');
   await expect(media).toHaveCount(2);
   const [menuBox, mediaTop] = await Promise.all([
