@@ -215,7 +215,7 @@ export const useSchema = z.enum([
   'derive-audio',
 ]);
 
-const lockAssetIdSchema = z
+export const lockAssetIdSchema = z
   .string()
   .regex(
     /^(?:t[12]:[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9/._-]*@[A-Za-z0-9._-]+|t3:[A-Za-z0-9][A-Za-z0-9_-]*\/[a-z0-9][a-z0-9/._-]*)$/,
