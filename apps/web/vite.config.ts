@@ -9,6 +9,22 @@ import { defineConfig, type Connect, type Plugin } from 'vite';
 const apiPort = process.env.OGM_API_PORT ?? '8787';
 const apiTarget = `http://127.0.0.1:${apiPort}`;
 
+// The frozen prototype remains the source of its showcase renderer. Vite
+// bundles it for the app while the images stay at their public app paths.
+function showcaseScenes(): Plugin {
+  const id = '\0virtual:showcase-scenes';
+  return {
+    name: 'ogm-showcase-scenes',
+    resolveId: (source) => (source === 'virtual:showcase-scenes' ? id : undefined),
+    async load(source) {
+      if (source !== id) return undefined;
+      const scenes = await readFile(resolve(import.meta.dirname, '../../prototypes/studio-v0/scenes.js'), 'utf8');
+      if (!scenes.includes('im.src = src;')) throw new Error('prototype scene asset URL pattern was not found');
+      return scenes.replace('im.src = src;', "im.src = '/proto/' + src;");
+    },
+  };
+}
+
 // The title town decompresses its own .gz files (models.bin.gz); Vite's static server would add Content-Encoding: gzip
 // and the browser would decompress them first. Serve them as plain bytes, as Netlify does.
 function rawTownGzip(): Plugin {
@@ -35,7 +51,7 @@ function rawTownGzip(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), rawTownGzip()],
+  plugins: [react(), rawTownGzip(), showcaseScenes()],
   server: {
     host: '127.0.0.1',
     port: 5173,

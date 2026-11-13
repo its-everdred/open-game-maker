@@ -11,6 +11,16 @@ test('renders prototype showcase art and opens a detail sheet', async ({ page })
   const logo = page.getByRole('link', { name: 'Open Game Maker 2000' }).locator('img');
   await expect(logo).toHaveAttribute('src', '/proto/art/gm.webp');
   await expect.poll(() => logo.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  for (const asset of ['goblin-fight.webp', 'town.png', 'splats/splat00.png']) {
+    const dimensions = await page.evaluate(async (name) => {
+      const image = new Image();
+      image.src = `/proto/art/${name}`;
+      await image.decode();
+      return [image.naturalWidth, image.naturalHeight];
+    }, asset);
+    expect(dimensions[0]).toBeGreaterThan(1);
+    expect(dimensions[1]).toBeGreaterThan(1);
+  }
   const tile = page.getByRole('button', { name: /^RestoreBound:/ });
   if (test.info().project.name === 'phone') {
     const first = page.getByRole('button', { name: /^Goblin Cellar:/ });

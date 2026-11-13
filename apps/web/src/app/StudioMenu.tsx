@@ -109,7 +109,6 @@ export function StudioMenu() {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setOpen(false);
-      trigger.current?.focus();
     };
     document.addEventListener('pointerdown', outside);
     document.addEventListener('keydown', escape);
@@ -117,12 +116,19 @@ export function StudioMenu() {
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('keydown', escape);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
   useEffect(() => {
-    if (wasOpen.current && !open) trigger.current?.focus();
+    if (wasOpen.current && !open) {
+      const soundTrigger =
+        hasStudioHeader && sheet === 'volume'
+          ? root.current?.querySelector<HTMLButtonElement>('.studio-library-volume button')
+          : null;
+      (soundTrigger ?? trigger.current)?.focus();
+      setSheet(undefined);
+    }
     wasOpen.current = open;
-  }, [open]);
+  }, [hasStudioHeader, open, sheet]);
 
   useEffect(() => {
     if (deck && deck.creatorId !== creatorId) setDeck(undefined);

@@ -190,6 +190,13 @@
   margin-right: 58px;
 }
 
+.studio-menu-control:has(.studio-library-volume) .studio-menu-row {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 58px;
+  margin-right: 0;
+}
+
 /* Keep the game's centered pause panel clear on a short landscape phone. */
 @media (orientation: landscape) and (min-width: 760px) and (max-height: 430px) {
   .app-chrome.is-game-playing .studio-menu-row {

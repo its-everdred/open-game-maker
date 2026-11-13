@@ -8,8 +8,13 @@ import { stagePrototype } from '../../tools/stage-prototype.mjs';
 const root = resolve(import.meta.dirname, '../../../..');
 const fixtureRoot = await mkdtemp(join(tmpdir(), 'ogm-prototype-browser-'));
 const fixture = join(fixtureRoot, 'studio-v0');
+const destination = join(root, 'apps', 'web', 'dist', 'proto');
+const builtArt = join(fixtureRoot, 'built-art');
 
 try {
+  // Preserve exactly what Vite packaged; source-tree files must not repair a
+  // broken build before browser tests exercise it.
+  await cp(join(destination, 'art'), builtArt, { recursive: true });
   await cp(join(root, 'prototypes', 'studio-v0'), fixture, { recursive: true });
   await Promise.all([
     mkdir(join(fixture, 'art'), { recursive: true }),
@@ -52,15 +57,16 @@ try {
   await mkdir(join(fixture, 'art', 'splats'), { recursive: true });
   await mkdir(join(fixture, 'demo', 'assets', 'img'), { recursive: true });
   await Promise.all([...sceneArt, ...splats].map((name) => writeFile(join(fixture, 'art', name), pixel)));
-  // Exercise the same real showcase art the app ships, rather than a one-pixel stand-in.
-  await cp(join(root, 'apps', 'web', 'public', 'proto', 'art'), join(fixture, 'art'), { recursive: true });
   await writeFile(join(fixture, 'demo', 'assets', 'img', 'paper-bg.png'), pixel);
   await Promise.all([
     writeFile(join(fixture, 'art', 'logo-big.webp'), ''),
     writeFile(join(fixture, 'demo', 'index.html'), '<!doctype html><title>Prototype demo fixture</title>'),
     writeFile(join(fixture, 'town', 'index.html'), '<!doctype html><title>Prototype town fixture</title>'),
   ]);
-  await stagePrototype(fixture, join(root, 'prototypes', 'ui-v0', 'site'), join(root, 'apps', 'web', 'dist', 'proto'));
+  await stagePrototype(fixture, join(root, 'prototypes', 'ui-v0', 'site'), destination);
+  await rm(join(destination, 'art'), { recursive: true, force: true });
+  await cp(builtArt, join(destination, 'art'), { recursive: true });
+  await writeFile(join(destination, 'art', 'logo-big.webp'), '');
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });
 }

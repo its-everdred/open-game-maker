@@ -81,6 +81,21 @@ const energyView = {
 
 test.use({ serviceWorkers: 'block' });
 
+test('keeps sound clickable while the library menu is expanded', async ({ page }) => {
+  await installAuthRoutes(page, { signedIn: true });
+  await installGamesMenuApi(page);
+  await page.goto('/all?test');
+  const sound = page.locator('.studio-library-volume button');
+  await expect(sound).toBeVisible();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  const hit = await sound.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  });
+  expect(hit).toBe(true);
+  await sound.click();
+});
+
 test('updates the worker tracker without a reload', async ({ page }, testInfo) => {
   testInfo.setTimeout(90_000);
   await installAuthRoutes(page, { signedIn: true });
