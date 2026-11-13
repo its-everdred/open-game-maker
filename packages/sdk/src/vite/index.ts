@@ -5,6 +5,7 @@ import {
   AssetsLockSchema,
   creditsFromLock,
   gameManifestSchema,
+  parseScenery,
   renderCredits,
   StrictDesignDocSchema,
   type CreditsDocument,
@@ -18,6 +19,20 @@ import {
 export const MANIFEST_FILE = 'manifest.json';
 export const DESIGN_FILE = 'design/design.json';
 export const CREDITS_FILE = 'credits.json';
+export const SCENERY_FILE = 'scenery.json';
+
+/** Read and validate optional shared scenery data against the game's lock. */
+export function sceneryArtifact(gameRoot: string, lockFile: string): string | undefined {
+  let raw: string;
+  try {
+    raw = readFileSync(join(gameRoot, SCENERY_FILE), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  const lock = AssetsLockSchema.parse(JSON.parse(readFileSync(lockFile, 'utf8')));
+  return `${JSON.stringify(parseScenery(JSON.parse(raw), lock.assets), null, 2)}\n`;
+}
 
 /**
  * Files a game keeps in `design/` that are not design docs. The creator feedback ledger (#567) and the decision record
@@ -95,12 +110,12 @@ export function gmBuildArtifacts(options: {
     generateBundle(this: EmitContext) {
       const manifest = gameManifestSchema.parse(options.manifest);
       const design = foldDesignFiles(options.designDir);
-      const credits = regenerateCredits(
-        options.assetsLockFile ?? join(gameRoot, 'assets.lock.json'),
-        options.creditsFile ?? join(gameRoot, 'CREDITS.md'),
-      );
+      const lockFile = options.assetsLockFile ?? join(gameRoot, 'assets.lock.json');
+      const scenery = sceneryArtifact(gameRoot, lockFile);
+      const credits = regenerateCredits(lockFile, options.creditsFile ?? join(gameRoot, 'CREDITS.md'));
       this.emitFile({ type: 'asset', fileName: MANIFEST_FILE, source: `${JSON.stringify(manifest, null, 2)}\n` });
       this.emitFile({ type: 'asset', fileName: DESIGN_FILE, source: `${JSON.stringify(design, null, 2)}\n` });
+      if (scenery !== undefined) this.emitFile({ type: 'asset', fileName: SCENERY_FILE, source: scenery });
       this.emitFile({ type: 'asset', fileName: CREDITS_FILE, source: `${JSON.stringify(credits, null, 2)}\n` });
     },
   };

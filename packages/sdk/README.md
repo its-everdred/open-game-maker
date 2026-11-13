@@ -82,3 +82,15 @@ A per-seat manifest must implement `MultiplayerHooksV2`: `capture({ seat })` ret
 integers in canonical order — seats ascending, entity ids sorted by code unit, positions quantised with `toUnits`
 (1/256 of a unit). Declaring the mode without those three hooks throws `ModeMismatchError` (`MODE_MISMATCH`) from
 `boot` instead of silently running host authority.
+
+## Scenery data
+
+A game can keep `scenery.json` at its root. Version 1 records placed asset IDs and transforms, terrain bands, a lighting
+preset, and camera framing. IDs must appear in `assets.lock.json`; the build validates the file and publishes it beside
+the game. `gm scenery list`, `gm scenery add <id> <asset-id> --position x,y,z`, and `gm scenery move <id> --position
+x,y,z` read and update the same file. `gm scenery render --out scenery.png` captures a standalone still using the locked models, even before a game build exists.
+
+`@gm/sdk/scenery` exports `createScenery` for a Three.js group, `frameScenery` for a camera, and `SceneryHistory` for
+undoable edits. Pass a `loadAsset` callback that supplies a fresh object for each placement. Declare the game's world-space
+X/Z play-area rectangle to omit any item or terrain segment whose bounds intersect it. The renderer owns terrain geometry
+and materials; the caller owns loaded assets and is responsible for disposing the group when finished.

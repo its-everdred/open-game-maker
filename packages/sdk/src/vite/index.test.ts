@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { creditsDocumentSchema, type GameManifest } from '@ogm/contracts';
 
-import { foldDesignFiles, gmBuildArtifacts, regenerateCredits } from './index.js';
+import { foldDesignFiles, gmBuildArtifacts, regenerateCredits, sceneryArtifact } from './index.js';
 
 const entity = (id: string) => ({ id, prefab: 'spawn', level: 'main', origin: 'build', props: {} });
 const A = 'spawn_01K8ZTEMP00000000000000001';
@@ -134,5 +134,33 @@ describe('regenerateCredits', () => {
       attribution: 'Example Artist',
     });
     expect(readFileSync(creditsFile, 'utf8')).toContain('Example Pack — Example Artist');
+  });
+});
+
+describe('sceneryArtifact', () => {
+  it('publishes a validated scene and rejects assets absent from the lock', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gm-scenery-'));
+    const lock = join(dir, 'assets.lock.json');
+    writeFileSync(lock, JSON.stringify({ version: 1, family: 'pixel-art', pov: 'side', assets: [] }));
+    expect(sceneryArtifact(dir, lock)).toBeUndefined();
+    const scene = {
+      version: 1,
+      items: [],
+      terrain: [],
+      lighting: 'night',
+      camera: { position: [0, 1, 2], target: [0, 0, 0], zoom: 1 },
+    };
+    writeFileSync(join(dir, 'scenery.json'), JSON.stringify(scene));
+    expect(JSON.parse(sceneryArtifact(dir, lock)!)).toEqual(scene);
+    scene.items.push({
+      id: 'tree',
+      assetId: 'missing',
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      layer: 'mid',
+    } as never);
+    writeFileSync(join(dir, 'scenery.json'), JSON.stringify(scene));
+    expect(() => sceneryArtifact(dir, lock)).toThrow('Scenery asset is not in the lock');
   });
 });

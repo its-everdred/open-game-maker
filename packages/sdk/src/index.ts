@@ -8,6 +8,7 @@ export * as nav from './nav/index.js';
 export * as net from './net/index.js';
 export * as phaser from './phaser/index.js';
 export * as proc from './proc/index.js';
+export * as scenery from './scenery/index.js';
 export * as three from './three/index.js';
 export * as achievements from './achievements.js';
 export * as analytics from './analytics.js';
