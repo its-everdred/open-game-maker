@@ -30,14 +30,21 @@ const rows = new Map<string, ChatRow>([
 ]);
 
 describe('approved stage media', () => {
-  it('selects the latest answered visual from the same job and ignores open or foreign media', () => {
+  it('selects the latest usable visual from the same job and ignores moot or foreign media', () => {
     const commands = [
       command('job', '2026-01-01T00:00:00Z', 'answered', 'a', 'older'),
       command('job', '2026-01-02T00:00:00Z', 'answered', 'a', 'newer'),
-      command('job', '2026-01-03T00:00:00Z', 'open', 'a', 'older'),
+      command('job', '2026-01-03T00:00:00Z', 'moot', 'a', 'older'),
       command('job', '2026-01-04T00:00:00Z', 'answered', 'a', 'foreign'),
     ];
     expect(selectStageMedia(commands, (id) => rows.get(id) ?? null, true)?.id).toBe('newer');
+  });
+  it('shows a pending concept before the creator answers', () => {
+    const pending = command('job', '2026-01-03T00:00:00Z', 'open', 'a', 'older');
+    const data = JSON.parse(pending.commandJson!);
+    delete data.option_id;
+    pending.commandJson = JSON.stringify(data);
+    expect(selectStageMedia([pending], (id) => rows.get(id) ?? null, true)?.id).toBe('older');
   });
   it('omits rejected, off-camera, and disallowed generated options', () => {
     const row = command('job', '2026-01-02T00:00:00Z', 'answered', 'a', 'newer');

@@ -2,7 +2,7 @@ import { ChatCommand } from '@ogm/contracts';
 
 import type { ChatRow } from '../build-chat/store.js';
 
-/** Select an answered visual review; open choices and media belonging to another job are never a stage. */
+/** Select the current visual, preferring a review's recommendation while its decision is open. */
 export function selectStageMedia(
   commands: readonly ChatRow[],
   findMedia: (id: string) => ChatRow | null,
@@ -33,7 +33,7 @@ export function selectStageMedia(
       continue;
     }
     const parsed = ChatCommand.safeParse(value);
-    if (!parsed.success || parsed.data.status !== 'answered') continue;
+    if (!parsed.success || parsed.data.status === 'moot') continue;
     const correction =
       typeof value === 'object' &&
       value !== null &&
@@ -42,20 +42,31 @@ export function selectStageMedia(
         ? value.corrected_option_id
         : undefined;
     const chosen = correction ?? parsed.data.option_id;
-    if (!chosen || (!correction && parsed.data.review && !parsed.data.review.likes.includes(chosen))) continue;
-    const option = parsed.data.options.find((item) => item.id === chosen);
-    if (!option?.media_id || (!allowAi && option.aiGenerated)) continue;
-    if (option.provenance?.aspect && !['scene', 'look'].includes(option.provenance.aspect)) continue;
-    if (option.provenance?.view && option.provenance.view !== 'player') continue;
-    const media = findMedia(option.media_id);
     if (
-      media?.jobId === row.jobId &&
-      (media.kind === 'image' || media.kind === 'clip') &&
-      media.mediaHash &&
-      media.width &&
-      media.height
+      parsed.data.status === 'answered' &&
+      (!chosen || (!correction && parsed.data.review && !parsed.data.review.likes.includes(chosen)))
     )
-      return media;
+      continue;
+    const options =
+      parsed.data.status === 'answered'
+        ? parsed.data.options.filter((item) => item.id === chosen)
+        : [...parsed.data.options].sort(
+            (a, b) => Number(b.id === parsed.data.recommend) - Number(a.id === parsed.data.recommend),
+          );
+    for (const option of options) {
+      if (!option.media_id || (!allowAi && option.aiGenerated)) continue;
+      if (option.provenance?.aspect && !['scene', 'look'].includes(option.provenance.aspect)) continue;
+      if (option.provenance?.view && option.provenance.view !== 'player') continue;
+      const media = findMedia(option.media_id);
+      if (
+        media?.jobId === row.jobId &&
+        (media.kind === 'image' || media.kind === 'clip') &&
+        media.mediaHash &&
+        media.width &&
+        media.height
+      )
+        return media;
+    }
   }
   return undefined;
 }
