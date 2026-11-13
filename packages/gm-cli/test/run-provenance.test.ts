@@ -63,12 +63,12 @@ it('builds the clean commit before issuing a source attestation', () => {
   git('commit', '-qm', 'ignore assets');
   mkdirSync(join(root, 'public'));
   writeFileSync(join(root, 'public/logo.png'), 'untracked visual input');
-  expect(() =>
+  expect(
     prepareVerifiedSource(root, () => {
       builds += 1;
     }),
-  ).toThrow('committed tracked changes');
-  expect(builds).toBe(1);
+  ).toBe(git('rev-parse', 'HEAD').trim());
+  expect(builds).toBe(2);
   git('add', '-f', 'public/logo.png');
   git('commit', '-qm', 'add asset');
   expect(() =>
