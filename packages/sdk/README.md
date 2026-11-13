@@ -112,3 +112,8 @@ x,y,z` read and update the same file. `gm scenery render --out scenery.png` capt
 undoable edits. Pass a `loadAsset` callback that supplies a fresh object for each placement. Declare the game's world-space
 X/Z play-area rectangle to omit any item or terrain segment whose bounds intersect it. The renderer owns terrain geometry
 and materials; the caller owns loaded assets and is responsible for disposing the group when finished.
+
+For the shared editor, `sceneryPalette` supplies the scenery categories and lock-filtered prefabs.
+`sceneryToDesign` imports scene settings and placements into a design document using caller-supplied stable entity IDs;
+`sceneryFromDesign` validates the effective document against the lock and produces the scene file format. Pose yaw is
+stored in degrees in the editor and radians in scenery data. These adapters do not themselves persist transactions.
