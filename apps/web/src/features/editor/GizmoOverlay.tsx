@@ -11,7 +11,7 @@ import {
   normalizeFramePoint,
   placementPose,
   projectedPose,
-  poseFromProps,
+  entityPose,
   stepPose,
   type GizmoKind,
 } from './canvas';
@@ -309,7 +309,7 @@ export function GizmoOverlay({
         pinch.entity.props.scale.every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0)
           ? (pinch.entity.props.scale as [number, number, number])
           : [1, 1, 1];
-      const pose = poseFromProps(pinch.entity.props.pose);
+      const pose = entityPose(pinch.entity.props);
       pose.rotationY =
         (pose.rotationY ?? 0) + ((Math.atan2(second.y - first.y, second.x - first.x) - pinch.angle) * 180) / Math.PI;
       const scale = originalScale.map((n) => n * factor) as [number, number, number];
@@ -368,16 +368,16 @@ export function GizmoOverlay({
             if (projection.cancelled || sequence !== projection.sequence) return;
             projection.pending = false;
             if (origin && target) {
-              const initial = poseFromProps(drag.entity.props.pose);
+              const initial = entityPose(drag.entity.props);
               const pose = projectedPose(
                 [
                   initial.position[0] + target[0] - origin[0],
-                  initial.position[1],
-                  initial.position[2] + target[2] - origin[2],
+                  initial.position[1] + (manifest.dimension === '2d' ? target[1] - origin[1] : 0),
+                  initial.position[2] + (manifest.dimension === '2d' ? 0 : target[2] - origin[2]),
                 ],
                 snap,
               );
-              pose.position[1] = initial.position[1];
+              if (manifest.dimension !== '2d') pose.position[1] = initial.position[1];
               if (initial.rotationY !== undefined) pose.rotationY = initial.rotationY;
               const intent = updateEntityPoseIntent(drag.doc, drag.entity.id, pose, `Moved ${drag.entity.prefab}`);
               drag.intents.push(intent);
@@ -401,7 +401,7 @@ export function GizmoOverlay({
         return;
       }
       const pose = movePose(
-        poseFromProps(drag.entity.props.pose),
+        entityPose(drag.entity.props),
         drag.gizmo,
         { x: (event.clientX - drag.startX) / rect.width, y: (event.clientY - drag.startY) / rect.height },
         manifest,
@@ -523,7 +523,7 @@ export function GizmoOverlay({
 
   const step = (entity: Entity, gizmo: GizmoKind, direction: -1 | 1) => {
     if (session.getState().readOnly) return;
-    const pose = stepPose(poseFromProps(entity.props.pose), gizmo, direction, manifest, snap);
+    const pose = stepPose(entityPose(entity.props), gizmo, direction, manifest, snap);
     if (pose === undefined) return;
     void session
       .getState()
