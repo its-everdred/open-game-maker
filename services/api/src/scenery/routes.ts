@@ -61,7 +61,7 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       }
       let cards: ResolvedCard[] = [];
       const thumbnails = new Map<string, string>();
-      if (assetsRoot) {
+      if (assetsRoot && assets.length > 0) {
         const index = await loadIndex(assetsRoot);
         cards = index.cards;
         const packs = new Set(assets.map((asset) => packOf(asset.id)).filter((pack) => pack !== undefined));
