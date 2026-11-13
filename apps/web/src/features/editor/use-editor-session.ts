@@ -24,6 +24,7 @@ type Options = {
   mode: 'play' | 'edit';
   role?: string;
   activeSnapshot?: DesignSnapshot;
+  requestOnlySnapshot?: DesignSnapshot;
   source?: ScenerySource;
   frameRef: RefObject<GameFrameController | undefined>;
   setAdopted: Dispatch<SetStateAction<Adoption | undefined>>;
@@ -35,6 +36,7 @@ export function useEditorSession({
   mode,
   role,
   activeSnapshot,
+  requestOnlySnapshot,
   source,
   frameRef,
   setAdopted,
@@ -43,6 +45,13 @@ export function useEditorSession({
   const [sessionView, setSessionView] = useState<EditorSessionState>();
   const [editStartup, setEditStartup] = useState<EditorSessionState['saved']>();
   useEffect(() => {
+    if (mode === 'edit' && role !== 'peer' && requestOnlySnapshot && gameId !== '') {
+      const editor = createSession(gameId, branch, 'preview', 0, requestOnlySnapshot, frameRef);
+      editor.setState({ readOnly: true });
+      setSessionStore(editor);
+      setEditStartup(undefined);
+      return () => setSessionStore(undefined);
+    }
     if (
       mode !== 'edit' ||
       role === 'peer' ||
@@ -136,7 +145,7 @@ export function useEditorSession({
       void lease.stop();
       setSessionStore(undefined);
     };
-  }, [activeSnapshot, branch, gameId, mode, role, source, frameRef, setAdopted]);
+  }, [activeSnapshot, requestOnlySnapshot, branch, gameId, mode, role, source, frameRef, setAdopted]);
 
   useEffect(() => {
     if (sessionStore === undefined) {

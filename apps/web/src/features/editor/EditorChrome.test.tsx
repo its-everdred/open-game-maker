@@ -60,6 +60,43 @@ describe('EditorChrome', () => {
     expect(container.querySelector('.editor-inspector-stack .editor-tools')).toBeNull();
     expect(container.querySelector('.editor-inspector-stack .editor-inspector')).toBeNull();
   });
+  it('clears a selected item from the canvas when the palette changes', () => {
+    const onCanvasChange = vi.fn();
+    const props = {
+      gameId: 'game',
+      session,
+      onCommand: vi.fn(),
+      onTool: vi.fn(),
+      onUndo: vi.fn(),
+      onRedo: vi.fn(),
+      onDelete: vi.fn(),
+      onDuplicate: vi.fn(),
+      onInstanceCount: vi.fn(),
+      onCanvasChange,
+    };
+    const view = render(<EditorChrome {...props} manifest={manifest} />);
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Skeleton' }), { pointerId: 1 });
+    expect(onCanvasChange).toHaveBeenLastCalledWith(expect.objectContaining({ prefab: 'skeleton' }));
+    view.rerender(<EditorChrome {...props} manifest={{ ...manifest, palette: { categories: [], items: [] } }} />);
+    expect(onCanvasChange).toHaveBeenLastCalledWith(expect.objectContaining({ prefab: undefined }));
+  });
+  it('selects the first category when a fallback palette arrives after the game manifest', () => {
+    const empty = { ...manifest, palette: { categories: [], items: [] } };
+    const props = {
+      gameId: 'game',
+      session,
+      onCommand: vi.fn(),
+      onTool: vi.fn(),
+      onUndo: vi.fn(),
+      onRedo: vi.fn(),
+      onDelete: vi.fn(),
+      onDuplicate: vi.fn(),
+      onInstanceCount: vi.fn(),
+    };
+    const view = render(<EditorChrome {...props} manifest={empty} />);
+    view.rerender(<EditorChrome {...props} manifest={manifest} />);
+    expect(screen.getByRole('button', { name: 'Skeleton' })).toBeVisible();
+  });
   it('submits an undoable light change from the scenery tab', () => {
     const submit = vi.fn();
     const sceneryManifest = {

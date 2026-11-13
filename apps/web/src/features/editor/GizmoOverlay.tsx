@@ -53,11 +53,21 @@ type GizmoOverlayProps = {
   manifest: GameManifest;
   session: StoreApi<EditorSessionState>;
   snap: SnapPrefs;
+  onRequestPlacement?(prefab: string, point: { x: number; y: number }): void;
+  allowReadOnlyRequests?: boolean;
 };
 
 const VALIDATION_INTERVAL_MS = 1000 / 15;
 
-export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: GizmoOverlayProps) {
+export function GizmoOverlay({
+  activePrefab,
+  frame,
+  manifest,
+  session,
+  snap,
+  onRequestPlacement,
+  allowReadOnlyRequests = false,
+}: GizmoOverlayProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<Ghost | undefined>(undefined);
   const dragRef = useRef<Drag | undefined>(undefined);
@@ -94,6 +104,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const pendingValidationRef = useRef<Ghost | undefined>(undefined);
   const dropRequestedRef = useRef(false);
   const projectionSequence = useRef(0);
+  const requestPointerRef = useRef<number | undefined>(undefined);
   const projectingRef = useRef(false);
   const [ghost, setGhost] = useState<Ghost>();
   const [anchor, setAnchor] = useState<{ id: string; x: number; y: number }>();
@@ -133,6 +144,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
       dropRequestedRef.current = false;
       if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
       dragRef.current = undefined;
+      requestPointerRef.current = undefined;
     },
     [activePrefab, frame],
   );
@@ -200,7 +212,13 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (session.getState().readOnly) return;
+    if (session.getState().readOnly && !(allowReadOnlyRequests && onRequestPlacement)) return;
+    if (onRequestPlacement && activePrefab !== undefined) {
+      if (requestPointerRef.current !== undefined) return;
+      requestPointerRef.current = event.pointerId;
+      capturePointer(event.currentTarget, event.pointerId);
+      return;
+    }
     if (event.pointerType === 'touch') {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size > 1) {
@@ -274,6 +292,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (requestPointerRef.current !== undefined) return;
     if (terrain.move(event)) return;
     if (activePrefab?.startsWith('scenery-band:')) return;
     if (touchesRef.current.has(event.pointerId))
@@ -398,6 +417,17 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (requestPointerRef.current !== undefined) {
+      if (requestPointerRef.current !== event.pointerId) return;
+      requestPointerRef.current = undefined;
+      if ((!session.getState().readOnly || allowReadOnlyRequests) && activePrefab && onRequestPlacement) {
+        onRequestPlacement(
+          activePrefab,
+          normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()),
+        );
+      }
+      return;
+    }
     touchesRef.current.delete(event.pointerId);
     if (terrain.up(event)) return;
     const pinch = pinchRef.current;
@@ -431,6 +461,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (requestPointerRef.current === event.pointerId) requestPointerRef.current = undefined;
     touchesRef.current.delete(event.pointerId);
     terrain.cancel(event);
     if (pinchRef.current?.ids.includes(event.pointerId)) {

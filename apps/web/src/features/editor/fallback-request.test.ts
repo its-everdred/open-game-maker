@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { CreateJobRequest } from '@ogm/contracts/browser';
 
-import { fallbackEditRequest } from './fallback-request';
+import { fallbackEditRequest, previewEditRequest } from './fallback-request';
 
 describe('fallback editor request', () => {
+  it('requests an item from an unmerged preview without treating its prefab as a locked asset', () => {
+    const request = previewEditRequest(
+      { gameId: 'g_1', branchId: 'main' },
+      { prefab: 'skeleton', name: 'Skeleton', x: 0.2, y: 0.4 },
+      'k',
+    );
+    expect(request.plan.summary).toContain('skeleton');
+    expect(request.plan.summary).toContain('preview');
+  });
   it('turns a palette placement into a game-specific agent job with its asset and preview location', () => {
     const request = fallbackEditRequest(
       { gameId: 'g_00000000-0000-4000-8000-000000000001', branchId: 'main' },
