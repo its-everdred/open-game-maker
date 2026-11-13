@@ -64,7 +64,9 @@ test('keeps models and painted sprites together in a no-build scene', async ({ p
   ];
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/api/v1/games/game/branches/main/design')
+    if (path === '/api/v1/games/game/branches')
+      return route.fulfill({ json: [{ id: 'draft', name: 'draft', gameId: 'game' }] });
+    if (path === '/api/v1/games/game/branches/draft/design')
       return route.fulfill({ json: { rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } } });
     if (path === '/api/v1/games/game/scenery/source')
       return route.fulfill({
@@ -104,9 +106,11 @@ test('keeps models and painted sprites together in a no-build scene', async ({ p
         contentType: 'image/png',
         body: readFileSync(new URL('../public/icons/favicon-32.png', import.meta.url)),
       });
+    if (path.includes('/branches/draft/'))
+      return route.fallback({ url: route.request().url().replace('/branches/draft/', '/branches/main/') });
     return route.fallback();
   });
-  await page.goto('/g/game?mode=edit&test');
+  await page.goto('/g/game?mode=edit&test&v=draft');
   await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '0', { timeout: 30_000 });
   await expect(page.getByLabel('Scene items')).toContainText('tree');
   const canvas = page.getByLabel('Editor canvas');

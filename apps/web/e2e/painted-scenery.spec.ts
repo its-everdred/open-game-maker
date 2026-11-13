@@ -23,7 +23,9 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
   });
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/api/v1/games/game/branches/main/design')
+    if (path === '/api/v1/games/game/branches')
+      return route.fulfill({ json: [{ id: 'draft', name: 'draft', gameId: 'game' }] });
+    if (path === '/api/v1/games/game/branches/draft/design')
       return route.fulfill({ json: { rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } } });
     if (path === '/api/v1/games/game/scenery/source')
       return route.fulfill({
@@ -57,9 +59,11 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
           : `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="${asset.id === 'forest' ? '#90c878' : '#b8dce4'}"/><path d="M0 270 Q320 180 640 270 V360 H0Z" fill="#507a43"/></svg>`;
       return route.fulfill({ contentType: 'image/svg+xml', body: svg });
     }
+    if (path.includes('/branches/draft/'))
+      return route.fallback({ url: route.request().url().replace('/branches/draft/', '/branches/main/') });
     return route.fallback();
   });
-  await page.goto('/g/game?mode=edit&test');
+  await page.goto('/g/game?mode=edit&test&v=draft');
   await expect(page.getByLabel('Scene items')).toContainText('forest', { timeout: 30_000 });
   await expect(page.locator('.game-frame canvas')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('painted-before.png') });
