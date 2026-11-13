@@ -7,6 +7,7 @@ export type CacheRoute = { strategy: 'pass' } | { strategy: 'cache-first'; cache
 export function classifyGameRequest(request: Request, workerOrigin = location.origin): CacheRoute {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== workerOrigin) return { strategy: 'pass' };
+  if (/^\/g\/[^/]+\/(?:pv|preview)-/u.test(url.pathname)) return { strategy: 'pass' };
   if (/^\/a\/[0-9a-f]{64}\.[a-z0-9]+$/.test(url.pathname)) {
     return { strategy: 'cache-first', cacheName: BLOB_CACHE };
   }

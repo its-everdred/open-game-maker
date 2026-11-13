@@ -91,6 +91,7 @@ describe('command registry', () => {
       'plan check',
       'plan premises',
       'policy',
+      'preview',
       'publish',
       'py',
       'py setup',

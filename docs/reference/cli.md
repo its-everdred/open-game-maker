@@ -29,6 +29,18 @@ reads. A set id (for example `limezu-modern`) is refused with its family named; 
 `--set` must name a set in that registry and, when `--family` is present, belong to the chosen family. It records the
 set in `gm.lock.json`, pins the exact `@gm/pack-<set>` version, and installs only that set's `gm-set-<set>` skill.
 
+## Preview an unmerged build
+
+```text
+gm preview [--ticket <number>] [--json]
+```
+
+From the game folder (or a sparse workspace with one game), build the current workspace, including uncommitted edits,
+and send it to the game's review queue without changing the live build. The ticket defaults to the current agent ticket
+or `aiur/<number>` branch; pass `--ticket` when neither is available. The daemon's `OGM_INTERNAL_URL` and
+`OGM_HOOK_SECRET_FILE` provide the upload connection. A new upload for the same game and ticket replaces the review
+request; the creator's verdict and optional note go back to that ticket.
+
 ## Verify a game
 
 ```text
@@ -67,7 +79,7 @@ temporary directory. Other builds use `dist`. A capture of an independently serv
 `--verify-source` also requires committed tracked changes and no untracked build inputs; git-ignored files are excluded.
 
 By default `gm run` captures the play screen as a player sees it: the build mounted through `@gm/host` (the app's own
-touch overlay, viewport tracking and bridge) under a copy of the app's top bar and Pause, styled with the app's own
+touch overlay, viewport tracking and bridge) with the app's menu and Pause, styled with the app's own
 stylesheets, at 390x844, 844x390, 820x1180 and 1180x820 with touch on (`--viewport touch`). `--viewport all` adds the
 1440x900 desktop, and one name (`phone`, `phone-landscape`, `tablet`, `tablet-landscape`, `desktop`) captures only it.
 `--frame app` captures inside the real signed-in app instead: it opens `/play/<gm.manifest.json id>` on

@@ -84,7 +84,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm chat post` sends the current still or clip to the build chat.
 - `gm decide` asks; `gm command wait` waits, or park on it; a `gm-decision-answer` comment answers. `gm ask` queues words.
 - `gm changes` summarizes the current game-repo diff.
-- `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
+- `gm preview [--ticket <number>]` builds this workspace for creator review without changing the live release; the verdict returns to the ticket. `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 - `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.
 ## Load when…
 

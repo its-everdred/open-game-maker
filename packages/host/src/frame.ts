@@ -25,6 +25,8 @@ export interface GameFrameOptions {
   appOrigin?: string;
   gameId: string;
   buildId: string;
+  /** A scoped preview capability, served outside the published-build service worker scope. */
+  preview?: boolean;
   build: 'draft' | 'test' | 'published';
   /** Extra query parameters the game reads at boot, such as a review deck's scenario (`speed=slow`). */
   params?: Readonly<Record<string, string>>;
@@ -87,11 +89,14 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   Object.assign(wrapper.style, { position: 'relative', width: '100%', height: '100%' });
   const iframe = document.createElement('iframe');
   iframe.title = 'Game';
-  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-pointer-lock');
+  iframe.setAttribute(
+    'sandbox',
+    options.preview ? 'allow-scripts allow-pointer-lock' : 'allow-scripts allow-same-origin allow-pointer-lock',
+  );
   iframe.setAttribute('allow', 'autoplay; fullscreen; gamepad');
   iframe.setAttribute('referrerpolicy', 'origin');
   Object.assign(iframe.style, { border: '0', width: '100%', height: '100%', display: 'block' });
-  const path = `/g/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/index.html`;
+  const path = `/${options.preview ? 'p' : 'g'}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/index.html`;
   const source = new URL(path, gamesOrigin.origin);
   /* The host's own parameters are set after, so a scenario can never change the build or the protocol. */
   for (const [key, value] of Object.entries(options.params ?? {})) source.searchParams.set(key, value);
@@ -115,6 +120,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   const bridge = new HostBridge({
     iframe,
     origin: gamesOrigin.origin,
+    ...(options.preview ? { opaqueOrigin: true } : {}),
     role: options.role,
     readyTimeoutMs: options.readyTimeoutMs,
     onFatal: dispose,
@@ -127,6 +133,17 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
       tier: options.tier,
     },
   });
+  if (options.preview) {
+    let loaded = false;
+    iframe.addEventListener('load', () => {
+      if (!loaded) {
+        loaded = true;
+        return;
+      }
+      options.onError?.({ code: 'frame-navigation', message: 'The preview navigated away.' });
+      dispose();
+    });
+  }
   bridge.onError((failure) => options.onError?.(failure));
 
   const overlay = new TouchOverlay({
