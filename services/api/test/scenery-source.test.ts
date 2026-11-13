@@ -64,6 +64,8 @@ describe('no-build scenery source', () => {
     git('commit', '-qm', 'side asset');
     git('branch', 'side');
     const branch = await readScenerySource(root, 'games/fixture', false, 'refs/heads/side');
+    const inherited = await readScenerySource(root, 'games/fixture', false, 'refs/heads/not-created', branch.commit);
+    expect(inherited.lock).toEqual(branch.lock);
     writeFileSync(lockPath, originalLock);
     writeFileSync(join(game, 'models', 'tree model.glb'), 'locked model');
     const result = await readSceneryFile({
@@ -247,6 +249,14 @@ describe('no-build scenery source', () => {
     git('init', '-q');
     git('add', '.');
     git('commit', '-qm', 'main');
+    const forkResponse = await app.request(`/api/v1/games/${ids.game}/branches`, {
+      method: 'POST',
+      headers: { ...asUser(ids.creator), 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'forked' }),
+    });
+    expect(forkResponse.status).toBe(201);
+    const fork = await forkResponse.json();
+    expect(fork.forkPoint.gitSha).toBe(git('rev-parse', 'HEAD').toString().trim());
     const branchModel = Buffer.from('side model');
     writeFileSync(join(game, 'models', 'tree model.glb'), branchModel);
     const lockPath = join(game, 'assets.lock.json');
@@ -257,6 +267,10 @@ describe('no-build scenery source', () => {
     git('add', '.');
     git('commit', '-qm', 'side');
     git('branch', 'side');
+    const inheritedResponse = await app.request(`${url}?branch=${fork.id}`, { headers: asUser(ids.creator) });
+    expect(inheritedResponse.status).toBe(200);
+    const inherited = await inheritedResponse.json();
+    expect(inherited.assets[0].sha256).not.toBe(sideLock.assets[0].sha256);
     writeFileSync(lockPath, oldLock);
     writeFileSync(join(game, 'models', 'tree model.glb'), 'locked model');
     deps.db

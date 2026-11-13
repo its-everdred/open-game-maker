@@ -20,6 +20,10 @@ async function branchObject(root: string, ref: string): Promise<string> {
   return sha;
 }
 
+export async function resolveSceneryCommit(checkout: string, gamePath: string, ref: string): Promise<string> {
+  return branchObject(await contained(checkout, gamePath), ref);
+}
+
 async function branchFile(root: string, sha: string, path: string): Promise<Buffer> {
   if (isAbsolute(path) || path.split('/').some((part) => part === '..' || part === '.'))
     throw new Error('invalid path');
@@ -71,10 +75,14 @@ export async function readScenerySource(
   gamePath: string,
   includeUpdatedAt = true,
   ref?: string,
+  fallbackRef?: string,
 ): Promise<{ root: string; lock: AssetsLock; scene: Scenery; updatedAt?: string; commit?: string }> {
   if (ref) {
     const root = await contained(checkout, gamePath);
-    const commit = await branchObject(root, ref);
+    const commit = await branchObject(root, ref).catch((error: unknown) => {
+      if (!fallbackRef) throw error;
+      return branchObject(root, fallbackRef);
+    });
     const lock = AssetsLockSchema.parse(
       JSON.parse((await branchFile(root, commit, 'assets.lock.json')).toString('utf8')),
     );

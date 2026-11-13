@@ -64,6 +64,7 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
         target.path,
         includeUpdatedAt,
         branch?.name === 'main' ? undefined : branch?.gitRef,
+        branch?.forkGitSha ?? undefined,
       );
     } catch {
       throw new HttpError(404, 'scenery_source_unavailable');

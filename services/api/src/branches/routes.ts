@@ -1,6 +1,8 @@
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
+import { schema } from '@ogm/db';
 
 import { authorize } from '@ogm/policy';
 
@@ -41,6 +43,7 @@ import {
   renameBranch,
 } from './service.js';
 import { createVersionCounts } from './version-counts.js';
+import { resolveSceneryCommit } from '../scenery/source.js';
 
 export const prefix = '/api/v1';
 
@@ -115,12 +118,25 @@ const routes = new Hono<ApiBindings>()
     const { game, userId } = authorizedGame(c, 'game.edit');
     const body = await parseBody(c, createBody);
     try {
+      const deps = c.get('deps');
+      const parent = getBranch(deps.sqlite, game.id, body.fromBranchId ?? 'main');
+      const daemon = game.slug
+        ? deps.db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).get()
+        : undefined;
+      let forkGitSha: string | undefined;
+      if (daemon && game.githubPath) {
+        const ref = parent.name === 'main' ? 'HEAD' : parent.gitRef;
+        forkGitSha = await resolveSceneryCommit(daemon.checkoutPath, game.githubPath, ref).catch(
+          () => parent.forkPoint?.gitSha ?? undefined,
+        );
+      }
       return c.json(
         createBranch(c.get('deps').sqlite, {
           gameId: game.id,
           name: body.name,
           fromBranchId: body.fromBranchId,
           userId,
+          forkGitSha,
         }),
         201,
       );
