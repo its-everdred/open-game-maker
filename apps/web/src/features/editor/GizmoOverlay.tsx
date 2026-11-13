@@ -54,6 +54,12 @@ type GizmoOverlayProps = {
   session: StoreApi<EditorSessionState>;
   snap: SnapPrefs;
   onRequestPlacement?(prefab: string, point: { x: number; y: number }): void;
+  onRequestDelete?(entity: Entity): void;
+  onRequestTransform?(
+    entity: Entity,
+    gizmo: GizmoKind,
+    target: { point?: { x: number; y: number }; direction?: -1 | 1 },
+  ): void;
   allowReadOnlyRequests?: boolean;
 };
 
@@ -66,6 +72,8 @@ export function GizmoOverlay({
   session,
   snap,
   onRequestPlacement,
+  onRequestDelete,
+  onRequestTransform,
   allowReadOnlyRequests = false,
 }: GizmoOverlayProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -105,6 +113,7 @@ export function GizmoOverlay({
   const dropRequestedRef = useRef(false);
   const projectionSequence = useRef(0);
   const requestPointerRef = useRef<number | undefined>(undefined);
+  const requestTransformRef = useRef<{ entity: Entity; gizmo: GizmoKind } | undefined>(undefined);
   const requestInterruptedRef = useRef(false);
   const projectingRef = useRef(false);
   const [ghost, setGhost] = useState<Ghost>();
@@ -146,6 +155,7 @@ export function GizmoOverlay({
       if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
       dragRef.current = undefined;
       requestPointerRef.current = undefined;
+      requestTransformRef.current = undefined;
       requestInterruptedRef.current = false;
     },
     [activePrefab, frame],
@@ -274,8 +284,12 @@ export function GizmoOverlay({
             if (holdRef.current !== held || !held.picked) return;
             const state = session.getState();
             const entity = state.doc.entities[held.picked];
-            if (!state.readOnly && entity?.prefab.startsWith('scenery:')) {
-              void state.submit(deleteEntityIntent(state.doc, entity.id, `Removed ${entity.prefab}`));
+            if (
+              entity?.prefab.startsWith('scenery:') &&
+              (!state.readOnly || (allowReadOnlyRequests && onRequestDelete))
+            ) {
+              if (state.readOnly) onRequestDelete?.(entity);
+              else void state.submit(deleteEntityIntent(state.doc, entity.id, `Removed ${entity.prefab}`));
               state.setSelection([]);
               frame.select([]);
             }
@@ -426,21 +440,21 @@ export function GizmoOverlay({
     if (requestPointerRef.current !== undefined) {
       if (requestPointerRef.current !== event.pointerId) return;
       requestPointerRef.current = undefined;
-      if (
-        !requestInterruptedRef.current &&
-        (!session.getState().readOnly || allowReadOnlyRequests) &&
-        activePrefab &&
-        onRequestPlacement
-      ) {
-        onRequestPlacement(
-          activePrefab,
-          normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()),
-        );
+      if (!requestInterruptedRef.current && (!session.getState().readOnly || allowReadOnlyRequests)) {
+        const point = normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
+        const transform = requestTransformRef.current;
+        if (transform && onRequestTransform) onRequestTransform(transform.entity, transform.gizmo, { point });
+        else if (activePrefab && onRequestPlacement) onRequestPlacement(activePrefab, point);
       }
+      requestTransformRef.current = undefined;
       requestInterruptedRef.current = false;
       return;
     }
-    if (onRequestPlacement) return;
+    if (onRequestPlacement) {
+      if (holdRef.current?.pointerId === event.pointerId) clearTimeout(holdRef.current.timer);
+      holdRef.current = undefined;
+      return;
+    }
     touchesRef.current.delete(event.pointerId);
     if (terrain.up(event)) return;
     const pinch = pinchRef.current;
@@ -474,7 +488,10 @@ export function GizmoOverlay({
   };
 
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (requestPointerRef.current === event.pointerId) requestPointerRef.current = undefined;
+    if (requestPointerRef.current === event.pointerId) {
+      requestPointerRef.current = undefined;
+      requestTransformRef.current = undefined;
+    }
     touchesRef.current.delete(event.pointerId);
     terrain.cancel(event);
     if (pinchRef.current?.ids.includes(event.pointerId)) {
@@ -505,7 +522,15 @@ export function GizmoOverlay({
 
   const beginGizmo = (event: React.PointerEvent<HTMLButtonElement>, entity: Entity, gizmo: GizmoKind) => {
     event.stopPropagation();
-    if (session.getState().readOnly) return;
+    if (session.getState().readOnly) {
+      if (allowReadOnlyRequests && onRequestTransform) {
+        requestPointerRef.current = event.pointerId;
+        requestInterruptedRef.current = false;
+        requestTransformRef.current = { entity, gizmo };
+        capturePointer(event.currentTarget, event.pointerId);
+      }
+      return;
+    }
     if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
     capturePointer(event.currentTarget, event.pointerId);
     const surface = surfaceRef.current;
@@ -535,7 +560,10 @@ export function GizmoOverlay({
   };
 
   const step = (entity: Entity, gizmo: GizmoKind, direction: -1 | 1) => {
-    if (session.getState().readOnly) return;
+    if (session.getState().readOnly) {
+      if (allowReadOnlyRequests && onRequestTransform) onRequestTransform(entity, gizmo, { direction });
+      return;
+    }
     const pose = stepPose(entityPose(entity.props), gizmo, direction, manifest, snap);
     if (pose === undefined) return;
     void session

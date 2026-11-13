@@ -15,6 +15,8 @@ export function selectStageMedia(
       if (
         typeof value === 'object' &&
         value !== null &&
+        'status' in value &&
+        value.status === 'answered' &&
         'command_id' in value &&
         typeof value.command_id === 'string'
       ) {
@@ -65,7 +67,7 @@ export function selectStageMedia(
         media.width &&
         media.height
       )
-        return media;
+        return { ...media, at: new Date(time(row)).toISOString() };
     }
   }
   return undefined;

@@ -53,7 +53,7 @@ describe('editor API classifications', () => {
     vi.stubGlobal('fetch', fetch);
     await getEditorPreviews(gameId);
     await getPreviewDesign(gameId, '12', 'preview-x');
-    expect(fetch).toHaveBeenNthCalledWith(1, `/api/v1/games/${gameId}/previews`, expect.anything());
+    expect(fetch).toHaveBeenNthCalledWith(1, `/api/v1/games/${gameId}/editor/previews`, expect.anything());
     expect(fetch).toHaveBeenNthCalledWith(
       2,
       `/api/v1/games/${gameId}/previews/12/design?buildId=preview-x`,

@@ -1,12 +1,29 @@
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { promisify } from 'node:util';
 
 import { buildPackIndex } from '@ogm/asset-cards';
 import type { BlobStore } from '@ogm/blob-store';
 import { AssetsLockSchema, parseScenery, type AssetsLock, type Scenery } from '@ogm/contracts';
 
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
+const runFile = promisify(execFile);
+
+async function sceneUpdatedAt(root: string, path: string): Promise<string> {
+  const modified = (await stat(path)).mtime.toISOString();
+  try {
+    const args = ['-C', root];
+    const status = await runFile('git', [...args, 'status', '--porcelain', '--', 'scenery.json'], { timeout: 2_000 });
+    if (status.stdout.trim()) return modified;
+    const log = await runFile('git', [...args, 'log', '-1', '--format=%cI', '--', 'scenery.json'], { timeout: 2_000 });
+    const timestamp = Date.parse(log.stdout.trim());
+    return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : modified;
+  } catch {
+    return modified;
+  }
+}
 
 function inside(root: string, path: string): boolean {
   const part = relative(root, path);
@@ -31,12 +48,15 @@ export async function readGameLock(checkout: string, gamePath: string): Promise<
 export async function readScenerySource(
   checkout: string,
   gamePath: string,
-): Promise<{ root: string; lock: AssetsLock; scene: Scenery }> {
+  includeUpdatedAt = true,
+): Promise<{ root: string; lock: AssetsLock; scene: Scenery; updatedAt?: string }> {
   const { root, lock } = await readGameLock(checkout, gamePath);
   let data: unknown;
+  let updatedAt: string | undefined;
   try {
     const path = await contained(root, 'scenery.json');
     data = JSON.parse(await readFile(path, 'utf8'));
+    if (includeUpdatedAt) updatedAt = await sceneUpdatedAt(root, path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     data = {
@@ -47,7 +67,7 @@ export async function readScenerySource(
       camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
     };
   }
-  return { root, lock, scene: parseScenery(data, lock.assets) };
+  return { root, lock, scene: parseScenery(data, lock.assets), ...(updatedAt ? { updatedAt } : {}) };
 }
 
 /** Resolve a lock-owned file, enforcing the recorded hash and directory boundary. */

@@ -32,6 +32,7 @@ type EditorChromeProps = {
   onDuplicate(entityId: string): void;
   onInstanceCount(change: InstanceCountChange): Promise<PlacementResult>;
   onCanvasChange?(value: { prefab?: string; snap: SnapPrefs }): void;
+  onRequestLight?(preset: 'warm-forest' | 'night' | 'cave'): void;
 };
 
 export function EditorChrome({
@@ -47,6 +48,7 @@ export function EditorChrome({
   onDuplicate,
   onInstanceCount,
   onCanvasChange,
+  onRequestLight,
 }: EditorChromeProps) {
   const [category, setCategory] = useState(manifest.palette.categories[0]?.id ?? '');
   const [pickedPrefab, setPickedPrefab] = useState<string>();
@@ -100,8 +102,10 @@ export function EditorChrome({
             <button
               key={preset}
               type="button"
-              disabled={session.readOnly}
-              onClick={() => void session.submit(sceneryLightIntent(session.doc, preset))}
+              disabled={session.readOnly && !onRequestLight}
+              onClick={() =>
+                onRequestLight ? onRequestLight(preset) : void session.submit(sceneryLightIntent(session.doc, preset))
+              }
             >
               {label}
             </button>

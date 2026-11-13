@@ -48,6 +48,29 @@ function Screen() {
 afterEach(cleanup);
 
 describe('EditorChrome', () => {
+  it('requests a lighting change when a no-build scene is request-only', () => {
+    const request = vi.fn();
+    const sceneryManifest = {
+      ...manifest,
+      capabilities: ['scenery'],
+      palette: { categories: [{ id: 'light', label: 'Light', kind: 'panel' }], items: [] },
+    } as GameManifest;
+    const props = {
+      gameId: 'game',
+      session: { ...session, readOnly: true },
+      onCommand: vi.fn(),
+      onTool: vi.fn(),
+      onUndo: vi.fn(),
+      onRedo: vi.fn(),
+      onDelete: vi.fn(),
+      onDuplicate: vi.fn(),
+      onInstanceCount: vi.fn(),
+      onRequestLight: request,
+    };
+    render(<EditorChrome {...props} manifest={sceneryManifest} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cave' }));
+    expect(request).toHaveBeenCalledWith('cave');
+  });
   it('clears a selected item from the canvas when the palette changes', () => {
     const onCanvasChange = vi.fn();
     const props = {

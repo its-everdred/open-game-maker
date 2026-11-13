@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { schema } from '@ogm/db';
@@ -33,24 +33,52 @@ function setup() {
   const message = vi.fn(async () => ({}));
   deps.aiurClientForGame = vi.fn(async () => ({ message }) as never);
   app.route('/api/v1', previewRoutes);
-  const upload = (ticket = '12', auth = SECRET, body = archive()) =>
+  const upload = (ticket = '12', auth = SECRET, body = archive(), branch = 'main') =>
     app.request(`http://example.test/internal/games/castle-game/previews/${ticket}`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${auth}`, 'x-gm-sha': SHA },
+      headers: { authorization: `Bearer ${auth}`, 'x-gm-sha': SHA, 'x-gm-branch': branch },
       body,
     });
   const list = () =>
     app.request(`http://example.test/api/v1/games/${ids.game}/previews`, { headers: asUser(ids.user) });
+  const editorList = () =>
+    app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, { headers: asUser(ids.user) });
   const answer = (buildId: string, note = 'Great') =>
     app.request(`http://example.test/api/v1/games/${ids.game}/previews/12/answer`, {
       method: 'POST',
       headers: { ...asUser(ids.user), 'content-type': 'application/json' },
       body: JSON.stringify({ buildId, verdict: 'looks right', note }),
     });
-  return { deps, app, upload, list, answer, message };
+  return { deps, app, upload, list, editorList, answer, message };
 }
 
 describe('preview builds', () => {
+  it('keeps an answered preview available to its branch with a rotated access token', async () => {
+    const { deps, upload, list, editorList, answer } = setup();
+    const build = (await (await upload('12', SECRET, archive(), 'branch-a')).json()) as { buildId: string };
+    const before = (await (await editorList()).json()) as { previews: { branchId: string; accessId: string }[] };
+    expect(before.previews[0]?.branchId).toBe('branch-a');
+    expect((await answer(build.buildId)).status).toBe(200);
+    expect(((await (await list()).json()) as { previews: unknown[] }).previews).toHaveLength(0);
+    const after = (await (await editorList()).json()) as { previews: { branchId: string; accessId: string }[] };
+    expect(after.previews[0]?.branchId).toBe('branch-a');
+    expect(after.previews[0]?.accessId).not.toBe(before.previews[0]?.accessId);
+    expect(existsSync(join(previewDirectory(deps, ids.game, build.buildId), 'index.html'))).toBe(true);
+    const host = createGamesHost({
+      root: deps.config.gamesRoot,
+      appOrigin: 'https://app.example.test',
+      version: 'test',
+    });
+    expect((await host.request(`/p/${ids.game}/${before.previews[0]!.accessId}/index.html`)).status).toBe(404);
+    expect((await host.request(`/p/${ids.game}/${after.previews[0]!.accessId}/index.html`)).status).toBe(200);
+  });
+  it('omits an old answered preview whose build was already removed', async () => {
+    const { deps, upload, editorList, answer } = setup();
+    const build = (await (await upload()).json()) as { buildId: string };
+    expect((await answer(build.buildId)).status).toBe(200);
+    rmSync(previewDirectory(deps, ids.game, build.buildId), { recursive: true, force: true });
+    expect(((await (await editorList()).json()) as { previews: unknown[] }).previews).toEqual([]);
+  });
   it('keeps the live branch untouched, serves the new build, and sends a verdict once', async () => {
     const { deps, app, upload, list, answer, message } = setup();
     expect((await upload('12', 'wrong')).status).toBe(401);

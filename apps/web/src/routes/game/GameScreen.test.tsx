@@ -215,7 +215,16 @@ describe('GameScreen', () => {
     editorApi.getScenerySource.mockResolvedValue({
       scene: {
         version: 1,
-        items: [{ id: 'tree' }],
+        items: [
+          {
+            id: 'tree',
+            assetId: 't3:fixture/tree',
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+            layer: 'mid',
+          },
+        ],
         terrain: [],
         lighting: 'warm-forest',
         camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
@@ -224,6 +233,41 @@ describe('GameScreen', () => {
     });
     renderGame('/g/game?mode=edit');
     await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+  });
+  it('shows a newer replacement concept instead of an older diorama', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getEditorStage.mockResolvedValue({
+      stage: { kind: 'image', url: 'https://example.test/new.webp', at: '2026-11-13T12:00:00Z' },
+    });
+    editorApi.getScenerySource.mockResolvedValue({
+      updatedAt: '2026-11-12T12:00:00Z',
+      scene: {
+        version: 1,
+        items: [
+          {
+            id: 'tree',
+            assetId: 't3:fixture/tree',
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+            layer: 'mid',
+          },
+        ],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    const view = renderGame('/g/game?mode=edit');
+    await waitFor(() =>
+      expect(view.container.querySelector('img[src="https://example.test/new.webp"]')).not.toBeNull(),
+    );
+    expect(preview.mountSceneryPreview).not.toHaveBeenCalled();
   });
   it('refreshes the scenery when it arrives while the concept is already open', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
@@ -239,9 +283,22 @@ describe('GameScreen', () => {
       lighting: 'warm-forest',
       camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
     };
-    editorApi.getScenerySource
-      .mockResolvedValueOnce({ scene, assets: [] })
-      .mockResolvedValue({ scene: { ...scene, items: [{ id: 'tree' }] }, assets: [] });
+    editorApi.getScenerySource.mockResolvedValueOnce({ scene, assets: [] }).mockResolvedValue({
+      scene: {
+        ...scene,
+        items: [
+          {
+            id: 'tree',
+            assetId: 't3:fixture/tree',
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+            layer: 'mid',
+          },
+        ],
+      },
+      assets: [],
+    });
     const view = renderGame('/g/game?mode=edit');
     await waitFor(() =>
       expect(view.container.querySelector('img[src="https://example.test/concept.webp"]')).not.toBeNull(),
@@ -281,14 +338,15 @@ describe('GameScreen', () => {
     expect(editorApi.postTransaction).not.toHaveBeenCalled();
   });
   it('uses an unmerged playable preview when no released build exists', async () => {
-    editorApi.listJobs.mockResolvedValue({ jobs: [{ aiurIssueNumber: 12, branchId: 'main' }] });
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
       buildId: editorApi.NO_BUILD_ID,
       doc: { schemaVersion: 1, globals: {}, entities: {} },
     });
     editorApi.getEditorPreviews.mockResolvedValue({
-      previews: [{ ticket: '12', buildId: 'preview-1', accessId: 'pv-1', createdAt: '2026-11-13T00:00:00Z' }],
+      previews: [
+        { ticket: '12', branchId: 'main', buildId: 'preview-1', accessId: 'pv-1', createdAt: '2026-11-13T00:00:00Z' },
+      ],
     });
     renderGame('/g/game?mode=edit');
     await waitFor(() =>
@@ -332,9 +390,10 @@ describe('GameScreen', () => {
       doc: { schemaVersion: 1, globals: {}, entities: {} },
     });
     editorApi.getEditorPreviews.mockResolvedValue({
-      previews: [{ ticket: '12', buildId: 'preview-1', accessId: 'pv-1', createdAt: '2026-11-13T00:00:00Z' }],
+      previews: [
+        { ticket: '12', branchId: 'other', buildId: 'preview-1', accessId: 'pv-1', createdAt: '2026-11-13T00:00:00Z' },
+      ],
     });
-    editorApi.listJobs.mockResolvedValue({ jobs: [{ aiurIssueNumber: 12, branchId: 'other' }] });
     editorApi.getEditorStage.mockResolvedValue({ stage: { kind: 'image', url: 'https://example.test/concept.webp' } });
     const view = renderGame('/g/game?mode=edit');
     await waitFor(() =>
@@ -428,7 +487,7 @@ describe('GameScreen', () => {
     );
     expect(host.mountGameFrame).toHaveBeenCalledOnce();
   });
-  it('opens a no-build scenery preview and persists its initial scene before editing', async () => {
+  it('opens no-build scenery without saving a design transaction', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
       buildId: editorApi.NO_BUILD_ID,
@@ -446,21 +505,13 @@ describe('GameScreen', () => {
     });
     renderGame('/g/game?mode=edit');
     await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(editorApi.postTransaction).toHaveBeenCalledWith(
-        'game',
-        'main',
-        expect.objectContaining({
-          baseBuildId: editorApi.NO_BUILD_ID,
-          baseRev: 0,
-          patches: expect.arrayContaining([expect.objectContaining({ path: ['globals', 'scenery.settings'] })]),
-        }),
-      ),
-    );
+    await act(async () => {});
+    expect(editorApi.acquireLease).not.toHaveBeenCalled();
+    expect(editorApi.postTransaction).not.toHaveBeenCalled();
     expect(host.mountGameFrame).not.toHaveBeenCalled();
   });
 
-  it('does not open an edit session if the initial scene cannot be saved', async () => {
+  it('requests a scenery placement before a playable build', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
       buildId: editorApi.NO_BUILD_ID,
@@ -476,11 +527,92 @@ describe('GameScreen', () => {
       },
       assets: [],
     });
-    editorApi.postTransaction.mockResolvedValue({ ok: false, kind: 'retryable', message: 'offline' });
     renderGame('/g/game?mode=edit');
-    await waitFor(() => expect(screen.getByText('Not saved')).toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'Play and edit' })).toHaveClass('is-unsaved');
-    expect(host.controller.applyDesign).not.toHaveBeenCalled();
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+    act(() =>
+      preview.mountSceneryPreview.mock.calls.at(-1)?.[3]({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: ['scenery'],
+          palette: {
+            categories: [{ id: 'trees', label: 'Trees', kind: 'items' }],
+            items: [{ prefab: 'scenery:t3:fixture/tree', label: 'Tree', category: 'trees' }],
+          },
+          tools: ['place'],
+          gizmos: {},
+          presentation: { minLogical: { w: 100, h: 100 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'Tree' }), { pointerId: 1 });
+    const canvas = await screen.findByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 2, clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 50, clientY: 50 });
+    await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+    expect(editorApi.postTransaction).not.toHaveBeenCalled();
+  });
+  it('requests a lighting change before a playable build', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getScenerySource.mockResolvedValue({
+      scene: {
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+    act(() =>
+      preview.mountSceneryPreview.mock.calls.at(-1)?.[3]({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: ['scenery'],
+          palette: { categories: [{ id: 'light', label: 'Light', kind: 'panel' }], items: [] },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 100, h: 100 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Cave' }));
+    await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+    expect(fallbackAdmission.admitJob.mock.calls[0]?.[0].plan.summary).toContain('lighting to cave');
+    expect(editorApi.postTransaction).not.toHaveBeenCalled();
+  });
+
+  it('does not open a transaction stream for a no-build scene', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getScenerySource.mockResolvedValue({
+      scene: {
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+    await waitFor(() => expect(host.controller.applyDesign).toHaveBeenCalled());
     expect(editorApi.openTransactionStream).not.toHaveBeenCalled();
   });
 

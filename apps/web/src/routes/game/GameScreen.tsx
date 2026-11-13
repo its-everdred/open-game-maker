@@ -2,11 +2,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
 
-import type { Entity, ReapplyReport } from '@ogm/contracts/browser';
+import type { CreateJobRequest, Entity, ReapplyReport } from '@ogm/contracts/browser';
 
 import type { OgmHost } from '../../app/testHook';
 import { useGameMenu, useGameMenuControls } from '../../app/GameMenu';
 import { useDock } from '../../features/build-chat/dock';
+import { editJobRequest } from '../../features/build-chat/edit';
 import { gameJobsQueryKey, myJobsQueryKey } from '../../features/build-chat/jobs';
 import {
   getDesignSnapshot,
@@ -129,10 +130,7 @@ export function GameScreen() {
     retry: false,
   });
   const candidatePreview = noBuild
-    ? previews.data?.previews.find((preview) => {
-        const matches = jobs.data?.jobs.filter((job) => String(job.aiurIssueNumber) === preview.ticket) ?? [];
-        return matches.length === 1 && matches[0]?.branchId === jobBranch;
-      })
+    ? previews.data?.previews.find((preview) => preview.branchId === jobBranch)
     : undefined;
   const previewDesign = useQuery({
     queryKey: ['preview-design', gameId, candidatePreview?.buildId],
@@ -141,7 +139,7 @@ export function GameScreen() {
     retry: false,
   });
   const waitingForPreview =
-    noBuild && (previews.isPending || jobs.isPending || (candidatePreview !== undefined && previewDesign.isPending));
+    noBuild && (previews.isPending || (candidatePreview !== undefined && previewDesign.isPending));
   const activePreview = candidatePreview && previewDesign.data ? candidatePreview : undefined;
   const stage = useQuery({
     queryKey: ['editor-stage', gameId, jobBranch],
@@ -165,6 +163,9 @@ export function GameScreen() {
     (scenerySource.data?.scene.items.length ?? 0) > 0 ||
     (scenerySource.data?.scene.terrain.length ?? 0) > 0 ||
     Object.values(activeSnapshot?.doc.entities ?? {}).some((entity) => entity.prefab.startsWith('scenery:'));
+  const stageAt = Date.parse(stage.data?.stage?.at ?? '');
+  const sceneryAt = Date.parse(scenerySource.data?.updatedAt ?? '');
+  const newerScenery = hasScenery && (!Number.isFinite(stageAt) || !Number.isFinite(sceneryAt) || sceneryAt >= stageAt);
   const waitingForScenery =
     noBuild &&
     !waitingForPreview &&
@@ -173,17 +174,17 @@ export function GameScreen() {
     stage.data?.stage?.kind === 'image' &&
     scenerySource.isPending;
   const activeStage =
-    noBuild && !activePreview && !waitingForScenery && !(hasScenery && stage.data?.stage?.kind === 'image')
+    noBuild && !activePreview && !waitingForScenery && !(newerScenery && stage.data?.stage?.kind === 'image')
       ? (stage.data?.stage ?? undefined)
       : undefined;
   const requestOnlySnapshot = useMemo(
     () =>
       activePreview && previewDesign.data
         ? { ...previewDesign.data, buildId: NO_BUILD_ID }
-        : activeStage
+        : noBuild
           ? activeSnapshot
           : undefined,
-    [activePreview?.buildId, previewDesign.data, activeStage, activeSnapshot],
+    [activePreview?.buildId, previewDesign.data, noBuild, activeSnapshot],
   );
   const previewSource = noBuild && !activePreview && !activeStage ? scenerySource.data : undefined;
   const previewSourceError = noBuild && !activePreview && !activeStage && scenerySource.isError;
@@ -197,13 +198,46 @@ export function GameScreen() {
     retry: false,
   });
   const fallbackActive = nativePaletteEmpty && fallback.data?.mode === 'request';
-  const requestOnly = fallbackActive || activePreview !== undefined || activeStage !== undefined;
+  const requestOnly = fallbackActive || noBuild;
   const editorManifest = useMemo(() => {
     if (!frameState.manifest) return undefined;
     return fallbackActive && fallback.data
       ? { ...frameState.manifest, palette: fallback.data.palette }
       : frameState.manifest;
   }, [frameState.manifest, fallbackActive, fallback.data]);
+  const submitEditRequest = useCallback(
+    (request: CreateJobRequest) => {
+      if (fallbackInFlight.current) return;
+      fallbackInFlight.current = true;
+      void admitJob(request)
+        .then((result) => {
+          if (result.kind === 'refused') {
+            pushToast(energyRefusalText(result.window) ?? 'The build could not be started.');
+            return;
+          }
+          void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
+          void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
+        })
+        .catch(() => pushToast('The build could not be started.'))
+        .finally(() => {
+          fallbackInFlight.current = false;
+        });
+    },
+    [gameId, queryClient],
+  );
+  const requestLight = useCallback(
+    (preset: 'warm-forest' | 'night' | 'cave') => {
+      submitEditRequest(
+        editJobRequest(
+          { gameId, branchId: jobBranch },
+          `Set the scene lighting to ${preset}.`,
+          'now',
+          `edit:${crypto.randomUUID()}`,
+        ),
+      );
+    },
+    [gameId, jobBranch, submitEditRequest],
+  );
   const requestFallbackPlacement = useCallback(
     (prefab: string, point: { x: number; y: number }) => {
       if (activeStage) {
@@ -219,7 +253,6 @@ export function GameScreen() {
       const palette = fallbackActive ? fallback.data?.palette : frameState.manifest?.palette;
       const item = palette?.items.find((candidate) => candidate.prefab === prefab);
       if (!item || fallbackInFlight.current) return;
-      fallbackInFlight.current = true;
       try {
         const target = { gameId, branchId: jobBranch };
         const key = `edit:${crypto.randomUUID()}`;
@@ -227,25 +260,12 @@ export function GameScreen() {
           fallbackActive && !prefab.startsWith('scope:')
             ? fallbackEditRequest(target, { assetId: prefab, name: item.label, ...point }, key)
             : previewEditRequest(target, { prefab, name: item.label, ...point }, key);
-        void admitJob(request)
-          .then((result) => {
-            if (result.kind === 'refused') {
-              pushToast(energyRefusalText(result.window) ?? 'The build could not be started.');
-              return;
-            }
-            void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
-            void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
-          })
-          .catch(() => pushToast('The build could not be started.'))
-          .finally(() => {
-            fallbackInFlight.current = false;
-          });
+        submitEditRequest(request);
       } catch {
-        fallbackInFlight.current = false;
         pushToast('The build could not be started.');
       }
     },
-    [activeStage, fallback.data, fallbackActive, frameState.manifest, gameId, jobBranch, queryClient],
+    [activeStage, fallback.data, fallbackActive, frameState.manifest, gameId, jobBranch, submitEditRequest],
   );
   const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
@@ -555,7 +575,33 @@ export function GameScreen() {
             session={sessionStore}
             snap={canvasOptions.snap}
             onRequestPlacement={requestOnly ? requestFallbackPlacement : undefined}
-            allowReadOnlyRequests={activePreview !== undefined || activeStage !== undefined}
+            onRequestDelete={
+              noBuild
+                ? (entity) =>
+                    submitEditRequest(
+                      editJobRequest(
+                        { gameId, branchId: jobBranch },
+                        `Remove ${describeRequestedEntity(entity)}.`,
+                        'now',
+                        `edit:${crypto.randomUUID()}`,
+                      ),
+                    )
+                : undefined
+            }
+            onRequestTransform={
+              noBuild
+                ? (entity, gizmo, target) =>
+                    submitEditRequest(
+                      editJobRequest(
+                        { gameId, branchId: jobBranch },
+                        `Change ${describeRequestedEntity(entity)} using ${gizmo}: ${JSON.stringify(target)}.`,
+                        'now',
+                        `edit:${crypto.randomUUID()}`,
+                      ),
+                    )
+                : undefined
+            }
+            allowReadOnlyRequests={noBuild}
           />
         ) : null}
         {hudShown &&
@@ -606,7 +652,19 @@ export function GameScreen() {
           manifest={editorManifest}
           sceneryAssets={scenerySource.data?.assets}
           session={sessionView}
+          onRequestLight={noBuild ? requestLight : undefined}
           onCommand={(command) => {
+            if (noBuild) {
+              submitEditRequest(
+                editJobRequest(
+                  { gameId, branchId: jobBranch },
+                  `Apply this editor change: ${JSON.stringify(command)}.`,
+                  'now',
+                  `edit:${crypto.randomUUID()}`,
+                ),
+              );
+              return;
+            }
             const state = sessionStore.getState();
             void state.submit(
               createIntent(state.doc, [command], command.op === 'invoke' ? command.command : command.control),
@@ -617,6 +675,17 @@ export function GameScreen() {
           onRedo={() => void sessionStore.getState().redo()}
           onDelete={(entityId) => {
             const state = sessionStore.getState();
+            if (noBuild) {
+              submitEditRequest(
+                editJobRequest(
+                  { gameId, branchId: jobBranch },
+                  `Remove ${describeRequestedEntity(state.doc.entities[entityId], entityId)}.`,
+                  'now',
+                  `edit:${crypto.randomUUID()}`,
+                ),
+              );
+              return;
+            }
             void state.submit(
               deleteEntityIntent(state.doc, entityId, `Removed ${state.doc.entities[entityId]?.prefab}`),
             );
@@ -625,12 +694,34 @@ export function GameScreen() {
             const state = sessionStore.getState();
             const source = state.doc.entities[entityId];
             if (source === undefined) return;
+            if (noBuild) {
+              submitEditRequest(
+                editJobRequest(
+                  { gameId, branchId: jobBranch },
+                  `Copy ${describeRequestedEntity(source)}.`,
+                  'now',
+                  `edit:${crypto.randomUUID()}`,
+                ),
+              );
+              return;
+            }
             const entity: Entity = { ...structuredClone(source), id: createStableId('e_'), origin: 'creator' };
             void state.submit(createEntityIntent(state.doc, entity, `Copied ${source.prefab}`));
           }}
-          onInstanceCount={(change) =>
-            changeInstanceCount(change, frameState.manifest!, frameRef.current!, sessionStore)
-          }
+          onInstanceCount={(change) => {
+            if (noBuild) {
+              submitEditRequest(
+                editJobRequest(
+                  { gameId, branchId: jobBranch },
+                  `${change.direction > 0 ? 'Add' : 'Remove'} one ${JSON.stringify(change.prefab)} instance.`,
+                  'now',
+                  `edit:${crypto.randomUUID()}`,
+                ),
+              );
+              return Promise.resolve({ ok: true });
+            }
+            return changeInstanceCount(change, frameState.manifest!, frameRef.current!, sessionStore);
+          }}
           onCanvasChange={setCanvasOptions}
         />
       ) : null}
@@ -664,6 +755,14 @@ export function GameScreen() {
       <Outlet />
     </section>
   );
+}
+
+function describeRequestedEntity(entity: Entity | undefined, fallbackId?: string): string {
+  return JSON.stringify({
+    id: entity?.id ?? fallbackId,
+    prefab: entity?.prefab,
+    sceneryItemId: entity?.props.sceneryItemId,
+  });
 }
 
 function savedLabel(saved: EditorSessionState['saved'] | undefined): string {

@@ -32,10 +32,14 @@ export type GameMetadata = {
 
 export type DesignSnapshot = { rev: number; buildId: string; doc: DesignDoc };
 export const NO_BUILD_ID = 'build_00000000000000000000000000';
-export type ScenerySource = { scene: Scenery; assets: { id: string; path: string; url: string; sha256: string }[] };
+export type ScenerySource = {
+  scene: Scenery;
+  assets: { id: string; path: string; url: string; sha256: string }[];
+  updatedAt?: string;
+};
 export type FallbackPalette = { mode: 'request'; palette: GameManifest['palette'] };
-export type EditorPreview = { ticket: string; buildId: string; accessId: string; createdAt: string };
-export type EditorStage = { kind: 'image' | 'clip'; url: string; poster?: string };
+export type EditorPreview = { ticket: string; branchId?: string; buildId: string; accessId: string; createdAt: string };
+export type EditorStage = { kind: 'image' | 'clip'; url: string; poster?: string; at?: string };
 export type Lease = { token: number; expiresAt: string };
 export type TransactionBody = {
   baseRev: number;
@@ -93,7 +97,7 @@ export function getFallbackPalette(gameId: string): Promise<FallbackPalette> {
 }
 
 export function getEditorPreviews(gameId: string): Promise<{ previews: EditorPreview[] }> {
-  return api(`/games/${segment(gameId)}/previews`);
+  return api(`/games/${segment(gameId)}/editor/previews`);
 }
 
 export function getEditorStage(gameId: string, branch: string): Promise<{ stage: EditorStage | null }> {

@@ -18,7 +18,7 @@ async function sceneryId(id: string): Promise<string> {
   return `e_${encoded}`;
 }
 
-/** Persist the checked-in scene as the initial design before accepting edits. */
+/** Represent a checked-in scene as a design, ready to persist or use for a request-only preview. */
 export async function bootstrapScenery(doc: DesignDoc, scene: Scenery): Promise<EditorIntent | undefined> {
   if ('scenery.settings' in doc.globals) return undefined;
   const ids = new Map(await Promise.all(scene.items.map(async (item) => [item.id, await sceneryId(item.id)] as const)));

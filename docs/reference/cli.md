@@ -32,14 +32,15 @@ set in `gm.lock.json`, pins the exact `@gm/pack-<set>` version, and installs onl
 ## Preview an unmerged build
 
 ```text
-gm preview [--ticket <number>] [--json]
+gm preview [--ticket <number>] [--branch <id>] [--json]
 ```
 
 From the game folder (or a sparse workspace with one game), build the current workspace, including uncommitted edits,
 and send it to the game's review queue without changing the live build. The ticket defaults to the current agent ticket
 or `aiur/<number>` branch; pass `--ticket` when neither is available. The daemon's `OGM_INTERNAL_URL` and
 `OGM_HOOK_SECRET_FILE` provide the upload connection. A new upload for the same game and ticket replaces the review
-request; the creator's verdict and optional note go back to that ticket.
+request; the creator's verdict and optional note go back to that ticket. The game branch defaults to `main`; pass
+`--branch <id>` for another game branch so the editor shows the preview on the correct version.
 
 ## Verify a game
 
