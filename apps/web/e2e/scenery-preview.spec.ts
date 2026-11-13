@@ -53,6 +53,82 @@ test('opens a no-build diorama and requests a locked item', async ({ page }, tes
   await page.screenshot({ path: testInfo.outputPath('scenery-preview.png') });
 });
 
+test('keeps models and painted sprites together in a no-build scene', async ({ page }) => {
+  test.setTimeout(180_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await installGameApi(page);
+  const assets = [
+    { id: 'rock', path: 'rock.glb', sha256: 'a', url: '/api/v1/games/game/scenery/assets/0/a/rock.glb' },
+    { id: 'forest', path: 'forest.png', sha256: 'b', url: '/api/v1/games/game/scenery/assets/1/b/forest.png' },
+    { id: 'tree', path: 'tree.png', sha256: 'c', url: '/api/v1/games/game/scenery/assets/2/c/tree.png' },
+  ];
+  await page.route('**/api/v1/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/games/game/editor/previews') return route.fulfill({ json: { previews: [] } });
+    if (path === '/api/v1/games/game/editor/stage') return route.fulfill({ json: { stage: null } });
+    if (path === '/api/v1/games/game/branches')
+      return route.fulfill({ json: [{ id: 'draft', name: 'draft', gameId: 'game' }] });
+    if (path === '/api/v1/games/game/branches/draft/design')
+      return route.fulfill({ json: { rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } } });
+    if (path === '/api/v1/games/game/scenery/source')
+      return route.fulfill({
+        json: {
+          assets,
+          scene: {
+            version: 1,
+            dimension: '3d',
+            backdrop: {
+              assetId: 'forest',
+              landscape: { fit: 'cover', anchor: [0.5, 0.5] },
+              portrait: { fit: 'cover', anchor: [0.5, 0.5] },
+            },
+            items: [
+              {
+                id: 'tree-1',
+                assetId: 'tree',
+                position: [200, 250, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+                layer: 'mid',
+              },
+            ],
+            terrain: [],
+            lighting: 'night',
+            camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+          },
+        },
+      });
+    if (path === assets[0]!.url)
+      return route.fulfill({
+        contentType: 'model/gltf-binary',
+        body: readFileSync(new URL('../../../packages/sdk/test/fixtures/cube.meshopt.glb', import.meta.url)),
+      });
+    if (assets.slice(1).some((asset) => asset.url === path))
+      return route.fulfill({
+        contentType: 'image/png',
+        body: readFileSync(new URL('../public/icons/favicon-32.png', import.meta.url)),
+      });
+    if (path.includes('/branches/draft/'))
+      return route.fallback({ url: route.request().url().replace('/branches/draft/', '/branches/main/') });
+    return route.fallback();
+  });
+  await page.goto('/g/game?mode=edit&test&v=draft');
+  await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '0', { timeout: 30_000 });
+  await expect(page.getByLabel('Scene items')).toContainText('tree');
+  const canvas = page.getByLabel('Editor canvas');
+  const bounds = (await canvas.boundingBox())!;
+  const scale = Math.min(bounds.width / 640, bounds.height / 480);
+  await canvas.click({
+    position: { x: (bounds.width - 640 * scale) / 2 + 200 * scale, y: (bounds.height - 480 * scale) / 2 + 250 * scale },
+  });
+  await expect(page.getByRole('button', { name: 'Move scenery:tree', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Rocks', exact: true }).click();
+  await page.getByRole('button', { name: 'rock', exact: true }).click();
+  await canvas.click({ position: { x: bounds.width * 0.75, y: bounds.height * 0.7 } });
+  await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '1', { timeout: 30_000 });
+  await expect(page.locator('.screen-error')).toHaveCount(0);
+});
+
 test('shows a reviewed concept and sends scope placement to the builder', async ({ page }, testInfo) => {
   await installAuthRoutes(page, { signedIn: true });
   const api = await installGameApi(page);

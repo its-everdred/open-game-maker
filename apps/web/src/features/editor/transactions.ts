@@ -69,6 +69,13 @@ export function createEntityIntent(doc: DesignDoc, entity: Entity, label: string
   return { label, commands: [command], patches, inverse, doc: apply(doc, patches) };
 }
 
+/** A copied scenery entity needs a new scene item ID, derived from its new entity ID. */
+export function copyEntity(source: Entity, id: string): Entity {
+  const entity: Entity = { ...structuredClone(source), id, origin: 'creator' };
+  if (entity.prefab.startsWith('scenery:')) delete entity.props.sceneryItemId;
+  return entity;
+}
+
 /** Change lighting through a normal global override so build reapply retains it. */
 export function sceneryLightIntent(doc: DesignDoc, lighting: 'warm-forest' | 'night' | 'cave'): EditorIntent {
   if (!('scenery.settings' in doc.globals)) throw new InvalidEditorIntentError('scenery settings are unavailable');

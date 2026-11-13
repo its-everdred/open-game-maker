@@ -1,7 +1,8 @@
 import type { ControlDecl, GameManifest } from '@ogm/contracts';
-import { sceneryPalette } from '@gm/sdk/scenery';
+import { paintedSceneryControls, sceneryPalette } from '@gm/sdk/scenery';
 
 declare const __GM_SCENERY_PALETTE__: GameManifest['palette'] | undefined;
+declare const __GM_PAINTED_SCENERY__: boolean | undefined;
 const palette = typeof __GM_SCENERY_PALETTE__ === 'undefined' ? sceneryPalette([], []) : __GM_SCENERY_PALETTE__;
 
 export const scenerySettingsControl: ControlDecl = {
@@ -39,7 +40,11 @@ export const manifest: GameManifest = {
   view: 'fixed',
   dimension: '3d',
   capabilities: ['editor.project', 'scenery'],
-  controls: [scenerySettingsControl, sceneryTerrainControl],
+  controls: [
+    scenerySettingsControl,
+    sceneryTerrainControl,
+    ...(typeof __GM_PAINTED_SCENERY__ !== 'undefined' && __GM_PAINTED_SCENERY__ ? paintedSceneryControls : []),
+  ],
   palette,
   tools: ['select', 'place'],
   gizmos: {

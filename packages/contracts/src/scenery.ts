@@ -11,6 +11,10 @@ const positiveVector = z.tuple([
 export const ScenerySchema = z
   .strictObject({
     version: z.literal(1),
+    dimension: z.enum(['2d', '3d']).optional(),
+    viewport: z
+      .strictObject({ width: z.number().int().min(1).max(8192), height: z.number().int().min(1).max(8192) })
+      .optional(),
     items: z.array(
       z.strictObject({
         id: z.string().min(1),
@@ -19,8 +23,22 @@ export const ScenerySchema = z
         rotation: vector,
         scale: positiveVector,
         layer: z.enum(['back', 'mid', 'front']),
+        parallax: z.number().finite().optional(),
       }),
     ),
+    backdrop: z
+      .strictObject({
+        assetId: z.string().min(1),
+        landscape: z.strictObject({
+          fit: z.enum(['cover', 'contain']),
+          anchor: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]),
+        }),
+        portrait: z.strictObject({
+          fit: z.enum(['cover', 'contain']),
+          anchor: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]),
+        }),
+      })
+      .optional(),
     terrain: z.array(
       z.strictObject({
         id: z.string().min(1),
@@ -50,5 +68,7 @@ export function parseScenery(input: unknown, assets: readonly { id: string }[]):
   const locked = new Set(assets.map((asset) => asset.id));
   const missing = scene.items.find((item) => !locked.has(item.assetId));
   if (missing) throw new Error(`Scenery asset is not in the lock: ${missing.assetId}`);
+  if (scene.backdrop && !locked.has(scene.backdrop.assetId))
+    throw new Error(`Scenery asset is not in the lock: ${scene.backdrop.assetId}`);
   return scene;
 }

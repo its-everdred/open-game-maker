@@ -47,6 +47,7 @@ import { energyRefusalText } from '../../features/energy/api';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
 import {
   createEntityIntent,
+  copyEntity,
   createIntent,
   createStableId,
   deleteEntityIntent,
@@ -688,6 +689,7 @@ export function GameScreen() {
           manifest={editorManifest}
           sceneryAssets={scenerySource.data?.assets}
           session={sessionView}
+          onSelection={(ids) => frameRef.current?.select(ids)}
           onRequestLight={noBuild && !sidePreview ? requestLight : undefined}
           onCommand={(command) => {
             if (noBuild && !sidePreview) {
@@ -741,7 +743,7 @@ export function GameScreen() {
               );
               return;
             }
-            const entity: Entity = { ...structuredClone(source), id: createStableId('e_'), origin: 'creator' };
+            const entity = copyEntity(source, createStableId('e_'));
             void state.submit(createEntityIntent(state.doc, entity, `Copied ${source.prefab}`));
           }}
           onInstanceCount={(change) => {

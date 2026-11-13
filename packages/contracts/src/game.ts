@@ -184,7 +184,7 @@ export interface GameInstance<D, S> {
   migrate?(prev: SaveData<unknown>): SaveData<S>;
   pick?(nx: number, ny: number): TargetRef[];
   /** Project a normalized frame point onto the editable surface, or return null when it misses. */
-  screenToWorld?(nx: number, ny: number): Vec3 | null;
+  screenToWorld?(nx: number, ny: number, prefab?: string): Vec3 | null;
   worldToScreen?(id: string): { x: number; y: number } | null;
   validatePlacement?(prefab: string, pose: Pose): PlacementResult;
   setSelection?(ids: string[]): void;

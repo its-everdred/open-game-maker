@@ -199,7 +199,7 @@ export function reduce(input: ReduceInput): WorkingSet {
         if (
           patch.path.length !== 2 ||
           patch.path[0] !== 'globals' ||
-          !['scenery.lighting', 'scenery.terrain'].includes(String(patch.path[1]))
+          !['scenery.lighting', 'scenery.terrain', 'scenery.backdrop'].includes(String(patch.path[1]))
         )
           continue;
         const control = patch.path[1] as string;

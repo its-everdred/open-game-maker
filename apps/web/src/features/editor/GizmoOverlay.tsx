@@ -216,7 +216,7 @@ export function GizmoOverlay({
       ghostRef.current = undefined;
       setGhost(undefined);
       void frame
-        .project(point.x, point.y)
+        .project(point.x, point.y, activePrefab)
         .then((position) => accept(position ? projectedPose(position, snap) : null))
         .catch(() => accept(null));
     } else {
@@ -356,6 +356,7 @@ export function GizmoOverlay({
       pinch.intents.push(intent);
       pinch.doc = intent.doc;
       frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+      frame.select([pinch.entity.id]);
       return;
     }
     const held = holdRef.current;
@@ -378,7 +379,7 @@ export function GizmoOverlay({
           intents: [],
           doc: state.doc,
           projection: {
-            origin: frame.project(point.x, point.y).catch(() => null),
+            origin: frame.project(point.x, point.y, entity.prefab).catch(() => null),
             sequence: 0,
             pending: false,
             released: false,
@@ -396,26 +397,39 @@ export function GizmoOverlay({
         const sequence = ++projection.sequence;
         projection.pending = true;
         const point = normalizeFramePoint(event.clientX, event.clientY, rect);
-        void Promise.all([projection.origin, frame.project(point.x, point.y)])
+        void Promise.all([projection.origin, frame.project(point.x, point.y, drag.entity.prefab)])
           .then(([origin, target]) => {
             if (projection.cancelled || sequence !== projection.sequence) return;
             projection.pending = false;
             if (origin && target) {
               const initial = entityPose(drag.entity.props);
+              const painted =
+                Boolean(session.getState().doc.globals['scenery.backdrop']) &&
+                manifest.palette.items.some(
+                  (item) => item.prefab === drag.entity.prefab && item.tag === 'painted-sprite',
+                );
               const pose = projectedPose(
-                [
-                  initial.position[0] + target[0] - origin[0],
-                  initial.position[1] + (manifest.dimension === '2d' ? target[1] - origin[1] : 0),
-                  initial.position[2] + (manifest.dimension === '2d' ? 0 : target[2] - origin[2]),
-                ],
+                manifest.dimension === '2d' || painted
+                  ? [
+                      initial.position[0] + target[0] - origin[0],
+                      initial.position[1] + target[1] - origin[1],
+                      initial.position[2],
+                    ]
+                  : [
+                      initial.position[0] + target[0] - origin[0],
+                      initial.position[1],
+                      initial.position[2] + target[2] - origin[2],
+                    ],
                 snap,
               );
-              if (manifest.dimension !== '2d') pose.position[1] = initial.position[1];
+              if (manifest.dimension === '2d' || painted) pose.position[2] = initial.position[2];
+              else pose.position[1] = initial.position[1];
               if (initial.rotationY !== undefined) pose.rotationY = initial.rotationY;
               const intent = updateEntityPoseIntent(drag.doc, drag.entity.id, pose, `Moved ${drag.entity.prefab}`);
               drag.intents.push(intent);
               drag.doc = intent.doc;
               frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+              frame.select([drag.entity.id]);
             }
             if (projection.released && drag.intents.length > 0) {
               void session.getState().commitStroke(drag.intents, `Moved ${drag.entity.prefab}`);
@@ -444,6 +458,7 @@ export function GizmoOverlay({
       drag.intents.push(intent);
       drag.doc = intent.doc;
       frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+      frame.select([drag.entity.id]);
       return;
     }
     if (activePrefab !== undefined) updateGhost(event.clientX, event.clientY);
@@ -568,7 +583,7 @@ export function GizmoOverlay({
       ...(gizmo === 'translate' && point && manifest.capabilities?.includes('editor.project')
         ? {
             projection: {
-              origin: frame.project(point.x, point.y).catch(() => null),
+              origin: frame.project(point.x, point.y, entity.prefab).catch(() => null),
               sequence: 0,
               pending: false,
               released: false,
@@ -669,13 +684,13 @@ function receivePicked(
 ): void {
   const ids = targets.filter((target) => target.kind === 'entity').map((target) => target.id);
   session.getState().setSelection(ids);
-  frame.select(ids);
   const first = targets.find((target) => target.id === ids[0] && target.bounds !== undefined);
   setAnchor(
     first?.bounds === undefined
       ? undefined
       : { id: first.id, x: first.bounds.x + first.bounds.w / 2, y: first.bounds.y + first.bounds.h / 2 },
   );
+  frame.select(ids);
 }
 
 function GhostView({ ghost, manifest }: { ghost: Ghost; manifest: GameManifest }) {

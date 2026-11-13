@@ -1,5 +1,8 @@
 import type { CameraRig } from '@ogm/contracts';
+import { DesignDocSchema } from '@ogm/contracts/browser';
 import { createRig, PhaserEditorCamera, RigSet } from '@gm/sdk/camera';
+import { createPaintedScenery } from '@gm/sdk/phaser';
+import { sceneryFromDesign } from '@gm/sdk/scenery';
 import Phaser from 'phaser';
 
 import { cameraView, game, getGameContext, type TemplateContext } from '../game.js';
@@ -21,6 +24,47 @@ export class Level extends Phaser.Scene {
     this.playerViews.clear();
     const levelWidth = context.design.globals['level.width'];
     this.data.set('level.bounds', { x: 0, y: 0, width: levelWidth, height: 480 });
+
+    if (context.sceneryAssets) {
+      const loader = context.sceneryAssets;
+      const scenery = createPaintedScenery(this, (id) => loader.resolve(id).url);
+      context.pickScenery = scenery.pick;
+      context.sceneryScreen = (position, parallax) =>
+        context.view?.worldToScreen([
+          position[0] + this.cameras.main.scrollX * (1 - parallax),
+          position[1] + this.cameras.main.scrollY * (1 - parallax),
+          position[2],
+        ]) ?? null;
+      context.updateScenery = () => {
+        if (!context.design.globals['scenery.settings']) return;
+        const backdrop = context.design.globals['scenery.backdrop'] as { assetId?: unknown } | undefined;
+        const ids = Object.values(context.design.entities)
+          .filter((entity) => entity.prefab.startsWith('scenery:'))
+          .map((entity) => ({ id: entity.prefab.slice('scenery:'.length) }));
+        if (typeof backdrop?.assetId === 'string') ids.push({ id: backdrop.assetId });
+        try {
+          const sceneryDoc = {
+            ...context.design,
+            entities: Object.fromEntries(
+              Object.entries(context.design.entities).filter(([, entity]) => entity.prefab.startsWith('scenery:')),
+            ),
+          };
+          const data = sceneryFromDesign(DesignDocSchema.parse(sceneryDoc), ids);
+          void scenery.update(data).catch((error: unknown) => console.error('scenery update failed', error));
+        } catch (error) {
+          console.error('scenery update failed', error);
+        }
+      };
+      context.updateScenery();
+      this.scale.on(Phaser.Scale.Events.RESIZE, scenery.resize);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        this.scale.off(Phaser.Scale.Events.RESIZE, scenery.resize);
+        context.updateScenery = undefined;
+        context.pickScenery = undefined;
+        context.sceneryScreen = undefined;
+        scenery.dispose();
+      });
+    }
 
     this.add.rectangle(levelWidth / 2, GROUND_Y + 20, levelWidth, 40, 0x303746);
     for (const platform of context.state.platforms) {

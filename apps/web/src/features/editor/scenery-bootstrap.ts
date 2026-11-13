@@ -25,7 +25,8 @@ export async function bootstrapScenery(doc: DesignDoc, scene: Scenery): Promise<
   const next = sceneryToDesign(scene, doc, (id) => ids.get(id)!);
   const intents: EditorIntent[] = [];
   let current = doc;
-  for (const control of ['scenery.settings', 'scenery.lighting', 'scenery.terrain']) {
+  for (const control of ['scenery.settings', 'scenery.lighting', 'scenery.terrain', 'scenery.backdrop']) {
+    if (!(control in next.globals)) continue;
     const intent = createIntent(
       current,
       [{ op: 'set', control, targets: 'global', value: next.globals[control] }],

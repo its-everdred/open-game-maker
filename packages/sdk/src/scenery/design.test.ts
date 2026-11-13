@@ -21,6 +21,29 @@ const scene = ScenerySchema.parse({
 const id = 'e_01K8ZTEMP00000000000000001';
 
 describe('scenery design adapter', () => {
+  it('preserves painted backdrop and parallax through the design document', () => {
+    const painted = ScenerySchema.parse({
+      ...scene,
+      dimension: '2d',
+      viewport: { width: 640, height: 480 },
+      backdrop: {
+        assetId: 'forest',
+        landscape: { fit: 'cover', anchor: [0.5, 1] },
+        portrait: { fit: 'contain', anchor: [0.5, 0.5] },
+      },
+      items: [{ ...scene.items[0], parallax: 0.5 }],
+    });
+    const doc = sceneryToDesign(painted, { schemaVersion: 1, globals: {}, entities: {} }, () => id);
+    expect(sceneryFromDesign(doc, [{ id: 'tree-asset' }, { id: 'forest' }])).toEqual(painted);
+    doc.globals['scenery.backdrop'] = { ...painted.backdrop!, assetId: 'clearing' };
+    expect(sceneryFromDesign(doc, [{ id: 'tree-asset' }, { id: 'clearing' }]).backdrop?.assetId).toBe('clearing');
+    doc.entities[id]!.props['scenery.depth'] = 12;
+    doc.entities[id]!.props['scenery.parallax'] = 0.25;
+    expect(sceneryFromDesign(doc, [{ id: 'tree-asset' }, { id: 'clearing' }]).items[0]).toMatchObject({
+      position: [1, 0, 12],
+      parallax: 0.25,
+    });
+  });
   it('round trips a scene and keeps unrelated game data', () => {
     const doc = { schemaVersion: 1, globals: { speed: 2 }, entities: {} };
     const mapped = sceneryToDesign(scene, doc, () => id);

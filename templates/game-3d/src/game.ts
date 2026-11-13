@@ -43,7 +43,7 @@ export interface GameSave {
 
 export interface SceneAdapter {
   pick(nx: number, ny: number): TargetRef[];
-  screenToWorld(nx: number, ny: number): Vec3 | null;
+  screenToWorld(nx: number, ny: number, selected?: string, prefab?: string): Vec3 | null;
   worldToScreen(id: string): { x: number; y: number } | null;
 }
 
@@ -145,6 +145,7 @@ export function createGame(): {
   attachScene(adapter: SceneAdapter): void;
   onDesignChange(listener: (design: LevelDesign) => void): () => void;
   setSceneryAssetValidator(validate: (id: string) => boolean): void;
+  setSceneryImageValidator(validate: (id: string) => boolean): void;
   /** The last bridge `editor.camera`; `undefined` keeps the manifest rig. */
   camera(): { mode: 'follow' | 'free'; target?: string } | undefined;
   /** A player's or spawn's world position; the default player when `id` is absent. */
@@ -155,11 +156,13 @@ export function createGame(): {
   let design = structuredClone(DEFAULT_DESIGN);
   const designListeners = new Set<(next: LevelDesign) => void>();
   let validSceneryAsset: (id: string) => boolean = () => false;
+  let isSceneryImage: (id: string) => boolean = () => false;
   let state: GameSave = { tick: 0, players: {} };
   let physics: PhysicsHandle | undefined;
   let initialPhysics: Uint8Array | undefined;
   let stopPhysicsSync: (() => void) | undefined;
   let scene: SceneAdapter | undefined;
+  let selectedId: string | undefined;
   const bodyHandles = new Map<string, number>();
   const stopInputs: (() => void)[] = [];
   let camera: { mode: 'follow' | 'free'; target?: string } | undefined;
@@ -295,14 +298,14 @@ export function createGame(): {
         pick(nx, ny) {
           return scene?.pick(nx, ny) ?? [];
         },
-        screenToWorld(nx, ny) {
-          return scene?.screenToWorld(nx, ny) ?? null;
+        screenToWorld(nx, ny, prefab) {
+          return scene?.screenToWorld(nx, ny, selectedId, prefab) ?? null;
         },
         worldToScreen(id) {
           return scene?.worldToScreen(id) ?? null;
         },
-        setSelection() {
-          // The editor overlay draws selection controls for scenery.
+        setSelection(ids) {
+          selectedId = ids[0];
         },
         setCamera(mode, target) {
           if (target !== undefined && !position(target)) throw new Error(`unknown camera target ${target}`);
@@ -313,6 +316,12 @@ export function createGame(): {
           const [x, , z] = pose.position;
           if (prefab.startsWith('scenery:')) {
             if (!validSceneryAsset(prefab.slice('scenery:'.length))) return { ok: false, reason: 'asset unavailable' };
+            if (
+              'scenery.backdrop' in design.globals &&
+              design.globals['scenery.backdrop'] &&
+              isSceneryImage(prefab.slice('scenery:'.length))
+            )
+              return { ok: true };
             return Math.abs(x) >= half || Math.abs(z) >= half
               ? { ok: true }
               : { ok: false, reason: 'inside play area' };
@@ -355,6 +364,9 @@ export function createGame(): {
     design: () => structuredClone(design),
     setSceneryAssetValidator(validate) {
       validSceneryAsset = validate;
+    },
+    setSceneryImageValidator(validate) {
+      isSceneryImage = validate;
     },
     onDesignChange(listener) {
       designListeners.add(listener);

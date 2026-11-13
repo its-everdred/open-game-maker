@@ -42,7 +42,7 @@ export type GameFrameController = {
   applyDesign(rev: number, doc: DesignDoc, patches: readonly Patch[]): void;
   pick(x: number, y: number): void;
   pickAt(x: number, y: number): Promise<TargetRef[]>;
-  project(x: number, y: number): Promise<[number, number, number] | null>;
+  project(x: number, y: number, prefab?: string): Promise<[number, number, number] | null>;
   select(ids: readonly string[]): void;
   camera(mode: 'follow' | 'free', target?: string): void;
   validatePlacement(prefab: string, pose: Pose, timeoutMs?: number): Promise<PlacementResult>;
@@ -261,7 +261,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       frame.send('editor.pick', { x, y });
     },
     pickAt: (x, y) => frame.pick?.(x, y) ?? Promise.reject(new Error('correlated picking unavailable')),
-    project: (x, y) => frame.project?.(x, y) ?? Promise.resolve(null),
+    project: (x, y, prefab) =>
+      (prefab === undefined ? frame.project?.(x, y) : frame.project?.(x, y, prefab)) ?? Promise.resolve(null),
     select: (ids) => {
       frame.send('editor.select', { ids: [...ids] });
     },
