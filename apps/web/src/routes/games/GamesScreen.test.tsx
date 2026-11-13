@@ -174,14 +174,14 @@ afterEach(() => {
 });
 
 describe('GamesScreen', () => {
-  it('shows prototype showcase games and opens the real Goblin Cellar for their play action', async () => {
+  it('opens the selected prototype showcase even when Goblin Cellar has a build', async () => {
     renderGames();
     fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }));
     expect(await screen.findByText('A sleepy village, one repair at a time.')).toBeVisible();
     const play = await screen.findByRole('button', { name: 'Play RestoreBound' });
     await waitFor(() => expect(play).toBeEnabled());
     fireEvent.click(play);
-    expect(screen.getByTestId('location')).toHaveTextContent('/g/g_2?v=main&mode=play');
+    expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/restorebound?mode=play');
   });
   it('opens the prototype demo for a showcase game before Goblin Cellar is registered', async () => {
     gamesResponse = [];
