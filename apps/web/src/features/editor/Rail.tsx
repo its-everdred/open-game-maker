@@ -24,7 +24,10 @@ export function Rail({
   return (
     <FocusZone id={EDITOR_FOCUS_ZONES.rail} className="editor-rail">
       {categories.map((category) => {
-        const item = items.find((candidate) => candidate.category === category.id);
+        const item = items.find(
+          (candidate) =>
+            candidate.category === category.id && (candidate.thumbnail || sceneryAsset(candidate, sceneryAssets)),
+        );
         const thumbnail = item?.thumbnail;
         const asset = sceneryAsset(item, sceneryAssets);
         return (

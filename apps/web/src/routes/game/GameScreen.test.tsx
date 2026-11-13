@@ -577,7 +577,7 @@ describe('GameScreen', () => {
             capabilities: [],
             palette: {
               categories: [{ id: 'actors', label: 'Actors', kind: 'items' }],
-              items: [{ prefab: 'skeleton', label: 'Skeleton', category: 'actors' }],
+              items: [{ prefab: 'skeleton', label: 'Skeleton', category: 'actors', thumbnail: 'art/skeleton.png' }],
             },
             tools: ['select', 'place'],
             gizmos: {},
@@ -593,6 +593,10 @@ describe('GameScreen', () => {
     renderGame('/g/game?mode=edit');
 
     expect(await screen.findByRole('button', { name: 'Skeleton' }, { timeout: 5_000 })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Skeleton' }).querySelector('img')).toHaveAttribute(
+      'src',
+      'http://127.0.0.1:10000/g/game/build/art/skeleton.png',
+    );
     expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
   }, 10_000);
 

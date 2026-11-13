@@ -139,6 +139,19 @@ for (const scenario of scenarios) {
     });
   }
 }
+
+test('keeps the editor preview usable on a landscape phone', async ({ browser, page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop');
+  await page.setViewportSize({ width: 844, height: 390 });
+  const reference = await browser.newPage({ viewport: { width: 844, height: 390 } });
+  try {
+    await prepareEditor(page, reference);
+    const stage = await page.locator('.game-stage').boundingBox();
+    expect(stage!.height).toBeGreaterThan(245);
+  } finally {
+    await reference.context().close();
+  }
+});
 type Masks = { app: ReturnType<Page['locator']>[]; reference: ReturnType<Page['locator']>[] };
 
 async function capture(page: Page, masks: Locator[]): Promise<Buffer> {

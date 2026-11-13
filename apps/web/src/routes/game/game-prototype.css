@@ -735,6 +735,30 @@
     flex: 0 0 auto;
   }
 }
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .game-screen.is-editing,
+  .game-screen.is-editing.is-scenery {
+    grid-template-columns: 110px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 100px;
+  }
+
+  .game-screen.is-editing .editor-rail button,
+  .game-screen.is-editing.is-scenery .editor-rail button {
+    min-height: 48px;
+    font-size: 13px;
+  }
+
+  .game-screen.is-editing .editor-rail img,
+  .game-screen.is-editing .rail-letter,
+  .game-screen.is-editing.is-scenery .editor-rail img,
+  .game-screen.is-editing.is-scenery .rail-letter,
+  .game-screen.is-editing .editor-rail .scenery-thumbnail {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+}
 .game-screen.is-editing .editor-inspector-stack:has(.editor-inspector:not(.has-content)) {
   display: none;
 }

@@ -41,6 +41,7 @@ import { ReapplyCard } from '../../features/editor/ReapplyCard';
 import type { EditorSessionState } from '../../features/editor/session';
 import { useEditorSession } from '../../features/editor/use-editor-session';
 import { mountSceneryPreview } from '../../features/editor/scenery-preview';
+import { resolvePaletteThumbnails } from '../../features/editor/palette-thumbnails';
 import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
 import { energyRefusalText } from '../../features/energy/api';
@@ -206,10 +207,24 @@ export function GameScreen() {
   const requestOnly = fallbackActive || (noBuild && !sidePreview);
   const editorManifest = useMemo(() => {
     if (!frameState.manifest) return undefined;
-    return fallbackActive && fallback.data
-      ? { ...frameState.manifest, palette: fallback.data.palette }
-      : frameState.manifest;
-  }, [frameState.manifest, fallbackActive, fallback.data]);
+    const manifest =
+      fallbackActive && fallback.data
+        ? { ...frameState.manifest, palette: fallback.data.palette }
+        : frameState.manifest;
+    const buildId = activePreview?.accessId ?? activeSnapshot?.buildId;
+    if (mode !== 'edit' || fallbackActive || !buildId || (noBuild && !activePreview)) return manifest;
+    return resolvePaletteThumbnails(manifest, gamesOrigin, gameId, buildId, !!activePreview);
+  }, [
+    frameState.manifest,
+    fallbackActive,
+    fallback.data,
+    activePreview,
+    activeSnapshot?.buildId,
+    noBuild,
+    gamesOrigin,
+    gameId,
+    mode,
+  ]);
   const submitEditRequest = useCallback(
     (request: CreateJobRequest) => {
       if (request.branchId !== 'main') {
