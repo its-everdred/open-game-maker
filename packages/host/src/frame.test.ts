@@ -6,6 +6,31 @@ import { createGameFrame, HostError } from './frame.js';
 afterEach(() => document.body.replaceChildren());
 
 describe('createGameFrame', () => {
+  it('keeps preview frames outside the published-build service worker scope', () => {
+    const container = document.createElement('div');
+    const onError = vi.fn();
+    const frame = createGameFrame({
+      container,
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g1',
+      buildId: 'pv-123',
+      preview: true,
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+      onError,
+    });
+    expect(new URL(frame.iframe.src).pathname).toBe('/p/g1/pv-123/index.html');
+    expect(frame.iframe.getAttribute('sandbox')).toBe('allow-scripts allow-pointer-lock');
+    frame.iframe.dispatchEvent(new Event('load'));
+    frame.iframe.dispatchEvent(new Event('load'));
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'frame-navigation' }));
+    expect(container.querySelector('iframe')).toBeNull();
+    frame.dispose();
+  });
   it('sets the exact iframe attributes and games-origin URL', () => {
     const container = document.createElement('div');
     document.body.append(container);

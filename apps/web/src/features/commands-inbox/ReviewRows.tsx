@@ -1,11 +1,12 @@
 import { Link } from 'react-router';
+import type { ReactNode } from 'react';
 
 import type { GameCommand } from '@ogm/contracts';
 
 import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { Icon } from '../../components/Icon';
 import { reviewTitle } from '../../routes/review/title';
-import { draftState, useReviewDraft } from './drafts';
+import { draftState, useIsSent, useReviewDraft } from './drafts';
 import { mediaKindOf, withoutLinks } from './review';
 import './review-glass.css';
 
@@ -14,23 +15,27 @@ import './review-glass.css';
 export function ReviewRows({
   commands,
   hrefOf,
+  actions,
 }: {
   commands: readonly GameCommand[];
   hrefOf(command: GameCommand): string;
+  actions?(command: GameCommand): ReactNode;
 }) {
   return (
     <ul className="review-rows" aria-label="Reviews">
       {commands.map((command) => (
-        <ReviewRow key={command.command_id} command={command} href={hrefOf(command)} />
+        <ReviewRow key={command.command_id} command={command} href={hrefOf(command)} actions={actions?.(command)} />
       ))}
     </ul>
   );
 }
 
-function ReviewRow({ command, href }: { command: GameCommand; href: string }) {
+function ReviewRow({ command, href, actions }: { command: GameCommand; href: string; actions?: ReactNode }) {
+  const sent = useIsSent(command);
   return (
     <li className="review-row">
       <ReviewRowLink command={command} href={href} />
+      {sent ? null : actions}
     </li>
   );
 }

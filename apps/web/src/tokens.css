@@ -120,6 +120,15 @@
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   /* Shared prototype glows and glass surfaces. */
+  --review-ink: var(--ink);
+  --review-muted: var(--muted);
+  --review-rule: var(--rule);
+  --review-paper: var(--paper-2);
+  --review-input: var(--paper-3);
+  --review-header: rgba(30, 27, 40, 0.85);
+  --review-button: var(--yellow-b);
+  --review-button-text: var(--dark);
+  --review-button-alternate: var(--red-b);
   --glow-night: #0f0e16;
   --glow-1: radial-gradient(closest-side, rgb(214 93 14 / 0.32), rgb(214 93 14 / 0.14) 55%, transparent);
   --glow-2: radial-gradient(closest-side, rgb(177 98 134 / 0.3), rgb(177 98 134 / 0.14) 55%, transparent);

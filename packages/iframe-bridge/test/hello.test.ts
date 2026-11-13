@@ -11,6 +11,32 @@ afterEach(() => {
 });
 
 describe('host handshake', () => {
+  it('accepts an opaque preview only from its exact iframe and transfers to the opaque target', async () => {
+    const iframe = document.createElement('iframe');
+    document.body.append(iframe);
+    const post = vi.spyOn(iframe.contentWindow!, 'postMessage').mockImplementation(() => undefined);
+    const bridge = openHostBridge(iframe, {
+      gameOrigin: 'https://games.test',
+      opaqueOrigin: true,
+      validate,
+      onMessage: vi.fn(),
+      hello: hello('host-hello'),
+    });
+    window.dispatchEvent(
+      new MessageEvent('message', { data: JSON.stringify(hello('forged')), origin: 'null', source: window }),
+    );
+    expect(post).not.toHaveBeenCalled();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: JSON.stringify(hello('game-hello')),
+        origin: 'null',
+        source: iframe.contentWindow,
+      }),
+    );
+    await bridge.ready;
+    expect(post).toHaveBeenCalledWith(JSON.stringify(hello('host-hello')), '*', [expect.anything()]);
+    bridge.close();
+  });
   it('rejects sends and requests until the handshake finishes', async () => {
     const iframe = document.createElement('iframe');
     document.body.append(iframe);

@@ -103,11 +103,20 @@ interface PhaseResult {
 let persistRequestedWithoutStorage = false;
 const activePersistRequests = new WeakSet<object>();
 
+export function isPrivatePreviewUrl(url: string): boolean {
+  try {
+    return /^\/p\/[^/]+\/pv-[^/]+\//u.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
 export async function prepare(
   options: PrepareOptions,
   dependencies: PrepareDependencies = {},
 ): Promise<PrepareResult | undefined> {
   const planUrl = absoluteUrl(options.plan);
+  const privatePreview = isPrivatePreviewUrl(planUrl);
   const fetcher = dependencies.fetcher ?? globalThis.fetch;
   const response = await fetcher(planUrl);
   if (response.status === 404) return undefined;
@@ -126,6 +135,7 @@ export async function prepare(
       planUrl,
       options.send,
       dependencies,
+      privatePreview,
     );
     const storage = dependencies.storage ?? defaultStorageManager();
     const persisted = (await storage?.persisted?.().catch(() => null)) ?? null;
@@ -141,13 +151,15 @@ export async function prepare(
       ...(estimate?.quota === undefined ? {} : { quota: estimate.quota }),
     });
 
-    await recordPlay(plan, options.tier, options.channel ?? 'test', dependencies).catch(() => undefined);
-    scheduleEviction(dependencies);
-    void requestPersistence(storage, persisted, dependencies);
+    if (!privatePreview) {
+      await recordPlay(plan, options.tier, options.channel ?? 'test', dependencies).catch(() => undefined);
+      scheduleEviction(dependencies);
+      void requestPersistence(storage, persisted, dependencies);
+    }
     return { plan, ...ready };
   };
 
-  const locks = dependencies.locks ?? defaultLockManager();
+  const locks = privatePreview ? undefined : (dependencies.locks ?? defaultLockManager());
   const result = await (locks ? locks.request(CACHE_LOCK_NAME, { mode: 'shared' }, run) : run());
   const stream = () =>
     fetchPhase(
@@ -156,6 +168,7 @@ export async function prepare(
       planUrl,
       options.send,
       dependencies,
+      privatePreview,
     );
   void (locks ? locks.request(CACHE_LOCK_NAME, { mode: 'shared' }, stream) : stream()).catch(() => undefined);
   return result;
@@ -179,9 +192,10 @@ async function fetchPhase(
   planUrl: string,
   send: LoadSender,
   dependencies: PrepareDependencies,
+  privatePreview: boolean,
 ): Promise<PhaseResult> {
   if (entries.length === 0) return { fetchedBytes: 0, cachedBytes: 0, fetchedFiles: 0, cachedFiles: 0 };
-  const cache = await openAssetCache(dependencies.cacheStorage ?? defaultCacheStorage());
+  const cache = privatePreview ? undefined : await openAssetCache(dependencies.cacheStorage ?? defaultCacheStorage());
   const resolved = entries.map((entry) => ({ entry, url: new URL(entry.url, planUrl).toString() }));
   const cached = await Promise.all(
     resolved.map(async (item) => ({ ...item, hit: cache ? await safeMatch(cache, item.url) : undefined })),
@@ -512,7 +526,11 @@ function defaultNow(): number {
 }
 
 function defaultCacheStorage(): CacheStorage | undefined {
-  return typeof globalThis.caches === 'undefined' ? undefined : globalThis.caches;
+  try {
+    return typeof globalThis.caches === 'undefined' ? undefined : globalThis.caches;
+  } catch {
+    return undefined;
+  }
 }
 
 function defaultLockManager(): LockManagerLike | undefined {
