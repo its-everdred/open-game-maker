@@ -57,6 +57,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const surfaceRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<Ghost | undefined>(undefined);
   const dragRef = useRef<Drag | undefined>(undefined);
+  const touchesRef = useRef(new Set<number>());
   const holdRef = useRef<
     | {
         pointerId: number;
@@ -100,6 +101,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
     () => () => {
       if (holdRef.current) clearTimeout(holdRef.current.timer);
       holdRef.current = undefined;
+      touchesRef.current.clear();
       if (validationTimerRef.current !== undefined) clearTimeout(validationTimerRef.current);
       validationTimerRef.current = undefined;
       pendingValidationRef.current = undefined;
@@ -177,6 +179,14 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (session.getState().readOnly) return;
+    if (event.pointerType === 'touch') {
+      touchesRef.current.add(event.pointerId);
+      if (touchesRef.current.size > 1) {
+        if (holdRef.current) clearTimeout(holdRef.current.timer);
+        holdRef.current = undefined;
+        return;
+      }
+    }
     capturePointer(event.currentTarget, event.pointerId);
     if (activePrefab !== undefined) {
       dropRequestedRef.current = false;
@@ -313,6 +323,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    touchesRef.current.delete(event.pointerId);
     if (holdRef.current?.pointerId === event.pointerId) {
       clearTimeout(holdRef.current.timer);
       holdRef.current = undefined;
@@ -337,6 +348,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    touchesRef.current.delete(event.pointerId);
     if (holdRef.current?.pointerId === event.pointerId) {
       clearTimeout(holdRef.current.timer);
       holdRef.current = undefined;

@@ -129,6 +129,30 @@ describe('GizmoOverlay', () => {
     expect(test.submit).not.toHaveBeenCalled();
   });
 
+  it('cancels long-press deletion when a second finger touches the canvas', async () => {
+    vi.useFakeTimers();
+    const test = harness();
+    test.frame.pickAt = vi.fn().mockResolvedValue([{ id: entityId, kind: 'entity' }]);
+    test.session.getState().doc = {
+      ...doc,
+      entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } },
+    };
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 20 });
+    await act(async () => {});
+    fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'touch', clientX: 30, clientY: 30 });
+    act(() => vi.advanceTimersByTime(650));
+    expect(test.submit).not.toHaveBeenCalled();
+  });
+
   it('drags a scenery item directly on the ground with touch', async () => {
     const test = harness();
     test.session.getState().doc = {
