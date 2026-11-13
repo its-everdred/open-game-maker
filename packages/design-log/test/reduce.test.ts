@@ -78,6 +78,43 @@ describe('reduce', () => {
     expect(result.entityOps[created]).toMatchObject({ kind: 'create', props: { pose } });
   });
 
+  it('preserves an undone scenery move and placement when reducing patch-only undo transactions', () => {
+    const created = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+    const original = { position: [1, 0, 0] };
+    const txs = [
+      transaction(
+        1,
+        [
+          {
+            op: 'invoke',
+            command: 'entity.create',
+            args: { entityId: created, parent: 'main', prefab: 'scenery:tree', props: { pose: original } },
+          },
+        ],
+        [],
+      ),
+      transaction(
+        2,
+        [{ op: 'invoke', command: 'entity.transform', args: { entityId: created, pose: { position: [4, 0, 0] } } }],
+        [],
+      ),
+      transaction(3, [], [{ op: 'replace', path: ['entities', created, 'props', 'pose'], value: original }]),
+    ];
+    const input = { gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: baseDoc(), txs };
+    expect(reduce(input).entityOps[created]).toMatchObject({ kind: 'create', props: { pose: original } });
+    txs.push(transaction(4, [], [{ op: 'remove', path: ['entities', created] }]));
+    expect(reduce(input).entityOps[created]).toMatchObject({ kind: 'delete' });
+  });
+
+  it('retains the restored scenery light after undo', () => {
+    const txs = [
+      transaction(1, [{ op: 'set', control: 'scenery.lighting', targets: 'global', value: 'night' }], []),
+      transaction(2, [], [{ op: 'replace', path: ['globals', 'scenery.lighting'], value: 'warm-forest' }]),
+    ];
+    const result = reduce({ gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: baseDoc(), txs });
+    expect(result.entries['scenery.lighting@global']).toMatchObject({ value: 'warm-forest' });
+  });
+
   it('is independent of transaction and object insertion order', () => {
     fc.assert(
       fc.property(fc.array(fc.integer(), { minLength: 1, maxLength: 50 }), (values) => {
