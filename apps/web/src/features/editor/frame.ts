@@ -18,6 +18,8 @@ type FrameLike = Pick<GameFrame, 'dispose' | 'on' | 'send' | 'setMode' | 'setSet
   bridge: Pick<GameFrame['bridge'], 'dropped'>;
   /** Optional so a test double need not answer diagnostics; `netInfo()` reports `undefined` when it cannot ask. */
   request?: GameFrame['request'];
+  project?: GameFrame['project'];
+  pick?: GameFrame['pick'];
 };
 
 export type GameLoadProgress = Extract<GameLoadEvent, { t: 'load.progress' }>['payload'];
@@ -39,6 +41,8 @@ export type GameFrameController = {
   setSettings(settings: PlayerSettings): void;
   applyDesign(rev: number, doc: DesignDoc, patches: readonly Patch[]): void;
   pick(x: number, y: number): void;
+  pickAt(x: number, y: number): Promise<TargetRef[]>;
+  project(x: number, y: number): Promise<[number, number, number] | null>;
   select(ids: readonly string[]): void;
   camera(mode: 'follow' | 'free', target?: string): void;
   validatePlacement(prefab: string, pose: Pose, timeoutMs?: number): Promise<PlacementResult>;
@@ -256,6 +260,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     pick: (x, y) => {
       frame.send('editor.pick', { x, y });
     },
+    pickAt: (x, y) => frame.pick?.(x, y) ?? Promise.reject(new Error('correlated picking unavailable')),
+    project: (x, y) => frame.project?.(x, y) ?? Promise.resolve(null),
     select: (ids) => {
       frame.send('editor.select', { ids: [...ids] });
     },

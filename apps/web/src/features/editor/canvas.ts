@@ -5,6 +5,20 @@ import type { SnapPrefs } from './SnapPrefs';
 export type NormalizedPoint = { x: number; y: number };
 export type GizmoKind = GameManifest['gizmos'][string][number];
 
+export function gizmoLabel(gizmo: GizmoKind): string {
+  if (gizmo === 'rotateYaw') return 'Rotate';
+  if (gizmo === 'elevate') return 'Elevate';
+  if (gizmo === 'splinePoints') return 'Move path point';
+  return 'Move';
+}
+
+export function gizmoSymbol(gizmo: GizmoKind): string {
+  if (gizmo === 'rotateYaw') return '↻';
+  if (gizmo === 'elevate') return '↕';
+  if (gizmo === 'splinePoints') return '◆';
+  return '✥';
+}
+
 type FrameRect = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>;
 
 export function normalizeFramePoint(clientX: number, clientY: number, frame: FrameRect): NormalizedPoint {
@@ -22,6 +36,10 @@ export function placementPose(point: NormalizedPoint, manifest: GameManifest, sn
   return manifest.dimension === '2d'
     ? { position: [clamp(x, 0, w), clamp(depth, 0, h), 0] }
     : { position: [clamp(x, 0, w), 0, clamp(depth, 0, h)] };
+}
+
+export function projectedPose(position: [number, number, number], snap: SnapPrefs): Pose {
+  return { position: position.map((value) => snapped(value, snap)) as [number, number, number] };
 }
 
 export function movePose(
@@ -61,7 +79,10 @@ export function stepPose(
   } else if (gizmo === 'elevate') {
     next.position[1] = clamp(start.position[1] + direction * distance, 0, manifest.presentation.minLogical.h);
   } else {
-    next.position[0] = clamp(start.position[0] + direction * distance, 0, manifest.presentation.minLogical.w);
+    const x = start.position[0] + direction * distance;
+    next.position[0] = manifest.capabilities?.includes('editor.project')
+      ? x
+      : clamp(x, 0, manifest.presentation.minLogical.w);
   }
   return samePose(start, next) ? undefined : next;
 }

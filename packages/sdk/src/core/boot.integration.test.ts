@@ -74,6 +74,23 @@ describe('boot bridge integration', () => {
     expect(response.payload.ok).toBe(true);
     expect(response.replyTo).toBe('advance-1');
     expect(runtime.clock.tick).toBe(60);
+    runtime.instance.screenToWorld = (x, y) => [x * 10, 0, y * 10];
+    const projected = await host.request<Envelope<'editor.projected', { position: [number, number, number] | null }>>({
+      v: 1,
+      id: 'project-1',
+      t: 'editor.project',
+      payload: { x: 0.25, y: 0.75 },
+    });
+    expect(projected.replyTo).toBe('project-1');
+    expect(projected.payload.position).toEqual([2.5, 0, 7.5]);
+    delete runtime.instance.screenToWorld;
+    const missed = await host.request<Envelope<'editor.projected', { position: null }>>({
+      v: 1,
+      id: 'project-2',
+      t: 'editor.project',
+      payload: { x: 0.5, y: 0.5 },
+    });
+    expect(missed.payload.position).toBeNull();
     runtime.dispose();
     host.close();
     hostDom.window.close();

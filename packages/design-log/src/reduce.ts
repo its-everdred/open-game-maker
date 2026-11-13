@@ -76,6 +76,7 @@ function clearRecord(record: Record<string, unknown>): void {
 
 function recordEntityOverride(
   entityOps: Record<string, EntityOverride>,
+  baseDoc: DesignDoc,
   tx: Transaction,
   command: Extract<EditorCommand, { op: 'invoke' }>,
 ): void {
@@ -107,6 +108,75 @@ function recordEntityOverride(
     for (const entityId of entityIds) {
       entityOps[entityId] = { kind: 'delete', entityId, txId: tx.id };
     }
+  } else if (command.command === 'entity.transform') {
+    const args = asRecord(command.args);
+    if (typeof args?.entityId !== 'string' || asRecord(args.pose) === undefined) return;
+    let previous = entityOps[args.entityId];
+    const baseEntity = baseDoc.entities[args.entityId];
+    if (!previous && baseEntity?.prefab.startsWith('scenery:')) {
+      previous = {
+        kind: 'create',
+        entityId: baseEntity.id,
+        parent: baseEntity.level,
+        prefab: baseEntity.prefab,
+        props: baseEntity.props,
+        txId: tx.id,
+      };
+    }
+    if (previous?.kind === 'create') {
+      entityOps[args.entityId] = {
+        ...previous,
+        props: { ...previous.props, pose: args.pose, ...(Array.isArray(args.scale) ? { scale: args.scale } : {}) },
+        txId: tx.id,
+      };
+    }
+  }
+}
+
+// Undo transactions contain inverse patches rather than commands. Fold scenery
+// changes into the same working set so a later build does not resurrect them.
+function recordSceneryUndo(entityOps: Record<string, EntityOverride>, tx: Transaction): void {
+  for (const patch of tx.patches) {
+    const [root, id, field, property] = patch.path;
+    if (root !== 'entities' || typeof id !== 'string') continue;
+    const previous = entityOps[id];
+    if (
+      patch.path.length === 2 &&
+      patch.op === 'remove' &&
+      previous?.kind === 'create' &&
+      previous.prefab.startsWith('scenery:')
+    ) {
+      entityOps[id] = { kind: 'delete', entityId: id, txId: tx.id };
+    } else if (patch.path.length === 2 && patch.op === 'add') {
+      const entity = asRecord(patch.value);
+      const props = asRecord(entity?.props);
+      if (
+        typeof entity?.prefab === 'string' &&
+        entity.prefab.startsWith('scenery:') &&
+        typeof entity.level === 'string' &&
+        props
+      ) {
+        entityOps[id] = {
+          kind: 'create',
+          entityId: id,
+          parent: entity.level,
+          prefab: entity.prefab,
+          props,
+          txId: tx.id,
+        };
+      }
+    } else if (
+      field === 'props' &&
+      (property === 'pose' || property === 'scale') &&
+      patch.path.length === 4 &&
+      previous?.kind === 'create' &&
+      previous.prefab.startsWith('scenery:')
+    ) {
+      const props = { ...previous.props };
+      if (patch.op === 'remove') delete props[property];
+      else props[property] = patch.value;
+      entityOps[id] = { ...previous, props, txId: tx.id };
+    }
   }
 }
 
@@ -123,13 +193,30 @@ export function reduce(input: ReduceInput): WorkingSet {
     if (tx.rev === previousRevision) throw new InvalidLogError(`duplicate revision ${tx.rev}`);
     previousRevision = tx.rev;
     const transactionBase = input.baseDocs?.[tx.baseBuildId] ?? input.baseDoc;
+    if (tx.commands.length === 0) {
+      recordSceneryUndo(entityOps, tx);
+      for (const patch of tx.patches) {
+        if (
+          patch.path.length !== 2 ||
+          patch.path[0] !== 'globals' ||
+          !['scenery.lighting', 'scenery.terrain'].includes(String(patch.path[1]))
+        )
+          continue;
+        const control = patch.path[1] as string;
+        const command: Extract<EditorCommand, { op: 'set' | 'reset' }> =
+          patch.op === 'remove'
+            ? { op: 'reset', control, targets: 'global' }
+            : { op: 'set', control, targets: 'global', value: patch.value };
+        recordOverride(entries, transactionBase, tx, command);
+      }
+    }
     for (const command of tx.commands) {
       if (command.op === 'invoke') {
         if (command.command === 'build.switch') {
           clearRecord(entries);
           clearRecord(entityOps);
         } else {
-          recordEntityOverride(entityOps, tx, command);
+          recordEntityOverride(entityOps, transactionBase, tx, command);
         }
       } else {
         recordOverride(entries, transactionBase, tx, command);

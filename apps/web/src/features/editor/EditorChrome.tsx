@@ -16,12 +16,14 @@ import { Palette } from './Palette';
 import { Rail } from './Rail';
 import { loadSnapPrefs, saveSnapPrefs, type SnapPrefs } from './SnapPrefs';
 import { Tools } from './Tools';
+import { sceneryLightIntent } from './transactions';
 import './editor.css';
 
 type EditorChromeProps = {
   gameId: string;
   manifest: GameManifest;
   session: EditorSessionState;
+  sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
   onCommand(command: EditorCommand): void;
   onTool(tool: string): void;
   onUndo(): void;
@@ -36,6 +38,7 @@ export function EditorChrome({
   gameId,
   manifest,
   session,
+  sceneryAssets,
   onCommand,
   onTool,
   onUndo,
@@ -73,12 +76,33 @@ export function EditorChrome({
           category={category}
           title={activeCategory.label}
           showTabs={false}
+          sceneryAssets={sceneryAssets}
           onCategory={setCategory}
           onPick={(prefab) => {
             setPickedPrefab(prefab);
             onTool('place');
           }}
         />
+      ) : null}
+      {activeCategory?.id === 'light' && manifest.capabilities.includes('scenery') ? (
+        <div className="palette-items" aria-label="Light">
+          {(
+            [
+              ['warm-forest', 'Warm forest'],
+              ['night', 'Night'],
+              ['cave', 'Cave'],
+            ] as const
+          ).map(([preset, label]) => (
+            <button
+              key={preset}
+              type="button"
+              disabled={session.readOnly}
+              onClick={() => void session.submit(sceneryLightIntent(session.doc, preset))}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       ) : null}
       <div className="editor-inspector-stack">
         <Tools
@@ -115,6 +139,6 @@ function manifestControls(manifest: GameManifest): ControlDecl[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((candidate) => {
     const parsed = controlDeclSchema.safeParse(candidate);
-    return parsed.success ? [parsed.data] : [];
+    return parsed.success && !['scenery.lighting', 'scenery.terrain'].includes(parsed.data.id) ? [parsed.data] : [];
   });
 }

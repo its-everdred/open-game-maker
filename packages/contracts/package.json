@@ -22,7 +22,8 @@
       "default": "./dist/transport.js"
     },
     "./schemas/*": "./schemas/*",
-    "./fixtures/*": "./fixtures/*"
+    "./fixtures/*": "./fixtures/*",
+    "./scenery": "./dist/scenery.js"
   },
   "bin": {
     "validate-cards": "bin/validate-cards.mjs"

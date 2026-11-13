@@ -5,6 +5,7 @@ import type { GameManifest } from '@ogm/contracts/browser';
 import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { FocusZone } from '../../lib/input';
 import { EDITOR_FOCUS_ZONES } from './focus';
+import { SceneryThumbnail } from './SceneryThumbnail';
 
 type PaletteProps = {
   palette: GameManifest['palette'];
@@ -13,9 +14,18 @@ type PaletteProps = {
   showTabs?: boolean;
   onCategory?(id: string): void;
   onPick(prefab: string): void;
+  sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
 };
 
-export function Palette({ palette, category, title, showTabs = true, onCategory, onPick }: PaletteProps) {
+export function Palette({
+  palette,
+  category,
+  title,
+  showTabs = true,
+  onCategory,
+  onPick,
+  sceneryAssets,
+}: PaletteProps) {
   const [localCategory, setLocalCategory] = useState(palette.categories[0]?.id ?? '');
   const active = category ?? localCategory;
   useEffect(() => {
@@ -50,23 +60,36 @@ export function Palette({ palette, category, title, showTabs = true, onCategory,
       <div className="palette-items">
         {palette.items
           .filter((item) => item.category === active)
-          .map((item) => (
-            <button
-              className="palette-item tap-primary"
-              type="button"
-              key={item.prefab}
-              aria-label={withAiGeneratedLabel(item.label, item.aiGenerated)}
-              title={item.hint}
-              onPointerDown={() => onPick(item.prefab)}
-              onClick={(event) => {
-                if (event.detail === 0) onPick(item.prefab);
-              }}
-            >
-              {item.thumbnail ? <img src={item.thumbnail} alt="" /> : null}
-              {item.aiGenerated ? <AiBadge /> : null}
-              <span>{item.label}</span>
-            </button>
-          ))}
+          .map((item) => {
+            const asset =
+              typeof item.assetSha === 'string' && item.prefab.startsWith('scenery:')
+                ? sceneryAssets?.find(
+                    (candidate) =>
+                      candidate.id === item.prefab.slice('scenery:'.length) && candidate.sha256 === item.assetSha,
+                  )
+                : undefined;
+            return (
+              <button
+                className="palette-item tap-primary"
+                type="button"
+                key={item.prefab}
+                aria-label={withAiGeneratedLabel(item.label, item.aiGenerated)}
+                title={item.hint}
+                onPointerDown={() => onPick(item.prefab)}
+                onClick={(event) => {
+                  if (event.detail === 0) onPick(item.prefab);
+                }}
+              >
+                {item.thumbnail ? (
+                  <img src={item.thumbnail} alt="" />
+                ) : asset ? (
+                  <SceneryThumbnail key={asset.url} url={asset.url} />
+                ) : null}
+                {item.aiGenerated ? <AiBadge /> : null}
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
       </div>
     </FocusZone>
   );

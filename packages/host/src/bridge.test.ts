@@ -55,13 +55,29 @@ function harness(
       stats.sent += 1;
     },
     request: async <R>(message: Envelope<string, unknown>) =>
-      ({
-        v: 1,
-        id: 'result-1',
-        replyTo: message.id,
-        t: 'test.result',
-        payload: { ok: true, value: { rendered: true } },
-      }) as R,
+      (message.t === 'editor.project'
+        ? {
+            v: 1,
+            id: 'projected-1',
+            replyTo: message.id,
+            t: 'editor.projected',
+            payload: { position: [2, 0, -1] },
+          }
+        : message.t === 'editor.pick'
+          ? {
+              v: 1,
+              id: 'picked-1',
+              replyTo: message.id,
+              t: 'editor.picked',
+              payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+            }
+          : {
+              v: 1,
+              id: 'result-1',
+              replyTo: message.id,
+              t: 'test.result',
+              payload: { ok: true, value: { rendered: true } },
+            }) as R,
     close,
     stats: () => stats,
   };
@@ -155,6 +171,22 @@ describe('HostBridge', () => {
     inbound(ready());
     await bridge.whenReady;
     await expect(bridge.request('test.renderInfo', {})).resolves.toEqual({ rendered: true });
+    bridge.close();
+  });
+
+  it('projects editor coordinates through a correlated game response', async () => {
+    const { bridge, inbound } = harness(() => 'owner');
+    inbound(ready());
+    await bridge.whenReady;
+    await expect(bridge.project(0.25, 0.75)).resolves.toEqual([2, 0, -1]);
+    bridge.close();
+  });
+
+  it('picks editor targets through a correlated game response', async () => {
+    const { bridge, inbound } = harness(() => 'owner');
+    inbound(ready());
+    await bridge.whenReady;
+    await expect(bridge.pick(0.25, 0.75)).resolves.toEqual([{ kind: 'entity', id: 'tree' }]);
     bridge.close();
   });
 

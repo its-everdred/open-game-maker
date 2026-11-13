@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameManifest } from '@ogm/contracts/browser';
 
+vi.mock('./SceneryThumbnail', () => ({
+  SceneryThumbnail: ({ url }: { url: string }) => <img alt="" data-url={url} />,
+}));
 import { Palette } from './Palette';
 
 const palette: GameManifest['palette'] = {
@@ -25,6 +28,28 @@ const palette: GameManifest['palette'] = {
 afterEach(cleanup);
 
 describe('Palette', () => {
+  it('renders a model thumbnail only when the source hash matches the built palette', () => {
+    const scenery = {
+      categories: [{ id: 'trees', label: 'Trees', kind: 'items' as const }],
+      items: [{ prefab: 'scenery:oak', label: 'Oak', category: 'trees', assetSha: 'matching' }],
+    };
+    const { rerender } = render(
+      <Palette
+        palette={scenery}
+        onPick={vi.fn()}
+        sceneryAssets={[{ id: 'oak', sha256: 'different', url: '/tree.glb' }]}
+      />,
+    );
+    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+    rerender(
+      <Palette
+        palette={scenery}
+        onPick={vi.fn()}
+        sceneryAssets={[{ id: 'oak', sha256: 'matching', url: '/tree.glb' }]}
+      />,
+    );
+    expect(screen.getByRole('presentation')).toHaveAttribute('data-url', '/tree.glb');
+  });
   it('switches categories and chooses an item without inventing manifest copy', () => {
     const onPick = vi.fn();
     render(<Palette palette={palette} onPick={onPick} />);

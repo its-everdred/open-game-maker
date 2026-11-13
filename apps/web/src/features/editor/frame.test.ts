@@ -31,6 +31,7 @@ describe('game frame adapter', () => {
       setMode: vi.fn(),
       setSettings: vi.fn(),
       send: vi.fn(),
+      project: vi.fn().mockResolvedValue([2, 0, -1]),
       dispose: vi.fn(),
     };
     const states: Array<{ bridgeState: string; dropped: number }> = [];
@@ -76,6 +77,8 @@ describe('game frame adapter', () => {
     expect(states.at(-1)).toEqual({ bridgeState: 'ready', dropped: 3 });
 
     controller.pick(0.25, 0.75);
+    await expect(controller.project(0.25, 0.75)).resolves.toEqual([2, 0, -1]);
+    expect(frame.project).toHaveBeenCalledWith(0.25, 0.75);
     controller.select(['e_01BX5ZZKBKACTAV9WEVGEMMVRZ']);
     controller.camera('free');
     controller.camera('follow', 'player_0');

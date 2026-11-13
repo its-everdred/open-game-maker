@@ -2,7 +2,8 @@ import { homedir } from 'node:os';
 
 import { skillPack } from '@ogm/game-repo-template';
 
-import { bundleRoutes, hookSecretFiles, type SkillTarball } from './bundle.js';
+import { agentDesignRoutes } from './agent-design.js';
+import { bundleRoutes, hookIdentityFiles, hookSecretFiles, type SkillTarball } from './bundle.js';
 import { tarGz } from './tarball.js';
 
 // Game-repo hooks call these on the API's loopback port with their daemon's hook secret.
@@ -19,4 +20,4 @@ export default bundleRoutes({
     }
     return tarball;
   },
-});
+}).route('/', agentDesignRoutes({ identityForSecret: hookIdentityFiles(homedir()) }));

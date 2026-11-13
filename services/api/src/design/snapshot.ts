@@ -10,6 +10,7 @@ export const EMPTY_DESIGN_DOC: DesignDoc = {
   globals: {},
   entities: {},
 };
+export const EMPTY_BUILD_ID = 'build_00000000000000000000000000';
 
 function buildAtRevision(chain: ReturnType<typeof readChain>, revision: number): string | null {
   const leaf = chain.at(-1)?.branch;
@@ -19,7 +20,7 @@ function buildAtRevision(chain: ReturnType<typeof readChain>, revision: number):
   for (const transaction of [...leafTransactions].sort((left, right) => right.rev - left.rev)) {
     if (transaction.rev <= revision) break;
     const switched = buildSwitchFrom(transaction);
-    if (switched) buildId = switched.from;
+    if (switched) buildId = switched.from === EMPTY_BUILD_ID ? null : switched.from;
   }
   return buildId;
 }

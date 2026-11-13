@@ -20,6 +20,7 @@ await build({
     'phaser/index': 'src/phaser/index.ts',
     'proc/index': 'src/proc/index.ts',
     'saves/index': 'src/saves/index.ts',
+    'scenery/index': 'src/scenery/index.ts',
     'test/index': 'src/test/index.ts',
     'three/index': 'src/three/index.ts',
   },

@@ -61,6 +61,133 @@ describe('reduce', () => {
     });
   });
 
+  it('retains a created entity’s latest pose when reducing its transform', () => {
+    const created = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+    const pose = { position: [4, 0, 3], rotationY: 90 };
+    const result = reduceCommands([
+      {
+        rev: 1,
+        command: {
+          op: 'invoke',
+          command: 'entity.create',
+          args: { entityId: created, parent: 'main', prefab: 'scenery:tree', props: { pose: { position: [0, 0, 0] } } },
+        },
+      },
+      { rev: 2, command: { op: 'invoke', command: 'entity.transform', args: { entityId: created, pose } } },
+    ]);
+    expect(result.entityOps[created]).toMatchObject({ kind: 'create', props: { pose } });
+  });
+
+  it('retains scale during a scenery transform and its undo', () => {
+    const created = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+    const pose = { position: [0, 0, 0], rotationY: 90 };
+    const txs = [
+      transaction(
+        1,
+        [
+          {
+            op: 'invoke',
+            command: 'entity.create',
+            args: { entityId: created, parent: 'main', prefab: 'scenery:tree', props: { pose } },
+          },
+        ],
+        [],
+      ),
+      transaction(
+        2,
+        [{ op: 'invoke', command: 'entity.transform', args: { entityId: created, pose, scale: [2, 2, 2] } }],
+        [],
+      ),
+    ];
+    const input = { gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: baseDoc(), txs };
+    expect(reduce(input).entityOps[created]).toMatchObject({ props: { scale: [2, 2, 2] } });
+    txs.push(transaction(3, [], [{ op: 'remove', path: ['entities', created, 'props', 'scale'] }]));
+    expect(reduce(input).entityOps[created]).not.toHaveProperty('props.scale');
+  });
+
+  it('retains a moved scenery entity originating in the base design', () => {
+    const base = baseDoc();
+    base.entities[ids.entity] = { ...base.entities[ids.entity]!, prefab: 'scenery:tree' };
+    const pose = { position: [3, 0, 4] };
+    const result = reduce({
+      gameId: ids.game,
+      branchId: ids.branch,
+      buildId: ids.build,
+      baseDoc: base,
+      txs: [transaction(1, [{ op: 'invoke', command: 'entity.transform', args: { entityId: ids.entity, pose } }], [])],
+    });
+    expect(result.entityOps[ids.entity]).toMatchObject({ kind: 'create', props: { pose } });
+  });
+
+  it('restores a moved base scenery entity after undoing its deletion', () => {
+    const base = baseDoc();
+    base.entities[ids.entity] = { ...base.entities[ids.entity]!, prefab: 'scenery:tree' };
+    const restored = { ...base.entities[ids.entity]!, props: { pose: { position: [5, 0, 0] } } };
+    const txs = [
+      transaction(1, [{ op: 'invoke', command: 'entity.delete', args: { entityId: ids.entity } }], []),
+      transaction(2, [], [{ op: 'add', path: ['entities', ids.entity], value: restored }]),
+    ];
+    const result = reduce({ gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: base, txs });
+    expect(result.entityOps[ids.entity]).toMatchObject({ kind: 'create', props: restored.props });
+  });
+
+  it('preserves an undone scenery move and placement when reducing patch-only undo transactions', () => {
+    const created = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+    const original = { position: [1, 0, 0] };
+    const txs = [
+      transaction(
+        1,
+        [
+          {
+            op: 'invoke',
+            command: 'entity.create',
+            args: { entityId: created, parent: 'main', prefab: 'scenery:tree', props: { pose: original } },
+          },
+        ],
+        [],
+      ),
+      transaction(
+        2,
+        [{ op: 'invoke', command: 'entity.transform', args: { entityId: created, pose: { position: [4, 0, 0] } } }],
+        [],
+      ),
+      transaction(3, [], [{ op: 'replace', path: ['entities', created, 'props', 'pose'], value: original }]),
+    ];
+    const input = { gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: baseDoc(), txs };
+    expect(reduce(input).entityOps[created]).toMatchObject({ kind: 'create', props: { pose: original } });
+    txs.push(transaction(4, [], [{ op: 'remove', path: ['entities', created] }]));
+    expect(reduce(input).entityOps[created]).toMatchObject({ kind: 'delete' });
+  });
+
+  it('retains the restored scenery light after undo', () => {
+    const txs = [
+      transaction(1, [{ op: 'set', control: 'scenery.lighting', targets: 'global', value: 'night' }], []),
+      transaction(2, [], [{ op: 'replace', path: ['globals', 'scenery.lighting'], value: 'warm-forest' }]),
+    ];
+    const result = reduce({ gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: baseDoc(), txs });
+    expect(result.entries['scenery.lighting@global']).toMatchObject({ value: 'warm-forest' });
+  });
+
+  it('retains restored scenery terrain after undo', () => {
+    const original = [
+      {
+        id: 'old',
+        kind: 'path',
+        points: [
+          [1, 0, 0],
+          [2, 0, 0],
+        ],
+        width: 1,
+      },
+    ];
+    const txs = [
+      transaction(1, [{ op: 'set', control: 'scenery.terrain', targets: 'global', value: [] }], []),
+      transaction(2, [], [{ op: 'replace', path: ['globals', 'scenery.terrain'], value: original }]),
+    ];
+    const result = reduce({ gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: baseDoc(), txs });
+    expect(result.entries['scenery.terrain@global']).toMatchObject({ value: original });
+  });
+
   it('is independent of transaction and object insertion order', () => {
     fc.assert(
       fc.property(fc.array(fc.integer(), { minLength: 1, maxLength: 50 }), (values) => {

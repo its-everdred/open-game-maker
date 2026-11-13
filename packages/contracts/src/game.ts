@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { Patch } from './bridge.js';
-import type { ActionFrame, ActionValue, Insets } from './input.js';
+import type { ActionFrame, ActionValue, Insets, Vec3 } from './input.js';
 import { vec3Schema, viewIdSchema } from './input.js';
 import { netManifestSchema } from './net.js';
 
@@ -126,6 +126,8 @@ export const gameManifestSchema = z.looseObject({
         prefab: z.string().min(1),
         label,
         thumbnail: z.string().optional(),
+        /** Short creator-facing descriptor, such as "easy" or "tough". */
+        tag: z.string().min(1).max(32).optional(),
         aiGenerated: z.boolean().optional(),
         hint: help.optional(),
         category: z.string().min(1),
@@ -181,6 +183,8 @@ export interface GameInstance<D, S> {
   restore(save: SaveData<S>): void;
   migrate?(prev: SaveData<unknown>): SaveData<S>;
   pick?(nx: number, ny: number): TargetRef[];
+  /** Project a normalized frame point onto the editable surface, or return null when it misses. */
+  screenToWorld?(nx: number, ny: number): Vec3 | null;
   worldToScreen?(id: string): { x: number; y: number } | null;
   validatePlacement?(prefab: string, pose: Pose): PlacementResult;
   setSelection?(ids: string[]): void;

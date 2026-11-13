@@ -4,12 +4,30 @@ import type { StoreApi } from 'zustand/vanilla';
 import type { Entity, GameManifest, PlacementResult, Pose, TargetRef } from '@ogm/contracts/browser';
 
 import { FocusZone } from '../../lib/input';
-import { movePose, normalizeFramePoint, placementPose, poseFromProps, stepPose, type GizmoKind } from './canvas';
+import {
+  movePose,
+  gizmoLabel,
+  gizmoSymbol,
+  normalizeFramePoint,
+  placementPose,
+  projectedPose,
+  poseFromProps,
+  stepPose,
+  type GizmoKind,
+} from './canvas';
 import { EDITOR_FOCUS_ZONES } from './focus';
 import type { GameFrameController } from './frame';
 import type { EditorSessionState } from './session';
 import type { SnapPrefs } from './SnapPrefs';
-import { createEntityIntent, createStableId, updateEntityPoseIntent, type EditorIntent } from './transactions';
+import { useTerrainStroke } from './terrain-stroke';
+import {
+  createEntityIntent,
+  createStableId,
+  deleteEntityIntent,
+  updateEntityPoseIntent,
+  updateSceneryTransformIntent,
+  type EditorIntent,
+} from './transactions';
 
 type Ghost = { prefab: string; pose: Pose; result?: PlacementResult };
 type Drag = {
@@ -20,6 +38,13 @@ type Drag = {
   gizmo: GizmoKind;
   intents: EditorIntent[];
   doc: EditorSessionState['doc'];
+  projection?: {
+    origin: Promise<[number, number, number] | null>;
+    sequence: number;
+    pending: boolean;
+    released: boolean;
+    cancelled: boolean;
+  };
 };
 
 type GizmoOverlayProps = {
@@ -36,10 +61,40 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const surfaceRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<Ghost | undefined>(undefined);
   const dragRef = useRef<Drag | undefined>(undefined);
+  const terrain = useTerrainStroke(
+    frame,
+    session,
+    activePrefab,
+    manifest.capabilities?.includes('editor.project') ?? false,
+  );
+  const touchesRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<
+    | {
+        ids: [number, number];
+        distance: number;
+        angle: number;
+        entity: Entity;
+        doc: EditorSessionState['doc'];
+        intents: EditorIntent[];
+      }
+    | undefined
+  >(undefined);
+  const holdRef = useRef<
+    | {
+        pointerId: number;
+        x: number;
+        y: number;
+        picked?: string;
+        timer: ReturnType<typeof setTimeout>;
+      }
+    | undefined
+  >(undefined);
   const validationAtRef = useRef(-Infinity);
   const validationTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingValidationRef = useRef<Ghost | undefined>(undefined);
   const dropRequestedRef = useRef(false);
+  const projectionSequence = useRef(0);
+  const projectingRef = useRef(false);
   const [ghost, setGhost] = useState<Ghost>();
   const [anchor, setAnchor] = useState<{ id: string; x: number; y: number }>();
   const selectedId = session.getState().selection[0];
@@ -47,7 +102,9 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const gizmos = selected === undefined ? [] : (manifest.gizmos[selected.prefab] ?? []);
 
   useEffect(() => {
-    const stopPicked = frame.onPicked((targets) => receivePicked(targets, session, frame, setAnchor));
+    const stopPicked = frame.onPicked((targets) => {
+      receivePicked(targets, session, frame, setAnchor);
+    });
     const stopScreen = frame.onScreen((position) => {
       if ('offscreen' in position) {
         setAnchor((current) => (current?.id === position.id ? undefined : current));
@@ -63,11 +120,21 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   useEffect(
     () => () => {
+      if (holdRef.current) clearTimeout(holdRef.current.timer);
+      holdRef.current = undefined;
+      touchesRef.current.clear();
+      pinchRef.current = undefined;
       if (validationTimerRef.current !== undefined) clearTimeout(validationTimerRef.current);
+      validationTimerRef.current = undefined;
       pendingValidationRef.current = undefined;
       ghostRef.current = undefined;
+      projectionSequence.current += 1;
+      projectingRef.current = false;
+      dropRequestedRef.current = false;
+      if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
+      dragRef.current = undefined;
     },
-    [],
+    [activePrefab, frame],
   );
 
   const validateGhost = (candidate: Ghost) => {
@@ -104,17 +171,66 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   const updateGhost = (clientX: number, clientY: number) => {
     const surface = surfaceRef.current;
-    if (activePrefab === undefined || surface === null) return;
+    if (activePrefab === undefined || surface === null || dropRequestedRef.current) return;
     const point = normalizeFramePoint(clientX, clientY, surface.getBoundingClientRect());
-    const next: Ghost = { prefab: activePrefab, pose: placementPose(point, manifest, snap) };
-    ghostRef.current = next;
-    setGhost(next);
-    requestValidation(next);
+    const sequence = ++projectionSequence.current;
+    const accept = (pose: Pose | null) => {
+      if (sequence !== projectionSequence.current) return;
+      projectingRef.current = false;
+      if (pose === null) {
+        dropRequestedRef.current = false;
+        return;
+      }
+      const next: Ghost = { prefab: activePrefab, pose };
+      ghostRef.current = next;
+      setGhost(next);
+      requestValidation(next);
+    };
+    if (manifest.capabilities?.includes('editor.project')) {
+      projectingRef.current = true;
+      ghostRef.current = undefined;
+      setGhost(undefined);
+      void frame
+        .project(point.x, point.y)
+        .then((position) => accept(position ? projectedPose(position, snap) : null))
+        .catch(() => accept(null));
+    } else {
+      accept(placementPose(point, manifest, snap));
+    }
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (session.getState().readOnly) return;
+    if (event.pointerType === 'touch') {
+      touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touchesRef.current.size > 1) {
+        const held = holdRef.current;
+        const state = session.getState();
+        const entity = held?.picked ? state.doc.entities[held.picked] : undefined;
+        if (holdRef.current) clearTimeout(holdRef.current.timer);
+        holdRef.current = undefined;
+        if (touchesRef.current.size === 2 && entity?.prefab.startsWith('scenery:')) {
+          if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
+          dragRef.current = undefined;
+          frame.applyDesign(state.headRev, state.doc, []);
+          const ids = [...touchesRef.current.keys()] as [number, number];
+          const first = touchesRef.current.get(ids[0])!;
+          const second = touchesRef.current.get(ids[1])!;
+          pinchRef.current = {
+            ids,
+            distance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+            angle: Math.atan2(second.y - first.y, second.x - first.x),
+            entity,
+            doc: state.doc,
+            intents: [],
+          };
+          capturePointer(event.currentTarget, event.pointerId);
+        }
+        return;
+      }
+    }
     capturePointer(event.currentTarget, event.pointerId);
+    if (terrain.down(event)) return;
     if (activePrefab !== undefined) {
       dropRequestedRef.current = false;
       updateGhost(event.clientX, event.clientY);
@@ -122,14 +238,149 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
     }
     if (session.getState().tool === 'select') {
       const point = normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
-      frame.pick(point.x, point.y);
+      if (event.pointerType === 'touch') {
+        if (holdRef.current) clearTimeout(holdRef.current.timer);
+        const pointerId = event.pointerId;
+        const held = {
+          pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          picked: undefined as string | undefined,
+          timer: setTimeout(() => {
+            if (holdRef.current !== held || !held.picked) return;
+            const state = session.getState();
+            const entity = state.doc.entities[held.picked];
+            if (!state.readOnly && entity?.prefab.startsWith('scenery:')) {
+              void state.submit(deleteEntityIntent(state.doc, entity.id, `Removed ${entity.prefab}`));
+              state.setSelection([]);
+              frame.select([]);
+            }
+            holdRef.current = undefined;
+          }, 650),
+        };
+        holdRef.current = held;
+        void frame
+          .pickAt(point.x, point.y)
+          .then((targets) => {
+            if (holdRef.current !== held) return;
+            held.picked = targets.find((target) => target.kind === 'entity')?.id;
+            receivePicked(targets, session, frame, setAnchor);
+          })
+          .catch(() => {});
+      } else {
+        frame.pick(point.x, point.y);
+      }
     }
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (terrain.move(event)) return;
+    if (activePrefab?.startsWith('scenery-band:')) return;
+    if (touchesRef.current.has(event.pointerId))
+      touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const pinch = pinchRef.current;
+    if (pinch?.ids.includes(event.pointerId)) {
+      const first = touchesRef.current.get(pinch.ids[0]);
+      const second = touchesRef.current.get(pinch.ids[1]);
+      if (!first || !second) return;
+      const factor = Math.max(0.1, Math.min(10, Math.hypot(second.x - first.x, second.y - first.y) / pinch.distance));
+      const originalScale =
+        Array.isArray(pinch.entity.props.scale) &&
+        pinch.entity.props.scale.length === 3 &&
+        pinch.entity.props.scale.every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0)
+          ? (pinch.entity.props.scale as [number, number, number])
+          : [1, 1, 1];
+      const pose = poseFromProps(pinch.entity.props.pose);
+      pose.rotationY =
+        (pose.rotationY ?? 0) + ((Math.atan2(second.y - first.y, second.x - first.x) - pinch.angle) * 180) / Math.PI;
+      const scale = originalScale.map((n) => n * factor) as [number, number, number];
+      const intent = updateSceneryTransformIntent(
+        pinch.doc,
+        pinch.entity.id,
+        pose,
+        scale,
+        `Transformed ${pinch.entity.prefab}`,
+      );
+      pinch.intents.push(intent);
+      pinch.doc = intent.doc;
+      frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+      return;
+    }
+    const held = holdRef.current;
+    if (held && event.pointerId === held.pointerId && Math.hypot(event.clientX - held.x, event.clientY - held.y) > 12) {
+      clearTimeout(held.timer);
+      const state = session.getState();
+      const entity = held.picked === undefined ? undefined : state.doc.entities[held.picked];
+      if (
+        !dragRef.current &&
+        entity?.prefab.startsWith('scenery:') &&
+        manifest.capabilities?.includes('editor.project')
+      ) {
+        const point = normalizeFramePoint(held.x, held.y, event.currentTarget.getBoundingClientRect());
+        dragRef.current = {
+          pointerId: held.pointerId,
+          startX: held.x,
+          startY: held.y,
+          entity,
+          gizmo: 'translate',
+          intents: [],
+          doc: state.doc,
+          projection: {
+            origin: frame.project(point.x, point.y).catch(() => null),
+            sequence: 0,
+            pending: false,
+            released: false,
+            cancelled: false,
+          },
+        };
+      }
+    }
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
       const rect = event.currentTarget.getBoundingClientRect();
+      if (drag.projection) {
+        const projection = drag.projection;
+        if (projection.released) return;
+        const sequence = ++projection.sequence;
+        projection.pending = true;
+        const point = normalizeFramePoint(event.clientX, event.clientY, rect);
+        void Promise.all([projection.origin, frame.project(point.x, point.y)])
+          .then(([origin, target]) => {
+            if (projection.cancelled || sequence !== projection.sequence) return;
+            projection.pending = false;
+            if (origin && target) {
+              const initial = poseFromProps(drag.entity.props.pose);
+              const pose = projectedPose(
+                [
+                  initial.position[0] + target[0] - origin[0],
+                  initial.position[1],
+                  initial.position[2] + target[2] - origin[2],
+                ],
+                snap,
+              );
+              pose.position[1] = initial.position[1];
+              if (initial.rotationY !== undefined) pose.rotationY = initial.rotationY;
+              const intent = updateEntityPoseIntent(drag.doc, drag.entity.id, pose, `Moved ${drag.entity.prefab}`);
+              drag.intents.push(intent);
+              drag.doc = intent.doc;
+              frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+            }
+            if (projection.released && drag.intents.length > 0) {
+              void session.getState().commitStroke(drag.intents, `Moved ${drag.entity.prefab}`);
+            }
+            if (projection.released && dragRef.current === drag) dragRef.current = undefined;
+          })
+          .catch(() => {
+            if (projection.cancelled || sequence !== projection.sequence) return;
+            projection.pending = false;
+            if (projection.released) {
+              if (drag.intents.length > 0)
+                void session.getState().commitStroke(drag.intents, `Moved ${drag.entity.prefab}`);
+              if (dragRef.current === drag) dragRef.current = undefined;
+            }
+          });
+        return;
+      }
       const pose = movePose(
         poseFromProps(drag.entity.props.pose),
         drag.gizmo,
@@ -147,8 +398,25 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    touchesRef.current.delete(event.pointerId);
+    if (terrain.up(event)) return;
+    const pinch = pinchRef.current;
+    if (pinch?.ids.includes(event.pointerId)) {
+      pinchRef.current = undefined;
+      if (pinch.intents.length)
+        void session.getState().commitStroke(pinch.intents, `Transformed ${pinch.entity.prefab}`);
+      return;
+    }
+    if (holdRef.current?.pointerId === event.pointerId) {
+      clearTimeout(holdRef.current.timer);
+      holdRef.current = undefined;
+    }
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
+      if (drag.projection?.pending) {
+        drag.projection.released = true;
+        return;
+      }
       dragRef.current = undefined;
       if (drag.intents.length > 0) void session.getState().commitStroke(drag.intents, `Moved ${drag.entity.prefab}`);
       return;
@@ -156,20 +424,34 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
     if (activePrefab === undefined) return;
     const current = ghostRef.current;
     if (current?.result === undefined) {
-      dropRequestedRef.current = current !== undefined;
+      dropRequestedRef.current = current !== undefined || projectingRef.current;
       return;
     }
     if (current.result.ok) commitPlacement(current, manifest, session, setGhost, ghostRef);
   };
 
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    touchesRef.current.delete(event.pointerId);
+    terrain.cancel(event);
+    if (pinchRef.current?.ids.includes(event.pointerId)) {
+      pinchRef.current = undefined;
+      const state = session.getState();
+      frame.applyDesign(state.headRev, state.doc, []);
+    }
+    if (holdRef.current?.pointerId === event.pointerId) {
+      clearTimeout(holdRef.current.timer);
+      holdRef.current = undefined;
+    }
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
       dragRef.current = undefined;
+      if (drag.projection) drag.projection.cancelled = true;
       const state = session.getState();
       frame.applyDesign(state.headRev, state.doc, []);
     }
     dropRequestedRef.current = false;
+    projectionSequence.current += 1;
+    projectingRef.current = false;
     pendingValidationRef.current = undefined;
     if (validationTimerRef.current !== undefined) clearTimeout(validationTimerRef.current);
     validationTimerRef.current = undefined;
@@ -180,7 +462,12 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const beginGizmo = (event: React.PointerEvent<HTMLButtonElement>, entity: Entity, gizmo: GizmoKind) => {
     event.stopPropagation();
     if (session.getState().readOnly) return;
+    if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
     capturePointer(event.currentTarget, event.pointerId);
+    const surface = surfaceRef.current;
+    const point = surface
+      ? normalizeFramePoint(event.clientX, event.clientY, surface.getBoundingClientRect())
+      : undefined;
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -189,6 +476,17 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
       gizmo,
       intents: [],
       doc: session.getState().doc,
+      ...(gizmo === 'translate' && point && manifest.capabilities?.includes('editor.project')
+        ? {
+            projection: {
+              origin: frame.project(point.x, point.y).catch(() => null),
+              sequence: 0,
+              pending: false,
+              released: false,
+              cancelled: false,
+            },
+          }
+        : {}),
     };
   };
 
@@ -262,7 +560,7 @@ function commitPlacement(
   const entity: Entity = {
     id: createStableId('e_'),
     prefab: ghost.prefab,
-    level: manifest.view,
+    level: ghost.prefab.startsWith('scenery:') ? 'main' : manifest.view,
     origin: 'creator',
     props: { pose: ghost.pose },
   };
@@ -308,20 +606,6 @@ function GhostView({ ghost, manifest }: { ghost: Ghost; manifest: GameManifest }
 
 function anchorStyle(anchor: { x: number; y: number } | undefined): React.CSSProperties {
   return anchor === undefined ? { left: '50%', top: '50%' } : { left: anchor.x, top: anchor.y };
-}
-
-function gizmoLabel(gizmo: GizmoKind): string {
-  if (gizmo === 'rotateYaw') return 'Rotate';
-  if (gizmo === 'elevate') return 'Elevate';
-  if (gizmo === 'splinePoints') return 'Move path point';
-  return 'Move';
-}
-
-function gizmoSymbol(gizmo: GizmoKind): string {
-  if (gizmo === 'rotateYaw') return '↻';
-  if (gizmo === 'elevate') return '↕';
-  if (gizmo === 'splinePoints') return '◆';
-  return '✥';
 }
 
 function capturePointer(element: HTMLElement, pointerId: number): void {
