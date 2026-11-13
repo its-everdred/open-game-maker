@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { buildPackIndex } from '@ogm/asset-cards';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { readLock } from '../../lock.js';
-import { resolveEntry } from '../../resolve.js';
+import { collectionParts, resolveEntry } from '../../resolve.js';
 import { readScene } from '../../scenery/files.js';
 import { testSoftwareRenderer } from '../../test-renderer.js';
 
@@ -25,9 +26,20 @@ export const command: GmCommand = {
     try {
       const assets: Record<string, string> = {};
       const ids = [...new Set(scene.items.map((item) => item.assetId))];
+      const entries = ids.map((id) => lock.assets.find((item) => item.id === id)!);
+      const packs = entries
+        .filter((entry) => entry.source === 'library')
+        .map((entry) => collectionParts(entry.id).slug);
+      const collections =
+        ctx.assetsRoot && packs.length ? (await buildPackIndex(ctx.assetsRoot, packs)).collections : undefined;
       for (const [index, id] of ids.entries()) {
-        const entry = lock.assets.find((item) => item.id === id)!;
-        const source = await resolveEntry(entry, { cwd: ctx.cwd, assetsRoot: ctx.assetsRoot, blobRoot: ctx.blobRoot });
+        const entry = entries[index]!;
+        const source = await resolveEntry(entry, {
+          cwd: ctx.cwd,
+          assetsRoot: ctx.assetsRoot,
+          blobRoot: ctx.blobRoot,
+          ...(collections ? { collections } : {}),
+        });
         if (!source.ok) throw new CommandError(`${id}: ${source.detail}; ${source.fix}`);
         const dir = join(temp, 'assets', String(index));
         for (const file of source.files) {
