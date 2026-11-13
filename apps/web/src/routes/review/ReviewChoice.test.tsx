@@ -7,7 +7,7 @@ import type { GameCommand } from '@ogm/contracts/browser';
 import { resetReviewDrafts } from '../../features/commands-inbox/drafts';
 import { ReviewChoice } from './ReviewChoice';
 
-const answer = vi.fn(async (..._args: unknown[]) => undefined);
+const answer = vi.fn(async (...args: unknown[]) => void args);
 vi.mock('../../features/commands-inbox/commands', () => ({ answerCommand: (...args: unknown[]) => answer(...args) }));
 const command: GameCommand = {
   job_id: null,
