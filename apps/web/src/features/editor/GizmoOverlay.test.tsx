@@ -556,6 +556,35 @@ describe('GizmoOverlay', () => {
     expect(test.submit).toHaveBeenCalledOnce();
   });
 
+  it('moves a legacy 2D entity relative to its existing position', async () => {
+    const test = harness([entityId]);
+    const current = test.session.getState().doc;
+    test.session.getState().doc = {
+      ...current,
+      entities: { ...current.entities, [entityId]: { ...current.entities[entityId]!, props: { x: 400, y: 320 } } },
+    };
+    test.frame.project = vi.fn().mockResolvedValueOnce([400, 320, 0]).mockResolvedValueOnce([420, 330, 0]);
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={{ ...manifest, capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 60 } as DOMRect);
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Move skeleton' }), {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 3,
+    });
+    fireEvent.pointerMove(canvas, { clientX: 30, clientY: 20, pointerId: 3 });
+    fireEvent.pointerUp(canvas, { clientX: 30, clientY: 20, pointerId: 3 });
+    await act(async () => {});
+    expect(test.commitStroke.mock.calls[0]?.[0][0].doc.entities[entityId].props.pose.position).toEqual([420, 330, 0]);
+  });
+
   it('moves 3D items by the projected ground delta even when released before projection finishes', async () => {
     const test = harness([entityId]);
     test.frame.project = vi.fn().mockResolvedValueOnce([1, 0, 1]).mockResolvedValueOnce([3, 0, 2]);
