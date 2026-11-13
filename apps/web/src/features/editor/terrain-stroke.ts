@@ -32,7 +32,16 @@ export function useTerrainStroke(
       if (ref.current) ref.current.cancelled = true;
       ref.current = undefined;
     },
-    [activePrefab, canProject, frame, session],
+    [frame, session],
+  );
+  useEffect(
+    () => () => {
+      if (ref.current && !ref.current.released) {
+        ref.current.cancelled = true;
+        ref.current = undefined;
+      }
+    },
+    [activePrefab, canProject],
   );
   const addPoint = (stroke: Stroke, event: Pointer) => {
     const point = normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());

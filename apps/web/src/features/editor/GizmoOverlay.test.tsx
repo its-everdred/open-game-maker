@@ -203,6 +203,26 @@ describe('GizmoOverlay', () => {
     await act(async () => finishes.forEach((finish, index) => finish([index, 0, 1])));
     expect(test.submit).not.toHaveBeenCalled();
   });
+
+  it('keeps a completed stroke when the brush changes during projection', async () => {
+    const test = harness();
+    test.session.getState().doc = { ...doc, globals: { 'scenery.terrain': [] } };
+    const finishes: Array<(value: [number, number, number]) => void> = [];
+    test.frame.project = vi.fn(() => new Promise<[number, number, number]>((resolve) => finishes.push(resolve)));
+    const props = {
+      frame: test.frame,
+      manifest: { ...manifest, dimension: '3d' as const, capabilities: ['editor.project'] },
+      session: test.session,
+      snap: { version: 1 as const, enabled: false, grid: 1 },
+    };
+    const view = render(<GizmoOverlay {...props} activePrefab="scenery-band:path" />);
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 40, clientY: 30 });
+    view.rerender(<GizmoOverlay {...props} activePrefab="scenery-band:water" />);
+    await act(async () => finishes.forEach((finish, index) => finish([index, 0, 1])));
+    expect(test.submit).toHaveBeenCalledOnce();
+  });
   it('long-presses a picked scenery item to remove it', async () => {
     vi.useFakeTimers();
     const test = harness();
