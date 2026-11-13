@@ -43,6 +43,24 @@ line.play({ onSentence: (_index, sentence) => showCaption(sentence) });
 Use `SpokenText.fromText(text, lang)` when rendered audio is unavailable. It keeps sentence callbacks and uses the
 browser's `speechSynthesis` voice.
 
+## Editor integration
+
+Games describe their palette in the manifest: categories have an `id`, `label`, and `kind`; items name a `prefab`,
+`label`, and category id, with optional `thumbnail`, `tag`, and `hint`. The host owns the palette UI. Use stable prefab
+and category ids so the same editor can present a game's items without game-specific controls.
+
+The host stores edits as design transactions and sends the resulting document and patches as `design.apply`. Implement
+`GameInstance.applyDesign` to apply the validated document to the live game. Creator-placed entities use `origin:
+'creator'` and `props.pose.position`; transforms update `props.pose` and removal removes the entity. A game that keeps
+older design data should continue to read it when adding support for these editor poses. Selection and placement
+validation reach the optional `setSelection`, `pick`, and `validatePlacement` hooks; implement those hooks for the
+items the game exposes. The host's selection and camera messages are not themselves persistent design changes.
+
+For a camera-based editable surface, add `editor.project` to manifest capabilities and implement
+`screenToWorld(nx, ny)` on the instance. The host supplies normalized frame coordinates; return a world-space position
+or `null` when the ray misses. The editor uses the result for placement and translation, preserving negative world
+coordinates. Games without the capability retain the legacy logical-coordinate mapping.
+
 ## Editor camera
 
 The host sends `editor.camera { mode: 'follow' | 'free', target?: entityId }` (a room watcher's Follow/Free toggle).

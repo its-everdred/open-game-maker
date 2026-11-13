@@ -7,6 +7,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
+  Plane,
   Raycaster,
   Scene,
   Vector2,
@@ -62,6 +63,8 @@ export function createScene(design: LevelDesign): SceneHandle {
   const players = new Map<string, Mesh>();
   const raycaster = new Raycaster();
   const projectedPosition = new Vector3();
+  const ground = new Plane(new Vector3(0, 1, 0), 0);
+  const groundPoint = new Vector3();
 
   const adapter: SceneHandle = {
     scene,
@@ -92,6 +95,11 @@ export function createScene(design: LevelDesign): SceneHandle {
       return raycaster
         .intersectObjects([...players.values()], false)
         .map(({ object }) => ({ id: String(object.userData.entityId), kind: 'entity' as const }));
+    },
+    screenToWorld(nx, ny) {
+      adapter.camera.updateMatrixWorld();
+      raycaster.setFromCamera(new Vector2(nx * 2 - 1, 1 - ny * 2), adapter.camera);
+      return raycaster.ray.intersectPlane(ground, groundPoint) ? groundPoint.toArray() : null;
     },
     worldToScreen(id) {
       const player = players.get(id);

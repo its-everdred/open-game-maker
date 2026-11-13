@@ -4,7 +4,15 @@ import type { StoreApi } from 'zustand/vanilla';
 import type { Entity, GameManifest, PlacementResult, Pose, TargetRef } from '@ogm/contracts/browser';
 
 import { FocusZone } from '../../lib/input';
-import { movePose, normalizeFramePoint, placementPose, poseFromProps, stepPose, type GizmoKind } from './canvas';
+import {
+  movePose,
+  normalizeFramePoint,
+  placementPose,
+  projectedPose,
+  poseFromProps,
+  stepPose,
+  type GizmoKind,
+} from './canvas';
 import { EDITOR_FOCUS_ZONES } from './focus';
 import type { GameFrameController } from './frame';
 import type { EditorSessionState } from './session';
@@ -20,6 +28,13 @@ type Drag = {
   gizmo: GizmoKind;
   intents: EditorIntent[];
   doc: EditorSessionState['doc'];
+  projection?: {
+    origin: Promise<[number, number, number] | null>;
+    sequence: number;
+    pending: boolean;
+    released: boolean;
+    cancelled: boolean;
+  };
 };
 
 type GizmoOverlayProps = {
@@ -40,6 +55,8 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const validationTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingValidationRef = useRef<Ghost | undefined>(undefined);
   const dropRequestedRef = useRef(false);
+  const projectionSequence = useRef(0);
+  const projectingRef = useRef(false);
   const [ghost, setGhost] = useState<Ghost>();
   const [anchor, setAnchor] = useState<{ id: string; x: number; y: number }>();
   const selectedId = session.getState().selection[0];
@@ -64,10 +81,16 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   useEffect(
     () => () => {
       if (validationTimerRef.current !== undefined) clearTimeout(validationTimerRef.current);
+      validationTimerRef.current = undefined;
       pendingValidationRef.current = undefined;
       ghostRef.current = undefined;
+      projectionSequence.current += 1;
+      projectingRef.current = false;
+      dropRequestedRef.current = false;
+      if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
+      dragRef.current = undefined;
     },
-    [],
+    [activePrefab, frame],
   );
 
   const validateGhost = (candidate: Ghost) => {
@@ -104,12 +127,32 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   const updateGhost = (clientX: number, clientY: number) => {
     const surface = surfaceRef.current;
-    if (activePrefab === undefined || surface === null) return;
+    if (activePrefab === undefined || surface === null || dropRequestedRef.current) return;
     const point = normalizeFramePoint(clientX, clientY, surface.getBoundingClientRect());
-    const next: Ghost = { prefab: activePrefab, pose: placementPose(point, manifest, snap) };
-    ghostRef.current = next;
-    setGhost(next);
-    requestValidation(next);
+    const sequence = ++projectionSequence.current;
+    const accept = (pose: Pose | null) => {
+      if (sequence !== projectionSequence.current) return;
+      projectingRef.current = false;
+      if (pose === null) {
+        dropRequestedRef.current = false;
+        return;
+      }
+      const next: Ghost = { prefab: activePrefab, pose };
+      ghostRef.current = next;
+      setGhost(next);
+      requestValidation(next);
+    };
+    if (manifest.capabilities?.includes('editor.project')) {
+      projectingRef.current = true;
+      ghostRef.current = undefined;
+      setGhost(undefined);
+      void frame
+        .project(point.x, point.y)
+        .then((position) => accept(position ? projectedPose(position, snap) : null))
+        .catch(() => accept(null));
+    } else {
+      accept(placementPose(point, manifest, snap));
+    }
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -130,6 +173,49 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
       const rect = event.currentTarget.getBoundingClientRect();
+      if (drag.projection) {
+        const projection = drag.projection;
+        if (projection.released) return;
+        const sequence = ++projection.sequence;
+        projection.pending = true;
+        const point = normalizeFramePoint(event.clientX, event.clientY, rect);
+        void Promise.all([projection.origin, frame.project(point.x, point.y)])
+          .then(([origin, target]) => {
+            if (projection.cancelled || sequence !== projection.sequence) return;
+            projection.pending = false;
+            if (origin && target) {
+              const initial = poseFromProps(drag.entity.props.pose);
+              const pose = projectedPose(
+                [
+                  initial.position[0] + target[0] - origin[0],
+                  initial.position[1],
+                  initial.position[2] + target[2] - origin[2],
+                ],
+                snap,
+              );
+              pose.position[1] = initial.position[1];
+              if (initial.rotationY !== undefined) pose.rotationY = initial.rotationY;
+              const intent = updateEntityPoseIntent(drag.doc, drag.entity.id, pose, `Moved ${drag.entity.prefab}`);
+              drag.intents.push(intent);
+              drag.doc = intent.doc;
+              frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+            }
+            if (projection.released && drag.intents.length > 0) {
+              void session.getState().commitStroke(drag.intents, `Moved ${drag.entity.prefab}`);
+            }
+            if (projection.released && dragRef.current === drag) dragRef.current = undefined;
+          })
+          .catch(() => {
+            if (projection.cancelled || sequence !== projection.sequence) return;
+            projection.pending = false;
+            if (projection.released) {
+              if (drag.intents.length > 0)
+                void session.getState().commitStroke(drag.intents, `Moved ${drag.entity.prefab}`);
+              if (dragRef.current === drag) dragRef.current = undefined;
+            }
+          });
+        return;
+      }
       const pose = movePose(
         poseFromProps(drag.entity.props.pose),
         drag.gizmo,
@@ -149,6 +235,10 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
+      if (drag.projection?.pending) {
+        drag.projection.released = true;
+        return;
+      }
       dragRef.current = undefined;
       if (drag.intents.length > 0) void session.getState().commitStroke(drag.intents, `Moved ${drag.entity.prefab}`);
       return;
@@ -156,7 +246,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
     if (activePrefab === undefined) return;
     const current = ghostRef.current;
     if (current?.result === undefined) {
-      dropRequestedRef.current = current !== undefined;
+      dropRequestedRef.current = current !== undefined || projectingRef.current;
       return;
     }
     if (current.result.ok) commitPlacement(current, manifest, session, setGhost, ghostRef);
@@ -166,10 +256,13 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
       dragRef.current = undefined;
+      if (drag.projection) drag.projection.cancelled = true;
       const state = session.getState();
       frame.applyDesign(state.headRev, state.doc, []);
     }
     dropRequestedRef.current = false;
+    projectionSequence.current += 1;
+    projectingRef.current = false;
     pendingValidationRef.current = undefined;
     if (validationTimerRef.current !== undefined) clearTimeout(validationTimerRef.current);
     validationTimerRef.current = undefined;
@@ -180,7 +273,12 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const beginGizmo = (event: React.PointerEvent<HTMLButtonElement>, entity: Entity, gizmo: GizmoKind) => {
     event.stopPropagation();
     if (session.getState().readOnly) return;
+    if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
     capturePointer(event.currentTarget, event.pointerId);
+    const surface = surfaceRef.current;
+    const point = surface
+      ? normalizeFramePoint(event.clientX, event.clientY, surface.getBoundingClientRect())
+      : undefined;
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -189,6 +287,17 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
       gizmo,
       intents: [],
       doc: session.getState().doc,
+      ...(gizmo === 'translate' && point && manifest.capabilities?.includes('editor.project')
+        ? {
+            projection: {
+              origin: frame.project(point.x, point.y).catch(() => null),
+              sequence: 0,
+              pending: false,
+              released: false,
+              cancelled: false,
+            },
+          }
+        : {}),
     };
   };
 

@@ -19,11 +19,12 @@ import { LEAKY } from './leaky.js';
 
 // Resolves an after_create hook's bearer to the one game repo whose daemon holds that secret, or null.
 export type HookDaemonResolver = (secret: string, deps: AppDeps) => Promise<string | null>;
+export type HookIdentityResolver = (secret: string, deps: AppDeps) => Promise<{ repo: string; slug: string } | null>;
 export type SkillTarball = { version: string; tgz: Buffer };
 
 // OGM-034 writes each daemon's secret to `~/.config/ogm/daemons/<slug>/hook-secret` (0600) and its env file names
 // only that path; the secret itself never sits in the daemon's environment.
-export function hookSecretFiles(home: string): HookDaemonResolver {
+export function hookIdentityFiles(home: string): HookIdentityResolver {
   return async (secret, deps) => {
     const given = digest(secret);
     for (const row of await deps.db
@@ -33,10 +34,15 @@ export function hookSecretFiles(home: string): HookDaemonResolver {
         () => undefined,
       );
       if (stored !== undefined && stored.trim() !== '' && timingSafeEqual(given, digest(stored.trim())))
-        return row.repo;
+        return { repo: row.repo, slug: row.slug };
     }
     return null;
   };
+}
+
+export function hookSecretFiles(home: string): HookDaemonResolver {
+  const identity = hookIdentityFiles(home);
+  return async (secret, deps) => (await identity(secret, deps))?.repo ?? null;
 }
 
 export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills: () => SkillTarball }) {

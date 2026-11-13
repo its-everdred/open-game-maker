@@ -35,4 +35,13 @@ describe('editor canvas geometry', () => {
       position: [99, 20, 0],
     });
   });
+
+  it('steps projected 3D world positions without clamping them to pixel bounds', () => {
+    const projected = { ...manifest, dimension: '3d', capabilities: ['editor.project'] } as GameManifest;
+    expect(
+      stepPose({ position: [-3, 0, 0] }, 'translate', 1, projected, { version: 1, enabled: true, grid: 1 }),
+    ).toEqual({
+      position: [-2, 0, 0],
+    });
+  });
 });

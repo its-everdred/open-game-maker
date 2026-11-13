@@ -1,4 +1,5 @@
 export type { CardIndex, IndexError, ResolvedCard, Rights, SearchQuery } from './types.js';
+export { fallbackEditorPalette } from './editor-palette.js';
 export { intersectRights, resolve } from './resolve.js';
 export {
   CARD_INDEX_VERSION,

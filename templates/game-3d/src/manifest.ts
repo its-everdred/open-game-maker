@@ -9,7 +9,7 @@ export const manifest: GameManifest = {
   presentation: { orientation: 'landscape', minLogical: { w: 640, h: 360 }, fit: 'responsive' },
   view: 'fixed',
   dimension: '3d',
-  capabilities: [],
+  capabilities: ['editor.project'],
   palette: { categories: [], items: [] },
   tools: ['select', 'place'],
   gizmos: { spawn: ['translate'] },

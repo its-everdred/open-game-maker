@@ -11,7 +11,7 @@ import { createApp } from '../../src/app/app.js';
 import { claimAttachments, storeAttachment } from '../../src/build-chat/attachments.js';
 import type { TicketJob } from '../../src/app/registry.js';
 import { writeLimits, writePreference } from '../../src/energy/store.js';
-import { bundleRoutes, hookSecretFiles } from '../../src/internal/bundle.js';
+import { bundleRoutes, hookIdentityFiles, hookSecretFiles } from '../../src/internal/bundle.js';
 import { tarGz } from '../../src/internal/tarball.js';
 import { setPaidApisDuringGameplay } from '../../src/gameplay/policy.js';
 import { ids, insertJob } from '../budget/fixture.js';
@@ -64,10 +64,15 @@ async function setup(jobs: TicketJob[] = [job()]) {
   );
   const get = (path: string, secret?: string) =>
     app.request(`http://127.0.0.1:4000${path}`, secret ? { headers: { authorization: `Bearer ${secret}` } } : {});
-  return { deps, get, tgz };
+  return { deps, get, tgz, home };
 }
 
 describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
+  it('retains the specific daemon slug when resolving a hook secret', async () => {
+    const { deps, home } = await setup();
+    expect(await hookIdentityFiles(home)(SECRET_A, deps)).toEqual({ repo: REPO_A, slug: 'everdred-games-gm-g1' });
+    expect(await hookIdentityFiles(home)('unknown', deps)).toBeNull();
+  });
   it('refuses a request without a daemon hook secret', async () => {
     const { get } = await setup();
     expect((await get('/internal/jobs/by-ticket/12/bundle')).status).toBe(401);
@@ -378,5 +383,6 @@ describe('internal context', () => {
     const { app, mounted } = await makeApp();
     expect(mounted).toContainEqual({ prefix: '/internal', file: 'internal/routes.ts' });
     expect((await app.request('/internal/jobs/by-ticket/1/bundle')).status).toBe(401);
+    expect((await app.request('/internal/jobs/by-ticket/1/design')).status).toBe(401);
   });
 });
