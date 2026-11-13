@@ -259,44 +259,52 @@ describe('GameScreen', () => {
     await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
     expect(editorApi.postTransaction).not.toHaveBeenCalled();
   });
-  it('submits fallback item placement as a build request without a design transaction', async () => {
-    editorApi.getFallbackPalette.mockResolvedValue({
-      mode: 'request',
-      palette: {
-        categories: [{ id: 'scenery', label: 'Scenery', kind: 'items' }],
-        items: [{ prefab: 't3:fixture/tree', label: 'Tree', category: 'scenery' }],
-      },
-    });
-    renderGame('/g/game?mode=edit');
-    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
-    act(() =>
-      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
-        bridgeState: 'ready',
-        dropped: 0,
-        manifest: {
-          id: 'game',
-          capabilities: [],
-          palette: { categories: [], items: [] },
-          tools: [],
-          gizmos: {},
-          presentation: { minLogical: { w: 100, h: 100 } },
-          dimension: '2d',
-          view: 'main',
-          saves: false,
+  it.each(['t3:fixture/tree', 'scope:0'])(
+    'submits fallback item %s as a build request without a design transaction',
+    async (prefab) => {
+      editorApi.getFallbackPalette.mockResolvedValue({
+        mode: 'request',
+        palette: {
+          categories: [{ id: 'scenery', label: 'Scenery', kind: 'items' }],
+          items: [{ prefab, label: 'Tree', category: 'scenery' }],
         },
-      }),
-    );
-    await waitFor(() => expect(editorApi.getFallbackPalette).toHaveBeenCalled());
-    const item = await screen.findByRole('button', { name: 'Tree' });
-    fireEvent.pointerDown(item, { pointerId: 1 });
-    const canvas = await screen.findByLabelText('Editor canvas');
-    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
-    fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
-    fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
-    await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
-    expect(fallbackAdmission.admitJob.mock.calls[0]?.[0].plan.summary).toContain('t3:fixture/tree');
-    expect(editorApi.postTransaction).not.toHaveBeenCalled();
-  });
+      });
+      renderGame('/g/game?mode=edit');
+      await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+      act(() =>
+        host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+          bridgeState: 'ready',
+          dropped: 0,
+          manifest: {
+            id: 'game',
+            capabilities: [],
+            palette: { categories: [], items: [] },
+            tools: [],
+            gizmos: {},
+            presentation: { minLogical: { w: 100, h: 100 } },
+            dimension: '2d',
+            view: 'main',
+            saves: false,
+          },
+        }),
+      );
+      await waitFor(() => expect(editorApi.getFallbackPalette).toHaveBeenCalled());
+      const item = await screen.findByRole('button', { name: 'Tree' });
+      fireEvent.pointerDown(item, { pointerId: 1 });
+      const canvas = await screen.findByLabelText('Editor canvas');
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 100,
+      } as DOMRect);
+      fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
+      fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
+      await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+      expect(fallbackAdmission.admitJob.mock.calls[0]?.[0].plan.summary).toContain(prefab);
+      expect(editorApi.postTransaction).not.toHaveBeenCalled();
+    },
+  );
   it('loads matching scenery thumbnail sources without restarting a running build', async () => {
     let finish!: (value: unknown) => void;
     editorApi.getScenerySource.mockReturnValue(

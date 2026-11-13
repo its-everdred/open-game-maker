@@ -1,9 +1,10 @@
 import { extname } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { fallbackEditorPalette, loadIndex, packOf, type ResolvedCard } from '@ogm/asset-cards';
 import { loadEnv } from '@ogm/config';
+import { AgreedScope, type AssetsLock } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
 
@@ -13,7 +14,9 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { thumbnailUrl } from '../catalog/routes.js';
 import { findGameForFamily } from '../games/games.js';
+import { authorizedGame } from '../games/authorize.js';
 import { readGameLock, readSceneryFile, readScenerySource } from './source.js';
+import { scopePaletteItems } from './scope-palette.js';
 
 export const prefix = '/api/v1';
 
@@ -43,19 +46,25 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
   }
   return new Hono<ApiBindings>()
     .get('/games/:gameId/editor/fallback', async (c) => {
-      const target = checkout(c);
-      let lock;
-      try {
-        ({ lock } = await readGameLock(target.checkout, target.path));
-      } catch {
-        throw new HttpError(404, 'editor_assets_unavailable');
+      const game = authorizedGame(c, 'game.edit');
+      const deps = c.get('deps');
+      const daemon = game.slug
+        ? deps.db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).get()
+        : undefined;
+      let assets: AssetsLock['assets'] = [];
+      if (daemon && game.githubPath) {
+        try {
+          assets = (await readGameLock(daemon.checkoutPath, game.githubPath)).lock.assets;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new HttpError(404, 'editor_assets_unavailable');
+        }
       }
       let cards: ResolvedCard[] = [];
       const thumbnails = new Map<string, string>();
       if (assetsRoot) {
         const index = await loadIndex(assetsRoot);
         cards = index.cards;
-        const packs = new Set(lock.assets.map((asset) => packOf(asset.id)).filter((pack) => pack !== undefined));
+        const packs = new Set(assets.map((asset) => packOf(asset.id)).filter((pack) => pack !== undefined));
         await Promise.all(
           Object.values(index.collections).map(async (card) => {
             const pack = packOf(card.id);
@@ -66,20 +75,45 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
         );
       }
       const byId = new Map(cards.map((card) => [card.id, card]));
-      const ids = lock.assets
+      const ids = assets
         .filter(
           (entry) =>
-            target.game.allowAiGeneratedAssets ||
+            game.allowAiGeneratedAssets ||
             (entry.meta?.generation?.method !== 'ai' && byId.get(entry.id)?.generation?.method !== 'ai'),
         )
         .map((entry) => entry.id);
       const palette = fallbackEditorPalette(ids, cards, (card) => thumbnails.get(packOf(card.id) ?? ''));
-      const locked = new Map(lock.assets.map((asset) => [asset.id, asset]));
+      const locked = new Map(assets.map((asset) => [asset.id, asset]));
       palette.palette.items = palette.palette.items.map((item) => {
         const thumbnail = item.thumbnail ?? thumbnails.get(packOf(item.prefab) ?? '');
         const generated = item.aiGenerated || locked.get(item.prefab)?.meta?.generation?.method === 'ai';
         return { ...item, ...(thumbnail ? { thumbnail } : {}), ...(generated ? { aiGenerated: true } : {}) };
       });
+      const scopeRow = deps.db
+        .select()
+        .from(schema.scopeSessions)
+        .where(and(eq(schema.scopeSessions.gameId, game.id), eq(schema.scopeSessions.status, 'agreed')))
+        .orderBy(desc(schema.scopeSessions.createdAt))
+        .get();
+      if (scopeRow?.scope) {
+        let data: unknown;
+        try {
+          data = JSON.parse(scopeRow.scope);
+        } catch {
+          data = undefined;
+        }
+        const scope = AgreedScope.safeParse(data);
+        if (scope.success) {
+          const items = scopePaletteItems(scope.data);
+          const labels = { characters: 'Characters', scenery: 'Scenery', props: 'Props', audio: 'Audio' } as const;
+          for (const item of items) {
+            const category = item.category as keyof typeof labels;
+            if (!palette.palette.categories.some((entry) => entry.id === category))
+              palette.palette.categories.push({ id: category, label: labels[category], kind: 'items' });
+            palette.palette.items.push(item);
+          }
+        }
+      }
       c.header('Cache-Control', 'private, no-store');
       return c.json(palette);
     })

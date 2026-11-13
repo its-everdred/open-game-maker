@@ -127,6 +127,59 @@ describe('no-build scenery source', () => {
     writeFileSync(join(game, 'scenery.json'), '{invalid');
     expect((await app.request(fallbackUrl, { headers: asUser(ids.creator) })).status).toBe(200);
     expect((await app.request(url, { headers: asUser(ids.creator) })).status).toBe(404);
+    deps.db
+      .insert(schema.jobs)
+      .values({
+        id: 'j_scope',
+        gameId: ids.game,
+        branchId: 'main',
+        familyId: ids.family,
+        creatorId: ids.creator,
+        kind: 'scope',
+        complexity: 1,
+        state: 'done',
+        start: 'now',
+        slot: 'edit',
+        plan: '{}',
+        reservation: '{}',
+        hardCapMicroUsd: 1,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.scopeSessions)
+      .values({
+        id: 's_88000000-0000-4000-8000-000000000001',
+        gameId: ids.game,
+        creatorId: ids.creator,
+        jobId: 'j_scope',
+        status: 'agreed',
+        revision: 1,
+        choices: '{}',
+        scope: JSON.stringify({
+          session_id: 's_88000000-0000-4000-8000-000000000001',
+          revision: 1,
+          title: 'Game',
+          summary: 'A game',
+          scope: { included: ['Forest trees'], excluded: ['Dragons'] },
+          tickets: [{ key: 'one', title: 'Build', skills: [], dependsOn: [], acceptanceCriteria: ['Works'] }],
+          complexity: 1,
+          open_questions: [],
+          ideas: [],
+        }),
+        scopeHash: 'hash',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    rmSync(join(game, 'assets.lock.json'));
+    const scopeOnly = await app.request(fallbackUrl, { headers: asUser(ids.creator) });
+    expect(scopeOnly.status).toBe(200);
+    expect(await scopeOnly.json()).toMatchObject({
+      mode: 'request',
+      palette: { items: [{ prefab: 'scope:0', label: 'Forest trees', category: 'scenery' }] },
+    });
   }, 60_000);
   it('serves only hash-verified files listed in the game lock', async () => {
     const { root, game, id, blobStore } = fixture();
