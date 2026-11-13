@@ -6,7 +6,7 @@ import { installGameApi } from './support/mock-game-api';
 test.use({ serviceWorkers: 'block' });
 
 test('opens a no-build diorama and places a locked item', async ({ page }, testInfo) => {
-  test.slow();
+  test.setTimeout(180_000);
   await installAuthRoutes(page, { signedIn: true });
   const api = await installGameApi(page);
   const assetUrl = '/api/v1/games/game/scenery/assets/0/hash/tree.glb';
@@ -24,7 +24,7 @@ test('opens a no-build diorama and places a locked item', async ({ page }, testI
             lighting: 'warm-forest',
             camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
           },
-          assets: [{ id: 't3:fixture/tree', path: 'tree.glb', url: assetUrl }],
+          assets: [{ id: 't3:fixture/tree', path: 'tree.glb', url: assetUrl, sha256: 'fixture-hash' }],
         },
       });
     if (path === assetUrl)
@@ -36,16 +36,27 @@ test('opens a no-build diorama and places a locked item', async ({ page }, testI
   });
   await page.goto('/g/game?mode=edit&test');
   const canvas = page.getByLabel('Editor canvas');
-  await expect(canvas).toBeVisible();
+  await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('.game-frame canvas')).toBeVisible();
-  await expect.poll(() => api.transactions.length).toBe(1);
+  await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(1);
+  await expect(page.locator('.scenery-thumbnail img')).toBeVisible({ timeout: 30_000 });
+  await page.screenshot({ path: testInfo.outputPath('scenery-palette.png') });
   await page.getByRole('button', { name: 'tree', exact: true }).click();
   const model = page.waitForResponse((response) => new URL(response.url()).pathname === assetUrl);
   await canvas.click({ position: { x: 180, y: 200 } });
-  await expect.poll(() => api.transactions.length).toBe(2);
+  await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(2);
   expect((await model).ok()).toBe(true);
   await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '1');
   await expect(page.locator('.screen-error')).toHaveCount(0);
   expect(api.transactions[1]?.commands).toEqual([expect.objectContaining({ command: 'entity.create' })]);
+  await page.getByRole('button', { name: 'Water', exact: true }).click();
+  await page.getByRole('button', { name: 'Path', exact: true }).click();
+  const bounds = (await canvas.boundingBox())!;
+  await page.mouse.move(bounds.x + 100, bounds.y + 170);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 200, bounds.y + 230, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(3);
+  expect(api.transactions[2]?.commands).toEqual([expect.objectContaining({ op: 'set', control: 'scenery.terrain' })]);
   await page.screenshot({ path: testInfo.outputPath('scenery-preview.png') });
 });

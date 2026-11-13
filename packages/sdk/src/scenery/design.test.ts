@@ -54,4 +54,21 @@ describe('scenery design adapter', () => {
       { id: newId, assetId: 'tree-asset', position: [2, 0, 3], rotation: [0, 0, 0], scale: [1, 1, 1], layer: 'mid' },
     ]);
   });
+  it('reads the independently edited terrain without discarding other settings', () => {
+    const doc = sceneryToDesign(scene, { schemaVersion: 1, globals: {}, entities: {} }, () => id);
+    const terrain = [
+      {
+        id: 'stream',
+        kind: 'water',
+        points: [
+          [2, 0, 0],
+          [3, 0, 1],
+        ],
+        width: 1,
+      },
+    ];
+    doc.globals['scenery.terrain'] = terrain;
+    expect(sceneryFromDesign(doc, [{ id: 'tree-asset' }]).terrain).toEqual(terrain);
+    expect(sceneryFromDesign(doc, [{ id: 'tree-asset' }]).lighting).toBe('night');
+  });
 });

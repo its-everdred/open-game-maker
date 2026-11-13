@@ -5,6 +5,20 @@ import type { SnapPrefs } from './SnapPrefs';
 export type NormalizedPoint = { x: number; y: number };
 export type GizmoKind = GameManifest['gizmos'][string][number];
 
+export function gizmoLabel(gizmo: GizmoKind): string {
+  if (gizmo === 'rotateYaw') return 'Rotate';
+  if (gizmo === 'elevate') return 'Elevate';
+  if (gizmo === 'splinePoints') return 'Move path point';
+  return 'Move';
+}
+
+export function gizmoSymbol(gizmo: GizmoKind): string {
+  if (gizmo === 'rotateYaw') return '↻';
+  if (gizmo === 'elevate') return '↕';
+  if (gizmo === 'splinePoints') return '◆';
+  return '✥';
+}
+
 type FrameRect = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>;
 
 export function normalizeFramePoint(clientX: number, clientY: number, frame: FrameRect): NormalizedPoint {

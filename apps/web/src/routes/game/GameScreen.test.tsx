@@ -193,6 +193,45 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('loads matching scenery thumbnail sources without restarting a running build', async () => {
+    let finish!: (value: unknown) => void;
+    editorApi.getScenerySource.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledOnce());
+    act(() =>
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: ['scenery'],
+          palette: { categories: [], items: [] },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 640, h: 360 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    await waitFor(() => expect(editorApi.getScenerySource).toHaveBeenCalledOnce());
+    await act(async () =>
+      finish({
+        scene: {
+          version: 1,
+          items: [],
+          terrain: [],
+          lighting: 'warm-forest',
+          camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+        },
+        assets: [],
+      }),
+    );
+    expect(host.mountGameFrame).toHaveBeenCalledOnce();
+  });
   it('opens a no-build scenery preview and persists its initial scene before editing', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
@@ -244,6 +283,7 @@ describe('GameScreen', () => {
     editorApi.postTransaction.mockResolvedValue({ ok: false, kind: 'retryable', message: 'offline' });
     renderGame('/g/game?mode=edit');
     await waitFor(() => expect(screen.getByText('Not saved')).toBeInTheDocument());
+    expect(screen.getByRole('region', { name: 'Play and edit' })).toHaveClass('is-unsaved');
     expect(host.controller.applyDesign).not.toHaveBeenCalled();
     expect(editorApi.openTransactionStream).not.toHaveBeenCalled();
   });

@@ -75,6 +75,77 @@ afterEach(() => {
 });
 
 describe('GizmoOverlay', () => {
+  it('paints a projected terrain band as one undoable change', async () => {
+    const test = harness();
+    test.session.getState().doc = { ...doc, globals: { 'scenery.settings': { terrain: [] } } };
+    test.frame.project = vi.fn().mockResolvedValueOnce([2, 0, 1]).mockResolvedValueOnce([4, 0, 2]);
+    render(
+      <GizmoOverlay
+        activePrefab="scenery-band:water"
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 60 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 30 });
+    await act(async () => {});
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 50, clientY: 40 });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(test.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commands: [
+          expect.objectContaining({
+            op: 'set',
+            control: 'scenery.terrain',
+            value: [
+              expect.objectContaining({
+                kind: 'water',
+                points: [
+                  [2, 0, 1],
+                  [4, 0, 2],
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('does not paint a terrain stroke cancelled before projection completes', async () => {
+    const test = harness();
+    test.session.getState().doc = { ...doc, globals: { 'scenery.settings': { terrain: [] } } };
+    const finishes: Array<(value: [number, number, number] | null) => void> = [];
+    test.frame.project = vi.fn(
+      () =>
+        new Promise<[number, number, number] | null>((resolve) => {
+          finishes.push(resolve);
+        }),
+    );
+    render(
+      <GizmoOverlay
+        activePrefab="scenery-band:path"
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 40, clientY: 30 });
+    expect(test.frame.project).toHaveBeenCalledTimes(2);
+    fireEvent.pointerCancel(canvas, { pointerId: 1 });
+    await act(async () => {
+      finishes[0]?.([2, 0, 1]);
+      finishes[1]?.([4, 0, 1]);
+    });
+    expect(test.submit).not.toHaveBeenCalled();
+  });
   it('long-presses a picked scenery item to remove it', async () => {
     vi.useFakeTimers();
     const test = harness();

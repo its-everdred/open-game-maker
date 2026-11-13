@@ -9,9 +9,10 @@ type Asset = { id: string };
 export function sceneryToDesign(scene: Scenery, doc: DesignDoc, stableId: (itemId: string) => string): DesignDoc {
   const next = structuredClone(doc);
   scene = ScenerySchema.parse(scene);
-  if (SETTINGS in next.globals || 'scenery.lighting' in next.globals)
+  if (SETTINGS in next.globals || 'scenery.lighting' in next.globals || 'scenery.terrain' in next.globals)
     throw new Error('design already has scenery settings');
   next.globals['scenery.lighting'] = scene.lighting;
+  next.globals['scenery.terrain'] = scene.terrain;
   next.globals[SETTINGS] = {
     version: scene.version,
     terrain: scene.terrain,
@@ -47,7 +48,12 @@ export function sceneryFromDesign(doc: DesignDoc, assets: readonly Asset[]): Sce
     .filter((entity) => entity.prefab.startsWith(PREFIX))
     .map(toItem);
   return parseScenery(
-    { ...settings, lighting: doc.globals['scenery.lighting'] ?? (settings as { lighting?: unknown }).lighting, items },
+    {
+      ...settings,
+      lighting: doc.globals['scenery.lighting'] ?? (settings as { lighting?: unknown }).lighting,
+      terrain: doc.globals['scenery.terrain'] ?? (settings as { terrain?: unknown }).terrain,
+      items,
+    },
     assets,
   );
 }

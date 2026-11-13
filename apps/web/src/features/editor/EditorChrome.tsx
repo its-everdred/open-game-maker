@@ -23,6 +23,7 @@ type EditorChromeProps = {
   gameId: string;
   manifest: GameManifest;
   session: EditorSessionState;
+  sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
   onCommand(command: EditorCommand): void;
   onTool(tool: string): void;
   onUndo(): void;
@@ -37,6 +38,7 @@ export function EditorChrome({
   gameId,
   manifest,
   session,
+  sceneryAssets,
   onCommand,
   onTool,
   onUndo,
@@ -74,6 +76,7 @@ export function EditorChrome({
           category={category}
           title={activeCategory.label}
           showTabs={false}
+          sceneryAssets={sceneryAssets}
           onCategory={setCategory}
           onPick={(prefab) => {
             setPickedPrefab(prefab);
@@ -136,6 +139,6 @@ function manifestControls(manifest: GameManifest): ControlDecl[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((candidate) => {
     const parsed = controlDeclSchema.safeParse(candidate);
-    return parsed.success && parsed.data.id !== 'scenery.lighting' ? [parsed.data] : [];
+    return parsed.success && !['scenery.lighting', 'scenery.terrain'].includes(parsed.data.id) ? [parsed.data] : [];
   });
 }

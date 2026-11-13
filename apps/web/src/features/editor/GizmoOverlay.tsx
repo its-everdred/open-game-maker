@@ -6,6 +6,8 @@ import type { Entity, GameManifest, PlacementResult, Pose, TargetRef } from '@og
 import { FocusZone } from '../../lib/input';
 import {
   movePose,
+  gizmoLabel,
+  gizmoSymbol,
   normalizeFramePoint,
   placementPose,
   projectedPose,
@@ -17,6 +19,7 @@ import { EDITOR_FOCUS_ZONES } from './focus';
 import type { GameFrameController } from './frame';
 import type { EditorSessionState } from './session';
 import type { SnapPrefs } from './SnapPrefs';
+import { useTerrainStroke } from './terrain-stroke';
 import {
   createEntityIntent,
   createStableId,
@@ -58,6 +61,12 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const surfaceRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<Ghost | undefined>(undefined);
   const dragRef = useRef<Drag | undefined>(undefined);
+  const terrain = useTerrainStroke(
+    frame,
+    session,
+    activePrefab,
+    manifest.capabilities?.includes('editor.project') ?? false,
+  );
   const touchesRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<
     | {
@@ -221,6 +230,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
       }
     }
     capturePointer(event.currentTarget, event.pointerId);
+    if (terrain.down(event)) return;
     if (activePrefab !== undefined) {
       dropRequestedRef.current = false;
       updateGhost(event.clientX, event.clientY);
@@ -264,6 +274,8 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (terrain.move(event)) return;
+    if (activePrefab?.startsWith('scenery-band:')) return;
     if (touchesRef.current.has(event.pointerId))
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const pinch = pinchRef.current;
@@ -387,6 +399,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     touchesRef.current.delete(event.pointerId);
+    if (terrain.up(event)) return;
     const pinch = pinchRef.current;
     if (pinch?.ids.includes(event.pointerId)) {
       pinchRef.current = undefined;
@@ -419,6 +432,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
     touchesRef.current.delete(event.pointerId);
+    terrain.cancel(event);
     if (pinchRef.current?.ids.includes(event.pointerId)) {
       pinchRef.current = undefined;
       const state = session.getState();
@@ -592,20 +606,6 @@ function GhostView({ ghost, manifest }: { ghost: Ghost; manifest: GameManifest }
 
 function anchorStyle(anchor: { x: number; y: number } | undefined): React.CSSProperties {
   return anchor === undefined ? { left: '50%', top: '50%' } : { left: anchor.x, top: anchor.y };
-}
-
-function gizmoLabel(gizmo: GizmoKind): string {
-  if (gizmo === 'rotateYaw') return 'Rotate';
-  if (gizmo === 'elevate') return 'Elevate';
-  if (gizmo === 'splinePoints') return 'Move path point';
-  return 'Move';
-}
-
-function gizmoSymbol(gizmo: GizmoKind): string {
-  if (gizmo === 'rotateYaw') return '↻';
-  if (gizmo === 'elevate') return '↕';
-  if (gizmo === 'splinePoints') return '◆';
-  return '✥';
 }
 
 function capturePointer(element: HTMLElement, pointerId: number): void {

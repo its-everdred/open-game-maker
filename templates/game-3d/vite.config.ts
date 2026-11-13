@@ -22,7 +22,7 @@ const items: SceneryPaletteItem[] = lock.assets
         : /water|stream|river/i.test(name)
           ? 'water'
           : 'props';
-    return { assetId: entry.id, name, category };
+    return { assetId: entry.id, name, category, sha256: entry.sha256 };
   });
 const palette = sceneryPalette(items, lock.assets);
 const buildManifest = {

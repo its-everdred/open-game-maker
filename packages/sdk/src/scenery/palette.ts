@@ -6,9 +6,10 @@ export type SceneryPaletteItem = {
   category: 'trees' | 'rocks' | 'water' | 'props';
   thumbnail?: string;
   tag?: string;
+  sha256?: string;
 };
 
-/** Palette data for the shared editor; only items in the game's lock may be offered. */
+/** Palette data for the shared editor: locked models and built-in terrain brushes. */
 export function sceneryPalette(
   items: readonly SceneryPaletteItem[],
   assets: readonly { id: string }[],
@@ -23,14 +24,20 @@ export function sceneryPalette(
   ];
   return {
     categories,
-    items: items
-      .filter((item) => locked.has(item.assetId))
-      .map((item) => ({
-        prefab: `scenery:${item.assetId}`,
-        label: item.name,
-        category: item.category,
-        ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}),
-        ...(item.tag ? { tag: item.tag } : {}),
-      })),
+    items: [
+      ...items
+        .filter((item) => locked.has(item.assetId))
+        .map((item) => ({
+          prefab: `scenery:${item.assetId}`,
+          label: item.name,
+          category: item.category,
+          ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}),
+          ...(item.tag ? { tag: item.tag } : {}),
+          ...(item.sha256 ? { assetSha: item.sha256 } : {}),
+        })),
+      { prefab: 'scenery-band:grass', label: 'Grass', category: 'water' },
+      { prefab: 'scenery-band:path', label: 'Path', category: 'water' },
+      { prefab: 'scenery-band:water', label: 'Water', category: 'water' },
+    ],
   };
 }

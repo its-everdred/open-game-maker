@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
-import type { StoreApi } from 'zustand/vanilla';
 
 import type { Entity, ReapplyReport } from '@ogm/contracts/browser';
 
@@ -10,16 +9,12 @@ import { useGameMenu, useGameMenuControls } from '../../app/GameMenu';
 import { useDock } from '../../features/build-chat/dock';
 import { gameJobsQueryKey } from '../../features/build-chat/jobs';
 import {
-  acquireLease,
   getDesignSnapshot,
   getGame,
   getScenerySource,
   getOptionalReapply,
-  heartbeatLease,
   listJobs,
   postAnalyticsEvent,
-  postTransaction,
-  releaseLease,
   NO_BUILD_ID,
   submitReapply,
   type DesignSnapshot,
@@ -34,19 +29,16 @@ import {
   type GameFrameState,
   type GameLoadMeasurement,
 } from '../../features/editor/frame';
-import { LeaseController } from '../../features/editor/lease';
 import { ReapplyCard } from '../../features/editor/ReapplyCard';
-import { createEditorSession, type EditorSessionState } from '../../features/editor/session';
-import { bootstrapScenery } from '../../features/editor/scenery-bootstrap';
+import type { EditorSessionState } from '../../features/editor/session';
+import { useEditorSession } from '../../features/editor/use-editor-session';
 import { mountSceneryPreview } from '../../features/editor/scenery-preview';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
-import { connectTransactionStream } from '../../features/editor/stream';
 import {
   createEntityIntent,
   createIntent,
   createStableId,
   deleteEntityIntent,
-  toTransactionBody,
 } from '../../features/editor/transactions';
 import { pushToast } from '../../lib/notify/slice';
 import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
@@ -108,9 +100,6 @@ export function GameScreen() {
   const [frameController, setFrameController] = useState<GameFrameController>();
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
-  const [sessionStore, setSessionStore] = useState<StoreApi<EditorSessionState>>();
-  const [sessionView, setSessionView] = useState<EditorSessionState>();
-  const [editStartup, setEditStartup] = useState<EditorSessionState['saved']>();
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
   const [pendingBuild, setPendingBuild] = useState<{ snapshot: DesignSnapshot; report: ReapplyReport }>();
@@ -124,8 +113,13 @@ export function GameScreen() {
   const scenerySource = useQuery({
     queryKey: ['scenery-source', gameId],
     queryFn: () => getScenerySource(gameId),
-    enabled: gameId !== '' && activeSnapshot?.buildId === NO_BUILD_ID,
+    enabled:
+      gameId !== '' &&
+      (activeSnapshot?.buildId === NO_BUILD_ID ||
+        (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
   });
+  const previewSource = activeSnapshot?.buildId === NO_BUILD_ID ? scenerySource.data : undefined;
+  const previewSourceError = activeSnapshot?.buildId === NO_BUILD_ID && scenerySource.isError;
   const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
   const reportGameLoad = useCallback(
@@ -176,8 +170,8 @@ export function GameScreen() {
     const container = containerRef.current;
     const snapshot = activeSnapshot;
     if (container === null || snapshot === undefined || gameId === '') return;
-    if (snapshot.buildId === NO_BUILD_ID && scenerySource.data === undefined) {
-      if (scenerySource.isError) setFrameState({ bridgeState: 'error', dropped: 0 });
+    if (snapshot.buildId === NO_BUILD_ID && previewSource === undefined) {
+      if (previewSourceError) setFrameState({ bridgeState: 'error', dropped: 0 });
       return;
     }
     setFrameState(initialFrameState);
@@ -185,7 +179,7 @@ export function GameScreen() {
     try {
       controller =
         snapshot.buildId === NO_BUILD_ID
-          ? mountSceneryPreview(container, scenerySource.data!, snapshot.doc, setFrameState)
+          ? mountSceneryPreview(container, previewSource!, snapshot.doc, setFrameState)
           : mountGameFrame({
               container,
               gamesOrigin,
@@ -221,8 +215,8 @@ export function GameScreen() {
     gamesOrigin,
     reportGameLoad,
     room.handleGameMessage,
-    scenerySource.data,
-    scenerySource.isError,
+    previewSource,
+    previewSourceError,
   ]);
 
   useEffect(() => {
@@ -234,110 +228,16 @@ export function GameScreen() {
     frameController?.camera(watcherCamera);
   }, [frameController, mode, room.snapshot?.phase, room.snapshot?.role, watcherCamera]);
 
-  useEffect(() => {
-    if (
-      mode !== 'edit' ||
-      room.snapshot?.role === 'peer' ||
-      activeSnapshot === undefined ||
-      gameId === '' ||
-      (activeSnapshot.buildId === NO_BUILD_ID && scenerySource.data === undefined)
-    ) {
-      setSessionStore(undefined);
-      setEditStartup(undefined);
-      return;
-    }
-    setEditStartup('saving');
-    const snapshot = activeSnapshot;
-    const sessionId = globalThis.crypto.randomUUID();
-    let active = true;
-    let stream: ReturnType<typeof connectTransactionStream> | undefined;
-    let editor: StoreApi<EditorSessionState> | undefined;
-    const lease = new LeaseController({
-      api: {
-        acquire: () => acquireLease(gameId, branch, sessionId),
-        heartbeat: (token) => heartbeatLease(gameId, branch, sessionId, token),
-        release: (token) => releaseLease(gameId, branch, sessionId, token),
-      },
-      onLost: (holder) => {
-        if (editor === undefined) {
-          if (active) setEditStartup('read-only');
-        } else {
-          void editor.getState().loseLease(holder);
-        }
-      },
-      onError: () => {
-        if (!active) return;
-        setEditStartup(editor === undefined ? 'not-saved' : 'retrying');
-      },
-      onRecovered: () => {
-        if (active && editor !== undefined) setEditStartup(undefined);
-      },
-    });
-
-    void lease
-      .start()
-      .then(async (result) => {
-        if (!active) {
-          await lease.stop();
-          return;
-        }
-        if (!result.ok) return;
-        let initial = snapshot;
-        if (snapshot.buildId === NO_BUILD_ID) {
-          initial = await getDesignSnapshot(gameId, branch);
-          if (initial.buildId !== NO_BUILD_ID) {
-            if (active) setAdopted({ gameId, branch, snapshot: initial });
-            return;
-          }
-          const intent = await bootstrapScenery(initial.doc, scenerySource.data!.scene);
-          if (intent) {
-            const saved = await postTransaction(
-              gameId,
-              branch,
-              toTransactionBody(intent, {
-                baseRev: initial.rev,
-                leaseToken: result.lease.token,
-                baseBuildId: NO_BUILD_ID,
-                sessionId,
-              }),
-            );
-            if (!saved.ok) throw new Error('initial scenery could not be saved');
-            initial = { ...initial, rev: saved.rev, doc: intent.doc };
-          }
-        }
-        if (!active) return;
-        frameRef.current?.applyDesign(initial.rev, initial.doc, []);
-        editor = createSession(gameId, branch, sessionId, result.lease.token, initial, frameRef);
-        setSessionStore(editor);
-        setEditStartup(undefined);
-        stream = connectTransactionStream({
-          gameId,
-          branch,
-          after: initial.rev,
-          receive: (transaction) => editor?.getState().receive(transaction),
-        });
-      })
-      .catch(() => {
-        if (active) setEditStartup('not-saved');
-        void lease.stop();
-      });
-
-    return () => {
-      active = false;
-      stream?.close();
-      void lease.stop();
-      setSessionStore(undefined);
-    };
-  }, [activeSnapshot, branch, gameId, mode, room.snapshot?.role, scenerySource.data]);
-
-  useEffect(() => {
-    if (sessionStore === undefined) {
-      setSessionView(undefined);
-      return;
-    }
-    setSessionView(sessionStore.getState());
-    return sessionStore.subscribe((state) => setSessionView(state));
-  }, [sessionStore]);
+  const { sessionStore, sessionView, editStartup } = useEditorSession({
+    gameId,
+    branch,
+    mode,
+    role: room.snapshot?.role,
+    activeSnapshot,
+    source: previewSource,
+    frameRef,
+    setAdopted,
+  });
 
   const testState: GameTestState = {
     bridgeState: frameState.bridgeState,
@@ -480,6 +380,7 @@ export function GameScreen() {
           saved={savedLabel(editStartup ?? sessionView?.saved)}
           build={build}
           playLabel={frameState.manifest?.playLabel}
+          compact={frameState.manifest?.capabilities.includes('scenery')}
           onBack={() => void leaveRoom()}
           onMode={requestMode}
           onAsk={askForChange}
@@ -563,6 +464,7 @@ export function GameScreen() {
         <EditorChrome
           gameId={gameId}
           manifest={frameState.manifest}
+          sceneryAssets={scenerySource.data?.assets}
           session={sessionView}
           onCommand={(command) => {
             const state = sessionStore.getState();
@@ -622,26 +524,6 @@ export function GameScreen() {
       <Outlet />
     </section>
   );
-}
-
-function createSession(
-  gameId: string,
-  branch: string,
-  sessionId: string,
-  leaseToken: number,
-  snapshot: DesignSnapshot,
-  frameRef: React.RefObject<GameFrameController | undefined>,
-) {
-  return createEditorSession({
-    sessionId,
-    leaseToken,
-    snapshot,
-    api: {
-      postTransaction: (body) => postTransaction(gameId, branch, body),
-      getSnapshot: () => getDesignSnapshot(gameId, branch),
-    },
-    applyDesign: (doc, patches, rev) => frameRef.current?.applyDesign(rev, doc, patches),
-  });
 }
 
 function savedLabel(saved: EditorSessionState['saved'] | undefined): string {

@@ -114,9 +114,12 @@ X/Z play-area rectangle to omit any item or terrain segment whose bounds interse
 and materials; the caller owns loaded assets and is responsible for disposing the group when finished.
 
 For the shared editor, `sceneryPalette` supplies the scenery categories and lock-filtered prefabs.
+Pass each model's lockfile SHA as `sha256` to allow the editor to render its thumbnail only from matching locked bytes.
 `sceneryToDesign` imports scene settings and placements into a design document using caller-supplied stable entity IDs;
 `sceneryFromDesign` validates the effective document against the lock and produces the scene file format. Pose yaw is
 stored in degrees in the editor and radians in scenery data. These adapters do not themselves persist transactions.
+The Water tab paints grass, path, and water bands; each stroke is one undoable edit. Games that accept these edits
+declare the global `scenery.terrain` custom control shown by the 3D template, so terrain survives a build switch.
 
 Workers can reconcile creator edits by saving the latest `gm design current --json` result and running
 `gm scenery sync --design <snapshot.json>` before changing `scenery.json`. Sync replaces the scene file with the

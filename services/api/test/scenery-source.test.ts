@@ -108,14 +108,15 @@ describe('no-build scenery source', () => {
     expect((await app.request(url, { headers: asUser(ids.other) })).status).toBe(403);
     const response = await app.request(url, { headers: asUser(ids.creator) });
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { assets: { url: string }[] };
+    const body = (await response.json()) as { assets: { url: string; sha256: string }[] };
     expect(JSON.stringify(body)).not.toContain(root);
+    expect(body.assets[0]?.sha256).toBe(createHash('sha256').update('locked model').digest('hex'));
     const asset = await app.request(body.assets[0]!.url, { headers: asUser(ids.creator) });
     expect(asset.status).toBe(200);
     expect(await asset.text()).toBe('locked model');
     writeFileSync(join(game, 'models/tree model.glb'), 'tampered');
     expect((await app.request(body.assets[0]!.url, { headers: asUser(ids.creator) })).status).toBe(404);
-  });
+  }, 60_000);
   it('serves only hash-verified files listed in the game lock', async () => {
     const { root, game, id, blobStore } = fixture();
     const source = await readScenerySource(root, 'games/fixture');

@@ -20,6 +20,15 @@ export const scenerySettingsControl: ControlDecl = {
   default: 'warm-forest',
 };
 
+export const sceneryTerrainControl: ControlDecl = {
+  id: 'scenery.terrain',
+  label: 'Scenery terrain',
+  scope: 'global',
+  path: '/globals/scenery.terrain',
+  widget: { kind: 'custom', renderer: 'game-overlay', id: 'scenery-terrain' },
+  default: [],
+};
+
 /* Read by the game and by vite.config.ts, which writes it to dist/manifest.json for publishing. */
 export const manifest: GameManifest = {
   id: 'game-3d',
@@ -30,7 +39,7 @@ export const manifest: GameManifest = {
   view: 'fixed',
   dimension: '3d',
   capabilities: ['editor.project', 'scenery'],
-  controls: [scenerySettingsControl],
+  controls: [scenerySettingsControl, sceneryTerrainControl],
   palette,
   tools: ['select', 'place'],
   gizmos: {

@@ -168,6 +168,26 @@ describe('reduce', () => {
     expect(result.entries['scenery.lighting@global']).toMatchObject({ value: 'warm-forest' });
   });
 
+  it('retains restored scenery terrain after undo', () => {
+    const original = [
+      {
+        id: 'old',
+        kind: 'path',
+        points: [
+          [1, 0, 0],
+          [2, 0, 0],
+        ],
+        width: 1,
+      },
+    ];
+    const txs = [
+      transaction(1, [{ op: 'set', control: 'scenery.terrain', targets: 'global', value: [] }], []),
+      transaction(2, [], [{ op: 'replace', path: ['globals', 'scenery.terrain'], value: original }]),
+    ];
+    const result = reduce({ gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: baseDoc(), txs });
+    expect(result.entries['scenery.terrain@global']).toMatchObject({ value: original });
+  });
+
   it('is independent of transaction and object insertion order', () => {
     fc.assert(
       fc.property(fc.array(fc.integer(), { minLength: 1, maxLength: 50 }), (values) => {

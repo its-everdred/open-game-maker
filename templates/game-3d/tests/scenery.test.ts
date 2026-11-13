@@ -23,6 +23,12 @@ const input = {
 };
 
 describe('template scenery integration', () => {
+  it('declares terrain as an editable global for build reapplication', () => {
+    const game = createGame();
+    expect(game.module.manifest.controls).toContainEqual(
+      expect.objectContaining({ id: 'scenery.terrain', scope: 'global' }),
+    );
+  });
   it('preserves editable scenery and displays only assets outside the play area', async () => {
     const game = createGame();
     const design = game.module.designSchema.parse(input);

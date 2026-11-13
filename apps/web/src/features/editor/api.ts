@@ -31,7 +31,7 @@ export type GameMetadata = {
 
 export type DesignSnapshot = { rev: number; buildId: string; doc: DesignDoc };
 export const NO_BUILD_ID = 'build_00000000000000000000000000';
-export type ScenerySource = { scene: Scenery; assets: { id: string; path: string; url: string }[] };
+export type ScenerySource = { scene: Scenery; assets: { id: string; path: string; url: string; sha256: string }[] };
 export type Lease = { token: number; expiresAt: string };
 export type TransactionBody = {
   baseRev: number;

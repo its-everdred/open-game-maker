@@ -196,11 +196,17 @@ export function reduce(input: ReduceInput): WorkingSet {
     if (tx.commands.length === 0) {
       recordSceneryUndo(entityOps, tx);
       for (const patch of tx.patches) {
-        if (patch.path.length !== 2 || patch.path[0] !== 'globals' || patch.path[1] !== 'scenery.lighting') continue;
+        if (
+          patch.path.length !== 2 ||
+          patch.path[0] !== 'globals' ||
+          !['scenery.lighting', 'scenery.terrain'].includes(String(patch.path[1]))
+        )
+          continue;
+        const control = patch.path[1] as string;
         const command: Extract<EditorCommand, { op: 'set' | 'reset' }> =
           patch.op === 'remove'
-            ? { op: 'reset', control: 'scenery.lighting', targets: 'global' }
-            : { op: 'set', control: 'scenery.lighting', targets: 'global', value: patch.value };
+            ? { op: 'reset', control, targets: 'global' }
+            : { op: 'set', control, targets: 'global', value: patch.value };
         recordOverride(entries, transactionBase, tx, command);
       }
     }

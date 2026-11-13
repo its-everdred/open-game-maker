@@ -41,6 +41,7 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       const assets = bundle.lock.assets.map((entry, index) => ({
         id: entry.id,
         path: entry.path,
+        sha256: entry.sha256,
         url: `${prefix}/games/${encodeURIComponent(c.req.param('gameId'))}/scenery/assets/${index}/${entry.sha256}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
       }));
       c.header('Cache-Control', 'private, no-store');
