@@ -88,7 +88,7 @@ describe('game-3d simulation', () => {
     controller.attachScene({ pick: () => [], screenToWorld, worldToScreen: () => null });
     instance.setSelection?.(['e_01K8ZTEMP00000000000000001']);
     expect(instance.screenToWorld?.(0.2, 0.3)).toEqual([1, 2, 3]);
-    expect(screenToWorld).toHaveBeenCalledWith(0.2, 0.3, 'e_01K8ZTEMP00000000000000001');
+    expect(screenToWorld).toHaveBeenCalledWith(0.2, 0.3, 'e_01K8ZTEMP00000000000000001', undefined);
   });
   it('notifies scenery listeners and protects the play area', async () => {
     const { controller, instance } = await mount();

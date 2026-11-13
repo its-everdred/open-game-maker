@@ -57,6 +57,18 @@ describe('boot', () => {
     bridge.onMessage = undefined;
   });
 
+  it('passes the placement prefab to editor projection', async () => {
+    const { runtime } = await start();
+    const project = vi.fn(() => [2, 3, 0] as [number, number, number]);
+    runtime.instance.screenToWorld = project;
+    bridge.onMessage!(message('editor.project', { x: 0.25, y: 0.75, prefab: 'scenery:tree' }));
+    expect(project).toHaveBeenCalledWith(0.25, 0.75, 'scenery:tree');
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({ t: 'editor.projected', payload: { position: [2, 3, 0] } }),
+    );
+    runtime.dispose();
+  });
+
   it('preserves the exported RuntimeImpl constructor positions', () => {
     type RuntimeParameters = ConstructorParameters<typeof RuntimeImpl>;
 

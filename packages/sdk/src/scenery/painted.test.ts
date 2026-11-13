@@ -45,6 +45,12 @@ describe('painted scenery', () => {
       width: 100,
       height: 100,
     });
+    expect(backdropRect(scene.backdrop!, image('forest', 100, 100), { width: 200, height: 100, aspect: 0.5 })).toEqual({
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    });
   });
   it('draws the backdrop before sorted items and applies camera parallax', () => {
     const context = {

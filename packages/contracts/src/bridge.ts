@@ -108,7 +108,10 @@ export const hostToGameSchema = z
     /** Normalized 0..1 of the frame. */
     envelope('editor.pick', z.looseObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })),
     /** Ask the game to project a normalized frame point onto its editable surface. */
-    envelope('editor.project', z.looseObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })),
+    envelope(
+      'editor.project',
+      z.looseObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), prefab: z.string().min(1).optional() }),
+    ),
     envelope('editor.validatePlacement', z.looseObject({ prefab: z.string(), pose: poseSchema })),
     /**
      * Presence, not design state: any role may send it. `follow` tracks `target` (an entity id; the game's

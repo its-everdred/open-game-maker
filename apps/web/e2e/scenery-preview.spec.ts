@@ -60,3 +60,76 @@ test('opens a no-build diorama and places a locked item', async ({ page }, testI
   expect(api.transactions[2]?.commands).toEqual([expect.objectContaining({ op: 'set', control: 'scenery.terrain' })]);
   await page.screenshot({ path: testInfo.outputPath('scenery-preview.png') });
 });
+
+test('keeps models and painted sprites together in a no-build scene', async ({ page }) => {
+  test.setTimeout(180_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await installGameApi(page);
+  const assets = [
+    { id: 'rock', path: 'rock.glb', sha256: 'a', url: '/api/v1/games/game/scenery/assets/0/a/rock.glb' },
+    { id: 'forest', path: 'forest.png', sha256: 'b', url: '/api/v1/games/game/scenery/assets/1/b/forest.png' },
+    { id: 'tree', path: 'tree.png', sha256: 'c', url: '/api/v1/games/game/scenery/assets/2/c/tree.png' },
+  ];
+  await page.route('**/api/v1/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/games/game/branches/main/design')
+      return route.fulfill({ json: { rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } } });
+    if (path === '/api/v1/games/game/scenery/source')
+      return route.fulfill({
+        json: {
+          assets,
+          scene: {
+            version: 1,
+            backdrop: {
+              assetId: 'forest',
+              landscape: { fit: 'cover', anchor: [0.5, 0.5] },
+              portrait: { fit: 'cover', anchor: [0.5, 0.5] },
+            },
+            items: [
+              {
+                id: 'rock-1',
+                assetId: 'rock',
+                position: [8, 0, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+                layer: 'mid',
+              },
+              {
+                id: 'tree-1',
+                assetId: 'tree',
+                position: [200, 250, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+                layer: 'mid',
+              },
+            ],
+            terrain: [],
+            lighting: 'night',
+            camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+          },
+        },
+      });
+    if (path === assets[0]!.url)
+      return route.fulfill({
+        contentType: 'model/gltf-binary',
+        body: readFileSync(new URL('../../../packages/sdk/test/fixtures/cube.meshopt.glb', import.meta.url)),
+      });
+    if (assets.slice(1).some((asset) => asset.url === path))
+      return route.fulfill({
+        contentType: 'image/png',
+        body: readFileSync(new URL('../public/icons/favicon-32.png', import.meta.url)),
+      });
+    return route.fallback();
+  });
+  await page.goto('/g/game?mode=edit&test');
+  await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '1', { timeout: 30_000 });
+  await expect(page.getByLabel('Scene items')).toContainText('tree');
+  const canvas = page.getByLabel('Editor canvas');
+  const bounds = (await canvas.boundingBox())!;
+  const scale = Math.min(bounds.width / 640, bounds.height / 480);
+  await canvas.click({
+    position: { x: (bounds.width - 640 * scale) / 2 + 200 * scale, y: (bounds.height - 480 * scale) / 2 + 250 * scale },
+  });
+  await expect(page.getByRole('button', { name: 'Move scenery:tree', exact: true })).toBeVisible();
+  await expect(page.locator('.screen-error')).toHaveCount(0);
+});

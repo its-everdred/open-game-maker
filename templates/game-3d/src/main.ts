@@ -98,13 +98,14 @@ async function start() {
         return false;
       }
     });
-    controller.setSceneryImageValidator((id) => {
+    const isSceneryImage = (id: string) => {
       try {
         return /\.(?:png|jpe?g|webp)(?:\?|$)/i.test(loader.resolve(id).url);
       } catch {
         return false;
       }
-    });
+    };
+    controller.setSceneryImageValidator(isSceneryImage);
     document.documentElement.dataset.bootStage = 'runtime';
 
     const canvas = document.querySelector<HTMLCanvasElement>('#game');
@@ -209,8 +210,11 @@ async function start() {
     });
     controller.attachScene({
       pick: (x, y) => [...sceneHandle!.pick(x, y), ...(scenery.isPainted() ? scenery.pick(x, y) : [])],
-      screenToWorld: (x, y, selected) =>
-        scenery.isPainted() && (!selected || scenery.screen(selected))
+      screenToWorld: (x, y, selected, prefab) =>
+        scenery.isPainted() &&
+        (prefab
+          ? prefab.startsWith('scenery:') && isSceneryImage(prefab.slice('scenery:'.length))
+          : !selected || scenery.screen(selected))
           ? scenery.project(x, y)
           : sceneHandle!.screenToWorld(x, y),
       worldToScreen: (id) => scenery.screen(id) ?? sceneHandle!.worldToScreen(id),

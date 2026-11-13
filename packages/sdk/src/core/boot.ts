@@ -272,7 +272,13 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
         case 'editor.project':
           send(
             'editor.projected',
-            { position: active.instance.screenToWorld?.(envelope.payload.x, envelope.payload.y) ?? null },
+            {
+              position:
+                (envelope.payload.prefab === undefined
+                  ? active.instance.screenToWorld?.(envelope.payload.x, envelope.payload.y)
+                  : active.instance.screenToWorld?.(envelope.payload.x, envelope.payload.y, envelope.payload.prefab)) ??
+                null,
+            },
             envelope.id,
           );
           return;

@@ -36,12 +36,14 @@ export function createPaintedScenery(scene: Phaser.Scene, resolveUrl: (id: strin
     if (!backdrop) return;
     const camera = scene.cameras.main;
     const source = backdrop.object.texture.getSourceImage();
+    const parent = scene.scale?.parentSize;
     const rect = backdropRect(
       backdrop.data,
       { width: source.width, height: source.height },
       {
         width: camera.width,
         height: camera.height,
+        ...(parent?.width && parent.height ? { aspect: parent.width / parent.height } : {}),
       },
     );
     backdrop.object.setPosition(rect.x, rect.y).setDisplaySize(rect.width, rect.height);

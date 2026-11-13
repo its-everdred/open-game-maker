@@ -11,6 +11,10 @@ describe('painted scenery in the 3D template', () => {
     const drawImage = vi.fn();
     const context = {
       clearRect: vi.fn(),
+      setTransform: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      clip: vi.fn(),
       drawImage,
       save: vi.fn(),
       restore: vi.fn(),
@@ -85,7 +89,10 @@ describe('painted scenery in the 3D template', () => {
     expect(renderer.pick(190 / 640, 170 / 480)).toEqual([{ kind: 'entity', id }]);
     expect(renderer.screen(id)).toEqual({ x: 190 / 640, y: 170 / 480 });
     renderer.resize(480, 640);
-    expect(renderer.project(1, 1)).toEqual([370, 490, 0]);
+    expect(renderer.project(0.5, 0.5)).toEqual([330, 250, 0]);
+    expect(renderer.project(0.5, 0)).toBeNull();
+    const portraitPoint = renderer.screen(id)!;
+    expect(renderer.pick(portraitPoint.x, portraitPoint.y)).toEqual([{ kind: 'entity', id }]);
     renderer.dispose();
     expect(scene.background).toBeNull();
   });

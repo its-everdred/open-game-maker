@@ -1,5 +1,5 @@
-import { drawPaintedScenery, type PaintedImage } from '@gm/sdk/scenery';
-import type { Scenery } from '@ogm/contracts/scenery';
+import { drawPaintedScenery, type PaintedImage } from './painted.js';
+import type { Scenery } from './data.js';
 import { CanvasTexture, SRGBColorSpace, type Scene } from 'three';
 
 /** A screen-space painted layer behind a Three.js game's normal scene. */
@@ -19,9 +19,17 @@ export function createPaintedBackground(scene: Scene, resolve: (id: string) => s
     offsetY = 0;
   let drawn = false;
   let aspect: number | undefined;
-  const viewport = () => {
-    const base = data?.viewport ?? { width: 640, height: 480 };
-    return { width: aspect ? base.height * aspect : base.width, height: base.height };
+  const viewport = () => data?.viewport ?? { width: 640, height: 480 };
+  const framing = () => {
+    const view = viewport();
+    const surface = { width: aspect ? view.height * aspect : view.width, height: view.height };
+    const scale = Math.min(surface.width / view.width, surface.height / view.height);
+    return {
+      ...surface,
+      scale,
+      x: (surface.width - view.width * scale) / 2,
+      y: (surface.height - view.height * scale) / 2,
+    };
   };
   const load = (id: string) => {
     let pending = images.get(id);
@@ -46,10 +54,18 @@ export function createPaintedBackground(scene: Scene, resolve: (id: string) => s
     offsetY = cameraY;
     drawn = true;
     const view = viewport();
-    canvas.width = view.width;
-    canvas.height = view.height;
+    const frame = framing();
+    canvas.width = frame.width;
+    canvas.height = frame.height;
+    context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, canvas.width, canvas.height);
-    drawPaintedScenery(context, data, loaded, { ...view, cameraX, cameraY });
+    context.setTransform(frame.scale, 0, 0, frame.scale, frame.x, frame.y);
+    context.save();
+    context.beginPath();
+    context.rect(0, 0, view.width, view.height);
+    context.clip();
+    drawPaintedScenery(context, data, loaded, { ...view, ...(aspect ? { aspect } : {}), cameraX, cameraY });
+    context.restore();
     texture.needsUpdate = true;
   };
   return {
@@ -75,26 +91,39 @@ export function createPaintedBackground(scene: Scene, resolve: (id: string) => s
     },
     pick(nx: number, ny: number): string[] {
       if (!data) return [];
+      const frame = framing();
       const view = viewport();
+      const px = (nx * frame.width - frame.x) / frame.scale;
+      const py = (ny * frame.height - frame.y) / frame.scale;
+      if (px < 0 || py < 0 || px > view.width || py > view.height) return [];
       const layers = { back: 0, mid: 1, front: 2 };
       return [...data.items]
         .sort((a, b) => layers[b.layer] - layers[a.layer] || b.position[2] - a.position[2])
         .flatMap((item) => {
           const image = loaded.get(item.assetId);
           if (!image) return [];
-          const dx = nx * view.width - item.position[0] + offsetX * (item.parallax ?? 1);
-          const dy = ny * view.height - item.position[1] + offsetY * (item.parallax ?? 1);
+          const dx = px - item.position[0] + offsetX * (item.parallax ?? 1);
+          const dy = py - item.position[1] + offsetY * (item.parallax ?? 1);
           const angle = -item.rotation[2];
           const x = (dx * Math.cos(angle) - dy * Math.sin(angle)) / item.scale[0];
           const y = (dx * Math.sin(angle) + dy * Math.cos(angle)) / item.scale[1];
           return Math.abs(x) <= image.width / 2 && Math.abs(y) <= image.height / 2 ? [item.id] : [];
         });
     },
-    project(nx: number, ny: number): [number, number, number] {
+    project(nx: number, ny: number): [number, number, number] | null {
+      const frame = framing();
+      const x = (nx * frame.width - frame.x) / frame.scale;
+      const y = (ny * frame.height - frame.y) / frame.scale;
       const view = viewport();
-      return [nx * view.width + offsetX, ny * view.height + offsetY, 0];
+      return x < 0 || y < 0 || x > view.width || y > view.height ? null : [x + offsetX, y + offsetY, 0];
     },
-    viewport,
+    screen(position: [number, number, number]) {
+      const frame = framing();
+      return {
+        x: (frame.x + position[0] * frame.scale) / frame.width,
+        y: (frame.y + position[1] * frame.scale) / frame.height,
+      };
+    },
     position(id: string) {
       const item = data?.items.find((entry) => entry.id === id);
       return item

@@ -6,3 +6,4 @@ export { sceneryPalette, type SceneryPaletteItem } from './palette.js';
 export { createSceneryController } from './controller.js';
 export { backdropRect, drawPaintedScenery, type PaintedImage, type PaintedViewport } from './painted.js';
 export { paintedSceneryControls } from './painted-controls.js';
+export { createPaintedBackground } from './painted-three.js';

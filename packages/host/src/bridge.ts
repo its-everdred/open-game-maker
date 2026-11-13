@@ -140,9 +140,14 @@ export class HostBridge {
     return result.data.payload.value;
   }
 
-  async project(x: number, y: number): Promise<[number, number, number] | null> {
+  async project(x: number, y: number, prefab?: string): Promise<[number, number, number] | null> {
     if (!this.readyPayload) throw new BridgeError('not_ready');
-    const parsed = hostToGameSchema.safeParse({ v: 1, id: this.nextId(), t: 'editor.project', payload: { x, y } });
+    const parsed = hostToGameSchema.safeParse({
+      v: 1,
+      id: this.nextId(),
+      t: 'editor.project',
+      payload: { x, y, ...(prefab ? { prefab } : {}) },
+    });
     if (!parsed.success) throw new TypeError('invalid editor.project payload');
     const reply = await this.transport.request<Envelope<string, unknown>>(
       parsed.data,

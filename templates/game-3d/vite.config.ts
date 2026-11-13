@@ -17,7 +17,7 @@ const scenery = sceneryArtifact(
 );
 const painted = scenery ? Boolean(JSON.parse(scenery).backdrop) : false;
 const items: SceneryPaletteItem[] = lock.assets
-  .filter((entry) => (painted ? /\.(?:png|jpe?g|webp)$/i.test(entry.path) : /\.(?:glb|gltf)$/i.test(entry.path)))
+  .filter((entry) => /\.(?:glb|gltf)$/i.test(entry.path) || (painted && /\.(?:png|jpe?g|webp)$/i.test(entry.path)))
   .map((entry) => {
     const name = (entry.id.split('/').at(-1) ?? entry.id).split('@')[0]!.replace(/[-_.]+/g, ' ');
     const category = /tree|bush|foliage/i.test(name)

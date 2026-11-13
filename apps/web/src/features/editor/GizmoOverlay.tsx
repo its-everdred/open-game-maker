@@ -191,7 +191,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
       ghostRef.current = undefined;
       setGhost(undefined);
       void frame
-        .project(point.x, point.y)
+        .project(point.x, point.y, activePrefab)
         .then((position) => accept(position ? projectedPose(position, snap) : null))
         .catch(() => accept(null));
     } else {
@@ -326,7 +326,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
           intents: [],
           doc: state.doc,
           projection: {
-            origin: frame.project(point.x, point.y).catch(() => null),
+            origin: frame.project(point.x, point.y, entity.prefab).catch(() => null),
             sequence: 0,
             pending: false,
             released: false,
@@ -344,7 +344,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
         const sequence = ++projection.sequence;
         projection.pending = true;
         const point = normalizeFramePoint(event.clientX, event.clientY, rect);
-        void Promise.all([projection.origin, frame.project(point.x, point.y)])
+        void Promise.all([projection.origin, frame.project(point.x, point.y, drag.entity.prefab)])
           .then(([origin, target]) => {
             if (projection.cancelled || sequence !== projection.sequence) return;
             projection.pending = false;
@@ -491,7 +491,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
       ...(gizmo === 'translate' && point && manifest.capabilities?.includes('editor.project')
         ? {
             projection: {
-              origin: frame.project(point.x, point.y).catch(() => null),
+              origin: frame.project(point.x, point.y, entity.prefab).catch(() => null),
               sequence: 0,
               pending: false,
               released: false,

@@ -9,6 +9,8 @@ export interface PaintedImage {
 export interface PaintedViewport {
   width: number;
   height: number;
+  /** Physical display aspect used to select landscape or portrait framing. */
+  aspect?: number;
   /** World-space camera displacement in pixels. */
   cameraX?: number;
   cameraY?: number;
@@ -20,7 +22,7 @@ export function backdropRect(
   image: Pick<PaintedImage, 'width' | 'height'>,
   view: PaintedViewport,
 ) {
-  const rule = view.width >= view.height ? backdrop.landscape : backdrop.portrait;
+  const rule = (view.aspect ?? view.width / view.height) >= 1 ? backdrop.landscape : backdrop.portrait;
   const scale = (rule.fit === 'cover' ? Math.max : Math.min)(view.width / image.width, view.height / image.height);
   const width = image.width * scale;
   const height = image.height * scale;

@@ -54,7 +54,7 @@ export interface GameFrame {
   viewport: ViewportTracker;
   send<T extends HostType>(type: T, payload: HostPayload<T>): void;
   request<T extends Extract<HostType, `test.${string}`>>(type: T, payload: HostPayload<T>): Promise<unknown>;
-  project(x: number, y: number): Promise<[number, number, number] | null>;
+  project(x: number, y: number, prefab?: string): Promise<[number, number, number] | null>;
   pick(x: number, y: number): ReturnType<HostBridge['pick']>;
   on<T extends GameType>(type: T, callback: (payload: GamePayload<T>) => void): () => void;
   setMode(mode: 'play' | 'edit'): void;

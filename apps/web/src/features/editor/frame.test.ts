@@ -79,6 +79,8 @@ describe('game frame adapter', () => {
     controller.pick(0.25, 0.75);
     await expect(controller.project(0.25, 0.75)).resolves.toEqual([2, 0, -1]);
     expect(frame.project).toHaveBeenCalledWith(0.25, 0.75);
+    await controller.project(0.25, 0.75, 'scenery:tree');
+    expect(frame.project).toHaveBeenCalledWith(0.25, 0.75, 'scenery:tree');
     controller.select(['e_01BX5ZZKBKACTAV9WEVGEMMVRZ']);
     controller.camera('free');
     controller.camera('follow', 'player_0');

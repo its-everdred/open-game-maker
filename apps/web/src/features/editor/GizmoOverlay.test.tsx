@@ -458,7 +458,7 @@ describe('GizmoOverlay', () => {
     fireEvent.pointerDown(canvas, { clientX: 25, clientY: 30, pointerId: 1 });
     fireEvent.pointerUp(canvas, { clientX: 25, clientY: 30, pointerId: 1 });
     await act(async () => {});
-    expect(test.frame.project).toHaveBeenCalledWith(0.25, 0.5);
+    expect(test.frame.project).toHaveBeenCalledWith(0.25, 0.5, 'skeleton');
     expect(test.frame.validatePlacement).toHaveBeenCalledWith('skeleton', { position: [2, 0, -1] });
     await act(async () => test.placement({ ok: true }));
     expect(test.submit).toHaveBeenCalledOnce();

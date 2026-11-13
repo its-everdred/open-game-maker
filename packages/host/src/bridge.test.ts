@@ -46,6 +46,7 @@ function harness(
   let inbound!: TransportOptions['onMessage'];
   let validator!: TransportOptions['validate'];
   const sent: Envelope<string, unknown>[] = [];
+  const requests: Envelope<string, unknown>[] = [];
   const stats: BridgeStats = { dropped: { tooLarge: 0, rateLimited: 0, invalid: 0 }, sent: 0, received: 0 };
   const close = vi.fn();
   const transport: Bridge = {
@@ -54,30 +55,34 @@ function harness(
       sent.push(message);
       stats.sent += 1;
     },
-    request: async <R>(message: Envelope<string, unknown>) =>
-      (message.t === 'editor.project'
-        ? {
-            v: 1,
-            id: 'projected-1',
-            replyTo: message.id,
-            t: 'editor.projected',
-            payload: { position: [2, 0, -1] },
-          }
-        : message.t === 'editor.pick'
+    request: async <R>(message: Envelope<string, unknown>) => {
+      requests.push(message);
+      return (
+        message.t === 'editor.project'
           ? {
               v: 1,
-              id: 'picked-1',
+              id: 'projected-1',
               replyTo: message.id,
-              t: 'editor.picked',
-              payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+              t: 'editor.projected',
+              payload: { position: [2, 0, -1] },
             }
-          : {
-              v: 1,
-              id: 'result-1',
-              replyTo: message.id,
-              t: 'test.result',
-              payload: { ok: true, value: { rendered: true } },
-            }) as R,
+          : message.t === 'editor.pick'
+            ? {
+                v: 1,
+                id: 'picked-1',
+                replyTo: message.id,
+                t: 'editor.picked',
+                payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+              }
+            : {
+                v: 1,
+                id: 'result-1',
+                replyTo: message.id,
+                t: 'test.result',
+                payload: { ok: true, value: { rendered: true } },
+              }
+      ) as R;
+    },
     close,
     stats: () => stats,
   };
@@ -100,6 +105,7 @@ function harness(
     inbound: (value: unknown) => inbound(value as Envelope<string, unknown>),
     validator,
     sent,
+    requests,
     stats,
   };
 }
@@ -175,10 +181,14 @@ describe('HostBridge', () => {
   });
 
   it('projects editor coordinates through a correlated game response', async () => {
-    const { bridge, inbound } = harness(() => 'owner');
+    const { bridge, inbound, requests } = harness(() => 'owner');
     inbound(ready());
     await bridge.whenReady;
-    await expect(bridge.project(0.25, 0.75)).resolves.toEqual([2, 0, -1]);
+    await expect(bridge.project(0.25, 0.75, 'scenery:tree')).resolves.toEqual([2, 0, -1]);
+    expect(requests.at(-1)).toMatchObject({
+      t: 'editor.project',
+      payload: { x: 0.25, y: 0.75, prefab: 'scenery:tree' },
+    });
     bridge.close();
   });
 

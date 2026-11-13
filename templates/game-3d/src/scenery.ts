@@ -1,9 +1,8 @@
 import type { AssetLoader } from '@gm/sdk/assets';
-import { createSceneryController, sceneryFromDesign } from '@gm/sdk/scenery';
+import { createPaintedBackground, createSceneryController, sceneryFromDesign } from '@gm/sdk/scenery';
 import { DesignDocSchema } from '@ogm/contracts/browser';
 import type { Scene } from 'three';
 import type { LevelDesign } from './game.js';
-import { createPaintedBackground } from './painted-scenery.js';
 
 /** Connect the reusable scenery renderer to a game's editable design. */
 export function attachScenery(scene: Scene, loader: AssetLoader, size: number) {
@@ -101,8 +100,7 @@ export function attachScenery(scene: Scene, loader: AssetLoader, size: number) {
       const item = [...itemIds].find(([, id]) => id === entity)?.[0];
       const position = item && painted?.position(item);
       if (!position) return null;
-      const dimensions = painted!.viewport();
-      return { x: position[0] / dimensions.width, y: position[1] / dimensions.height };
+      return painted!.screen(position);
     },
     dispose() {
       generation++;

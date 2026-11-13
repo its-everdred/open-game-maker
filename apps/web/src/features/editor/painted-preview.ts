@@ -83,7 +83,12 @@ export function mountPaintedPreview(
     context.clearRect(0, 0, width, height);
     context.setTransform(scale, 0, 0, scale, x, y);
     context.clearRect(0, 0, view.width, view.height);
-    drawPaintedScenery(context, scene, images, view);
+    context.save();
+    context.beginPath();
+    context.rect(0, 0, view.width, view.height);
+    context.clip();
+    drawPaintedScenery(context, scene, images, { ...view, aspect: width / height });
+    context.restore();
   };
   const update = (next: DesignDoc) => {
     doc = next;
