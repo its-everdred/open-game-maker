@@ -31,6 +31,7 @@ let nextMessageId = 0;
 export interface HostBridgeOptions {
   iframe: HTMLIFrameElement;
   origin: string;
+  opaqueOrigin?: boolean;
   hello: Extract<HostToGame, { t: 'hello' }>['payload'];
   role: () => Role;
   readyTimeoutMs?: number;
@@ -87,6 +88,7 @@ export class HostBridge {
     const factory = options.transportFactory ?? openHostBridge;
     this.transport = factory(options.iframe, {
       gameOrigin: options.origin,
+      ...(options.opaqueOrigin ? { opaqueOrigin: true } : {}),
       validate: parseInbound,
       onMessage: (message) => this.receive(message),
       hello,

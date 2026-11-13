@@ -12,8 +12,25 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
   let answer: unknown;
   let choice: unknown;
   let commandOpen = true;
+  let gameScript = '';
   await installAuthRoutes(page, { signedIn: true });
-  await page.route('**/p/**', (route) => route.continue({ url: route.request().url().replace('/p/', '/g/') }));
+  await page.route('**/p/**', async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith('/bridge.js')) {
+      return route.fulfill({ contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' }, body: gameScript });
+    }
+    const response = await route.fetch({ url: route.request().url().replace('/p/', '/g/') });
+    const headers = { ...response.headers(), 'access-control-allow-origin': '*' };
+    delete headers['content-length'];
+    if (!new URL(route.request().url()).pathname.endsWith('/index.html')) return route.fulfill({ response, headers });
+    const html = (await response.text()).replace(/<script type="module">([\s\S]*?)<\/script>/u, (_match, script: string) => {
+      gameScript = script.replace('const HOST_ORIGIN',
+      "try { await caches.open('old-sdk-cache'); document.body.dataset.cache = 'open'; } catch { document.body.dataset.cache = 'blocked'; }\n      const HOST_ORIGIN",
+      );
+      return '<script type="module" src="./bridge.js"></script>';
+    });
+    headers['content-security-policy'] = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'self'; connect-src 'self' blob: data:; worker-src 'self' blob:; frame-ancestors *; base-uri 'none'; form-action 'none'; object-src 'none'";
+    return route.fulfill({ response, headers, body: html });
+  });
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -82,6 +99,15 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
   await expect(card).toBeVisible();
   await expect(card.locator('iframe')).toBeVisible();
   await expect(page.frameLocator('iframe').getByText('Bridge fixture')).toBeVisible();
+  await expect(page.frameLocator('iframe').locator('body')).toHaveAttribute('data-cache', 'blocked');
+  await expect
+    .poll(() =>
+      page
+        .frameLocator('iframe')
+        .locator('body')
+        .evaluate(() => (window as unknown as { __fixture?: { applies: unknown[] } }).__fixture?.applies.length ?? 0),
+    )
+    .toBeGreaterThan(0);
   const still = testInfo.outputPath('preview-review.png');
   await page.screenshot({ path: still });
   await testInfo.attach('preview-review', { path: still, contentType: 'image/png' });

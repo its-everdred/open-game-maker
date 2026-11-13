@@ -159,6 +159,12 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   };
   const observeOrigin = (event: MessageEvent) => {
     if (event.origin === trustedOrigin) return;
+    if (
+      options.preview &&
+      event.origin === 'null' &&
+      event.source === options.container.querySelector('iframe')?.contentWindow
+    )
+      return;
     wrongOriginDrops += 1;
     publish();
   };

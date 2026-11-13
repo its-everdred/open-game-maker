@@ -225,6 +225,10 @@
   border-radius: var(--r);
 }
 
+.review-screen-body > .review-deck {
+  margin-bottom: 24px;
+}
+
 .review-screen-body > .review-deck .review-deck-playable-frame {
   position: absolute;
   inset: 0;

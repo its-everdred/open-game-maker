@@ -131,6 +131,24 @@ function fetchFor(value: unknown = manifest) {
 }
 
 describe('AssetLoader', () => {
+  it('loads a private preview lazy group without persisting its files', async () => {
+    const grouped = structuredClone(manifest);
+    grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';
+    const cacheStorage = { open: vi.fn(async () => ({ put: vi.fn() }) as unknown as Cache) };
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('manifest.json')) return Response.json(grouped);
+      if (String(input).endsWith('cache-plan.json')) return new Response(null, { status: 404 });
+      return new Response(fileBytes);
+    });
+    const loader = new AssetLoader({
+      manifestUrl: 'https://game.test/p/game/pv-secret/assets/manifest.json',
+      tier: 'desktop',
+      fetch: fetcher,
+      cacheStorage,
+    });
+    await loader.loadGroup('backdrop-nim');
+    expect(cacheStorage.open).not.toHaveBeenCalled();
+  });
   it('treats a case-insensitive HTML plan fallback as absent', async () => {
     const grouped = structuredClone(manifest);
     grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';

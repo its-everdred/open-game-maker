@@ -13,6 +13,7 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import {
   ASSET_CACHE_NAME,
   CACHE_LOCK_NAME,
+  isPrivatePreviewUrl,
   matchCachedAsset,
   prepare as prepareCache,
   type LedgerBuild,
@@ -235,7 +236,9 @@ export class AssetLoader {
         const results = await Promise.allSettled(
           [...files].map(async (file) => {
             const bytes = await this.#fetchFile(file);
-            const storage = this.#cacheStorage ?? globalThis.caches;
+            const storage = isPrivatePreviewUrl(this.#manifestUrl)
+              ? undefined
+              : (this.#cacheStorage ?? globalThis.caches);
             if (storage) {
               try {
                 const cache = await storage.open(ASSET_CACHE_NAME);
@@ -329,7 +332,8 @@ export class AssetLoader {
     if (existing) return existing;
 
     const url = new URL(file, this.#manifestUrl).toString();
-    const request = matchCachedAsset(url, this.#cacheStorage)
+    const cached = isPrivatePreviewUrl(url) ? Promise.resolve(undefined) : matchCachedAsset(url, this.#cacheStorage);
+    const request = cached
       .then(async (cached) => {
         const response = cached ?? (await this.#fetch(url));
         if (!response.ok) throw new Error(`Failed to fetch asset file ${url}: HTTP ${response.status}`);

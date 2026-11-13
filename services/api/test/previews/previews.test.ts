@@ -115,7 +115,7 @@ describe('preview builds', () => {
     expect(message.mock.calls[0]?.[2]).toBe(message.mock.calls[1]?.[2]);
   });
   it('protects preview files and private cache-plan assets with a revocable capability', async () => {
-    const { deps, upload } = setup();
+    const { deps, upload, list } = setup();
     const files = builtFiles();
     const bytes = Buffer.from('preview image');
     const hash = createHash('sha256').update(bytes).digest('hex');
@@ -163,6 +163,7 @@ describe('preview builds', () => {
     const image = await host.request(`${url}/a/${hash}.png`);
     expect(image.status).toBe(200);
     expect(image.headers.get('cache-control')).toBe('no-store');
+    expect(image.headers.get('access-control-allow-origin')).toBe('*');
     expect(Buffer.from(await image.arrayBuffer())).toEqual(bytes);
     const assetManifest = (await (await host.request(`${url}/assets/manifest.json`)).json()) as {
       assets: { hero: { file: Record<string, string> } };
@@ -177,9 +178,11 @@ describe('preview builds', () => {
     const metadata = JSON.parse(readFileSync(metadataPath, 'utf8')) as Record<string, unknown>;
     writeFileSync(metadataPath, JSON.stringify({ ...metadata, accessExpiresAt: '2000-01-01T00:00:00.000Z' }));
     expect((await host.request(`${url}/index.html`)).status).toBe(404);
-    writeFileSync(metadataPath, JSON.stringify(metadata));
+    const renewed = ((await (await list()).json()) as { previews: { accessId: string }[] }).previews[0]!.accessId;
+    expect(renewed).not.toBe(preview.accessId);
+    expect((await host.request(`/p/${ids.game}/${renewed}/index.html`)).status).toBe(200);
     expect((await upload()).status).toBe(201);
-    expect((await host.request(`${url}/index.html`)).status).toBe(404);
+    expect((await host.request(`/p/${ids.game}/${renewed}/index.html`)).status).toBe(404);
   });
   it('keeps preview upload and daemon routing working after the game is renamed', async () => {
     const { deps, upload } = setup();

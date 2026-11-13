@@ -28,6 +28,9 @@ export function createApp(options: GamesHostOptions): Hono {
     for (const [name, value] of gameHeaderEntries) {
       context.res.headers.set(name, value);
     }
+    if (new URL(context.req.url).pathname.startsWith('/p/')) {
+      context.res.headers.set('Access-Control-Allow-Origin', '*');
+    }
     if (context.res.status !== 200 || new URL(context.req.url).pathname.startsWith('/p/')) {
       context.res.headers.set('Cache-Control', 'no-store');
     } else if (new URL(context.req.url).pathname === '/game-cache.js') {
