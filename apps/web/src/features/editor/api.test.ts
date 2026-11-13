@@ -5,6 +5,9 @@ import { savesListPath, savesPath, type DesignDoc } from '@ogm/contracts/browser
 import {
   getOptionalPublished,
   getDesignSnapshot,
+  getFallbackPalette,
+  getEditorPreviews,
+  getPreviewDesign,
   NO_BUILD_ID,
   getOptionalSaves,
   postAnalyticsEvent,
@@ -42,6 +45,28 @@ afterEach(() => {
 });
 
 describe('editor API classifications', () => {
+  it('loads playable previews and the exact preview build design', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(200, { previews: [] }))
+      .mockResolvedValueOnce(response(200, { rev: 0, doc: { schemaVersion: 1, globals: {}, entities: {} } }));
+    vi.stubGlobal('fetch', fetch);
+    await getEditorPreviews(gameId);
+    await getPreviewDesign(gameId, '12', 'preview-x');
+    expect(fetch).toHaveBeenNthCalledWith(1, `/api/v1/games/${gameId}/editor/previews`, expect.anything());
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      `/api/v1/games/${gameId}/previews/12/design?buildId=preview-x`,
+      expect.anything(),
+    );
+  });
+  it('loads a game-scoped request palette', async () => {
+    const value = { mode: 'request', palette: { categories: [], items: [] } };
+    const fetch = vi.fn().mockResolvedValue(response(200, value));
+    vi.stubGlobal('fetch', fetch);
+    await expect(getFallbackPalette(gameId)).resolves.toEqual(value);
+    expect(fetch).toHaveBeenCalledWith(`/api/v1/games/${gameId}/editor/fallback`, expect.anything());
+  });
   it('represents an unbuilt snapshot with the reserved empty build id', async () => {
     const doc = { schemaVersion: 1, globals: {}, entities: {} };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, { rev: 0, buildId: null, doc })));

@@ -87,6 +87,19 @@ export function stepPose(
   return samePose(start, next) ? undefined : next;
 }
 
+export function entityPose(props: Record<string, unknown> | undefined): Pose {
+  if (props?.pose !== undefined) return poseFromProps(props.pose);
+  if (
+    typeof props?.x === 'number' &&
+    Number.isFinite(props.x) &&
+    typeof props.y === 'number' &&
+    Number.isFinite(props.y)
+  ) {
+    return { position: [props.x, props.y, 0] };
+  }
+  return poseFromProps(undefined);
+}
+
 export function poseFromProps(value: unknown): Pose {
   if (!isRecord(value) || !Array.isArray(value.position) || value.position.length !== 3) {
     return { position: [0, 0, 0] };

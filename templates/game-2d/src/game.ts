@@ -20,12 +20,15 @@ const entitySchema = z.object({
   prefab: z.enum(['spawn', 'platform']),
   level: z.string(),
   origin: z.string(),
-  props: z.object({
-    x: z.number(),
-    y: z.number(),
-    w: z.number().positive().optional(),
-    h: z.number().positive().optional(),
-  }),
+  props: z
+    .object({
+      x: z.number().optional(),
+      y: z.number().optional(),
+      pose: z.looseObject({ position: z.tuple([z.number(), z.number(), z.number()]) }).optional(),
+      w: z.number().positive().optional(),
+      h: z.number().positive().optional(),
+    })
+    .refine((props) => props.pose !== undefined || (props.x !== undefined && props.y !== undefined)),
 });
 
 export const designSchema = z.object({
@@ -247,6 +250,13 @@ export const game: GameModule<PlatformDesign, PlatformSave> = {
           }
         }
         return targets;
+      },
+      screenToWorld(nx, ny) {
+        const [x, y] = context.view?.screenToWorld(nx, ny) ?? [
+          nx * game.manifest.presentation.minLogical.w,
+          ny * game.manifest.presentation.minLogical.h,
+        ];
+        return [x, y, 0];
       },
       worldToScreen(id) {
         const player = playerById(context.state, id);

@@ -33,6 +33,7 @@ type EditorChromeProps = {
   onDuplicate(entityId: string): void;
   onInstanceCount(change: InstanceCountChange): Promise<PlacementResult>;
   onCanvasChange?(value: { prefab?: string; snap: SnapPrefs }): void;
+  onRequestLight?(preset: 'warm-forest' | 'night' | 'cave'): void;
 };
 
 export function EditorChrome({
@@ -48,17 +49,22 @@ export function EditorChrome({
   onDuplicate,
   onInstanceCount,
   onCanvasChange,
+  onRequestLight,
 }: EditorChromeProps) {
   const [category, setCategory] = useState(manifest.palette.categories[0]?.id ?? '');
   const [pickedPrefab, setPickedPrefab] = useState<string>();
   const [snap, setSnap] = useState<SnapPrefs>(() => loadSnapPrefs(gameId, manifest.grid?.size ?? 1));
   const [toolsTarget, setToolsTarget] = useState<HTMLElement | null>(null);
   const controls = useMemo(() => manifestControls(manifest), [manifest]);
-  const activeCategory = manifest.palette.categories.find((candidate) => candidate.id === category);
+  const activeCategory =
+    manifest.palette.categories.find((candidate) => candidate.id === category) ?? manifest.palette.categories[0];
   const picked = manifest.palette.items.find((item) => item.prefab === pickedPrefab);
+  useLayoutEffect(() => {
+    if (pickedPrefab !== undefined && picked === undefined) setPickedPrefab(undefined);
+  }, [picked, pickedPrefab]);
   // Layout, not passive: the canvas must hold the pick in the same commit the palette shows it, or a quick tap
   // after picking lands as a select and places nothing (#297).
-  useLayoutEffect(() => onCanvasChange?.({ prefab: pickedPrefab, snap }), [onCanvasChange, pickedPrefab, snap]);
+  useLayoutEffect(() => onCanvasChange?.({ prefab: picked?.prefab, snap }), [onCanvasChange, picked?.prefab, snap]);
   useLayoutEffect(() => setToolsTarget(document.getElementById('studio-editor-tools')), []);
   const updateSnap = (next: SnapPrefs) => {
     setSnap(next);
@@ -97,13 +103,13 @@ export function EditorChrome({
       <Rail
         categories={manifest.palette.categories}
         items={manifest.palette.items}
-        active={category}
+        active={activeCategory?.id ?? ''}
         onChange={setCategory}
       />
       {activeCategory?.kind === 'items' ? (
         <Palette
           palette={manifest.palette}
-          category={category}
+          category={activeCategory.id}
           title={activeCategory.label}
           showTabs={false}
           sceneryAssets={sceneryAssets}
@@ -126,8 +132,10 @@ export function EditorChrome({
             <button
               key={preset}
               type="button"
-              disabled={session.readOnly}
-              onClick={() => void session.submit(sceneryLightIntent(session.doc, preset))}
+              disabled={session.readOnly && !onRequestLight}
+              onClick={() =>
+                onRequestLight ? onRequestLight(preset) : void session.submit(sceneryLightIntent(session.doc, preset))
+              }
             >
               {label}
             </button>

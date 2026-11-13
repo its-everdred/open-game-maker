@@ -1,16 +1,21 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
 
-import type { Entity, ReapplyReport } from '@ogm/contracts/browser';
+import type { CreateJobRequest, Entity, ReapplyReport } from '@ogm/contracts/browser';
 
 import type { OgmHost } from '../../app/testHook';
 import { useGameMenu, useGameMenuControls } from '../../app/GameMenu';
 import { useDock } from '../../features/build-chat/dock';
-import { gameJobsQueryKey } from '../../features/build-chat/jobs';
+import { editJobRequest } from '../../features/build-chat/edit';
+import { gameJobsQueryKey, myJobsQueryKey } from '../../features/build-chat/jobs';
 import {
   getDesignSnapshot,
   getGame,
+  getFallbackPalette,
+  getEditorPreviews,
+  getEditorStage,
+  getPreviewDesign,
   getScenerySource,
   getOptionalReapply,
   listJobs,
@@ -23,6 +28,7 @@ import { inspectBuildChange, readyBuildSignal } from '../../features/editor/buil
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
 import { FocusZone } from '../../lib/input';
+import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
 import {
@@ -35,6 +41,9 @@ import { ReapplyCard } from '../../features/editor/ReapplyCard';
 import type { EditorSessionState } from '../../features/editor/session';
 import { useEditorSession } from '../../features/editor/use-editor-session';
 import { mountSceneryPreview } from '../../features/editor/scenery-preview';
+import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
+import { admitJob } from '../../features/scope-chat/admit';
+import { energyRefusalText } from '../../features/energy/api';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
 import {
   createEntityIntent,
@@ -73,6 +82,7 @@ type GameTestState = {
 type TestHost = OgmHost & { game?: GameTestState };
 
 export function GameScreen() {
+  const queryClient = useQueryClient();
   const { gameId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -102,6 +112,7 @@ export function GameScreen() {
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
+  const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
   const [pendingBuild, setPendingBuild] = useState<{ snapshot: DesignSnapshot; report: ReapplyReport }>();
   const [publishedBuildId, setPublishedBuildId] = useState<string>();
@@ -111,16 +122,176 @@ export function GameScreen() {
   const inspectedBuildRef = useRef<string | undefined>(undefined);
   const inspectedJobRef = useRef<string | undefined>(undefined);
   const activeSnapshot = adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
+  const noBuild = activeSnapshot?.buildId === NO_BUILD_ID;
+  const previews = useQuery({
+    queryKey: ['editor-previews', gameId],
+    queryFn: () => getEditorPreviews(gameId),
+    enabled: gameId !== '' && noBuild,
+    refetchInterval: 5_000,
+    retry: false,
+  });
+  const candidatePreview = noBuild
+    ? previews.data?.previews.find((preview) => preview.branchId === jobBranch)
+    : undefined;
+  const previewDesign = useQuery({
+    queryKey: ['preview-design', gameId, candidatePreview?.buildId],
+    queryFn: () => getPreviewDesign(gameId, candidatePreview!.ticket, candidatePreview!.buildId),
+    enabled: candidatePreview !== undefined,
+    retry: false,
+  });
+  const waitingForPreview =
+    noBuild && (previews.isPending || (candidatePreview !== undefined && previewDesign.isPending));
+  const activePreview = candidatePreview && previewDesign.data ? candidatePreview : undefined;
+  const stage = useQuery({
+    queryKey: ['editor-stage', gameId, jobBranch],
+    queryFn: () => getEditorStage(gameId, jobBranch),
+    enabled: gameId !== '' && noBuild && !waitingForPreview && !activePreview,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const waitingForStage = noBuild && !waitingForPreview && !activePreview && stage.isPending;
   const scenerySource = useQuery({
-    queryKey: ['scenery-source', gameId],
-    queryFn: () => getScenerySource(gameId),
+    queryKey: ['scenery-source', gameId, jobBranch],
+    queryFn: () => getScenerySource(gameId, jobBranch),
     enabled:
       gameId !== '' &&
-      (activeSnapshot?.buildId === NO_BUILD_ID ||
+      ((noBuild && !waitingForPreview && !waitingForStage && !activePreview) ||
         (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
+    retry: false,
+    refetchInterval: noBuild && !activePreview ? 5_000 : false,
   });
-  const previewSource = activeSnapshot?.buildId === NO_BUILD_ID ? scenerySource.data : undefined;
-  const previewSourceError = activeSnapshot?.buildId === NO_BUILD_ID && scenerySource.isError;
+  const hasScenery =
+    (scenerySource.data?.scene.items.length ?? 0) > 0 ||
+    (scenerySource.data?.scene.terrain.length ?? 0) > 0 ||
+    Object.values(activeSnapshot?.doc.entities ?? {}).some((entity) => entity.prefab.startsWith('scenery:'));
+  const stageAt = Date.parse(stage.data?.stage?.at ?? '');
+  const sceneryAt = Date.parse(scenerySource.data?.updatedAt ?? '');
+  const newerScenery =
+    hasScenery && (!Number.isFinite(stageAt) || (Number.isFinite(sceneryAt) && sceneryAt >= stageAt));
+  const waitingForScenery =
+    noBuild &&
+    !waitingForPreview &&
+    !waitingForStage &&
+    !activePreview &&
+    stage.data?.stage?.kind === 'image' &&
+    scenerySource.isPending;
+  const activeStage =
+    noBuild && !activePreview && !waitingForScenery && !(newerScenery && stage.data?.stage?.kind === 'image')
+      ? (stage.data?.stage ?? undefined)
+      : undefined;
+  const requestOnlySnapshot = useMemo(
+    () =>
+      activePreview && previewDesign.data
+        ? { ...previewDesign.data, buildId: NO_BUILD_ID }
+        : noBuild
+          ? activeSnapshot
+          : undefined,
+    [activePreview?.buildId, previewDesign.data, noBuild, activeSnapshot],
+  );
+  const previewSource = noBuild && !activePreview && !activeStage ? scenerySource.data : undefined;
+  const previewSourceError = noBuild && !activePreview && !activeStage && scenerySource.isError;
+  const nativePalette = frameState.manifest?.palette;
+  const nativePaletteEmpty =
+    nativePalette !== undefined && nativePalette.categories.length === 0 && nativePalette.items.length === 0;
+  const fallback = useQuery({
+    queryKey: ['editor-fallback', gameId],
+    queryFn: () => getFallbackPalette(gameId),
+    enabled: gameId !== '' && mode === 'edit' && nativePaletteEmpty,
+    retry: false,
+  });
+  const fallbackActive = nativePaletteEmpty && fallback.data?.mode === 'request';
+  const sideBranch =
+    branches.data?.some(({ id, name }) => (id === branch || name === branch) && name !== 'main') === true;
+  const sidePreview = noBuild && sideBranch && !fallbackActive && !activeStage;
+  const requestOnly = fallbackActive || (noBuild && !sidePreview);
+  const editorManifest = useMemo(() => {
+    if (!frameState.manifest) return undefined;
+    return fallbackActive && fallback.data
+      ? { ...frameState.manifest, palette: fallback.data.palette }
+      : frameState.manifest;
+  }, [frameState.manifest, fallbackActive, fallback.data]);
+  const submitEditRequest = useCallback(
+    (request: CreateJobRequest) => {
+      if (request.branchId !== 'main') {
+        pushToast('Changes to this version stay in the preview.');
+        return;
+      }
+      if (fallbackInFlight.current) return;
+      fallbackInFlight.current = true;
+      void admitJob(request)
+        .then((result) => {
+          if (result.kind === 'refused') {
+            pushToast(energyRefusalText(result.window) ?? 'The build could not be started.');
+            return;
+          }
+          void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
+          void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
+        })
+        .catch(() => pushToast('The build could not be started.'))
+        .finally(() => {
+          fallbackInFlight.current = false;
+        });
+    },
+    [gameId, queryClient],
+  );
+  const requestLight = useCallback(
+    (preset: 'warm-forest' | 'night' | 'cave') => {
+      submitEditRequest(
+        editJobRequest(
+          { gameId, branchId: jobBranch },
+          `Set the scene lighting to ${preset}.`,
+          'now',
+          `edit:${crypto.randomUUID()}`,
+        ),
+      );
+    },
+    [gameId, jobBranch, submitEditRequest],
+  );
+  const requestFallbackPlacement = useCallback(
+    (prefab: string, point: { x: number; y: number }, path?: Array<{ x: number; y: number }>) => {
+      if (activeStage) {
+        const media = containerRef.current?.querySelector('img, video');
+        if (!(media instanceof HTMLImageElement || media instanceof HTMLVideoElement)) return;
+        const width = media instanceof HTMLImageElement ? media.naturalWidth : media.videoWidth;
+        const height = media instanceof HTMLImageElement ? media.naturalHeight : media.videoHeight;
+        const rect = media.getBoundingClientRect();
+        const mapped = containedStagePoint(point, rect.width, rect.height, width, height);
+        if (!mapped) return;
+        point = mapped;
+      }
+      const palette = fallbackActive ? fallback.data?.palette : frameState.manifest?.palette;
+      const item = palette?.items.find((candidate) => candidate.prefab === prefab);
+      if (!item || fallbackInFlight.current) return;
+      try {
+        const target = { gameId, branchId: jobBranch };
+        const key = `edit:${crypto.randomUUID()}`;
+        if (path && path.length > 1 && !activeStage) {
+          const count = Math.min(path.length, 60);
+          const points = Array.from({ length: count }, (_, i) => {
+            const point = path[Math.round((i * (path.length - 1)) / (count - 1))]!;
+            return [Number(point.x.toFixed(3)), Number(point.y.toFixed(3))];
+          });
+          submitEditRequest(
+            editJobRequest(
+              target,
+              `Draw ${JSON.stringify(item.label).slice(0, 300)} (${JSON.stringify(prefab).slice(0, 500)}) along normalized preview coordinates ${JSON.stringify(points)}.`,
+              'now',
+              key,
+            ),
+          );
+          return;
+        }
+        const request =
+          fallbackActive && !prefab.startsWith('scope:')
+            ? fallbackEditRequest(target, { assetId: prefab, name: item.label, ...point }, key)
+            : previewEditRequest(target, { prefab, name: item.label, ...point }, key);
+        submitEditRequest(request);
+      } catch {
+        pushToast('The build could not be started.');
+      }
+    },
+    [activeStage, fallback.data, fallbackActive, frameState.manifest, gameId, jobBranch, submitEditRequest],
+  );
   const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
   const reportGameLoad = useCallback(
@@ -138,7 +309,7 @@ export function GameScreen() {
   }, [branch, gameId]);
 
   useEffect(() => {
-    const signal = readyBuildSignal(jobs.data?.jobs ?? [], branch);
+    const signal = readyBuildSignal(jobs.data?.jobs ?? [], jobBranch);
     if (signal === undefined || signal === inspectedJobRef.current || activeSnapshot === undefined || gameId === '') {
       return;
     }
@@ -165,29 +336,35 @@ export function GameScreen() {
     return () => {
       active = false;
     };
-  }, [activeSnapshot, branch, gameId, jobs.data?.jobs]);
+  }, [activeSnapshot, branch, gameId, jobBranch, jobs.data?.jobs]);
 
   useEffect(() => {
     const container = containerRef.current;
     const snapshot = activeSnapshot;
     if (container === null || snapshot === undefined || gameId === '') return;
-    if (snapshot.buildId === NO_BUILD_ID && previewSource === undefined) {
+    if (waitingForPreview) return;
+    if (waitingForStage) return;
+    if (waitingForScenery) return;
+    if (activePreview && !previewDesign.data) return;
+    if (snapshot.buildId === NO_BUILD_ID && !activePreview && !activeStage && previewSource === undefined) {
       if (previewSourceError) setFrameState({ bridgeState: 'error', dropped: 0 });
       return;
     }
     setFrameState(initialFrameState);
     let controller: GameFrameController;
     try {
-      controller =
-        snapshot.buildId === NO_BUILD_ID
+      controller = activeStage
+        ? mountStagePreview(container, activeStage, setFrameState)
+        : snapshot.buildId === NO_BUILD_ID && !activePreview
           ? mountSceneryPreview(container, previewSource!, snapshot.doc, setFrameState)
           : mountGameFrame({
               container,
               gamesOrigin,
               gameId,
-              buildId: snapshot.buildId,
+              buildId: activePreview?.accessId ?? snapshot.buildId,
+              ...(activePreview ? { preview: true } : {}),
               mode,
-              design: snapshot,
+              design: activePreview ? previewDesign.data! : snapshot,
               build,
               onState: setFrameState,
               onSaveWrite: () => setLastSaveAt(new Date().toISOString()),
@@ -218,6 +395,13 @@ export function GameScreen() {
     room.handleGameMessage,
     previewSource,
     previewSourceError,
+    waitingForPreview,
+    waitingForStage,
+    waitingForScenery,
+    activeStage,
+    activePreview?.buildId,
+    activePreview?.accessId,
+    previewDesign.data,
   ]);
 
   useEffect(() => {
@@ -235,6 +419,8 @@ export function GameScreen() {
     mode,
     role: room.snapshot?.role,
     activeSnapshot,
+    requestOnlySnapshot,
+    previewOnly: sidePreview,
     source: previewSource,
     frameRef,
     setAdopted,
@@ -415,15 +601,43 @@ export function GameScreen() {
         ) : null}
         {mode === 'edit' &&
         frameRef.current !== undefined &&
-        frameState.manifest !== undefined &&
+        editorManifest !== undefined &&
         sessionStore !== undefined &&
         canvasOptions !== undefined ? (
           <GizmoOverlay
             activePrefab={canvasOptions.prefab}
             frame={frameRef.current}
-            manifest={frameState.manifest}
+            manifest={editorManifest}
             session={sessionStore}
             snap={canvasOptions.snap}
+            onRequestPlacement={requestOnly ? requestFallbackPlacement : undefined}
+            onRequestDelete={
+              noBuild && !sidePreview
+                ? (entity) =>
+                    submitEditRequest(
+                      editJobRequest(
+                        { gameId, branchId: jobBranch },
+                        `Remove ${describeRequestedEntity(entity)}.`,
+                        'now',
+                        `edit:${crypto.randomUUID()}`,
+                      ),
+                    )
+                : undefined
+            }
+            onRequestTransform={
+              noBuild && !sidePreview
+                ? (entity, gizmo, target) =>
+                    submitEditRequest(
+                      editJobRequest(
+                        { gameId, branchId: jobBranch },
+                        `Change ${describeRequestedEntity(entity)} using ${gizmo}: ${JSON.stringify(target)}.`,
+                        'now',
+                        `edit:${crypto.randomUUID()}`,
+                      ),
+                    )
+                : undefined
+            }
+            allowReadOnlyRequests={noBuild}
           />
         ) : null}
         {hudShown &&
@@ -468,16 +682,25 @@ export function GameScreen() {
           snapshot={room.snapshot}
         />
       </div>
-      {mode === 'edit' &&
-      frameState.manifest !== undefined &&
-      sessionView !== undefined &&
-      sessionStore !== undefined ? (
+      {mode === 'edit' && editorManifest !== undefined && sessionView !== undefined && sessionStore !== undefined ? (
         <EditorChrome
           gameId={gameId}
-          manifest={frameState.manifest}
+          manifest={editorManifest}
           sceneryAssets={scenerySource.data?.assets}
           session={sessionView}
+          onRequestLight={noBuild && !sidePreview ? requestLight : undefined}
           onCommand={(command) => {
+            if (noBuild && !sidePreview) {
+              submitEditRequest(
+                editJobRequest(
+                  { gameId, branchId: jobBranch },
+                  `Apply this editor change: ${JSON.stringify(command)}.`,
+                  'now',
+                  `edit:${crypto.randomUUID()}`,
+                ),
+              );
+              return;
+            }
             const state = sessionStore.getState();
             void state.submit(
               createIntent(state.doc, [command], command.op === 'invoke' ? command.command : command.control),
@@ -488,6 +711,17 @@ export function GameScreen() {
           onRedo={() => void sessionStore.getState().redo()}
           onDelete={(entityId) => {
             const state = sessionStore.getState();
+            if (noBuild && !sidePreview) {
+              submitEditRequest(
+                editJobRequest(
+                  { gameId, branchId: jobBranch },
+                  `Remove ${describeRequestedEntity(state.doc.entities[entityId], entityId)}.`,
+                  'now',
+                  `edit:${crypto.randomUUID()}`,
+                ),
+              );
+              return;
+            }
             void state.submit(
               deleteEntityIntent(state.doc, entityId, `Removed ${state.doc.entities[entityId]?.prefab}`),
             );
@@ -496,12 +730,34 @@ export function GameScreen() {
             const state = sessionStore.getState();
             const source = state.doc.entities[entityId];
             if (source === undefined) return;
+            if (noBuild && !sidePreview) {
+              submitEditRequest(
+                editJobRequest(
+                  { gameId, branchId: jobBranch },
+                  `Copy ${describeRequestedEntity(source)}.`,
+                  'now',
+                  `edit:${crypto.randomUUID()}`,
+                ),
+              );
+              return;
+            }
             const entity: Entity = { ...structuredClone(source), id: createStableId('e_'), origin: 'creator' };
             void state.submit(createEntityIntent(state.doc, entity, `Copied ${source.prefab}`));
           }}
-          onInstanceCount={(change) =>
-            changeInstanceCount(change, frameState.manifest!, frameRef.current!, sessionStore)
-          }
+          onInstanceCount={(change) => {
+            if (noBuild && !sidePreview) {
+              submitEditRequest(
+                editJobRequest(
+                  { gameId, branchId: jobBranch },
+                  `${change.direction > 0 ? 'Add' : 'Remove'} one ${JSON.stringify(change.prefab)} instance.`,
+                  'now',
+                  `edit:${crypto.randomUUID()}`,
+                ),
+              );
+              return Promise.resolve({ ok: true });
+            }
+            return changeInstanceCount(change, frameState.manifest!, frameRef.current!, sessionStore);
+          }}
           onCanvasChange={setCanvasOptions}
         />
       ) : null}
@@ -535,6 +791,14 @@ export function GameScreen() {
       <Outlet />
     </section>
   );
+}
+
+function describeRequestedEntity(entity: Entity | undefined, fallbackId?: string): string {
+  return JSON.stringify({
+    id: entity?.id ?? fallbackId,
+    prefab: entity?.prefab,
+    sceneryItemId: entity?.props.sceneryItemId,
+  });
 }
 
 function savedLabel(saved: EditorSessionState['saved'] | undefined): string {

@@ -2,7 +2,7 @@ import type { StoreApi } from 'zustand/vanilla';
 
 import type { Entity, GameManifest, PlacementResult, Pose } from '@ogm/contracts/browser';
 
-import { poseFromProps } from './canvas';
+import { entityPose } from './canvas';
 import type { GameFrameController } from './frame';
 import type { EditorSessionState } from './session';
 import { createEntityIntent, createStableId, deleteEntityIntent } from './transactions';
@@ -47,7 +47,7 @@ export async function changeInstanceCount(
 }
 
 function adjacentPose(anchor: Entity | undefined, step: number): Pose {
-  const pose = poseFromProps(anchor?.props.pose);
+  const pose = entityPose(anchor?.props);
   return { ...pose, position: [pose.position[0] + step, pose.position[1], pose.position[2]] };
 }
 

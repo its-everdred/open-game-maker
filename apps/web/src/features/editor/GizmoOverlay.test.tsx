@@ -75,6 +75,73 @@ afterEach(() => {
 });
 
 describe('GizmoOverlay', () => {
+  it('requests a transform in a read-only no-build session', () => {
+    const test = harness([entityId]);
+    test.session.getState().readOnly = true;
+    const request = vi.fn();
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+        onRequestPlacement={vi.fn()}
+        onRequestTransform={request}
+        allowReadOnlyRequests
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Move skeleton forward' }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ id: entityId }), 'translate', { direction: 1 });
+    expect(test.submit).not.toHaveBeenCalled();
+  });
+  it('does not send a request when a placement is cancelled or interrupted by another pointer', () => {
+    const test = harness();
+    const request = vi.fn();
+    render(
+      <GizmoOverlay
+        activePrefab="t3:fixture/tree"
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+        onRequestPlacement={request}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 1 });
+    fireEvent.pointerCancel(canvas, { pointerId: 1 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    fireEvent.pointerDown(canvas, { pointerId: 2 });
+    fireEvent.pointerDown(canvas, { pointerId: 3 });
+    fireEvent.pointerUp(canvas, { pointerId: 2 });
+    fireEvent.pointerUp(canvas, { pointerId: 3 });
+    expect(request).not.toHaveBeenCalled();
+    fireEvent.pointerDown(canvas, { pointerId: 4, clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(canvas, { pointerId: 4, clientX: 50, clientY: 50 });
+    expect(request).toHaveBeenCalledOnce();
+  });
+  it('routes a fallback placement to an agent request without changing the live design', () => {
+    const test = harness();
+    const request = vi.fn();
+    render(
+      <GizmoOverlay
+        activePrefab="t3:fixture/tree"
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+        onRequestPlacement={request}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 100, height: 80 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 35, clientY: 60, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 35, clientY: 60, pointerId: 1 });
+    expect(request).toHaveBeenCalledWith('t3:fixture/tree', { x: 0.25, y: 0.5 });
+    expect(test.frame.validatePlacement).not.toHaveBeenCalled();
+    expect(test.submit).not.toHaveBeenCalled();
+  });
   it('paints a projected terrain band as one undoable change', async () => {
     const test = harness();
     test.session.getState().doc = { ...doc, globals: { 'scenery.settings': { terrain: [] } } };
@@ -223,6 +290,34 @@ describe('GizmoOverlay', () => {
     await act(async () => finishes.forEach((finish, index) => finish([index, 0, 1])));
     expect(test.submit).toHaveBeenCalledOnce();
   });
+  it('preserves a drawn terrain path in a request-only edit', () => {
+    const test = harness();
+    test.session.getState().readOnly = true;
+    const request = vi.fn();
+    render(
+      <GizmoOverlay
+        activePrefab="scenery-band:path"
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+        onRequestPlacement={request}
+        allowReadOnlyRequests
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 10, clientY: 20 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 40, clientY: 50 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 80, clientY: 90 });
+    expect(request).toHaveBeenCalledWith('scenery-band:path', { x: 0.8, y: 0.9 }, [
+      { x: 0.1, y: 0.2 },
+      { x: 0.4, y: 0.5 },
+      { x: 0.8, y: 0.9 },
+    ]);
+    expect(test.submit).not.toHaveBeenCalled();
+  });
+
   it('long-presses a picked scenery item to remove it', async () => {
     vi.useFakeTimers();
     const test = harness();
@@ -244,6 +339,32 @@ describe('GizmoOverlay', () => {
     expect(test.submit).toHaveBeenCalledWith(
       expect.objectContaining({ patches: [expect.objectContaining({ op: 'remove', path: ['entities', entityId] })] }),
     );
+  });
+  it('requests removal on a long press in a no-build session', async () => {
+    vi.useFakeTimers();
+    const test = harness();
+    const request = vi.fn();
+    test.frame.pickAt = vi.fn().mockResolvedValue([{ id: entityId, kind: 'entity' }]);
+    const state = test.session.getState();
+    state.readOnly = true;
+    state.doc = { ...doc, entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } } };
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+        onRequestPlacement={vi.fn()}
+        onRequestDelete={request}
+        allowReadOnlyRequests
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 20 });
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(650));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ id: entityId }));
+    expect(test.submit).not.toHaveBeenCalled();
   });
 
   it('does not delete when a touch moves or a late pick arrives after release', async () => {
@@ -533,6 +654,35 @@ describe('GizmoOverlay', () => {
     expect(test.commitStroke.mock.calls[0]?.[0]).toHaveLength(40);
     fireEvent.click(screen.getByRole('button', { name: 'Move skeleton backward' }));
     expect(test.submit).toHaveBeenCalledOnce();
+  });
+
+  it('moves a legacy 2D entity relative to its existing position', async () => {
+    const test = harness([entityId]);
+    const current = test.session.getState().doc;
+    test.session.getState().doc = {
+      ...current,
+      entities: { ...current.entities, [entityId]: { ...current.entities[entityId]!, props: { x: 400, y: 320 } } },
+    };
+    test.frame.project = vi.fn().mockResolvedValueOnce([400, 320, 0]).mockResolvedValueOnce([420, 330, 0]);
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={{ ...manifest, capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 60 } as DOMRect);
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Move skeleton' }), {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 3,
+    });
+    fireEvent.pointerMove(canvas, { clientX: 30, clientY: 20, pointerId: 3 });
+    fireEvent.pointerUp(canvas, { clientX: 30, clientY: 20, pointerId: 3 });
+    await act(async () => {});
+    expect(test.commitStroke.mock.calls[0]?.[0][0].doc.entities[entityId].props.pose.position).toEqual([420, 330, 0]);
   });
 
   it('moves 3D items by the projected ground delta even when released before projection finishes', async () => {

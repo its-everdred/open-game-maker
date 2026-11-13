@@ -9,7 +9,7 @@ export const manifest: GameManifest = {
   presentation: { orientation: 'landscape', minLogical: { w: 640, h: 480 }, fit: 'fixed' },
   view: 'side',
   dimension: '2d',
-  capabilities: [],
+  capabilities: ['editor.project'],
   palette: {
     categories: [{ id: 'level', label: 'Level', kind: 'items' }],
     items: [{ prefab: 'platform', label: 'Platform', category: 'level' }],

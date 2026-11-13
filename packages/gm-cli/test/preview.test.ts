@@ -34,7 +34,7 @@ describe('gm preview', () => {
       `#!/bin/sh\nset -eu\ntest -z "\${OGM_HOOK_SECRET_FILE:-}"\nmkdir -p dist/design\ncp current.txt dist/index.html\necho '{}' > dist/manifest.json\necho '{"folded":true}' > dist/design/design.json\necho '{}' > dist/credits.json\n`,
     );
     chmodSync(join(bin, 'pnpm'), 0o755);
-    const received: { path?: string; auth?: string; sha?: string; body?: Buffer } = {};
+    const received: { path?: string; auth?: string; sha?: string; branch?: string; body?: Buffer } = {};
     const server = createServer((req, res) => {
       const chunks: Buffer[] = [];
       req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -42,6 +42,7 @@ describe('gm preview', () => {
         received.path = req.url;
         received.auth = req.headers.authorization;
         received.sha = req.headers['x-gm-sha'] as string;
+        received.branch = req.headers['x-gm-branch'] as string;
         received.body = Buffer.concat(chunks);
         res.writeHead(201, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ gameId: 'g_game', buildId: 'preview-123', accessId: 'pv-secret' }));
@@ -50,7 +51,7 @@ describe('gm preview', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     try {
       const port = (server.address() as AddressInfo).port;
-      const result = await gm(['preview', '--json'], {
+      const result = await gm(['preview', '--branch', 'branch-a', '--json'], {
         cwd: root,
         env: {
           PATH: `${bin}:${process.env.PATH ?? ''}`,
@@ -60,7 +61,12 @@ describe('gm preview', () => {
       });
       expect(result.code).toBe(0);
       expect(JSON.stringify(result)).not.toContain('pv-secret');
-      expect(received).toMatchObject({ path: '/internal/games/blobs/previews/42', auth: 'Bearer fixture-secret', sha });
+      expect(received).toMatchObject({
+        path: '/internal/games/blobs/previews/42',
+        auth: 'Bearer fixture-secret',
+        sha,
+        branch: 'branch-a',
+      });
       const archive = join(root, 'received.tgz');
       writeFileSync(archive, received.body!);
       expect(execFileSync('tar', ['-xOzf', archive, './index.html'], { encoding: 'utf8' })).toBe(

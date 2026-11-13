@@ -11,8 +11,11 @@ import { scanReferences, unlisted } from '../../references.js';
 export const command: GmCommand = {
   name: 'preview',
   summary: 'build the current workspace for creator review without publishing',
-  usage: '[--ticket <number>]',
-  flags: { ticket: { type: 'string', help: 'ticket receiving the verdict (defaults to the current agent ticket)' } },
+  usage: '[--ticket <number>] [--branch <id>]',
+  flags: {
+    ticket: { type: 'string', help: 'ticket receiving the verdict (defaults to the current agent ticket)' },
+    branch: { type: 'string', help: 'game branch receiving the preview (defaults to main)' },
+  },
   async run(ctx, args, flags) {
     if (args.length) throw new UsageError('gm preview takes no positional arguments', 'gm help preview');
     const root = workspaceRoot(ctx.cwd);
@@ -20,6 +23,9 @@ export const command: GmCommand = {
     const branchTicket = /^aiur\/(\d+)(?:-|$)/u.exec(branch)?.[1];
     const ticket = typeof flags.ticket === 'string' ? flags.ticket : String(ctx.config.aiurIssue ?? branchTicket ?? '');
     if (!/^[1-9]\d{0,15}$/u.test(ticket)) throw new UsageError('no valid ticket', 'gm preview --ticket <number>');
+    const branchId = typeof flags.branch === 'string' ? flags.branch : 'main';
+    if (!/^[A-Za-z0-9_-]{1,200}$/u.test(branchId))
+      throw new UsageError('invalid game branch', 'gm preview --branch <id>');
     if (!ctx.blobApi)
       throw new UsageError('no daemon upload configuration', 'set OGM_INTERNAL_URL and OGM_HOOK_SECRET_FILE');
     let game = gameDir(ctx.cwd, root);
@@ -103,7 +109,12 @@ export const command: GmCommand = {
       const url = `${ctx.blobApi.url.replace(/\/+$/, '')}/internal/games/${encodeURIComponent(slug)}/previews/${ticket}`;
       const response = await fetch(url, {
         method: 'POST',
-        headers: { authorization: `Bearer ${secret}`, 'x-gm-sha': sha, 'content-type': 'application/gzip' },
+        headers: {
+          authorization: `Bearer ${secret}`,
+          'x-gm-sha': sha,
+          'x-gm-branch': branchId,
+          'content-type': 'application/gzip',
+        },
         body: readFileSync(archive),
         signal: AbortSignal.timeout(300_000),
       });
