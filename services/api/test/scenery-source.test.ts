@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -45,6 +46,43 @@ function fixture() {
 }
 
 describe('no-build scenery source', () => {
+  it('uses the tracked scene commit time rather than checkout file time', async () => {
+    const { root, game } = fixture();
+    const scenePath = join(game, 'scenery.json');
+    writeFileSync(
+      scenePath,
+      JSON.stringify({
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      }),
+    );
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args], {
+        // The temporary Git fixture needs a deterministic committer timestamp.
+        // eslint-disable-next-line no-restricted-properties
+        env: { ...process.env, GIT_AUTHOR_DATE: '2026-11-01T00:00:00Z', GIT_COMMITTER_DATE: '2026-11-01T00:00:00Z' },
+      });
+    git('init', '-q');
+    git('add', 'games/fixture/scenery.json');
+    git('commit', '-qm', 'scene');
+    utimesSync(scenePath, new Date('2026-11-12T00:00:00Z'), new Date('2026-11-12T00:00:00Z'));
+    expect((await readScenerySource(root, 'games/fixture')).updatedAt).toBe('2026-11-01T00:00:00.000Z');
+    writeFileSync(
+      scenePath,
+      JSON.stringify({
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'night',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      }),
+    );
+    utimesSync(scenePath, new Date('2026-11-12T00:00:00Z'), new Date('2026-11-12T00:00:00Z'));
+    expect((await readScenerySource(root, 'games/fixture')).updatedAt).toBe('2026-11-12T00:00:00.000Z');
+  });
   it('authorizes the owner and exposes only locked file URLs', async () => {
     const { root, game } = fixture();
     const ids = {
@@ -125,6 +163,20 @@ describe('no-build scenery source', () => {
     expect(await asset.text()).toBe('locked model');
     writeFileSync(join(game, 'models/tree model.glb'), 'tampered');
     expect((await app.request(body.assets[0]!.url, { headers: asUser(ids.creator) })).status).toBe(404);
+    const scenePath = join(game, 'scenery.json');
+    writeFileSync(
+      scenePath,
+      JSON.stringify({
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      }),
+    );
+    utimesSync(scenePath, new Date('2026-11-01T00:00:00Z'), new Date('2026-11-01T00:00:00Z'));
+    const datedScene = await app.request(url, { headers: asUser(ids.creator) });
+    expect(await datedScene.json()).toMatchObject({ updatedAt: '2026-11-01T00:00:00.000Z' });
     writeFileSync(join(game, 'scenery.json'), '{invalid');
     expect((await app.request(fallbackUrl, { headers: asUser(ids.creator) })).status).toBe(200);
     expect((await app.request(url, { headers: asUser(ids.creator) })).status).toBe(404);

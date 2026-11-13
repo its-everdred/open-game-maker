@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { access as fileAccess, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { creditsDocumentSchema, DesignDocSchema, gameManifestSchema } from '@ogm/contracts';
@@ -15,6 +15,7 @@ import { paidApisDuringGameplay } from '../gameplay/policy.js';
 export type Preview = {
   gameId: string;
   ticket: string;
+  branchId: string;
   buildId: string;
   sha: string;
   createdAt: string;
@@ -65,7 +66,14 @@ async function json(file: string): Promise<unknown> {
 }
 
 /** An upload becomes visible only after its complete immutable build is on disk. */
-export async function createPreview(deps: AppDeps, gameId: string, ticket: string, sha: string, archive: Buffer) {
+export async function createPreview(
+  deps: AppDeps,
+  gameId: string,
+  ticket: string,
+  sha: string,
+  archive: Buffer,
+  branchId = 'main',
+) {
   checkKey(deps, gameId, ticket);
   return withArtifactMutation(async () => {
     const buildId = `preview-${randomUUID()}`;
@@ -104,6 +112,7 @@ export async function createPreview(deps: AppDeps, gameId: string, ticket: strin
       const preview: Preview = {
         gameId,
         ticket,
+        branchId,
         buildId,
         sha,
         createdAt: new Date().toISOString(),
@@ -126,10 +135,15 @@ export async function createPreview(deps: AppDeps, gameId: string, ticket: strin
 
 export async function listPreviews(deps: AppDeps, gameId: string): Promise<Preview[]> {
   checkKey(deps, gameId, '1');
-  return withArtifactMutation(() => listPreviewsUnlocked(deps, gameId));
+  return withArtifactMutation(() => listPreviewsUnlocked(deps, gameId, false));
 }
 
-async function listPreviewsUnlocked(deps: AppDeps, gameId: string): Promise<Preview[]> {
+export async function listEditorPreviews(deps: AppDeps, gameId: string): Promise<Preview[]> {
+  checkKey(deps, gameId, '1');
+  return withArtifactMutation(() => listPreviewsUnlocked(deps, gameId, true));
+}
+
+async function listPreviewsUnlocked(deps: AppDeps, gameId: string, includeAnswered: boolean): Promise<Preview[]> {
   const directory = root(deps, gameId);
   const names = await readdir(directory).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
@@ -139,15 +153,29 @@ async function listPreviewsUnlocked(deps: AppDeps, gameId: string): Promise<Prev
     names.filter((name) => /^[1-9]\d{0,15}\.json$/u.test(name)).map((name) => readPreview(join(directory, name))),
   );
   const open = previews
-    .filter((preview): preview is Preview => preview !== null && !preview.answered)
+    .filter((preview): preview is Preview => preview !== null && (includeAnswered || !preview.answered))
+    .map((preview) => ({ ...preview, branchId: preview.branchId ?? 'main' }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return Promise.all(
+  const available = await Promise.all(
     open.map(async (preview) => {
-      if (Date.parse(preview.accessExpiresAt) > Date.now() + 5 * 60_000) return preview;
-      const refreshed = { ...preview, ...access() };
-      await writePreview(join(directory, `${preview.ticket}.json`), refreshed);
-      return refreshed;
+      if (!preview.answered) return preview;
+      try {
+        await fileAccess(join(previewDirectory(deps, gameId, preview.buildId), 'index.html'));
+        return preview;
+      } catch {
+        return null;
+      }
     }),
+  );
+  return Promise.all(
+    available
+      .filter((preview): preview is Preview => preview !== null)
+      .map(async (preview) => {
+        if (Date.parse(preview.accessExpiresAt) > Date.now() + 5 * 60_000) return preview;
+        const refreshed = { ...preview, ...access() };
+        await writePreview(join(directory, `${preview.ticket}.json`), refreshed);
+        return refreshed;
+      }),
   );
 }
 
@@ -169,8 +197,7 @@ export async function answerPreview(
     const client = await deps.aiurClientForGame(gameId);
     const receipt = await client.message(ticket, message, `preview:${buildId}`, AbortSignal.timeout(20_000));
     if (receipt.warning === 'outcome_unknown') throw new Error('preview_delivery_unknown');
-    await writePreview(file, { ...preview, pendingMessage: message, answered: true });
-    await rm(previewDirectory(deps, gameId, preview.buildId), { recursive: true, force: true }).catch(() => undefined);
+    await writePreview(file, { ...preview, ...access(), pendingMessage: message, answered: true });
     return true;
   });
 }

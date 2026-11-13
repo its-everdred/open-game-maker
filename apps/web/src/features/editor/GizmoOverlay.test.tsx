@@ -75,6 +75,25 @@ afterEach(() => {
 });
 
 describe('GizmoOverlay', () => {
+  it('requests a transform in a read-only no-build session', () => {
+    const test = harness([entityId]);
+    test.session.getState().readOnly = true;
+    const request = vi.fn();
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+        onRequestPlacement={vi.fn()}
+        onRequestTransform={request}
+        allowReadOnlyRequests
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Move skeleton forward' }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ id: entityId }), 'translate', { direction: 1 });
+    expect(test.submit).not.toHaveBeenCalled();
+  });
   it('does not send a request when a placement is cancelled or interrupted by another pointer', () => {
     const test = harness();
     const request = vi.fn();
@@ -292,6 +311,32 @@ describe('GizmoOverlay', () => {
     expect(test.submit).toHaveBeenCalledWith(
       expect.objectContaining({ patches: [expect.objectContaining({ op: 'remove', path: ['entities', entityId] })] }),
     );
+  });
+  it('requests removal on a long press in a no-build session', async () => {
+    vi.useFakeTimers();
+    const test = harness();
+    const request = vi.fn();
+    test.frame.pickAt = vi.fn().mockResolvedValue([{ id: entityId, kind: 'entity' }]);
+    const state = test.session.getState();
+    state.readOnly = true;
+    state.doc = { ...doc, entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } } };
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+        onRequestPlacement={vi.fn()}
+        onRequestDelete={request}
+        allowReadOnlyRequests
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 20 });
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(650));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ id: entityId }));
+    expect(test.submit).not.toHaveBeenCalled();
   });
 
   it('does not delete when a touch moves or a late pick arrives after release', async () => {

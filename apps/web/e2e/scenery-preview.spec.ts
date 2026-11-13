@@ -5,13 +5,18 @@ import { installGameApi } from './support/mock-game-api';
 
 test.use({ serviceWorkers: 'block' });
 
-test('opens a no-build diorama and places a locked item', async ({ page }, testInfo) => {
+test('opens a no-build diorama and requests a locked item', async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   await installAuthRoutes(page, { signedIn: true });
   const api = await installGameApi(page);
+  let request: { plan?: { summary?: string } } | undefined;
   const assetUrl = '/api/v1/games/game/scenery/assets/0/hash/tree.glb';
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/jobs' && route.request().method() === 'POST') {
+      request = route.request().postDataJSON() as typeof request;
+      return route.fulfill({ status: 202, json: { jobId: 'job' } });
+    }
     if (path === '/api/v1/games/game/branches/main/design')
       return route.fulfill({ json: { rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } } });
     if (path === '/api/v1/games/game/scenery/source')
@@ -38,26 +43,13 @@ test('opens a no-build diorama and places a locked item', async ({ page }, testI
   const canvas = page.getByLabel('Editor canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('.game-frame canvas')).toBeVisible();
-  await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(1);
   await expect(page.locator('.scenery-thumbnail img')).toBeVisible({ timeout: 30_000 });
   await page.screenshot({ path: testInfo.outputPath('scenery-palette.png') });
   await page.getByRole('button', { name: 'tree', exact: true }).click();
-  const model = page.waitForResponse((response) => new URL(response.url()).pathname === assetUrl);
   await canvas.click({ position: { x: 180, y: 200 } });
-  await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(2);
-  expect((await model).ok()).toBe(true);
-  await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '1');
+  await expect.poll(() => request?.plan?.summary, { timeout: 30_000 }).toContain('scenery:t3:fixture/tree');
   await expect(page.locator('.screen-error')).toHaveCount(0);
-  expect(api.transactions[1]?.commands).toEqual([expect.objectContaining({ command: 'entity.create' })]);
-  await page.getByRole('button', { name: 'Water', exact: true }).click();
-  await page.getByRole('button', { name: 'Path', exact: true }).click();
-  const bounds = (await canvas.boundingBox())!;
-  await page.mouse.move(bounds.x + 100, bounds.y + 170);
-  await page.mouse.down();
-  await page.mouse.move(bounds.x + 200, bounds.y + 230, { steps: 4 });
-  await page.mouse.up();
-  await expect.poll(() => api.transactions.length, { timeout: 30_000 }).toBe(3);
-  expect(api.transactions[2]?.commands).toEqual([expect.objectContaining({ op: 'set', control: 'scenery.terrain' })]);
+  expect(api.transactions).toHaveLength(0);
   await page.screenshot({ path: testInfo.outputPath('scenery-preview.png') });
 });
 
@@ -70,7 +62,7 @@ test('shows a reviewed concept and sends scope placement to the builder', async 
     const path = url.pathname;
     if (path === '/api/v1/games/game/branches/main/design')
       return route.fulfill({ json: { rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } } });
-    if (path === '/api/v1/games/game/previews') return route.fulfill({ json: { previews: [] } });
+    if (path === '/api/v1/games/game/editor/previews') return route.fulfill({ json: { previews: [] } });
     if (path === '/api/v1/games/game/editor/stage')
       return route.fulfill({ json: { stage: { kind: 'image', url: '/concept-preview.svg' } } });
     if (path === '/api/v1/games/game/editor/fallback')

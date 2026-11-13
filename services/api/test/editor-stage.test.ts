@@ -72,9 +72,17 @@ describe('approved stage media', () => {
     olderCommand.commandJson = JSON.stringify({ ...JSON.parse(olderCommand.commandJson!), command_id: 'old-command' });
     newerCommand.commandJson = JSON.stringify({ ...JSON.parse(newerCommand.commandJson!), command_id: 'new-command' });
     const answers = new Map([['job\0old-command', '2026-01-03T00:00:00Z']]);
-    expect(selectStageMedia([newerCommand, olderCommand], (id) => rows.get(id) ?? null, true, answers)?.id).toBe(
-      'older',
-    );
+    expect(selectStageMedia([newerCommand, olderCommand], (id) => rows.get(id) ?? null, true, answers)).toMatchObject({
+      id: 'older',
+      at: '2026-01-03T00:00:00.000Z',
+    });
+  });
+  it('orders an open revision by its current command time, not an earlier review', () => {
+    const pending = command('job', '2026-01-03T00:00:00Z', 'open', 'a', 'newer');
+    pending.commandJson = JSON.stringify({ ...JSON.parse(pending.commandJson!), command_id: 'reopened' });
+    const older = command('job', '2026-01-02T00:00:00Z', 'answered', 'a', 'older');
+    const answers = new Map([['job\0reopened', '2026-01-01T00:00:00Z']]);
+    expect(selectStageMedia([pending, older], (id) => rows.get(id) ?? null, true, answers)?.id).toBe('newer');
   });
   it('uses the creator’s corrected choice after a review', () => {
     const row = command('job', '2026-01-01T00:00:00Z', 'answered', 'a', 'older');

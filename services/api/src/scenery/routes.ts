@@ -39,10 +39,10 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
     if (!daemon || !game.githubPath) throw new HttpError(404, 'scenery_source_unavailable');
     return { game, path: game.githubPath, checkout: daemon.checkoutPath };
   }
-  async function source(c: Parameters<typeof requirePrincipal>[0]) {
+  async function source(c: Parameters<typeof requirePrincipal>[0], includeUpdatedAt = true) {
     const target = checkout(c);
     try {
-      return await readScenerySource(target.checkout, target.path);
+      return await readScenerySource(target.checkout, target.path, includeUpdatedAt);
     } catch {
       throw new HttpError(404, 'scenery_source_unavailable');
     }
@@ -87,6 +87,7 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       return c.json({
         stage: {
           kind: row.kind,
+          at: row.at,
           url: await sign(row.mediaHash),
           ...(row.posterHash ? { poster: await sign(row.posterHash) } : {}),
         },
@@ -173,10 +174,10 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
         url: `${prefix}/games/${encodeURIComponent(c.req.param('gameId'))}/scenery/assets/${index}/${entry.sha256}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
       }));
       c.header('Cache-Control', 'private, no-store');
-      return c.json({ scene: bundle.scene, assets });
+      return c.json({ scene: bundle.scene, assets, ...(bundle.updatedAt ? { updatedAt: bundle.updatedAt } : {}) });
     })
     .get('/games/:gameId/scenery/assets/:index/:hash/*', async (c) => {
-      const bundle = await source(c);
+      const bundle = await source(c, false);
       const index = c.req.param('index');
       if (!/^\d+$/.test(index)) throw new HttpError(404, 'scenery_asset_unavailable');
       const entry = bundle.lock.assets[Number(index)];

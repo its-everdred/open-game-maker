@@ -158,7 +158,7 @@ async function previewDirectory(root: string, gameId: string, accessId: string):
     if (
       row.gameId !== gameId ||
       row.accessId !== accessId ||
-      row.answered !== false ||
+      typeof row.answered !== 'boolean' ||
       typeof row.accessExpiresAt !== 'string' ||
       !Number.isFinite(Date.parse(row.accessExpiresAt)) ||
       Date.parse(row.accessExpiresAt) <= Date.now()

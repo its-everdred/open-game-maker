@@ -46,11 +46,23 @@ export function useEditorSession({
   const [editStartup, setEditStartup] = useState<EditorSessionState['saved']>();
   useEffect(() => {
     if (mode === 'edit' && role !== 'peer' && requestOnlySnapshot && gameId !== '') {
-      const editor = createSession(gameId, branch, 'preview', 0, requestOnlySnapshot, frameRef);
-      editor.setState({ readOnly: true });
-      setSessionStore(editor);
+      let active = true;
       setEditStartup(undefined);
-      return () => setSessionStore(undefined);
+      void (async () => {
+        const intent = source ? await bootstrapScenery(requestOnlySnapshot.doc, source.scene) : undefined;
+        if (!active) return;
+        const initial = intent ? { ...requestOnlySnapshot, doc: intent.doc } : requestOnlySnapshot;
+        if (source) frameRef.current?.applyDesign(initial.rev, initial.doc, []);
+        const editor = createSession(gameId, branch, 'preview', 0, initial, frameRef);
+        editor.setState({ readOnly: true });
+        setSessionStore(editor);
+      })().catch(() => {
+        if (active) setEditStartup('not-saved');
+      });
+      return () => {
+        active = false;
+        setSessionStore(undefined);
+      };
     }
     if (
       mode !== 'edit' ||
