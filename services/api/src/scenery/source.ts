@@ -21,7 +21,14 @@ async function branchObject(root: string, ref: string): Promise<string> {
 }
 
 export async function resolveSceneryCommit(checkout: string, gamePath: string, ref: string): Promise<string> {
-  return branchObject(await contained(checkout, gamePath), ref);
+  return branchObject(await gitGameRoot(checkout, gamePath), ref);
+}
+
+async function gitGameRoot(checkout: string, gamePath: string): Promise<string> {
+  const base = await realpath(checkout);
+  const top = (await runFile('git', ['-C', base, 'rev-parse', '--show-toplevel'], { timeout: 5_000 })).stdout.trim();
+  if ((await realpath(top)) !== base) throw new Error('checkout is not a repository root');
+  return contained(base, gamePath);
 }
 
 async function branchFile(root: string, sha: string, path: string): Promise<Buffer> {
@@ -78,9 +85,10 @@ export async function readScenerySource(
   fallbackRef?: string,
 ): Promise<{ root: string; lock: AssetsLock; scene: Scenery; updatedAt?: string; commit?: string }> {
   if (ref) {
-    const root = await contained(checkout, gamePath);
+    const root = await gitGameRoot(checkout, gamePath);
     const commit = await branchObject(root, ref).catch((error: unknown) => {
-      if (!fallbackRef) throw error;
+      const stderr = (error as { stderr?: Buffer | string }).stderr;
+      if (!fallbackRef || !stderr || !String(stderr).includes('Needed a single revision')) throw error;
       return branchObject(root, fallbackRef);
     });
     const lock = AssetsLockSchema.parse(
@@ -89,7 +97,9 @@ export async function readScenerySource(
     let sceneFile: Buffer | undefined;
     try {
       sceneFile = await branchFile(root, commit, 'scenery.json');
-    } catch {
+    } catch (error) {
+      const stderr = (error as { stderr?: Buffer | string }).stderr;
+      if (!stderr || !String(stderr).includes('does not exist in')) throw error;
       sceneFile = undefined;
     }
     const data: unknown = sceneFile

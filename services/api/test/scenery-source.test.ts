@@ -244,6 +244,19 @@ describe('no-build scenery source', () => {
       updatedAt: '2026-11-12T00:00:00.000Z',
     });
     expect((await app.request(`${url}?branch=side`, { headers: asUser(ids.creator) })).status).toBe(404);
+    const unavailableFork = await app.request(`/api/v1/games/${ids.game}/branches`, {
+      method: 'POST',
+      headers: { ...asUser(ids.creator), 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'unavailable fork' }),
+    });
+    expect(unavailableFork.status).toBe(503);
+    expect(
+      deps.db
+        .select()
+        .from(schema.branches)
+        .all()
+        .map((branch) => branch.name),
+    ).not.toContain('unavailable fork');
     const git = (...args: string[]) =>
       execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args]);
     git('init', '-q');

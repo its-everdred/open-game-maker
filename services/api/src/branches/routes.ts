@@ -124,11 +124,22 @@ const routes = new Hono<ApiBindings>()
         ? deps.db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).get()
         : undefined;
       let forkGitSha: string | undefined;
+      if (game.githubPath && !daemon) throw new HttpError(503, 'branch_source_unavailable');
       if (daemon && game.githubPath) {
         const ref = parent.name === 'main' ? 'HEAD' : parent.gitRef;
-        forkGitSha = await resolveSceneryCommit(daemon.checkoutPath, game.githubPath, ref).catch(
-          () => parent.forkPoint?.gitSha ?? undefined,
-        );
+        try {
+          forkGitSha = await resolveSceneryCommit(daemon.checkoutPath, game.githubPath, ref);
+        } catch (error) {
+          const fallback = parent.forkPoint?.gitSha;
+          const stderr = (error as { stderr?: Buffer | string }).stderr;
+          if (!fallback || !stderr || !String(stderr).includes('Needed a single revision'))
+            throw new HttpError(503, 'branch_source_unavailable');
+          try {
+            forkGitSha = await resolveSceneryCommit(daemon.checkoutPath, game.githubPath, fallback);
+          } catch {
+            throw new HttpError(503, 'branch_source_unavailable');
+          }
+        }
       }
       return c.json(
         createBranch(c.get('deps').sqlite, {
