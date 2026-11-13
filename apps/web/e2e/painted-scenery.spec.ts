@@ -23,6 +23,8 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
   });
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/games/game/editor/previews') return route.fulfill({ json: { previews: [] } });
+    if (path === '/api/v1/games/game/editor/stage') return route.fulfill({ json: { stage: null } });
     if (path === '/api/v1/games/game/branches')
       return route.fulfill({ json: [{ id: 'draft', name: 'draft', gameId: 'game' }] });
     if (path === '/api/v1/games/game/branches/draft/design')

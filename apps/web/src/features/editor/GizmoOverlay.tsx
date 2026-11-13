@@ -356,6 +356,7 @@ export function GizmoOverlay({
       pinch.intents.push(intent);
       pinch.doc = intent.doc;
       frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+      frame.select([pinch.entity.id]);
       return;
     }
     const held = holdRef.current;
@@ -428,6 +429,7 @@ export function GizmoOverlay({
               drag.intents.push(intent);
               drag.doc = intent.doc;
               frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+              frame.select([drag.entity.id]);
             }
             if (projection.released && drag.intents.length > 0) {
               void session.getState().commitStroke(drag.intents, `Moved ${drag.entity.prefab}`);
@@ -456,6 +458,7 @@ export function GizmoOverlay({
       drag.intents.push(intent);
       drag.doc = intent.doc;
       frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+      frame.select([drag.entity.id]);
       return;
     }
     if (activePrefab !== undefined) updateGhost(event.clientX, event.clientY);
