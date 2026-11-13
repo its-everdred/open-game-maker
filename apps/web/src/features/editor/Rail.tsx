@@ -2,6 +2,8 @@ import type { GameManifest } from '@ogm/contracts/browser';
 
 import { FocusZone } from '../../lib/input';
 import { EDITOR_FOCUS_ZONES } from './focus';
+import { SceneryThumbnail } from './SceneryThumbnail';
+import { sceneryAsset } from './scenery-asset';
 
 type Category = GameManifest['palette']['categories'][number];
 type Item = GameManifest['palette']['items'][number];
@@ -9,18 +11,22 @@ type Item = GameManifest['palette']['items'][number];
 export function Rail({
   categories,
   items = [],
+  sceneryAssets = [],
   active,
   onChange,
 }: {
   categories: Category[];
   items?: Item[];
+  sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
   active?: string;
   onChange(id: string): void;
 }) {
   return (
     <FocusZone id={EDITOR_FOCUS_ZONES.rail} className="editor-rail">
       {categories.map((category) => {
-        const thumbnail = items.find((item) => item.category === category.id)?.thumbnail;
+        const item = items.find((candidate) => candidate.category === category.id);
+        const thumbnail = item?.thumbnail;
+        const asset = sceneryAsset(item, sceneryAssets);
         return (
           <button
             className="tap-secondary"
@@ -32,6 +38,8 @@ export function Rail({
           >
             {thumbnail ? (
               <img src={thumbnail} alt="" />
+            ) : asset ? (
+              <SceneryThumbnail url={asset.url} />
             ) : (
               <span className="rail-letter" aria-hidden="true">
                 {category.label.slice(0, 1)}

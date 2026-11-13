@@ -341,17 +341,14 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
     }
     if (trayTitle) trayTitle.textContent = 'Actors';
   });
-  // The requested editor revision removes the prototype's header and uses a compact side column in landscape.
+  // The requested editor revision removes the prototype's header and inspector.
   if (reference.viewportSize()!.width > reference.viewportSize()!.height) {
     await reference.addStyleTag({
       content: `
-      #editor { grid-template-columns: minmax(0, 1fr) minmax(220px, 25%); grid-template-rows: auto 180px minmax(0, 1fr);
-        grid-template-areas: 'stage rail' 'stage tray' 'stage .'; }
+      #editor { grid-template-columns: 200px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 168px;
+        grid-template-areas: 'rail stage' 'tray tray'; }
       #editor::before { background: #fdf1d8; }
-      #editor .topbar, #editor #inspector, #tray h2 { display: none; }
-      #rail { flex-direction: row; padding-top: 60px; }
-      #rail button { flex: 0 0 72px; min-height: 0; font-size: 14px; }
-      #rail .thumb { width: 36px; height: 36px; }
+      #editor .topbar, #editor #inspector { display: none; }
     `,
     });
   }
@@ -375,10 +372,10 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
       app.locator('.game-stage').boundingBox(),
       app.locator('.editor-rail').boundingBox(),
     ]);
-    expect(rail!.x).toBeGreaterThanOrEqual(stage!.x + stage!.width);
-    expect(rail!.height / app.viewportSize()!.height).toBeLessThan(0.3);
+    expect(rail!.x + rail!.width).toBeLessThanOrEqual(stage!.x);
     const palette = await app.locator('.editor-palette').boundingBox();
-    expect(palette!.height).toBeLessThanOrEqual(180);
+    expect(palette!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height);
+    expect(palette!.width).toBeGreaterThan(stage!.width);
   }
   await app.getByRole('button', { name: 'Menu', exact: true }).click();
   await expect(app.locator('#studio-editor-tools .editor-inspector')).toBeVisible();

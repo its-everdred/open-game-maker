@@ -6,6 +6,7 @@ import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { FocusZone } from '../../lib/input';
 import { EDITOR_FOCUS_ZONES } from './focus';
 import { SceneryThumbnail } from './SceneryThumbnail';
+import { sceneryAsset } from './scenery-asset';
 
 type PaletteProps = {
   palette: GameManifest['palette'];
@@ -61,13 +62,7 @@ export function Palette({
         {palette.items
           .filter((item) => item.category === active)
           .map((item) => {
-            const asset =
-              typeof item.assetSha === 'string' && item.prefab.startsWith('scenery:')
-                ? sceneryAssets?.find(
-                    (candidate) =>
-                      candidate.id === item.prefab.slice('scenery:'.length) && candidate.sha256 === item.assetSha,
-                  )
-                : undefined;
+            const asset = sceneryAsset(item, sceneryAssets);
             return (
               <button
                 className="palette-item tap-primary"

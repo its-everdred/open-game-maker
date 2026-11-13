@@ -103,6 +103,7 @@ export function EditorChrome({
       <Rail
         categories={manifest.palette.categories}
         items={manifest.palette.items}
+        sceneryAssets={sceneryAssets}
         active={activeCategory?.id ?? ''}
         onChange={setCategory}
       />
