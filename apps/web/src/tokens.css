@@ -105,6 +105,10 @@
   --editor-selected: #ffd9b8;
   --editor-ink: #3a2a20;
   --editor-muted: #817568;
+  --terrain-grass: #719557;
+  --terrain-path: #bc9b70;
+  --terrain-water: #609fc5;
+  --terrain-outline: #49392c;
   --editor-paper-image: url('/proto/demo/assets/img/paper-bg.png');
   --shadow-color: rgba(0, 0, 0, 0.35);
   --shadow-color-strong: rgba(0, 0, 0, 0.6);
