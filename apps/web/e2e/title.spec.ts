@@ -97,7 +97,7 @@ test('title only shows its thin aqua focus outline for keyboard input', async ({
   const menu = page.getByRole('button', { name: 'Menu' });
   await expect(menu).toBeFocused();
   await expect(menu).toHaveCSS('outline-width', '2px');
-  await expect(menu).toHaveCSS('outline-color', 'rgb(142, 192, 124)');
+  await expect(menu).toHaveCSS('outline-color', 'rgb(111, 214, 180)');
 
   await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerdown')));
   await expect(menu).toHaveCSS('outline-style', 'none');

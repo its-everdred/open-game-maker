@@ -266,7 +266,7 @@ async function prepareCreationOption(app: Page, reference: Page): Promise<Masks>
   const appChoice = app.getByRole('button', { name: 'Adventure' });
   const referenceChoice = reference.getByRole('button', { name: 'Adventure' });
   await appChoice.click();
-  await referenceChoice.evaluate((button) => button.setAttribute('aria-pressed', 'true'));
+  await referenceChoice.click();
   await Promise.all([
     expect(appChoice).toHaveAttribute('aria-pressed', 'true'),
     expect(referenceChoice).toHaveAttribute('aria-pressed', 'true'),
@@ -431,7 +431,7 @@ async function normalize(page: Page): Promise<void> {
       ${prototypePaletteNormalizationCss}
       *, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }
       html, body, button, input, textarea { font-family: Arial, sans-serif !important; }
-      #bg canvas, .studio-backdrop canvas { visibility: hidden !important; }
+      #bg canvas, .studio-backdrop canvas, .studio-backdrop .glow-backdrop { visibility: hidden !important; }
       #bg, .studio-backdrop { background: #0f0e16 !important; }
     `,
   });

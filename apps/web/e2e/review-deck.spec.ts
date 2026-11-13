@@ -357,7 +357,7 @@ test('opens questions from the rows, keeps each draft and answers one by swipe',
   const lookThumb = rows.getByRole('link', { name: 'Pick the Blobs look, open' }).locator('img');
   await expect.poll(() => lookThumb.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   // The review is the glossy surface: the glows sit behind it, not a flat panel.
-  await expect(page.locator('.glow-backdrop span')).toHaveCount(5);
+  await expect(page.locator('.review-screen .glow-backdrop span')).toHaveCount(5);
   await capture(page, testInfo, 'rows-open');
 
   // Open the look and judge two of its cards.

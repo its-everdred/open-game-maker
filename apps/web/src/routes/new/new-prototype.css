@@ -88,7 +88,7 @@
   gap: 16px;
 }
 
-.new-option {
+.new-game-screen .new-option {
   min-height: 150px;
   padding: 14px 10px;
   font: 600 18px var(--display);

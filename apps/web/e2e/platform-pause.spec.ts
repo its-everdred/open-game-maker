@@ -108,7 +108,7 @@ for (const viewport of viewports) {
     if (viewport.width === 844) return;
 
     await menuRow.getByRole('button', { name: 'Edit', exact: true }).click();
-    await expect(page.locator('.play-bar')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
     await expect(page).toHaveURL(/mode=edit/);
     await expect.poll(() => fixtureMessages(page)).toContain('lifecycle.resume');
     await page.screenshot({
