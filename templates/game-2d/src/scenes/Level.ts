@@ -1,4 +1,5 @@
-import { DesignDocSchema, type CameraRig } from '@ogm/contracts';
+import type { CameraRig } from '@ogm/contracts';
+import { DesignDocSchema } from '@ogm/contracts/browser';
 import { createRig, PhaserEditorCamera, RigSet } from '@gm/sdk/camera';
 import { createPaintedScenery } from '@gm/sdk/phaser';
 import { sceneryFromDesign } from '@gm/sdk/scenery';
