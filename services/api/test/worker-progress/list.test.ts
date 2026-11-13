@@ -4,7 +4,7 @@ import { listWorkers } from '../../src/worker-progress/list.js';
 describe('game workers', () => {
   it('projects running workers independently and uses each ticket progress', async () => {
     const client = {
-      state: vi.fn(async (_signal?: AbortSignal) => ({
+      state: vi.fn().mockResolvedValue({
         running: [
           {
             issue_identifier: '12',
@@ -16,8 +16,8 @@ describe('game workers', () => {
           { issue_identifier: '13', title: 'Add a big boss monster now', runtime_seconds: 20, work_state: 'working' },
           { issue_identifier: '14', title: 'Paused worker', runtime_seconds: 20, work_state: 'paused' },
         ],
-      })),
-      progress: vi.fn(async (ticket: string, _limit?: number, _signal?: AbortSignal) => ({
+      }),
+      progress: vi.fn(async (ticket: string) => ({
         progress: ticket === '12' ? { status: 'known', percent: 50 } : { status: 'unknown' },
       })),
     };
@@ -35,7 +35,7 @@ describe('game workers', () => {
     ]);
     expect(workpad).toHaveBeenCalledOnce();
     expect(workpad).toHaveBeenCalledWith('13');
-    expect(client.state.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
-    expect(client.progress.mock.calls[0]?.[2]).toBeInstanceOf(AbortSignal);
+    expect(client.state).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(client.progress).toHaveBeenCalledWith('12', undefined, expect.any(AbortSignal));
   });
 });
