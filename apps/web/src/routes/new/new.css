@@ -150,7 +150,7 @@
 .new-pick-capacity i {
   width: 10px;
   height: 10px;
-  border: 2px solid var(--gruvbox-bg2);
+  border: 2px solid var(--border);
   border-radius: 50%;
   background: transparent;
 }
@@ -208,7 +208,7 @@
   font-weight: 700;
 }
 .new-style-ai-switch input {
-  accent-color: var(--gruvbox-purple);
+  accent-color: var(--purple-b);
 }
 .new-style-step:has(.new-style-detail) {
   min-height: 0;

@@ -76,4 +76,4 @@ vendor reference suggests owning pause, settings, or device safe areas.
 
 For the layout and type of menus, HUD and the title, won and lost screens, open
 `.claude/skills/vendor/frontend-design/frontend-design/SKILL.md`. It defers: the game's approved targets (the picked
-mock, approved renders) and the app's Gruvbox palette win over its suggestions, and it never touches the host's HUD.
+mock, approved renders) and the app's prototype palette tokens win over its suggestions, and it never touches the host's HUD.

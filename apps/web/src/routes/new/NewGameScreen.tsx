@@ -36,13 +36,13 @@ const VIEW_LABELS: Record<string, string> = {
 };
 
 const STEP_COLORS: Record<ChoiceKey, string> = {
-  genre: 'var(--gruvbox-orange)',
-  vibe: 'var(--gruvbox-purple)',
-  family: 'var(--gruvbox-blue)',
-  sound: 'var(--gruvbox-red)',
-  world: 'var(--gruvbox-green)',
-  players: 'var(--gruvbox-aqua)',
-  view: 'var(--gruvbox-yellow)',
+  genre: 'var(--orange-b)',
+  vibe: 'var(--purple-b)',
+  family: 'var(--blue-b)',
+  sound: 'var(--red-b)',
+  world: 'var(--green-b)',
+  players: 'var(--aqua-b)',
+  view: 'var(--yellow-b)',
 };
 
 const testState: { step: StepKey; picks: NewGameChoices; sessionId?: string } = {

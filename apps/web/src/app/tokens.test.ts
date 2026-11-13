@@ -19,30 +19,13 @@ describe('shared design tokens', () => {
     expect(css).toContain('max-height: 540px');
   });
 
-  it('owns the canonical Gruvbox dark palette and semantic action roles', () => {
+  it('uses the prototype glass and bright accent tokens', () => {
     const css = readFileSync(tokenPath, 'utf8');
-
-    expect(css).toContain('--gruvbox-bg: #282828');
-    expect(css).toContain('--gruvbox-bg0-h: #1d2021');
-    expect(css).toContain('--gruvbox-bg1: #3c3836');
-    expect(css).toContain('--gruvbox-bg2: #504945');
-    expect(css).toContain('--gruvbox-fg: #ebdbb2');
-    expect(css).toContain('--gruvbox-fg4: #a89984');
-    expect(css).toContain('--gruvbox-red: #fb4934');
-    expect(css).toContain('--gruvbox-green-neutral: #98971a');
-    expect(css).toContain('--gruvbox-green: #b8bb26');
-    expect(css).toContain('--gruvbox-yellow: #fabd2f');
-    expect(css).toContain('--gruvbox-blue: #83a598');
-    expect(css).toContain('--gruvbox-purple: #d3869b');
-    expect(css).toContain('--gruvbox-aqua: #8ec07c');
-    expect(css).toContain('--gruvbox-orange: #fe8019');
-    expect(css).toContain('--action-primary: var(--gruvbox-green-neutral)');
-    expect(css).toContain('--action-primary-text: var(--gruvbox-bg0-h)');
-    expect(css).toContain('--action-secondary: var(--gruvbox-bg1)');
-    expect(css).toContain('--action-secondary-text: var(--gruvbox-fg)');
-    expect(css).toContain('--focus-ring: var(--gruvbox-aqua)');
-    expect(css).toContain('--text-muted: color-mix(in srgb, var(--gruvbox-fg4) 50%, var(--gruvbox-fg))');
-    expect(css).toContain('--text-danger: color-mix(in srgb, var(--gruvbox-red) 60%, var(--gruvbox-fg))');
+    expect(css).toContain('--surface-page: #0f0e16');
+    expect(css).toContain('--ink: #f2ead6');
+    expect(css).toContain('--glass: blur(22px) saturate(1.4)');
+    expect(css).toContain('--yellow-b: #fabd2f');
+    expect(css).not.toContain('--gruvbox-');
   });
 
   it('keeps chrome colours in the token file and app surfaces flat', () => {
@@ -56,6 +39,7 @@ describe('shared design tokens', () => {
       }),
     );
     const chromeFiles = sourceFiles.filter((file) => file !== tokenPath);
+    expect(chromeFiles.filter((file) => sourceByFile.get(file)!.includes('--gruvbox-'))).toEqual([]);
     const offenders = chromeFiles.flatMap((file) => {
       const source = sourceByFile.get(file)!;
       const findings: string[] = [];
@@ -93,7 +77,7 @@ describe('shared design tokens', () => {
   it('meets WCAG AA for the shared text and primary-action pairs', () => {
     const tokens = parseColors(readFileSync(tokenPath, 'utf8'));
 
-    expect(tokens.get('--action-primary')).toBe('#98971a');
+    expect(tokens.get('--action-primary')).toBe('#b8bb26');
     expectContrast(tokens, '--text', '--surface-page');
     expectContrast(tokens, '--text', '--surface-card');
     expectContrast(tokens, '--text-muted', '--surface-page');

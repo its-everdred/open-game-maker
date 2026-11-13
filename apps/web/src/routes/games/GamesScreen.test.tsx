@@ -271,6 +271,7 @@ describe('GamesScreen', () => {
     const { container } = renderGames();
 
     await screen.findByRole('button', { name: 'New game' });
+    expect(screen.getByRole('button', { name: 'New game' }).textContent).toBe('');
     const plus = container.querySelector('.games-new .plus');
     expect(plus).not.toHaveTextContent('+');
     expect(plus?.querySelector('svg')).toHaveAttribute('viewBox', '0 0 16 16');

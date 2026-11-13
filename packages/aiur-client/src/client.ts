@@ -11,11 +11,13 @@ import {
   IssueEntrySchema,
   MessageResultSchema,
   SpendCapSchema,
+  StateSchema,
   TicketProgressSchema,
   TicketUsageSchema,
   UsageAccountsSchema,
   parseContract,
   type CancelResult,
+  type AiurState,
   type Decision,
   type EventPage,
   type IssueEntry,
@@ -73,6 +75,7 @@ export type DecisionMediaFile = { mime: string; body: ReadableStream<Uint8Array>
 
 export interface AiurClient {
   readonly baseUrl: string;
+  state(): Promise<AiurState>;
   issue(id: string): Promise<IssueEntry>;
   usage(id: string): Promise<TicketUsage>;
   progress(id: string, limit?: number): Promise<TicketProgress>;
@@ -184,6 +187,10 @@ export function createAiurClient(
 
   return {
     baseUrl,
+    async state() {
+      const { body } = await fetchResponse('GET', '/api/v1/state');
+      return parseContract(StateSchema, body);
+    },
     async issue(id) {
       const { body } = await fetchResponse('GET', `/api/v1/${encodeURIComponent(id)}`);
       return parseContract(IssueEntrySchema, body);

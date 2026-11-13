@@ -112,14 +112,14 @@
 
 /* Like and dislike carry the deck's two colours. */
 .review-screen .review-deck-thumb[aria-label='Like'] {
-  --k: var(--gruvbox-aqua);
+  --k: var(--aqua-b);
   box-shadow:
     inset 0 1px 0 var(--glass-shine),
     0 10px 30px -10px var(--k);
 }
 
 .review-screen .review-deck-thumb[aria-label='Dislike'] {
-  --k: var(--gruvbox-red);
+  --k: var(--red-b);
   box-shadow:
     inset 0 1px 0 var(--glass-shine),
     0 10px 30px -10px var(--k);
@@ -130,7 +130,7 @@
 }
 
 .review-screen .review-deck-audio {
-  background: color-mix(in srgb, var(--gruvbox-aqua) 10%, transparent);
+  background: color-mix(in srgb, var(--aqua-b) 10%, transparent);
 }
 
 /* A card with a sample shows only its letter, on a glass chip over the media. */
@@ -180,11 +180,11 @@
 }
 
 .review-row-link[data-state='draft'] {
-  --k: var(--gruvbox-yellow);
+  --k: var(--yellow-b);
 }
 
 .review-row-link[data-state='sent'] {
-  --k: var(--gruvbox-green);
+  --k: var(--green-b);
 }
 
 .review-row-link:focus-visible {
@@ -201,7 +201,7 @@
   overflow: hidden;
   border-radius: 14px;
   background: color-mix(in srgb, var(--glow-night) 55%, transparent);
-  color: var(--gruvbox-aqua);
+  color: var(--aqua-b);
 }
 
 .review-row-thumb img,
@@ -240,12 +240,12 @@
 }
 
 .review-row-progress circle + circle {
-  stroke: var(--gruvbox-yellow);
+  stroke: var(--yellow-b);
   stroke-linecap: round;
 }
 
 .review-row-mark {
-  color: var(--gruvbox-green);
+  color: var(--green-b);
 }
 
 .review-row-mark .icon svg {

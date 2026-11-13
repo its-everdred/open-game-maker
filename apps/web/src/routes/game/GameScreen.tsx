@@ -49,7 +49,6 @@ import { RoomLayer } from '../../features/room/RoomLayer';
 import { useRoomRuntime } from '../../features/room/useRoomRuntime';
 import { useBranches } from '../games/useBranches';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
-import { PlayEditBar } from './PlayEditBar';
 import { LoadingLayer } from './LoadingLayer';
 import { gameLoadActivity } from './load-analytics';
 import { PlatformHud } from './PlatformHud';
@@ -354,7 +353,7 @@ export function GameScreen() {
       mode === 'play'
         ? {
             actions: [
-              { id: 'games', label: 'Games', icon: 'games', onSelect: () => void leaveRoom() },
+              { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
               {
                 id: 'edit',
                 label: 'Edit',
@@ -373,7 +372,19 @@ export function GameScreen() {
             extras: gameExtraElements('topbar', extraProps),
             button: frameState.manifest?.playMenuButton,
           }
-        : undefined,
+        : {
+            actions: [
+              { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
+              {
+                id: 'ask-change',
+                label: 'Ask for a change',
+                icon: 'speak',
+                disabled: room.snapshot?.role === 'peer',
+                onSelect: askForChange,
+              },
+            ],
+            extras: gameExtraElements('topbar', extraProps),
+          },
     [askForChange, extraProps, frameState.manifest?.playMenuButton, leaveRoom, mode, requestMode, room.snapshot?.role],
   );
   useGameMenuControls(playMenuControls);
@@ -387,18 +398,22 @@ export function GameScreen() {
   return (
     <section className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}`} aria-label="Play and edit">
       {mode === 'edit' ? (
-        <PlayEditBar
-          title={game.data?.title ?? ''}
-          mode={mode}
-          saved={savedLabel(editStartup ?? sessionView?.saved)}
-          build={build}
-          playLabel={frameState.manifest?.playLabel}
-          onBack={() => void leaveRoom()}
-          onMode={requestMode}
-          onAsk={askForChange}
-        >
-          <GameExtras placement="topbar" {...extraProps} />
-        </PlayEditBar>
+        <>
+          <button
+            className="editor-play-button"
+            type="button"
+            aria-label="Play"
+            disabled={room.snapshot?.role === 'peer'}
+            onClick={() => requestMode('play')}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 3v18l14-9z" />
+            </svg>
+          </button>
+          <output className="sr" aria-live="polite">
+            {savedLabel(editStartup ?? sessionView?.saved)}
+          </output>
+        </>
       ) : null}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />

@@ -106,13 +106,13 @@
 
 .review-deck-stamp-like {
   left: 16px;
-  color: var(--gruvbox-aqua, var(--aqua-b));
+  color: var(--aqua-b, var(--aqua-b));
   transform: rotate(-14deg);
 }
 
 .review-deck-stamp-dislike {
   right: 16px;
-  color: var(--gruvbox-red, var(--red-b));
+  color: var(--red-b, var(--red-b));
   transform: rotate(14deg);
 }
 

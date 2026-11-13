@@ -16,6 +16,6 @@
     monospace;
   line-height: 16px;
   white-space: pre;
-  color: var(--gruvbox-fg);
-  background: color-mix(in srgb, var(--gruvbox-bg0-h) 78%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-deep) 78%, transparent);
 }

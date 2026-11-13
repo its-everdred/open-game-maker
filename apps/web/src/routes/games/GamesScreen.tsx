@@ -177,13 +177,12 @@ export function GamesScreen() {
         </>
       )}
 
-      <button type="button" className="tap-primary games-new" onClick={() => navigate('/new')}>
+      <button type="button" className="tap-primary games-new" aria-label="New game" onClick={() => navigate('/new')}>
         <span className="plus" aria-hidden="true">
           <svg viewBox="0 0 16 16" width="14" height="14">
             <path d="M8 2.5v11M2.5 8h11" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
           </svg>
         </span>
-        <span>New game</span>
       </button>
     </div>
   );

@@ -89,13 +89,13 @@
   }
 
   .games-new {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
+    right: max(16px, calc(var(--safe-r) + 16px));
+    left: auto;
+    transform: none;
   }
 
   .games-new:hover {
-    transform: translate(-50%, -3px);
+    transform: translateY(-3px);
   }
 }
 
@@ -179,10 +179,10 @@
   }
 
   .games-new {
-    right: max(80px, calc(var(--safe-r) + 80px));
-    bottom: 12px;
+    right: max(16px, calc(var(--safe-r) + 16px));
+    bottom: max(24px, calc(var(--safe-b) + 16px));
     left: auto;
-    padding: 8px 16px 8px 12px;
+    padding: 0;
     font-size: 15px;
     transform: none;
   }

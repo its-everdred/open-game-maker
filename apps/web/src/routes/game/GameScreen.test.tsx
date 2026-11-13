@@ -188,6 +188,18 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('offers an icon-only play control and keeps editor navigation in the menu', async () => {
+    const { container } = renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    expect(container.querySelector('.play-bar')).not.toBeInTheDocument();
+    const play = screen.getByRole('button', { name: 'Play' });
+    expect(play.textContent).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.getByRole('button', { name: 'Games' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Ask for a change' })).toBeVisible();
+    fireEvent.click(play);
+    await waitFor(() => expect(container.querySelector('.game-screen.is-playing')).toBeVisible());
+  });
   it('passes the ready manifest button theme to the play menu', async () => {
     renderGame();
     await readyPlayFrame({ colour: '#e02020', icon: 'pause' });
@@ -235,8 +247,8 @@ describe('GameScreen', () => {
     await waitFor(() => expect(editorApi.acquireLease).toHaveBeenCalledWith('game', 'main', expect.any(String)));
     expect(host.controller.setMode).toHaveBeenCalledWith('edit');
     expect(container.querySelector('.game-screen.is-editing')).toBeVisible();
-    expect(container.querySelector('.play-bar')).toBeVisible();
-    expect(screen.getByText('Goblin Cellar')).toBeVisible();
+    expect(container.querySelector('.play-bar')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
   });
 
   it('asks for a change in the build chat for this game and branch', async () => {
@@ -285,7 +297,6 @@ describe('GameScreen', () => {
 
     renderGame('/g/game?mode=edit');
 
-    expect(await screen.findByText('Published')).toBeVisible();
     await waitFor(() =>
       expect(host.mountGameFrame).toHaveBeenLastCalledWith(expect.objectContaining({ build: 'published' })),
     );
@@ -545,7 +556,7 @@ describe('GameScreen', () => {
     renderGame('/g/game?mode=edit');
 
     expect(await screen.findByRole('button', { name: 'Skeleton' }, { timeout: 5_000 })).toBeVisible();
-    expect(screen.getByRole('button', { name: '▶ Enter crypt' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
   }, 10_000);
 
   // The API files each save under the branch and build that wrote it; the player knows them only here.

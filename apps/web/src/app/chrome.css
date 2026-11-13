@@ -42,7 +42,8 @@
   object-fit: contain;
 }
 
-.app-chrome.is-game-playing .studio-logo {
+.app-chrome.is-game-playing .studio-logo,
+.app-chrome:has(.game-screen.is-editing) .studio-logo {
   display: none;
 }
 

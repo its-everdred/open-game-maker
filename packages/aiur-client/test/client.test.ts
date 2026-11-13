@@ -33,6 +33,12 @@ const decision = {
 };
 
 describe('createAiurClient', () => {
+  it('reads the daemon worker snapshot', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(fixture('state')));
+    const client = createAiurClient(daemon, fetchImpl);
+    await expect(client.state()).resolves.toEqual(fixture('state'));
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('http://127.0.0.1:4000/api/v1/state');
+  });
   it('sends the spend-cap write with the required method, path, headers, and body', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
