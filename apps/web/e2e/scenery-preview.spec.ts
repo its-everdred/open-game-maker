@@ -80,20 +80,13 @@ test('keeps models and painted sprites together in a no-build scene', async ({ p
           assets,
           scene: {
             version: 1,
+            dimension: '3d',
             backdrop: {
               assetId: 'forest',
               landscape: { fit: 'cover', anchor: [0.5, 0.5] },
               portrait: { fit: 'cover', anchor: [0.5, 0.5] },
             },
             items: [
-              {
-                id: 'rock-1',
-                assetId: 'rock',
-                position: [8, 0, 0],
-                rotation: [0, 0, 0],
-                scale: [1, 1, 1],
-                layer: 'mid',
-              },
               {
                 id: 'tree-1',
                 assetId: 'tree',
@@ -122,7 +115,7 @@ test('keeps models and painted sprites together in a no-build scene', async ({ p
     return route.fallback();
   });
   await page.goto('/g/game?mode=edit&test');
-  await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '1', { timeout: 30_000 });
+  await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '0', { timeout: 30_000 });
   await expect(page.getByLabel('Scene items')).toContainText('tree');
   const canvas = page.getByLabel('Editor canvas');
   const bounds = (await canvas.boundingBox())!;
@@ -131,5 +124,9 @@ test('keeps models and painted sprites together in a no-build scene', async ({ p
     position: { x: (bounds.width - 640 * scale) / 2 + 200 * scale, y: (bounds.height - 480 * scale) / 2 + 250 * scale },
   });
   await expect(page.getByRole('button', { name: 'Move scenery:tree', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Rocks', exact: true }).click();
+  await page.getByRole('button', { name: 'rock', exact: true }).click();
+  await canvas.click({ position: { x: bounds.width * 0.75, y: bounds.height * 0.7 } });
+  await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '1', { timeout: 30_000 });
   await expect(page.locator('.screen-error')).toHaveCount(0);
 });

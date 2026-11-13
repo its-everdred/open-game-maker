@@ -15,6 +15,12 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
     sha256: `hash${index}`,
     url: `/api/v1/games/game/scenery/assets/${index}/hash/${id}.png`,
   }));
+  assets.push({
+    id: 'unused-model',
+    path: 'unused.glb',
+    sha256: 'hash3',
+    url: '/api/v1/games/game/scenery/assets/3/hash/unused.glb',
+  });
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/games/game/branches/main/design')
@@ -24,6 +30,7 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
         json: {
           scene: {
             version: 1,
+            dimension: '2d',
             backdrop: { assetId: 'forest', landscape: rule, portrait: rule },
             items: [
               {

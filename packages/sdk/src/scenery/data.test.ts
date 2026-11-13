@@ -41,6 +41,7 @@ describe('scenery data', () => {
     expect(parseScenery(painted, [{ id: 'tree' }, { id: 'forest' }])).toEqual(painted);
     expect(() => parseScenery(painted, [{ id: 'tree' }])).toThrow('Scenery asset is not in the lock: forest');
     expect(ScenerySchema.safeParse({ ...painted, viewport: { width: 0, height: 480 } }).success).toBe(false);
+    expect(ScenerySchema.safeParse({ ...painted, dimension: '4d' }).success).toBe(false);
   });
   it('rejects unsupported versions and invalid transforms', () => {
     expect(ScenerySchema.safeParse({ ...scene, version: 2 }).success).toBe(false);

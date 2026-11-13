@@ -128,6 +128,7 @@ Lock the backdrop and each transparent cut-out image as separate assets. Add the
 ```json
 {
   "version": 1,
+  "dimension": "2d",
   "viewport": { "width": 640, "height": 480 },
   "backdrop": {
     "assetId": "forest-background",
@@ -144,6 +145,7 @@ Lock the backdrop and each transparent cut-out image as separate assets. Add the
 }
 ```
 
+Set `dimension` to the game's dimension, so the no-build editor can offer models in a 3D scene before one is placed.
 Set `viewport` to the game's logical size; the 2D template and no-build preview default to 640×480. The fit rule is
 chosen by display aspect; anchors range from 0 (left/top) to 1 (right/bottom). Item positions and
 image dimensions use game pixels, centred on the item; Z orders items within each back/mid/front layer. Scale multiplies

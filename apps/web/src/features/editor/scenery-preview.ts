@@ -36,7 +36,7 @@ export function mountSceneryPreview(
   const imageIds = new Set(
     source.assets.filter((entry) => /\.(?:png|jpe?g|webp)$/i.test(entry.path)).map((entry) => entry.id),
   );
-  const mixed = source.scene.items.some((item) => !imageIds.has(item.assetId));
+  const mixed = source.scene.dimension === '3d' || source.scene.items.some((item) => !imageIds.has(item.assetId));
   if (source.scene.backdrop && !mixed) return mountPaintedPreview(container, source, initial, onState);
   const items: SceneryPaletteItem[] = source.assets
     .filter((entry) => /\.(?:glb|gltf)$/i.test(entry.path))

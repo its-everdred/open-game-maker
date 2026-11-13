@@ -11,6 +11,7 @@ const positiveVector = z.tuple([
 export const ScenerySchema = z
   .strictObject({
     version: z.literal(1),
+    dimension: z.enum(['2d', '3d']).optional(),
     viewport: z
       .strictObject({ width: z.number().int().min(1).max(8192), height: z.number().int().min(1).max(8192) })
       .optional(),
