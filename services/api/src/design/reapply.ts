@@ -14,6 +14,7 @@ import type { Sqlite } from '@ogm/db';
 import { reduce, reapply, type ReapplyResult } from '@ogm/design-log';
 
 import type { BaseDocSource } from './base-doc.js';
+import { EMPTY_BUILD_ID } from './snapshot.js';
 import { appendBuildSwitch, appendTransaction, readChain, StaleBaseRev } from './store.js';
 
 type ReportRow = {
@@ -161,16 +162,15 @@ export async function computeReport(
       loadManifest(source, branch.gameId, toBuildId),
     ]);
     const result = reapply({
-      from: { buildId: toBuildId, baseDoc: toDoc, manifest: toManifest },
+      from: { buildId: EMPTY_BUILD_ID, baseDoc: toDoc, manifest: toManifest },
       to: { buildId: toBuildId, baseDoc: toDoc, manifest: toManifest },
-      workingSet: {
+      workingSet: reduce({
         gameId: branch.gameId,
         branchId: branch.id,
         buildId: toBuildId,
-        headRev: branch.headRev,
-        entries: {},
-        entityOps: {},
-      },
+        baseDoc: toDoc,
+        txs: effectiveTransactions(chain),
+      }),
       targetControls: targetControls(sqlite, toManifest),
     });
     storeComputedReport(sqlite, result, options.now ?? new Date(), branch);

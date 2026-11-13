@@ -61,6 +61,23 @@ describe('reduce', () => {
     });
   });
 
+  it('retains a created entity’s latest pose when reducing its transform', () => {
+    const created = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+    const pose = { position: [4, 0, 3], rotationY: 90 };
+    const result = reduceCommands([
+      {
+        rev: 1,
+        command: {
+          op: 'invoke',
+          command: 'entity.create',
+          args: { entityId: created, parent: 'main', prefab: 'scenery:tree', props: { pose: { position: [0, 0, 0] } } },
+        },
+      },
+      { rev: 2, command: { op: 'invoke', command: 'entity.transform', args: { entityId: created, pose } } },
+    ]);
+    expect(result.entityOps[created]).toMatchObject({ kind: 'create', props: { pose } });
+  });
+
   it('is independent of transaction and object insertion order', () => {
     fc.assert(
       fc.property(fc.array(fc.integer(), { minLength: 1, maxLength: 50 }), (values) => {

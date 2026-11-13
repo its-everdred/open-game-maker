@@ -1,10 +1,11 @@
-import type { ControlDecl, DesignDoc, GameManifest } from '@ogm/contracts';
+import type { ControlDecl, DesignDoc, EditorCommand, GameManifest } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
 import { MemoryBaseDocSource, type BaseDocSource } from '../src/design/base-doc.js';
 import { acquireLease } from '../src/design/lease.js';
 import { answerReport, computeReport, getReport, onBuildTested, switchBranchBuild } from '../src/design/reapply.js';
+import { snapshotAt } from '../src/design/snapshot.js';
 import { appendTransaction, ensureMainBranch, insertBranch, StaleBaseRev } from '../src/design/store.js';
 import { makeDeps } from './helpers.js';
 
@@ -127,6 +128,62 @@ function setup() {
 }
 
 describe('design reapply service', () => {
+  it('carries pre-build edits and the latest created entity pose into the first build', async () => {
+    const { deps, branch, source } = setup();
+    insertBranch(deps.sqlite, {
+      ...branch,
+      id: ids.branch2,
+      name: 'new-game',
+      gitRef: 'refs/heads/new-game',
+      headRev: 0,
+      latestBuildId: null,
+    });
+    const entityId = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+    const pose = { position: [4, 0, 3] };
+    for (const [index, command] of [
+      {
+        op: 'invoke',
+        command: 'entity.create',
+        args: { entityId, parent: 'main', prefab: 'scenery:tree', props: { pose: { position: [0, 0, 0] } } },
+      },
+      { op: 'invoke', command: 'entity.transform', args: { entityId, pose } },
+      { op: 'set', control: 'world.gravity', targets: 'global', value: 2 },
+    ].entries()) {
+      appendTransaction(deps.sqlite, {
+        gameId: ids.game,
+        branchId: ids.branch2,
+        baseRev: index,
+        leaseToken: 0,
+        actor: ids.creator,
+        kind: 'system',
+        label: 'Edit',
+        baseBuildId: ids.to,
+        commands: [command as EditorCommand],
+        patches: [],
+        inverse: [],
+      });
+    }
+    const toDoc = design(1);
+    toDoc.entities['e_01BX5ZZKBKACTAV9WEVGEMMVRY'] = {
+      id: 'e_01BX5ZZKBKACTAV9WEVGEMMVRY',
+      prefab: 'player',
+      level: 'main',
+      origin: 'builder',
+      props: {},
+    };
+    source.set(ids.game, ids.to, toDoc, manifest());
+    const result = await computeReport(deps.sqlite, source, ids.branch2, ids.to);
+    expect(result.rebased.entityOps[entityId]).toMatchObject({ kind: 'create', props: { pose } });
+    expect(result.rebased.entries['world.gravity@global']).toMatchObject({ value: 2 });
+    await switchBranchBuild(deps.sqlite, source, { ...branch, id: ids.branch2 }, ids.to, {
+      actor: ids.creator,
+      token: 0,
+    });
+    const before = await snapshotAt(deps.sqlite, source, ids.branch2, 3);
+    const after = await snapshotAt(deps.sqlite, source, ids.branch2);
+    expect(before.buildId).toBeNull();
+    expect(after.doc.entities[entityId]?.props.pose).toEqual(pose);
+  });
   it('computes, stores, and then returns the cached report', async () => {
     const { deps, branch, source } = setup();
     const report = await computeReport(deps.sqlite, source, branch.id, ids.to, { now: new Date(now) });

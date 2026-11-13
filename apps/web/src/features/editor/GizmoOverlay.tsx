@@ -459,7 +459,7 @@ function commitPlacement(
   const entity: Entity = {
     id: createStableId('e_'),
     prefab: ghost.prefab,
-    level: manifest.view,
+    level: ghost.prefab.startsWith('scenery:') ? 'main' : manifest.view,
     origin: 'creator',
     props: { pose: ghost.pose },
   };

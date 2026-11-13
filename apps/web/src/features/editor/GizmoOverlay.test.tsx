@@ -179,6 +179,30 @@ describe('GizmoOverlay', () => {
     expect(test.submit).toHaveBeenCalledOnce();
   });
 
+  it('places scenery in the scene level rather than the camera view', async () => {
+    const test = harness();
+    test.frame.project = vi.fn().mockResolvedValue([2, 0, -1]);
+    render(
+      <GizmoOverlay
+        activePrefab="scenery:tree"
+        frame={test.frame}
+        manifest={{ ...manifest, view: 'iso', dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { clientX: 25, clientY: 30, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 25, clientY: 30, pointerId: 1 });
+    await act(async () => {});
+    await act(async () => test.placement({ ok: true }));
+    expect(test.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patches: [expect.objectContaining({ value: expect.objectContaining({ level: 'main' }) })],
+      }),
+    );
+  });
+
   it('does not place a projected item after the pointer is cancelled', async () => {
     const test = harness();
     let finish!: (position: [number, number, number] | null) => void;

@@ -107,6 +107,13 @@ function recordEntityOverride(
     for (const entityId of entityIds) {
       entityOps[entityId] = { kind: 'delete', entityId, txId: tx.id };
     }
+  } else if (command.command === 'entity.transform') {
+    const args = asRecord(command.args);
+    if (typeof args?.entityId !== 'string' || asRecord(args.pose) === undefined) return;
+    const previous = entityOps[args.entityId];
+    if (previous?.kind === 'create') {
+      entityOps[args.entityId] = { ...previous, props: { ...previous.props, pose: args.pose }, txId: tx.id };
+    }
   }
 }
 
