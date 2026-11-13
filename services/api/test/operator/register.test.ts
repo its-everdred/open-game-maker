@@ -13,6 +13,57 @@ const body = {
 };
 
 describe('operator game registration', () => {
+  it('selects the family or repository owner', async () => {
+    {
+      const { app, deps } = await seededApp();
+      deps.db.delete(schema.games).where(eq(schema.games.familyId, Y.family)).run();
+      deps.db.delete(schema.familyMembers).where(eq(schema.familyMembers.familyId, Y.family)).run();
+      deps.db.delete(schema.families).where(eq(schema.families.id, Y.family)).run();
+      const send = (payload: unknown) =>
+        app.request('/internal/operator/games', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-ogm-internal': INTERNAL_TOKEN },
+          body: JSON.stringify(payload),
+        });
+      expect((await send(body)).status).toBe(201);
+      expect(
+        (await send({ ...body, ownerId: X.creator.userId, slug: 'other', repo: { ...body.repo, path: 'games/other' } }))
+          .status,
+      ).toBe(201);
+      const response = await send({
+        ...body,
+        ownerId: undefined,
+        slug: 'third',
+        repo: { ...body.repo, path: 'games/third' },
+      });
+      expect(response.status).toBe(201);
+      expect(await response.json()).toMatchObject({ ownerId: X.owner.userId });
+    }
+    {
+      const { app } = await seededApp();
+      const send = (payload: unknown) =>
+        app.request('/internal/operator/games', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-ogm-internal': INTERNAL_TOKEN },
+          body: JSON.stringify(payload),
+        });
+      expect((await send(body)).status).toBe(201);
+      const response = await send({
+        ...body,
+        ownerId: undefined,
+        slug: 'other',
+        repo: { owner: 'EXAMPLE', name: 'GAMES', path: 'games/other' },
+      });
+      expect(response.status).toBe(201);
+      expect(await response.json()).toMatchObject({ ownerId: X.owner.userId });
+      const third = { ...body, slug: 'third', repo: { ...body.repo, path: 'games/third' } };
+      expect((await send({ ...third, ownerId: Y.admin.userId })).status).toBe(201);
+      const fourth = { ...body, slug: 'fourth', repo: { ...body.repo, path: 'games/fourth' } };
+      expect((await send({ ...fourth, ownerId: undefined })).status).toBe(409);
+      expect((await send({ ...fourth, ownerId: X.owner.userId })).status).toBe(201);
+    }
+  });
+
   it('requires the internal token and registers, updates, and exposes the game to publish', async () => {
     const { app, deps } = await seededApp();
     const send = (payload: unknown, token = INTERNAL_TOKEN) =>
@@ -70,7 +121,14 @@ it('registers a fixture through gm and finds it with publish dry-run', async () 
   const { vi } = await import('vitest');
   const { run } = await import('../../../../packages/gm-cli/src/cli.js');
   const { app, deps } = await seededApp();
+  deps.db.delete(schema.games).where(eq(schema.games.familyId, Y.family)).run();
   deps.db.delete(schema.familyMembers).where(eq(schema.familyMembers.familyId, Y.family)).run();
+  deps.db.delete(schema.families).where(eq(schema.families.id, Y.family)).run();
+  deps.db
+    .update(schema.familyMembers)
+    .set({ role: 'owner' })
+    .where(eq(schema.familyMembers.userId, X.admin.userId))
+    .run();
   const home = mkdtempSync(join(tmpdir(), 'operator-register-'));
   try {
     const checkout = join(home, 'games', 'games');
@@ -93,6 +151,7 @@ it('registers a fixture through gm and finds it with publish dry-run', async () 
     ).toBe(0);
     expect(await run(['publish', 'fixture', '--dry-run'], options)).toBe(0);
     expect(output.join('\n')).toContain('games/fixture');
+    expect(output).toContain(`registered fixture (owner: ${X.owner.userId})`);
     expect(deps.db.select().from(schema.games).where(eq(schema.games.slug, 'fixture')).get()?.ownerId).toBe(
       X.owner.userId,
     );
