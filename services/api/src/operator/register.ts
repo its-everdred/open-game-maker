@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 
 import { daemonPaths, unitName } from '@ogm/builder';
 import { schema } from '@ogm/db';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { RegisterGameBody } from '../admin/shapes.js';

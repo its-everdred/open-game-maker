@@ -22,7 +22,7 @@ describe('operator game registration', () => {
         body: JSON.stringify(payload),
       });
     expect((await send(body, 'wrong')).status).toBe(401);
-    const { ownerId: _ignoredOwner, ...noOwner } = body;
+    const noOwner = { ...body, ownerId: undefined };
     expect((await send(noOwner)).status).toBe(409);
     deps.config.instanceOwnerId = X.owner.userId;
     expect((await send(noOwner)).status).toBe(201);
