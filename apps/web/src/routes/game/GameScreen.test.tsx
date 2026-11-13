@@ -29,6 +29,7 @@ const editorApi = vi.hoisted(() => ({
   getGame: vi.fn(),
   getFallbackPalette: vi.fn(),
   getEditorPreviews: vi.fn(),
+  getEditorStage: vi.fn(),
   getPreviewDesign: vi.fn(),
   getScenerySource: vi.fn(),
   getOptionalPublished: vi.fn(),
@@ -164,6 +165,7 @@ beforeEach(() => {
   editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
+  editorApi.getEditorStage.mockResolvedValue({ stage: null });
   editorApi.getPreviewDesign.mockResolvedValue({ rev: 0, doc: { schemaVersion: 1, globals: {}, entities: {} } });
   fallbackAdmission.admitJob.mockResolvedValue({ kind: 'accepted', jobId: 'job' });
   editorApi.getOptionalPublished.mockResolvedValue({ available: false });
@@ -202,6 +204,35 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('shows a concept and sends a scope placement as a request before any build', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getEditorStage.mockResolvedValue({ stage: { kind: 'image', url: 'https://example.test/concept.webp' } });
+    editorApi.getFallbackPalette.mockResolvedValue({
+      mode: 'request',
+      palette: {
+        categories: [{ id: 'scenery', label: 'Scenery', kind: 'items' }],
+        items: [{ prefab: 'scope:0', label: 'Forest trees', category: 'scenery' }],
+      },
+    });
+    const view = renderGame('/g/game?mode=edit');
+    await waitFor(() =>
+      expect(view.container.querySelector('img[src="https://example.test/concept.webp"]')).not.toBeNull(),
+    );
+    await waitFor(() => expect(editorApi.getFallbackPalette).toHaveBeenCalled());
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'Forest trees' }, { timeout: 5_000 }), {
+      pointerId: 1,
+    });
+    const canvas = await screen.findByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
+    fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
+    await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+    expect(editorApi.postTransaction).not.toHaveBeenCalled();
+  });
   it('uses an unmerged playable preview when no released build exists', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,

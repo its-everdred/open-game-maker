@@ -60,3 +60,46 @@ test('opens a no-build diorama and places a locked item', async ({ page }, testI
   expect(api.transactions[2]?.commands).toEqual([expect.objectContaining({ op: 'set', control: 'scenery.terrain' })]);
   await page.screenshot({ path: testInfo.outputPath('scenery-preview.png') });
 });
+
+test('shows a reviewed concept and sends scope placement to the builder', async ({ page }, testInfo) => {
+  await installAuthRoutes(page, { signedIn: true });
+  const api = await installGameApi(page);
+  let request: { plan?: { summary?: string } } | undefined;
+  await page.route('**/api/v1/**', async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (path === '/api/v1/games/game/branches/main/design')
+      return route.fulfill({ json: { rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } } });
+    if (path === '/api/v1/games/game/previews') return route.fulfill({ json: { previews: [] } });
+    if (path === '/api/v1/games/game/editor/stage')
+      return route.fulfill({ json: { stage: { kind: 'image', url: '/concept-preview.svg' } } });
+    if (path === '/api/v1/games/game/editor/fallback')
+      return route.fulfill({
+        json: {
+          mode: 'request',
+          palette: {
+            categories: [{ id: 'scenery', label: 'Scenery', kind: 'items' }],
+            items: [{ prefab: 'scope:0', label: 'Forest trees', category: 'scenery' }],
+          },
+        },
+      });
+    if (path === '/api/v1/jobs' && route.request().method() === 'POST') {
+      request = route.request().postDataJSON() as typeof request;
+      return route.fulfill({ status: 202, json: { jobId: 'job' } });
+    }
+    return route.fallback();
+  });
+  await page.route('**/concept-preview.svg', (route) =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="forestgreen"/></svg>',
+    }),
+  );
+  await page.goto('/g/game?mode=edit&test');
+  await expect(page.locator('.game-frame img')).toBeVisible();
+  await page.getByRole('button', { name: 'Forest trees' }).click();
+  await page.getByLabel('Editor canvas').click({ position: { x: 180, y: 120 } });
+  await expect.poll(() => request?.plan?.summary).toContain('scope:0');
+  expect(api.transactions).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath('concept-editor.png') });
+});
