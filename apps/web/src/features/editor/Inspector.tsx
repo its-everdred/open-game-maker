@@ -14,6 +14,7 @@ type InspectorProps = {
   onDelete?(entityId: string): void;
   onDuplicate?(entityId: string): void;
   onInstanceCount?(change: InstanceCountChange): Promise<PlacementResult>;
+  onSelect?(ids: string[]): void;
 };
 
 type ControlContext = {
@@ -32,6 +33,7 @@ export function Inspector({
   onDelete,
   onDuplicate,
   onInstanceCount,
+  onSelect,
 }: InspectorProps) {
   const selected = selectedIds.map((id) => doc.entities[id]).find((entity) => entity !== undefined);
   const visible = controls.flatMap((control) => {
@@ -81,6 +83,18 @@ export function Inspector({
           <ControlWidget context={context} onCommand={onCommand} onInstanceCount={onInstanceCount} />
         </div>
       ))}
+      {doc.globals['scenery.backdrop'] ? (
+        <div aria-label="Scene items">
+          <h3>Backdrop: {(doc.globals['scenery.backdrop'] as { assetId: string }).assetId}</h3>
+          {Object.values(doc.entities)
+            .filter((entity) => entity.prefab.startsWith('scenery:'))
+            .map((entity) => (
+              <button key={entity.id} className="tap-secondary" type="button" onClick={() => onSelect?.([entity.id])}>
+                {entity.prefab.slice('scenery:'.length)}
+              </button>
+            ))}
+        </div>
+      ) : null}
     </FocusZone>
   );
 }
@@ -235,11 +249,17 @@ function controlContext(
     };
   }
   if (selected === undefined) return undefined;
+  if (['scenery.depth', 'scenery.parallax'].includes(control.id) && !selected.prefab.startsWith('scenery:'))
+    return undefined;
   if (control.scope === 'instance') {
+    const pose = selected.props.pose as { position?: unknown[] } | undefined;
     return {
       control,
       targets: [selected.id],
-      value: selected.props[control.id] ?? control.default,
+      value:
+        selected.props[control.id] ??
+        (control.id === 'scenery.depth' ? pose?.position?.[2] : undefined) ??
+        control.default,
       scopeLabel: `This ${selected.prefab}`,
       prefab: selected.prefab,
     };

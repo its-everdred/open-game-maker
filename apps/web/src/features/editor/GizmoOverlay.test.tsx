@@ -328,6 +328,32 @@ describe('GizmoOverlay', () => {
     expect(test.commitStroke.mock.calls[0]?.[0][0].doc.entities[entityId].props.pose.position).toEqual([12, 10, 1]);
   });
 
+  it('moves painted scenery on both screen axes without changing depth', async () => {
+    const test = harness();
+    test.session.getState().doc = {
+      ...doc,
+      entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } },
+    };
+    test.frame.pickAt = vi.fn().mockResolvedValue([{ kind: 'entity', id: entityId }]);
+    test.frame.project = vi.fn().mockResolvedValueOnce([1, 2, 0]).mockResolvedValueOnce([3, 5, 0]);
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '2d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 60 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 });
+    await act(async () => {});
+    fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 30 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    await act(async () => {});
+    expect(test.commitStroke.mock.calls[0]?.[0][0].doc.entities[entityId].props.pose.position).toEqual([12, 13, 0]);
+  });
+
   it('pinches and rotates a scenery item as one undoable stroke', async () => {
     const test = harness();
     test.session.getState().doc = {

@@ -351,14 +351,21 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
             if (origin && target) {
               const initial = poseFromProps(drag.entity.props.pose);
               const pose = projectedPose(
-                [
-                  initial.position[0] + target[0] - origin[0],
-                  initial.position[1],
-                  initial.position[2] + target[2] - origin[2],
-                ],
+                manifest.dimension === '2d'
+                  ? [
+                      initial.position[0] + target[0] - origin[0],
+                      initial.position[1] + target[1] - origin[1],
+                      initial.position[2],
+                    ]
+                  : [
+                      initial.position[0] + target[0] - origin[0],
+                      initial.position[1],
+                      initial.position[2] + target[2] - origin[2],
+                    ],
                 snap,
               );
-              pose.position[1] = initial.position[1];
+              if (manifest.dimension === '2d') pose.position[2] = initial.position[2];
+              else pose.position[1] = initial.position[1];
               if (initial.rotationY !== undefined) pose.rotationY = initial.rotationY;
               const intent = updateEntityPoseIntent(drag.doc, drag.entity.id, pose, `Moved ${drag.entity.prefab}`);
               drag.intents.push(intent);

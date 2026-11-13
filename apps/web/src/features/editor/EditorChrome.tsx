@@ -17,7 +17,7 @@ import { Palette } from './Palette';
 import { Rail } from './Rail';
 import { loadSnapPrefs, saveSnapPrefs, type SnapPrefs } from './SnapPrefs';
 import { Tools } from './Tools';
-import { sceneryLightIntent } from './transactions';
+import { createIntent, sceneryLightIntent } from './transactions';
 import './editor.css';
 
 type EditorChromeProps = {
@@ -32,6 +32,7 @@ type EditorChromeProps = {
   onDelete(entityId: string): void;
   onDuplicate(entityId: string): void;
   onInstanceCount(change: InstanceCountChange): Promise<PlacementResult>;
+  onSelection?(ids: string[]): void;
   onCanvasChange?(value: { prefab?: string; snap: SnapPrefs }): void;
 };
 
@@ -47,6 +48,7 @@ export function EditorChrome({
   onDelete,
   onDuplicate,
   onInstanceCount,
+  onSelection,
   onCanvasChange,
 }: EditorChromeProps) {
   const [category, setCategory] = useState(manifest.palette.categories[0]?.id ?? '');
@@ -54,8 +56,27 @@ export function EditorChrome({
   const [snap, setSnap] = useState<SnapPrefs>(() => loadSnapPrefs(gameId, manifest.grid?.size ?? 1));
   const [toolsTarget, setToolsTarget] = useState<HTMLElement | null>(null);
   const controls = useMemo(() => manifestControls(manifest), [manifest]);
-  const activeCategory = manifest.palette.categories.find((candidate) => candidate.id === category);
-  const picked = manifest.palette.items.find((item) => item.prefab === pickedPrefab);
+  const palette = useMemo(() => {
+    if (!session.doc.globals['scenery.backdrop'] || !sceneryAssets) return manifest.palette;
+    const images = sceneryAssets.filter((asset) => /\.(png|jpe?g|webp)(?:\?|$)/i.test(asset.url));
+    const categories = [...manifest.palette.categories];
+    if (!categories.some((candidate) => candidate.id === 'backdrops'))
+      categories.push({ id: 'backdrops', label: 'Backdrops', kind: 'items' });
+    const items = [...manifest.palette.items];
+    for (const asset of images) {
+      const prefab = `scenery-backdrop:${asset.id}`;
+      if (!items.some((item) => item.prefab === prefab))
+        items.push({
+          prefab,
+          label: asset.id.split('/').at(-1) ?? asset.id,
+          category: 'backdrops',
+          thumbnail: asset.url,
+        });
+    }
+    return { categories, items };
+  }, [manifest.palette, sceneryAssets, session.doc.globals]);
+  const activeCategory = palette.categories.find((candidate) => candidate.id === category);
+  const picked = palette.items.find((item) => item.prefab === pickedPrefab);
   // Layout, not passive: the canvas must hold the pick in the same commit the palette shows it, or a quick tap
   // after picking lands as a select and places nothing (#297).
   useLayoutEffect(() => onCanvasChange?.({ prefab: pickedPrefab, snap }), [onCanvasChange, pickedPrefab, snap]);
@@ -90,25 +111,48 @@ export function EditorChrome({
       onDelete={onDelete}
       onDuplicate={onDuplicate}
       onInstanceCount={onInstanceCount}
+      onSelect={(ids) => {
+        session.setSelection(ids);
+        onSelection?.(ids);
+      }}
     />
   );
   return (
     <div className="editor-chrome">
-      <Rail
-        categories={manifest.palette.categories}
-        items={manifest.palette.items}
-        active={category}
-        onChange={setCategory}
-      />
+      <Rail categories={palette.categories} items={palette.items} active={category} onChange={setCategory} />
       {activeCategory?.kind === 'items' ? (
         <Palette
-          palette={manifest.palette}
+          palette={palette}
           category={category}
           title={activeCategory.label}
           showTabs={false}
           sceneryAssets={sceneryAssets}
           onCategory={setCategory}
           onPick={(prefab) => {
+            if (prefab.startsWith('scenery-backdrop:')) {
+              const settings =
+                session.doc.globals['scenery.backdrop'] ??
+                (session.doc.globals['scenery.settings'] as { backdrop?: unknown } | undefined)?.backdrop;
+              if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return;
+              void session.submit(
+                createIntent(
+                  session.doc,
+                  [
+                    {
+                      op: 'set',
+                      control: 'scenery.backdrop',
+                      targets: 'global',
+                      value: {
+                        ...settings,
+                        assetId: prefab.slice('scenery-backdrop:'.length),
+                      },
+                    },
+                  ],
+                  'Changed backdrop',
+                ),
+              );
+              return;
+            }
             setPickedPrefab(prefab);
             onTool('place');
           }}
@@ -160,6 +204,8 @@ function manifestControls(manifest: GameManifest): ControlDecl[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((candidate) => {
     const parsed = controlDeclSchema.safeParse(candidate);
-    return parsed.success && !['scenery.lighting', 'scenery.terrain'].includes(parsed.data.id) ? [parsed.data] : [];
+    return parsed.success && !['scenery.lighting', 'scenery.terrain', 'scenery.backdrop'].includes(parsed.data.id)
+      ? [parsed.data]
+      : [];
   });
 }

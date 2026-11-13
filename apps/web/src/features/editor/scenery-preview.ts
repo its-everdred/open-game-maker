@@ -17,6 +17,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import type { ScenerySource } from './api';
 import { disposeModel } from './dispose-model';
 import type { GameFrameController, GameFrameState } from './frame';
+import { mountPaintedPreview } from './painted-preview';
 
 /** A local diorama for a game that does not yet have a runnable build. */
 export function mountSceneryPreview(
@@ -25,6 +26,7 @@ export function mountSceneryPreview(
   initial: DesignDoc,
   onState: (state: GameFrameState) => void,
 ): GameFrameController {
+  if (source.scene.backdrop) return mountPaintedPreview(container, source, initial, onState);
   const items: SceneryPaletteItem[] = source.assets
     .filter((entry) => /\.(?:glb|gltf)$/i.test(entry.path))
     .map((entry) => {

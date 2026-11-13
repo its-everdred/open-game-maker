@@ -1,4 +1,5 @@
 import type { ActionFrame, GameInstance, GameModule, Patch, SaveData } from '@ogm/contracts';
+import type { AssetLoader } from '@gm/sdk/assets';
 import { z } from 'zod';
 
 import { manifest } from './manifest.js';
@@ -19,7 +20,7 @@ const entitySchema = z.object({
   id: z.string(),
   prefab: z.enum(['spawn', 'platform']),
   level: z.string(),
-  origin: z.string(),
+  origin: z.enum(['build', 'creator']),
   props: z.object({
     x: z.number(),
     y: z.number(),
@@ -28,15 +29,23 @@ const entitySchema = z.object({
   }),
 });
 
+const sceneryEntitySchema = z.looseObject({
+  id: z.string(),
+  prefab: z.templateLiteral(['scenery:', z.string()]),
+  level: z.string(),
+  origin: z.enum(['build', 'creator']),
+  props: z.record(z.string(), z.unknown()),
+});
+
 export const designSchema = z.object({
   schemaVersion: z.number().int().positive().default(1),
   globals: z
-    .object({
+    .looseObject({
       'player.speed': z.number().min(60).max(400).default(160),
       'level.width': z.number().int().min(640).max(4096).default(1280),
     })
     .default({ 'player.speed': 160, 'level.width': 1280 }),
-  entities: z.record(z.string(), entitySchema).default({
+  entities: z.record(z.string(), z.union([entitySchema, sceneryEntitySchema])).default({
     spawn_01K8ZTEMP00000000000000001: {
       id: 'spawn_01K8ZTEMP00000000000000001',
       prefab: 'spawn',
@@ -84,6 +93,9 @@ export interface TemplateContext {
   /** Bridge `editor.camera`; applied by the level scene while `editing()`. */
   camera: { mode: 'follow' | 'free'; target?: string };
   editing?: () => boolean;
+  sceneryAssets?: AssetLoader;
+  updateScenery?: () => void;
+  pickScenery?: (x: number, y: number) => string[];
   advance(dt: number, frames: ActionFrame[]): void;
 }
 
@@ -208,6 +220,7 @@ export const game: GameModule<PlatformDesign, PlatformSave> = {
       applyDesign(next: PlatformDesign, patches: Patch[]) {
         context.design = structuredClone(next);
         context.state.platforms = platformsFromDesign(next);
+        context.updateScenery?.();
         const restart = patches.some(
           ({ path }) => path[0] === 'entities' || (path[0] === 'globals' && path[1] === 'level.width'),
         );
@@ -246,9 +259,23 @@ export const game: GameModule<PlatformDesign, PlatformSave> = {
             targets.push({ id: platform.id, kind: 'entity' as const });
           }
         }
+        for (const itemId of context.pickScenery?.(x, y) ?? []) {
+          const entity = Object.values(context.design.entities).find(
+            (entry) =>
+              entry.prefab.startsWith('scenery:') &&
+              ((entry.props as Record<string, unknown>).sceneryItemId ?? entry.id) === itemId,
+          );
+          if (entity) targets.push({ id: entity.id, kind: 'entity' as const });
+        }
         return targets;
       },
       worldToScreen(id) {
+        const entity = context.design.entities[id];
+        if (entity?.prefab.startsWith('scenery:')) {
+          const pose = (entity.props as Record<string, unknown>).pose as
+            { position?: [number, number, number] } | undefined;
+          return pose?.position ? (context.view?.worldToScreen(pose.position) ?? null) : null;
+        }
         const player = playerById(context.state, id);
         if (player) {
           return (
@@ -269,6 +296,14 @@ export const game: GameModule<PlatformDesign, PlatformSave> = {
         context.camera = { mode, target };
       },
       validatePlacement(prefab, pose) {
+        if (prefab.startsWith('scenery:')) {
+          try {
+            context.sceneryAssets?.resolve(prefab.slice('scenery:'.length));
+            return context.sceneryAssets ? { ok: true } : { ok: false, reason: 'asset unavailable' };
+          } catch {
+            return { ok: false, reason: 'asset unavailable' };
+          }
+        }
         if (prefab !== 'platform') return { ok: false, reason: 'unknown prefab' };
         const [x, y] = pose.position;
         if (x < 80 || x > context.design.globals['level.width'] - 80 || y < 0 || y > GROUND_Y - 24) {

@@ -26,6 +26,7 @@ async function main(): Promise<void> {
     channel: runtime.build,
   });
   await loader.prepare();
+  getGameContext().sceneryAssets = loader;
   runtime.onStep((dt, frames) => getGameContext().advance(dt, frames));
   getGameContext().editing = () => runtime.mode === 'edit';
 

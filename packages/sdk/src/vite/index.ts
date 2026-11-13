@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { sceneryToDesign } from '../scenery/design.js';
+import { paintedSceneryControls } from '../scenery/painted-controls.js';
 
 import {
   AssetsLockSchema,
@@ -142,7 +143,31 @@ export function gmBuildArtifacts(options: {
               lighting: 'warm-forest',
               camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
             };
-        design = sceneryToDesign(parseScenery(raw, lock.assets), design, sceneryEntityId);
+        const scene = parseScenery(raw, lock.assets);
+        design = sceneryToDesign(scene, design, sceneryEntityId);
+        const controls: unknown[] = Array.isArray(manifest.controls) ? manifest.controls : [];
+        if (scene.backdrop) {
+          const has = (id: string) =>
+            controls.some(
+              (control) => typeof control === 'object' && control !== null && 'id' in control && control.id === id,
+            );
+          manifest.controls = [
+            ...controls,
+            ...(!has('scenery.backdrop')
+              ? [
+                  {
+                    id: 'scenery.backdrop',
+                    label: 'Backdrop',
+                    scope: 'global',
+                    path: '/globals/scenery.backdrop',
+                    widget: { kind: 'custom', renderer: 'game-overlay', id: 'scenery-backdrop' },
+                    default: scene.backdrop,
+                  },
+                ]
+              : []),
+            ...paintedSceneryControls.filter((candidate) => !has(candidate.id)),
+          ];
+        }
       }
       const credits = regenerateCredits(lockFile, options.creditsFile ?? join(gameRoot, 'CREDITS.md'));
       this.emitFile({ type: 'asset', fileName: MANIFEST_FILE, source: `${JSON.stringify(manifest, null, 2)}\n` });

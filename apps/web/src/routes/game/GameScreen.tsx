@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
 
-import type { Entity, ReapplyReport } from '@ogm/contracts/browser';
+import type { ReapplyReport } from '@ogm/contracts/browser';
 
 import type { OgmHost } from '../../app/testHook';
 import { useGameMenu, useGameMenuControls } from '../../app/GameMenu';
@@ -38,6 +38,7 @@ import { mountSceneryPreview } from '../../features/editor/scenery-preview';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
 import {
   createEntityIntent,
+  copyEntity,
   createIntent,
   createStableId,
   deleteEntityIntent,
@@ -477,6 +478,7 @@ export function GameScreen() {
           manifest={frameState.manifest}
           sceneryAssets={scenerySource.data?.assets}
           session={sessionView}
+          onSelection={(ids) => frameRef.current?.select(ids)}
           onCommand={(command) => {
             const state = sessionStore.getState();
             void state.submit(
@@ -496,7 +498,7 @@ export function GameScreen() {
             const state = sessionStore.getState();
             const source = state.doc.entities[entityId];
             if (source === undefined) return;
-            const entity: Entity = { ...structuredClone(source), id: createStableId('e_'), origin: 'creator' };
+            const entity = copyEntity(source, createStableId('e_'));
             void state.submit(createEntityIntent(state.doc, entity, `Copied ${source.prefab}`));
           }}
           onInstanceCount={(change) =>

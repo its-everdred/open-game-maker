@@ -18,6 +18,28 @@ function reduceCommands(commands: Array<{ rev: number; command: EditorCommand }>
 }
 
 describe('reduce', () => {
+  it('retains a backdrop restored by undo', () => {
+    const original = {
+      assetId: 'forest',
+      landscape: { fit: 'cover', anchor: [0.5, 0.5] },
+      portrait: { fit: 'cover', anchor: [0.5, 0.5] },
+    };
+    const result = reduce({
+      gameId: ids.game,
+      branchId: ids.branch,
+      buildId: ids.build,
+      baseDoc: baseDoc(),
+      txs: [
+        transaction(
+          1,
+          [{ op: 'set', control: 'scenery.backdrop', targets: 'global', value: { ...original, assetId: 'clearing' } }],
+          [],
+        ),
+        transaction(2, [], [{ op: 'replace', path: ['globals', 'scenery.backdrop'], value: original }]),
+      ],
+    });
+    expect(result.entries['scenery.backdrop@global']).toMatchObject({ value: original });
+  });
   it('keeps the last write and the original base value', () => {
     const result = reduce({
       gameId: ids.game,
