@@ -69,6 +69,16 @@ export function createEntityIntent(doc: DesignDoc, entity: Entity, label: string
   return { label, commands: [command], patches, inverse, doc: apply(doc, patches) };
 }
 
+/** Change lighting through a normal global override so build reapply retains it. */
+export function sceneryLightIntent(doc: DesignDoc, lighting: 'warm-forest' | 'night' | 'cave'): EditorIntent {
+  if (!('scenery.settings' in doc.globals)) throw new InvalidEditorIntentError('scenery settings are unavailable');
+  return createIntent(
+    doc,
+    [{ op: 'set', control: 'scenery.lighting', targets: 'global', value: lighting }],
+    'Changed scenery light',
+  );
+}
+
 export function deleteEntityIntent(doc: DesignDoc, entityId: string, label: string): EditorIntent {
   const entity = doc.entities[entityId];
   if (entity === undefined) throw new InvalidEditorIntentError(`entity ${entityId} does not exist`);

@@ -39,6 +39,7 @@ describe('gm scenery', () => {
     const doc = {
       schemaVersion: 1,
       globals: {
+        'scenery.lighting': 'cave',
         'scenery.settings': {
           version: 1,
           terrain: [],
@@ -58,7 +59,9 @@ describe('gm scenery', () => {
     };
     writeFileSync(join(cwd, 'snapshot.json'), JSON.stringify({ rev: 2, doc }));
     expect((await gm(['scenery', 'sync', '--design', 'snapshot.json'], { cwd })).code).toBe(0);
-    const item = JSON.parse(readFileSync(join(cwd, 'scenery.json'), 'utf8')).items[0];
+    const synced = JSON.parse(readFileSync(join(cwd, 'scenery.json'), 'utf8'));
+    expect(synced.lighting).toBe('cave');
+    const item = synced.items[0];
     expect(item).toMatchObject({ id, assetId: ORC, position: [3, 0, 2], rotation: [0, Math.PI / 2, 0] });
     const before = readFileSync(join(cwd, 'scenery.json'), 'utf8');
     writeFileSync(join(cwd, 'snapshot.json'), JSON.stringify({ rev: 3, doc: { ...doc, globals: {} } }));

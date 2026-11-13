@@ -16,6 +16,7 @@ import { Palette } from './Palette';
 import { Rail } from './Rail';
 import { loadSnapPrefs, saveSnapPrefs, type SnapPrefs } from './SnapPrefs';
 import { Tools } from './Tools';
+import { sceneryLightIntent } from './transactions';
 import './editor.css';
 
 type EditorChromeProps = {
@@ -80,6 +81,26 @@ export function EditorChrome({
           }}
         />
       ) : null}
+      {activeCategory?.id === 'light' && manifest.capabilities.includes('scenery') ? (
+        <div className="palette-items" aria-label="Light">
+          {(
+            [
+              ['warm-forest', 'Warm forest'],
+              ['night', 'Night'],
+              ['cave', 'Cave'],
+            ] as const
+          ).map(([preset, label]) => (
+            <button
+              key={preset}
+              type="button"
+              disabled={session.readOnly}
+              onClick={() => void session.submit(sceneryLightIntent(session.doc, preset))}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="editor-inspector-stack">
         <Tools
           tools={manifest.tools}
@@ -115,6 +136,6 @@ function manifestControls(manifest: GameManifest): ControlDecl[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((candidate) => {
     const parsed = controlDeclSchema.safeParse(candidate);
-    return parsed.success ? [parsed.data] : [];
+    return parsed.success && parsed.data.id !== 'scenery.lighting' ? [parsed.data] : [];
   });
 }

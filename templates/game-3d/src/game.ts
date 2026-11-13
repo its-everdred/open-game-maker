@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import type { Runtime } from '@gm/sdk/core';
 
-import { manifest } from './manifest.js';
+import { manifest, scenerySettingsControl } from './manifest.js';
 
 export interface SpawnEntity {
   id: string;
@@ -203,6 +203,7 @@ export function createGame(): {
     manifest,
     designSchema: levelDesignSchema,
     controls: [
+      scenerySettingsControl,
       {
         id: 'player.speed',
         label: 'Player speed',

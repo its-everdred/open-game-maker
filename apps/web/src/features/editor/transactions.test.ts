@@ -15,6 +15,7 @@ import {
   createIntent,
   createStableId,
   replayIntent,
+  sceneryLightIntent,
   toTransactionBody,
 } from './transactions';
 
@@ -42,6 +43,15 @@ function speed(value: number): EditorCommand {
 }
 
 describe('editor transaction intents', () => {
+  it('replays and undoes scenery lighting changes', () => {
+    const doc = baseDoc();
+    doc.globals['scenery.settings'] = { version: 1, lighting: 'night', terrain: [], camera: {} };
+    doc.globals['scenery.lighting'] = 'night';
+    const intent = sceneryLightIntent(doc, 'cave');
+    expect(intent.doc.globals['scenery.lighting']).toBe('cave');
+    expect(apply(intent.doc, intent.inverse)).toEqual(doc);
+    expect(replayIntent(intent, doc).doc).toEqual(intent.doc);
+  });
   it('coalesces a 40-step stroke and restores the byte-identical starting document', () => {
     const original = baseDoc();
     let current = original;

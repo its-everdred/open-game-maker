@@ -35,6 +35,8 @@ describe('scenery design adapter', () => {
       position: [4, 0, 3],
       rotation: [0.2, Math.PI / 2, 0.3],
     });
+    doc.globals['scenery.lighting'] = 'cave';
+    expect(sceneryFromDesign(doc, [{ id: 'tree-asset' }]).lighting).toBe('cave');
     expect(() => sceneryFromDesign(doc, [])).toThrow('not in the lock');
   });
   it('maps placements created by the generic editor and respects deletion', () => {
