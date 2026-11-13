@@ -152,11 +152,10 @@ export function GameScreen() {
   const waitingForStage = noBuild && !waitingForPreview && !activePreview && stage.isPending;
   const scenerySource = useQuery({
     queryKey: ['scenery-source', gameId, jobBranch],
-    queryFn: () => getScenerySource(gameId),
+    queryFn: () => getScenerySource(gameId, jobBranch),
     enabled:
       gameId !== '' &&
-      (!noBuild || jobBranch === 'main') &&
-      ((noBuild && jobBranch === 'main' && !waitingForPreview && !waitingForStage && !activePreview) ||
+      ((noBuild && !waitingForPreview && !waitingForStage && !activePreview) ||
         (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
     retry: false,
     refetchInterval: noBuild && !activePreview ? 5_000 : false,
@@ -171,7 +170,6 @@ export function GameScreen() {
     hasScenery && (!Number.isFinite(stageAt) || (Number.isFinite(sceneryAt) && sceneryAt >= stageAt));
   const waitingForScenery =
     noBuild &&
-    jobBranch === 'main' &&
     !waitingForPreview &&
     !waitingForStage &&
     !activePreview &&
@@ -261,10 +259,15 @@ export function GameScreen() {
         const target = { gameId, branchId: jobBranch };
         const key = `edit:${crypto.randomUUID()}`;
         if (path && path.length > 1 && !activeStage) {
+          const count = Math.min(path.length, 60);
+          const points = Array.from({ length: count }, (_, i) => {
+            const point = path[Math.round((i * (path.length - 1)) / (count - 1))]!;
+            return [Number(point.x.toFixed(3)), Number(point.y.toFixed(3))];
+          });
           submitEditRequest(
             editJobRequest(
               target,
-              `Draw ${JSON.stringify(item.label)} (${JSON.stringify(prefab)}) along normalized preview coordinates ${JSON.stringify(path)}.`,
+              `Draw ${JSON.stringify(item.label).slice(0, 300)} (${JSON.stringify(prefab).slice(0, 500)}) along normalized preview coordinates ${JSON.stringify(points)}.`,
               'now',
               key,
             ),

@@ -88,8 +88,8 @@ export async function getDesignSnapshot(gameId: string, branch: string): Promise
   return { ...snapshot, buildId: snapshot.buildId ?? NO_BUILD_ID };
 }
 
-export function getScenerySource(gameId: string): Promise<ScenerySource> {
-  return api(`/games/${segment(gameId)}/scenery/source`);
+export function getScenerySource(gameId: string, branch = 'main'): Promise<ScenerySource> {
+  return api(`/games/${segment(gameId)}/scenery/source?branch=${encodeURIComponent(branch)}`);
 }
 
 export function getFallbackPalette(gameId: string): Promise<FallbackPalette> {

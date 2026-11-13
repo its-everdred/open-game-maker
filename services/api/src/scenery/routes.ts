@@ -1,5 +1,5 @@
 import { extname } from 'node:path';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { fallbackEditorPalette, loadIndex, packOf, type ResolvedCard } from '@ogm/asset-cards';
@@ -20,6 +20,7 @@ import { authorizedGame } from '../games/authorize.js';
 import { readGameLock, readSceneryFile, readScenerySource } from './source.js';
 import { scopePaletteItems } from './scope-palette.js';
 import { selectStageMedia } from './stage.js';
+import { latestSceneryEdit } from './edit-time.js';
 
 export const prefix = '/api/v1';
 
@@ -169,23 +170,34 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       const bundle = await source(c);
       const deps = c.get('deps');
       const gameId = c.req.param('gameId');
-      const main = deps.db
+      const selected = c.req.query('branch') ?? 'main';
+      const branch = deps.db
         .select({ id: schema.branches.id })
         .from(schema.branches)
-        .where(and(eq(schema.branches.gameId, gameId), eq(schema.branches.name, 'main')))
+        .where(
+          and(
+            eq(schema.branches.gameId, gameId),
+            or(eq(schema.branches.name, selected), eq(schema.branches.id, selected)),
+          ),
+        )
         .get();
       const lastEdit =
-        main &&
-        deps.db
-          .select({ at: schema.designTransactions.createdAt })
-          .from(schema.designTransactions)
-          .where(and(eq(schema.designTransactions.gameId, gameId), eq(schema.designTransactions.branchId, main.id)))
-          .orderBy(desc(schema.designTransactions.rev))
-          .get();
+        branch &&
+        latestSceneryEdit(
+          deps.db
+            .select({
+              at: schema.designTransactions.createdAt,
+              patches: schema.designTransactions.patchesJson,
+              inverse: schema.designTransactions.inverseJson,
+            })
+            .from(schema.designTransactions)
+            .where(and(eq(schema.designTransactions.gameId, gameId), eq(schema.designTransactions.branchId, branch.id)))
+            .orderBy(desc(schema.designTransactions.rev))
+            .all(),
+        );
+      const mainFileTime = selected === 'main' ? bundle.updatedAt : undefined;
       const updatedAt =
-        lastEdit && (!bundle.updatedAt || Date.parse(lastEdit.at) > Date.parse(bundle.updatedAt))
-          ? lastEdit.at
-          : bundle.updatedAt;
+        lastEdit && (!mainFileTime || Date.parse(lastEdit) > Date.parse(mainFileTime)) ? lastEdit : mainFileTime;
       const assets = bundle.lock.assets.map((entry, index) => ({
         id: entry.id,
         path: entry.path,
@@ -193,7 +205,17 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
         url: `${prefix}/games/${encodeURIComponent(c.req.param('gameId'))}/scenery/assets/${index}/${entry.sha256}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
       }));
       c.header('Cache-Control', 'private, no-store');
-      return c.json({ scene: bundle.scene, assets, ...(updatedAt ? { updatedAt } : {}) });
+      const scene =
+        selected === 'main'
+          ? bundle.scene
+          : {
+              version: 1 as const,
+              items: [],
+              terrain: [],
+              lighting: 'warm-forest' as const,
+              camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+            };
+      return c.json({ scene, assets, ...(updatedAt ? { updatedAt } : {}) });
     })
     .get('/games/:gameId/scenery/assets/:index/:hash/*', async (c) => {
       const bundle = await source(c, false);
