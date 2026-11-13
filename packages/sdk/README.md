@@ -117,3 +117,7 @@ For the shared editor, `sceneryPalette` supplies the scenery categories and lock
 `sceneryToDesign` imports scene settings and placements into a design document using caller-supplied stable entity IDs;
 `sceneryFromDesign` validates the effective document against the lock and produces the scene file format. Pose yaw is
 stored in degrees in the editor and radians in scenery data. These adapters do not themselves persist transactions.
+
+Workers can reconcile creator edits by saving the latest `gm design current --json` result and running
+`gm scenery sync --design <snapshot.json>` before changing `scenery.json`. Sync replaces the scene file with the
+validated scenery in that snapshot; obtain a fresh snapshot first.
