@@ -269,6 +269,13 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
             envelope.id,
           );
           return;
+        case 'editor.project':
+          send(
+            'editor.projected',
+            { position: active.instance.screenToWorld?.(envelope.payload.x, envelope.payload.y) ?? null },
+            envelope.id,
+          );
+          return;
         case 'editor.validatePlacement':
           send(
             'editor.placement',

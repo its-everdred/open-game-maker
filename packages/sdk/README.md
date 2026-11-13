@@ -56,6 +56,11 @@ older design data should continue to read it when adding support for these edito
 validation reach the optional `setSelection`, `pick`, and `validatePlacement` hooks; implement those hooks for the
 items the game exposes. The host's selection and camera messages are not themselves persistent design changes.
 
+For a camera-based editable surface, add `editor.project` to manifest capabilities and implement
+`screenToWorld(nx, ny)` on the instance. The host supplies normalized frame coordinates; return a world-space position
+or `null` when the ray misses. The editor uses the result for placement and translation, preserving negative world
+coordinates. Games without the capability retain the legacy logical-coordinate mapping.
+
 ## Editor camera
 
 The host sends `editor.camera { mode: 'follow' | 'free', target?: entityId }` (a room watcher's Follow/Free toggle).

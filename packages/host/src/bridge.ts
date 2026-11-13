@@ -138,6 +138,19 @@ export class HostBridge {
     return result.data.payload.value;
   }
 
+  async project(x: number, y: number): Promise<[number, number, number] | null> {
+    if (!this.readyPayload) throw new BridgeError('not_ready');
+    const parsed = hostToGameSchema.safeParse({ v: 1, id: this.nextId(), t: 'editor.project', payload: { x, y } });
+    if (!parsed.success) throw new TypeError('invalid editor.project payload');
+    const reply = await this.transport.request<Envelope<string, unknown>>(
+      parsed.data,
+      this.options.requestTimeoutMs ?? 10_000,
+    );
+    const result = gameToHostSchema.safeParse(reply);
+    if (!result.success || result.data.t !== 'editor.projected') throw new TypeError('invalid editor.projected reply');
+    return result.data.payload.position;
+  }
+
   on<T extends GameType>(type: T, callback: (payload: GamePayload<T>) => void): () => void {
     const callbacks = this.handlers.get(type) ?? new Set();
     callbacks.add(callback as (payload: unknown) => void);

@@ -35,6 +35,7 @@ export interface GameSave {
 
 export interface SceneAdapter {
   pick(nx: number, ny: number): TargetRef[];
+  screenToWorld(nx: number, ny: number): Vec3 | null;
   worldToScreen(id: string): { x: number; y: number } | null;
 }
 
@@ -270,6 +271,9 @@ export function createGame(): {
         },
         pick(nx, ny) {
           return scene?.pick(nx, ny) ?? [];
+        },
+        screenToWorld(nx, ny) {
+          return scene?.screenToWorld(nx, ny) ?? null;
         },
         worldToScreen(id) {
           return scene?.worldToScreen(id) ?? null;

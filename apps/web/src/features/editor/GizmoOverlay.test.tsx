@@ -74,6 +74,55 @@ afterEach(() => {
 });
 
 describe('GizmoOverlay', () => {
+  it('uses game projection for a 3D placement, including a quick release', async () => {
+    const test = harness();
+    test.frame.project = vi.fn().mockResolvedValue([2, 0, -1]);
+    render(
+      <GizmoOverlay
+        activePrefab="skeleton"
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 60 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 25, clientY: 30, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 25, clientY: 30, pointerId: 1 });
+    await act(async () => {});
+    expect(test.frame.project).toHaveBeenCalledWith(0.25, 0.5);
+    expect(test.frame.validatePlacement).toHaveBeenCalledWith('skeleton', { position: [2, 0, -1] });
+    await act(async () => test.placement({ ok: true }));
+    expect(test.submit).toHaveBeenCalledOnce();
+  });
+
+  it('does not place a projected item after the pointer is cancelled', async () => {
+    const test = harness();
+    let finish!: (position: [number, number, number] | null) => void;
+    test.frame.project = vi.fn(
+      () =>
+        new Promise<[number, number, number] | null>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(
+      <GizmoOverlay
+        activePrefab="skeleton"
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 60 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 25, clientY: 30, pointerId: 1 });
+    fireEvent.pointerCancel(canvas, { pointerId: 1 });
+    await act(async () => finish([2, 0, -1]));
+    expect(test.frame.validatePlacement).not.toHaveBeenCalled();
+    expect(test.submit).not.toHaveBeenCalled();
+  });
   it('echoes a picked target as the session selection and editor.select acknowledgement', () => {
     const test = harness();
     render(
@@ -154,6 +203,31 @@ describe('GizmoOverlay', () => {
     expect(test.commitStroke.mock.calls[0]?.[0]).toHaveLength(40);
     fireEvent.click(screen.getByRole('button', { name: 'Move skeleton backward' }));
     expect(test.submit).toHaveBeenCalledOnce();
+  });
+
+  it('moves 3D items by the projected ground delta even when released before projection finishes', async () => {
+    const test = harness([entityId]);
+    test.frame.project = vi.fn().mockResolvedValueOnce([1, 0, 1]).mockResolvedValueOnce([3, 0, 2]);
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 60 } as DOMRect);
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Move skeleton' }), {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 3,
+    });
+    fireEvent.pointerMove(canvas, { clientX: 50, clientY: 30, pointerId: 3 });
+    fireEvent.pointerUp(canvas, { clientX: 50, clientY: 30, pointerId: 3 });
+    await act(async () => {});
+    expect(test.commitStroke).toHaveBeenCalledOnce();
+    expect(test.commitStroke.mock.calls[0]?.[0][0].doc.entities[entityId].props.pose.position).toEqual([12, 10, 1]);
   });
 
   it('discards a cancelled drag and restores the authoritative design', () => {

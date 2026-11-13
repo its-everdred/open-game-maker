@@ -24,6 +24,10 @@ export function placementPose(point: NormalizedPoint, manifest: GameManifest, sn
     : { position: [clamp(x, 0, w), 0, clamp(depth, 0, h)] };
 }
 
+export function projectedPose(position: [number, number, number], snap: SnapPrefs): Pose {
+  return { position: position.map((value) => snapped(value, snap)) as [number, number, number] };
+}
+
 export function movePose(
   start: Pose,
   gizmo: GizmoKind,
@@ -61,7 +65,10 @@ export function stepPose(
   } else if (gizmo === 'elevate') {
     next.position[1] = clamp(start.position[1] + direction * distance, 0, manifest.presentation.minLogical.h);
   } else {
-    next.position[0] = clamp(start.position[0] + direction * distance, 0, manifest.presentation.minLogical.w);
+    const x = start.position[0] + direction * distance;
+    next.position[0] = manifest.capabilities?.includes('editor.project')
+      ? x
+      : clamp(x, 0, manifest.presentation.minLogical.w);
   }
   return samePose(start, next) ? undefined : next;
 }
