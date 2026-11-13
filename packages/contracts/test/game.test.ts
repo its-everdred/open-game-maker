@@ -17,6 +17,17 @@ const control = {
 };
 
 describe('game contract', () => {
+  it('accepts short palette item tags and rejects oversized tags', () => {
+    const palette = (manifest() as { palette: { items: Record<string, unknown>[] } }).palette;
+    const withTag = (tag: string) => ({
+      ...manifest(),
+      palette: { ...palette, items: [{ ...palette.items[0], tag }] },
+    });
+    expect(gameManifestSchema.safeParse(withTag('easy')).success).toBe(true);
+    expect(gameJson(withTag('easy'))).toBe(true);
+    expect(gameManifestSchema.safeParse(withTag('x'.repeat(33))).success).toBe(false);
+    expect(gameJson(withTag('x'.repeat(33)))).toBe(false);
+  });
   it('validates the optional play menu appearance', () => {
     const themed = { ...manifest(), playMenuButton: { colour: '#e02020', icon: 'pause' } };
     expect(gameManifestSchema.parse(themed).playMenuButton).toEqual(themed.playMenuButton);
