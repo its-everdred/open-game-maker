@@ -258,7 +258,7 @@ gm build [--json]
 ```
 
 Runs `pnpm build` in the game repository, then checks that `dist/` holds `manifest.json` and `design/design.json` and
-that both match the `@ogm/contracts` schemas the publisher and API read. The templates' Vite config writes both files
+that both match the `@ogm/contracts` schemas the publisher and API read. It also requires `index.html` and `credits.json` and rejects origin-root asset paths in `index.html`, as publish does. The templates' Vite config writes both files
 (`@gm/sdk/vite`): the manifest from `src/manifest.ts`, and the design folded from every design-doc `design/*.json`
 (a key defined in two files fails the build). The creator feedback ledger `design/feedback.json` is skipped, so a game
 that carries one still builds. Exits 1 naming each missing or invalid file.
