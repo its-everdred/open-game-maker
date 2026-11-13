@@ -34,13 +34,15 @@ import { useAdminMe } from '../routes/admin/api';
 import { requireAdmin } from '../routes/admin/guard';
 import { useGameMenu, type GameMenuAction } from './GameMenu';
 import { VolumeCircle } from './VolumeCircle';
+import { BuildPanel, BuildTracker, combinedPercent } from '../features/worker-builds/BuildTracker';
+import { useWorkers } from '../features/worker-builds/useWorkers';
 
 const RECENT_BUILD_MS = 5 * 60 * 1000;
 const MAX_TRACKED_BUILDS = 100;
 const activeBuildsByCreator = new Map<string, Set<string>>();
 
 // The circle whose detail shows in the sheet under the row; one at a time.
-type Sheet = 'volume' | 'bug' | 'builds' | 'decisions' | 'energy';
+type Sheet = 'volume' | 'bug' | 'builds' | 'jobs' | 'decisions' | 'energy';
 
 export function StudioMenu() {
   const root = useRef<HTMLDivElement>(null);
@@ -63,8 +65,11 @@ export function StudioMenu() {
   // The deck belongs to the creator who opened it: another account signed in on this device never sees it.
   const [deck, setDeck] = useState<{ creatorId: string; command: CreatorCommand }>();
   const [questions, setQuestions] = useState<{ creatorId: string; session: QueuedSession }>();
-  const game = matchPath('/g/:gameId/*', location.pathname);
+  const isShowcase = Boolean(matchPath('/g/showcase/:id', location.pathname));
+  const game = isShowcase ? null : matchPath('/g/:gameId/*', location.pathname);
+  const isGameView = Boolean(game || isShowcase);
   const gameId = game?.params.gameId;
+  const workers = useWorkers(isShowcase ? [] : builds.games, gameId);
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
@@ -185,17 +190,37 @@ export function StudioMenu() {
   if (buildGroups.length > 0) {
     circles.push(
       <button
-        key="builds"
+        key="jobs"
         type="button"
         className="menu-circle"
         data-done={buildsDone}
-        aria-label={`Builds: ${buildsPercent}%`}
+        aria-label={`Jobs: ${buildsPercent}%`}
+        aria-expanded={sheet === 'jobs'}
+        aria-controls="studio-menu-jobs"
+        onClick={() => toggleSheet('jobs')}
+      >
+        <MenuRing percent={buildsPercent} />
+        <Icon name="build" />
+      </button>,
+    );
+  }
+  if (gameId && workers.length > 0) {
+    circles.push(
+      <button
+        key="builds"
+        type="button"
+        className="menu-circle"
+        data-worker-builds="true"
+        aria-label={`${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running`}
         aria-expanded={sheet === 'builds'}
         aria-controls="studio-menu-builds"
         onClick={() => toggleSheet('builds')}
       >
-        <MenuRing percent={buildsPercent} />
+        <MenuRing percent={combinedPercent(workers) ?? undefined} />
         <Icon name="build" />
+        <span className="studio-menu-badge" aria-hidden="true">
+          {workers.length}
+        </span>
       </button>,
     );
   }
@@ -322,9 +347,11 @@ export function StudioMenu() {
         ))}
       </ul>
     );
-  } else if (sheet === 'builds' && buildGroups.length > 0) {
+  } else if (sheet === 'builds' && workers.length > 0) {
+    sheetContent = <BuildPanel workers={workers} id="studio-menu-builds" />;
+  } else if (sheet === 'jobs' && buildGroups.length > 0) {
     sheetContent = (
-      <ul id="studio-menu-builds" className="studio-menu-builds" aria-label="Build progress">
+      <ul id="studio-menu-jobs" className="studio-menu-builds" aria-label="Build progress">
         {buildGroups.map((group) => (
           <li key={group.gameId}>
             <div className="studio-menu-build-group" role="group" aria-label={`${group.title} builds`}>
@@ -375,12 +402,13 @@ export function StudioMenu() {
 
   return (
     <div ref={root} className="studio-menu-control">
+      {!isGameView && <BuildTracker workers={workers} />}
       <button
         ref={trigger}
         type="button"
         className="studio-menu-button"
         style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
-        data-game-play={controls !== undefined}
+        data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}
         data-blocking={blocked}
         aria-label="Menu"
@@ -416,6 +444,7 @@ export function StudioMenu() {
             </span>
           ))}
         </div>
+        {gameId && new URLSearchParams(location.search).get('mode') === 'edit' && <div id="studio-editor-tools" className="studio-editor-tools" />}
         {open && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
       </div>
       <JobConversationModal />

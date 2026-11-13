@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import {
   controlDeclSchema,
@@ -48,17 +49,33 @@ export function EditorChrome({
   const [category, setCategory] = useState(manifest.palette.categories[0]?.id ?? '');
   const [pickedPrefab, setPickedPrefab] = useState<string>();
   const [snap, setSnap] = useState<SnapPrefs>(() => loadSnapPrefs(gameId, manifest.grid?.size ?? 1));
+  const [toolsTarget, setToolsTarget] = useState<HTMLElement | null>(null);
   const controls = useMemo(() => manifestControls(manifest), [manifest]);
   const activeCategory = manifest.palette.categories.find((candidate) => candidate.id === category);
   const picked = manifest.palette.items.find((item) => item.prefab === pickedPrefab);
   // Layout, not passive: the canvas must hold the pick in the same commit the palette shows it, or a quick tap
   // after picking lands as a select and places nothing (#297).
   useLayoutEffect(() => onCanvasChange?.({ prefab: pickedPrefab, snap }), [onCanvasChange, pickedPrefab, snap]);
+  useLayoutEffect(() => setToolsTarget(document.getElementById('studio-editor-tools')), []);
   const updateSnap = (next: SnapPrefs) => {
     setSnap(next);
     saveSnapPrefs(gameId, next);
   };
 
+  const tools = <Tools
+    tools={manifest.tools}
+    active={session.tool}
+    snap={snap}
+    canUndo={session.canUndo}
+    canRedo={session.canRedo}
+    onTool={(tool) => {
+      if (tool !== 'place') setPickedPrefab(undefined);
+      onTool(tool);
+    }}
+    onSnap={updateSnap}
+    onUndo={onUndo}
+    onRedo={onRedo}
+  />;
   return (
     <div className="editor-chrome">
       <Rail
@@ -81,20 +98,7 @@ export function EditorChrome({
         />
       ) : null}
       <div className="editor-inspector-stack">
-        <Tools
-          tools={manifest.tools}
-          active={session.tool}
-          snap={snap}
-          canUndo={session.canUndo}
-          canRedo={session.canRedo}
-          onTool={(tool) => {
-            if (tool !== 'place') setPickedPrefab(undefined);
-            onTool(tool);
-          }}
-          onSnap={updateSnap}
-          onUndo={onUndo}
-          onRedo={onRedo}
-        />
+        {toolsTarget ? createPortal(tools, toolsTarget) : tools}
         <Inspector
           doc={session.doc}
           selectedIds={session.selection}

@@ -30,6 +30,7 @@ import { startScheduler } from './jobs/scheduler.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
 import { createWaitTickets } from './decision-waits/tickets.js';
+import { createWorkpadReader } from './worker-progress/workpad.js';
 import { startBriefingPush } from './voice/briefing-push.js';
 import { questionSession } from './voice/question-session.js';
 
@@ -107,6 +108,7 @@ const deps: AppDeps = {
 };
 deps.registry.chatJobs = createChatJobDirectory(db);
 deps.registry.aiurClientFor = daemonDirectory.clientForSlug;
+deps.registry.workerWorkpad = createWorkpadReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.issueStateWriter = issues;
 
 const budgetDefaults = {

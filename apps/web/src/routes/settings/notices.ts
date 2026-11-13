@@ -3,6 +3,15 @@ export type SoftwareNotice = { name: string; license: string; source: string };
 export const SOFTWARE_NOTICES: readonly SoftwareNotice[] = [
   { name: 'Fredoka', license: 'SIL Open Font License 1.1', source: 'https://fonts.google.com/specimen/Fredoka' },
   { name: 'Nunito', license: 'SIL Open Font License 1.1', source: 'https://fonts.google.com/specimen/Nunito' },
+  {
+    name: 'Press Start 2P',
+    license: 'SIL Open Font License 1.1',
+    source: 'https://fonts.google.com/specimen/Press+Start+2P',
+  },
+  { name: 'Bungee', license: 'SIL Open Font License 1.1', source: 'https://fonts.google.com/specimen/Bungee' },
+  { name: 'Creepster', license: 'SIL Open Font License 1.1', source: 'https://fonts.google.com/specimen/Creepster' },
+  { name: 'Lilita One', license: 'SIL Open Font License 1.1', source: 'https://fonts.google.com/specimen/Lilita+One' },
+  { name: 'Russo One', license: 'SIL Open Font License 1.1', source: 'https://fonts.google.com/specimen/Russo+One' },
   { name: 'React', license: 'MIT', source: 'https://github.com/facebook/react' },
   { name: 'React Router', license: 'MIT', source: 'https://github.com/remix-run/react-router' },
   { name: 'TanStack Query', license: 'MIT', source: 'https://github.com/TanStack/query' },

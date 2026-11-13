@@ -18,6 +18,13 @@
 }
 
 .game-screen.is-editing {
+  --ink: var(--editor-ink);
+  --ink-2: var(--editor-ink);
+  --muted: var(--editor-muted);
+  --paper: var(--editor-panel);
+  --paper-2: var(--editor-tile);
+  --editor-card: var(--editor-panel);
+  background: var(--editor-paper-image) center / cover no-repeat, var(--editor-tile);
   grid-template-columns: 200px minmax(0, 1fr) 270px;
   grid-template-rows: 62px minmax(0, 1fr) 168px;
   grid-template-areas:
@@ -508,11 +515,14 @@
 }
 
 /* Editor preview and palette share the screen without a navigation bar. */
-.editor-play-button {
+.editor-play-zone {
   position: fixed;
   z-index: 49;
   top: calc(var(--safe-t) + 12px);
   right: max(76px, calc(var(--safe-r) + 60px));
+}
+
+.editor-play-button {
   display: grid;
   width: 50px;
   height: 50px;
@@ -560,7 +570,8 @@
 @media (orientation: portrait) and (max-width: 820px) {
   .game-screen.is-editing {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) 64px 118px;
+    grid-template-rows: minmax(0, 68%) 64px minmax(0, 1fr);
     grid-template-areas: 'stage' 'rail' 'tray';
   }
 }
+.game-screen.is-editing .editor-inspector-stack:has(.editor-inspector:not(.has-content)) { display: none; }

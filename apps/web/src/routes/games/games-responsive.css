@@ -197,3 +197,8 @@
     transition: opacity 0.3s;
   }
 }
+@media (hover: hover) and (pointer: fine) {
+  .showcase-tile-row { opacity: 0; transition: opacity 0.3s var(--games-ease); }
+  .showcase-tile:hover .showcase-tile-row,
+  .showcase-tile:focus-visible .showcase-tile-row { opacity: 1; }
+}

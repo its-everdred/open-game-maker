@@ -193,6 +193,7 @@ describe('GameScreen', () => {
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
     expect(container.querySelector('.play-bar')).not.toBeInTheDocument();
     const play = screen.getByRole('button', { name: 'Play' });
+    expect(play.closest('[data-focus-zone]')).toHaveAttribute('data-focus-zone', 'editor-bar');
     expect(play.textContent).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     expect(screen.getByRole('button', { name: 'Games' })).toBeVisible();

@@ -74,7 +74,7 @@
   height: 20px;
 }
 
-/* Previous and next: the same round Gruvbox buttons as the X; at either end the arrow stays put, dimmed. */
+/* Previous and next use the same round buttons as the X; at either end the arrow stays put, dimmed. */
 .review-screen-step {
   text-decoration: none;
 }

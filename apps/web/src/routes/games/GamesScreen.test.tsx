@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation, type InitialEntry } from 'react-router';
 
 import { commandFixture } from '../../features/commands-inbox/fixtures';
+import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 import { GamesScreen } from './GamesScreen';
 
 const games = [
@@ -95,6 +96,19 @@ function LocationProbe() {
   );
 }
 
+function MenuProbe() {
+  const { controls } = useGameMenu();
+  return (
+    <>
+      {controls?.actions.map((action) => (
+        <button key={action.id} type="button" onClick={action.onSelect}>
+          {action.label}
+        </button>
+      ))}
+    </>
+  );
+}
+
 function renderGames(
   entry: InitialEntry = '/all',
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
@@ -102,8 +116,11 @@ function renderGames(
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[entry]}>
-        <GamesScreen />
-        <LocationProbe />
+        <GameMenuProvider>
+          <GamesScreen />
+          <LocationProbe />
+          <MenuProbe />
+        </GameMenuProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -157,42 +174,64 @@ afterEach(() => {
 });
 
 describe('GamesScreen', () => {
+  it('shows prototype showcase games and opens the real Goblin Cellar for their play action', async () => {
+    renderGames();
+    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }));
+    expect(await screen.findByText('A sleepy village, one repair at a time.')).toBeVisible();
+    const play = await screen.findByRole('button', { name: 'Play RestoreBound' });
+    await waitFor(() => expect(play).toBeEnabled());
+    fireEvent.click(play);
+    expect(screen.getByTestId('location')).toHaveTextContent('/g/g_2?v=main&mode=play');
+  });
+  it('opens the prototype demo for a showcase game before Goblin Cellar is registered', async () => {
+    gamesResponse = [];
+    renderGames();
+    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Play RestoreBound' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/restorebound?mode=play');
+  });
   it('changes an existing game’s AI asset preference in both directions', async () => {
     renderGames('/all?spotlight=g_2');
-    const toggle = await screen.findByRole('switch', { name: 'AI-generated assets' });
-    expect(toggle).toBeChecked();
-    fireEvent.click(toggle);
-    await waitFor(() => expect(toggle).not.toBeChecked());
-    fireEvent.click(toggle);
-    await waitFor(() => expect(toggle).toBeChecked());
+    fireEvent.click(await screen.findByRole('button', { name: 'Disable AI-generated assets' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable AI-generated assets' }));
+    await screen.findByRole('button', { name: 'Disable AI-generated assets' });
     const patches = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PATCH');
     expect(patches.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
       { allowAiGeneratedAssets: false },
       { allowAiGeneratedAssets: true },
     ]);
   });
-  it('keeps the existing empty state when there are no games', async () => {
+  it('keeps the real showcase game share link in the menu', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const { container } = renderGames('/all?spotlight=g_2');
+    await screen.findByRole('heading', { name: 'Goblin Cellar' });
+    expect(container.querySelector('[data-game-id="g_2"] .game-copy')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy link to Goblin Cellar' }));
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/play/g_2`);
+  });
+  it('keeps the prototype showcase when there are no real games', async () => {
     gamesResponse = [];
     renderGames();
 
-    expect(await screen.findByText('No games yet. Start with a new idea.')).toBeVisible();
+    expect(await screen.findByRole('button', { name: /^RestoreBound:/ })).toBeVisible();
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
   });
 
   it.each([
     { label: 'one game', count: 1 },
     { label: 'exactly one thumbnail row', count: 3 },
-  ])('opens the first game and keeps every thumbnail visible with $label', async ({ count }) => {
+  ])('keeps the showcase unselected with $label', async ({ count }) => {
     gamesResponse = games.slice(0, count);
     setGridColumns(3);
     const { container } = renderGames('/all?test');
 
     // The selection and the spotlight mount either side of a paint; allow for a
     // slow first render under the fully parallel suite.
-    expect(await screen.findByRole('heading', { name: 'Midnight Crumbs' }, AUTO_SELECT)).toBeVisible();
-    expect(screen.getByTestId('location')).toHaveTextContent('spotlight=g_1');
-    expect(container.querySelectorAll('.game-tile')).toHaveLength(count);
-    expect(container.querySelectorAll('[data-game-id].is-selected')).toHaveLength(1);
+    await screen.findByRole('button', { name: /^Midnight Crumbs/ });
+    expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
+    expect(container.querySelectorAll('.game-tile')).toHaveLength(13 + count - (count >= 2 ? 1 : 0));
+    expect(container.querySelectorAll('[data-game-id].is-selected')).toHaveLength(0);
   });
 
   it('keeps the zoomed-out grid when the games overflow one thumbnail row', async () => {
@@ -203,12 +242,12 @@ describe('GamesScreen', () => {
     await screen.findByRole('button', { name: 'Fourth Game' });
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
     expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
-    expect(container.querySelectorAll('.game-tile')).toHaveLength(4);
+    expect(container.querySelectorAll('.game-tile')).toHaveLength(16);
   });
 
   it('keeps the grid dismissed after the closing navigation lands', async () => {
     renderGames('/games?test');
-    fireEvent.click(await screen.findByRole('button', { name: 'Goblin Cellar' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Goblin Cellar:/ }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('spotlight=g_2'));
 
     fireEvent.keyDown(await screen.findByRole('button', { name: 'Close game' }), { key: 'Escape' });
@@ -218,7 +257,7 @@ describe('GamesScreen', () => {
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
   });
 
-  it('waits for active jobs before selecting the first sorted game', async () => {
+  it('updates build progress without selecting a game', async () => {
     let resolveJobs!: (response: Response) => void;
     const pendingJobs = new Promise<Response>((resolve) => {
       resolveJobs = resolve;
@@ -240,8 +279,8 @@ describe('GamesScreen', () => {
 
     resolveJobs(json({ jobs: [{ ...jobs[0]!, gameId: 'g_2' }] }));
 
-    expect(await screen.findByRole('heading', { name: 'Goblin Cellar' }, AUTO_SELECT)).toBeVisible();
-    expect(screen.getByTestId('location')).toHaveTextContent('spotlight=g_2');
+    expect(await screen.findByText('Building 40%')).toBeVisible();
+    expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
     expect(container.querySelector<HTMLElement>('[data-game-id]')?.dataset.gameId).toBe('g_2');
   });
 
@@ -250,9 +289,10 @@ describe('GamesScreen', () => {
 
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });
     const tiles = [...container.querySelectorAll<HTMLElement>('[data-game-id]')];
-    expect(tiles.map((tile) => tile.dataset.gameId)).toEqual(['g_1', 'g_2', 'g_3']);
+    expect(tiles[0]?.dataset.gameId).toBe('g_2');
+    expect(tiles.slice(-2).map((tile) => tile.dataset.gameId)).toEqual(['g_1', 'g_3']);
     expect(screen.getByText('Building 40%')).toBeVisible();
-    expect(screen.getAllByText('New')).toHaveLength(2);
+    expect(screen.getAllByText('New').length).toBeGreaterThanOrEqual(2);
   }, 10_000);
 
   it('opens the URL-selected spotlight and falls back to main when branches are unavailable', async () => {
@@ -336,7 +376,7 @@ describe('GamesScreen', () => {
     const { container } = renderGames('/all', client);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh the library');
-    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(3);
+    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(15);
     expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
   });
 
@@ -351,7 +391,7 @@ describe('GamesScreen', () => {
     const { container } = renderGames();
 
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });
-    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(3);
+    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(15);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -359,7 +399,7 @@ describe('GamesScreen', () => {
   it('lists the selected game’s open Commands in its spotlight and answers them', async () => {
     commandsResponse = [commandFixture({ job_id: 'j_1', title: 'Moon gate' })];
     setGridColumns(3);
-    renderGames('/games?test');
+    renderGames('/games?test&spotlight=g_1');
 
     const option = await screen.findByRole('button', { name: 'Stone arch' }, { timeout: 3000 });
     expect(screen.getByText('Which gate should the courtyard use?')).toBeVisible();

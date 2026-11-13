@@ -1,6 +1,6 @@
 /* The review's glossy look: the games screen's living glows (GlowBackdrop) behind glass panes, after the studio
    prototype (prototypes/studio-v0/index.html, "glass-pane edges" and "CTAs"). A pane is a tinted, blurred fill with an
-   edge in its colour (--k) and a highlight along its top. The header's arrows and X stay in the app's Gruvbox chrome.
+   edge in its colour (--k) and a highlight along its top.
    Colours and glows are tokens (tokens.css). */
 .glow-backdrop {
   position: fixed;

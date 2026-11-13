@@ -80,6 +80,7 @@ export interface Registry {
   ticketJobResolver: TicketJobResolver | null;
   chatJobs: ChatJobDirectory | null;
   aiurClientFor: AiurClientResolver | null;
+  workerWorkpad: ((ticket: string) => Promise<string>) | null;
   issueStateWriter: IssueStateWriter | null;
 }
 
@@ -94,6 +95,7 @@ export function createRegistry(): Registry {
     ticketJobResolver: null,
     chatJobs: null,
     aiurClientFor: null,
+    workerWorkpad: null,
     issueStateWriter: null,
   };
 }

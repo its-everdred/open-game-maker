@@ -5,6 +5,9 @@ import { registerTestApi } from '../../app/testHook';
 import { CopyLink } from './CopyLink';
 import { glideTiles, measureTiles, type TileRects } from './flip';
 import { Spotlight } from './Spotlight';
+import { ShowcaseSpotlight } from './ShowcaseSpotlight';
+import { ShowcaseMenuControls } from './ShowcaseMenuControls';
+import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
 import { gameUpdatedAt, type GameSummary, type JobView } from './types';
 import { indexActiveJobs, useActiveJobs } from './useActiveJobs';
@@ -26,11 +29,16 @@ export function GamesScreen() {
 
   const gamesQuery = useGames();
   const jobsQuery = useActiveJobs();
-  const games = gamesQuery.data ?? [];
+  const realGames = gamesQuery.data ?? [];
+  const games = useMemo(() => mergeShowcase(gamesQuery.data ?? []), [gamesQuery.data]);
   const jobs = jobsQuery.data ?? [];
   const selectedId = searchParams.get('spotlight');
   const selected = games.find((game) => game.id === selectedId) ?? null;
-  const branchesQuery = useBranches(selected?.id ?? null);
+  const goblin = realGames.find(
+    (item) => item.slug === 'goblin-cellar' || (!item.slug && item.title === 'Goblin Cellar'),
+  );
+  const target = selected?.id.startsWith('showcase:') ? goblin : selected;
+  const branchesQuery = useBranches(target?.id ?? null);
   const branches = branchesQuery.data ?? [];
   const gridRef = useRef<HTMLDivElement>(null);
   const previousRects = useRef<TileRects>(new Map());
@@ -69,8 +77,13 @@ export function GamesScreen() {
     const game = sortedGames[index];
     const branch =
       branches.find((item) => item.id === branchId) ?? branches.find((item) => item.name === 'main') ?? branches[0];
-    if (!game || game.id !== selected?.id || !branch?.latestBuildId) return;
-    navigate(`/g/${encodeURIComponent(game.id)}?v=${encodeURIComponent(branch.id)}&mode=${mode}`);
+    if (!game || game.id !== selected?.id) return;
+    if (game.id.startsWith('showcase:') && !branch?.latestBuildId && game.showcase && game.showcase.id !== 'goblin-cellar') {
+      navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
+      return;
+    }
+    if (!target || !branch?.latestBuildId) return;
+    navigate(`/g/${encodeURIComponent(target.id)}?v=${encodeURIComponent(branch.id)}&mode=${mode}`);
   };
 
   const nav = useGridNav({
@@ -125,15 +138,26 @@ export function GamesScreen() {
 
   return (
     <div className={`games-screen${fitsThumbnailRow ? ' games-single-row' : ''}`}>
-      {selected && (
-        <Spotlight
+      {selected?.showcase && !selected.id.startsWith('showcase:') && <ShowcaseMenuControls game={selected} />}
+      {selected?.showcase ? (
+        <ShowcaseSpotlight
           game={selected}
-          branches={branches}
-          job={activeJobs.get(selected.id)}
-          onPlay={(branchId) => open(selectedIndex ?? -1, 'play', branchId)}
-          onEdit={(branchId) => open(selectedIndex ?? -1, 'edit', branchId)}
+          canOpen={Boolean((selected.id.startsWith('showcase:') && selected.showcase.id !== 'goblin-cellar') || (target && (branches.find((branch) => branch.name === 'main') ?? branches[0])?.latestBuildId))}
+          onPlay={() => open(selectedIndex ?? -1, 'play')}
+          onEdit={() => open(selectedIndex ?? -1, 'edit')}
           onClose={close}
         />
+      ) : (
+        selected && (
+          <Spotlight
+            game={selected}
+            branches={branches}
+            job={activeJobs.get(selected.id)}
+            onPlay={(branchId) => open(selectedIndex ?? -1, 'play', branchId)}
+            onEdit={(branchId) => open(selectedIndex ?? -1, 'edit', branchId)}
+            onClose={close}
+          />
+        )
       )}
 
       {gamesQuery.isError && games.length === 0 ? (
@@ -168,7 +192,7 @@ export function GamesScreen() {
                         select(index);
                       }}
                     />
-                    <CopyLink id={game.id} slug={game.slug} title={game.title} />
+                    {!game.showcase && <CopyLink id={game.id} slug={game.slug} title={game.title} />}
                   </div>
                 ))}
               </div>
@@ -201,6 +225,9 @@ function isSpotlightDismissed(state: unknown): boolean {
 
 function sortGames(games: GameSummary[], jobs: ReadonlyMap<string, JobView>): GameSummary[] {
   return [...games].sort((left, right) => {
+    if (left.showcase && right.showcase) return 0;
+    if (left.showcase) return -1;
+    if (right.showcase) return 1;
     const building = Number(jobs.has(right.id)) - Number(jobs.has(left.id));
     return building || gameUpdatedAt(right).localeCompare(gameUpdatedAt(left));
   });

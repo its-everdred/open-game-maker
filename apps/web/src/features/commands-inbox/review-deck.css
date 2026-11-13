@@ -1,4 +1,4 @@
-/* The review deck (A3): one card at a time, full width on a phone, in the studio's Gruvbox dark look. The deck sits in
+/* The review deck (A3): one card at a time, full width on a phone, in the studio's prototype look. The deck sits in
    the Commands inbox or in its own deep-linked screen, so it uses the same glass card, rule and display type as the
    rest of the studio and adds no chrome of its own. */
 .review-deck {

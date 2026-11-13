@@ -22,6 +22,7 @@ export async function mockGamesRoutes(page: Page): Promise<void> {
   await page.route('**/api/v1/jobs?state=active', (route) => route.fulfill({ json: { jobs: fixture.jobs } }));
   // The game spotlight's Commands inbox (M3) polls this route; an empty inbox keeps the prototype comparison stable.
   await page.route('**/api/v1/games/*/commands', (route) => route.fulfill({ json: { commands: [] } }));
+  await page.route('**/api/v1/games/*/workers', (route) => route.fulfill({ json: { workers: [] } }));
   await page.route('**/api/v1/games/*/branches', (route) => {
     const gameId = new URL(route.request().url()).pathname.split('/').at(-2)!;
     const branches = fixture.branches[gameId];

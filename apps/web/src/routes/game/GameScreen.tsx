@@ -24,6 +24,8 @@ import {
 } from '../../features/editor/api';
 import { inspectBuildChange, readyBuildSignal } from '../../features/editor/builds';
 import { EditorChrome } from '../../features/editor/EditorChrome';
+import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
+import { FocusZone } from '../../lib/input';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
 import {
@@ -399,7 +401,7 @@ export function GameScreen() {
     <section className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}`} aria-label="Play and edit">
       {mode === 'edit' ? (
         <>
-          <button
+          <FocusZone id={EDITOR_FOCUS_ZONES.bar} className="editor-play-zone"><button
             className="editor-play-button"
             type="button"
             aria-label="Play"
@@ -409,7 +411,7 @@ export function GameScreen() {
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M7 3v18l14-9z" />
             </svg>
-          </button>
+          </button></FocusZone>
           <output className="sr" aria-live="polite">
             {savedLabel(editStartup ?? sessionView?.saved)}
           </output>
