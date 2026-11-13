@@ -148,7 +148,9 @@ describe('preview builds', () => {
     const body = execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', files, '.']);
     const response = await upload('12', SECRET, body);
     expect(response.status).toBe(201);
-    const preview = (await response.json()) as { buildId: string; accessId: string };
+    const preview = (await response.json()) as { buildId: string; accessId?: string };
+    expect(preview.accessId).toBeUndefined();
+    const accessId = ((await (await list()).json()) as { previews: { accessId: string }[] }).previews[0]!.accessId;
     expect(existsSync(join(deps.config.gamesRoot, '_a', `${hash}.png`))).toBe(false);
     expect(readFileSync(join(previewDirectory(deps, ids.game, preview.buildId), 'a', `${hash}.png`))).toEqual(bytes);
     const host = createGamesHost({
@@ -159,7 +161,7 @@ describe('preview builds', () => {
     });
     expect((await host.request(`/g/${ids.game}/${preview.buildId}/index.html`)).status).toBe(404);
     expect((await host.request(`/a/${hash}.png`)).status).toBe(404);
-    const url = `/p/${ids.game}/${preview.accessId}`;
+    const url = `/p/${ids.game}/${accessId}`;
     const image = await host.request(`${url}/a/${hash}.png`);
     expect(image.status).toBe(200);
     expect(image.headers.get('cache-control')).toBe('no-store');
@@ -173,13 +175,21 @@ describe('preview builds', () => {
       entries: { url: string }[];
     };
     expect(cachePlan.entries.some((entry) => entry.url === `../a/${hash}.png`)).toBe(true);
-    expect((await host.request(`${url}/index.html`)).status).toBe(200);
+    const html = await host.request(`${url}/index.html`);
+    expect(html.status).toBe(200);
+    expect(await html.text()).toContain('<script src="./__ogm_preview_bootstrap.js"></script>');
+    const bootstrap = await host.request(`${url}/__ogm_preview_bootstrap.js`);
+    expect(bootstrap.status).toBe(200);
+    expect(bootstrap.headers.get('cache-control')).toBe('no-store');
+    expect(bootstrap.headers.get('access-control-allow-origin')).toBe('*');
+    expect(await bootstrap.text()).toContain("Object.defineProperty(navigator, 'locks'");
     const metadataPath = join(deps.config.gamesRoot, '.previews', ids.game, '12.json');
     const metadata = JSON.parse(readFileSync(metadataPath, 'utf8')) as Record<string, unknown>;
     writeFileSync(metadataPath, JSON.stringify({ ...metadata, accessExpiresAt: '2000-01-01T00:00:00.000Z' }));
     expect((await host.request(`${url}/index.html`)).status).toBe(404);
+    expect((await host.request(`${url}/__ogm_preview_bootstrap.js`)).status).toBe(404);
     const renewed = ((await (await list()).json()) as { previews: { accessId: string }[] }).previews[0]!.accessId;
-    expect(renewed).not.toBe(preview.accessId);
+    expect(renewed).not.toBe(accessId);
     expect((await host.request(`/p/${ids.game}/${renewed}/index.html`)).status).toBe(200);
     expect((await upload()).status).toBe(201);
     expect((await host.request(`/p/${ids.game}/${renewed}/index.html`)).status).toBe(404);

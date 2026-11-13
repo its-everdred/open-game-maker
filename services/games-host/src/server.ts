@@ -9,6 +9,7 @@ import { Hono, type Context, type Handler, type MiddlewareHandler } from 'hono';
 import { gameHeaders, healthHeaders } from './headers.js';
 import { BadBlobName, BadId, blobPath, buildDir, isComplete, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
+import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
 
 export interface GamesHostOptions {
   appOrigin: string;
@@ -80,12 +81,20 @@ export function createApp(options: GamesHostOptions): Hono {
     }
 
     const urlPath = new URL(context.req.url).pathname.split('/').slice(4).join('/');
+    const isPreview = new URL(context.req.url).pathname.startsWith('/p/');
+    if (isPreview && urlPath === PREVIEW_BOOTSTRAP_FILE)
+      return context.body(PREVIEW_BOOTSTRAP, 200, { 'content-type': 'text/javascript; charset=utf-8' });
     const file = await resolveFile(directory, urlPath);
     if (file === null) {
       return context.text('Not Found', 404);
     }
 
     const relativePath = relative(directory, file).split(sep).join('/');
+    if (isPreview && relativePath === 'index.html') {
+      const html = bootstrapPreviewHtml(await readFile(file, 'utf8'));
+      context.header('content-type', 'text/html; charset=utf-8');
+      return context.req.method === 'HEAD' ? context.body(null, 200) : context.body(html, 200);
+    }
     return serveFile(context, file, {
       ETag: `"${buildId}:${encodeURIComponent(relativePath)}"`,
     });

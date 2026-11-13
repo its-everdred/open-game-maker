@@ -44,13 +44,13 @@ describe('gm preview', () => {
         received.sha = req.headers['x-gm-sha'] as string;
         received.body = Buffer.concat(chunks);
         res.writeHead(201, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ gameId: 'g_game', buildId: 'preview-123' }));
+        res.end(JSON.stringify({ gameId: 'g_game', buildId: 'preview-123', accessId: 'pv-secret' }));
       });
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     try {
       const port = (server.address() as AddressInfo).port;
-      const result = await gm(['preview'], {
+      const result = await gm(['preview', '--json'], {
         cwd: root,
         env: {
           PATH: `${bin}:${process.env.PATH ?? ''}`,
@@ -59,6 +59,7 @@ describe('gm preview', () => {
         },
       });
       expect(result.code).toBe(0);
+      expect(JSON.stringify(result)).not.toContain('pv-secret');
       expect(received).toMatchObject({ path: '/internal/games/blobs/previews/42', auth: 'Bearer fixture-secret', sha });
       const archive = join(root, 'received.tgz');
       writeFileSync(archive, received.body!);

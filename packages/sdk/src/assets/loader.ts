@@ -110,7 +110,7 @@ export class AssetLoader {
     this.tier = options.tier;
     this.#manifestUrl = absoluteUrl(options.manifestUrl);
     this.#basisPath = new URL(options.basisPath ?? 'basis/', this.#manifestUrl).toString();
-    this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.#audioContext = options.audioContext;
     this.#planUrl = new URL(options.planUrl ?? 'cache-plan.json', this.#manifestUrl).toString();
     this.#send = options.send;
@@ -253,7 +253,7 @@ export class AssetLoader {
         const failure = results.find((result) => result.status === 'rejected');
         if (failure?.status === 'rejected') throw failure.reason;
       };
-      const locks = globalThis.navigator?.locks;
+      const locks = isPrivatePreviewUrl(this.#manifestUrl) ? undefined : globalThis.navigator?.locks;
       if (locks) await locks.request(CACHE_LOCK_NAME, { mode: 'shared' }, fetchFiles);
       else await fetchFiles();
       if (this.#groupTokens.get(name) !== token) throw new Error(`Asset group load canceled: ${name}`);

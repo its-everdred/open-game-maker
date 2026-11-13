@@ -131,6 +131,18 @@ function fetchFor(value: unknown = manifest) {
 }
 
 describe('AssetLoader', () => {
+  it('calls the default browser fetch with its global receiver', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(function (this: unknown) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(Response.json(manifest));
+    });
+    try {
+      await new AssetLoader({ manifestUrl: 'https://game.test/assets/manifest.json', tier: 'desktop' }).load();
+      expect(fetchSpy).toHaveBeenCalledOnce();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
   it('loads a private preview lazy group without persisting its files', async () => {
     const grouped = structuredClone(manifest);
     grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';

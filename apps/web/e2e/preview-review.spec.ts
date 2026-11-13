@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
+import {
+  bootstrapPreviewHtml,
+  PREVIEW_BOOTSTRAP,
+  PREVIEW_BOOTSTRAP_FILE,
+} from '../../../services/games-host/src/preview-bootstrap';
 
 const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01';
 const first = 'preview-11111111-1111-4111-8111-111111111111';
@@ -15,21 +20,36 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
   let gameScript = '';
   await installAuthRoutes(page, { signedIn: true });
   await page.route('**/p/**', async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith(`/${PREVIEW_BOOTSTRAP_FILE}`))
+      return route.fulfill({
+        contentType: 'text/javascript',
+        headers: { 'access-control-allow-origin': '*' },
+        body: PREVIEW_BOOTSTRAP,
+      });
     if (new URL(route.request().url()).pathname.endsWith('/bridge.js')) {
-      return route.fulfill({ contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' }, body: gameScript });
+      return route.fulfill({
+        contentType: 'text/javascript',
+        headers: { 'access-control-allow-origin': '*' },
+        body: gameScript,
+      });
     }
     const response = await route.fetch({ url: route.request().url().replace('/p/', '/g/') });
     const headers = { ...response.headers(), 'access-control-allow-origin': '*' };
     delete headers['content-length'];
     if (!new URL(route.request().url()).pathname.endsWith('/index.html')) return route.fulfill({ response, headers });
-    const html = (await response.text()).replace(/<script type="module">([\s\S]*?)<\/script>/u, (_match, script: string) => {
-      gameScript = script.replace('const HOST_ORIGIN',
-      "try { await caches.open('old-sdk-cache'); document.body.dataset.cache = 'open'; } catch { document.body.dataset.cache = 'blocked'; }\n      const HOST_ORIGIN",
-      );
-      return '<script type="module" src="./bridge.js"></script>';
-    });
-    headers['content-security-policy'] = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'self'; connect-src 'self' blob: data:; worker-src 'self' blob:; frame-ancestors *; base-uri 'none'; form-action 'none'; object-src 'none'";
-    return route.fulfill({ response, headers, body: html });
+    const html = (await response.text()).replace(
+      /<script type="module">([\s\S]*?)<\/script>/u,
+      (_match, script: string) => {
+        gameScript = script.replace(
+          'const HOST_ORIGIN',
+          "try { await caches.open('old-sdk-cache'); document.body.dataset.cache = 'open'; } catch { document.body.dataset.cache = 'blocked'; }\n      document.body.dataset.locks = typeof navigator.locks;\n      try { await fetch.call({}, 'data:text/plain,ok'); document.body.dataset.fetch = 'bound'; } catch { document.body.dataset.fetch = 'failed'; }\n      const HOST_ORIGIN",
+        );
+        return '<script type="module" src="./bridge.js"></script>';
+      },
+    );
+    headers['content-security-policy'] =
+      "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'self'; connect-src 'self' blob: data:; worker-src 'self' blob:; frame-ancestors *; base-uri 'none'; form-action 'none'; object-src 'none'";
+    return route.fulfill({ response, headers, body: bootstrapPreviewHtml(html) });
   });
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
@@ -100,6 +120,8 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
   await expect(card.locator('iframe')).toBeVisible();
   await expect(page.frameLocator('iframe').getByText('Bridge fixture')).toBeVisible();
   await expect(page.frameLocator('iframe').locator('body')).toHaveAttribute('data-cache', 'blocked');
+  await expect(page.frameLocator('iframe').locator('body')).toHaveAttribute('data-locks', 'undefined');
+  await expect(page.frameLocator('iframe').locator('body')).toHaveAttribute('data-fetch', 'bound');
   await expect
     .poll(() =>
       page

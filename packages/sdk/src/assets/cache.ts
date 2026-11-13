@@ -159,7 +159,7 @@ export async function prepare(
     return { plan, ...ready };
   };
 
-  const locks = dependencies.locks ?? defaultLockManager();
+  const locks = privatePreview ? undefined : (dependencies.locks ?? defaultLockManager());
   const result = await (locks ? locks.request(CACHE_LOCK_NAME, { mode: 'shared' }, run) : run());
   const stream = () =>
     fetchPhase(

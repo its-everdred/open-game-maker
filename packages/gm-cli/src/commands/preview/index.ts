@@ -110,7 +110,7 @@ export const command: GmCommand = {
       const body = await response.text();
       if (response.status !== 201) throw new CommandError(`preview upload failed (HTTP ${response.status}): ${body}`);
       const preview = JSON.parse(body) as { buildId: string; gameId: string };
-      if (ctx.json) printJson(ctx, { state: 'done', ticket, sha, ...preview });
+      if (ctx.json) printJson(ctx, { state: 'done', ticket, sha, gameId: preview.gameId, buildId: preview.buildId });
       else ctx.out(`preview ready for ticket ${ticket}: ${preview.buildId}`);
       return EXIT.ok;
     } finally {

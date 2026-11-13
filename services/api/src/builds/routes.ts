@@ -95,10 +95,14 @@ export function buildRoutes(opts: { daemonForSecret: HookDaemonResolver; gameFor
         const sha = c.req.header('x-gm-sha') ?? '';
         if (!SHA.test(sha)) return c.json({ error: { code: 'invalid_sha' } }, 400);
         try {
-          return c.json(
-            await createPreview(deps, game.id, c.req.param('identifier'), sha, Buffer.from(await c.req.arrayBuffer())),
-            201,
+          const preview = await createPreview(
+            deps,
+            game.id,
+            c.req.param('identifier'),
+            sha,
+            Buffer.from(await c.req.arrayBuffer()),
           );
+          return c.json({ gameId: preview.gameId, buildId: preview.buildId }, 201);
         } catch (error) {
           if (error instanceof BadArchive || error instanceof BuildCacheError)
             return c.json({ error: { code: error.message } }, 422);
