@@ -17,7 +17,13 @@ import { EDITOR_FOCUS_ZONES } from './focus';
 import type { GameFrameController } from './frame';
 import type { EditorSessionState } from './session';
 import type { SnapPrefs } from './SnapPrefs';
-import { createEntityIntent, createStableId, updateEntityPoseIntent, type EditorIntent } from './transactions';
+import {
+  createEntityIntent,
+  createStableId,
+  deleteEntityIntent,
+  updateEntityPoseIntent,
+  type EditorIntent,
+} from './transactions';
 
 type Ghost = { prefab: string; pose: Pose; result?: PlacementResult };
 type Drag = {
@@ -51,6 +57,16 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const surfaceRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<Ghost | undefined>(undefined);
   const dragRef = useRef<Drag | undefined>(undefined);
+  const holdRef = useRef<
+    | {
+        pointerId: number;
+        x: number;
+        y: number;
+        picked?: string;
+        timer: ReturnType<typeof setTimeout>;
+      }
+    | undefined
+  >(undefined);
   const validationAtRef = useRef(-Infinity);
   const validationTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingValidationRef = useRef<Ghost | undefined>(undefined);
@@ -64,7 +80,9 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const gizmos = selected === undefined ? [] : (manifest.gizmos[selected.prefab] ?? []);
 
   useEffect(() => {
-    const stopPicked = frame.onPicked((targets) => receivePicked(targets, session, frame, setAnchor));
+    const stopPicked = frame.onPicked((targets) => {
+      receivePicked(targets, session, frame, setAnchor);
+    });
     const stopScreen = frame.onScreen((position) => {
       if ('offscreen' in position) {
         setAnchor((current) => (current?.id === position.id ? undefined : current));
@@ -80,6 +98,8 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   useEffect(
     () => () => {
+      if (holdRef.current) clearTimeout(holdRef.current.timer);
+      holdRef.current = undefined;
       if (validationTimerRef.current !== undefined) clearTimeout(validationTimerRef.current);
       validationTimerRef.current = undefined;
       pendingValidationRef.current = undefined;
@@ -165,11 +185,71 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
     }
     if (session.getState().tool === 'select') {
       const point = normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
-      frame.pick(point.x, point.y);
+      if (event.pointerType === 'touch') {
+        if (holdRef.current) clearTimeout(holdRef.current.timer);
+        const pointerId = event.pointerId;
+        const held = {
+          pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          picked: undefined as string | undefined,
+          timer: setTimeout(() => {
+            if (holdRef.current !== held || !held.picked) return;
+            const state = session.getState();
+            const entity = state.doc.entities[held.picked];
+            if (!state.readOnly && entity?.prefab.startsWith('scenery:')) {
+              void state.submit(deleteEntityIntent(state.doc, entity.id, `Removed ${entity.prefab}`));
+              state.setSelection([]);
+              frame.select([]);
+            }
+            holdRef.current = undefined;
+          }, 650),
+        };
+        holdRef.current = held;
+        void frame
+          .pickAt(point.x, point.y)
+          .then((targets) => {
+            if (holdRef.current !== held) return;
+            held.picked = targets.find((target) => target.kind === 'entity')?.id;
+            receivePicked(targets, session, frame, setAnchor);
+          })
+          .catch(() => {});
+      } else {
+        frame.pick(point.x, point.y);
+      }
     }
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const held = holdRef.current;
+    if (held && event.pointerId === held.pointerId && Math.hypot(event.clientX - held.x, event.clientY - held.y) > 12) {
+      clearTimeout(held.timer);
+      const state = session.getState();
+      const entity = held.picked === undefined ? undefined : state.doc.entities[held.picked];
+      if (
+        !dragRef.current &&
+        entity?.prefab.startsWith('scenery:') &&
+        manifest.capabilities?.includes('editor.project')
+      ) {
+        const point = normalizeFramePoint(held.x, held.y, event.currentTarget.getBoundingClientRect());
+        dragRef.current = {
+          pointerId: held.pointerId,
+          startX: held.x,
+          startY: held.y,
+          entity,
+          gizmo: 'translate',
+          intents: [],
+          doc: state.doc,
+          projection: {
+            origin: frame.project(point.x, point.y).catch(() => null),
+            sequence: 0,
+            pending: false,
+            released: false,
+            cancelled: false,
+          },
+        };
+      }
+    }
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
       const rect = event.currentTarget.getBoundingClientRect();
@@ -233,6 +313,10 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (holdRef.current?.pointerId === event.pointerId) {
+      clearTimeout(holdRef.current.timer);
+      holdRef.current = undefined;
+    }
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
       if (drag.projection?.pending) {
@@ -253,6 +337,10 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (holdRef.current?.pointerId === event.pointerId) {
+      clearTimeout(holdRef.current.timer);
+      holdRef.current = undefined;
+    }
     const drag = dragRef.current;
     if (drag !== undefined && event.pointerId === drag.pointerId) {
       dragRef.current = undefined;

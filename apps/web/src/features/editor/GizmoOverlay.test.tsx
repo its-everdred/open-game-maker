@@ -49,6 +49,7 @@ function harness(selection: string[] = []) {
   const frame = {
     applyDesign: vi.fn(),
     pick: vi.fn(),
+    pickAt: vi.fn(),
     select: vi.fn(),
     validatePlacement: vi.fn(() => new Promise<PlacementResult>((resolve) => placements.push(resolve))),
     onPicked: vi.fn((callback) => {
@@ -74,6 +75,87 @@ afterEach(() => {
 });
 
 describe('GizmoOverlay', () => {
+  it('long-presses a picked scenery item to remove it', async () => {
+    vi.useFakeTimers();
+    const test = harness();
+    test.frame.pickAt = vi.fn().mockResolvedValue([{ id: entityId, kind: 'entity' }]);
+    const state = test.session.getState();
+    state.doc = { ...doc, entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } } };
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 20 });
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(650));
+    expect(test.submit).toHaveBeenCalledWith(
+      expect.objectContaining({ patches: [expect.objectContaining({ op: 'remove', path: ['entities', entityId] })] }),
+    );
+  });
+
+  it('does not delete when a touch moves or a late pick arrives after release', async () => {
+    vi.useFakeTimers();
+    const test = harness();
+    let resolve!: (targets: TargetRef[]) => void;
+    test.frame.pickAt = vi.fn(
+      () =>
+        new Promise<TargetRef[]>((done) => {
+          resolve = done;
+        }),
+    );
+    test.session.getState().doc = {
+      ...doc,
+      entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } },
+    };
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 20 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 40, clientY: 20 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    await act(async () => resolve([{ id: entityId, kind: 'entity' }]));
+    act(() => vi.advanceTimersByTime(650));
+    expect(test.submit).not.toHaveBeenCalled();
+  });
+
+  it('drags a scenery item directly on the ground with touch', async () => {
+    const test = harness();
+    test.session.getState().doc = {
+      ...doc,
+      entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } },
+    };
+    test.frame.pickAt = vi.fn().mockResolvedValue([{ kind: 'entity', id: entityId }]);
+    test.frame.project = vi.fn().mockResolvedValueOnce([1, 0, 1]).mockResolvedValueOnce([3, 0, 2]);
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 60 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 });
+    await act(async () => {});
+    fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 30 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    await act(async () => {});
+    expect(test.commitStroke).toHaveBeenCalledOnce();
+    expect(test.commitStroke.mock.calls[0]?.[0][0].doc.entities[entityId].props.pose.position).toEqual([12, 10, 1]);
+  });
+
   it('uses game projection for a 3D placement, including a quick release', async () => {
     const test = harness();
     test.frame.project = vi.fn().mockResolvedValue([2, 0, -1]);
