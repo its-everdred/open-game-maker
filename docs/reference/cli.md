@@ -29,6 +29,18 @@ reads. A set id (for example `limezu-modern`) is refused with its family named; 
 `--set` must name a set in that registry and, when `--family` is present, belong to the chosen family. It records the
 set in `gm.lock.json`, pins the exact `@gm/pack-<set>` version, and installs only that set's `gm-set-<set>` skill.
 
+## Preview an unmerged build
+
+```text
+gm preview [--ticket <number>] [--json]
+```
+
+From the game folder (or a sparse workspace with one game), build the current workspace, including uncommitted edits,
+and send it to the game's review queue without changing the live build. The ticket defaults to the current agent ticket
+or `aiur/<number>` branch; pass `--ticket` when neither is available. The daemon's `OGM_INTERNAL_URL` and
+`OGM_HOOK_SECRET_FILE` provide the upload connection. A new upload for the same game and ticket replaces the review
+request; the creator's verdict and optional note go back to that ticket.
+
 ## Verify a game
 
 ```text

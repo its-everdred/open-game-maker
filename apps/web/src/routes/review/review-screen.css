@@ -1,6 +1,11 @@
 /* The review deck's own screen (A3): the deep link the Executor pushes. Same studio backdrop and type as the other
    screens; the deck itself carries the look. */
 .review-screen {
+  --ink: #f2ead6;
+  --muted: rgba(242, 234, 214, 0.6);
+  --rule: rgba(242, 234, 214, 0.18);
+  --paper-2: rgba(255, 255, 255, 0.06);
+  --display: 'Fredoka', 'Nunito', system-ui, sans-serif;
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -36,7 +41,7 @@
   gap: 12px;
   padding: max(10px, var(--safe-t)) max(16px, var(--safe-r)) 10px max(16px, var(--safe-l));
   border-bottom: 3px solid var(--ink);
-  background: color-mix(in srgb, var(--night-2) 92%, transparent);
+  background: rgba(30, 27, 40, 0.85);
   backdrop-filter: var(--glass);
 }
 
@@ -74,7 +79,7 @@
   height: 20px;
 }
 
-/* Previous and next: the same round Gruvbox buttons as the X; at either end the arrow stays put, dimmed. */
+/* Previous and next: the same round buttons as the X; at either end the arrow stays put, dimmed. */
 .review-screen-step {
   text-decoration: none;
 }
@@ -211,4 +216,87 @@
     flex-direction: column;
     gap: 10px;
   }
+}
+
+.review-screen-body > .review-deck .review-deck-playable {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  overflow: hidden;
+  border-radius: var(--r);
+}
+
+.review-screen-body > .review-deck .review-deck-playable-frame {
+  position: absolute;
+  inset: 0;
+}
+
+.review-screen-body > .review-deck label {
+  display: grid;
+  gap: 6px;
+  font: 600 16px var(--display);
+}
+
+.review-screen-body > .review-deck textarea {
+  min-height: 64px;
+  padding: 12px;
+  border: 1.5px solid var(--rule);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.review-screen-body > .review-deck .review-deck-actions button {
+  min-height: 48px;
+  padding: 10px 20px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: #fabd2f;
+  color: #1d1b16;
+  font: 600 17px var(--display);
+  cursor: pointer;
+}
+
+.review-screen-body > .review-deck .review-deck-actions button + button {
+  background: #fb4934;
+}
+
+.review-choice {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.review-choice label {
+  display: grid;
+  gap: 4px;
+  font: 600 14px var(--display);
+}
+
+.review-choice textarea {
+  min-height: 48px;
+  padding: 10px;
+  border: 1.5px solid var(--rule);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+  font: inherit;
+}
+
+.review-choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-choice-options button {
+  min-width: 48px;
+  min-height: 48px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: #fabd2f;
+  color: #1d1b16;
+  font: 600 17px var(--display);
+  cursor: pointer;
 }

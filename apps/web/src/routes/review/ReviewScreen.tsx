@@ -17,6 +17,8 @@ import { ReviewRows } from '../../features/commands-inbox/ReviewRows';
 import { Icon } from '../../components/Icon';
 import { useMyJobs } from '../../features/build-chat/jobs';
 import { reviewTitle } from './title';
+import { PreviewReviews, usePreviews } from './PreviewReviews';
+import { ReviewChoice } from './ReviewChoice';
 import './review-screen.css';
 
 // The short link the Executor pushes to the creator (#591): `/<slug>/review/<n>`, the game's slug and the Command's
@@ -84,6 +86,7 @@ function ReviewList({ gameId, slug, title }: { gameId: string; slug: string; tit
   const { commands, isPending } = useGameCommands(gameId);
   useServerDrafts(gameId);
   const rows = numbered(commands);
+  const previews = usePreviews(gameId);
   return (
     <ReviewFrame
       head={
@@ -94,13 +97,23 @@ function ReviewList({ gameId, slug, title }: { gameId: string; slug: string; tit
       }
     >
       <div className="review-screen-body">
-        {isPending ? null : rows.length === 0 ? (
+        <PreviewReviews gameId={gameId} previews={previews.data?.previews ?? []} />
+        {previews.isError ? (
+          <p className="review-screen-state" role="alert">
+            Previews could not be loaded.
+          </p>
+        ) : null}
+        {rows.length > 0 ? (
+          <ReviewRows
+            commands={rows}
+            hrefOf={(command) => reviewPath(slug, command.review_number!)}
+            actions={(command) => <ReviewChoice gameId={gameId} command={command} />}
+          />
+        ) : isPending || previews.isPending || previews.isError ? null : (previews.data?.previews.length ?? 0) === 0 ? (
           <p className="review-screen-state" role="status">
             That review is not open. It may already be answered.
           </p>
-        ) : (
-          <ReviewRows commands={rows} hrefOf={(command) => reviewPath(slug, command.review_number!)} />
-        )}
+        ) : null}
       </div>
     </ReviewFrame>
   );
