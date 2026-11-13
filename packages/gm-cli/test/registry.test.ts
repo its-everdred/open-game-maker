@@ -71,6 +71,7 @@ describe('command registry', () => {
       'design current',
       'docs pattern',
       'energy',
+      'games register',
       'instance init',
       'look check',
       'look evidence',

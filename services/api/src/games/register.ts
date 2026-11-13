@@ -18,6 +18,7 @@ import { findGameBySlugOrId } from './slug.js';
 // other game's. The daemon row is the link to that instance: the game's inbox reads its open Commands there, and the
 // fleet starts no new daemon for a game whose instance is already running.
 export type RegisterGameInput = {
+  shareRepoDaemon?: boolean;
   familyId: string;
   ownerId: string;
   title: string;
@@ -84,7 +85,18 @@ export function registerExistingGame(db: Db, input: RegisterGameInput): GameRow 
   ) {
     throw new HttpError(409, 'game_daemon_already_registered');
   }
+  const repoDaemons = input.shareRepoDaemon
+    ? db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.repo, repo)).all()
+    : [];
+  if (repoDaemons.length > 1 || (repoDaemons.length === 1 && repoDaemons[0]!.port !== input.daemon.port))
+    throw new HttpError(409, 'repo_daemon_ambiguous');
+  const shared =
+    input.shareRepoDaemon &&
+    db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.port, input.daemon.port)).get();
+  if (shared && (shared.repo !== repo || shared.checkoutPath !== input.daemon.checkoutPath))
+    throw new HttpError(409, 'daemon_port_taken');
   if (
+    !shared &&
     db
       .select({ port: schema.gameDaemons.port })
       .from(schema.gameDaemons)
@@ -113,18 +125,19 @@ export function registerExistingGame(db: Db, input: RegisterGameInput): GameRow 
         createdAt,
       })
       .run();
-    tx.insert(schema.gameDaemons)
-      .values({
-        slug,
-        repo,
-        checkoutPath: input.daemon.checkoutPath,
-        unit: input.daemon.unit,
-        envFile: input.daemon.envFile,
-        port: input.daemon.port,
-        status: input.daemon.status ?? 'running',
-        createdAt,
-      })
-      .run();
+    if (!shared)
+      tx.insert(schema.gameDaemons)
+        .values({
+          slug,
+          repo,
+          checkoutPath: input.daemon.checkoutPath,
+          unit: input.daemon.unit,
+          envFile: input.daemon.envFile,
+          port: input.daemon.port,
+          status: input.daemon.status ?? 'running',
+          createdAt,
+        })
+        .run();
   });
   return findGame(db, id);
 }

@@ -83,7 +83,7 @@ fallback when it is blank.
 
 | Unit file | Fill | Optional |
 | --- | --- | --- |
-| `api.env` | `OGM_API_PORT`, `OGM_PUBLIC_ORIGIN`, `OGM_APP_ORIGIN`, `OGM_GAMES_ORIGIN`, `OGM_DATA_DIR`, `OGM_BLOB_ROOT`, `OGM_ROOMS_INTERNAL_URL`, `OGM_COMMIT_INTERNAL_URL`, `OGM_INSTANCE_REPO` (`owner/repository` every game lives in), `OGM_BUILDER_BOT_LOGIN`, `OGM_INTAKE_BOT_LOGIN`, `OGM_VAPID_SUBJECT`; tokens you obtain: `OGM_BUILDER_BOT_TOKEN`, `OGM_INTAKE_GITHUB_TOKEN` | `OGM_GAMES_ROOT`, `OGM_ASSETS_ROOT`, `OGM_INTAKE_DIR`, `OGM_VOICE_HOST_INTERNAL_URL`, `OGM_VOICE_WS_URL`, `OGM_BUILDER_WORKSPACES_ROOT`, `OGM_VAPID_KEY_FILE`, `OGM_GAME_TEMPLATE_REF`, `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD`, `OGM_RESET_ZONE_DEFAULT`, `OGM_ANALYTICS_RETENTION_DAYS`, `OGM_REPORT_BUNDLE_MAX_BYTES`, `OGM_NARRATION_CONCURRENCY`, `OGM_INTAKE_SWEEP_SECONDS`, `OGM_CHAT_POLL_MS`, `OGM_COMMAND_POLL_MS`, `OGM_DESIGN_DEFAULT_MS`, `OGM_VOICE_QUESTIONS_AT`, `OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `SMTP_URL`/`SMTP_FROM`, `OGM_QA_EMAILS` |
+| `api.env` | `OGM_API_PORT`, `OGM_PUBLIC_ORIGIN`, `OGM_APP_ORIGIN`, `OGM_GAMES_ORIGIN`, `OGM_DATA_DIR`, `OGM_BLOB_ROOT`, `OGM_ROOMS_INTERNAL_URL`, `OGM_COMMIT_INTERNAL_URL`, `OGM_INSTANCE_REPO` (`owner/repository` every game lives in), `OGM_BUILDER_BOT_LOGIN`, `OGM_INTAKE_BOT_LOGIN`, `OGM_VAPID_SUBJECT`; tokens you obtain: `OGM_BUILDER_BOT_TOKEN`, `OGM_INTAKE_GITHUB_TOKEN` | `OGM_INSTANCE_OWNER_ID`, `OGM_GAMES_ROOT`, `OGM_ASSETS_ROOT`, `OGM_INTAKE_DIR`, `OGM_VOICE_HOST_INTERNAL_URL`, `OGM_VOICE_WS_URL`, `OGM_BUILDER_WORKSPACES_ROOT`, `OGM_VAPID_KEY_FILE`, `OGM_GAME_TEMPLATE_REF`, `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD`, `OGM_RESET_ZONE_DEFAULT`, `OGM_ANALYTICS_RETENTION_DAYS`, `OGM_REPORT_BUNDLE_MAX_BYTES`, `OGM_NARRATION_CONCURRENCY`, `OGM_INTAKE_SWEEP_SECONDS`, `OGM_CHAT_POLL_MS`, `OGM_COMMAND_POLL_MS`, `OGM_DESIGN_DEFAULT_MS`, `OGM_VOICE_QUESTIONS_AT`, `OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `SMTP_URL`/`SMTP_FROM`, `OGM_QA_EMAILS` |
 | `rooms.env` | `OGM_ROOMS_PORT`, `OGM_GAMES_ORIGIN`, `OGM_API_INTERNAL_URL` | |
 | `games.env` | `OGM_GAMES_PORT`, `OGM_GAMES_ROOT`, `OGM_APP_ORIGIN` | `OGM_GAMES_SW` (defaults to the workspace's built `packages/host/dist/game-cache.js`) |
 | `voice-host.env` | `OGM_VOICE_PORT`, `OGM_VOICE_INTERNAL_PORT`, `OGM_API_INTERNAL_URL`, `OGM_VOICE_PROVIDER` (`fake`) | Live ElevenLabs only: `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `OGM_VOICE_LLM`, `OGM_VOICE_CLEANUP_ROOT`; tuning: `OGM_VOICE_MAX_SESSIONS`, `OGM_VOICE_RENDER_DIR`, `OGM_VOICE_NARRATION_ENABLED` |
@@ -258,6 +258,12 @@ and the game's inbox read that instance's aiur and no other's.
 The row's `status` defaults to `running`, because the instance the game is registered against is already up. Nothing
 else changes — the game appears in the games picker and opens from its play link as soon as it is registered.
 
+## Register an existing game as an operator
+
+Run `gm games register <slug> --repo <owner>/<repo> --folder games/<slug> --title "<title>"` on the API host. It reads the API token from `api.env` and the daemon port from the checkout's `.aiur/config`; the checkout defaults to `~/games/<repo>` and can be set with `--checkout`. The repository origin must match `--repo`. The owner defaults to `OGM_INSTANCE_OWNER_ID` in the API environment, or the sole family owner when only one exists. Set that value to the instance owner’s app user ID for installations with multiple families, or pass `--owner <user-id>` for a specific registration. Use `--visibility listed` to show the game in the picker (the default is private). Repeating the command updates the title, owner, visibility and daemon details for the same game; conflicting slugs or daemon registrations are refused.
+
+Operator publish can reuse a repository daemon checkout for multiple registered games. Those registrations do not create additional game daemon rows.
+
 ## Publish a build for a registered game
 
 A game the app registered against a repository whose own tickets are not Game Maker jobs never gets a build: the
@@ -269,7 +275,7 @@ uploads use, so the release history stays one path (`ops/bin/ogm-publish` is a t
 same arguments):
 
 ```
-gm publish [<game-slug>] [--sha <ref>] [--checkout <path>] [--api <url>] [--keep] [--json]
+gm publish [<game-slug>] [--sha <ref>] [--checkout <path>] [--api <url>] [--keep] [--dry-run] [--json]
 ```
 
 Run from a game folder, the slug defaults to that game (the folder of the nearest `gm.manifest.json`). It reads the
@@ -291,6 +297,7 @@ gm publish blobs                 # build the registered game "blobs" at its repo
 cd games/blobs && gm publish     # the same, from the game's folder
 gm publish blobs --sha <sha>     # build a specific commit
 gm publish blobs --keep          # keep the worktree and the archive for inspection
+gm publish blobs --dry-run       # confirm registration without building or publishing
 gm publish blobs --json          # one JSON line: state, slug, gameId, sha, buildId, jobId, play
 ```
 
