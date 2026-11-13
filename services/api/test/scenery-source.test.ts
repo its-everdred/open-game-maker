@@ -177,6 +177,40 @@ describe('no-build scenery source', () => {
     utimesSync(scenePath, new Date('2026-11-01T00:00:00Z'), new Date('2026-11-01T00:00:00Z'));
     const datedScene = await app.request(url, { headers: asUser(ids.creator) });
     expect(await datedScene.json()).toMatchObject({ updatedAt: '2026-11-01T00:00:00.000Z' });
+    deps.db
+      .insert(schema.branches)
+      .values({
+        id: 'main-branch',
+        gameId: ids.game,
+        name: 'main',
+        gitRef: 'main',
+        status: 'active',
+        createdBy: ids.creator,
+        createdAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.designTransactions)
+      .values({
+        id: 'scene-edit',
+        gameId: ids.game,
+        branchId: 'main-branch',
+        rev: 1,
+        baseRev: 0,
+        leaseToken: 1,
+        actor: ids.creator,
+        kind: 'manual',
+        label: 'Edit scene',
+        baseBuildId: 'none',
+        commandsJson: '[]',
+        patchesJson: '[]',
+        inverseJson: '[]',
+        createdAt: '2026-11-12T00:00:00.000Z',
+      })
+      .run();
+    expect(await (await app.request(url, { headers: asUser(ids.creator) })).json()).toMatchObject({
+      updatedAt: '2026-11-12T00:00:00.000Z',
+    });
     writeFileSync(join(game, 'scenery.json'), '{invalid');
     expect((await app.request(fallbackUrl, { headers: asUser(ids.creator) })).status).toBe(200);
     expect((await app.request(url, { headers: asUser(ids.creator) })).status).toBe(404);

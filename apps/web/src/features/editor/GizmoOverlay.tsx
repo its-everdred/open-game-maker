@@ -53,7 +53,7 @@ type GizmoOverlayProps = {
   manifest: GameManifest;
   session: StoreApi<EditorSessionState>;
   snap: SnapPrefs;
-  onRequestPlacement?(prefab: string, point: { x: number; y: number }): void;
+  onRequestPlacement?(prefab: string, point: { x: number; y: number }, path?: Array<{ x: number; y: number }>): void;
   onRequestDelete?(entity: Entity): void;
   onRequestTransform?(
     entity: Entity,
@@ -113,6 +113,7 @@ export function GizmoOverlay({
   const dropRequestedRef = useRef(false);
   const projectionSequence = useRef(0);
   const requestPointerRef = useRef<number | undefined>(undefined);
+  const requestPathRef = useRef<Array<{ x: number; y: number }>>([]);
   const requestTransformRef = useRef<{ entity: Entity; gizmo: GizmoKind } | undefined>(undefined);
   const requestInterruptedRef = useRef(false);
   const projectingRef = useRef(false);
@@ -232,6 +233,9 @@ export function GizmoOverlay({
       }
       requestInterruptedRef.current = false;
       requestPointerRef.current = event.pointerId;
+      requestPathRef.current = [
+        normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()),
+      ];
       capturePointer(event.currentTarget, event.pointerId);
       return;
     }
@@ -312,7 +316,15 @@ export function GizmoOverlay({
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (requestPointerRef.current !== undefined) return;
+    if (requestPointerRef.current !== undefined) {
+      if (requestPointerRef.current === event.pointerId && activePrefab?.startsWith('scenery-band:')) {
+        if (requestPathRef.current.length < 255)
+          requestPathRef.current.push(
+            normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()),
+          );
+      }
+      return;
+    }
     if (terrain.move(event)) return;
     if (activePrefab?.startsWith('scenery-band:')) return;
     if (touchesRef.current.has(event.pointerId))
@@ -444,9 +456,15 @@ export function GizmoOverlay({
         const point = normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
         const transform = requestTransformRef.current;
         if (transform && onRequestTransform) onRequestTransform(transform.entity, transform.gizmo, { point });
-        else if (activePrefab && onRequestPlacement) onRequestPlacement(activePrefab, point);
+        else if (activePrefab && onRequestPlacement) {
+          if (activePrefab.startsWith('scenery-band:')) {
+            requestPathRef.current.push(point);
+            onRequestPlacement(activePrefab, point, requestPathRef.current);
+          } else onRequestPlacement(activePrefab, point);
+        }
       }
       requestTransformRef.current = undefined;
+      requestPathRef.current = [];
       requestInterruptedRef.current = false;
       return;
     }
@@ -491,6 +509,7 @@ export function GizmoOverlay({
     if (requestPointerRef.current === event.pointerId) {
       requestPointerRef.current = undefined;
       requestTransformRef.current = undefined;
+      requestPathRef.current = [];
     }
     touchesRef.current.delete(event.pointerId);
     terrain.cancel(event);

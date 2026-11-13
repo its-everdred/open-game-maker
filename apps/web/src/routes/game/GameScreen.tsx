@@ -150,11 +150,12 @@ export function GameScreen() {
   });
   const waitingForStage = noBuild && !waitingForPreview && !activePreview && stage.isPending;
   const scenerySource = useQuery({
-    queryKey: ['scenery-source', gameId],
+    queryKey: ['scenery-source', gameId, jobBranch],
     queryFn: () => getScenerySource(gameId),
     enabled:
       gameId !== '' &&
-      ((noBuild && !waitingForPreview && !waitingForStage && !activePreview) ||
+      (!noBuild || jobBranch === 'main') &&
+      ((noBuild && jobBranch === 'main' && !waitingForPreview && !waitingForStage && !activePreview) ||
         (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
     retry: false,
     refetchInterval: noBuild && !activePreview ? 5_000 : false,
@@ -165,9 +166,11 @@ export function GameScreen() {
     Object.values(activeSnapshot?.doc.entities ?? {}).some((entity) => entity.prefab.startsWith('scenery:'));
   const stageAt = Date.parse(stage.data?.stage?.at ?? '');
   const sceneryAt = Date.parse(scenerySource.data?.updatedAt ?? '');
-  const newerScenery = hasScenery && (!Number.isFinite(stageAt) || !Number.isFinite(sceneryAt) || sceneryAt >= stageAt);
+  const newerScenery =
+    hasScenery && (!Number.isFinite(stageAt) || (Number.isFinite(sceneryAt) && sceneryAt >= stageAt));
   const waitingForScenery =
     noBuild &&
+    jobBranch === 'main' &&
     !waitingForPreview &&
     !waitingForStage &&
     !activePreview &&
@@ -239,7 +242,7 @@ export function GameScreen() {
     [gameId, jobBranch, submitEditRequest],
   );
   const requestFallbackPlacement = useCallback(
-    (prefab: string, point: { x: number; y: number }) => {
+    (prefab: string, point: { x: number; y: number }, path?: Array<{ x: number; y: number }>) => {
       if (activeStage) {
         const media = containerRef.current?.querySelector('img, video');
         if (!(media instanceof HTMLImageElement || media instanceof HTMLVideoElement)) return;
@@ -256,6 +259,17 @@ export function GameScreen() {
       try {
         const target = { gameId, branchId: jobBranch };
         const key = `edit:${crypto.randomUUID()}`;
+        if (path && path.length > 1 && !activeStage) {
+          submitEditRequest(
+            editJobRequest(
+              target,
+              `Draw ${JSON.stringify(item.label)} (${JSON.stringify(prefab)}) along normalized preview coordinates ${JSON.stringify(path)}.`,
+              'now',
+              key,
+            ),
+          );
+          return;
+        }
         const request =
           fallbackActive && !prefab.startsWith('scope:')
             ? fallbackEditRequest(target, { assetId: prefab, name: item.label, ...point }, key)
@@ -284,7 +298,7 @@ export function GameScreen() {
   }, [branch, gameId]);
 
   useEffect(() => {
-    const signal = readyBuildSignal(jobs.data?.jobs ?? [], branch);
+    const signal = readyBuildSignal(jobs.data?.jobs ?? [], jobBranch);
     if (signal === undefined || signal === inspectedJobRef.current || activeSnapshot === undefined || gameId === '') {
       return;
     }
@@ -311,7 +325,7 @@ export function GameScreen() {
     return () => {
       active = false;
     };
-  }, [activeSnapshot, branch, gameId, jobs.data?.jobs]);
+  }, [activeSnapshot, branch, gameId, jobBranch, jobs.data?.jobs]);
 
   useEffect(() => {
     const container = containerRef.current;
