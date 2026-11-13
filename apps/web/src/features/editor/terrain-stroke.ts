@@ -25,8 +25,10 @@ export function useTerrainStroke(
 ) {
   const ref = useRef<Stroke | undefined>(undefined);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const generation = useRef(0);
   useEffect(
     () => () => {
+      generation.current++;
       if (ref.current) ref.current.cancelled = true;
       ref.current = undefined;
     },
@@ -71,12 +73,13 @@ export function useTerrainStroke(
       if (stroke.released) return true;
       if (Math.hypot(event.clientX - stroke.x, event.clientY - stroke.y) >= 8) addPoint(stroke, event);
       stroke.released = true;
+      const currentGeneration = generation.current;
       const projected = Promise.all(stroke.points);
       queue.current = queue.current
         .then(async () => {
           const results = await projected;
           if (ref.current === stroke) ref.current = undefined;
-          if (stroke.cancelled) return;
+          if (stroke.cancelled || currentGeneration !== generation.current) return;
           const points = results.filter((point): point is Point => point !== null);
           if (points.length < 2 || points.every((point) => point[0] === points[0]![0] && point[2] === points[0]![2]))
             return;

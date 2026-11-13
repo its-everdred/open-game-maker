@@ -179,6 +179,30 @@ describe('GizmoOverlay', () => {
     expect(test.submit).toHaveBeenCalledTimes(2);
     expect(state.doc.globals['scenery.terrain']).toHaveLength(2);
   });
+
+  it('does not submit queued strokes after the overlay is removed', async () => {
+    const test = harness();
+    test.session.getState().doc = { ...doc, globals: { 'scenery.terrain': [] } };
+    const finishes: Array<(value: [number, number, number]) => void> = [];
+    test.frame.project = vi.fn(() => new Promise<[number, number, number]>((resolve) => finishes.push(resolve)));
+    const view = render(
+      <GizmoOverlay
+        activePrefab="scenery-band:path"
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    for (const pointerId of [1, 2]) {
+      fireEvent.pointerDown(canvas, { pointerId, clientX: 10, clientY: 10 });
+      fireEvent.pointerUp(canvas, { pointerId, clientX: 40, clientY: 30 });
+    }
+    view.unmount();
+    await act(async () => finishes.forEach((finish, index) => finish([index, 0, 1])));
+    expect(test.submit).not.toHaveBeenCalled();
+  });
   it('long-presses a picked scenery item to remove it', async () => {
     vi.useFakeTimers();
     const test = harness();

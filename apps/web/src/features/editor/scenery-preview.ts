@@ -15,6 +15,7 @@ import {
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import type { ScenerySource } from './api';
+import { disposeModel } from './dispose-model';
 import type { GameFrameController, GameFrameState } from './frame';
 
 /** A local diorama for a game that does not yet have a runnable build. */
@@ -219,6 +220,8 @@ export function mountSceneryPreview(
       revision++;
       observer.disconnect();
       scenery.dispose();
+      for (const model of models.values()) void model.then(({ scene }) => disposeModel(scene)).catch(() => undefined);
+      models.clear();
       ground.geometry.dispose();
       ground.material.dispose();
       renderer.dispose();
