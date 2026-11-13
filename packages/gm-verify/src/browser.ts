@@ -59,7 +59,7 @@ export function gameUrl(url: string, tier: Tier): string {
  * The shell a run captures the game in: a page that mounts the game in an iframe on another origin. Either the host
  * frame (`hostFrameUrl`, the build served as its own games origin), or the signed-in app's `/play/<slug>` page with
  * `storageState`, where every request the app makes for a game build (`/g/<gameId>/<buildId>/<file>` on the games
- * origin) is answered from `localUrl`, the local build. Either way the stills show the top bar, Pause and touch overlay
+ * origin) is answered from `localUrl`, the local build. Either way the stills show the menu, Pause and touch overlay
  * around the build under test.
  */
 export type AppFrame = {
