@@ -36,6 +36,7 @@ import { useGameMenu, type GameMenuAction } from './GameMenu';
 import { VolumeCircle } from './VolumeCircle';
 import { BuildPanel, BuildTracker, combinedPercent } from '../features/worker-builds/BuildTracker';
 import { useWorkers } from '../features/worker-builds/useWorkers';
+import { useWorkerReviews } from '../features/worker-builds/useWorkerReviews';
 import { useWorkerFinishes } from '../features/worker-builds/useWorkerFinishes';
 
 const RECENT_BUILD_MS = 5 * 60 * 1000;
@@ -71,6 +72,11 @@ export function StudioMenu() {
   const isGameView = Boolean(game || isShowcase);
   const gameId = game?.params.gameId;
   const { workers, feeds } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
+  const reviews = useWorkerReviews(
+    isShowcase ? [] : builds.games.filter((game) => !gameId || game.id === gameId),
+    workers,
+    creatorId,
+  );
   const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, creatorId);
   const visibleFinished = isShowcase
     ? []
@@ -211,7 +217,7 @@ export function StudioMenu() {
       </button>,
     );
   }
-  if (gameId && workers.length > 0) {
+  if (gameId && (workers.length > 0 || reviews.length > 0)) {
     circles.push(
       <button
         key="builds"
@@ -354,8 +360,8 @@ export function StudioMenu() {
         ))}
       </ul>
     );
-  } else if (sheet === 'builds' && workers.length > 0) {
-    sheetContent = <BuildPanel workers={workers} id="studio-menu-builds" />;
+  } else if (sheet === 'builds' && (workers.length > 0 || reviews.length > 0)) {
+    sheetContent = <BuildPanel workers={workers} reviews={reviews} id="studio-menu-builds" />;
   } else if (sheet === 'jobs' && buildGroups.length > 0) {
     sheetContent = (
       <ul id="studio-menu-jobs" className="studio-menu-builds" aria-label="Build progress">
@@ -409,7 +415,9 @@ export function StudioMenu() {
 
   return (
     <div ref={root} className="studio-menu-control">
-      {!isGameView && <BuildTracker workers={workers} finished={visibleFinished} onDismiss={dismissFinished} />}
+      {!isGameView && (
+        <BuildTracker workers={workers} reviews={reviews} finished={visibleFinished} onDismiss={dismissFinished} />
+      )}
       {isGameView && visibleFinished.length > 0 && (
         <span className="worker-tracker-toast worker-tracker-game-toast" role="status">
           {visibleFinished.at(-1)!.title} is ready

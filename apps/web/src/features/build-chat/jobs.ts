@@ -8,7 +8,7 @@ import { api, ApiError } from '../../lib/api/client';
 import { useSession } from '../../lib/api/session';
 import { subscribeNotification } from '../../lib/notify';
 
-type GameSummary = { id: string; title?: string };
+type GameSummary = { id: string; title?: string; slug?: string | null };
 type JobsData = { jobs: Job[]; games: GameSummary[] };
 const EMPTY_JOBS: Job[] = [];
 const EMPTY_GAMES: GameSummary[] = [];

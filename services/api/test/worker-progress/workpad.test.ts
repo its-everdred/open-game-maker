@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createWorkpadReader } from '../../src/worker-progress/workpad.js';
+import { createTicketTitleReader, createWorkpadReader } from '../../src/worker-progress/workpad.js';
 
 describe('workpad reader', () => {
   it('reads the agent workpad without exposing other comments', async () => {
@@ -34,5 +34,15 @@ describe('workpad reader', () => {
     await read('12', { owner: 'other', name: 'game' });
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(String(fetcher.mock.calls[1]?.[0])).toContain('/repos/other/game/issues/12/comments');
+  });
+  it('retrieves a short durable ticket title from the game repository', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(
+        async () => new Response(JSON.stringify({ title: 'Paint a forest with tall trees' }), { status: 200 }),
+      );
+    const read = createTicketTitleReader({ owner: 'owner', name: 'games' }, 'secret', fetcher);
+    expect(await read('12', { owner: 'other', name: 'game' })).toBe('Paint a forest with');
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain('/repos/other/game/issues/12');
   });
 });

@@ -101,6 +101,7 @@ vi.mock('../features/build-chat/jobs', () => ({
   setJobPaused: jobControls.setJobPaused,
 }));
 vi.mock('../features/worker-builds/useWorkers', () => ({ useWorkers: () => ({ workers: state.workers, feeds: [] }) }));
+vi.mock('../features/worker-builds/useWorkerReviews', () => ({ useWorkerReviews: () => [] }));
 vi.mock('../features/build-chat/Chat', () => ({
   Chat: ({ jobId }: { jobId?: string }) => <p>conversation {jobId}</p>,
 }));

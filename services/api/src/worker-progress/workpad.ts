@@ -33,3 +33,36 @@ export function createWorkpadReader(defaultRepo: Repository, token: string, fetc
     return found;
   };
 }
+
+// Preview records contain ticket IDs; look up their durable titles for creators who reopen the app later.
+export function createTicketTitleReader(
+  defaultRepo: Repository,
+  token: string,
+  fetcher: typeof fetch = globalThis.fetch,
+) {
+  const cache = new Map<string, CacheEntry>();
+  return async (ticket: string, repo: Repository = defaultRepo): Promise<string> => {
+    if (!/^[1-9]\d*$/.test(ticket)) return '';
+    const key = `${repo.owner}/${repo.name}#${ticket}`;
+    const cached = cache.get(key);
+    if (cached && cached.expires > Date.now()) return cached.body;
+    const path = `https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/issues/${ticket}`;
+    const response = await fetcher(path, {
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `token ${token}`,
+        'x-github-api-version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error(`Ticket request failed (${response.status})`);
+    const issue: unknown = await response.json();
+    const title =
+      typeof issue === 'object' && issue !== null && 'title' in issue && typeof issue.title === 'string'
+        ? issue.title.trim().split(/\s+/).slice(0, 4).join(' ')
+        : '';
+    if (cache.size >= 200 && !cache.has(key)) cache.delete(cache.keys().next().value!);
+    cache.set(key, { body: title, expires: Date.now() + 30_000 });
+    return title;
+  };
+}

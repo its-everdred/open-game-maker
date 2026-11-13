@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 import { BuildTracker } from './BuildTracker';
 
 afterEach(cleanup);
@@ -36,5 +37,17 @@ describe('build tracker', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Forest backdrop is ready');
     fireEvent.click(screen.getByRole('button', { name: '1 build finished' }));
     expect(dismiss).toHaveBeenCalledOnce();
+  });
+  it('links a handed-off build to its exact review item', () => {
+    render(
+      <MemoryRouter>
+        <BuildTracker
+          workers={[]}
+          reviews={[{ ticket: 'game:12', title: 'Forest backdrop', href: '/forest/review/4' }]}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '1 build to review' }));
+    expect(screen.getByRole('link', { name: 'Forest backdrop' })).toHaveAttribute('href', '/forest/review/4');
   });
 });

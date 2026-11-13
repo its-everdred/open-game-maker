@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { Link } from 'react-router';
 import { Icon } from '../../components/Icon';
 import { MenuRing } from '../../components/MenuCircle';
 import type { FinishedWorker } from './useWorkerFinishes';
@@ -11,6 +12,7 @@ export type WorkerBuild = {
   etaSeconds: number | null;
   startedAt?: string;
 };
+export type WorkerReview = { ticket: string; title: string; href: string };
 
 export function combinedPercent(workers: readonly WorkerBuild[]): number | null {
   return workers.length && workers.every((worker) => worker.percent !== null)
@@ -21,18 +23,22 @@ export function combinedPercent(workers: readonly WorkerBuild[]): number | null 
 export function BuildTracker({
   workers,
   finished = [],
+  reviews = [],
   onDismiss,
 }: {
   workers: WorkerBuild[];
   finished?: readonly FinishedWorker[];
+  reviews?: readonly WorkerReview[];
   onDismiss?(): void;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
-  if (!workers.length && !finished.length) return null;
+  if (!workers.length && !finished.length && !reviews.length) return null;
   const count = workers.length
     ? `${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running`
-    : `${finished.length} ${finished.length === 1 ? 'build' : 'builds'} finished`;
+    : reviews.length
+      ? `${reviews.length} ${reviews.length === 1 ? 'build' : 'builds'} to review`
+      : `${finished.length} ${finished.length === 1 ? 'build' : 'builds'} finished`;
   return (
     <div className="worker-tracker">
       <button
@@ -43,7 +49,7 @@ export function BuildTracker({
         aria-controls={id}
         onClick={() => {
           onDismiss?.();
-          if (workers.length) setOpen(!open);
+          if (workers.length || reviews.length) setOpen(!open);
         }}
       >
         <MenuRing percent={workers.length ? (combinedPercent(workers) ?? undefined) : 100} />
@@ -57,36 +63,46 @@ export function BuildTracker({
           {finished.at(-1)!.title} is ready
         </span>
       )}
-      {open && workers.length > 0 && <BuildPanel workers={workers} id={id} />}
+      {open && <BuildPanel workers={workers} reviews={reviews} id={id} />}
     </div>
   );
 }
 
-export function BuildPanel({ workers, id }: { workers: WorkerBuild[]; id: string }) {
+export function BuildPanel({
+  workers,
+  reviews = [],
+  id,
+}: {
+  workers: WorkerBuild[];
+  reviews?: readonly WorkerReview[];
+  id: string;
+}) {
   const [expanded, setExpanded] = useState(false);
-  if (!workers.length) return null;
+  if (!workers.length && !reviews.length) return null;
   const percent = combinedPercent(workers);
-  const first = [...workers].sort((a, b) => (a.etaSeconds ?? Infinity) - (b.etaSeconds ?? Infinity))[0]!;
+  const first = [...workers].sort((a, b) => (a.etaSeconds ?? Infinity) - (b.etaSeconds ?? Infinity))[0];
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
       <h2>Builds</h2>
-      <button
-        type="button"
-        className="worker-tracker-summary"
-        aria-expanded={expanded}
-        aria-controls={`${id}-list`}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span>
-          {first.title}
-          {first.etaSeconds === null ? '' : ` · about ${formatTime(first.etaSeconds)} left`}
-        </span>
-        <span>{percent === null ? '—' : `${percent}%`}</span>
-        <span className="worker-tracker-bar">
-          <span style={{ width: `${percent ?? 0}%` }} />
-        </span>
-        <small>{expanded ? 'Hide builds ▴' : 'Show each build ▾'}</small>
-      </button>
+      {first && (
+        <button
+          type="button"
+          className="worker-tracker-summary"
+          aria-expanded={expanded}
+          aria-controls={`${id}-list`}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span>
+            {first.title}
+            {first.etaSeconds === null ? '' : ` · about ${formatTime(first.etaSeconds)} left`}
+          </span>
+          <span>{percent === null ? '—' : `${percent}%`}</span>
+          <span className="worker-tracker-bar">
+            <span style={{ width: `${percent ?? 0}%` }} />
+          </span>
+          <small>{expanded ? 'Hide builds ▴' : 'Show each build ▾'}</small>
+        </button>
+      )}
       {expanded && (
         <ul id={`${id}-list`} className="worker-tracker-list">
           {workers.map((worker) => (
@@ -98,6 +114,15 @@ export function BuildPanel({ workers, id }: { workers: WorkerBuild[]; id: string
               <span className="worker-tracker-bar">
                 <span style={{ width: `${worker.percent ?? 0}%` }} />
               </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {reviews.length > 0 && (
+        <ul className="worker-tracker-list">
+          {reviews.map((review) => (
+            <li key={review.href}>
+              <Link to={review.href}>{review.title}</Link>
             </li>
           ))}
         </ul>
