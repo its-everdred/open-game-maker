@@ -1,5 +1,5 @@
 import { ASSETS_SCHEMA_MINOR, type AssetManifest, type AssetMetadata } from '@ogm/contracts';
-import type { WebGLRenderer } from 'three';
+import { Group, Mesh, type WebGLRenderer } from 'three';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssetNotFound, AssetUnavailable } from './errors.js';
@@ -416,6 +416,30 @@ describe('AssetLoader', () => {
     expect(() => loader.resolve('nope')).toThrow('nope');
     expect(() => loader.resolve('castle/tower-alt')).toThrow(AssetUnavailable);
     expect(() => loader.resolve('castle/tower-alt')).toThrow('low → mobile → desktop → *');
+  });
+
+  it('returns independent hierarchies for named and whole-model assets', async () => {
+    const root = new Group();
+    const child = new Mesh();
+    child.name = 'castle/tower-base';
+    const parent = new Group();
+    parent.position.set(3, 0, 0);
+    parent.add(child);
+    root.add(parent, new Mesh());
+    gltfSpies.parse.mockResolvedValue({ scene: root });
+    const loader = new AssetLoader({
+      manifestUrl: 'https://game.test/assets/manifest.json',
+      tier: 'desktop',
+      fetch: fetchFor(),
+    });
+    await loader.load();
+    const named = await loader.object('castle/tower-base');
+    const whole = await loader.object('castle/tower-alt');
+    expect(named).not.toBe(child);
+    expect(named.name).toBe(child.name);
+    expect(named.children[0]?.position.x).toBe(3);
+    expect(whole.children[0]?.children).toHaveLength(2);
+    expect(whole).not.toBe(root);
   });
 
   it('configures meshopt without importing KTX2 for an ordinary GLB', async () => {

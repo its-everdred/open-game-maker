@@ -17,7 +17,15 @@ export interface SpawnEntity {
 export interface LevelDesign {
   schemaVersion: 1;
   globals: { 'player.speed': number; 'level.size': number };
-  entities: Record<string, SpawnEntity>;
+  entities: Record<string, SpawnEntity | SceneryEntity>;
+}
+
+export interface SceneryEntity {
+  id: string;
+  prefab: `scenery:${string}`;
+  level: string;
+  origin: 'build' | 'creator';
+  props: Record<string, unknown>;
 }
 
 export interface PlayerState {
@@ -67,7 +75,7 @@ const PLAYER_GROUND_Y = 1;
 export const levelDesignSchema: z.ZodType<LevelDesign> = z.object({
   schemaVersion: z.literal(1).default(1),
   globals: z
-    .object({
+    .looseObject({
       'player.speed': z.number().min(1).max(10).default(4),
       'level.size': z.number().min(6).max(40).default(12),
     })
@@ -75,28 +83,37 @@ export const levelDesignSchema: z.ZodType<LevelDesign> = z.object({
   entities: z
     .record(
       z.string(),
-      z.object({
-        id: z.string(),
-        prefab: z.literal('spawn'),
-        level: z.string().min(1),
-        origin: z.enum(['build', 'creator']),
-        props: z
-          .object({
-            x: z.number().optional(),
-            z: z.number().optional(),
-            pose: z
-              .object({ position: z.tuple([z.number(), z.number(), z.number()]), rotationY: z.number().optional() })
-              .optional(),
-          })
-          .refine((props) => props.pose !== undefined || (props.x !== undefined && props.z !== undefined)),
-      }),
+      z.union([
+        z.object({
+          id: z.string(),
+          prefab: z.literal('spawn'),
+          level: z.string().min(1),
+          origin: z.enum(['build', 'creator']),
+          props: z
+            .object({
+              x: z.number().optional(),
+              z: z.number().optional(),
+              pose: z
+                .object({ position: z.tuple([z.number(), z.number(), z.number()]), rotationY: z.number().optional() })
+                .optional(),
+            })
+            .refine((props) => props.pose !== undefined || (props.x !== undefined && props.z !== undefined)),
+        }),
+        z.object({
+          id: z.string(),
+          prefab: z.templateLiteral(['scenery:', z.string()]),
+          level: z.string().min(1),
+          origin: z.enum(['build', 'creator']),
+          props: z.record(z.string(), z.unknown()),
+        }),
+      ]),
     )
     .default(() => structuredClone(DEFAULT_DESIGN.entities)),
 });
 
 function spawnEntries(design: LevelDesign): SpawnEntity[] {
   return Object.values(design.entities)
-    .filter((entity) => entity.prefab === 'spawn')
+    .filter((entity): entity is SpawnEntity => entity.prefab === 'spawn')
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
@@ -126,6 +143,8 @@ export function createGame(): {
   design(): LevelDesign;
   attachPhysics(runtime: Runtime<LevelDesign, GameSave>): Promise<PhysicsHandle>;
   attachScene(adapter: SceneAdapter): void;
+  onDesignChange(listener: (design: LevelDesign) => void): () => void;
+  setSceneryAssetValidator(validate: (id: string) => boolean): void;
   /** The last bridge `editor.camera`; `undefined` keeps the manifest rig. */
   camera(): { mode: 'follow' | 'free'; target?: string } | undefined;
   /** A player's or spawn's world position; the default player when `id` is absent. */
@@ -134,6 +153,8 @@ export function createGame(): {
   followPosition(target?: string): Vec3;
 } {
   let design = structuredClone(DEFAULT_DESIGN);
+  const designListeners = new Set<(next: LevelDesign) => void>();
+  let validSceneryAsset: (id: string) => boolean = () => false;
   let state: GameSave = { tick: 0, players: {} };
   let physics: PhysicsHandle | undefined;
   let initialPhysics: Uint8Array | undefined;
@@ -147,7 +168,7 @@ export function createGame(): {
     const player = state.players[id];
     if (player) return [...player.position];
     const spawn = design.entities[id];
-    return spawn ? [...spawnPosition(spawn)] : undefined;
+    return spawn?.prefab === 'spawn' ? [...spawnPosition(spawn)] : undefined;
   };
 
   const addPlayerBody = (player: PlayerState) => {
@@ -243,6 +264,7 @@ export function createGame(): {
         },
         applyDesign(next: LevelDesign, patches: Patch[]) {
           design = structuredClone(next);
+          for (const listener of designListeners) listener(structuredClone(design));
           return patches.some(({ path }) => path[0] === 'globals' && path[1] === 'level.size')
             ? 'restart-scene'
             : 'live';
@@ -278,13 +300,22 @@ export function createGame(): {
         worldToScreen(id) {
           return scene?.worldToScreen(id) ?? null;
         },
+        setSelection() {
+          // The editor overlay draws selection controls for scenery.
+        },
         setCamera(mode, target) {
           if (target !== undefined && !position(target)) throw new Error(`unknown camera target ${target}`);
           camera = { mode, target };
         },
-        validatePlacement(_prefab, pose) {
+        validatePlacement(prefab, pose) {
           const half = design.globals['level.size'] / 2;
           const [x, , z] = pose.position;
+          if (prefab.startsWith('scenery:')) {
+            if (!validSceneryAsset(prefab.slice('scenery:'.length))) return { ok: false, reason: 'asset unavailable' };
+            return Math.abs(x) >= half || Math.abs(z) >= half
+              ? { ok: true }
+              : { ok: false, reason: 'inside play area' };
+          }
           return Math.abs(x) <= half && Math.abs(z) <= half
             ? { ok: true }
             : { ok: false, reason: 'outside level bounds' };
@@ -321,6 +352,15 @@ export function createGame(): {
     module,
     state: () => cloneSave(state),
     design: () => structuredClone(design),
+    setSceneryAssetValidator(validate) {
+      validSceneryAsset = validate;
+    },
+    onDesignChange(listener) {
+      designListeners.add(listener);
+      return () => {
+        designListeners.delete(listener);
+      };
+    },
     async attachPhysics(runtime) {
       stopPhysicsSync?.();
       stopPhysicsSync = runtime.onStep(stepPhysics);

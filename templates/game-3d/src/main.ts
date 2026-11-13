@@ -7,6 +7,7 @@ import { OrthographicCamera, type Camera } from 'three';
 
 import { createGame, type GameSave, type LevelDesign } from './game.js';
 import { createScene, type SceneHandle } from './scene.js';
+import { attachScenery } from './scenery.js';
 
 declare const __GM_BUILD__: 'draft' | 'test' | 'published';
 
@@ -55,6 +56,7 @@ async function start() {
   let editorCamera: EditorCamera | undefined;
   let stopViewport: (() => void) | undefined;
   let stopPlayers: (() => void) | undefined;
+  let stopScenery: (() => void) | undefined;
   let onWindowResize: (() => void) | undefined;
   let cleaned = false;
   const cleanup = () => {
@@ -63,6 +65,7 @@ async function start() {
     closeStandaloneHost();
     stopViewport?.();
     stopPlayers?.();
+    stopScenery?.();
     if (onWindowResize) window.removeEventListener('resize', onWindowResize);
     cameraRigs?.dispose();
     editorCamera?.dispose();
@@ -87,6 +90,14 @@ async function start() {
       channel: runtime.build,
     });
     await loader.prepare();
+    controller.setSceneryAssetValidator((id) => {
+      try {
+        loader.resolve(id);
+        return true;
+      } catch {
+        return false;
+      }
+    });
     document.documentElement.dataset.bootStage = 'runtime';
 
     const canvas = document.querySelector<HTMLCanvasElement>('#game');
@@ -100,6 +111,16 @@ async function start() {
       },
     });
     sceneHandle = createScene(controller.design());
+    loader.attachRenderer(rendererHandle.renderer);
+    const scenery = attachScenery(sceneHandle.scene, loader, controller.design().globals['level.size']);
+    const offDesign = controller.onDesignChange((design) => {
+      void scenery.update(design).catch((error: unknown) => console.error('scenery update failed', error));
+    });
+    stopScenery = () => {
+      offDesign();
+      scenery.dispose();
+    };
+    await scenery.update(controller.design());
     cameraRigs = new RigSet(
       () =>
         createRig(controller.module.manifest.view, '3d', {
@@ -113,7 +134,7 @@ async function start() {
     );
     const frameEditorCamera = (camera: OrthographicCamera) => {
       const aspect = canvas.height > 0 ? canvas.width / canvas.height : 1;
-      const half = controller.design().globals['level.size'] * 0.6;
+      const half = controller.design().globals['level.size'] * 0.85;
       camera.left = -half * aspect;
       camera.right = half * aspect;
       camera.top = half;
@@ -123,7 +144,7 @@ async function start() {
     let appliedCamera = '';
     /* Edit mode obeys bridge `editor.camera` (follow tracks the target, free pans/zooms); otherwise the manifest rig. */
     const viewCamera = (): Camera => {
-      const command = runtime?.mode === 'edit' ? controller.camera() : undefined;
+      const command = runtime?.mode === 'edit' ? (controller.camera() ?? { mode: 'free' as const }) : undefined;
       if (!command) {
         editorCamera?.dispose();
         editorCamera = undefined;

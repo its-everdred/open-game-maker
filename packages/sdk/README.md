@@ -121,3 +121,8 @@ stored in degrees in the editor and radians in scenery data. These adapters do n
 Workers can reconcile creator edits by saving the latest `gm design current --json` result and running
 `gm scenery sync --design <snapshot.json>` before changing `scenery.json`. Sync replaces the scene file with the
 validated scenery in that snapshot; obtain a fresh snapshot first.
+
+A game can opt in by declaring `scenery` in its manifest capabilities. The Vite artifact plugin maps
+`scenery.json` into the build's design document with stable entity IDs (or initializes empty scene settings when the
+file is absent). The 3D template demonstrates loading each locked model with `AssetLoader.object`, applying design
+updates through the scenery controller, and protecting the game's play-area rectangle.

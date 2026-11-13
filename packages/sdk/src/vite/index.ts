@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+
+import { sceneryToDesign } from '../scenery/design.js';
 
 import {
   AssetsLockSchema,
@@ -95,6 +98,19 @@ export function foldDesignFiles(designDir: string): DesignDoc {
   return folded as DesignDoc;
 }
 
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/** Stable entity IDs keep editor transactions attached to the same scenery after a rebuild. */
+export function sceneryEntityId(itemId: string): string {
+  let value = BigInt(`0x${createHash('sha256').update(itemId).digest('hex').slice(0, 32)}`);
+  let encoded = '';
+  for (let i = 0; i < 26; i++) {
+    encoded = CROCKFORD[Number(value & 31n)]! + encoded;
+    value >>= 5n;
+  }
+  return `e_${encoded}`;
+}
+
 type EmitContext = { emitFile(file: { type: 'asset'; fileName: string; source: string }): string };
 
 /** Vite plugin: publish the host artifacts and refresh the game's checked-in credits from its current lock. */
@@ -109,9 +125,25 @@ export function gmBuildArtifacts(options: {
     name: 'gm-build-artifacts',
     generateBundle(this: EmitContext) {
       const manifest = gameManifestSchema.parse(options.manifest);
-      const design = foldDesignFiles(options.designDir);
+      let design = foldDesignFiles(options.designDir);
       const lockFile = options.assetsLockFile ?? join(gameRoot, 'assets.lock.json');
       const scenery = sceneryArtifact(gameRoot, lockFile);
+      if (
+        manifest.capabilities.includes('scenery') &&
+        (scenery !== undefined || !('scenery.settings' in design.globals))
+      ) {
+        const lock = AssetsLockSchema.parse(JSON.parse(readFileSync(lockFile, 'utf8')));
+        const raw = scenery
+          ? JSON.parse(scenery)
+          : {
+              version: 1,
+              items: [],
+              terrain: [],
+              lighting: 'warm-forest',
+              camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+            };
+        design = sceneryToDesign(parseScenery(raw, lock.assets), design, sceneryEntityId);
+      }
       const credits = regenerateCredits(lockFile, options.creditsFile ?? join(gameRoot, 'CREDITS.md'));
       this.emitFile({ type: 'asset', fileName: MANIFEST_FILE, source: `${JSON.stringify(manifest, null, 2)}\n` });
       this.emitFile({ type: 'asset', fileName: DESIGN_FILE, source: `${JSON.stringify(design, null, 2)}\n` });
