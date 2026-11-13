@@ -57,6 +57,18 @@ afterEach(() => {
 });
 
 describe('editor session', () => {
+  it('keeps an ephemeral preview marked unsaved after local edits', async () => {
+    const store = createEditorSession({
+      sessionId: 'preview',
+      leaseToken: 0,
+      snapshot: snapshot(),
+      ephemeral: true,
+      api: { postTransaction: async () => ({ ok: true, rev: 5 }), getSnapshot: async () => snapshot() },
+    });
+    await store.getState().submit(intent());
+    expect(store.getState()).toMatchObject({ saved: 'not-saved', headRev: 5, canUndo: true });
+    expect(store.getState().doc.entities[entityId]?.props['enemy.speed']).toBe(4);
+  });
   it('reloads and replays once after a 409 before reporting saved', async () => {
     const { store, postTransaction, getSnapshot } = setup(
       [

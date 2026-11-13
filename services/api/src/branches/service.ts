@@ -82,7 +82,7 @@ function latestBuildGitSha(sqlite: Sqlite, branch: Branch): string | null {
 
 export function createBranch(
   sqlite: Sqlite,
-  input: { gameId: string; name: string; fromBranchId?: string; userId: string },
+  input: { gameId: string; name: string; fromBranchId?: string; userId: string; forkGitSha?: string },
   options: { id?: string; now?: Date } = {},
 ): Branch {
   const name = normalizedName(input.name);
@@ -106,7 +106,7 @@ export function createBranch(
         forkPoint: {
           parentBranchId: parent.id,
           parentRev: parent.headRev,
-          gitSha: latestBuildGitSha(sqlite, parent),
+          gitSha: input.forkGitSha ?? latestBuildGitSha(sqlite, parent),
         },
         headRev: 0,
         latestBuildId: parent.latestBuildId,

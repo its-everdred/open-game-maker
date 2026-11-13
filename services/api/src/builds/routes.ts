@@ -94,6 +94,8 @@ export function buildRoutes(opts: { daemonForSecret: HookDaemonResolver; gameFor
         const game = findGameBySlugOrId(deps.db, c.req.param('ref'))!;
         const sha = c.req.header('x-gm-sha') ?? '';
         if (!SHA.test(sha)) return c.json({ error: { code: 'invalid_sha' } }, 400);
+        const branchId = c.req.header('x-gm-branch') ?? 'main';
+        if (!/^[A-Za-z0-9_-]{1,200}$/u.test(branchId)) return c.json({ error: { code: 'invalid_branch' } }, 400);
         try {
           const preview = await createPreview(
             deps,
@@ -101,6 +103,7 @@ export function buildRoutes(opts: { daemonForSecret: HookDaemonResolver; gameFor
             c.req.param('identifier'),
             sha,
             Buffer.from(await c.req.arrayBuffer()),
+            branchId,
           );
           return c.json({ gameId: preview.gameId, buildId: preview.buildId }, 201);
         } catch (error) {

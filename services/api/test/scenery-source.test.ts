@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { BlobStore } from '@ogm/blob-store';
+import type { BlobHash, BlobStore } from '@ogm/blob-store';
 import { schema } from '@ogm/db';
 import { readSceneryFile, readScenerySource } from '../src/scenery/source.js';
+import { insertChatRow } from '../src/build-chat/store.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 
 const roots: string[] = [];
@@ -44,6 +46,75 @@ function fixture() {
 }
 
 describe('no-build scenery source', () => {
+  it('reads the selected branch lock and vendored bytes without using the checkout', async () => {
+    const { root, game, blobStore } = fixture();
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args]);
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-qm', 'main');
+    const originalLock = readFileSync(join(game, 'assets.lock.json'));
+    const bytes = Buffer.from('branch-only model');
+    writeFileSync(join(game, 'models', 'tree model.glb'), bytes);
+    const lockPath = join(game, 'assets.lock.json');
+    const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+    lock.assets[0].sha256 = createHash('sha256').update(bytes).digest('hex');
+    writeFileSync(lockPath, JSON.stringify(lock));
+    git('add', '.');
+    git('commit', '-qm', 'side asset');
+    git('branch', 'side');
+    const branch = await readScenerySource(root, 'games/fixture', false, 'refs/heads/side');
+    const inherited = await readScenerySource(root, 'games/fixture', false, 'refs/heads/not-created', branch.commit);
+    expect(inherited.lock).toEqual(branch.lock);
+    writeFileSync(lockPath, originalLock);
+    writeFileSync(join(game, 'models', 'tree model.glb'), 'locked model');
+    const result = await readSceneryFile({
+      root: branch.root,
+      lock: branch.lock,
+      assetId: lock.assets[0].id,
+      path: lock.assets[0].path,
+      blobStore,
+      commit: branch.commit,
+    });
+    expect(Buffer.from(result)).toEqual(bytes);
+  });
+  it('uses the tracked scene commit time rather than checkout file time', async () => {
+    const { root, game } = fixture();
+    const scenePath = join(game, 'scenery.json');
+    writeFileSync(
+      scenePath,
+      JSON.stringify({
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      }),
+    );
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args], {
+        // The temporary Git fixture needs a deterministic committer timestamp.
+        // eslint-disable-next-line no-restricted-properties
+        env: { ...process.env, GIT_AUTHOR_DATE: '2026-11-01T00:00:00Z', GIT_COMMITTER_DATE: '2026-11-01T00:00:00Z' },
+      });
+    git('init', '-q');
+    git('add', 'games/fixture/scenery.json');
+    git('commit', '-qm', 'scene');
+    utimesSync(scenePath, new Date('2026-11-12T00:00:00Z'), new Date('2026-11-12T00:00:00Z'));
+    expect((await readScenerySource(root, 'games/fixture')).updatedAt).toBe('2026-11-01T00:00:00.000Z');
+    writeFileSync(
+      scenePath,
+      JSON.stringify({
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'night',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      }),
+    );
+    utimesSync(scenePath, new Date('2026-11-12T00:00:00Z'), new Date('2026-11-12T00:00:00Z'));
+    expect((await readScenerySource(root, 'games/fixture')).updatedAt).toBe('2026-11-12T00:00:00.000Z');
+  });
   it('authorizes the owner and exposes only locked file URLs', async () => {
     const { root, game } = fixture();
     const ids = {
@@ -106,6 +177,14 @@ describe('no-build scenery source', () => {
     const url = `/api/v1/games/${ids.game}/scenery/source`;
     expect((await app.request(url)).status).toBe(401);
     expect((await app.request(url, { headers: asUser(ids.other) })).status).toBe(403);
+    const fallbackUrl = `/api/v1/games/${ids.game}/editor/fallback`;
+    expect((await app.request(fallbackUrl)).status).toBe(401);
+    expect((await app.request(fallbackUrl, { headers: asUser(ids.other) })).status).toBe(403);
+    const fallback = await app.request(fallbackUrl, { headers: asUser(ids.creator) });
+    expect(fallback.status).toBe(200);
+    const fallbackBody = await fallback.json();
+    expect(fallbackBody).toMatchObject({ mode: 'request', palette: { items: [{ prefab: 't3:fixture/models/tree' }] } });
+    expect(JSON.stringify(fallbackBody)).not.toContain(root);
     const response = await app.request(url, { headers: asUser(ids.creator) });
     expect(response.status).toBe(200);
     const body = (await response.json()) as { assets: { url: string; sha256: string }[] };
@@ -116,6 +195,200 @@ describe('no-build scenery source', () => {
     expect(await asset.text()).toBe('locked model');
     writeFileSync(join(game, 'models/tree model.glb'), 'tampered');
     expect((await app.request(body.assets[0]!.url, { headers: asUser(ids.creator) })).status).toBe(404);
+    const scenePath = join(game, 'scenery.json');
+    writeFileSync(
+      scenePath,
+      JSON.stringify({
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      }),
+    );
+    utimesSync(scenePath, new Date('2026-11-01T00:00:00Z'), new Date('2026-11-01T00:00:00Z'));
+    const datedScene = await app.request(url, { headers: asUser(ids.creator) });
+    expect(await datedScene.json()).toMatchObject({ updatedAt: '2026-11-01T00:00:00.000Z' });
+    deps.db
+      .insert(schema.branches)
+      .values({
+        id: 'main-branch',
+        gameId: ids.game,
+        name: 'main',
+        gitRef: 'main',
+        status: 'active',
+        createdBy: ids.creator,
+        createdAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.designTransactions)
+      .values({
+        id: 'scene-edit',
+        gameId: ids.game,
+        branchId: 'main-branch',
+        rev: 1,
+        baseRev: 0,
+        leaseToken: 1,
+        actor: ids.creator,
+        kind: 'manual',
+        label: 'Edit scene',
+        baseBuildId: 'none',
+        commandsJson: '[]',
+        patchesJson: JSON.stringify([{ op: 'replace', path: ['globals', 'scenery.terrain'], value: [] }]),
+        inverseJson: '[]',
+        createdAt: '2026-11-12T00:00:00.000Z',
+      })
+      .run();
+    expect(await (await app.request(url, { headers: asUser(ids.creator) })).json()).toMatchObject({
+      updatedAt: '2026-11-12T00:00:00.000Z',
+    });
+    expect((await app.request(`${url}?branch=side`, { headers: asUser(ids.creator) })).status).toBe(404);
+    const unavailableFork = await app.request(`/api/v1/games/${ids.game}/branches`, {
+      method: 'POST',
+      headers: { ...asUser(ids.creator), 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'unavailable fork' }),
+    });
+    expect(unavailableFork.status).toBe(503);
+    expect(
+      deps.db
+        .select()
+        .from(schema.branches)
+        .all()
+        .map((branch) => branch.name),
+    ).not.toContain('unavailable fork');
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args]);
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-qm', 'main');
+    const forkResponse = await app.request(`/api/v1/games/${ids.game}/branches`, {
+      method: 'POST',
+      headers: { ...asUser(ids.creator), 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'forked' }),
+    });
+    expect(forkResponse.status).toBe(201);
+    const fork = await forkResponse.json();
+    expect(fork.forkPoint.gitSha).toBe(git('rev-parse', 'HEAD').toString().trim());
+    const branchModel = Buffer.from('side model');
+    writeFileSync(join(game, 'models', 'tree model.glb'), branchModel);
+    const lockPath = join(game, 'assets.lock.json');
+    const oldLock = readFileSync(lockPath);
+    const sideLock = JSON.parse(oldLock.toString());
+    sideLock.assets[0].sha256 = createHash('sha256').update(branchModel).digest('hex');
+    writeFileSync(lockPath, JSON.stringify(sideLock));
+    git('add', '.');
+    git('commit', '-qm', 'side');
+    git('branch', 'side');
+    const inheritedResponse = await app.request(`${url}?branch=${fork.id}`, { headers: asUser(ids.creator) });
+    expect(inheritedResponse.status).toBe(200);
+    const inherited = await inheritedResponse.json();
+    expect(inherited.assets[0].sha256).not.toBe(sideLock.assets[0].sha256);
+    writeFileSync(lockPath, oldLock);
+    writeFileSync(join(game, 'models', 'tree model.glb'), 'locked model');
+    deps.db
+      .insert(schema.branches)
+      .values({
+        id: 'side-branch',
+        gameId: ids.game,
+        name: 'side',
+        gitRef: 'refs/heads/side',
+        status: 'active',
+        createdBy: ids.creator,
+        createdAt: now,
+      })
+      .run();
+    const sideResponse = await app.request(`${url}?branch=side`, { headers: asUser(ids.creator) });
+    expect(sideResponse.status).toBe(200);
+    const side = await sideResponse.json();
+    expect(side.assets[0].sha256).toBe(sideLock.assets[0].sha256);
+    const sideAsset = await app.request(side.assets[0].url, { headers: asUser(ids.creator) });
+    expect(Buffer.from(await sideAsset.arrayBuffer())).toEqual(branchModel);
+    writeFileSync(join(game, 'scenery.json'), '{invalid');
+    expect((await app.request(fallbackUrl, { headers: asUser(ids.creator) })).status).toBe(200);
+    expect((await app.request(url, { headers: asUser(ids.creator) })).status).toBe(404);
+    deps.db
+      .insert(schema.jobs)
+      .values({
+        id: 'j_scope',
+        gameId: ids.game,
+        branchId: 'main',
+        familyId: ids.family,
+        creatorId: ids.creator,
+        kind: 'scope',
+        complexity: 1,
+        state: 'done',
+        start: 'now',
+        slot: 'edit',
+        plan: '{}',
+        reservation: '{}',
+        hardCapMicroUsd: 1,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.scopeSessions)
+      .values({
+        id: 's_88000000-0000-4000-8000-000000000001',
+        gameId: ids.game,
+        creatorId: ids.creator,
+        jobId: 'j_scope',
+        status: 'agreed',
+        revision: 1,
+        choices: '{}',
+        scope: JSON.stringify({
+          session_id: 's_88000000-0000-4000-8000-000000000001',
+          revision: 1,
+          title: 'Game',
+          summary: 'A game',
+          scope: { included: ['Forest trees'], excluded: ['Dragons'] },
+          tickets: [{ key: 'one', title: 'Build', skills: [], dependsOn: [], acceptanceCriteria: ['Works'] }],
+          complexity: 1,
+          open_questions: [],
+          ideas: [],
+        }),
+        scopeHash: 'hash',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    const mediaId = 'm_88000000-0000-4000-8000-000000000001';
+    insertChatRow(deps.sqlite, {
+      id: mediaId,
+      jobId: 'j_scope',
+      actor: 'agent',
+      kind: 'image',
+      at: now,
+      media: { hash: `sha256:${'a'.repeat(64)}` as BlobHash, width: 100, height: 100 },
+    });
+    insertChatRow(deps.sqlite, {
+      jobId: 'j_scope',
+      actor: 'agent',
+      kind: 'command',
+      at: now,
+      command: {
+        decision_id: 'decision',
+        question: 'Choose a scene',
+        options: [{ id: 'a', label: 'Forest', media_id: mediaId }],
+        status: 'answered',
+        option_id: 'a',
+      },
+    });
+    const stageUrl = `/api/v1/games/${ids.game}/editor/stage`;
+    expect((await app.request(stageUrl)).status).toBe(401);
+    expect((await app.request(stageUrl, { headers: asUser(ids.other) })).status).toBe(403);
+    const stage = await app.request(stageUrl, { headers: asUser(ids.creator) });
+    expect(await stage.json()).toMatchObject({ stage: { kind: 'image', url: expect.stringContaining('/sha256/') } });
+    const otherBranch = await app.request(`${stageUrl}?branch=other`, { headers: asUser(ids.creator) });
+    expect(await otherBranch.json()).toEqual({ stage: null });
+    rmSync(join(game, 'assets.lock.json'));
+    const scopeOnly = await app.request(fallbackUrl, { headers: asUser(ids.creator) });
+    expect(scopeOnly.status).toBe(200);
+    expect(await scopeOnly.json()).toMatchObject({
+      mode: 'request',
+      palette: { items: [{ prefab: 'scope:0', label: 'Forest trees', category: 'scenery' }] },
+    });
   }, 60_000);
   it('serves only hash-verified files listed in the game lock', async () => {
     const { root, game, id, blobStore } = fixture();

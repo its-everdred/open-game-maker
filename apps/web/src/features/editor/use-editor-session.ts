@@ -24,6 +24,8 @@ type Options = {
   mode: 'play' | 'edit';
   role?: string;
   activeSnapshot?: DesignSnapshot;
+  requestOnlySnapshot?: DesignSnapshot;
+  previewOnly?: boolean;
   source?: ScenerySource;
   frameRef: RefObject<GameFrameController | undefined>;
   setAdopted: Dispatch<SetStateAction<Adoption | undefined>>;
@@ -35,6 +37,8 @@ export function useEditorSession({
   mode,
   role,
   activeSnapshot,
+  requestOnlySnapshot,
+  previewOnly = false,
   source,
   frameRef,
   setAdopted,
@@ -43,6 +47,25 @@ export function useEditorSession({
   const [sessionView, setSessionView] = useState<EditorSessionState>();
   const [editStartup, setEditStartup] = useState<EditorSessionState['saved']>();
   useEffect(() => {
+    if (mode === 'edit' && role !== 'peer' && requestOnlySnapshot && gameId !== '') {
+      let active = true;
+      setEditStartup(undefined);
+      void (async () => {
+        const intent = source ? await bootstrapScenery(requestOnlySnapshot.doc, source.scene) : undefined;
+        if (!active) return;
+        const initial = intent ? { ...requestOnlySnapshot, doc: intent.doc } : requestOnlySnapshot;
+        if (source) frameRef.current?.applyDesign(initial.rev, initial.doc, []);
+        const editor = createSession(gameId, branch, 'preview', 0, initial, frameRef, previewOnly);
+        if (!previewOnly) editor.setState({ readOnly: true });
+        setSessionStore(editor);
+      })().catch(() => {
+        if (active) setEditStartup('not-saved');
+      });
+      return () => {
+        active = false;
+        setSessionStore(undefined);
+      };
+    }
     if (
       mode !== 'edit' ||
       role === 'peer' ||
@@ -136,7 +159,7 @@ export function useEditorSession({
       void lease.stop();
       setSessionStore(undefined);
     };
-  }, [activeSnapshot, branch, gameId, mode, role, source, frameRef, setAdopted]);
+  }, [activeSnapshot, requestOnlySnapshot, previewOnly, branch, gameId, mode, role, source, frameRef, setAdopted]);
 
   useEffect(() => {
     if (sessionStore === undefined) {
@@ -157,13 +180,17 @@ function createSession(
   leaseToken: number,
   snapshot: DesignSnapshot,
   frameRef: RefObject<GameFrameController | undefined>,
+  previewOnly = false,
 ) {
+  let previewRev = snapshot.rev;
   return createEditorSession({
     sessionId,
     leaseToken,
     snapshot,
+    ephemeral: previewOnly,
     api: {
-      postTransaction: (body) => postTransaction(gameId, branch, body),
+      postTransaction: (body) =>
+        previewOnly ? Promise.resolve({ ok: true as const, rev: ++previewRev }) : postTransaction(gameId, branch, body),
       getSnapshot: () => getDesignSnapshot(gameId, branch),
     },
     applyDesign: (doc, patches, rev) => frameRef.current?.applyDesign(rev, doc, patches),

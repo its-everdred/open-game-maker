@@ -82,6 +82,9 @@ bash "$ROOT/prototypes/studio-v0/tools/build.sh"
 cp -R "$ROOT/apps/web/dist/." "$DEPLOY_DIR/"
 node "$ROOT/apps/web/tools/stage-prototype.mjs" \
   "$ROOT/prototypes/studio-v0" "$ROOT/prototypes/ui-v0/site" "$DEPLOY_DIR/proto" "${ASSET_FILTER_ARGS[@]}"
+# Keep the checked-in showcase images when the archived prototype build lacks
+# its separately captured Goblin Cellar stills.
+cp -R "$ROOT/apps/web/public/proto/art/." "$DEPLOY_DIR/proto/art/"
 printf '%s\n' "$REDIRECTS" >"$DEPLOY_DIR/_redirects"
 if [[ "$INSTANCE_ALL_ASSETS" == 0 && -d "$DEPLOY_DIR/art/packs" ]]; then
   find "$DEPLOY_DIR/art/packs" -maxdepth 1 -type f -name 'synty-*' -delete

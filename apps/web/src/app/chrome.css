@@ -65,6 +65,22 @@
   right: max(76px, calc(var(--safe-r) + 60px));
 }
 
+.studio-library-volume {
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.studio-library-volume .volume-circle {
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--pop-sm);
+}
+
+.studio-library-volume .menu-circle-ring {
+  display: none;
+}
+
 .studio-menu-button,
 .menu-circle {
   display: grid;
@@ -82,6 +98,10 @@
   width: 50px;
   height: 50px;
   border-radius: 50%;
+}
+
+.studio-menu-button[hidden] {
+  display: none;
 }
 
 .studio-menu-button:active {
@@ -172,6 +192,13 @@
   width: calc(100% - 58px);
   max-width: calc(100% - 58px);
   margin-right: 58px;
+}
+
+.studio-menu-control:has(.studio-library-volume) .studio-menu-row {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 58px;
+  margin-right: 0;
 }
 
 /* Keep the game's centered pause panel clear on a short landscape phone. */

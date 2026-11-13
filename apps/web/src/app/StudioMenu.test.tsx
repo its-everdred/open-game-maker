@@ -211,6 +211,43 @@ afterEach(() => {
 });
 
 describe('StudioMenu', () => {
+  it.each(['/all', '/all/', '/new', '/new/'])('keeps the sound control directly available on %s', (path) => {
+    renderMenu(path);
+    const volume = screen.getByRole('button', { name: 'Mute' });
+    expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
+    fireEvent.click(volume);
+    expect(sound.setMuted).toHaveBeenCalledWith(true);
+    fireEvent.contextMenu(volume);
+    expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
+  });
+  it.each(['Escape', 'outside'] as const)('collapses the persistent sound control after %s', (dismiss) => {
+    vi.useFakeTimers();
+    renderMenu('/all');
+    const volume = screen.getByRole('button', { name: 'Mute' });
+    fireEvent.pointerDown(volume, { clientX: 100, clientY: 100 });
+    act(() => vi.advanceTimersByTime(450));
+    fireEvent.contextMenu(volume);
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeVisible();
+    fireEvent.pointerUp(volume);
+    fireEvent.click(volume);
+    expect(volume).toHaveAttribute('aria-expanded', 'true');
+    if (dismiss === 'Escape') fireEvent.keyDown(document, { key: 'Escape' });
+    else fireEvent.pointerDown(document.body);
+    expect(volume).toHaveAttribute('aria-expanded', 'false');
+    expect(volume).toHaveFocus();
+  });
+  it('opens the header menu from the keyboard and returns focus to sound', () => {
+    renderMenu('/all');
+    const volume = screen.getByRole('button', { name: 'Mute' });
+    volume.focus();
+    expect(volume).toHaveAccessibleDescription('Long press or Shift+F10 opens the menu');
+    fireEvent.keyDown(volume, { key: 'F10', shiftKey: true });
+    expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
+    expect(volume).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(volume).toHaveFocus();
+    expect(volume).toHaveAttribute('aria-expanded', 'false');
+  });
   it('shows live worker progress in the builds control', () => {
     state.workers = [{ ticket: '12', title: 'Forest backdrop', percent: 50, etaSeconds: 10 }];
     renderMenu('/games');

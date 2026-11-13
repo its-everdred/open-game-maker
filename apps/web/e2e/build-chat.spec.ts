@@ -73,7 +73,7 @@ test('phone build dock opens the streamed chat and posts text once', async ({ pa
   await installBuildRoutes(page);
   await page.goto('/all?test');
 
-  await expect(page.getByRole('button', { name: 'Menu' })).toHaveAttribute('data-building', 'true');
+  await expect(page.locator('.studio-library-volume button')).toHaveAttribute('data-building', 'true');
   await openBuildChat(page);
 
   const panel = page.locator('.build-chat-panel');
@@ -225,7 +225,7 @@ test('a broken picker leaves the chat dock mounted', async ({ page }) => {
   await page.goto('/all?test');
 
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Menu' })).toBeVisible();
+  await expect(page.locator('.studio-library-volume button')).toBeVisible();
 });
 
 test('asking for a change with no build running starts an edit job and streams it', async ({ page }) => {

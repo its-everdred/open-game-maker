@@ -43,6 +43,7 @@ export type EditorSessionOptions = {
   sessionId: string;
   leaseToken: number;
   snapshot: DesignSnapshot;
+  ephemeral?: boolean;
   api: SessionApi;
   applyDesign?(doc: DesignDoc, patches: readonly Patch[], rev: number): void;
   retryDelayMs?: number;
@@ -63,7 +64,7 @@ export function createEditorSession(options: EditorSessionOptions): StoreApi<Edi
     doc: options.snapshot.doc,
     headRev: options.snapshot.rev,
     buildId: options.snapshot.buildId,
-    saved: 'saved',
+    saved: options.ephemeral ? 'not-saved' : 'saved',
     readOnly: false,
     canUndo: false,
     canRedo: false,
@@ -130,7 +131,7 @@ export function createEditorSession(options: EditorSessionOptions): StoreApi<Edi
       if (result.ok) {
         pending = undefined;
         recordSuccess(intent, mode);
-        store.setState({ headRev: result.rev, saved: 'saved', error: undefined });
+        store.setState({ headRev: result.rev, saved: options.ephemeral ? 'not-saved' : 'saved', error: undefined });
         options.applyDesign?.(store.getState().doc, [], result.rev);
         return;
       }

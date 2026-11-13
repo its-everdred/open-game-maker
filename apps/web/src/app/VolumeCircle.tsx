@@ -20,6 +20,11 @@ export function VolumeCircle({
   onMute,
   sliderOpen,
   onSlider,
+  onMenu,
+  menuOpen = false,
+  decisionCount = 0,
+  blocked = false,
+  building = false,
 }: {
   sound: SoundStatus;
   volume: number;
@@ -27,6 +32,11 @@ export function VolumeCircle({
   onMute(muted: boolean): void;
   sliderOpen: boolean;
   onSlider(): void;
+  onMenu?(): void;
+  menuOpen?: boolean;
+  decisionCount?: number;
+  blocked?: boolean;
+  building?: boolean;
 }) {
   const gesture = useRef<Gesture | undefined>(undefined);
   const on = sound === 'on';
@@ -69,6 +79,11 @@ export function VolumeCircle({
     onMute(on);
   };
   const key = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (onMenu && event.shiftKey && event.key === 'F10') {
+      event.preventDefault();
+      onMenu();
+      return;
+    }
     const step = { ArrowUp: KEY_STEP, ArrowRight: KEY_STEP, ArrowDown: -KEY_STEP, ArrowLeft: -KEY_STEP }[event.key];
     if (step === undefined) return;
     event.preventDefault();
@@ -80,18 +95,36 @@ export function VolumeCircle({
       type="button"
       className="menu-circle volume-circle"
       aria-label={on ? 'Mute' : 'Unmute'}
-      aria-expanded={sliderOpen}
-      aria-controls="studio-menu-volume"
+      aria-expanded={sliderOpen || menuOpen}
+      aria-controls={onMenu ? 'studio-menu-panel studio-menu-volume' : 'studio-menu-volume'}
+      aria-keyshortcuts={onMenu ? 'Shift+F10' : undefined}
+      aria-describedby={
+        onMenu
+          ? `studio-header-menu-hint${decisionCount > 0 ? ' studio-menu-requests' : ''}`
+          : decisionCount > 0
+            ? 'studio-menu-requests'
+            : undefined
+      }
+      data-blocking={blocked}
+      data-building={building}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={release}
       onPointerCancel={cancel}
       onClick={click}
       onKeyDown={key}
-      onContextMenu={(event) => event.preventDefault()}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        if (!gesture.current?.held) onMenu?.();
+      }}
     >
       <MenuRing percent={on ? volume * 100 : 0} />
       <Icon name={on ? 'volume' : 'volumeOff'} />
+      {decisionCount > 0 && (
+        <span className="studio-menu-badge" aria-hidden="true">
+          {decisionCount}
+        </span>
+      )}
     </button>
   );
 }

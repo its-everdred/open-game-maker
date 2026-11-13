@@ -43,11 +43,12 @@ export interface SerializedSimulation {
 
 function spawns(design: PlatformDesign): { x: number; y: number }[] {
   return Object.values(design.entities)
-    .filter(
-      (entity): entity is Extract<PlatformDesign['entities'][string], { prefab: 'spawn' | 'platform' }> =>
-        entity.prefab === 'spawn',
-    )
-    .map((entity) => ({ x: entity.props.x, y: entity.props.y }));
+    .filter((entity) => entity.prefab === 'spawn')
+    .map((entity) => position(entity.props));
+}
+
+function position(props: PlatformDesign['entities'][string]['props']): { x: number; y: number } {
+  return { x: props.pose?.position[0] ?? props.x!, y: props.pose?.position[1] ?? props.y! };
 }
 
 export function platformsFromDesign(design: PlatformDesign): Platform[] {
@@ -58,8 +59,7 @@ export function platformsFromDesign(design: PlatformDesign): Platform[] {
     )
     .map((entity) => ({
       id: entity.id,
-      x: entity.props.x,
-      y: entity.props.y,
+      ...position(entity.props),
       width: entity.props.w ?? 160,
       height: entity.props.h ?? 24,
     }));

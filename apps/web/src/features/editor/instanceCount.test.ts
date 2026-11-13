@@ -40,6 +40,17 @@ function harness(result: { ok: true } | { ok: false; reason: string }) {
 }
 
 describe('instance count controls', () => {
+  it('places an adjacent item relative to a legacy 2D entity', async () => {
+    const test = harness({ ok: true });
+    test.session.getState().doc.entities[skeleton]!.props = { x: 400, y: 320 };
+    await changeInstanceCount(
+      { direction: 1, prefab: 'skeleton', targetIds: [skeleton] },
+      manifest,
+      test.frame,
+      test.session,
+    );
+    expect(test.frame.validatePlacement).toHaveBeenCalledWith('skeleton', { position: [402, 320, 0] }, 3_000);
+  });
   it('validates an adjacent placement before posting an entity transaction', async () => {
     const test = harness({ ok: true });
 

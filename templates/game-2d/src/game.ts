@@ -20,13 +20,16 @@ const entitySchema = z.object({
   id: z.string(),
   prefab: z.enum(['spawn', 'platform']),
   level: z.string(),
-  origin: z.enum(['build', 'creator']),
-  props: z.object({
-    x: z.number(),
-    y: z.number(),
-    w: z.number().positive().optional(),
-    h: z.number().positive().optional(),
-  }),
+  origin: z.string(),
+  props: z
+    .object({
+      x: z.number().optional(),
+      y: z.number().optional(),
+      pose: z.looseObject({ position: z.tuple([z.number(), z.number(), z.number()]) }).optional(),
+      w: z.number().positive().optional(),
+      h: z.number().positive().optional(),
+    })
+    .refine((props) => props.pose !== undefined || (props.x !== undefined && props.y !== undefined)),
 });
 
 const sceneryEntitySchema = z.looseObject({
@@ -34,7 +37,11 @@ const sceneryEntitySchema = z.looseObject({
   prefab: z.templateLiteral(['scenery:', z.string()]),
   level: z.string(),
   origin: z.enum(['build', 'creator']),
-  props: z.record(z.string(), z.unknown()),
+  props: z.looseObject({
+    x: z.number().optional(),
+    y: z.number().optional(),
+    pose: z.looseObject({ position: z.tuple([z.number(), z.number(), z.number()]) }).optional(),
+  }),
 });
 
 export const designSchema = z.object({
@@ -269,6 +276,13 @@ export const game: GameModule<PlatformDesign, PlatformSave> = {
           if (entity) targets.push({ id: entity.id, kind: 'entity' as const });
         }
         return targets;
+      },
+      screenToWorld(nx, ny) {
+        const [x, y] = context.view?.screenToWorld(nx, ny) ?? [
+          nx * game.manifest.presentation.minLogical.w,
+          ny * game.manifest.presentation.minLogical.h,
+        ];
+        return [x, y, 0];
       },
       worldToScreen(id) {
         const entity = context.design.entities[id];

@@ -1,4 +1,4 @@
-import type { CameraRig } from '@ogm/contracts';
+import { DesignDocSchema, type CameraRig } from '@ogm/contracts';
 import { createRig, PhaserEditorCamera, RigSet } from '@gm/sdk/camera';
 import { createPaintedScenery } from '@gm/sdk/phaser';
 import { sceneryFromDesign } from '@gm/sdk/scenery';
@@ -42,7 +42,13 @@ export class Level extends Phaser.Scene {
           .map((entity) => ({ id: entity.prefab.slice('scenery:'.length) }));
         if (typeof backdrop?.assetId === 'string') ids.push({ id: backdrop.assetId });
         try {
-          const data = sceneryFromDesign(context.design, ids);
+          const sceneryDoc = {
+            ...context.design,
+            entities: Object.fromEntries(
+              Object.entries(context.design.entities).filter(([, entity]) => entity.prefab.startsWith('scenery:')),
+            ),
+          };
+          const data = sceneryFromDesign(DesignDocSchema.parse(sceneryDoc), ids);
           void scenery.update(data).catch((error: unknown) => console.error('scenery update failed', error));
         } catch (error) {
           console.error('scenery update failed', error);
