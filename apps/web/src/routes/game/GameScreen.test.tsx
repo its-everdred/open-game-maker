@@ -84,6 +84,7 @@ function GameMenuProbe() {
   const { controls, open, setOpen } = useGameMenu();
   return (
     <aside data-testid="game-menu-probe">
+      {controls?.button ? <span data-testid="menu-theme">{JSON.stringify(controls.button)}</span> : null}
       <button type="button" aria-label="Menu" onClick={() => setOpen(!open)} />
       {open && controls ? (
         <div role="group" aria-label="Menu">
@@ -120,7 +121,7 @@ function renderGame(entry = '/g/game') {
   );
 }
 
-async function readyPlayFrame() {
+async function readyPlayFrame(playMenuButton?: { colour: string; icon: 'pause' | 'menu' }) {
   await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
   act(() => {
     host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
@@ -130,6 +131,7 @@ async function readyPlayFrame() {
         id: 'cellar',
         sdk: '^1',
         title: 'Goblin Cellar',
+        playMenuButton,
         inputs: { actions: {} },
         presentation: { orientation: 'any', minLogical: { w: 320, h: 180 }, fit: 'responsive' },
         view: 'main',
@@ -186,6 +188,15 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('passes the ready manifest button theme to the play menu', async () => {
+    renderGame();
+    await readyPlayFrame({ colour: '#e02020', icon: 'pause' });
+    await waitFor(() => expect(screen.getByTestId('menu-theme')).toHaveTextContent('"colour":"#e02020"'));
+    expect(screen.getByTestId('menu-theme')).toHaveTextContent('"icon":"pause"');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await waitFor(() => expect(screen.queryByTestId('menu-theme')).not.toBeInTheDocument());
+  });
   it('defaults to a full-screen play view with the host actions only inside the menu', async () => {
     const { container } = renderGame();
 

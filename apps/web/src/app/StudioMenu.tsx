@@ -379,6 +379,7 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
+        style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={controls !== undefined}
         data-building={buildingJobs.length > 0}
         data-blocking={blocked}
@@ -392,7 +393,7 @@ export function StudioMenu() {
         }}
       >
         <span className="studio-menu-ring" aria-hidden="true" />
-        <Icon name="menu" />
+        <Icon name={controls?.button?.icon ?? 'menu'} />
         {openDecisions > 0 && !open ? (
           <span className="studio-menu-badge" aria-hidden="true">
             {openDecisions}

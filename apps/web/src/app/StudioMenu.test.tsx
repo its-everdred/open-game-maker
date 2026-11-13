@@ -65,6 +65,15 @@ function TestPendingControls() {
   return null;
 }
 
+function ThemedControls() {
+  const controls = useMemo(
+    () => ({ actions: [], extras: [], button: { colour: '#e02020', icon: 'pause' as const } }),
+    [],
+  );
+  useGameMenuControls(controls);
+  return null;
+}
+
 const state = vi.hoisted(() => ({
   admin: { data: undefined as { platformRole: 'maintainer' | 'admin' | 'none' } | undefined },
   jobs: { jobs: [] as TestJob[], active: [] as TestJob[], games: [] as Array<{ id: string; title: string }> },
@@ -198,6 +207,28 @@ afterEach(() => {
 });
 
 describe('StudioMenu', () => {
+  it('applies the play theme and restores the default when the game leaves', () => {
+    const view = render(
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          <ThemedControls />
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    const button = screen.getByRole('button', { name: 'Menu' });
+    expect(button.style.getPropertyValue('--play-menu-colour')).toBe('#e02020');
+    expect(button.querySelector('path')?.getAttribute('d')).toBe('M96 64v128M160 64v128');
+    view.rerender(
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    expect(button.style.getPropertyValue('--play-menu-colour')).toBe('');
+    expect(button.querySelector('path')?.getAttribute('d')).not.toBe('M96 64v128M160 64v128');
+  });
   it('opens the always-available controls on the title without signed-in links', () => {
     renderMenu('/');
 

@@ -21,6 +21,7 @@ export type GameMenuAction = {
 export type GameMenuControls = {
   actions: GameMenuAction[];
   extras: ReactElement[];
+  button?: { colour: string; icon: 'pause' | 'menu' };
 };
 
 type GameMenuState = {

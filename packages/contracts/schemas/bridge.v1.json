@@ -2811,6 +2811,27 @@
                       "minLength": 1,
                       "maxLength": 80
                     },
+                    "playMenuButton": {
+                      "type": "object",
+                      "properties": {
+                        "colour": {
+                          "type": "string",
+                          "pattern": "^#[0-9a-fA-F]{6}$"
+                        },
+                        "icon": {
+                          "type": "string",
+                          "enum": [
+                            "pause",
+                            "menu"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "colour",
+                        "icon"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "saves": {
                       "type": "boolean"
                     },

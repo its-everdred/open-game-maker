@@ -371,9 +371,10 @@ export function GameScreen() {
               },
             ],
             extras: gameExtraElements('topbar', extraProps),
+            button: frameState.manifest?.playMenuButton,
           }
         : undefined,
-    [askForChange, extraProps, leaveRoom, mode, requestMode, room.snapshot?.role],
+    [askForChange, extraProps, frameState.manifest?.playMenuButton, leaveRoom, mode, requestMode, room.snapshot?.role],
   );
   useGameMenuControls(playMenuControls);
 

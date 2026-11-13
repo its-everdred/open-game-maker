@@ -17,6 +17,18 @@ const control = {
 };
 
 describe('game contract', () => {
+  it('validates the optional play menu appearance', () => {
+    const themed = { ...manifest(), playMenuButton: { colour: '#e02020', icon: 'pause' } };
+    expect(gameManifestSchema.parse(themed).playMenuButton).toEqual(themed.playMenuButton);
+    expect(gameJson(themed)).toBe(true);
+    for (const playMenuButton of [
+      { colour: 'red; background: url(x)', icon: 'pause' },
+      { colour: '#e02020', icon: 'stop' },
+    ]) {
+      expect(gameManifestSchema.safeParse({ ...manifest(), playMenuButton }).success).toBe(false);
+      expect(gameJson({ ...manifest(), playMenuButton })).toBe(false);
+    }
+  });
   it('accepts the golden manifest in both Zod and the emitted JSON Schema', () => {
     expect(gameManifestSchema.safeParse(manifest()).success).toBe(true);
     expect(gameJson(manifest())).toBe(true);
