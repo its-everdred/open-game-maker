@@ -438,6 +438,11 @@ export function StudioMenu() {
   return (
     <div ref={root} className="studio-menu-control">
       {hasStudioHeader && <div className="studio-library-volume">{volumeCircle}</div>}
+      {hasStudioHeader && (
+        <span id="studio-header-menu-hint" className="sr">
+          Long press or Shift+F10 opens the menu
+        </span>
+      )}
       {!isGameView && (
         <BuildTracker workers={workers} reviews={reviews} finished={visibleFinished} onDismiss={dismissFinished} />
       )}

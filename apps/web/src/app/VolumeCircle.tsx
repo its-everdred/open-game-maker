@@ -98,7 +98,13 @@ export function VolumeCircle({
       aria-expanded={sliderOpen || menuOpen}
       aria-controls={onMenu ? 'studio-menu-panel studio-menu-volume' : 'studio-menu-volume'}
       aria-keyshortcuts={onMenu ? 'Shift+F10' : undefined}
-      aria-describedby={decisionCount > 0 ? 'studio-menu-requests' : undefined}
+      aria-describedby={
+        onMenu
+          ? `studio-header-menu-hint${decisionCount > 0 ? ' studio-menu-requests' : ''}`
+          : decisionCount > 0
+            ? 'studio-menu-requests'
+            : undefined
+      }
       data-blocking={blocked}
       data-building={building}
       onPointerDown={down}

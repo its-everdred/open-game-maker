@@ -238,6 +238,7 @@ describe('StudioMenu', () => {
     renderMenu('/all');
     const volume = screen.getByRole('button', { name: 'Mute' });
     volume.focus();
+    expect(volume).toHaveAccessibleDescription('Long press or Shift+F10 opens the menu');
     fireEvent.keyDown(volume, { key: 'F10', shiftKey: true });
     expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
     expect(volume).toHaveAttribute('aria-expanded', 'true');
