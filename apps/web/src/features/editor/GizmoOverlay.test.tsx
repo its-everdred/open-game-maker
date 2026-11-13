@@ -146,6 +146,39 @@ describe('GizmoOverlay', () => {
     });
     expect(test.submit).not.toHaveBeenCalled();
   });
+
+  it('retains consecutive strokes when their projections finish out of order', async () => {
+    const test = harness();
+    const state = test.session.getState();
+    state.doc = { ...doc, globals: { 'scenery.terrain': [] } };
+    const finishes: Array<(value: [number, number, number]) => void> = [];
+    test.frame.project = vi.fn(() => new Promise<[number, number, number]>((resolve) => finishes.push(resolve)));
+    test.submit.mockImplementation(async (intent) => {
+      state.doc = { ...state.doc, globals: { ...state.doc.globals, 'scenery.terrain': intent.commands[0].value } };
+    });
+    render(
+      <GizmoOverlay
+        activePrefab="scenery-band:path"
+        frame={test.frame}
+        manifest={{ ...manifest, dimension: '3d', capabilities: ['editor.project'] }}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 40, clientY: 30 });
+    fireEvent.pointerDown(canvas, { pointerId: 2, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 40, clientY: 30 });
+    await act(async () => {
+      finishes[2]?.([5, 0, 1]);
+      finishes[3]?.([6, 0, 1]);
+      finishes[0]?.([1, 0, 1]);
+      finishes[1]?.([2, 0, 1]);
+    });
+    expect(test.submit).toHaveBeenCalledTimes(2);
+    expect(state.doc.globals['scenery.terrain']).toHaveLength(2);
+  });
   it('long-presses a picked scenery item to remove it', async () => {
     vi.useFakeTimers();
     const test = harness();

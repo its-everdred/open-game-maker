@@ -24,6 +24,7 @@ export function useTerrainStroke(
   canProject: boolean,
 ) {
   const ref = useRef<Stroke | undefined>(undefined);
+  const queue = useRef<Promise<void>>(Promise.resolve());
   useEffect(
     () => () => {
       if (ref.current) ref.current.cancelled = true;
@@ -42,7 +43,7 @@ export function useTerrainStroke(
       if (!activePrefab?.startsWith('scenery-band:')) return false;
       const kind = activePrefab.slice('scenery-band:'.length);
       if (canProject && (kind === 'grass' || kind === 'path' || kind === 'water')) {
-        if (ref.current) ref.current.cancelled = true;
+        if (ref.current && !ref.current.released) ref.current.cancelled = true;
         const stroke: Stroke = {
           pointerId: event.pointerId,
           kind,
@@ -70,30 +71,34 @@ export function useTerrainStroke(
       if (stroke.released) return true;
       if (Math.hypot(event.clientX - stroke.x, event.clientY - stroke.y) >= 8) addPoint(stroke, event);
       stroke.released = true;
-      void Promise.all(stroke.points).then((results) => {
-        if (ref.current === stroke) ref.current = undefined;
-        if (stroke.cancelled) return;
-        const points = results.filter((point): point is Point => point !== null);
-        if (points.length < 2 || points.every((point) => point[0] === points[0]![0] && point[2] === points[0]![2]))
-          return;
-        const state = session.getState();
-        if (state.readOnly) return;
-        const settings = state.doc.globals['scenery.settings'];
-        const fallback =
-          settings && typeof settings === 'object' && !Array.isArray(settings)
-            ? (settings as { terrain?: unknown }).terrain
-            : undefined;
-        const terrain = state.doc.globals['scenery.terrain'] ?? fallback;
-        if (!Array.isArray(terrain)) return;
-        const value = [...terrain, { id: createStableId('band_'), kind: stroke.kind, points, width: 1 }];
-        void state.submit(
-          createIntent(
-            state.doc,
-            [{ op: 'set', control: 'scenery.terrain', targets: 'global', value }],
-            `Painted ${stroke.kind}`,
-          ),
-        );
-      });
+      const projected = Promise.all(stroke.points);
+      queue.current = queue.current
+        .then(async () => {
+          const results = await projected;
+          if (ref.current === stroke) ref.current = undefined;
+          if (stroke.cancelled) return;
+          const points = results.filter((point): point is Point => point !== null);
+          if (points.length < 2 || points.every((point) => point[0] === points[0]![0] && point[2] === points[0]![2]))
+            return;
+          const state = session.getState();
+          if (state.readOnly) return;
+          const settings = state.doc.globals['scenery.settings'];
+          const fallback =
+            settings && typeof settings === 'object' && !Array.isArray(settings)
+              ? (settings as { terrain?: unknown }).terrain
+              : undefined;
+          const terrain = state.doc.globals['scenery.terrain'] ?? fallback;
+          if (!Array.isArray(terrain)) return;
+          const value = [...terrain, { id: createStableId('band_'), kind: stroke.kind, points, width: 1 }];
+          await state.submit(
+            createIntent(
+              state.doc,
+              [{ op: 'set', control: 'scenery.terrain', targets: 'global', value }],
+              `Painted ${stroke.kind}`,
+            ),
+          );
+        })
+        .catch(() => undefined);
       return true;
     },
     cancel(event: Pointer): void {
