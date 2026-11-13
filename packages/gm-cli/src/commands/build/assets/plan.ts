@@ -106,8 +106,9 @@ export async function planBuild(
     const facts = item.facts!;
     const declaredKit = meta?.kit !== undefined;
     const eligible =
-      declaredKit ||
-      (meta?.rig === undefined && !facts.rigged && facts.triangles < 5_000 && facts.textureKeys.length > 0);
+      !facts.animated &&
+      (declaredKit ||
+        (meta?.rig === undefined && !facts.rigged && facts.triangles < 5_000 && facts.textureKeys.length > 0));
     if (!eligible) {
       jobs.push({
         kind: 'model',

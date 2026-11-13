@@ -122,7 +122,7 @@ function wav(): Buffer {
   return bytes;
 }
 
-async function glb(width: number, height: number, texture?: Buffer, rigged = false): Promise<Buffer> {
+async function glb(width: number, height: number, texture?: Buffer, rigged = false, animated = false): Promise<Buffer> {
   const document = new Document();
   const buffer = document.createBuffer();
   const vertexCount = (width + 1) * (height + 1);
@@ -166,6 +166,27 @@ async function glb(width: number, height: number, texture?: Buffer, rigged = fal
   const mesh = document.createMesh().addPrimitive(primitive);
   const meshNode = document.createNode().setMesh(mesh);
   const scene = document.createScene().addChild(meshNode);
+  if (animated) {
+    const times = document
+      .createAccessor()
+      .setType('SCALAR')
+      .setArray(new Float32Array([0, 1]))
+      .setBuffer(buffer);
+    const rotations = document
+      .createAccessor()
+      .setType('VEC4')
+      .setArray(new Float32Array([0, 0, 0, 1, 0, 0.707, 0, 0.707]))
+      .setBuffer(buffer);
+    for (const name of ['open', 'close']) {
+      const sampler = document.createAnimationSampler().setInput(times).setOutput(rotations);
+      document
+        .createAnimation(name)
+        .addSampler(sampler)
+        .addChannel(
+          document.createAnimationChannel().setSampler(sampler).setTargetNode(meshNode).setTargetPath('rotation'),
+        );
+    }
+  }
   if (rigged) {
     const joints = new Uint16Array(vertexCount * 4);
     const weights = new Float32Array(vertexCount * 4);
@@ -196,6 +217,8 @@ async function fixtureGame(): Promise<{ cwd: string; meta: AssetMetadata }> {
   if (ffmpegAvailable) writeAsset(cwd, 'assets/audio/tone.wav', wav());
   writeAsset(cwd, 'assets/image/sheet.png', await png(16, 8));
   writeAsset(cwd, 'assets/model/kit/tower.glb', await glb(12, 12, colormap));
+  writeAsset(cwd, 'assets/model/kit/chest.glb', await glb(4, 4, colormap, false, true));
+  writeAsset(cwd, 'assets/model/declared/chest.glb', await glb(4, 4, colormap, false, true));
   writeAsset(cwd, 'assets/model/kit/wall.glb', await glb(16, 12, colormap));
   writeAsset(cwd, 'assets/model/kit/rig-meta.glb', await glb(4, 4, colormap));
   writeAsset(cwd, 'assets/model/declared/a.glb', await glb(4, 4, await png(8, 8)));
@@ -218,6 +241,12 @@ async function fixtureGame(): Promise<{ cwd: string; meta: AssetMetadata }> {
   writeLock(cwd, [
     ...(ffmpegAvailable ? [{ id: 't3:fixture/audio-tone', path: 'assets/audio/tone.wav' }] : []),
     { id: 't3:fixture/image-sheet', path: 'assets/image/sheet.png', meta },
+    { id: 't3:fixture/kit-chest', path: 'assets/model/kit/chest.glb' },
+    {
+      id: 't3:fixture/declared-chest',
+      path: 'assets/model/declared/chest.glb',
+      meta: { kit: { piece: 'wall', grid_m: 1 } },
+    },
     { id: 't3:fixture/kit-tower', path: 'assets/model/kit/tower.glb' },
     { id: 't3:fixture/kit-wall', path: 'assets/model/kit/wall.glb' },
     {
@@ -248,6 +277,46 @@ function outputPath(cwd: string, url: string): string {
 }
 
 describe('gm build assets', () => {
+  const kenneyChest = join(
+    process.cwd(),
+    '../../assets-local/packs/kenney-mini-dungeon/2.0/extracted/Models/GLB format/chest.glb',
+  );
+  it.skipIf(!existsSync(kenneyChest))('preserves the local Kenney Mini Dungeon chest clips', async () => {
+    const cwd = tempDir('gm-build-chest-');
+    const path = 'assets/model/kit/chest.glb';
+    const chestIo = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+    const source = await chestIo.read(kenneyChest);
+    writeAsset(cwd, path, await chestIo.writeBinary(source));
+    writeLock(cwd, [{ id: 't3:fixture/chest', path }]);
+    const result = await gm(['build', 'assets', '--json'], { cwd });
+    expect(result, JSON.stringify(result)).toMatchObject({ code: 0, err: [] });
+    const manifest = assetManifestSchema.parse(
+      JSON.parse(readFileSync(join(cwd, 'public/assets/manifest.json'), 'utf8')),
+    );
+    const asset = manifest.assets['t3:fixture/chest']!;
+    expect(asset.file['*']).toBeUndefined();
+    await MeshoptDecoder.ready;
+    const io = new NodeIO()
+      .registerExtensions(ALL_EXTENSIONS)
+      .registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
+    const input = await io.read(kenneyChest);
+    const expected = input
+      .getRoot()
+      .listAnimations()
+      .map((animation) => animation.getName())
+      .sort();
+    expect(expected.length).toBeGreaterThan(0);
+    for (const tier of ['desktop', 'mobile', 'low'] as const) {
+      const output = await io.read(outputPath(cwd, asset.file[tier]!));
+      expect(
+        output
+          .getRoot()
+          .listAnimations()
+          .map((animation) => animation.getName())
+          .sort(),
+      ).toEqual(expected);
+    }
+  });
   it('builds tiered assets, validates the manifest, preserves metadata, and reuses the cache', async () => {
     const { cwd, meta } = await fixtureGame();
     const events = join(cwd, 'events.jsonl');
@@ -287,6 +356,26 @@ describe('gm build assets', () => {
     const io = new NodeIO()
       .registerExtensions(ALL_EXTENSIONS)
       .registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
+    for (const id of ['t3:fixture/kit-chest', 't3:fixture/declared-chest']) {
+      const chest = manifest.assets[id]!;
+      expect(chest.file['*']).toBeUndefined();
+      for (const tier of ['desktop', 'mobile', 'low'] as const) {
+        const built = await io.read(outputPath(cwd, chest.file[tier]!));
+        expect(
+          built
+            .getRoot()
+            .listAnimations()
+            .map((animation) => animation.getName())
+            .sort(),
+        ).toEqual(['close', 'open']);
+        expect(
+          built
+            .getRoot()
+            .listAnimations()
+            .every((animation) => animation.listChannels()[0]?.getTargetNode()),
+        ).toBe(true);
+      }
+    }
     const kit = await io.read(outputPath(cwd, kitName!));
     expect(
       kit
