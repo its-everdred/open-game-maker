@@ -335,7 +335,7 @@ describe('GameScreen previews', () => {
           capabilities: [],
           palette: {
             categories: [{ id: 'actors', label: 'Actors', kind: 'items' }],
-            items: [{ prefab: 'skeleton', label: 'Skeleton', category: 'actors' }],
+            items: [{ prefab: 'skeleton', label: 'Skeleton', category: 'actors', thumbnail: 'art/skeleton.png' }],
           },
           tools: ['place'],
           gizmos: {},
@@ -347,6 +347,7 @@ describe('GameScreen previews', () => {
       }),
     );
     const item = await screen.findByRole('button', { name: 'Skeleton' });
+    expect(item.querySelector('img')).toHaveAttribute('src', 'http://127.0.0.1:10000/p/game/pv-1/art/skeleton.png');
     fireEvent.pointerDown(item, { pointerId: 1 });
     const canvas = screen.getByLabelText('Editor canvas');
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
