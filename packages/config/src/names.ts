@@ -163,6 +163,12 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     doc: 'owner/repository of the instance repository that holds every game under games/<slug>',
   },
   {
+    name: 'OGM_INSTANCE_OWNER_ID',
+    unit: 'api',
+    kind: 'string',
+    doc: 'instance owner user ID for operator game registration',
+  },
+  {
     name: 'OGM_BUILDER_BOT_TOKEN',
     unit: 'api',
     kind: 'secret',
