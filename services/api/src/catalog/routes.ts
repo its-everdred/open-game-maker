@@ -258,7 +258,10 @@ export function setRequiresPrivateRepository(
 }
 
 /** A signed URL only for a public collection whose imported thumb blob the store holds. */
-async function thumbnailUrl(blobStore: BlobStore, card: (ResolvedCard & Imported) | undefined): Promise<string | null> {
+export async function thumbnailUrl(
+  blobStore: BlobStore,
+  card: (ResolvedCard & Imported) | undefined,
+): Promise<string | null> {
   const thumb = card?.previews?.blob?.thumb;
   if (!card || !thumb || !blobHash.test(thumb)) return null;
   if (card.visibility === 'private' || card.resolved.rights.audience !== 'public') return null;

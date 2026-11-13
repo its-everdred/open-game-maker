@@ -2,6 +2,7 @@ import type {
   ActivityEvent,
   DesignDoc,
   EditorCommand,
+  GameManifest,
   IngestResponse,
   Job,
   Patch,
@@ -32,6 +33,8 @@ export type GameMetadata = {
 export type DesignSnapshot = { rev: number; buildId: string; doc: DesignDoc };
 export const NO_BUILD_ID = 'build_00000000000000000000000000';
 export type ScenerySource = { scene: Scenery; assets: { id: string; path: string; url: string; sha256: string }[] };
+export type FallbackPalette = { mode: 'request'; palette: GameManifest['palette'] };
+export type EditorPreview = { ticket: string; buildId: string; accessId: string; createdAt: string };
 export type Lease = { token: number; expiresAt: string };
 export type TransactionBody = {
   baseRev: number;
@@ -82,6 +85,22 @@ export async function getDesignSnapshot(gameId: string, branch: string): Promise
 
 export function getScenerySource(gameId: string): Promise<ScenerySource> {
   return api(`/games/${segment(gameId)}/scenery/source`);
+}
+
+export function getFallbackPalette(gameId: string): Promise<FallbackPalette> {
+  return api(`/games/${segment(gameId)}/editor/fallback`);
+}
+
+export function getEditorPreviews(gameId: string): Promise<{ previews: EditorPreview[] }> {
+  return api(`/games/${segment(gameId)}/previews`);
+}
+
+export function getPreviewDesign(
+  gameId: string,
+  ticket: string,
+  buildId: string,
+): Promise<{ rev: number; doc: DesignDoc }> {
+  return api(`/games/${segment(gameId)}/previews/${segment(ticket)}/design?buildId=${encodeURIComponent(buildId)}`);
 }
 
 export async function acquireLease(gameId: string, branch: string, sessionId: string): Promise<LeaseResult> {

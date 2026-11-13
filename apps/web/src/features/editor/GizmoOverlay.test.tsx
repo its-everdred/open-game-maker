@@ -75,6 +75,27 @@ afterEach(() => {
 });
 
 describe('GizmoOverlay', () => {
+  it('routes a fallback placement to an agent request without changing the live design', () => {
+    const test = harness();
+    const request = vi.fn();
+    render(
+      <GizmoOverlay
+        activePrefab="t3:fixture/tree"
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: true, grid: 1 }}
+        onRequestPlacement={request}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 100, height: 80 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 35, clientY: 60, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 35, clientY: 60, pointerId: 1 });
+    expect(request).toHaveBeenCalledWith('t3:fixture/tree', { x: 0.25, y: 0.5 });
+    expect(test.frame.validatePlacement).not.toHaveBeenCalled();
+    expect(test.submit).not.toHaveBeenCalled();
+  });
   it('paints a projected terrain band as one undoable change', async () => {
     const test = harness();
     test.session.getState().doc = { ...doc, globals: { 'scenery.settings': { terrain: [] } } };

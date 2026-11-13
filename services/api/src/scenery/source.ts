@@ -21,13 +21,18 @@ async function contained(root: string, path: string): Promise<string> {
 }
 
 /** Read only the registered game's lock and scenery, never arbitrary checkout paths. */
+export async function readGameLock(checkout: string, gamePath: string): Promise<{ root: string; lock: AssetsLock }> {
+  const root = await contained(checkout, gamePath);
+  const lockFile = await contained(root, 'assets.lock.json');
+  const lock = AssetsLockSchema.parse(JSON.parse(await readFile(lockFile, 'utf8')));
+  return { root, lock };
+}
+
 export async function readScenerySource(
   checkout: string,
   gamePath: string,
 ): Promise<{ root: string; lock: AssetsLock; scene: Scenery }> {
-  const root = await contained(checkout, gamePath);
-  const lockFile = await contained(root, 'assets.lock.json');
-  const lock = AssetsLockSchema.parse(JSON.parse(await readFile(lockFile, 'utf8')));
+  const { root, lock } = await readGameLock(checkout, gamePath);
   let data: unknown;
   try {
     const path = await contained(root, 'scenery.json');

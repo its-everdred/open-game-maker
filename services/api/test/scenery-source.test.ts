@@ -106,6 +106,14 @@ describe('no-build scenery source', () => {
     const url = `/api/v1/games/${ids.game}/scenery/source`;
     expect((await app.request(url)).status).toBe(401);
     expect((await app.request(url, { headers: asUser(ids.other) })).status).toBe(403);
+    const fallbackUrl = `/api/v1/games/${ids.game}/editor/fallback`;
+    expect((await app.request(fallbackUrl)).status).toBe(401);
+    expect((await app.request(fallbackUrl, { headers: asUser(ids.other) })).status).toBe(403);
+    const fallback = await app.request(fallbackUrl, { headers: asUser(ids.creator) });
+    expect(fallback.status).toBe(200);
+    const fallbackBody = await fallback.json();
+    expect(fallbackBody).toMatchObject({ mode: 'request', palette: { items: [{ prefab: 't3:fixture/models/tree' }] } });
+    expect(JSON.stringify(fallbackBody)).not.toContain(root);
     const response = await app.request(url, { headers: asUser(ids.creator) });
     expect(response.status).toBe(200);
     const body = (await response.json()) as { assets: { url: string; sha256: string }[] };
@@ -116,6 +124,9 @@ describe('no-build scenery source', () => {
     expect(await asset.text()).toBe('locked model');
     writeFileSync(join(game, 'models/tree model.glb'), 'tampered');
     expect((await app.request(body.assets[0]!.url, { headers: asUser(ids.creator) })).status).toBe(404);
+    writeFileSync(join(game, 'scenery.json'), '{invalid');
+    expect((await app.request(fallbackUrl, { headers: asUser(ids.creator) })).status).toBe(200);
+    expect((await app.request(url, { headers: asUser(ids.creator) })).status).toBe(404);
   }, 60_000);
   it('serves only hash-verified files listed in the game lock', async () => {
     const { root, game, id, blobStore } = fixture();
