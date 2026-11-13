@@ -305,7 +305,7 @@ describe('gm build assets', () => {
       .listAnimations()
       .map((animation) => animation.getName())
       .sort();
-    expect(expected.length).toBeGreaterThan(0);
+    expect(expected).toEqual(['close', 'open', 'open-close']);
     for (const tier of ['desktop', 'mobile', 'low'] as const) {
       const output = await io.read(outputPath(cwd, asset.file[tier]!));
       expect(
@@ -315,6 +315,21 @@ describe('gm build assets', () => {
           .map((animation) => animation.getName())
           .sort(),
       ).toEqual(expected);
+      const chest = output
+        .getRoot()
+        .listNodes()
+        .find((node) => node.getName() === 'chest');
+      const lid = output
+        .getRoot()
+        .listNodes()
+        .find((node) => node.getName() === 'lid');
+      expect(chest?.listChildren()).toContain(lid);
+      expect(
+        output
+          .getRoot()
+          .listAnimations()
+          .every((animation) => animation.listChannels().some((channel) => channel.getTargetNode() === lid)),
+      ).toBe(true);
     }
   });
   it('builds tiered assets, validates the manifest, preserves metadata, and reuses the cache', async () => {
