@@ -20,7 +20,7 @@ it('registers a checkout and lets publish dry-run find the game', async () => {
         repo: { owner: 'example', name: 'fixture-repo', path: 'games/fixture' },
         daemon: { port: 4011, checkoutPath: checkout },
       });
-      return new Response(JSON.stringify({ id: 'g-fixture' }), { status: 201 });
+      return new Response(JSON.stringify({ id: 'g-fixture', ownerId: 'u-owner' }), { status: 201 });
     }
     return new Response(
       JSON.stringify({
@@ -47,6 +47,7 @@ it('registers a checkout and lets publish dry-run find the game', async () => {
   );
   expect(registered.err).toEqual([]);
   expect(registered.code).toBe(0);
+  expect(registered.out).toContain('registered fixture (owner: u-owner)');
   const dry = await gm(['publish', 'fixture', '--dry-run'], options);
   expect(dry.code).toBe(0);
   expect(dry.out.join('\n')).toContain('games/fixture');

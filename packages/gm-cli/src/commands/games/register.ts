@@ -86,10 +86,16 @@ export const command: GmCommand = {
     } catch {
       throw new CommandError('registration returned invalid JSON');
     }
-    if (game === null || typeof game !== 'object' || Array.isArray(game))
+    if (
+      game === null ||
+      typeof game !== 'object' ||
+      Array.isArray(game) ||
+      !('ownerId' in game) ||
+      typeof game.ownerId !== 'string'
+    )
       throw new CommandError('registration returned invalid JSON');
     if (ctx.json) printJson(ctx, game);
-    else ctx.out(`registered ${args[0]}`);
+    else ctx.out(`registered ${args[0]} (owner: ${game.ownerId})`);
     return EXIT.ok;
   },
 };

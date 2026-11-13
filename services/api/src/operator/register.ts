@@ -29,10 +29,26 @@ export function registerOperatorGame(deps: AppDeps, body: Input) {
   ) {
     throw new HttpError(409, 'game_slug_taken');
   }
-  const ownerId = body.ownerId ?? deps.config.instanceOwnerId;
+  let ownerId = body.ownerId ?? deps.config.instanceOwnerId;
+  const instanceFamilies = ownerId ? [] : db.select().from(schema.families).all();
+  if (!ownerId && instanceFamilies.length === 1) ownerId = instanceFamilies[0]!.ownerUserId;
+  if (!ownerId && instanceFamilies.length > 1) {
+    const repoOwners = db
+      .select()
+      .from(schema.games)
+      .all()
+      .filter(
+        (game) =>
+          game.githubOwner?.toLowerCase() === body.repo.owner.toLowerCase() &&
+          game.githubRepo?.toLowerCase() === body.repo.name.toLowerCase(),
+      );
+    const owners = [...new Set(repoOwners.map((game) => game.ownerId))];
+    if (owners.length > 1) throw new HttpError(409, 'owner_ambiguous');
+    ownerId = owners[0];
+  }
   const families = ownerId
     ? db.select().from(schema.familyMembers).where(eq(schema.familyMembers.userId, ownerId)).all()
-    : db.select().from(schema.familyMembers).where(eq(schema.familyMembers.role, 'owner')).all();
+    : [];
   if (families.length !== 1) throw new HttpError(409, 'owner_ambiguous');
   const member = families[0]!;
   if (existing && existing.familyId !== member.familyId) throw new HttpError(409, 'game_family_mismatch');
