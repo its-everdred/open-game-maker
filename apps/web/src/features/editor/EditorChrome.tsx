@@ -62,20 +62,33 @@ export function EditorChrome({
     saveSnapPrefs(gameId, next);
   };
 
-  const tools = <Tools
-    tools={manifest.tools}
-    active={session.tool}
-    snap={snap}
-    canUndo={session.canUndo}
-    canRedo={session.canRedo}
-    onTool={(tool) => {
-      if (tool !== 'place') setPickedPrefab(undefined);
-      onTool(tool);
-    }}
-    onSnap={updateSnap}
-    onUndo={onUndo}
-    onRedo={onRedo}
-  />;
+  const tools = (
+    <Tools
+      tools={manifest.tools}
+      active={session.tool}
+      snap={snap}
+      canUndo={session.canUndo}
+      canRedo={session.canRedo}
+      onTool={(tool) => {
+        if (tool !== 'place') setPickedPrefab(undefined);
+        onTool(tool);
+      }}
+      onSnap={updateSnap}
+      onUndo={onUndo}
+      onRedo={onRedo}
+    />
+  );
+  const inspector = (
+    <Inspector
+      doc={session.doc}
+      selectedIds={session.selection}
+      controls={controls}
+      onCommand={onCommand}
+      onDelete={onDelete}
+      onDuplicate={onDuplicate}
+      onInstanceCount={onInstanceCount}
+    />
+  );
   return (
     <div className="editor-chrome">
       <Rail
@@ -98,16 +111,20 @@ export function EditorChrome({
         />
       ) : null}
       <div className="editor-inspector-stack">
-        {toolsTarget ? createPortal(tools, toolsTarget) : tools}
-        <Inspector
-          doc={session.doc}
-          selectedIds={session.selection}
-          controls={controls}
-          onCommand={onCommand}
-          onDelete={onDelete}
-          onDuplicate={onDuplicate}
-          onInstanceCount={onInstanceCount}
-        />
+        {toolsTarget ? (
+          createPortal(
+            <>
+              {tools}
+              {inspector}
+            </>,
+            toolsTarget,
+          )
+        ) : (
+          <>
+            {tools}
+            {inspector}
+          </>
+        )}
       </div>
       <HintStrip hint={picked?.hint} />
     </div>

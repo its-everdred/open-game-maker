@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BuildTracker } from './BuildTracker';
 
 afterEach(cleanup);
@@ -27,5 +27,14 @@ describe('build tracker', () => {
     fireEvent.click(screen.getByRole('button', { name: /1 build running/ }));
     expect(screen.getByText('New level')).toBeVisible();
     expect(screen.queryByText(/left/)).toBeNull();
+  });
+  it('shows a confirmed finishing state until it is acknowledged', () => {
+    const dismiss = vi.fn();
+    render(
+      <BuildTracker workers={[]} finished={[{ ticket: 'game:12', title: 'Forest backdrop' }]} onDismiss={dismiss} />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Forest backdrop is ready');
+    fireEvent.click(screen.getByRole('button', { name: '1 build finished' }));
+    expect(dismiss).toHaveBeenCalledOnce();
   });
 });

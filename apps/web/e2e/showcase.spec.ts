@@ -15,8 +15,16 @@ test('renders prototype showcase art and opens a detail sheet', async ({ page })
   );
   await page.goto('/all?test');
   const tile = page.getByRole('button', { name: /^RestoreBound:/ });
+  if (test.info().project.name === 'phone') {
+    const first = page.getByRole('button', { name: /^Goblin Cellar:/ });
+    const [firstBox, nextBox] = await Promise.all([first.boundingBox(), tile.boundingBox()]);
+    expect(firstBox).not.toBeNull();
+    expect(nextBox!.y).toBeGreaterThan(firstBox!.y);
+  }
   await expect(tile.locator('canvas')).toHaveAttribute('data-painted', 'true');
   await tile.click();
   await expect(page.getByRole('heading', { name: 'RestoreBound' })).toBeVisible();
   await expect(page.getByText('A sleepy village, one repair at a time.')).toBeVisible();
+  await page.getByRole('button', { name: 'Play RestoreBound' }).click();
+  await expect(page).toHaveURL(/\/g\/showcase\/restorebound\?mode=play/);
 });

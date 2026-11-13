@@ -25,8 +25,12 @@ export function ShowcaseSpotlight({
   useEffect(() => {
     let active = true;
     setMask(undefined);
-    void splatMask(data.id).then((value) => { if (active) setMask(value); });
-    return () => { active = false; };
+    void splatMask(data.id).then((value) => {
+      if (active) setMask(value);
+    });
+    return () => {
+      active = false;
+    };
   }, [data.id]);
   return (
     <section
@@ -40,7 +44,9 @@ export function ShowcaseSpotlight({
         }
       }}
     >
-      <div className="showcase-ambient" aria-hidden="true"><Cover game={game} hero /></div>
+      <div className="showcase-ambient" aria-hidden="true">
+        <Cover game={game} hero />
+      </div>
       <button ref={close} type="button" className="games-close" aria-label="Close game" onClick={onClose}>
         <span aria-hidden="true">×</span>
       </button>
@@ -116,7 +122,12 @@ export function ShowcaseSpotlight({
           </button>
         </div>
       </div>
-    <div className="games-spotlight-media" data-splat={Boolean(mask)} style={mask ? { maskImage: `url(${mask})`, WebkitMaskImage: `url(${mask})` } : undefined} aria-hidden="true">
+      <div
+        className="games-spotlight-media"
+        data-splat={Boolean(mask)}
+        style={mask ? { maskImage: `url(${mask})`, WebkitMaskImage: `url(${mask})` } : undefined}
+        aria-hidden="true"
+      >
         <span className="game-cover">
           <Cover game={game} hero />
         </span>

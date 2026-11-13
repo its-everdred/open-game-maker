@@ -5,7 +5,7 @@ import { AUDIO_STYLES } from '@ogm/contracts/browser';
 import { STEP_ORDER, STATIC_STEPS, audioDirectionFrom, scopeChoicesFrom, viewsFor } from './options';
 
 describe('new game options', () => {
-  it('keeps the designed step order and pick limits', () => {
+  it('retains supported step keys and pick limits', () => {
     expect(STEP_ORDER).toEqual(['genre', 'vibe', 'family', 'sound', 'world', 'players', 'view', 'talk']);
     expect(STATIC_STEPS.genre.options).toHaveLength(14);
     expect(STATIC_STEPS.genre.max).toBe(3);
@@ -17,6 +17,11 @@ describe('new game options', () => {
   it('filters views to both the selected family and genre defaults', () => {
     expect(viewsFor(['iso', 'follow'], ['platformer'])).toEqual(['follow']);
     expect(viewsFor(['iso', 'follow'], ['rhythm'])).toEqual(['iso', 'follow']);
+  });
+
+  it('uses a supported family view when the prototype flow does not ask for one', () => {
+    expect(scopeChoicesFrom({ genre: { picks: ['platformer'] } }, ['iso', 'follow']).pov).toBe('follow');
+    expect(scopeChoicesFrom({ view: { picks: ['iso'] } }, ['follow']).pov).toBe('iso');
   });
 
   it('serializes multi-picks and Other text into the landed scope contract', () => {

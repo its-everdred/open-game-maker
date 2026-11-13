@@ -24,7 +24,9 @@
   --paper: var(--editor-panel);
   --paper-2: var(--editor-tile);
   --editor-card: var(--editor-panel);
-  background: var(--editor-paper-image) center / cover no-repeat, var(--editor-tile);
+  background:
+    var(--editor-paper-image) center / cover no-repeat,
+    var(--editor-tile);
   grid-template-columns: 200px minmax(0, 1fr) 270px;
   grid-template-rows: 62px minmax(0, 1fr) 168px;
   grid-template-areas:
@@ -543,8 +545,8 @@
 
 .game-screen.is-editing {
   grid-template-columns: minmax(0, 1fr) minmax(220px, 25%);
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-areas: 'stage rail' 'stage tray';
+  grid-template-rows: auto 180px minmax(0, 1fr);
+  grid-template-areas: 'stage rail' 'stage tray' 'stage .';
 }
 
 .game-screen.is-editing .editor-rail,
@@ -567,6 +569,26 @@
   color: var(--editor-ink);
 }
 
+@media (orientation: landscape) {
+  .game-screen.is-editing .editor-rail {
+    flex-direction: row;
+    padding-top: 60px;
+  }
+  .game-screen.is-editing .editor-rail button {
+    flex: 0 0 72px;
+    min-height: 0;
+    font-size: 14px;
+  }
+  .game-screen.is-editing .editor-rail img,
+  .game-screen.is-editing .rail-letter {
+    width: 36px;
+    height: 36px;
+  }
+  .game-screen.is-editing .editor-palette h2 {
+    display: none;
+  }
+}
+
 @media (orientation: portrait) and (max-width: 820px) {
   .game-screen.is-editing {
     grid-template-columns: minmax(0, 1fr);
@@ -574,4 +596,6 @@
     grid-template-areas: 'stage' 'rail' 'tray';
   }
 }
-.game-screen.is-editing .editor-inspector-stack:has(.editor-inspector:not(.has-content)) { display: none; }
+.game-screen.is-editing .editor-inspector-stack:has(.editor-inspector:not(.has-content)) {
+  display: none;
+}

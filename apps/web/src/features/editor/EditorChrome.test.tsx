@@ -49,9 +49,16 @@ afterEach(cleanup);
 
 describe('EditorChrome', () => {
   it('puts editing tools into the menu target when the app provides one', () => {
-    const { container } = render(<><div id="studio-editor-tools" /><Screen /></>);
+    const { container } = render(
+      <>
+        <div id="studio-editor-tools" />
+        <Screen />
+      </>,
+    );
     expect(container.querySelector('#studio-editor-tools .editor-tools')).toBeVisible();
+    expect(container.querySelector('#studio-editor-tools .editor-inspector')).toBeVisible();
     expect(container.querySelector('.editor-inspector-stack .editor-tools')).toBeNull();
+    expect(container.querySelector('.editor-inspector-stack .editor-inspector')).toBeNull();
   });
   it('maps real editor controls into the prototype rail, tray, and inspector regions', () => {
     const { container } = render(<Screen />);

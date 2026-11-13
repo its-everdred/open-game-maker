@@ -606,7 +606,9 @@
 .showcase-tile .game-cover::after {
   background: var(--showcase-shade);
 }
-.showcase-spotlight::before { background: transparent; }
+.showcase-spotlight::before {
+  background: transparent;
+}
 .showcase-stars {
   display: flex;
   align-items: center;
@@ -621,5 +623,17 @@
   color: var(--text-muted);
   font: 700 14px var(--display);
 }
-.showcase-spotlight .games-spotlight-media[data-splat='true'] { clip-path: none; mask-size: 100% 100%; mask-repeat: no-repeat; }
-.showcase-ambient { position: absolute; z-index: -2; inset: -10%; overflow: hidden; filter: blur(70px) saturate(1.7); opacity: 0.55; pointer-events: none; }
+.showcase-spotlight .games-spotlight-media[data-splat='true'] {
+  clip-path: none;
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+}
+.showcase-ambient {
+  position: absolute;
+  z-index: -2;
+  inset: -10%;
+  overflow: hidden;
+  filter: blur(70px) saturate(1.7);
+  opacity: 0.55;
+  pointer-events: none;
+}

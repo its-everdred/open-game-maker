@@ -39,6 +39,18 @@ describe('createAiurClient', () => {
     await expect(client.state()).resolves.toEqual(fixture('state'));
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('http://127.0.0.1:4000/api/v1/state');
   });
+  it('forwards cancellation signals for worker state and progress reads', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(fixture('state')))
+      .mockResolvedValueOnce(jsonResponse(fixture('progress')));
+    const client = createAiurClient(daemon, fetchImpl);
+    const signal = new AbortController().signal;
+    await client.state(signal);
+    await client.progress('142', undefined, signal);
+    expect(fetchImpl.mock.calls[0]?.[1]?.signal).toBe(signal);
+    expect(fetchImpl.mock.calls[1]?.[1]?.signal).toBe(signal);
+  });
   it('sends the spend-cap write with the required method, path, headers, and body', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({

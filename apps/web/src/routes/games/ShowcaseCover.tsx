@@ -8,10 +8,18 @@ type SceneModule = {
 };
 let sceneModule: Promise<SceneModule> | undefined;
 const sceneArt: Record<string, string> = {
-  'goblin-cellar': 'goblin-fight.webp', restorebound: 'town.png', 'mossy-leap': 'pp-tiles.png',
-  'skyward-squadron': 'shmup-tiles.png', 'powder-rush': 'ski.png', 'little-fronts': 'battle.png',
-  'crypt-crawlers': 'dungeon.png', 'nebula-run': 'space-bg.png', 'turbo-tumble': 'race-car_red_1.png',
-  'brick-bloom': 'puz-element_red_rectangle_glossy.png', 'lantern-hollow': 'dungeon.png', 'frostbite-peaks': 'pp-tiles.png',
+  'goblin-cellar': 'goblin-fight.webp',
+  restorebound: 'town.png',
+  'mossy-leap': 'pp-tiles.png',
+  'skyward-squadron': 'shmup-tiles.png',
+  'powder-rush': 'ski.png',
+  'little-fronts': 'battle.png',
+  'crypt-crawlers': 'dungeon.png',
+  'nebula-run': 'space-bg.png',
+  'turbo-tumble': 'race-car_red_1.png',
+  'brick-bloom': 'puz-element_red_rectangle_glossy.png',
+  'lantern-hollow': 'dungeon.png',
+  'frostbite-peaks': 'pp-tiles.png',
 };
 function availableArt(name: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -67,7 +75,8 @@ export function ShowcaseCover({ id, title, hero }: { id: string; title: string; 
           if (!active) return;
           if (visible) {
             if (key === 'puddle-postal') {
-              target.width = 320; target.height = 180;
+              target.width = 320;
+              target.height = 180;
               const context = target.getContext('2d');
               if (context) scenes.blueprint(context, (now - started) / 1000, 320, 180, 0);
             } else {
@@ -88,7 +97,11 @@ export function ShowcaseCover({ id, title, hero }: { id: string; title: string; 
   }, [hero, id]);
   return (
     <>
-      {!painted && <div className="game-cover-placeholder" aria-hidden="true"><span>{title}</span></div>}
+      {!painted && (
+        <div className="game-cover-placeholder" aria-hidden="true">
+          <span>{title}</span>
+        </div>
+      )}
       <canvas ref={canvas} className="game-showcase-canvas" data-painted={painted} aria-hidden="true" />
     </>
   );

@@ -25,4 +25,14 @@ describe('workpad reader', () => {
     expect(await read('../bad')).toBe('');
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it('separates workpads for the same ticket in different game repositories', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response(JSON.stringify([]), { status: 200 }));
+    const read = createWorkpadReader({ owner: 'owner', name: 'games' }, 'secret', fetcher);
+    await read('12');
+    await read('12', { owner: 'other', name: 'game' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[1]?.[0])).toContain('/repos/other/game/issues/12/comments');
+  });
 });

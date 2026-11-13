@@ -2,11 +2,12 @@ type Repository = { owner: string; name: string };
 type CacheEntry = { body: string; expires: number };
 
 // Only the checklist-derived count leaves the API. Comment text never reaches the player.
-export function createWorkpadReader(repo: Repository, token: string, fetcher: typeof fetch = globalThis.fetch) {
+export function createWorkpadReader(defaultRepo: Repository, token: string, fetcher: typeof fetch = globalThis.fetch) {
   const cache = new Map<string, CacheEntry>();
-  return async (ticket: string): Promise<string> => {
+  return async (ticket: string, repo: Repository = defaultRepo): Promise<string> => {
     if (!/^[1-9]\d*$/.test(ticket)) return '';
-    const cached = cache.get(ticket);
+    const key = `${repo.owner}/${repo.name}#${ticket}`;
+    const cached = cache.get(key);
     if (cached && cached.expires > Date.now()) return cached.body;
     const path = `https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/issues/${ticket}/comments`;
     let found = '';
@@ -27,8 +28,8 @@ export function createWorkpadReader(repo: Repository, token: string, fetcher: ty
       }
       if (found || comments.length < 100) break;
     }
-    if (cache.size >= 200 && !cache.has(ticket)) cache.delete(cache.keys().next().value!);
-    cache.set(ticket, { body: found, expires: Date.now() + 30_000 });
+    if (cache.size >= 200 && !cache.has(key)) cache.delete(cache.keys().next().value!);
+    cache.set(key, { body: found, expires: Date.now() + 30_000 });
     return found;
   };
 }

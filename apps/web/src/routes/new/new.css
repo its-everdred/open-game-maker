@@ -85,6 +85,7 @@
   margin: 6px 0 24px;
   text-align: center;
   color: var(--muted);
+  font-weight: 700;
 }
 .new-option-grid {
   display: grid;
@@ -115,8 +116,9 @@
   background: var(--surface-raised);
 }
 .new-option[aria-pressed='true'] {
-  box-shadow: 0 16px 48px -14px var(--new-color, var(--ink));
-  background: color-mix(in srgb, var(--new-color) 14%, var(--surface-card));
+  border-color: var(--option-color, var(--new-color));
+  box-shadow: 0 16px 48px -14px var(--option-color, var(--new-color, var(--ink)));
+  background: color-mix(in srgb, var(--option-color, var(--new-color)) 14%, var(--surface-card));
 }
 .new-option[aria-pressed='true']::after {
   content: '✓';
@@ -128,13 +130,13 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--new-color, var(--green-b));
+  background: var(--option-color, var(--new-color, var(--green-b)));
   color: var(--dark);
 }
 .new-option-icon {
   width: 56px;
   height: 56px;
-  color: var(--new-color, var(--ink));
+  color: var(--option-color, var(--new-color, var(--ink)));
 }
 .new-option-icon svg {
   width: 100%;
@@ -142,21 +144,12 @@
 }
 
 .new-pick-capacity {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 16px;
-}
-.new-pick-capacity i {
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--border);
-  border-radius: 50%;
-  background: transparent;
-}
-.new-pick-capacity i.filled {
-  border-color: var(--new-color);
-  background: var(--new-color);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 @keyframes new-limit-shake-a {

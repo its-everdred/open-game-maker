@@ -89,18 +89,26 @@ describe('NewGameScreen', () => {
       screen.getByRole('button', { name: 'Back' }),
     );
     expect(container.querySelector('.new-game-head > h1')).toHaveTextContent('Genre');
-    expect(container.querySelector('.new-game-head > .new-dots')).toHaveAttribute('aria-label', 'Step 1 of 8');
+    expect(container.querySelector('.new-game-head > .new-dots')).toHaveAttribute('aria-label', 'Step 1 of 6');
     expect(screen.queryByText(/Create your game|Game setup|Choose a template/)).toBeNull();
   });
 
-  it('shows pick capacity and rejects a fourth pick without text', async () => {
+  it('uses the prototype individual colors for genre icons', () => {
+    renderScreen();
+    expect(button('Shooter').style.getPropertyValue('--option-color')).toBe('var(--option-shooter, var(--new-color))');
+    expect(button('Adventure').style.getPropertyValue('--option-color')).toBe(
+      'var(--option-adventure, var(--new-color))',
+    );
+  });
+
+  it('shows the pick limit and rejects a fourth pick', async () => {
     const vibrate = vi.fn();
     Object.defineProperty(window.navigator, 'vibrate', { configurable: true, value: vibrate });
     renderScreen();
 
     const capacity = screen.getByRole('img', { name: '0 of 3 picked' });
     expect(capacity.querySelectorAll('.filled')).toHaveLength(0);
-    expect(screen.queryByText('Pick up to 3')).not.toBeInTheDocument();
+    expect(screen.getByText('Pick up to 3')).toBeVisible();
 
     for (const name of ['Shooter', 'Adventure']) fireEvent.click(button(name));
     expect(capacity).toHaveAccessibleName('2 of 3 picked');
@@ -136,7 +144,7 @@ describe('NewGameScreen', () => {
     expect(screen.getByText('“Delivery”')).toBeVisible();
   }, 20_000);
 
-  it('selects from a catalog family detail and filters point of view', async () => {
+  it('selects from a catalog family detail and proceeds through the prototype steps', async () => {
     renderScreen();
 
     fireEvent.click(button('Platformer'));
@@ -153,8 +161,7 @@ describe('NewGameScreen', () => {
     fireEvent.click(button('Solo'));
     fireEvent.click(button('Next'));
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Follow' })).toBeVisible());
-    expect(screen.queryByRole('button', { name: 'Isometric' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Talk it through' })).toBeVisible();
   });
 
   it('replaces an Other style with the selected catalog set', async () => {
@@ -266,7 +273,7 @@ describe('NewGameScreen', () => {
     renderScreen('/new?step=talk');
 
     await waitFor(() => expect(writes.some(({ method }) => method === 'POST')).toBe(true));
-    for (const heading of ['Point of view', 'Players', 'World', 'Sound', 'Style']) {
+    for (const heading of ['Players', 'World', 'Art']) {
       fireEvent.click(screen.getByRole('button', { name: 'Back' }));
       await screen.findByRole('heading', { name: heading });
     }

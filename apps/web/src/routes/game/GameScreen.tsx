@@ -401,17 +401,19 @@ export function GameScreen() {
     <section className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}`} aria-label="Play and edit">
       {mode === 'edit' ? (
         <>
-          <FocusZone id={EDITOR_FOCUS_ZONES.bar} className="editor-play-zone"><button
-            className="editor-play-button"
-            type="button"
-            aria-label="Play"
-            disabled={room.snapshot?.role === 'peer'}
-            onClick={() => requestMode('play')}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 3v18l14-9z" />
-            </svg>
-          </button></FocusZone>
+          <FocusZone id={EDITOR_FOCUS_ZONES.bar} className="editor-play-zone">
+            <button
+              className="editor-play-button"
+              type="button"
+              aria-label="Play"
+              disabled={room.snapshot?.role === 'peer'}
+              onClick={() => requestMode('play')}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 3v18l14-9z" />
+              </svg>
+            </button>
+          </FocusZone>
           <output className="sr" aria-live="polite">
             {savedLabel(editStartup ?? sessionView?.saved)}
           </output>

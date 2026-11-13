@@ -80,7 +80,7 @@ export interface Registry {
   ticketJobResolver: TicketJobResolver | null;
   chatJobs: ChatJobDirectory | null;
   aiurClientFor: AiurClientResolver | null;
-  workerWorkpad: ((ticket: string) => Promise<string>) | null;
+  workerWorkpad: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   issueStateWriter: IssueStateWriter | null;
 }
 

@@ -7,10 +7,14 @@ const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 const sessionId = 's_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 const scopeJobId = 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 
-export type NewRouteState = { admissions: Array<Record<string, unknown>>; scopeMessages: string[] };
+export type NewRouteState = {
+  admissions: Array<Record<string, unknown>>;
+  scopeMessages: string[];
+  scopeRequests: Array<Record<string, unknown>>;
+};
 
 export async function installNewRoutes(page: Page): Promise<NewRouteState> {
-  const state: NewRouteState = { admissions: [], scopeMessages: [] };
+  const state: NewRouteState = { admissions: [], scopeMessages: [], scopeRequests: [] };
   let scopeAgreed = false;
 
   await page.route('**/api/catalog/style-families', (route) => json(route, catalog));
@@ -37,7 +41,10 @@ export async function installNewRoutes(page: Page): Promise<NewRouteState> {
     if (route.request().method() === 'POST') return json(route, { id: gameId }, 201);
     return json(route, { games: [] });
   });
-  await page.route('**/api/v1/games/*/scope/sessions', (route) => json(route, { sessionId, jobId: scopeJobId }, 201));
+  await page.route('**/api/v1/games/*/scope/sessions', (route) => {
+    state.scopeRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    return json(route, { sessionId, jobId: scopeJobId }, 201);
+  });
   await page.route(/\/api\/v1\/games\/[^/]+\/scope\/sessions\/[^/?]+$/, (route) =>
     json(route, {
       sessionId,

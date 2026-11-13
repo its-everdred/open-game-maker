@@ -561,6 +561,31 @@ button.studio-menu-questions {
   font-weight: 700;
 }
 
-.studio-editor-tools { width: min(22rem, 100%); padding: 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--paper); pointer-events: auto; }
-.studio-editor-tools:empty { display: none; }
-.studio-editor-tools .editor-tools { position: static; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.studio-editor-tools {
+  width: min(22rem, 100%);
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+  pointer-events: auto;
+}
+.studio-editor-tools:empty {
+  display: none;
+}
+.studio-editor-tools .editor-tools {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.studio-editor-tools .editor-inspector {
+  position: static;
+  width: auto;
+  max-height: 35vh;
+  margin-top: 12px;
+  overflow: auto;
+}

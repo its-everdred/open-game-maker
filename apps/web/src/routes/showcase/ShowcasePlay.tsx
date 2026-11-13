@@ -29,16 +29,27 @@ export function ShowcasePlay() {
   const mode = search.get('mode') === 'edit' ? 'edit' : 'play';
   const entry = mergeShowcase([]).find((game) => game.showcase?.id === id && id !== 'goblin-cellar');
   const frame = useRef<HTMLIFrameElement>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const readyTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const initial = useRef<{ id: string; src: string } | undefined>(undefined);
   if (entry && initial.current?.id !== id) {
     const params = new URLSearchParams({ shell: '', models: 'json', editor: '', title: entry.title });
     if (mode === 'play') params.set('play', '');
     initial.current = { id, src: `/proto/demo/index.html?${params}` };
   }
-  const setMode = useCallback((next: 'play' | 'edit') => {
-    const params = new URLSearchParams(search); params.set('mode', next); setSearch(params, { replace: true });
-  }, [search, setSearch]);
-  const sendMode = useCallback(() => frame.current?.contentWindow?.postMessage({ ogm: mode }, window.location.origin), [mode]);
+  const setMode = useCallback(
+    (next: 'play' | 'edit') => {
+      const params = new URLSearchParams(search);
+      params.set('mode', next);
+      setSearch(params, { replace: true });
+    },
+    [search, setSearch],
+  );
+  const sendMode = useCallback(
+    () => frame.current?.contentWindow?.postMessage({ ogm: mode }, window.location.origin),
+    [mode],
+  );
   const onLoad = useCallback(() => {
     const document = frame.current?.contentDocument;
     if (document?.head) {
@@ -46,17 +57,40 @@ export function ShowcasePlay() {
       style.textContent = embeddedDemoStyles;
       document.head.append(style);
     }
+    clearInterval(readyTimer.current);
+    readyTimer.current = setInterval(() => {
+      if (!frame.current?.contentDocument?.querySelector<HTMLButtonElement>('#play')?.onclick) return;
+      clearInterval(readyTimer.current);
+      frame.current?.contentWindow?.postMessage({ ogm: modeRef.current }, window.location.origin);
+    }, 100);
     sendMode();
   }, [sendMode]);
+  useEffect(() => () => clearInterval(readyTimer.current), []);
   useEffect(() => sendMode(), [sendMode]);
-  const controls = useMemo(() => ({ actions: [
-    { id: 'games', label: 'Games', icon: 'games', onSelect: () => navigate('/all') },
-    ...(mode === 'play' ? [{ id: 'edit', label: 'Edit', icon: 'edit', onSelect: () => setMode('edit') }] : []),
-  ], extras: [] }), [mode, navigate, setMode]);
+  const controls = useMemo(
+    () => ({
+      actions: [
+        { id: 'games', label: 'Games', icon: 'games', onSelect: () => navigate('/all') },
+        ...(mode === 'play' ? [{ id: 'edit', label: 'Edit', icon: 'edit', onSelect: () => setMode('edit') }] : []),
+      ],
+      extras: [],
+    }),
+    [mode, navigate, setMode],
+  );
   useGameMenuControls(controls);
   if (!entry || !initial.current) return <Navigate to="/all" replace />;
-  return <section className="showcase-play" aria-label="Play and edit">
-    {mode === 'edit' && <FocusZone id="editor-bar" className="showcase-play-control"><button type="button" aria-label="Play" onClick={() => setMode('play')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v18l14-9z" /></svg></button></FocusZone>}
-    <iframe ref={frame} src={initial.current.src} title={entry.title} allow="autoplay; fullscreen" onLoad={onLoad} />
-  </section>;
+  return (
+    <section className="showcase-play" aria-label="Play and edit">
+      {mode === 'edit' && (
+        <FocusZone id="editor-bar" className="showcase-play-control">
+          <button type="button" aria-label="Play" onClick={() => setMode('play')}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 3v18l14-9z" />
+            </svg>
+          </button>
+        </FocusZone>
+      )}
+      <iframe ref={frame} src={initial.current.src} title={entry.title} allow="autoplay; fullscreen" onLoad={onLoad} />
+    </section>
+  );
 }

@@ -37,7 +37,11 @@ export function GamesScreen() {
   const goblin = realGames.find(
     (item) => item.slug === 'goblin-cellar' || (!item.slug && item.title === 'Goblin Cellar'),
   );
-  const target = selected?.id.startsWith('showcase:') ? goblin : selected;
+  const target = selected?.id.startsWith('showcase:')
+    ? selected.showcase?.id === 'goblin-cellar'
+      ? goblin
+      : null
+    : selected;
   const branchesQuery = useBranches(target?.id ?? null);
   const branches = branchesQuery.data ?? [];
   const gridRef = useRef<HTMLDivElement>(null);
@@ -78,7 +82,7 @@ export function GamesScreen() {
     const branch =
       branches.find((item) => item.id === branchId) ?? branches.find((item) => item.name === 'main') ?? branches[0];
     if (!game || game.id !== selected?.id) return;
-    if (game.id.startsWith('showcase:') && !branch?.latestBuildId && game.showcase && game.showcase.id !== 'goblin-cellar') {
+    if (game.id.startsWith('showcase:') && game.showcase && game.showcase.id !== 'goblin-cellar') {
       navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
       return;
     }
@@ -142,7 +146,10 @@ export function GamesScreen() {
       {selected?.showcase ? (
         <ShowcaseSpotlight
           game={selected}
-          canOpen={Boolean((selected.id.startsWith('showcase:') && selected.showcase.id !== 'goblin-cellar') || (target && (branches.find((branch) => branch.name === 'main') ?? branches[0])?.latestBuildId))}
+          canOpen={Boolean(
+            (selected.id.startsWith('showcase:') && selected.showcase.id !== 'goblin-cellar') ||
+            (target && (branches.find((branch) => branch.name === 'main') ?? branches[0])?.latestBuildId),
+          )}
           onPlay={() => open(selectedIndex ?? -1, 'play')}
           onEdit={() => open(selectedIndex ?? -1, 'edit')}
           onClose={close}

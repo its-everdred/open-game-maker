@@ -26,9 +26,21 @@ describe('worker progress route', () => {
         familyId: family,
         ownerId: user,
         title: 'Game',
+        slug: 'test-game',
         visibility: 'private',
         repoVisibility: 'private',
         createdAt: at,
+      })
+      .run();
+    deps.db
+      .insert(schema.aiurEvents)
+      .values({
+        daemonSlug: 'test-game',
+        seq: 4,
+        ticket: '11',
+        topic: 'ticket.11.lifecycle.changed',
+        payload: JSON.stringify({ lifecycle: 'completed', lifecycle_source: 'tracker' }),
+        observedAt: at,
       })
       .run();
     installUsers(deps, [
@@ -64,11 +76,13 @@ describe('worker progress route', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       workers: [{ ticket: '12', title: 'Forest backdrop', percent: 50, etaSeconds: 10, source: 'daemon' }],
+      cursor: 4,
+      completed: [{ ticket: '11', seq: 4, at }],
     });
     deps.aiurClientForGame = async () => {
       throw new HttpError(409, 'daemon_not_found');
     };
     const noDaemon = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
-    expect(await noDaemon.json()).toEqual({ workers: [] });
+    expect(await noDaemon.json()).toEqual({ workers: [], cursor: 4, completed: [{ ticket: '11', seq: 4, at }] });
   });
 });

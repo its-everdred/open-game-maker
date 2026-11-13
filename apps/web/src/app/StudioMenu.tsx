@@ -36,6 +36,7 @@ import { useGameMenu, type GameMenuAction } from './GameMenu';
 import { VolumeCircle } from './VolumeCircle';
 import { BuildPanel, BuildTracker, combinedPercent } from '../features/worker-builds/BuildTracker';
 import { useWorkers } from '../features/worker-builds/useWorkers';
+import { useWorkerFinishes } from '../features/worker-builds/useWorkerFinishes';
 
 const RECENT_BUILD_MS = 5 * 60 * 1000;
 const MAX_TRACKED_BUILDS = 100;
@@ -69,7 +70,13 @@ export function StudioMenu() {
   const game = isShowcase ? null : matchPath('/g/:gameId/*', location.pathname);
   const isGameView = Boolean(game || isShowcase);
   const gameId = game?.params.gameId;
-  const workers = useWorkers(isShowcase ? [] : builds.games, gameId);
+  const { workers, feeds } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
+  const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, creatorId);
+  const visibleFinished = isShowcase
+    ? []
+    : gameId
+      ? finished.filter(({ ticket }) => ticket.startsWith(gameId + ':'))
+      : finished;
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
@@ -402,7 +409,12 @@ export function StudioMenu() {
 
   return (
     <div ref={root} className="studio-menu-control">
-      {!isGameView && <BuildTracker workers={workers} />}
+      {!isGameView && <BuildTracker workers={workers} finished={visibleFinished} onDismiss={dismissFinished} />}
+      {isGameView && visibleFinished.length > 0 && (
+        <span className="worker-tracker-toast worker-tracker-game-toast" role="status">
+          {visibleFinished.at(-1)!.title} is ready
+        </span>
+      )}
       <button
         ref={trigger}
         type="button"
@@ -416,6 +428,7 @@ export function StudioMenu() {
         aria-expanded={open}
         aria-controls="studio-menu-panel"
         onClick={() => {
+          dismissFinished();
           setOpen((current) => !current);
           setSheet(undefined);
         }}
@@ -444,7 +457,9 @@ export function StudioMenu() {
             </span>
           ))}
         </div>
-        {gameId && new URLSearchParams(location.search).get('mode') === 'edit' && <div id="studio-editor-tools" className="studio-editor-tools" />}
+        {gameId && new URLSearchParams(location.search).get('mode') === 'edit' && (
+          <div id="studio-editor-tools" className="studio-editor-tools" />
+        )}
         {open && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
       </div>
       <JobConversationModal />

@@ -22,8 +22,8 @@
    period (41, 53, 47, 61 and 37 seconds). */
 .glow-backdrop span {
   position: absolute;
-  width: 100vmax;
-  height: 100vmax;
+  width: 84vw;
+  height: 84vw;
   translate: -50% -50%;
   will-change: transform;
   animation: glow-drift var(--period) ease-in-out infinite alternate;

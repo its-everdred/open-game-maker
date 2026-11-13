@@ -8,12 +8,12 @@
   --text-muted: #c4beb0;
   --text-danger: #ff9b8f;
   --border: #69616b;
-  --action-primary: #b8bb26;
+  --action-primary: #94d742;
   --action-primary-text: #1d1b16;
   --action-secondary: #393643;
   --action-secondary-text: #f2ead6;
-  --focus-ring: #8ec07c;
-  --action-danger: #fb4934;
+  --focus-ring: #6fd6b4;
+  --action-danger: #f76d67;
   --action-danger-text: #1d1b16;
   --paper: rgba(30, 27, 40, 0.62);
   --paper-2: rgba(255, 255, 255, 0.06);
@@ -24,28 +24,82 @@
   --rule: rgba(242, 234, 214, 0.18);
   --dark: #1d1b16;
   --glass: blur(22px) saturate(1.4);
-  --night: #282828;
-  --night-2: #32302f;
-  --night-3: #3c3836;
-  --cream: #ebdbb2;
-  --red: #cc241d;
-  --red-b: #fb4934;
-  --green: #98971a;
-  --green-b: #b8bb26;
-  --yellow: #d79921;
-  --yellow-b: #fabd2f;
-  --blue: #458588;
-  --blue-b: #83a598;
-  --purple: #b16286;
-  --purple-b: #d3869b;
-  --aqua: #689d6a;
-  --aqua-b: #8ec07c;
-  --orange: #d65d0e;
-  --orange-b: #fe8019;
+  --night: #1a1824;
+  --night-2: #282532;
+  --night-3: #373340;
+  --cream: #f5e7c8;
+  --red: #d94242;
+  --red-b: #f76d67;
+  --green: #70aa35;
+  --green-b: #94d742;
+  --yellow: #e5a622;
+  --yellow-b: #ffbf32;
+  --blue: #399dcc;
+  --blue-b: #74c8ed;
+  --purple: #a95bd1;
+  --purple-b: #d795e4;
+  --aqua: #3caf9d;
+  --aqua-b: #6fd6b4;
+  --orange: #e87522;
+  --orange-b: #ff9133;
+  --option-shooter: hsl(0 72% 66%);
+  --option-adventure: hsl(24 72% 66%);
+  --option-rpg: hsl(47 72% 66%);
+  --option-sports: hsl(71 72% 66%);
+  --option-racing: hsl(94 72% 66%);
+  --option-strategy: hsl(118 72% 66%);
+  --option-puzzle: hsl(141 72% 66%);
+  --option-battle: hsl(165 72% 66%);
+  --option-platformer: hsl(189 72% 66%);
+  --option-sim: hsl(212 72% 66%);
+  --option-roguelike: hsl(236 72% 66%);
+  --option-craft: hsl(259 72% 66%);
+  --option-tcg: hsl(283 72% 66%);
+  --option-rhythm: hsl(306 72% 66%);
+  --option-retro: hsl(0 72% 66%);
+  --option-future: hsl(30 72% 66%);
+  --option-cool: hsl(60 72% 66%);
+  --option-cute: hsl(90 72% 66%);
+  --option-old: hsl(120 72% 66%);
+  --option-creepy: hsl(150 72% 66%);
+  --option-cozy: hsl(180 72% 66%);
+  --option-epic: hsl(210 72% 66%);
+  --option-surreal: hsl(240 72% 66%);
+  --option-funny: hsl(270 72% 66%);
+  --option-calm: hsl(300 72% 66%);
+  --option-bit1: hsl(0 72% 66%);
+  --option-bit8: hsl(33 72% 66%);
+  --option-bit16: hsl(66 72% 66%);
+  --option-cartoon: hsl(99 72% 66%);
+  --option-sketch: hsl(132 72% 66%);
+  --option-iso: hsl(165 72% 66%);
+  --option-toy3d: hsl(198 72% 66%);
+  --option-voxel: hsl(231 72% 66%);
+  --option-retro3d: hsl(264 72% 66%);
+  --option-lowpoly: hsl(297 72% 66%);
+  --option-dungeon: hsl(0 72% 66%);
+  --option-forest: hsl(30 72% 66%);
+  --option-spaceW: hsl(60 72% 66%);
+  --option-city: hsl(90 72% 66%);
+  --option-ocean: hsl(120 72% 66%);
+  --option-desert: hsl(150 72% 66%);
+  --option-sky: hsl(180 72% 66%);
+  --option-snow: hsl(210 72% 66%);
+  --option-castle: hsl(240 72% 66%);
+  --option-farm: hsl(270 72% 66%);
+  --option-haunted: hsl(300 72% 66%);
+  --option-solo: hsl(0 72% 66%);
+  --option-coop: hsl(47 72% 66%);
+  --option-versus: hsl(94 72% 66%);
+  --option-online: hsl(141 72% 66%);
+  --option-party: hsl(189 72% 66%);
+  --option-bots: hsl(236 72% 66%);
+  --option-pass: hsl(283 72% 66%);
   --build-stripes: repeating-linear-gradient(-45deg, var(--yellow-b) 0 8px, var(--orange-b) 8px 16px);
   --showcase-shade: linear-gradient(to top, rgba(11, 10, 7, 0.94) 0%, rgba(11, 10, 7, 0.4) 34%, transparent 60%);
   --rating-empty: #d5c4a1;
   --mask-fill: #ffffff;
+  --build-badge: #eca2b8;
   --editor-panel: #fffaf0;
   --editor-tile: #fdf1d8;
   --editor-selected: #ffd9b8;
@@ -82,6 +136,7 @@
   --glass-fill: rgb(24 22 32 / 0.55);
   --glass-edge: rgb(242 234 214 / 0.32);
   --glass-shine: rgb(255 255 255 / 0.14);
+  --button-sheen: linear-gradient(to bottom, rgb(255 255 255 / 0.18), transparent 55%);
 }
 
 * {
@@ -137,6 +192,12 @@ select {
 .tap-secondary {
   min-width: var(--tap-secondary);
   min-height: var(--tap-secondary);
+}
+
+button.tap-primary:not(.new-option):not(.palette-item):not(.game-tile):not(.new-style-set),
+button.editor-play-button,
+.showcase-play-control button {
+  background-image: var(--button-sheen);
 }
 
 @media (hover: hover) and (pointer: fine) {

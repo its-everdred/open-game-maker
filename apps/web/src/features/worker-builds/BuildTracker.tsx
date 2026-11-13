@@ -1,9 +1,16 @@
 import { useId, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { MenuRing } from '../../components/MenuCircle';
+import type { FinishedWorker } from './useWorkerFinishes';
 import './build-tracker.css';
 
-export type WorkerBuild = { ticket: string; title: string; percent: number | null; etaSeconds: number | null };
+export type WorkerBuild = {
+  ticket: string;
+  title: string;
+  percent: number | null;
+  etaSeconds: number | null;
+  startedAt?: string;
+};
 
 export function combinedPercent(workers: readonly WorkerBuild[]): number | null {
   return workers.length && workers.every((worker) => worker.percent !== null)
@@ -11,11 +18,21 @@ export function combinedPercent(workers: readonly WorkerBuild[]): number | null 
     : null;
 }
 
-export function BuildTracker({ workers }: { workers: WorkerBuild[] }) {
+export function BuildTracker({
+  workers,
+  finished = [],
+  onDismiss,
+}: {
+  workers: WorkerBuild[];
+  finished?: readonly FinishedWorker[];
+  onDismiss?(): void;
+}) {
   const [open, setOpen] = useState(false);
   const id = useId();
-  if (!workers.length) return null;
-  const count = `${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running`;
+  if (!workers.length && !finished.length) return null;
+  const count = workers.length
+    ? `${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running`
+    : `${finished.length} ${finished.length === 1 ? 'build' : 'builds'} finished`;
   return (
     <div className="worker-tracker">
       <button
@@ -24,15 +41,23 @@ export function BuildTracker({ workers }: { workers: WorkerBuild[] }) {
         aria-label={count}
         aria-expanded={open}
         aria-controls={id}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          onDismiss?.();
+          if (workers.length) setOpen(!open);
+        }}
       >
-        <MenuRing percent={combinedPercent(workers) ?? undefined} />
+        <MenuRing percent={workers.length ? (combinedPercent(workers) ?? undefined) : 100} />
         <Icon name="build" />
         <span className="worker-tracker-count" aria-hidden="true">
-          {workers.length}
+          {workers.length || '✓'}
         </span>
       </button>
-      {open && <BuildPanel workers={workers} id={id} />}
+      {finished.length > 0 && (
+        <span className="worker-tracker-toast" role="status">
+          {finished.at(-1)!.title} is ready
+        </span>
+      )}
+      {open && workers.length > 0 && <BuildPanel workers={workers} id={id} />}
     </div>
   );
 }

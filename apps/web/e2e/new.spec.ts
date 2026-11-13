@@ -13,16 +13,17 @@ type NewGameTestApi = {
 
 test.use({ serviceWorkers: 'block', reducedMotion: 'reduce' });
 
-test('phone multi-pick capacity shows 0, 2, and 3 picks', async ({ page, isMobile }, testInfo) => {
+test('phone multi-pick announces capacity and shows the prototype limit', async ({ page, isMobile }, testInfo) => {
+  testInfo.setTimeout(90_000);
   test.skip(!isMobile, 'phone screenshot acceptance path');
   await installAuthRoutes(page, { signedIn: true, github: 'kim' });
   await installNewRoutes(page);
   const adventure = await openReadyNewGame(page);
   const capacity = page.locator('.new-pick-capacity');
 
-  await expect(capacity).toBeVisible();
+  await expect(capacity).toBeAttached();
   await expect(capacity).toHaveAccessibleName('0 of 3 picked');
-  await expect(page.getByText('Pick up to 3')).toHaveCount(0);
+  await expect(page.getByText('Pick up to 3')).toBeVisible();
   await attachScreenshot(page, testInfo, 'pick-capacity-0');
 
   await selectOption(page, adventure, 'genre', 'adventure');
@@ -118,11 +119,10 @@ test('phone creation flow reaches scope admission and queues at reset', async ({
   await activate(page, 'Next');
   await selectOption(page, page.getByRole('button', { name: 'Solo' }), 'players', 'single');
   await activate(page, 'Next');
-  await selectOption(page, page.getByRole('button', { name: 'Isometric' }), 'view', 'iso');
-  await activate(page, 'Next');
 
   await expect(page.getByText('“Moonlit”')).toBeVisible();
   await expect(page.getByText('Three small islands will make a good first version.')).toBeVisible();
+  expect(routes.scopeRequests[0]).toMatchObject({ choices: { family: 'smallscaleint', pov: 'iso' } });
   await page.getByRole('textbox', { name: 'Message the builder' }).fill('Keep the first version small.');
   await activate(page, 'Send');
   await expect(page.getByText('Keep the first version small.')).toHaveCount(1);

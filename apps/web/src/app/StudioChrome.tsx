@@ -5,7 +5,11 @@ import { GlowBackdrop } from '../features/commands-inbox/GlowBackdrop';
 import '../features/commands-inbox/review-glass.css';
 
 export function StudioBackdrop() {
-  return <div className="studio-backdrop" aria-hidden="true"><GlowBackdrop /></div>;
+  return (
+    <div className="studio-backdrop" aria-hidden="true">
+      <GlowBackdrop />
+    </div>
+  );
 }
 
 export function StudioLogo() {

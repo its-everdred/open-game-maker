@@ -1,17 +1,21 @@
 import { workerProgress, type WorkerProgress } from './progress.js';
 
 type WorkerClient = {
-  state(): Promise<{ running: Record<string, unknown>[] }>;
-  progress(ticket: string): Promise<{ progress: { status: string; percent?: number } }>;
+  state(signal?: AbortSignal): Promise<{ running: Record<string, unknown>[] }>;
+  progress(
+    ticket: string,
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<{ progress: { status: string; percent?: number } }>;
 };
-export type Worker = WorkerProgress & { ticket: string; title: string };
+export type Worker = WorkerProgress & { ticket: string; title: string; startedAt?: string };
 
 // The daemon belongs to one game. Only expose creator-facing fields, never its workspace or host details.
 export async function listWorkers(
   client: WorkerClient,
   readWorkpad: (ticket: string) => Promise<string>,
 ): Promise<Worker[]> {
-  const snapshot = await client.state();
+  const snapshot = await client.state(AbortSignal.timeout(10_000));
   const active = snapshot.running.filter(
     (entry) =>
       typeof entry.issue_identifier === 'string' &&
@@ -23,7 +27,7 @@ export async function listWorkers(
   return Promise.all(
     active.map(async (entry) => {
       const ticket = entry.issue_identifier as string;
-      const reading = await client.progress(ticket).catch(() => undefined);
+      const reading = await client.progress(ticket, undefined, AbortSignal.timeout(10_000)).catch(() => undefined);
       const value = reading?.progress.status === 'known' ? reading.progress.percent : undefined;
       const percent =
         typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? value : undefined;
@@ -36,7 +40,16 @@ export async function listWorkers(
             ? entry.title
             : 'Building';
       const title = rawTitle.trim().split(/\s+/).slice(0, 4).join(' ') || 'Building';
-      return { ticket, title, ...workerProgress({ percent, runtimeSeconds, workpad }) };
+      const startedAt =
+        typeof entry.started_at === 'string' && Number.isFinite(Date.parse(entry.started_at))
+          ? entry.started_at
+          : undefined;
+      return {
+        ticket,
+        title,
+        ...(startedAt ? { startedAt } : {}),
+        ...workerProgress({ percent, runtimeSeconds, workpad }),
+      };
     }),
   );
 }

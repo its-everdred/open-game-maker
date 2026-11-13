@@ -109,7 +109,7 @@
   }
 
   .games-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .game-tile-meta {
@@ -198,7 +198,12 @@
   }
 }
 @media (hover: hover) and (pointer: fine) {
-  .showcase-tile-row { opacity: 0; transition: opacity 0.3s var(--games-ease); }
+  .showcase-tile-row {
+    opacity: 0;
+    transition: opacity 0.3s var(--games-ease);
+  }
   .showcase-tile:hover .showcase-tile-row,
-  .showcase-tile:focus-visible .showcase-tile-row { opacity: 1; }
+  .showcase-tile:focus-visible .showcase-tile-row {
+    opacity: 1;
+  }
 }

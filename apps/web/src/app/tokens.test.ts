@@ -24,7 +24,8 @@ describe('shared design tokens', () => {
     expect(css).toContain('--surface-page: #0f0e16');
     expect(css).toContain('--ink: #f2ead6');
     expect(css).toContain('--glass: blur(22px) saturate(1.4)');
-    expect(css).toContain('--yellow-b: #fabd2f');
+    expect(css).toContain('--yellow-b: #ffbf32');
+    expect(css).not.toContain('--green-b: #b8bb26');
     expect(css).not.toContain('--gruvbox-');
   });
 
@@ -77,7 +78,7 @@ describe('shared design tokens', () => {
   it('meets WCAG AA for the shared text and primary-action pairs', () => {
     const tokens = parseColors(readFileSync(tokenPath, 'utf8'));
 
-    expect(tokens.get('--action-primary')).toBe('#b8bb26');
+    expect(tokens.get('--action-primary')).toBe('#94d742');
     expectContrast(tokens, '--text', '--surface-page');
     expectContrast(tokens, '--text', '--surface-card');
     expectContrast(tokens, '--text-muted', '--surface-page');
