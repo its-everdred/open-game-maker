@@ -176,9 +176,10 @@ export function GameScreen() {
       try {
         const target = { gameId, branchId: jobBranch };
         const key = `edit:${crypto.randomUUID()}`;
-        const request = fallbackActive
-          ? fallbackEditRequest(target, { assetId: prefab, name: item.label, ...point }, key)
-          : previewEditRequest(target, { prefab, name: item.label, ...point }, key);
+        const request =
+          fallbackActive && !prefab.startsWith('scope:')
+            ? fallbackEditRequest(target, { assetId: prefab, name: item.label, ...point }, key)
+            : previewEditRequest(target, { prefab, name: item.label, ...point }, key);
         void admitJob(request)
           .then((result) => {
             if (result.kind === 'refused') {

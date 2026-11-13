@@ -28,7 +28,8 @@ export function previewEditRequest(
   if (!prefab.trim() || prefab.length > 1_000 || [...prefab].some((char) => char.charCodeAt(0) < 32) || !name.trim()) {
     throw new TypeError('an item and name are required');
   }
-  const text = `Place ${JSON.stringify(name.slice(0, 200))} (preview item ${JSON.stringify(prefab)}) at normalized preview coordinates x=${x}, y=${y}.`;
+  const source = prefab.startsWith('scope:') ? 'scope item' : 'preview item';
+  const text = `Place ${JSON.stringify(name.slice(0, 200))} (${source} ${JSON.stringify(prefab)}) at normalized preview coordinates x=${x}, y=${y}.`;
   return editJobRequest(target, text, 'now', idempotencyKey);
 }
 
