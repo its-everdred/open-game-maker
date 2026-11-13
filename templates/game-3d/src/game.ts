@@ -9,9 +9,9 @@ import { manifest } from './manifest.js';
 export interface SpawnEntity {
   id: string;
   prefab: 'spawn';
-  level: 'main';
-  origin: 'build';
-  props: { x: number; z: number };
+  level: string;
+  origin: 'build' | 'creator';
+  props: { x?: number; z?: number; pose?: { position: Vec3; rotationY?: number } };
 }
 
 export interface LevelDesign {
@@ -77,9 +77,17 @@ export const levelDesignSchema: z.ZodType<LevelDesign> = z.object({
       z.object({
         id: z.string(),
         prefab: z.literal('spawn'),
-        level: z.literal('main'),
-        origin: z.literal('build'),
-        props: z.object({ x: z.number(), z: z.number() }),
+        level: z.string().min(1),
+        origin: z.enum(['build', 'creator']),
+        props: z
+          .object({
+            x: z.number().optional(),
+            z: z.number().optional(),
+            pose: z
+              .object({ position: z.tuple([z.number(), z.number(), z.number()]), rotationY: z.number().optional() })
+              .optional(),
+          })
+          .refine((props) => props.pose !== undefined || (props.x !== undefined && props.z !== undefined)),
       }),
     )
     .default(() => structuredClone(DEFAULT_DESIGN.entities)),
@@ -94,12 +102,17 @@ function spawnEntries(design: LevelDesign): SpawnEntity[] {
 function spawnPlayer(design: LevelDesign, playerIndex: number, playerId: string): PlayerState {
   const spawns = spawnEntries(design);
   const spawn = spawns[playerIndex % Math.max(1, spawns.length)];
+  const position: Vec3 = spawn ? spawnPosition(spawn) : [0, 0, 0];
   return {
     id: playerId,
     playerIndex,
-    position: [spawn?.props.x ?? 0, 1, spawn?.props.z ?? 0],
+    position: [position[0], 1, position[2]],
     velocity: [0, 0, 0],
   };
+}
+
+function spawnPosition(spawn: SpawnEntity): Vec3 {
+  return spawn.props.pose?.position ?? [spawn.props.x ?? 0, 0, spawn.props.z ?? 0];
 }
 
 function cloneSave(state: GameSave): GameSave {
@@ -133,7 +146,7 @@ export function createGame(): {
     const player = state.players[id];
     if (player) return [...player.position];
     const spawn = design.entities[id];
-    return spawn ? [spawn.props.x, 0, spawn.props.z] : undefined;
+    return spawn ? [...spawnPosition(spawn)] : undefined;
   };
 
   const addPlayerBody = (player: PlayerState) => {
