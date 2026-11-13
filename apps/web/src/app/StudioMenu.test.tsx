@@ -211,6 +211,12 @@ afterEach(() => {
 });
 
 describe('StudioMenu', () => {
+  it.each(['/all', '/new'])('keeps the sound control directly available on %s', (path) => {
+    renderMenu(path);
+    const volume = screen.getByRole('button', { name: 'Mute' });
+    fireEvent.click(volume);
+    expect(sound.setMuted).toHaveBeenCalledWith(true);
+  });
   it('shows live worker progress in the builds control', () => {
     state.workers = [{ ticket: '12', title: 'Forest backdrop', percent: 50, etaSeconds: 10 }];
     renderMenu('/games');

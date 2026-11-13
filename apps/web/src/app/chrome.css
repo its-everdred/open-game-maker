@@ -65,6 +65,22 @@
   right: max(76px, calc(var(--safe-r) + 60px));
 }
 
+.studio-library-volume {
+  position: absolute;
+  right: 60px;
+  top: 0;
+}
+
+.studio-library-volume .volume-circle {
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--pop-sm);
+}
+
+.studio-library-volume .menu-circle-ring {
+  display: none;
+}
+
 .studio-menu-button,
 .menu-circle {
   display: grid;

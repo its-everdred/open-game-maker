@@ -52,6 +52,8 @@ try {
   await mkdir(join(fixture, 'art', 'splats'), { recursive: true });
   await mkdir(join(fixture, 'demo', 'assets', 'img'), { recursive: true });
   await Promise.all([...sceneArt, ...splats].map((name) => writeFile(join(fixture, 'art', name), pixel)));
+  // Exercise the same real showcase art the app ships, rather than a one-pixel stand-in.
+  await cp(join(root, 'apps', 'web', 'public', 'proto', 'art'), join(fixture, 'art'), { recursive: true });
   await writeFile(join(fixture, 'demo', 'assets', 'img', 'paper-bg.png'), pixel);
   await Promise.all([
     writeFile(join(fixture, 'art', 'logo-big.webp'), ''),

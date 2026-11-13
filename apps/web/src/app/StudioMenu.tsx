@@ -70,6 +70,7 @@ export function StudioMenu() {
   const isShowcase = Boolean(matchPath('/g/showcase/:id', location.pathname));
   const game = isShowcase ? null : matchPath('/g/:gameId/*', location.pathname);
   const isGameView = Boolean(game || isShowcase);
+  const hasStudioHeader = location.pathname === '/all' || location.pathname === '/new';
   const gameId = game?.params.gameId;
   const { workers, feeds } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
   const reviews = useWorkerReviews(
@@ -240,7 +241,7 @@ export function StudioMenu() {
   if (session) {
     circles.push(<EnergyButton key="energy" open={sheet === 'energy'} onToggle={() => toggleSheet('energy')} />);
   }
-  circles.push(
+  const volumeCircle = (
     <VolumeCircle
       key="volume"
       sound={sound}
@@ -248,10 +249,14 @@ export function StudioMenu() {
       onVolume={changeVolume}
       onMute={setMuted}
       sliderOpen={sheet === 'volume'}
-      onSlider={() => setSheet('volume')}
-    />,
-    <BugButton key="bug" open={sheet === 'bug'} onToggle={() => toggleSheet('bug')} />,
+      onSlider={() => {
+        setOpen(true);
+        setSheet('volume');
+      }}
+    />
   );
+  if (!hasStudioHeader) circles.push(volumeCircle);
+  circles.push(<BugButton key="bug" open={sheet === 'bug'} onToggle={() => toggleSheet('bug')} />);
   if (gamePath) {
     circles.push(
       <MenuLink key="versions" label="Versions" icon="versions" to={`${gamePath}/versions`} close={close} />,
@@ -415,6 +420,7 @@ export function StudioMenu() {
 
   return (
     <div ref={root} className="studio-menu-control">
+      {hasStudioHeader && <div className="studio-library-volume">{volumeCircle}</div>}
       {!isGameView && (
         <BuildTracker workers={workers} reviews={reviews} finished={visibleFinished} onDismiss={dismissFinished} />
       )}
