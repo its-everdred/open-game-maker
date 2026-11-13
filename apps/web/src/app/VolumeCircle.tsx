@@ -115,7 +115,7 @@ export function VolumeCircle({
       onKeyDown={key}
       onContextMenu={(event) => {
         event.preventDefault();
-        onMenu?.();
+        if (!gesture.current?.held) onMenu?.();
       }}
     >
       <MenuRing percent={on ? volume * 100 : 0} />

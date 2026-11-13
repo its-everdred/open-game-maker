@@ -226,6 +226,8 @@ describe('StudioMenu', () => {
     const volume = screen.getByRole('button', { name: 'Mute' });
     fireEvent.pointerDown(volume, { clientX: 100, clientY: 100 });
     act(() => vi.advanceTimersByTime(450));
+    fireEvent.contextMenu(volume);
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeVisible();
     fireEvent.pointerUp(volume);
     fireEvent.click(volume);
     expect(volume).toHaveAttribute('aria-expanded', 'true');
