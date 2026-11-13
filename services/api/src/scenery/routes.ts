@@ -167,6 +167,25 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
     })
     .get('/games/:gameId/scenery/source', async (c) => {
       const bundle = await source(c);
+      const deps = c.get('deps');
+      const gameId = c.req.param('gameId');
+      const main = deps.db
+        .select({ id: schema.branches.id })
+        .from(schema.branches)
+        .where(and(eq(schema.branches.gameId, gameId), eq(schema.branches.name, 'main')))
+        .get();
+      const lastEdit =
+        main &&
+        deps.db
+          .select({ at: schema.designTransactions.createdAt })
+          .from(schema.designTransactions)
+          .where(and(eq(schema.designTransactions.gameId, gameId), eq(schema.designTransactions.branchId, main.id)))
+          .orderBy(desc(schema.designTransactions.rev))
+          .get();
+      const updatedAt =
+        lastEdit && (!bundle.updatedAt || Date.parse(lastEdit.at) > Date.parse(bundle.updatedAt))
+          ? lastEdit.at
+          : bundle.updatedAt;
       const assets = bundle.lock.assets.map((entry, index) => ({
         id: entry.id,
         path: entry.path,
@@ -174,7 +193,7 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
         url: `${prefix}/games/${encodeURIComponent(c.req.param('gameId'))}/scenery/assets/${index}/${entry.sha256}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
       }));
       c.header('Cache-Control', 'private, no-store');
-      return c.json({ scene: bundle.scene, assets, ...(bundle.updatedAt ? { updatedAt: bundle.updatedAt } : {}) });
+      return c.json({ scene: bundle.scene, assets, ...(updatedAt ? { updatedAt } : {}) });
     })
     .get('/games/:gameId/scenery/assets/:index/:hash/*', async (c) => {
       const bundle = await source(c, false);

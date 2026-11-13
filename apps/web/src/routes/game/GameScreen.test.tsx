@@ -415,6 +415,24 @@ describe('GameScreen', () => {
     expect(host.mountGameFrame).not.toHaveBeenCalled();
     expect(editorApi.getPreviewDesign).not.toHaveBeenCalled();
   });
+  it('does not load the shared main scenery into an unbuilt side branch', async () => {
+    branchList.value = [
+      { id: 'b_main', name: 'main' },
+      { id: 'b_side', name: 'side' },
+    ];
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getEditorStage.mockResolvedValue({ stage: { kind: 'image', url: 'https://example.test/concept.webp' } });
+    const view = renderGame('/g/game?v=b_side&mode=edit');
+    await waitFor(() =>
+      expect(view.container.querySelector('img[src="https://example.test/concept.webp"]')).not.toBeNull(),
+    );
+    expect(editorApi.getScenerySource).not.toHaveBeenCalled();
+    expect(preview.mountSceneryPreview).not.toHaveBeenCalled();
+  });
   it.each(['t3:fixture/tree', 'scope:0'])(
     'submits fallback item %s as a build request without a design transaction',
     async (prefab) => {
@@ -744,6 +762,25 @@ describe('GameScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask for a change' }));
 
     expect(useDock.getState().draft).toMatchObject({ gameId: 'game', branchId: 'main' });
+  });
+
+  it('detects a finished main build when the editor opened main by id', async () => {
+    branchList.value = [{ id: 'b_main', name: 'main' }];
+    editorApi.getDesignSnapshot
+      .mockResolvedValueOnce({
+        rev: 0,
+        buildId: editorApi.NO_BUILD_ID,
+        doc: { schemaVersion: 1, globals: {}, entities: {} },
+      })
+      .mockResolvedValue({ rev: 0, buildId: 'new-build', doc: { schemaVersion: 1, globals: {}, entities: {} } });
+    editorApi.listJobs.mockResolvedValue({
+      jobs: [{ id: 'job', branchId: 'main', state: 'done', updatedAt: '2026-11-13T00:00:00Z' }],
+    });
+    editorApi.getOptionalReapply.mockResolvedValue({ available: false });
+    renderGame('/g/game?v=b_main');
+    await waitFor(() =>
+      expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ buildId: 'new-build' })),
+    );
   });
 
   it('reports a denied edit lease as read only', async () => {

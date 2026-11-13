@@ -290,6 +290,34 @@ describe('GizmoOverlay', () => {
     await act(async () => finishes.forEach((finish, index) => finish([index, 0, 1])));
     expect(test.submit).toHaveBeenCalledOnce();
   });
+  it('preserves a drawn terrain path in a request-only edit', () => {
+    const test = harness();
+    test.session.getState().readOnly = true;
+    const request = vi.fn();
+    render(
+      <GizmoOverlay
+        activePrefab="scenery-band:path"
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+        onRequestPlacement={request}
+        allowReadOnlyRequests
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 10, clientY: 20 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 40, clientY: 50 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 80, clientY: 90 });
+    expect(request).toHaveBeenCalledWith('scenery-band:path', { x: 0.8, y: 0.9 }, [
+      { x: 0.1, y: 0.2 },
+      { x: 0.4, y: 0.5 },
+      { x: 0.8, y: 0.9 },
+    ]);
+    expect(test.submit).not.toHaveBeenCalled();
+  });
+
   it('long-presses a picked scenery item to remove it', async () => {
     vi.useFakeTimers();
     const test = harness();
