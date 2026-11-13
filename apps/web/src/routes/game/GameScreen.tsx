@@ -13,6 +13,7 @@ import {
   getGame,
   getFallbackPalette,
   getEditorPreviews,
+  getEditorStage,
   getPreviewDesign,
   getScenerySource,
   getOptionalReapply,
@@ -39,6 +40,7 @@ import { ReapplyCard } from '../../features/editor/ReapplyCard';
 import type { EditorSessionState } from '../../features/editor/session';
 import { useEditorSession } from '../../features/editor/use-editor-session';
 import { mountSceneryPreview } from '../../features/editor/scenery-preview';
+import { mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
 import { energyRefusalText } from '../../features/energy/api';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
@@ -137,20 +139,34 @@ export function GameScreen() {
   const waitingForPreview =
     noBuild && (previews.isPending || (candidatePreview !== undefined && previewDesign.isPending));
   const activePreview = candidatePreview && previewDesign.data ? candidatePreview : undefined;
+  const stage = useQuery({
+    queryKey: ['editor-stage', gameId],
+    queryFn: () => getEditorStage(gameId),
+    enabled: gameId !== '' && noBuild && !waitingForPreview && !activePreview,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const waitingForStage = noBuild && !waitingForPreview && !activePreview && stage.isPending;
+  const activeStage = noBuild && !activePreview ? (stage.data?.stage ?? undefined) : undefined;
   const requestOnlySnapshot = useMemo(
-    () => (activePreview && previewDesign.data ? { ...previewDesign.data, buildId: NO_BUILD_ID } : undefined),
-    [activePreview?.buildId, previewDesign.data],
+    () =>
+      activePreview && previewDesign.data
+        ? { ...previewDesign.data, buildId: NO_BUILD_ID }
+        : activeStage
+          ? activeSnapshot
+          : undefined,
+    [activePreview?.buildId, previewDesign.data, activeStage, activeSnapshot],
   );
   const scenerySource = useQuery({
     queryKey: ['scenery-source', gameId],
     queryFn: () => getScenerySource(gameId),
     enabled:
       gameId !== '' &&
-      ((noBuild && !waitingForPreview && !activePreview) ||
+      ((noBuild && !waitingForPreview && !waitingForStage && !activePreview && !activeStage) ||
         (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
   });
-  const previewSource = noBuild && !activePreview ? scenerySource.data : undefined;
-  const previewSourceError = noBuild && !activePreview && scenerySource.isError;
+  const previewSource = noBuild && !activePreview && !activeStage ? scenerySource.data : undefined;
+  const previewSourceError = noBuild && !activePreview && !activeStage && scenerySource.isError;
   const nativePalette = frameState.manifest?.palette;
   const nativePaletteEmpty =
     nativePalette !== undefined && nativePalette.categories.length === 0 && nativePalette.items.length === 0;
@@ -161,7 +177,7 @@ export function GameScreen() {
     retry: false,
   });
   const fallbackActive = nativePaletteEmpty && fallback.data?.mode === 'request';
-  const requestOnly = fallbackActive || activePreview !== undefined;
+  const requestOnly = fallbackActive || activePreview !== undefined || activeStage !== undefined;
   const editorManifest = useMemo(() => {
     if (!frameState.manifest) return undefined;
     return fallbackActive && fallback.data
@@ -252,16 +268,18 @@ export function GameScreen() {
     const snapshot = activeSnapshot;
     if (container === null || snapshot === undefined || gameId === '') return;
     if (waitingForPreview) return;
+    if (waitingForStage) return;
     if (activePreview && !previewDesign.data) return;
-    if (snapshot.buildId === NO_BUILD_ID && !activePreview && previewSource === undefined) {
+    if (snapshot.buildId === NO_BUILD_ID && !activePreview && !activeStage && previewSource === undefined) {
       if (previewSourceError) setFrameState({ bridgeState: 'error', dropped: 0 });
       return;
     }
     setFrameState(initialFrameState);
     let controller: GameFrameController;
     try {
-      controller =
-        snapshot.buildId === NO_BUILD_ID && !activePreview
+      controller = activeStage
+        ? mountStagePreview(container, activeStage, setFrameState)
+        : snapshot.buildId === NO_BUILD_ID && !activePreview
           ? mountSceneryPreview(container, previewSource!, snapshot.doc, setFrameState)
           : mountGameFrame({
               container,
@@ -302,6 +320,8 @@ export function GameScreen() {
     previewSource,
     previewSourceError,
     waitingForPreview,
+    waitingForStage,
+    activeStage,
     activePreview?.buildId,
     activePreview?.accessId,
     previewDesign.data,
@@ -513,7 +533,7 @@ export function GameScreen() {
             session={sessionStore}
             snap={canvasOptions.snap}
             onRequestPlacement={requestOnly ? requestFallbackPlacement : undefined}
-            allowReadOnlyRequests={activePreview !== undefined}
+            allowReadOnlyRequests={activePreview !== undefined || activeStage !== undefined}
           />
         ) : null}
         {hudShown &&

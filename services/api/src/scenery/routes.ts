@@ -13,10 +13,13 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { thumbnailUrl } from '../catalog/routes.js';
+import { mediaSigner } from '../build-chat/media.js';
+import { getChatRow, listCommands } from '../build-chat/store.js';
 import { findGameForFamily } from '../games/games.js';
 import { authorizedGame } from '../games/authorize.js';
 import { readGameLock, readSceneryFile, readScenerySource } from './source.js';
 import { scopePaletteItems } from './scope-palette.js';
+import { selectStageMedia } from './stage.js';
 
 export const prefix = '/api/v1';
 
@@ -45,6 +48,48 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
     }
   }
   return new Hono<ApiBindings>()
+    .get('/games/:gameId/editor/stage', async (c) => {
+      const game = authorizedGame(c, 'game.edit');
+      const deps = c.get('deps');
+      const jobs = deps.db
+        .select({ id: schema.jobs.id })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.gameId, game.id))
+        .all();
+      const commands = jobs.flatMap(({ id }) => listCommands(deps.sqlite, id));
+      const reviews = deps.db
+        .select({
+          jobId: schema.commandReviews.jobId,
+          commandId: schema.commandReviews.commandId,
+          at: schema.commandReviews.at,
+        })
+        .from(schema.commandReviews)
+        .where(eq(schema.commandReviews.gameId, game.id))
+        .orderBy(desc(schema.commandReviews.at))
+        .all();
+      const reviewTimes = new Map<string, string>();
+      for (const review of reviews) {
+        if (!review.jobId) continue;
+        const key = `${review.jobId}\0${review.commandId}`;
+        if (!reviewTimes.has(key)) reviewTimes.set(key, review.at);
+      }
+      const row = selectStageMedia(
+        commands,
+        (id) => getChatRow(deps.sqlite, id),
+        game.allowAiGeneratedAssets,
+        reviewTimes,
+      );
+      c.header('Cache-Control', 'private, no-store');
+      if (!row || !row.mediaHash) return c.json({ stage: null });
+      const sign = mediaSigner(deps.blobStore);
+      return c.json({
+        stage: {
+          kind: row.kind,
+          url: await sign(row.mediaHash),
+          ...(row.posterHash ? { poster: await sign(row.posterHash) } : {}),
+        },
+      });
+    })
     .get('/games/:gameId/editor/fallback', async (c) => {
       const game = authorizedGame(c, 'game.edit');
       const deps = c.get('deps');

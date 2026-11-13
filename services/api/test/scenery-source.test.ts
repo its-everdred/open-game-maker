@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { BlobStore } from '@ogm/blob-store';
+import type { BlobHash, BlobStore } from '@ogm/blob-store';
 import { schema } from '@ogm/db';
 import { readSceneryFile, readScenerySource } from '../src/scenery/source.js';
+import { insertChatRow } from '../src/build-chat/store.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 
 const roots: string[] = [];
@@ -173,6 +174,33 @@ describe('no-build scenery source', () => {
         updatedAt: now,
       })
       .run();
+    const mediaId = 'm_88000000-0000-4000-8000-000000000001';
+    insertChatRow(deps.sqlite, {
+      id: mediaId,
+      jobId: 'j_scope',
+      actor: 'agent',
+      kind: 'image',
+      at: now,
+      media: { hash: `sha256:${'a'.repeat(64)}` as BlobHash, width: 100, height: 100 },
+    });
+    insertChatRow(deps.sqlite, {
+      jobId: 'j_scope',
+      actor: 'agent',
+      kind: 'command',
+      at: now,
+      command: {
+        decision_id: 'decision',
+        question: 'Choose a scene',
+        options: [{ id: 'a', label: 'Forest', media_id: mediaId }],
+        status: 'answered',
+        option_id: 'a',
+      },
+    });
+    const stageUrl = `/api/v1/games/${ids.game}/editor/stage`;
+    expect((await app.request(stageUrl)).status).toBe(401);
+    expect((await app.request(stageUrl, { headers: asUser(ids.other) })).status).toBe(403);
+    const stage = await app.request(stageUrl, { headers: asUser(ids.creator) });
+    expect(await stage.json()).toMatchObject({ stage: { kind: 'image', url: expect.stringContaining('/sha256/') } });
     rmSync(join(game, 'assets.lock.json'));
     const scopeOnly = await app.request(fallbackUrl, { headers: asUser(ids.creator) });
     expect(scopeOnly.status).toBe(200);
