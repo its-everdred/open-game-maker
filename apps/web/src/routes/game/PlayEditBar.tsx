@@ -9,6 +9,7 @@ type PlayEditBarProps = {
   saved?: string;
   build: 'draft' | 'published';
   playLabel?: string;
+  compact?: boolean;
   children?: ReactNode;
   onBack(): void;
   onMode(mode: 'play' | 'edit'): void;
@@ -21,6 +22,7 @@ export function PlayEditBar({
   saved,
   build,
   playLabel = 'Play',
+  compact = false,
   children,
   onBack,
   onMode,
@@ -39,6 +41,7 @@ export function PlayEditBar({
           className="tap-primary"
           type="button"
           data-mode="play"
+          aria-label={compact ? playLabel : undefined}
           aria-pressed={mode === 'play'}
           onClick={() => onMode('play')}
         >

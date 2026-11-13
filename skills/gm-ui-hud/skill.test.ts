@@ -43,6 +43,7 @@ const sdkExports = {
     migrate: 1,
     pick: 1,
     worldToScreen: 1,
+    screenToWorld: 1,
     validatePlacement: 1,
     setSelection: 1,
     setCamera: 1,

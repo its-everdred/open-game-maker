@@ -4,11 +4,25 @@ after_create: |
   ticket="${AIUR_HOOK_TICKET_IDENTIFIER:?}"
   git checkout -b "${AIUR_TICKET_BRANCH:-aiur/${ticket}}" "origin/$THIS_BASE_BRANCH"
   mkdir -p .gm/context
-  rm -f .gm/context/bundle.json .gm/context/bundle.missing
+  case "$ticket" in ''|*[!0-9]*) rm -f .gm/context/ticket ;; *) printf '%s\n' "$ticket" > .gm/context/ticket ;; esac
+  rm -f .gm/context/bundle.json .gm/context/bundle.missing .gm/context/design.json .gm/context/design.missing
   secret="$(cat "${OGM_HOOK_SECRET_FILE:?}" 2>/dev/null || true)"
   if [ -n "$secret" ] && curl -fsS --max-time 20 -H "Authorization: Bearer ${secret}" \
       "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/bundle" \
       -o .gm/context/bundle.json; then
+    if ! curl -fs --max-time 20 -H "Authorization: Bearer ${secret}" \
+      "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/design" \
+      -o .gm/context/design.json || ! node -e '
+        try {
+          const s = JSON.parse(require("node:fs").readFileSync(".gm/context/design.json", "utf8"));
+          const record = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+          if (!Number.isInteger(s.rev) || s.rev < 0 || !(s.buildId === null || typeof s.buildId === "string") ||
+              !record(s.doc) || !Number.isInteger(s.doc.schemaVersion) || !record(s.doc.globals) || !record(s.doc.entities)) process.exit(1);
+        } catch { process.exit(1); }
+      '; then
+      rm -f .gm/context/design.json
+      echo "design snapshot unavailable" > .gm/context/design.missing
+    fi
     want="$(node -p "require('./.gm/context/bundle.json').skillPackVersion")"
     have="$(node -p "require('./skills.lock').pack" 2>/dev/null || echo none)"
     if [ "$want" != "$have" ]; then
@@ -30,6 +44,7 @@ after_create: |
   else
     rm -f .gm/context/bundle.json
     echo "bundle unavailable" > .gm/context/bundle.missing
+    echo "design snapshot unavailable" > .gm/context/design.missing
   fi
 before_remove: |
   git status --short

@@ -107,6 +107,8 @@ export const hostToGameSchema = z
     envelope('editor.select', z.looseObject({ ids: z.array(z.string()) })),
     /** Normalized 0..1 of the frame. */
     envelope('editor.pick', z.looseObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })),
+    /** Ask the game to project a normalized frame point onto its editable surface. */
+    envelope('editor.project', z.looseObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })),
     envelope('editor.validatePlacement', z.looseObject({ prefab: z.string(), pose: poseSchema })),
     /**
      * Presence, not design state: any role may send it. `follow` tracks `target` (an entity id; the game's
@@ -251,6 +253,7 @@ export const gameToHostSchema = z
       z.looseObject({ rev: z.number().int().min(0), result: z.enum(['live', 'restart-scene']) }),
     ),
     envelope('editor.picked', z.looseObject({ targets: z.array(targetRefSchema) })),
+    envelope('editor.projected', z.looseObject({ position: z.tuple([z.number(), z.number(), z.number()]).nullable() })),
     envelope('editor.placement', placementResult),
     envelope(
       'editor.screen',

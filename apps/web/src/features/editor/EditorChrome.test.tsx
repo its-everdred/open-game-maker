@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -60,6 +60,44 @@ describe('EditorChrome', () => {
     expect(container.querySelector('.editor-inspector-stack .editor-tools')).toBeNull();
     expect(container.querySelector('.editor-inspector-stack .editor-inspector')).toBeNull();
   });
+  it('submits an undoable light change from the scenery tab', () => {
+    const submit = vi.fn();
+    const sceneryManifest = {
+      ...manifest,
+      capabilities: ['scenery'],
+      palette: { categories: [{ id: 'light', label: 'Light', kind: 'panel' }], items: [] },
+    } as GameManifest;
+    const scenerySession = {
+      ...session,
+      doc: {
+        schemaVersion: 1,
+        globals: { 'scenery.settings': { lighting: 'night' }, 'scenery.lighting': 'night' },
+        entities: {},
+      },
+      submit,
+    } as unknown as EditorSessionState;
+    render(
+      <EditorChrome
+        gameId="game"
+        manifest={sceneryManifest}
+        session={scenerySession}
+        onCommand={vi.fn()}
+        onTool={vi.fn()}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={vi.fn()}
+        onInstanceCount={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cave' }));
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patches: [expect.objectContaining({ path: ['globals', 'scenery.lighting'], value: 'cave' })],
+      }),
+    );
+  });
+
   it('maps real editor controls into the prototype rail, tray, and inspector regions', () => {
     const { container } = render(<Screen />);
 

@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
-import type { StoreApi } from 'zustand/vanilla';
 
 import type { Entity, ReapplyReport } from '@ogm/contracts/browser';
 
@@ -10,15 +9,13 @@ import { useGameMenu, useGameMenuControls } from '../../app/GameMenu';
 import { useDock } from '../../features/build-chat/dock';
 import { gameJobsQueryKey } from '../../features/build-chat/jobs';
 import {
-  acquireLease,
   getDesignSnapshot,
   getGame,
+  getScenerySource,
   getOptionalReapply,
-  heartbeatLease,
   listJobs,
   postAnalyticsEvent,
-  postTransaction,
-  releaseLease,
+  NO_BUILD_ID,
   submitReapply,
   type DesignSnapshot,
 } from '../../features/editor/api';
@@ -34,11 +31,11 @@ import {
   type GameFrameState,
   type GameLoadMeasurement,
 } from '../../features/editor/frame';
-import { LeaseController } from '../../features/editor/lease';
 import { ReapplyCard } from '../../features/editor/ReapplyCard';
-import { createEditorSession, type EditorSessionState } from '../../features/editor/session';
+import type { EditorSessionState } from '../../features/editor/session';
+import { useEditorSession } from '../../features/editor/use-editor-session';
+import { mountSceneryPreview } from '../../features/editor/scenery-preview';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
-import { connectTransactionStream } from '../../features/editor/stream';
 import {
   createEntityIntent,
   createIntent,
@@ -104,9 +101,6 @@ export function GameScreen() {
   const [frameController, setFrameController] = useState<GameFrameController>();
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
-  const [sessionStore, setSessionStore] = useState<StoreApi<EditorSessionState>>();
-  const [sessionView, setSessionView] = useState<EditorSessionState>();
-  const [editStartup, setEditStartup] = useState<EditorSessionState['saved']>();
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
   const [pendingBuild, setPendingBuild] = useState<{ snapshot: DesignSnapshot; report: ReapplyReport }>();
@@ -117,6 +111,16 @@ export function GameScreen() {
   const inspectedBuildRef = useRef<string | undefined>(undefined);
   const inspectedJobRef = useRef<string | undefined>(undefined);
   const activeSnapshot = adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
+  const scenerySource = useQuery({
+    queryKey: ['scenery-source', gameId],
+    queryFn: () => getScenerySource(gameId),
+    enabled:
+      gameId !== '' &&
+      (activeSnapshot?.buildId === NO_BUILD_ID ||
+        (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
+  });
+  const previewSource = activeSnapshot?.buildId === NO_BUILD_ID ? scenerySource.data : undefined;
+  const previewSourceError = activeSnapshot?.buildId === NO_BUILD_ID && scenerySource.isError;
   const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
   const reportGameLoad = useCallback(
@@ -167,21 +171,34 @@ export function GameScreen() {
     const container = containerRef.current;
     const snapshot = activeSnapshot;
     if (container === null || snapshot === undefined || gameId === '') return;
+    if (snapshot.buildId === NO_BUILD_ID && previewSource === undefined) {
+      if (previewSourceError) setFrameState({ bridgeState: 'error', dropped: 0 });
+      return;
+    }
     setFrameState(initialFrameState);
-    const controller = mountGameFrame({
-      container,
-      gamesOrigin,
-      gameId,
-      buildId: snapshot.buildId,
-      mode,
-      design: snapshot,
-      build,
-      onState: setFrameState,
-      onSaveWrite: () => setLastSaveAt(new Date().toISOString()),
-      onRoomMessage: room.handleGameMessage,
-      onLoadDone: (measurement) => reportGameLoad(measurement, 'ok'),
-      onLoadStalled: (measurement) => reportGameLoad(measurement, 'fail'),
-    });
+    let controller: GameFrameController;
+    try {
+      controller =
+        snapshot.buildId === NO_BUILD_ID
+          ? mountSceneryPreview(container, previewSource!, snapshot.doc, setFrameState)
+          : mountGameFrame({
+              container,
+              gamesOrigin,
+              gameId,
+              buildId: snapshot.buildId,
+              mode,
+              design: snapshot,
+              build,
+              onState: setFrameState,
+              onSaveWrite: () => setLastSaveAt(new Date().toISOString()),
+              onRoomMessage: room.handleGameMessage,
+              onLoadDone: (measurement) => reportGameLoad(measurement, 'ok'),
+              onLoadStalled: (measurement) => reportGameLoad(measurement, 'fail'),
+            });
+    } catch {
+      setFrameState({ bridgeState: 'error', dropped: 0 });
+      return;
+    }
     frameRef.current = controller;
     setFrameController(controller);
     setWatcherCamera('follow');
@@ -190,7 +207,18 @@ export function GameScreen() {
       if (frameRef.current === controller) frameRef.current = undefined;
       setFrameController((current) => (current === controller ? undefined : current));
     };
-  }, [activeSnapshot, branch, build, frameAttempt, gameId, gamesOrigin, reportGameLoad, room.handleGameMessage]);
+  }, [
+    activeSnapshot,
+    branch,
+    build,
+    frameAttempt,
+    gameId,
+    gamesOrigin,
+    reportGameLoad,
+    room.handleGameMessage,
+    previewSource,
+    previewSourceError,
+  ]);
 
   useEffect(() => {
     frameRef.current?.setMode(mode);
@@ -201,73 +229,16 @@ export function GameScreen() {
     frameController?.camera(watcherCamera);
   }, [frameController, mode, room.snapshot?.phase, room.snapshot?.role, watcherCamera]);
 
-  useEffect(() => {
-    if (mode !== 'edit' || room.snapshot?.role === 'peer' || activeSnapshot === undefined || gameId === '') {
-      setSessionStore(undefined);
-      setEditStartup(undefined);
-      return;
-    }
-    setEditStartup('saving');
-    const snapshot = activeSnapshot;
-    const sessionId = globalThis.crypto.randomUUID();
-    let active = true;
-    let stream: ReturnType<typeof connectTransactionStream> | undefined;
-    let editor: StoreApi<EditorSessionState> | undefined;
-    const lease = new LeaseController({
-      api: {
-        acquire: () => acquireLease(gameId, branch, sessionId),
-        heartbeat: (token) => heartbeatLease(gameId, branch, sessionId, token),
-        release: (token) => releaseLease(gameId, branch, sessionId, token),
-      },
-      onLost: (holder) => {
-        if (editor === undefined) {
-          if (active) setEditStartup('read-only');
-        } else {
-          void editor.getState().loseLease(holder);
-        }
-      },
-      onError: () => {
-        if (!active) return;
-        setEditStartup(editor === undefined ? 'not-saved' : 'retrying');
-      },
-      onRecovered: () => {
-        if (active && editor !== undefined) setEditStartup(undefined);
-      },
-    });
-
-    void lease.start().then(async (result) => {
-      if (!active) {
-        await lease.stop();
-        return;
-      }
-      if (!result.ok) return;
-      editor = createSession(gameId, branch, sessionId, result.lease.token, snapshot, frameRef);
-      setSessionStore(editor);
-      setEditStartup(undefined);
-      stream = connectTransactionStream({
-        gameId,
-        branch,
-        after: snapshot.rev,
-        receive: (transaction) => editor?.getState().receive(transaction),
-      });
-    });
-
-    return () => {
-      active = false;
-      stream?.close();
-      void lease.stop();
-      setSessionStore(undefined);
-    };
-  }, [activeSnapshot, branch, gameId, mode, room.snapshot?.role]);
-
-  useEffect(() => {
-    if (sessionStore === undefined) {
-      setSessionView(undefined);
-      return;
-    }
-    setSessionView(sessionStore.getState());
-    return sessionStore.subscribe((state) => setSessionView(state));
-  }, [sessionStore]);
+  const { sessionStore, sessionView, editStartup } = useEditorSession({
+    gameId,
+    branch,
+    mode,
+    role: room.snapshot?.role,
+    activeSnapshot,
+    source: previewSource,
+    frameRef,
+    setAdopted,
+  });
 
   const testState: GameTestState = {
     bridgeState: frameState.bridgeState,
@@ -352,17 +323,23 @@ export function GameScreen() {
   );
   const playMenuControls = useMemo(
     () =>
-      mode === 'play'
+      mode === 'play' || frameState.manifest?.capabilities.includes('scenery')
         ? {
             actions: [
               { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
-              {
-                id: 'edit',
-                label: 'Edit',
-                icon: 'edit',
-                disabled: room.snapshot?.role === 'peer',
-                onSelect: () => requestMode('edit'),
-              },
+              ...(mode === 'play'
+                ? [
+                    {
+                      id: 'edit',
+                      label: 'Edit',
+                      icon: 'edit',
+                      disabled: room.snapshot?.role === 'peer',
+                      onSelect: (): void => {
+                        void requestMode('edit');
+                      },
+                    },
+                  ]
+                : []),
               {
                 id: 'ask-change',
                 label: 'Ask for a change',
@@ -398,7 +375,10 @@ export function GameScreen() {
     activeSnapshot !== undefined;
 
   return (
-    <section className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}`} aria-label="Play and edit">
+    <section
+      className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}${frameState.manifest?.capabilities.includes('scenery') ? ' is-scenery' : ''}${['not-saved', 'read-only', 'retrying'].includes(editStartup ?? sessionView?.saved ?? '') ? ' is-unsaved' : ''}`}
+      aria-label="Play and edit"
+    >
       {mode === 'edit' ? (
         <>
           <FocusZone id={EDITOR_FOCUS_ZONES.bar} className="editor-play-zone">
@@ -495,6 +475,7 @@ export function GameScreen() {
         <EditorChrome
           gameId={gameId}
           manifest={frameState.manifest}
+          sceneryAssets={scenerySource.data?.assets}
           session={sessionView}
           onCommand={(command) => {
             const state = sessionStore.getState();
@@ -526,7 +507,14 @@ export function GameScreen() {
       ) : null}
       {frameState.bridgeState === 'error' ? (
         <div className="screen-error" role="alert">
-          <button className="tap-primary" type="button" onClick={() => setFrameAttempt((attempt) => attempt + 1)}>
+          <button
+            className="tap-primary"
+            type="button"
+            onClick={() => {
+              if (activeSnapshot?.buildId === NO_BUILD_ID) void scenerySource.refetch();
+              setFrameAttempt((attempt) => attempt + 1);
+            }}
+          >
             Try again
           </button>
         </div>
@@ -547,26 +535,6 @@ export function GameScreen() {
       <Outlet />
     </section>
   );
-}
-
-function createSession(
-  gameId: string,
-  branch: string,
-  sessionId: string,
-  leaseToken: number,
-  snapshot: DesignSnapshot,
-  frameRef: React.RefObject<GameFrameController | undefined>,
-) {
-  return createEditorSession({
-    sessionId,
-    leaseToken,
-    snapshot,
-    api: {
-      postTransaction: (body) => postTransaction(gameId, branch, body),
-      getSnapshot: () => getDesignSnapshot(gameId, branch),
-    },
-    applyDesign: (doc, patches, rev) => frameRef.current?.applyDesign(rev, doc, patches),
-  });
 }
 
 function savedLabel(saved: EditorSessionState['saved'] | undefined): string {

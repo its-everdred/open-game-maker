@@ -132,6 +132,47 @@ describe('after_create hook', () => {
     expect(existsSync(join(dir, '.gm/context/bundle.json'))).toBe(false);
   });
 
+  it('downloads the current creator design for the worker as context', async () => {
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle') {
+        res.end(
+          JSON.stringify({ v: 1, skillPackVersion: '0.0.0-placeholder', skillPackUrl: 'http://127.0.0.1:9/x.tgz' }),
+        );
+      } else if (req.url === '/internal/jobs/by-ticket/12/design') {
+        res.end(
+          JSON.stringify({
+            rev: 2,
+            buildId: null,
+            doc: { schemaVersion: 1, globals: { scenery: 'forest' }, entities: {} },
+          }),
+        );
+      } else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const { dir, result } = await runHook({ OGM_INTERNAL_URL: base });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, '.gm/context/design.json'), 'utf8')).doc.globals.scenery).toBe('forest');
+    expect(readFileSync(join(dir, '.gm/context/ticket'), 'utf8')).toBe('12\n');
+  });
+
+  it('marks malformed design responses unavailable instead of trusting them', async () => {
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle') {
+        res.end(
+          JSON.stringify({ v: 1, skillPackVersion: '0.0.0-placeholder', skillPackUrl: 'http://127.0.0.1:9/x.tgz' }),
+        );
+      } else {
+        res.end('not a design');
+      }
+    });
+    const { dir, result } = await runHook({ OGM_INTERNAL_URL: base });
+    expect(result.status).toBe(0);
+    expect(existsSync(join(dir, '.gm/context/design.json'))).toBe(false);
+    expect(readFileSync(join(dir, '.gm/context/design.missing'), 'utf8')).toBe('design snapshot unavailable\n');
+  });
+
   it('writes the bundle and refreshes the gm-* skills when the pack version differs', async () => {
     const pack = mkdtempSync(join(tmpdir(), 'ogm-hook-pack-'));
     mkdirSync(join(pack, 'gm-core'));
@@ -155,6 +196,7 @@ describe('after_create hook', () => {
     expect(result.status).toBe(0);
     expect(seen).toEqual([
       `/internal/jobs/by-ticket/12/bundle Bearer ${SECRET}`,
+      `/internal/jobs/by-ticket/12/design Bearer ${SECRET}`,
       `/internal/skills/1.0.0.tgz Bearer ${SECRET}`,
     ]);
     expect(JSON.parse(readFileSync(join(dir, '.gm/context/bundle.json'), 'utf8')).skillPackVersion).toBe('1.0.0');
@@ -203,6 +245,7 @@ describe('after_create hook', () => {
     expect(result.status).toBe(0);
     expect(seen).toEqual([
       `/internal/jobs/by-ticket/12/bundle Bearer ${SECRET}`,
+      `/internal/jobs/by-ticket/12/design Bearer ${SECRET}`,
       `/internal/jobs/by-ticket/12/attachments/${md} Bearer ${SECRET}`,
       `/internal/jobs/by-ticket/12/attachments/${image} Bearer ${SECRET}`,
     ]);
@@ -218,13 +261,19 @@ describe('after_create hook', () => {
     const seen: string[] = [];
     const base = await api((req, res) => {
       seen.push(req.url ?? '');
+      if (req.url !== '/internal/jobs/by-ticket/12/bundle') {
+        res.statusCode = 404;
+        res.end();
+        return;
+      }
       res.end(
         JSON.stringify({ v: 1, skillPackVersion: '0.0.0-placeholder', skillPackUrl: 'http://127.0.0.1:9/x.tgz' }),
       );
     });
     const { dir, result } = await runHook({ OGM_INTERNAL_URL: base });
     expect(result.status).toBe(0);
-    expect(seen).toEqual(['/internal/jobs/by-ticket/12/bundle']);
+    expect(seen).toEqual(['/internal/jobs/by-ticket/12/bundle', '/internal/jobs/by-ticket/12/design']);
+    expect(readFileSync(join(dir, '.gm/context/design.missing'), 'utf8')).toBe('design snapshot unavailable\n');
     expect(readFileSync(join(dir, '.claude/skills/gm-core/SKILL.md'), 'utf8')).toContain('name: gm-core');
   });
 });

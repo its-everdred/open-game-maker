@@ -43,6 +43,24 @@ line.play({ onSentence: (_index, sentence) => showCaption(sentence) });
 Use `SpokenText.fromText(text, lang)` when rendered audio is unavailable. It keeps sentence callbacks and uses the
 browser's `speechSynthesis` voice.
 
+## Editor integration
+
+Games describe their palette in the manifest: categories have an `id`, `label`, and `kind`; items name a `prefab`,
+`label`, and category id, with optional `thumbnail`, `tag`, and `hint`. The host owns the palette UI. Use stable prefab
+and category ids so the same editor can present a game's items without game-specific controls.
+
+The host stores edits as design transactions and sends the resulting document and patches as `design.apply`. Implement
+`GameInstance.applyDesign` to apply the validated document to the live game. Creator-placed entities use `origin:
+'creator'` and `props.pose.position`; transforms update `props.pose` and removal removes the entity. A game that keeps
+older design data should continue to read it when adding support for these editor poses. Selection and placement
+validation reach the optional `setSelection`, `pick`, and `validatePlacement` hooks; implement those hooks for the
+items the game exposes. The host's selection and camera messages are not themselves persistent design changes.
+
+For a camera-based editable surface, add `editor.project` to manifest capabilities and implement
+`screenToWorld(nx, ny)` on the instance. The host supplies normalized frame coordinates; return a world-space position
+or `null` when the ray misses. The editor uses the result for placement and translation, preserving negative world
+coordinates. Games without the capability retain the legacy logical-coordinate mapping.
+
 ## Editor camera
 
 The host sends `editor.camera { mode: 'follow' | 'free', target?: entityId }` (a room watcher's Follow/Free toggle).
@@ -82,3 +100,32 @@ A per-seat manifest must implement `MultiplayerHooksV2`: `capture({ seat })` ret
 integers in canonical order — seats ascending, entity ids sorted by code unit, positions quantised with `toUnits`
 (1/256 of a unit). Declaring the mode without those three hooks throws `ModeMismatchError` (`MODE_MISMATCH`) from
 `boot` instead of silently running host authority.
+
+## Scenery data
+
+A game can keep `scenery.json` at its root. Version 1 records placed asset IDs and transforms, terrain bands, a lighting
+preset, and camera framing. IDs must appear in `assets.lock.json`; the build validates the file and publishes it beside
+the game. `gm scenery list`, `gm scenery add <id> <asset-id> --position x,y,z`, and `gm scenery move <id> --position
+x,y,z` read and update the same file. `gm scenery render --out scenery.png` captures a standalone still using the locked models, even before a game build exists.
+
+`@gm/sdk/scenery` exports `createScenery` for a Three.js group, `frameScenery` for a camera, and `SceneryHistory` for
+undoable edits. `createSceneryController` swaps the rendered group when an edit finishes loading, ignoring stale loads. Pass a `loadAsset` callback that supplies a fresh object for each placement. Declare the game's world-space
+X/Z play-area rectangle to omit any item or terrain segment whose bounds intersect it. The renderer owns terrain geometry
+and materials; the caller owns loaded assets and is responsible for disposing the group when finished.
+
+For the shared editor, `sceneryPalette` supplies the scenery categories and lock-filtered prefabs.
+Pass each model's lockfile SHA as `sha256` to allow the editor to render its thumbnail only from matching locked bytes.
+`sceneryToDesign` imports scene settings and placements into a design document using caller-supplied stable entity IDs;
+`sceneryFromDesign` validates the effective document against the lock and produces the scene file format. Pose yaw is
+stored in degrees in the editor and radians in scenery data. These adapters do not themselves persist transactions.
+The Water tab paints grass, path, and water bands; each stroke is one undoable edit. Games that accept these edits
+declare the global `scenery.terrain` custom control shown by the 3D template, so terrain survives a build switch.
+
+Workers can reconcile creator edits by saving the latest `gm design current --json` result and running
+`gm scenery sync --design <snapshot.json>` before changing `scenery.json`. Sync replaces the scene file with the
+validated scenery in that snapshot; obtain a fresh snapshot first.
+
+A game can opt in by declaring `scenery` in its manifest capabilities. The Vite artifact plugin maps
+`scenery.json` into the build's design document with stable entity IDs (or initializes empty scene settings when the
+file is absent). The 3D template demonstrates loading each locked model with `AssetLoader.object`, applying design
+updates through the scenery controller, and protecting the game's play-area rectangle.

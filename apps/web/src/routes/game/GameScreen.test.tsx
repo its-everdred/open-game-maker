@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,9 +23,11 @@ type MockMountOptions = {
 };
 
 const editorApi = vi.hoisted(() => ({
+  NO_BUILD_ID: 'build_00000000000000000000000000',
   acquireLease: vi.fn(),
   getDesignSnapshot: vi.fn(),
   getGame: vi.fn(),
+  getScenerySource: vi.fn(),
   getOptionalPublished: vi.fn(),
   getOptionalReapply: vi.fn(),
   getOptionalSaves: vi.fn(),
@@ -76,6 +78,8 @@ vi.mock('../../features/editor/api', () => editorApi);
 const branchList = vi.hoisted(() => ({ value: undefined as Array<{ id: string; name: string }> | undefined }));
 vi.mock('../games/useBranches', () => ({ useBranches: () => ({ data: branchList.value }) }));
 vi.mock('../../features/editor/frame', () => host);
+const preview = vi.hoisted(() => ({ mountSceneryPreview: vi.fn() }));
+vi.mock('../../features/editor/scenery-preview', () => preview);
 
 import { useDock } from '../../features/build-chat/dock';
 import { GameScreen } from './GameScreen';
@@ -150,6 +154,7 @@ async function readyPlayFrame(playMenuButton?: { colour: string; icon: 'pause' |
 
 beforeEach(() => {
   branchList.value = undefined;
+  preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
   editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
   editorApi.getOptionalPublished.mockResolvedValue({ available: false });
@@ -200,6 +205,139 @@ describe('GameScreen', () => {
     expect(screen.getByRole('button', { name: 'Ask for a change' })).toBeVisible();
     fireEvent.click(play);
     await waitFor(() => expect(container.querySelector('.game-screen.is-playing')).toBeVisible());
+  });
+  it('loads matching scenery thumbnail sources without restarting a running build', async () => {
+    let finish!: (value: unknown) => void;
+    editorApi.getScenerySource.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledOnce());
+    act(() =>
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: ['scenery'],
+          palette: { categories: [], items: [] },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 640, h: 360 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    await waitFor(() => expect(editorApi.getScenerySource).toHaveBeenCalledOnce());
+    await act(async () =>
+      finish({
+        scene: {
+          version: 1,
+          items: [],
+          terrain: [],
+          lighting: 'warm-forest',
+          camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+        },
+        assets: [],
+      }),
+    );
+    expect(host.mountGameFrame).toHaveBeenCalledOnce();
+  });
+  it('opens a no-build scenery preview and persists its initial scene before editing', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getScenerySource.mockResolvedValue({
+      scene: {
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(editorApi.postTransaction).toHaveBeenCalledWith(
+        'game',
+        'main',
+        expect.objectContaining({
+          baseBuildId: editorApi.NO_BUILD_ID,
+          baseRev: 0,
+          patches: expect.arrayContaining([expect.objectContaining({ path: ['globals', 'scenery.settings'] })]),
+        }),
+      ),
+    );
+    expect(host.mountGameFrame).not.toHaveBeenCalled();
+  });
+
+  it('does not open an edit session if the initial scene cannot be saved', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getScenerySource.mockResolvedValue({
+      scene: {
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    editorApi.postTransaction.mockResolvedValue({ ok: false, kind: 'retryable', message: 'offline' });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(screen.getByText('Not saved')).toBeInTheDocument());
+    expect(screen.getByRole('region', { name: 'Play and edit' })).toHaveClass('is-unsaved');
+    expect(host.controller.applyDesign).not.toHaveBeenCalled();
+    expect(editorApi.openTransactionStream).not.toHaveBeenCalled();
+  });
+
+  it('keeps the game menu available while editing scenery', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getScenerySource.mockResolvedValue({
+      scene: {
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+    act(() =>
+      preview.mountSceneryPreview.mock.calls.at(-1)?.[3]({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: ['scenery'],
+          palette: { categories: [], items: [] },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 640, h: 360 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    await waitFor(() =>
+      expect(within(screen.getByRole('group', { name: 'Menu' })).getByRole('button', { name: 'Games' })).toBeVisible(),
+    );
   });
   it('passes the ready manifest button theme to the play menu', async () => {
     renderGame();

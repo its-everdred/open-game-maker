@@ -281,6 +281,36 @@ describe('reapply', () => {
     ]);
   });
 
+  it('replaces an existing scenery entity and restores its builder version on inverse', () => {
+    const base = {
+      id: ids.entity,
+      prefab: 'scenery:tree',
+      level: 'main',
+      origin: 'build' as const,
+      props: { pose: { position: [1, 0, 0] } },
+    };
+    const target = doc({}, { [ids.entity]: base });
+    const pose = { position: [4, 0, 0] };
+    const result = run({
+      entries: [],
+      toDoc: target,
+      toControls: [],
+      entityOps: {
+        [ids.entity]: {
+          kind: 'create',
+          entityId: ids.entity,
+          parent: 'main',
+          prefab: 'scenery:tree',
+          props: { pose },
+          txId: ids.tx,
+        },
+      },
+    });
+    const switched = apply(target, result.switchPatches);
+    expect(switched.entities[ids.entity]?.props.pose).toEqual(pose);
+    expect(apply(switched, result.switchInverse)).toEqual(target);
+  });
+
   it('makes switch patches equivalent to applying the rebased working set', () => {
     fc.assert(
       fc.property(

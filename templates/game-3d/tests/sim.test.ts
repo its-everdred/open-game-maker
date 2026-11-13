@@ -82,6 +82,55 @@ function typescriptFiles(directory: string): string[] {
 }
 
 describe('game-3d simulation', () => {
+  it('notifies scenery listeners and protects the play area', async () => {
+    const { controller, instance } = await mount();
+    const seen: LevelDesign[] = [];
+    const unsubscribe = controller.onDesignChange((design) => seen.push(design));
+    const next = controller.module.designSchema.parse({
+      ...DEFAULT_DESIGN,
+      globals: { ...DEFAULT_DESIGN.globals, 'scenery.settings': { lighting: 'night' } },
+    });
+    instance.applyDesign(next, []);
+    expect(seen[0]?.globals).toHaveProperty('scenery.settings');
+    expect(instance.validatePlacement?.('scenery:tree', { position: [8, 0, 0] }).ok).toBe(false);
+    controller.setSceneryAssetValidator((asset) => asset === 'tree');
+    expect(instance.validatePlacement?.('scenery:tree', { position: [0, 0, 0] }).ok).toBe(false);
+    expect(instance.validatePlacement?.('scenery:tree', { position: [8, 0, 0] }).ok).toBe(true);
+    unsubscribe();
+  });
+
+  it('accepts editor-created spawn points and uses their moved position', async () => {
+    const { controller, instance } = await mount();
+    const design = structuredClone(DEFAULT_DESIGN);
+    const id = 'e_01K8ZTEMP00000000000000003';
+    const edited = {
+      ...design,
+      entities: {
+        ...design.entities,
+        [id]: { id, prefab: 'spawn', level: 'fixed', origin: 'creator', props: { pose: { position: [2, 0, -1] } } },
+      },
+    };
+    const parsed = controller.module.designSchema.safeParse(edited);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    instance.applyDesign(parsed.data, []);
+    expect(controller.position(id)).toEqual([2, 0, -1]);
+    const moved = structuredClone(parsed.data);
+    const movedSpawn = moved.entities[id]!;
+    if (movedSpawn.prefab !== 'spawn') throw new Error('expected spawn');
+    movedSpawn.props.pose!.position = [-2, 0, 1];
+    const movedDesign = controller.module.designSchema.parse(moved);
+    instance.applyDesign(movedDesign, []);
+    expect(controller.position(id)).toEqual([-2, 0, 1]);
+    const existingId = 'spawn_01K8ZTEMP00000000000000001';
+    const existing = moved.entities[existingId]!;
+    existing.props.pose = { position: [1, 0, 2] };
+    instance.applyDesign(controller.module.designSchema.parse(moved), []);
+    expect(controller.position(existingId)).toEqual([1, 0, 2]);
+    delete moved.entities[id];
+    instance.applyDesign(controller.module.designSchema.parse(moved), []);
+    expect(controller.position(id)).toBeUndefined();
+  });
   it('does not read ambient random values or wall-clock time', () => {
     const forbidden = new RegExp(['Math', 'random|Date', 'now'].join('\\.'));
     const offenders = typescriptFiles(resolve('src')).filter((path) => forbidden.test(readFileSync(path, 'utf8')));

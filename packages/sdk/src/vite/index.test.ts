@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { creditsDocumentSchema, type GameManifest } from '@ogm/contracts';
 
-import { foldDesignFiles, gmBuildArtifacts, regenerateCredits } from './index.js';
+import { foldDesignFiles, gmBuildArtifacts, regenerateCredits, sceneryArtifact } from './index.js';
 
 const entity = (id: string) => ({ id, prefab: 'spawn', level: 'main', origin: 'build', props: {} });
 const A = 'spawn_01K8ZTEMP00000000000000001';
@@ -134,5 +134,119 @@ describe('regenerateCredits', () => {
       attribution: 'Example Artist',
     });
     expect(readFileSync(creditsFile, 'utf8')).toContain('Example Pack — Example Artist');
+  });
+});
+
+describe('sceneryArtifact', () => {
+  it('publishes a validated scene and rejects assets absent from the lock', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gm-scenery-'));
+    const lock = join(dir, 'assets.lock.json');
+    writeFileSync(lock, JSON.stringify({ version: 1, family: 'pixel-art', pov: 'side', assets: [] }));
+    expect(sceneryArtifact(dir, lock)).toBeUndefined();
+    const scene = {
+      version: 1,
+      items: [],
+      terrain: [],
+      lighting: 'night',
+      camera: { position: [0, 1, 2], target: [0, 0, 0], zoom: 1 },
+    };
+    writeFileSync(join(dir, 'scenery.json'), JSON.stringify(scene));
+    expect(JSON.parse(sceneryArtifact(dir, lock)!)).toEqual(scene);
+    scene.items.push({
+      id: 'tree',
+      assetId: 'missing',
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      layer: 'mid',
+    } as never);
+    writeFileSync(join(dir, 'scenery.json'), JSON.stringify(scene));
+    expect(() => sceneryArtifact(dir, lock)).toThrow('Scenery asset is not in the lock');
+  });
+});
+
+describe('scenery build integration', () => {
+  it('includes opt-in scenery as stable editable design entities', () => {
+    const root = mkdtempSync(join(tmpdir(), 'gm-scenery-build-'));
+    const design = join(root, 'design');
+    mkdirSync(design);
+    writeFileSync(join(design, 'level.json'), JSON.stringify({ schemaVersion: 1, globals: {}, entities: {} }));
+    const id = 't1:example/tree@1';
+    writeFileSync(
+      join(root, 'assets.lock.json'),
+      JSON.stringify({
+        version: 1,
+        family: 'pixel-art',
+        pov: 'side',
+        assets: [
+          {
+            id,
+            sha256: 'a'.repeat(64),
+            path: 'tree.glb',
+            license: 'CC0-1.0',
+            rights: { uses: ['in-game'], audience: 'public', redistribution: 'free', attribution: null },
+            credit: {
+              pack: 'example',
+              title: 'Example',
+              licenseSource: 'fixture',
+              attribution: 'none required',
+              source: { label: 'fixture' },
+            },
+            added: '2026-11-01',
+          },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(root, 'scenery.json'),
+      JSON.stringify({
+        version: 1,
+        items: [{ id: 'oak', assetId: id, position: [1, 0, 2], rotation: [0, 0, 0], scale: [1, 1, 1], layer: 'back' }],
+        terrain: [],
+        lighting: 'night',
+        camera: { position: [0, 5, 5], target: [0, 0, 0], zoom: 1 },
+      }),
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(process.cwd(), '../contracts/fixtures/game.v1.json'), 'utf8'),
+    ) as GameManifest;
+    const files: Record<string, string> = {};
+    gmBuildArtifacts({ manifest, designDir: design }).generateBundle.call({
+      emitFile(file) {
+        files[file.fileName] = file.source;
+        return file.fileName;
+      },
+    });
+    expect(Object.keys(JSON.parse(files['design/design.json']!).entities)).toHaveLength(0);
+    manifest.capabilities.push('scenery');
+    gmBuildArtifacts({ manifest, designDir: design }).generateBundle.call({
+      emitFile(file) {
+        files[file.fileName] = file.source;
+        return file.fileName;
+      },
+    });
+    const result = JSON.parse(files['design/design.json']!);
+    expect(Object.values(result.entities)).toEqual([
+      expect.objectContaining({ prefab: `scenery:${id}`, props: expect.objectContaining({ sceneryItemId: 'oak' }) }),
+    ]);
+    expect(result.globals['scenery.settings'].lighting).toBe('night');
+    const first = Object.keys(result.entities)[0];
+    gmBuildArtifacts({ manifest, designDir: design }).generateBundle.call({
+      emitFile(file) {
+        files[file.fileName] = file.source;
+        return file.fileName;
+      },
+    });
+    expect(Object.keys(JSON.parse(files['design/design.json']!).entities)[0]).toBe(first);
+    rmSync(join(root, 'scenery.json'));
+    gmBuildArtifacts({ manifest, designDir: design }).generateBundle.call({
+      emitFile(file) {
+        files[file.fileName] = file.source;
+        return file.fileName;
+      },
+    });
+    const empty = JSON.parse(files['design/design.json']!);
+    expect(empty.globals['scenery.settings'].lighting).toBe('warm-forest');
+    expect(empty.entities).toEqual({});
   });
 });

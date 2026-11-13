@@ -24,6 +24,22 @@ function issuePaths(schema: z.ZodType, value: unknown): string[] {
 }
 
 describe('bridge contract', () => {
+  it('carries normalized editor projection requests and world-space results', () => {
+    const request = { v: 1, id: 'project-1', t: 'editor.project', payload: { x: 0.25, y: 0.75 } };
+    const response = {
+      v: 1,
+      id: 'project-2',
+      replyTo: 'project-1',
+      t: 'editor.projected',
+      payload: { position: [2, 0, -1] },
+    };
+    expect(hostToGameSchema.safeParse(request).success).toBe(true);
+    expect(gameToHostSchema.safeParse(response).success).toBe(true);
+    expect(bridgeJson(request)).toBe(true);
+    expect(bridgeJson(response)).toBe(true);
+    expect(hostToGameSchema.safeParse({ ...request, payload: { x: -1, y: 0 } }).success).toBe(false);
+    expect(gameToHostSchema.safeParse({ ...response, payload: { position: [1, 2] } }).success).toBe(false);
+  });
   it('pins the wire protocol to 1', () => {
     expect(SDK_PROTOCOL).toBe(1);
   });

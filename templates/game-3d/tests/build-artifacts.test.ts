@@ -29,7 +29,12 @@ describe('the build writes the files a published build needs', () => {
   });
 
   it('dist/design/design.json is the folded template design', () => {
-    expect(DesignDocSchema.parse(readJson('design/design.json'))).toEqual(DEFAULT_DESIGN);
+    const design = DesignDocSchema.parse(readJson('design/design.json'));
+    expect(design.entities).toEqual(DEFAULT_DESIGN.entities);
+    expect(design.globals).toMatchObject({
+      ...DEFAULT_DESIGN.globals,
+      'scenery.settings': { version: 1, terrain: [], lighting: 'warm-forest' },
+    });
   });
 
   it('dist/credits.json is regenerated from the template lock', () => {

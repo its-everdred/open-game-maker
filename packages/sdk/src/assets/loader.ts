@@ -1,5 +1,6 @@
 import { assetManifestSchema, cachePlanSchema, type AssetManifest, type Tier } from '@ogm/contracts/assets';
 import {
+  Group,
   ImageBitmapLoader,
   SRGBColorSpace,
   Texture,
@@ -260,6 +261,21 @@ export class AssetLoader {
     } finally {
       if (this.#groupTokens.get(name) !== token) for (const file of files) this.#releaseFile(file);
     }
+  }
+
+  /** Clone a locked model hierarchy for independent placement in a scene. */
+  async object(id: string): Promise<Object3D> {
+    const resolved = this.resolve(id);
+    const gltf = await this.#gltf(resolved.file);
+    const object = resolved.mesh ? gltf.scene.getObjectByName(resolved.mesh) : gltf.scene;
+    if (!object) throw new Error(`Asset ${id} contains no object named ${resolved.mesh}`);
+    gltf.scene.updateMatrixWorld(true);
+    const clone = object.clone(true);
+    if (resolved.mesh) object.matrixWorld.decompose(clone.position, clone.quaternion, clone.scale);
+    const placement = new Group();
+    placement.name = object.name;
+    placement.add(clone);
+    return placement;
   }
 
   async mesh(id: string): Promise<Mesh> {

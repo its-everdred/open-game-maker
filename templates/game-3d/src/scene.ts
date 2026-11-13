@@ -7,6 +7,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
+  Plane,
   Raycaster,
   Scene,
   Vector2,
@@ -62,6 +63,8 @@ export function createScene(design: LevelDesign): SceneHandle {
   const players = new Map<string, Mesh>();
   const raycaster = new Raycaster();
   const projectedPosition = new Vector3();
+  const ground = new Plane(new Vector3(0, 1, 0), 0);
+  const groundPoint = new Vector3();
 
   const adapter: SceneHandle = {
     scene,
@@ -89,14 +92,25 @@ export function createScene(design: LevelDesign): SceneHandle {
     },
     pick(nx, ny) {
       raycaster.setFromCamera(new Vector2(nx * 2 - 1, 1 - ny * 2), adapter.camera);
-      return raycaster
-        .intersectObjects([...players.values()], false)
-        .map(({ object }) => ({ id: String(object.userData.entityId), kind: 'entity' as const }));
+      return raycaster.intersectObjects(scene.children, true).flatMap(({ object }) => {
+        let target: typeof object | null = object;
+        while (target && typeof target.userData.entityId !== 'string') target = target.parent;
+        return target ? [{ id: String(target.userData.entityId), kind: 'entity' as const }] : [];
+      });
+    },
+    screenToWorld(nx, ny) {
+      adapter.camera.updateMatrixWorld();
+      raycaster.setFromCamera(new Vector2(nx * 2 - 1, 1 - ny * 2), adapter.camera);
+      return raycaster.ray.intersectPlane(ground, groundPoint) ? groundPoint.toArray() : null;
     },
     worldToScreen(id) {
-      const player = players.get(id);
-      if (!player) return null;
-      projectedPosition.copy(player.position).project(adapter.camera);
+      let object = players.get(id);
+      if (!object)
+        scene.traverse((candidate) => {
+          if (!object && candidate.userData.entityId === id) object = candidate as Mesh;
+        });
+      if (!object) return null;
+      object.getWorldPosition(projectedPosition).project(adapter.camera);
       if (projectedPosition.z < -1 || projectedPosition.z > 1) return null;
       return { x: (projectedPosition.x + 1) / 2, y: (1 - projectedPosition.y) / 2 };
     },

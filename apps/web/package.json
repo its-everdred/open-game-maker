@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:deps": "pnpm --filter @ogm/contracts --filter @ogm/voice-client --filter @ogm/design-log --filter @ogm/iframe-bridge --filter @ogm/rooms --filter @gm/host build",
+    "build:deps": "pnpm --filter @ogm/contracts --filter @ogm/voice-client --filter @ogm/design-log --filter @ogm/iframe-bridge --filter @ogm/rooms --filter @gm/host --filter @gm/sdk build",
     "prebuild": "pnpm run build:deps",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -18,19 +18,21 @@
     "test:browser": "vitest run e2e/render-gltf.test.ts e2e/thumbnail-scene.test.ts e2e/thumbnail-scene-3d.test.ts && playwright test"
   },
   "dependencies": {
-    "@colyseus/sdk": "0.18.9",
     "@better-auth/passkey": "1.7.15",
+    "@colyseus/sdk": "0.18.9",
     "@gm/host": "workspace:*",
+    "@gm/sdk": "workspace:*",
     "@noriginmedia/norigin-spatial-navigation": "2.3.0",
     "@ogm/contracts": "workspace:*",
-    "@ogm/voice-client": "workspace:*",
     "@ogm/design-log": "workspace:*",
     "@ogm/iframe-bridge": "workspace:*",
+    "@ogm/voice-client": "workspace:*",
     "@tanstack/react-query": "5.105.1",
     "better-auth": "1.7.15",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-router": "7.18.5",
+    "three": "0.186.1",
     "zustand": "5.0.16"
   },
   "devDependencies": {
@@ -43,12 +45,12 @@
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@types/three": "0.186.0",
     "@vitejs/plugin-react": "5.2.0",
     "esbuild": "0.25.12",
     "jsdom": "27.4.0",
     "playwright": "1.64.1",
     "sharp": "0.35.5",
-    "three": "0.186.1",
     "typescript": "6.0.3",
     "vite": "7.3.7",
     "vitest": "5.0.5"

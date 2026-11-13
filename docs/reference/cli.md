@@ -79,7 +79,7 @@ temporary directory. Other builds use `dist`. A capture of an independently serv
 `--verify-source` also requires committed tracked changes and no untracked build inputs; git-ignored files are excluded.
 
 By default `gm run` captures the play screen as a player sees it: the build mounted through `@gm/host` (the app's own
-touch overlay, viewport tracking and bridge) under a copy of the app's top bar and Pause, styled with the app's own
+touch overlay, viewport tracking and bridge) with the app's menu and Pause, styled with the app's own
 stylesheets, at 390x844, 844x390, 820x1180 and 1180x820 with touch on (`--viewport touch`). `--viewport all` adds the
 1440x900 desktop, and one name (`phone`, `phone-landscape`, `tablet`, `tablet-landscape`, `desktop`) captures only it.
 `--frame app` captures inside the real signed-in app instead: it opens `/play/<gm.manifest.json id>` on

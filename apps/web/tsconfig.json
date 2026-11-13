@@ -13,5 +13,9 @@
     "types": ["vite/client", "vitest/globals", "node"]
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/voice-client" }]
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/voice-client" },
+    { "path": "../../packages/sdk" }
+  ]
 }
