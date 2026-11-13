@@ -136,6 +136,10 @@ export const gameManifestSchema = z.looseObject({
   gizmos: z.record(z.string(), z.array(z.enum(['translate', 'rotateYaw', 'elevate', 'splinePoints']))),
   grid: z.looseObject({ size: z.number().positive(), units: z.string().max(16) }).optional(),
   playLabel: z.string().min(1).max(80).optional(),
+  /** Appearance of the shell menu button while playing this game. */
+  playMenuButton: z
+    .looseObject({ colour: z.string().regex(/^#[0-9a-fA-F]{6}$/u), icon: z.enum(['pause', 'menu']) })
+    .optional(),
   saves: z.boolean(),
   /**
    * The save schema version this build writes and, when the game migrates, the one older version it still reads.
