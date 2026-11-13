@@ -65,6 +65,26 @@ function renderedStills(root: string, dir: string): { path: string; blob: string
   return found.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/** Verified captures made on this branch belong to this ticket, even when Git ignores the images. */
+function ticketCapture(root: string, still: { path: string; blob: string }, ancestor: string): boolean {
+  try {
+    const file = join(root, '.gm/captures', `${sha256(still.path)}.json`);
+    const record = JSON.parse(readFileSync(file, 'utf8')) as { source?: string; blob?: string };
+    if (
+      !record.source ||
+      !/^[0-9a-f]{40}$/.test(record.source) ||
+      record.blob !== still.blob ||
+      record.source === ancestor
+    )
+      return false;
+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, record.source], { cwd: root, stdio: 'ignore' });
+    execFileSync('git', ['merge-base', '--is-ancestor', record.source, 'HEAD'], { cwd: root, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function readLooks(root: string): Look[] {
   const file = join(root, '.gm-mock', 'looks.jsonl');
   if (!existsSync(file)) return [];
@@ -220,11 +240,16 @@ export const command: GmCommand = {
         }
       }
       const inputs = visualInputs(root, game, ancestor);
-      if (Object.keys(inputs).length > 0 && (!scope || Object.keys(scope.screens).length === 0))
+      const captures = committed.length === 0 ? stills.filter((still) => ticketCapture(root, still, ancestor)) : [];
+      if (
+        (Object.keys(inputs).length > 0 || captures.length > 0) &&
+        (!scope || Object.keys(scope.screens).length === 0)
+      )
         results.push({
           path: scopePath,
           status: 'missing',
-          detail: 'visual changes need a ticket scope: gm look scope add <screen>',
+          detail:
+            'visual changes need a ticket scope: gm look scope add <screen> --still <png>, then commit design/look-scope.json',
         });
       if (scope) {
         for (const path of Object.keys(inputs)) {
@@ -293,8 +318,9 @@ export const command: GmCommand = {
       }
       const selectedPaths = new Set(changed);
       selectedPaths.add(scopePath);
-      // Ignored renders cannot appear in a Git diff; treat all current renders as in scope.
-      if (committed.length === 0) for (const still of stills) selectedPaths.add(still.path);
+      // Ignored renders cannot be attributed to this ticket by a Git diff. Scope evidence
+      // selects the renders belonging to this ticket; other renders remain inherited.
+      for (const still of captures) selectedPaths.add(still.path);
       for (const screen of screens) {
         const target = resolve(game, screen.target);
         if (!screenNames.has(screen.name)) continue;

@@ -51,9 +51,10 @@ it('finds visual entrypoints and asset files outside named asset directories', (
   mkdirSync(join(root, 'src'));
   mkdirSync(join(root, 'design'));
   writeFileSync(join(root, 'src/game.ts'), 'presentation');
+  writeFileSync(join(root, 'src/App.tsx'), 'presentation');
   writeFileSync(join(root, 'design/icon.png'), 'image');
   writeFileSync(join(root, 'gameplay.ts'), 'gameplay');
   git('add', '-A');
   git('commit', '-qm', 'changes');
-  expect(Object.keys(visualInputs(root, root, base))).toEqual(['design/icon.png', 'src/game.ts']);
+  expect(Object.keys(visualInputs(root, root, base))).toEqual(['design/icon.png', 'src/App.tsx', 'src/game.ts']);
 });

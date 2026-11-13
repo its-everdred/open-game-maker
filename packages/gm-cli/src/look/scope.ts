@@ -32,13 +32,14 @@ export function visualInputs(root: string, game: string, ancestor: string): Reco
   for (const path of changed.sort()) {
     const local = prefix ? (path.startsWith(`${prefix}/`) ? path.slice(prefix.length + 1) : '') : path;
     const visualPath =
-      /(?:^|\/)(?:screens?|scenes?|ui|main|game|samplers?|visuals?|assets?|art|public|images?|materials?|shaders?|fonts?|tiles?|backgrounds?|sprites?|textures?|models?|shots?|renders?|renderer|look)(?:\/|\.|$)/i.test(
+      /(?:^|\/)(?:screens?|scenes?|ui|app|components?|main|game|samplers?|visuals?|assets?|art|public|images?|materials?|shaders?|fonts?|tiles?|backgrounds?|sprites?|textures?|models?|shots?|renders?|renderer|draw(?:ing)?|look)(?:\/|\.|$)/i.test(
         local,
       );
     const visualAsset = /\.(?:png|jpe?g|webp|gif|svg|avif|glb|gltf|ktx2?|basis|hdr|exr|vert|frag|glsl|wgsl)$/i.test(
       local,
     );
-    if (!local || local.startsWith('review/') || (!visualPath && !visualAsset)) continue;
+    const entrypoint = /^src\/index\.[cm]?[jt]sx?$/i.test(local);
+    if (!local || local.startsWith('review/') || (!visualPath && !visualAsset && !entrypoint)) continue;
     try {
       inputs[path] = execFileSync('git', ['rev-parse', `HEAD:${path}`], {
         cwd: root,
