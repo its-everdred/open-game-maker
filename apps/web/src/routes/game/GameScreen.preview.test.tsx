@@ -452,6 +452,36 @@ describe('GameScreen previews', () => {
     await waitFor(() => expect(editorApi.getScenerySource).toHaveBeenCalledWith('game', 'b_side'));
     expect(preview.mountSceneryPreview).not.toHaveBeenCalled();
   });
+  it('offers the starter brushes when the game and fallback have no items', async () => {
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    act(() =>
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          id: 'game',
+          capabilities: ['scenery'],
+          palette: { categories: [{ id: 'light', label: 'Light', kind: 'panel' }], items: [] },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 100, h: 100 } },
+          dimension: '2d',
+          view: 'main',
+          saves: false,
+        },
+      }),
+    );
+    const grass = await screen.findByRole('button', { name: 'Grass' });
+    expect(screen.getByRole('button', { name: 'Light' })).toBeVisible();
+    fireEvent.pointerDown(grass, { pointerId: 1 });
+    const canvas = await screen.findByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
+    fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
+    await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+    expect(fallbackAdmission.admitJob.mock.calls[0]?.[0].plan.summary).toContain('scenery-band:grass');
+  });
   it.each(['t3:fixture/tree', 'scope:0'])(
     'submits fallback item %s as a build request without a design transaction',
     async (prefab) => {

@@ -8,6 +8,24 @@ import { Rail } from './Rail';
 
 afterEach(cleanup);
 
+it('renders a terrain brush preview and never a placeholder letter', () => {
+  render(
+    <Rail
+      categories={[
+        { id: 'arena', label: 'Arena', kind: 'items' },
+        { id: 'ground', label: 'Ground', kind: 'items' },
+      ]}
+      items={[
+        { prefab: 'seat', label: 'Seat', category: 'arena' },
+        { prefab: 'scenery-band:grass', label: 'Grass', category: 'ground' },
+      ]}
+      onChange={vi.fn()}
+    />,
+  );
+  expect(screen.getByRole('button', { name: 'Arena' })).toHaveTextContent(/^Arena$/);
+  expect(screen.getByRole('button', { name: 'Ground' }).querySelector('svg')).toBeInTheDocument();
+});
+
 it('uses a hash-matched real scenery model for its category thumbnail', () => {
   const props = {
     categories: [{ id: 'trees', label: 'Trees', kind: 'items' as const }],

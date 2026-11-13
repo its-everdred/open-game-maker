@@ -6,6 +6,7 @@ import { AiBadge, withAiGeneratedLabel } from '../../components/AiBadge';
 import { FocusZone } from '../../lib/input';
 import { EDITOR_FOCUS_ZONES } from './focus';
 import { SceneryThumbnail } from './SceneryThumbnail';
+import { TerrainThumbnail } from './TerrainThumbnail';
 import { sceneryAsset } from './scenery-asset';
 
 type PaletteProps = {
@@ -81,7 +82,9 @@ export function Palette({
                   <img src={item.thumbnail} alt="" />
                 ) : asset ? (
                   <SceneryThumbnail key={asset.url} url={asset.url} />
-                ) : null}
+                ) : (
+                  <TerrainThumbnail prefab={item.prefab} />
+                )}
                 {item.aiGenerated ? <AiBadge /> : null}
                 <span>{item.label}</span>
               </button>

@@ -54,10 +54,11 @@ export function mountSceneryPreview(
     saves: false,
     overrides: { aliases: {}, retired: [] },
   };
-  const renderer = new WebGLRenderer({ antialias: true });
+  const renderer = new WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.domElement.style.width = '100%';
   renderer.domElement.style.height = '100%';
+  renderer.domElement.style.background = 'var(--editor-paper-image) center / cover no-repeat, var(--editor-tile)';
   container.append(renderer.domElement);
   const scene = new Scene();
   const ground = new Mesh(new BoxGeometry(30, 0.05, 30), new MeshStandardMaterial({ color: 0x719557 }));

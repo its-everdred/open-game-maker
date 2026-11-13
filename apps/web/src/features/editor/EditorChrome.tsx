@@ -53,13 +53,22 @@ export function EditorChrome({
   onCanvasChange,
   onRequestLight,
 }: EditorChromeProps) {
-  const [category, setCategory] = useState(manifest.palette.categories[0]?.id ?? '');
+  const [category, setCategory] = useState(
+    () =>
+      manifest.palette.categories.find((candidate) =>
+        manifest.palette.items.some((item) => item.category === candidate.id),
+      )?.id ?? '',
+  );
   const [pickedPrefab, setPickedPrefab] = useState<string>();
   const [snap, setSnap] = useState<SnapPrefs>(() => loadSnapPrefs(gameId, manifest.grid?.size ?? 1));
   const [toolsTarget, setToolsTarget] = useState<HTMLElement | null>(null);
   const controls = useMemo(() => manifestControls(manifest), [manifest]);
   const activeCategory =
-    manifest.palette.categories.find((candidate) => candidate.id === category) ?? manifest.palette.categories[0];
+    manifest.palette.categories.find((candidate) => candidate.id === category) ??
+    manifest.palette.categories.find((candidate) =>
+      manifest.palette.items.some((item) => item.category === candidate.id),
+    ) ??
+    manifest.palette.categories[0];
   const picked = manifest.palette.items.find((item) => item.prefab === pickedPrefab);
   useLayoutEffect(() => {
     if (pickedPrefab !== undefined && picked === undefined) setPickedPrefab(undefined);

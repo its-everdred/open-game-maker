@@ -3,6 +3,7 @@ import type { GameManifest } from '@ogm/contracts/browser';
 import { FocusZone } from '../../lib/input';
 import { EDITOR_FOCUS_ZONES } from './focus';
 import { SceneryThumbnail } from './SceneryThumbnail';
+import { TerrainThumbnail } from './TerrainThumbnail';
 import { sceneryAsset } from './scenery-asset';
 
 type Category = GameManifest['palette']['categories'][number];
@@ -29,7 +30,9 @@ export function Rail({
         const item = items.find(
           (candidate) =>
             candidate.category === category.id &&
-            (candidate.thumbnail || sceneryAsset(candidate, sceneryAssets, buildPinnedAssets)),
+            (candidate.thumbnail ||
+              sceneryAsset(candidate, sceneryAssets, buildPinnedAssets) ||
+              candidate.prefab.startsWith('scenery-band:')),
         );
         const thumbnail = item?.thumbnail;
         const asset = sceneryAsset(item, sceneryAssets, buildPinnedAssets);
@@ -46,11 +49,9 @@ export function Rail({
               <img src={thumbnail} alt="" />
             ) : asset ? (
               <SceneryThumbnail url={asset.url} />
-            ) : (
-              <span className="rail-letter" aria-hidden="true">
-                {category.label.slice(0, 1)}
-              </span>
-            )}
+            ) : item ? (
+              <TerrainThumbnail prefab={item.prefab} />
+            ) : null}
             <span>{category.label}</span>
           </button>
         );
