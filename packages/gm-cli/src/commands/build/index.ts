@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { DesignDocSchema, gameManifestSchema } from '@ogm/contracts';
 
+import { checkPublishDist } from '../../dist-validation.js';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 
 /* The publisher (#283) copies dist/ into the games host; the API reads these two files with these schemas. */
@@ -45,7 +46,9 @@ export const command: GmCommand = {
     if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help build');
     const dist = join(ctx.cwd, 'dist');
     /* A build that stops writing these files must not pass on copies left by an earlier build. */
-    for (const { file } of ARTIFACTS) rmSync(join(dist, file), { force: true });
+    for (const file of [...ARTIFACTS.map((artifact) => artifact.file), 'index.html', 'credits.json']) {
+      rmSync(join(dist, file), { force: true });
+    }
     const result = spawnSync('pnpm', ['build'], {
       cwd: ctx.cwd,
       encoding: 'utf8',
@@ -62,7 +65,7 @@ export const command: GmCommand = {
       return EXIT.failed;
     }
 
-    const problems = checkBuildDir(dist);
+    const problems = [...checkBuildDir(dist), ...checkPublishDist(dist)];
     if (ctx.json) ctx.out(JSON.stringify({ ok: problems.length === 0, problems }));
     else if (problems.length === 0) ctx.out('dist/ ok: manifest.json, design/design.json');
     for (const problem of ctx.json ? [] : problems) ctx.err(problem);

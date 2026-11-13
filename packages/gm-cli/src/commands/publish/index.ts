@@ -5,6 +5,7 @@ import { basename, dirname, join } from 'node:path';
 
 import { ConfigError, loadEnv } from '@ogm/config';
 
+import { checkPublishDist } from '../../dist-validation.js';
 import { CommandError, EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { printJson } from '../../context.js';
 import { readLock } from '../../lock.js';
@@ -26,7 +27,6 @@ const ENV = {
 } as const;
 
 const OUTPUT_BYTES = 64 * 1024 * 1024;
-const REQUIRED_DIST = ['index.html', 'manifest.json', 'design/design.json', 'credits.json'];
 // The archive the daemon's hook uploads: dist/ plus the repository's own manifest, base design and achievements.
 const FROM_REPO = ['manifest.json', 'design/design.json', 'achievements.json'];
 
@@ -266,11 +266,8 @@ export const command: GmCommand = {
       if (!build.ok) throw new CommandError(`the game's build failed:\n${tail(`${build.out}\n${build.err}`)}`);
 
       const dist = join(game, 'dist');
-      const missing = REQUIRED_DIST.filter((file) => !existsSync(join(dist, file)));
-      if (missing.length) throw new CommandError(`the build wrote no ${missing.map((f) => `dist/${f}`).join(', ')}`);
-      if (readFileSync(join(dist, 'index.html'), 'utf8').includes('="/assets/')) {
-        throw new CommandError('dist/index.html loads assets from the origin root; set a relative base');
-      }
+      const problems = checkPublishDist(dist);
+      if (problems.length) throw new CommandError(problems[0]!);
 
       stage = mkdtempSync(join(workRoot, `${facts.slug}-stage.`));
       cpSync(dist, stage, { recursive: true, verbatimSymlinks: true });
