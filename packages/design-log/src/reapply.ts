@@ -192,8 +192,11 @@ export function reapply(input: ReapplyInput): ReapplyResult {
       props: structuredClone(operation.props),
     };
     const path: Patch['path'] = ['entities', operation.entityId];
-    patches.push({ op: 'add', path, value: entity });
-    inverse.unshift({ op: 'remove', path });
+    const previous = nextDoc.entities[operation.entityId];
+    patches.push({ op: previous === undefined ? 'add' : 'replace', path, value: entity });
+    inverse.unshift(
+      previous === undefined ? { op: 'remove', path } : { op: 'replace', path, value: structuredClone(previous) },
+    );
     nextDoc.entities[operation.entityId] = entity;
   }
   for (const operation of Object.values(rebasedEntityOps).filter(

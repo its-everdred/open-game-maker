@@ -76,6 +76,7 @@ function clearRecord(record: Record<string, unknown>): void {
 
 function recordEntityOverride(
   entityOps: Record<string, EntityOverride>,
+  baseDoc: DesignDoc,
   tx: Transaction,
   command: Extract<EditorCommand, { op: 'invoke' }>,
 ): void {
@@ -110,7 +111,18 @@ function recordEntityOverride(
   } else if (command.command === 'entity.transform') {
     const args = asRecord(command.args);
     if (typeof args?.entityId !== 'string' || asRecord(args.pose) === undefined) return;
-    const previous = entityOps[args.entityId];
+    let previous = entityOps[args.entityId];
+    const baseEntity = baseDoc.entities[args.entityId];
+    if (!previous && baseEntity?.prefab.startsWith('scenery:')) {
+      previous = {
+        kind: 'create',
+        entityId: baseEntity.id,
+        parent: baseEntity.level,
+        prefab: baseEntity.prefab,
+        props: baseEntity.props,
+        txId: tx.id,
+      };
+    }
     if (previous?.kind === 'create') {
       entityOps[args.entityId] = { ...previous, props: { ...previous.props, pose: args.pose }, txId: tx.id };
     }
@@ -194,7 +206,7 @@ export function reduce(input: ReduceInput): WorkingSet {
           clearRecord(entries);
           clearRecord(entityOps);
         } else {
-          recordEntityOverride(entityOps, tx, command);
+          recordEntityOverride(entityOps, transactionBase, tx, command);
         }
       } else {
         recordOverride(entries, transactionBase, tx, command);

@@ -78,6 +78,20 @@ describe('reduce', () => {
     expect(result.entityOps[created]).toMatchObject({ kind: 'create', props: { pose } });
   });
 
+  it('retains a moved scenery entity originating in the base design', () => {
+    const base = baseDoc();
+    base.entities[ids.entity] = { ...base.entities[ids.entity]!, prefab: 'scenery:tree' };
+    const pose = { position: [3, 0, 4] };
+    const result = reduce({
+      gameId: ids.game,
+      branchId: ids.branch,
+      buildId: ids.build,
+      baseDoc: base,
+      txs: [transaction(1, [{ op: 'invoke', command: 'entity.transform', args: { entityId: ids.entity, pose } }], [])],
+    });
+    expect(result.entityOps[ids.entity]).toMatchObject({ kind: 'create', props: { pose } });
+  });
+
   it('preserves an undone scenery move and placement when reducing patch-only undo transactions', () => {
     const created = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
     const original = { position: [1, 0, 0] };
