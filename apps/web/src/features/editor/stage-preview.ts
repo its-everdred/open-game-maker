@@ -19,6 +19,23 @@ const manifest: GameManifest = {
   overrides: { aliases: {}, retired: [] },
 };
 
+export function containedStagePoint(
+  point: { x: number; y: number },
+  width: number,
+  height: number,
+  mediaWidth: number,
+  mediaHeight: number,
+): { x: number; y: number } | undefined {
+  if (Math.min(width, height, mediaWidth, mediaHeight) <= 0) return undefined;
+  const scale = Math.min(width / mediaWidth, height / mediaHeight);
+  const w = mediaWidth * scale;
+  const h = mediaHeight * scale;
+  const x = (point.x * width - (width - w) / 2) / w;
+  const y = (point.y * height - (height - h) / 2) / h;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return undefined;
+  return { x, y };
+}
+
 /** The shell shows reviewed media until a runnable preview or build is available. */
 export function mountStagePreview(
   container: HTMLElement,

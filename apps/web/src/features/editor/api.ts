@@ -96,8 +96,8 @@ export function getEditorPreviews(gameId: string): Promise<{ previews: EditorPre
   return api(`/games/${segment(gameId)}/previews`);
 }
 
-export function getEditorStage(gameId: string): Promise<{ stage: EditorStage | null }> {
-  return api(`/games/${segment(gameId)}/editor/stage`);
+export function getEditorStage(gameId: string, branch: string): Promise<{ stage: EditorStage | null }> {
+  return api(`/games/${segment(gameId)}/editor/stage?branch=${encodeURIComponent(branch)}`);
 }
 
 export function getPreviewDesign(

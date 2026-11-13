@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { mountStagePreview } from './stage-preview';
+import { containedStagePoint, mountStagePreview } from './stage-preview';
 
 describe('stage preview', () => {
+  it('maps the visible picture rather than its letterbox bars', () => {
+    expect(containedStagePoint({ x: 0.5, y: 0.1 }, 400, 400, 1600, 900)).toBeUndefined();
+    expect(containedStagePoint({ x: 0.5, y: 0.21875 }, 400, 400, 1600, 900)).toEqual({ x: 0.5, y: 0 });
+    expect(containedStagePoint({ x: 0.5, y: 0.5 }, 400, 400, 1600, 900)).toEqual({ x: 0.5, y: 0.5 });
+  });
   it('shows a visual stage and disposes it', () => {
     const container = document.createElement('div');
     const onState = vi.fn();

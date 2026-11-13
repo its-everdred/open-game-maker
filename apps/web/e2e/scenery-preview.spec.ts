@@ -97,8 +97,13 @@ test('shows a reviewed concept and sends scope placement to the builder', async 
   );
   await page.goto('/g/game?mode=edit&test');
   await expect(page.locator('.game-frame img')).toBeVisible();
+  await expect
+    .poll(() => page.locator('.game-frame img').evaluate((image) => (image as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Forest trees' }).click();
-  await page.getByLabel('Editor canvas').click({ position: { x: 180, y: 120 } });
+  const canvas = page.getByLabel('Editor canvas');
+  const bounds = (await canvas.boundingBox())!;
+  await canvas.click({ position: { x: bounds.width / 2, y: bounds.height / 2 } });
   await expect.poll(() => request?.plan?.summary).toContain('scope:0');
   expect(api.transactions).toHaveLength(0);
   await page.screenshot({ path: testInfo.outputPath('concept-editor.png') });

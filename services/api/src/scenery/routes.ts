@@ -51,10 +51,12 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
     .get('/games/:gameId/editor/stage', async (c) => {
       const game = authorizedGame(c, 'game.edit');
       const deps = c.get('deps');
+      const branch = c.req.query('branch') ?? 'main';
+      if (!branch || branch.length > 200) throw new HttpError(400, 'invalid_request');
       const jobs = deps.db
         .select({ id: schema.jobs.id })
         .from(schema.jobs)
-        .where(eq(schema.jobs.gameId, game.id))
+        .where(and(eq(schema.jobs.gameId, game.id), eq(schema.jobs.branchId, branch)))
         .all();
       const commands = jobs.flatMap(({ id }) => listCommands(deps.sqlite, id));
       const reviews = deps.db

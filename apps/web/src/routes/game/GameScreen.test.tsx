@@ -166,6 +166,7 @@ beforeEach(() => {
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
   editorApi.getEditorStage.mockResolvedValue({ stage: null });
+  editorApi.getScenerySource.mockRejectedValue(new Error('unavailable'));
   editorApi.getPreviewDesign.mockResolvedValue({ rev: 0, doc: { schemaVersion: 1, globals: {}, entities: {} } });
   fallbackAdmission.admitJob.mockResolvedValue({ kind: 'accepted', jobId: 'job' });
   editorApi.getOptionalPublished.mockResolvedValue({ available: false });
@@ -217,6 +218,49 @@ describe('GameScreen', () => {
     fireEvent.click(play);
     await waitFor(() => expect(container.querySelector('.game-screen.is-playing')).toBeVisible());
   });
+  it('advances from an approved concept to a populated scenery diorama', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getEditorStage.mockResolvedValue({ stage: { kind: 'image', url: 'https://example.test/concept.webp' } });
+    editorApi.getScenerySource.mockResolvedValue({
+      scene: {
+        version: 1,
+        items: [{ id: 'tree' }],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+  });
+  it('refreshes the scenery when it arrives while the concept is already open', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getEditorStage.mockResolvedValue({ stage: { kind: 'image', url: 'https://example.test/concept.webp' } });
+    const scene = {
+      version: 1,
+      items: [],
+      terrain: [],
+      lighting: 'warm-forest',
+      camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+    };
+    editorApi.getScenerySource
+      .mockResolvedValueOnce({ scene, assets: [] })
+      .mockResolvedValue({ scene: { ...scene, items: [{ id: 'tree' }] }, assets: [] });
+    const view = renderGame('/g/game?mode=edit');
+    await waitFor(() =>
+      expect(view.container.querySelector('img[src="https://example.test/concept.webp"]')).not.toBeNull(),
+    );
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled(), { timeout: 8_000 });
+  }, 15_000);
   it('shows a concept and sends a scope placement as a request before any build', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
@@ -235,6 +279,9 @@ describe('GameScreen', () => {
     await waitFor(() =>
       expect(view.container.querySelector('img[src="https://example.test/concept.webp"]')).not.toBeNull(),
     );
+    const image = view.container.querySelector('img[src="https://example.test/concept.webp"]')!;
+    Object.defineProperties(image, { naturalWidth: { value: 100 }, naturalHeight: { value: 100 } });
+    vi.spyOn(image, 'getBoundingClientRect').mockReturnValue({ width: 100, height: 100 } as DOMRect);
     await waitFor(() => expect(editorApi.getFallbackPalette).toHaveBeenCalled());
     fireEvent.pointerDown(await screen.findByRole('button', { name: 'Forest trees' }, { timeout: 5_000 }), {
       pointerId: 1,
@@ -247,6 +294,7 @@ describe('GameScreen', () => {
     expect(editorApi.postTransaction).not.toHaveBeenCalled();
   });
   it('uses an unmerged playable preview when no released build exists', async () => {
+    editorApi.listJobs.mockResolvedValue({ jobs: [{ aiurIssueNumber: 12, branchId: 'main' }] });
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
       buildId: editorApi.NO_BUILD_ID,
@@ -289,6 +337,24 @@ describe('GameScreen', () => {
     fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
     await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
     expect(editorApi.postTransaction).not.toHaveBeenCalled();
+  });
+  it('does not show a preview belonging to a different branch', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getEditorPreviews.mockResolvedValue({
+      previews: [{ ticket: '12', buildId: 'preview-1', accessId: 'pv-1', createdAt: '2026-11-13T00:00:00Z' }],
+    });
+    editorApi.listJobs.mockResolvedValue({ jobs: [{ aiurIssueNumber: 12, branchId: 'other' }] });
+    editorApi.getEditorStage.mockResolvedValue({ stage: { kind: 'image', url: 'https://example.test/concept.webp' } });
+    const view = renderGame('/g/game?mode=edit');
+    await waitFor(() =>
+      expect(view.container.querySelector('img[src="https://example.test/concept.webp"]')).not.toBeNull(),
+    );
+    expect(host.mountGameFrame).not.toHaveBeenCalled();
+    expect(editorApi.getPreviewDesign).not.toHaveBeenCalled();
   });
   it.each(['t3:fixture/tree', 'scope:0'])(
     'submits fallback item %s as a build request without a design transaction',
