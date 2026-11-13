@@ -62,6 +62,9 @@ and writes `hud-dom.html` in the output directory when the page remains responsi
 keys without exposing values. Use `gm help run` for viewport, recording, rig, and asset-tier flags. `--record-native`
 records the game canvas at its pixel size, scaled up only by a whole-number factor, rendering every frame through the
 game's deterministic hook so a clip holds exactly duration x fps frames.
+For local captures, `gm run` runs a Vite game build in test mode (including its prebuild asset staging) in a separate
+temporary directory. Other builds use `dist`. A capture of an independently served `--url` uses that server as-is.
+`--verify-source` also requires committed tracked changes and no untracked build inputs; git-ignored files are excluded.
 
 By default `gm run` captures the play screen as a player sees it: the build mounted through `@gm/host` (the app's own
 touch overlay, viewport tracking and bridge) under a copy of the app's top bar and Pause, styled with the app's own

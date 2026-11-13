@@ -26,27 +26,13 @@ export function cleanHead(cwd: string, outputPaths: string[] = []): string | und
         maxBuffer: 64 * 1024 * 1024,
       }).split('\0');
     const untracked = files(['--others', '--exclude-standard']);
-    const ignoredBuildPaths = files([
-      '--others',
-      '--ignored',
-      '--exclude-standard',
-      '--',
-      'src',
-      'public',
-      'assets',
-      ':(glob)**/src/**',
-      ':(glob)**/public/**',
-      ':(glob)**/assets/**',
-      ':(exclude,glob)**/node_modules/**',
-      ':(exclude,glob)**/dist/**',
-    ]);
     const buildInput = (path: string) =>
       !outputNames.has(path) &&
       !/(?:^|\/)(?:\.gm(?:-mock)?|shots?|looks?|review|node_modules|dist)(?:\/|$)/.test(path) &&
       /\.(?:[cm]?[jt]sx?|html?|css|s[ac]ss|json|glsl|wgsl|png|jpe?g|webp|gif|svg|avif|glb|gltf|ktx2?|basis|hdr|exr)$/i.test(
         path,
       );
-    if (untracked.some(buildInput) || ignoredBuildPaths.some(buildInput)) return undefined;
+    if (untracked.some(buildInput)) return undefined;
     return execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd,
       encoding: 'utf8',

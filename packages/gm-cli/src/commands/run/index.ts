@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { homedir, setPriority } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
@@ -116,6 +116,15 @@ function manifestField(ctx: GmContext, field: 'id' | 'title'): string | undefine
     return typeof value === 'string' && value !== '' ? value : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function hasViteBuild(cwd: string): boolean {
+  try {
+    const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { scripts?: { build?: unknown } };
+    return typeof manifest.scripts?.build === 'string' && /\bvite\s+build\b/.test(manifest.scripts.build);
+  } catch {
+    return false;
   }
 }
 
@@ -243,59 +252,123 @@ export const command: GmCommand = {
     if (url && !isLoopbackUrl(url))
       throw new UsageError('--url is loopback only', 'gm run --url http://127.0.0.1:8000/');
     let source: string | undefined;
-    if (flags['verify-source']) {
-      if (url || frame === 'app')
-        throw new UsageError(
-          'source verification requires the local game build',
-          'omit --url and use --frame host or bare',
-        );
-      const out = resolve(ctx.cwd, flags.out as string);
-      const game = gameDir(ctx.cwd);
-      const outputPath = relative(game, out).split('\\').join('/');
-      if (
-        !outputPath ||
-        outputPath === '..' ||
-        outputPath.startsWith('../') ||
-        /^(?:src|public|assets|design|node_modules|dist)(?:\/|$)/i.test(outputPath)
-      )
-        throw new UsageError('source-verified output must be outside build input directories', 'use --out shots');
-      let outputPart = game;
-      for (const part of outputPath.split('/')) {
-        outputPart = join(outputPart, part);
-        let isLink = false;
-        try {
-          isLink = lstatSync(outputPart).isSymbolicLink();
-        } catch {
-          /* A new output directory has no entry yet. */
-        }
-        if (isLink) throw new UsageError('source-verified output cannot traverse a symlink', 'use --out shots');
+    let buildDir: string | undefined;
+    let retainBuild = false;
+    const viteBuild = hasViteBuild(ctx.cwd);
+    const buildTest = () => {
+      if (!viteBuild) {
+        execFileSync('pnpm', ['run', 'build'], { cwd: ctx.cwd, stdio: 'ignore' });
+        return;
       }
-      if (hasCaptureSymlink(out))
-        throw new UsageError('source-verified output cannot contain a symlink', 'use a clean --out directory');
-      source = prepareVerifiedSource(
-        ctx.cwd,
-        () => execFileSync('pnpm', ['run', 'build'], { cwd: ctx.cwd, stdio: 'ignore' }),
-        captureOutputPaths(ctx.cwd, out),
-      );
-    }
-    const verify = await import('@ogm/gm-verify');
-    const inputs = loadInputs(ctx, flags.inputs, verify.readInputScript);
-    const budgets = loadBudgetOverrides(ctx, flags.budgets, verify.readBudgetOverrides, 'run');
+      const parent = join(ctx.cwd, '.gm', 'run-builds');
+      mkdirSync(parent, { recursive: true });
+      buildDir = mkdtempSync(join(parent, 'capture-'));
+      execFileSync('pnpm', ['run', 'build', '--mode', 'test', '--outDir', buildDir], { cwd: ctx.cwd, stdio: 'ignore' });
+    };
+    try {
+      if (flags['verify-source']) {
+        if (url || frame === 'app')
+          throw new UsageError(
+            'source verification requires the local game build',
+            'omit --url and use --frame host or bare',
+          );
+        const out = resolve(ctx.cwd, flags.out as string);
+        const game = gameDir(ctx.cwd);
+        const outputPath = relative(game, out).split('\\').join('/');
+        if (
+          !outputPath ||
+          outputPath === '..' ||
+          outputPath.startsWith('../') ||
+          /^(?:src|public|assets|design|node_modules|dist)(?:\/|$)/i.test(outputPath)
+        )
+          throw new UsageError('source-verified output must be outside build input directories', 'use --out shots');
+        let outputPart = game;
+        for (const part of outputPath.split('/')) {
+          outputPart = join(outputPart, part);
+          let isLink = false;
+          try {
+            isLink = lstatSync(outputPart).isSymbolicLink();
+          } catch {
+            /* A new output directory has no entry yet. */
+          }
+          if (isLink) throw new UsageError('source-verified output cannot traverse a symlink', 'use --out shots');
+        }
+        if (hasCaptureSymlink(out))
+          throw new UsageError('source-verified output cannot contain a symlink', 'use a clean --out directory');
+        source = prepareVerifiedSource(ctx.cwd, buildTest, captureOutputPaths(ctx.cwd, out));
+      } else if (!url && viteBuild) {
+        try {
+          buildTest();
+        } catch {
+          throw new UsageError('game test build failed', 'run pnpm run build --mode test to inspect the failure');
+        }
+      }
+      const verify = await import('@ogm/gm-verify');
+      const inputs = loadInputs(ctx, flags.inputs, verify.readInputScript);
+      const budgets = loadBudgetOverrides(ctx, flags.budgets, verify.readBudgetOverrides, 'run');
 
-    if (ctx.config.verifyQueue) {
-      if (url) throw new UsageError('queue mode serves ./dist and does not accept --url', 'omit --url');
-      if (frame === 'app') throw new UsageError('queue mode cannot sign in to the app', 'gm run --frame host');
-      const runId = verify.newRunId();
-      const dir = verify.submitRequest(ctx.cwd, {
-        v: 1,
-        runId,
-        ...(ctx.config.jobId ? { jobId: ctx.config.jobId } : {}),
-        ...(ctx.config.aiurIssue !== undefined ? { aiurIssue: ctx.config.aiurIssue } : {}),
-        ...(ctx.config.aiurRunId ? { aiurRunId: ctx.config.aiurRunId } : {}),
-        serveDir: 'dist',
-        args: {
+      if (ctx.config.verifyQueue) {
+        if (url) throw new UsageError('queue mode serves ./dist and does not accept --url', 'omit --url');
+        if (frame === 'app') throw new UsageError('queue mode cannot sign in to the app', 'gm run --frame host');
+        const runId = verify.newRunId();
+        const dir = verify.submitRequest(ctx.cwd, {
+          v: 1,
+          runId,
+          ...(ctx.config.jobId ? { jobId: ctx.config.jobId } : {}),
+          ...(ctx.config.aiurIssue !== undefined ? { aiurIssue: ctx.config.aiurIssue } : {}),
+          ...(ctx.config.aiurRunId ? { aiurRunId: ctx.config.aiurRunId } : {}),
+          serveDir: buildDir ? relative(ctx.cwd, buildDir) : 'dist',
+          args: {
+            viewport,
+            frame,
+            tier,
+            ...(rig ? { rig } : {}),
+            ...(frames ? { frames } : {}),
+            ...(timeline ? { timeline } : {}),
+            ...(record ? { record } : {}),
+            ...(inputs ? { inputs } : {}),
+            ...(budgets ? { budgets } : {}),
+          },
+        });
+        retainBuild = true;
+        try {
+          const report = await verify.waitForReport(dir);
+          retainBuild = false;
+          const reportPath = resolve(dir, 'report.json');
+          recordRunProvenance(
+            ctx.cwd,
+            reportPath,
+            report.frames,
+            source,
+            [report.timeline, report.clip].filter((path): path is string => path !== undefined),
+          );
+          return finish(ctx, report, reportPath);
+        } catch (error) {
+          ctx.err(error instanceof Error ? error.message : String(error));
+          return EXIT.failed;
+        }
+      }
+
+      const app = frame === 'app' ? appFrame(ctx, flags) : undefined;
+      niceCapture();
+      let server: Awaited<ReturnType<typeof verify.serveStatic>> | undefined;
+      let target = url;
+      if (!target) {
+        try {
+          server = await verify.serveStatic(buildDir ?? resolve(ctx.cwd, 'dist'));
+          target = server.url;
+        } catch {
+          throw new UsageError('no built game in ./dist', 'build the game or pass --url http://127.0.0.1:PORT/');
+        }
+      }
+      try {
+        const result = await verify.runVerify({
+          url: target,
+          outDir: resolve(ctx.cwd, flags.out as string),
           viewport,
           frame,
+          ...(app ? { app } : {}),
+          title: manifestField(ctx, 'title') ?? '',
           tier,
           ...(rig ? { rig } : {}),
           ...(frames ? { frames } : {}),
@@ -303,71 +376,28 @@ export const command: GmCommand = {
           ...(record ? { record } : {}),
           ...(inputs ? { inputs } : {}),
           ...(budgets ? { budgets } : {}),
-        },
-      });
-      try {
-        const report = await verify.waitForReport(dir);
-        const reportPath = resolve(dir, 'report.json');
+          software: ctx.config.verifySoftwareGl,
+          eventsFile: ctx.config.eventsFile,
+          jobId: ctx.config.jobId,
+          aiurIssue: ctx.config.aiurIssue,
+          aiurRunId: ctx.config.aiurRunId,
+          source: 'gm run',
+          slots: { runtimeDir: ctx.config.runtimeDir },
+          warn: ctx.err,
+        });
         recordRunProvenance(
           ctx.cwd,
-          reportPath,
-          report.frames,
+          result.reportPath,
+          result.report.frames,
           source,
-          [report.timeline, report.clip].filter((path): path is string => path !== undefined),
+          [result.report.timeline, result.report.clip].filter((path): path is string => path !== undefined),
         );
-        return finish(ctx, report, reportPath);
-      } catch (error) {
-        ctx.err(error instanceof Error ? error.message : String(error));
-        return EXIT.failed;
+        return finish(ctx, result.report, result.reportPath, result.ffmpegMissing);
+      } finally {
+        await server?.close();
       }
-    }
-
-    const app = frame === 'app' ? appFrame(ctx, flags) : undefined;
-    niceCapture();
-    let server: Awaited<ReturnType<typeof verify.serveStatic>> | undefined;
-    let target = url;
-    if (!target) {
-      try {
-        server = await verify.serveStatic(resolve(ctx.cwd, 'dist'));
-        target = server.url;
-      } catch {
-        throw new UsageError('no built game in ./dist', 'build the game or pass --url http://127.0.0.1:PORT/');
-      }
-    }
-    try {
-      const result = await verify.runVerify({
-        url: target,
-        outDir: resolve(ctx.cwd, flags.out as string),
-        viewport,
-        frame,
-        ...(app ? { app } : {}),
-        title: manifestField(ctx, 'title') ?? '',
-        tier,
-        ...(rig ? { rig } : {}),
-        ...(frames ? { frames } : {}),
-        ...(timeline ? { timeline } : {}),
-        ...(record ? { record } : {}),
-        ...(inputs ? { inputs } : {}),
-        ...(budgets ? { budgets } : {}),
-        software: ctx.config.verifySoftwareGl,
-        eventsFile: ctx.config.eventsFile,
-        jobId: ctx.config.jobId,
-        aiurIssue: ctx.config.aiurIssue,
-        aiurRunId: ctx.config.aiurRunId,
-        source: 'gm run',
-        slots: { runtimeDir: ctx.config.runtimeDir },
-        warn: ctx.err,
-      });
-      recordRunProvenance(
-        ctx.cwd,
-        result.reportPath,
-        result.report.frames,
-        source,
-        [result.report.timeline, result.report.clip].filter((path): path is string => path !== undefined),
-      );
-      return finish(ctx, result.report, result.reportPath, result.ffmpegMissing);
     } finally {
-      await server?.close();
+      if (buildDir && !retainBuild) rmSync(buildDir, { recursive: true, force: true });
     }
   },
 };
