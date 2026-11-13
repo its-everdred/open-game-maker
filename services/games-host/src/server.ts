@@ -1,6 +1,6 @@
 import { createReadStream, type Stats } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { relative, sep } from 'node:path';
+import { readFile, readdir, stat } from 'node:fs/promises';
+import { join, relative, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { constants as zlib, createBrotliCompress, createGzip } from 'node:zlib';
 
@@ -28,7 +28,7 @@ export function createApp(options: GamesHostOptions): Hono {
     for (const [name, value] of gameHeaderEntries) {
       context.res.headers.set(name, value);
     }
-    if (context.res.status !== 200) {
+    if (context.res.status !== 200 || new URL(context.req.url).pathname.startsWith('/p/')) {
       context.res.headers.set('Cache-Control', 'no-store');
     } else if (new URL(context.req.url).pathname === '/game-cache.js') {
       context.res.headers.set('Cache-Control', 'no-cache');
@@ -36,6 +36,7 @@ export function createApp(options: GamesHostOptions): Hono {
     context.res.headers.delete('set-cookie');
   };
   app.use('/g/*', secureResponse);
+  app.use('/p/*', secureResponse);
   app.use('/a/*', secureResponse);
   app.use('/game-cache.js', secureResponse);
 
@@ -57,7 +58,13 @@ export function createApp(options: GamesHostOptions): Hono {
     const buildId = context.req.param('buildId') ?? '';
     let directory: string;
     try {
-      directory = buildDir(options.root, gameId, buildId);
+      if (buildId.startsWith('preview-')) return context.text('Not Found', 404);
+      directory = new URL(context.req.url).pathname.startsWith('/p/')
+        ? ((await previewDirectory(options.root, gameId, buildId)) ?? '')
+        : buildDir(options.root, gameId, buildId);
+      if (buildId.startsWith('pv-') && !new URL(context.req.url).pathname.startsWith('/p/'))
+        return context.text('Not Found', 404);
+      if (!directory) return context.text('Not Found', 404);
     } catch (error) {
       if (error instanceof BadId) {
         return context.text('Not Found', 404);
@@ -110,6 +117,7 @@ export function createApp(options: GamesHostOptions): Hono {
     return context.redirect(`/g/${gameId}/${buildId}/`, 308);
   });
   app.on(['GET', 'HEAD'], '/g/:gameId/:buildId/*', serveGame);
+  app.on(['GET', 'HEAD'], '/p/:gameId/:buildId/*', serveGame);
   app.on(['GET', 'HEAD'], '/a/:file', serveBlob);
   app.on(['GET', 'HEAD'], '/game-cache.js', (context) =>
     serveFile(context, options.workerScript, { 'Service-Worker-Allowed': '/g/' }),
@@ -118,6 +126,36 @@ export function createApp(options: GamesHostOptions): Hono {
   app.notFound((context) => context.text('Not Found', 404, { 'Cache-Control': 'no-store' }));
 
   return app;
+}
+
+// Preview access IDs are short-lived capabilities issued only by the authorized review API. Resolve every request
+// against the current ticket record so answering or replacing it immediately revokes the old capability.
+async function previewDirectory(root: string, gameId: string, accessId: string): Promise<string | null> {
+  buildDir(root, gameId, 'preview-check');
+  if (!/^pv-[0-9a-f-]{36}$/u.test(accessId)) return null;
+  const directory = join(root, '.previews', gameId);
+  const names = await readdir(directory).catch(() => [] as string[]);
+  for (const name of names.filter((entry) => /^[1-9]\d{0,15}\.json$/u.test(entry))) {
+    const raw = await readFile(join(directory, name), 'utf8').catch(() => '');
+    let row: { gameId?: unknown; accessId?: unknown; accessExpiresAt?: unknown; buildId?: unknown; answered?: unknown };
+    try {
+      row = JSON.parse(raw) as typeof row;
+    } catch {
+      continue;
+    }
+    if (
+      row.gameId !== gameId ||
+      row.accessId !== accessId ||
+      row.answered !== false ||
+      typeof row.accessExpiresAt !== 'string' ||
+      !Number.isFinite(Date.parse(row.accessExpiresAt)) ||
+      Date.parse(row.accessExpiresAt) <= Date.now()
+    )
+      continue;
+    if (typeof row.buildId !== 'string' || !/^preview-[0-9a-f-]{36}$/u.test(row.buildId)) return null;
+    return join(directory, '.builds', row.buildId);
+  }
+  return null;
 }
 
 async function serveFile(

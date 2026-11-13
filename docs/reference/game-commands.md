@@ -75,6 +75,14 @@ against the job's Command and calls aiur's canonical Decision API with the Comma
 from the inbox, from the job conversation modal and from an inline Command card are the same operation. A `409`
 means another writer answered first and the returned status is the winner's.
 
+## Preview reviews
+
+A game's Review view also lists workspace previews sent with `gm preview`. Each preview plays in its card and offers
+Looks right or Needs work with an optional note. The answer is delivered to the ticket that uploaded the build; the
+card leaves the queue after delivery and a later upload opens a new one. Preview files and assets use a short-lived,
+revocable access URL issued to a game editor, and never change the live build. Single-choice Commands can also be
+answered from the queue using their letter buttons and an optional note; opening a row still shows its media deck.
+
 ## Skipping a question
 
 `POST /api/v1/jobs/:jobId/commands/:commandId/skip` takes the Command's recommended option without the player

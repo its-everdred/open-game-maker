@@ -11,7 +11,18 @@ import { gameSlugFor } from '../games/games.js';
 export function daemonRowForGame(db: Db, gameId: string): typeof schema.gameDaemons.$inferSelect | undefined {
   const slug = gameSlugFor(db, gameId);
   if (slug === null) return undefined;
-  return db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, slug)).get();
+  const current = db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, slug)).get();
+  if (current) return current;
+  const previous = db
+    .select({ slug: schema.gameSlugs.slug })
+    .from(schema.gameSlugs)
+    .where(eq(schema.gameSlugs.gameId, gameId))
+    .all();
+  for (const { slug: oldSlug } of previous) {
+    const daemon = db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, oldSlug)).get();
+    if (daemon) return daemon;
+  }
+  return undefined;
 }
 
 export function createDaemonDirectory(db: Db, fleet: Pick<FeedFleet, 'daemonFor'>) {

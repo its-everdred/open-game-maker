@@ -22,7 +22,7 @@ describe('gm preview', () => {
     git('init', '-q', '-b', 'aiur/42-preview');
     writeFileSync(join(game, 'package.json'), JSON.stringify({ scripts: { build: 'custom' } }));
     writeFileSync(join(game, 'manifest.json'), '{}');
-    writeFileSync(join(game, 'design', 'design.json'), '{}');
+    writeFileSync(join(game, 'design', 'design.json'), '{"base":true}');
     git('add', 'games');
     git('commit', '-qm', 'fixture');
     const sha = git('rev-parse', 'HEAD');
@@ -31,7 +31,7 @@ describe('gm preview', () => {
     writeFileSync(secretFile, 'fixture-secret');
     writeFileSync(
       join(bin, 'pnpm'),
-      `#!/bin/sh\nset -eu\ntest -z "\${OGM_HOOK_SECRET_FILE:-}"\nmkdir -p dist/design\ncp current.txt dist/index.html\necho '{}' > dist/manifest.json\necho '{}' > dist/design/design.json\necho '{}' > dist/credits.json\n`,
+      `#!/bin/sh\nset -eu\ntest -z "\${OGM_HOOK_SECRET_FILE:-}"\nmkdir -p dist/design\ncp current.txt dist/index.html\necho '{}' > dist/manifest.json\necho '{"folded":true}' > dist/design/design.json\necho '{}' > dist/credits.json\n`,
     );
     chmodSync(join(bin, 'pnpm'), 0o755);
     const received: { path?: string; auth?: string; sha?: string; body?: Buffer } = {};
@@ -64,6 +64,9 @@ describe('gm preview', () => {
       writeFileSync(archive, received.body!);
       expect(execFileSync('tar', ['-xOzf', archive, './index.html'], { encoding: 'utf8' })).toBe(
         'uncommitted workspace',
+      );
+      expect(JSON.parse(execFileSync('tar', ['-xOzf', archive, './design/design.json'], { encoding: 'utf8' }))).toEqual(
+        { folded: true },
       );
       expect(readFileSync(join(game, 'current.txt'), 'utf8')).toBe('uncommitted workspace');
     } finally {

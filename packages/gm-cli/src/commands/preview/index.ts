@@ -89,7 +89,7 @@ export const command: GmCommand = {
     try {
       const stage = join(scratch, 'stage');
       cpSync(dist, stage, { recursive: true, verbatimSymlinks: true });
-      for (const file of ['manifest.json', 'design/design.json', 'achievements.json']) {
+      for (const file of ['manifest.json', 'achievements.json']) {
         if (!existsSync(join(game, file))) continue;
         mkdirSync(dirname(join(stage, file)), { recursive: true });
         cpSync(join(game, file), join(stage, file));

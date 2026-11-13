@@ -7,7 +7,7 @@ import { queryClient } from '../../app/query';
 import { mountGameFrame } from '../../features/editor/frame';
 import { api } from '../../lib/api/client';
 
-export type Preview = { ticket: string; buildId: string; createdAt: string };
+export type Preview = { ticket: string; buildId: string; accessId: string; createdAt: string; pendingMessage?: string };
 const key = (gameId: string) => ['game-previews', gameId] as const;
 
 export function usePreviews(gameId: string) {
@@ -32,6 +32,10 @@ export function PreviewReviews({ gameId, previews }: { gameId: string; previews:
 function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) {
   const container = useRef<HTMLDivElement>(null);
   const [note, setNote] = useState('');
+  const pending = /^Preview review of preview-[0-9a-f-]{36}: (looks right|needs work)\.(?:\n([\s\S]*))?$/u.exec(
+    preview.pendingMessage ?? '',
+  );
+  const actualNote = pending ? (pending[2] ?? '') : note;
   const [frameError, setFrameError] = useState(false);
   const path = `/games/${encodeURIComponent(gameId)}/previews/${encodeURIComponent(preview.ticket)}`;
   const design = useQuery({
@@ -44,9 +48,10 @@ function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) 
     mutationFn: (verdict: 'looks right' | 'needs work') =>
       api(`${path}/answer`, {
         method: 'POST',
-        json: { buildId: preview.buildId, verdict, ...(note.trim() ? { note: note.trim() } : {}) },
+        json: { buildId: preview.buildId, verdict, ...(actualNote.trim() ? { note: actualNote.trim() } : {}) },
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
+    onError: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
   });
   useEffect(() => {
     if (!container.current || !design.data) return;
@@ -54,13 +59,14 @@ function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) 
       container: container.current,
       gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
       gameId,
-      buildId: preview.buildId,
+      buildId: preview.accessId,
+      preview: true,
       mode: 'play',
       design: design.data,
       onState: (state) => setFrameError(state.bridgeState === 'error'),
     });
     return () => frame.dispose();
-  }, [design.data, gameId, preview.buildId]);
+  }, [design.data, gameId, preview.accessId]);
   return (
     <section className="review-deck" aria-label={`Preview for ticket ${preview.ticket}`}>
       <div className="review-deck-playable">
@@ -69,17 +75,32 @@ function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) 
       </div>
       <label>
         Note (optional)
-        <textarea value={note} maxLength={4000} onChange={(event) => setNote(event.target.value)} />
+        <textarea
+          value={actualNote}
+          readOnly={pending !== null}
+          maxLength={4000}
+          onChange={(event) => setNote(event.target.value)}
+        />
       </label>
       <div className="review-deck-actions">
-        <button type="button" disabled={answer.isPending} onClick={() => answer.mutate('looks right')}>
+        <button
+          type="button"
+          disabled={answer.isPending || (pending !== null && pending[1] !== 'looks right')}
+          onClick={() => answer.mutate('looks right')}
+        >
           Looks right
         </button>
-        <button type="button" disabled={answer.isPending} onClick={() => answer.mutate('needs work')}>
+        <button
+          type="button"
+          disabled={answer.isPending || (pending !== null && pending[1] !== 'needs work')}
+          onClick={() => answer.mutate('needs work')}
+        >
           Needs work
         </button>
       </div>
-      {answer.isError ? <p role="alert">The review did not send. Refresh and try again.</p> : null}
+      {answer.isError || pending ? (
+        <p role="alert">The review may not have sent. Tap the same verdict to retry.</p>
+      ) : null}
     </section>
   );
 }

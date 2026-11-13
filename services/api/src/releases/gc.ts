@@ -6,7 +6,6 @@ import { eq } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
 import { withArtifactMutation } from '../builds/artifact-lock.js';
-import { previewBuildDirectories } from '../previews/store.js';
 import { buildResponse, ReleaseError } from './service.js';
 
 export async function collectBuildArtifact(deps: AppDeps, buildId: string) {
@@ -31,7 +30,7 @@ export async function collectBuildArtifact(deps: AppDeps, buildId: string) {
       .where(eq(schema.builds.artifact, 'present'))
       .all()
       .map(({ gameId, id }) => buildDir(deps.config.gamesRoot, gameId, id));
-    await gcBlobs(deps.config.gamesRoot, [...liveBuilds, ...(await previewBuildDirectories(deps))]);
+    await gcBlobs(deps.config.gamesRoot, liveBuilds);
 
     return buildResponse({ ...existing, artifact: 'gc' });
   });

@@ -69,6 +69,7 @@ export type MountGameFrameOptions = {
   gamesOrigin: string;
   gameId: string;
   buildId: string;
+  preview?: boolean;
   mode: 'play' | 'edit';
   design: { rev: number; doc: DesignDoc };
   build?: 'draft' | 'test' | 'published';
@@ -170,6 +171,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       gamesOrigin: trustedOrigin,
       gameId: options.gameId,
       buildId: options.buildId,
+      ...(options.preview ? { preview: true } : {}),
       build: options.build ?? 'draft',
       ...(options.params === undefined ? {} : { params: options.params }),
       mode: options.mode,

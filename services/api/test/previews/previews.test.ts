@@ -4,12 +4,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { schema } from '@ogm/db';
-import { gcBlobs } from '@ogm/games-host/layout';
+import { createApp as createGamesHost } from '../../../games-host/src/server.js';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 
 import previewRoutes from '../../src/previews/routes.js';
-import { previewBuildDirectories } from '../../src/previews/store.js';
+import { previewDirectory } from '../../src/previews/store.js';
+import { daemonRowForGame } from '../../src/jobs/daemons.js';
 import { createApp } from '../../src/app/app.js';
 import { buildRoutes } from '../../src/builds/routes.js';
 import { asUser } from '../helpers.js';
@@ -46,17 +47,18 @@ function setup() {
       headers: { ...asUser(ids.user), 'content-type': 'application/json' },
       body: JSON.stringify({ buildId, verdict: 'looks right', note }),
     });
-  return { deps, upload, list, answer, message };
+  return { deps, app, upload, list, answer, message };
 }
 
 describe('preview builds', () => {
   it('keeps the live branch untouched, serves the new build, and sends a verdict once', async () => {
-    const { deps, upload, list, answer, message } = setup();
+    const { deps, app, upload, list, answer, message } = setup();
     expect((await upload('12', 'wrong')).status).toBe(401);
+    expect((await app.request(`http://example.test/api/v1/games/${ids.game}/previews`)).status).toBe(401);
     const response = await upload();
     expect(response.status).toBe(201);
     const preview = (await response.json()) as { buildId: string };
-    expect(readFileSync(join(deps.config.gamesRoot, ids.game, preview.buildId, 'index.html'), 'utf8')).toContain(
+    expect(readFileSync(join(previewDirectory(deps, ids.game, preview.buildId), 'index.html'), 'utf8')).toContain(
       'Fixture',
     );
     expect(deps.db.select().from(schema.builds).all()).toEqual([]);
@@ -68,7 +70,7 @@ describe('preview builds', () => {
     expect((await answer(preview.buildId)).status).toBe(200);
     expect(message).toHaveBeenCalledWith(
       '12',
-      'Preview review: looks right.\nGreat',
+      `Preview review of ${preview.buildId}: looks right.\nGreat`,
       `preview:${preview.buildId}`,
       expect.any(AbortSignal),
     );
@@ -107,16 +109,22 @@ describe('preview builds', () => {
     message.mockResolvedValueOnce({ warning: 'outcome_unknown' });
     expect((await answer(preview.buildId)).status).toBe(500);
     expect(((await (await list()).json()) as { previews: unknown[] }).previews).toHaveLength(1);
+    expect((await answer(preview.buildId, 'Changed')).status).toBe(409);
+    expect(message).toHaveBeenCalledTimes(1);
     expect((await answer(preview.buildId)).status).toBe(200);
     expect(message.mock.calls[0]?.[2]).toBe(message.mock.calls[1]?.[2]);
   });
-  it('stages cache-plan assets as blobs and keeps them through garbage collection', async () => {
+  it('protects preview files and private cache-plan assets with a revocable capability', async () => {
     const { deps, upload } = setup();
     const files = builtFiles();
     const bytes = Buffer.from('preview image');
     const hash = createHash('sha256').update(bytes).digest('hex');
     mkdirSync(join(files, 'a'));
     writeFileSync(join(files, 'a', `${hash}.png`), bytes);
+    writeFileSync(
+      join(files, 'assets', 'manifest.json'),
+      JSON.stringify({ files: { [`/a/${hash}.png`]: {} }, assets: { hero: { file: { '*': `/a/${hash}.png` } } } }),
+    );
     const phase = () => ({
       boot: { bytes: 0, files: 0 },
       ready: { bytes: bytes.length, files: 1 },
@@ -140,11 +148,60 @@ describe('preview builds', () => {
     const body = execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', files, '.']);
     const response = await upload('12', SECRET, body);
     expect(response.status).toBe(201);
-    const preview = (await response.json()) as { buildId: string };
-    const blob = join(deps.config.gamesRoot, '_a', `${hash}.png`);
-    expect(readFileSync(blob)).toEqual(bytes);
-    expect(existsSync(join(deps.config.gamesRoot, ids.game, preview.buildId, 'a'))).toBe(false);
-    await gcBlobs(deps.config.gamesRoot, await previewBuildDirectories(deps));
-    expect(readFileSync(blob)).toEqual(bytes);
+    const preview = (await response.json()) as { buildId: string; accessId: string };
+    expect(existsSync(join(deps.config.gamesRoot, '_a', `${hash}.png`))).toBe(false);
+    expect(readFileSync(join(previewDirectory(deps, ids.game, preview.buildId), 'a', `${hash}.png`))).toEqual(bytes);
+    const host = createGamesHost({
+      root: deps.config.gamesRoot,
+      appOrigin: 'https://app.example.test',
+      version: 'test',
+      workerScript: '/missing',
+    });
+    expect((await host.request(`/g/${ids.game}/${preview.buildId}/index.html`)).status).toBe(404);
+    expect((await host.request(`/a/${hash}.png`)).status).toBe(404);
+    const url = `/p/${ids.game}/${preview.accessId}`;
+    const image = await host.request(`${url}/a/${hash}.png`);
+    expect(image.status).toBe(200);
+    expect(image.headers.get('cache-control')).toBe('no-store');
+    expect(Buffer.from(await image.arrayBuffer())).toEqual(bytes);
+    const assetManifest = (await (await host.request(`${url}/assets/manifest.json`)).json()) as {
+      assets: { hero: { file: Record<string, string> } };
+    };
+    expect(assetManifest.assets.hero.file['*']).toBe(`../a/${hash}.png`);
+    const cachePlan = (await (await host.request(`${url}/assets/cache-plan.json`)).json()) as {
+      entries: { url: string }[];
+    };
+    expect(cachePlan.entries.some((entry) => entry.url === `../a/${hash}.png`)).toBe(true);
+    expect((await host.request(`${url}/index.html`)).status).toBe(200);
+    const metadataPath = join(deps.config.gamesRoot, '.previews', ids.game, '12.json');
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(metadataPath, JSON.stringify({ ...metadata, accessExpiresAt: '2000-01-01T00:00:00.000Z' }));
+    expect((await host.request(`${url}/index.html`)).status).toBe(404);
+    writeFileSync(metadataPath, JSON.stringify(metadata));
+    expect((await upload()).status).toBe(201);
+    expect((await host.request(`${url}/index.html`)).status).toBe(404);
+  });
+  it('keeps preview upload and daemon routing working after the game is renamed', async () => {
+    const { deps, upload } = setup();
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'castle-game',
+        repo: REPO,
+        checkoutPath: '/fixture',
+        unit: 'fixture',
+        envFile: '/fixture',
+        port: 12345,
+        status: 'running',
+        createdAt: '2026-11-13T00:00:00.000Z',
+      })
+      .run();
+    deps.db
+      .insert(schema.gameSlugs)
+      .values({ slug: 'castle-game', gameId: ids.game, createdAt: '2026-11-13T00:00:00.000Z' })
+      .run();
+    deps.db.update(schema.games).set({ slug: 'new-name' }).where(eq(schema.games.id, ids.game)).run();
+    expect(daemonRowForGame(deps.db, ids.game)?.slug).toBe('castle-game');
+    expect((await upload()).status).toBe(201);
   });
 });

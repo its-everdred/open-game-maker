@@ -79,7 +79,7 @@ export function buildRoutes(opts: { daemonForSecret: HookDaemonResolver; gameFor
         if (
           !game?.githubOwner ||
           !game.githubRepo ||
-          game.slug !== daemon.slug ||
+          findGameBySlugOrId(deps.db, daemon.slug)?.id !== game.id ||
           `${game.githubOwner}/${game.githubRepo}`.toLowerCase() !== daemon.repo.toLowerCase()
         )
           return c.json({ error: { code: 'not_found' } }, 404);
