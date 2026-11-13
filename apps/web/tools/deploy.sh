@@ -107,7 +107,7 @@ fi
 RECORD_DIR="$(mktemp -d)"
 PREVIEW_LOG="$RECORD_DIR/preview.log"
 LOAD_LOG="$RECORD_DIR/loadrec.log"
-LOAD_SECONDS="${OGM_DEPLOY_LOAD_SECONDS:-60}"
+LOAD_SECONDS="${OGM_DEPLOY_LOAD_SECONDS:-240}"
 pnpm --dir "$ROOT/apps/web" exec vite preview \
   --host 127.0.0.1 --port 43171 --outDir "$DEPLOY_DIR" \
   >"$PREVIEW_LOG" 2>&1 &
