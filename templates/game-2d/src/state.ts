@@ -53,7 +53,10 @@ function position(props: PlatformDesign['entities'][string]['props']): { x: numb
 
 export function platformsFromDesign(design: PlatformDesign): Platform[] {
   return Object.values(design.entities)
-    .filter((entity) => entity.prefab === 'platform')
+    .filter(
+      (entity): entity is Extract<PlatformDesign['entities'][string], { prefab: 'spawn' | 'platform' }> =>
+        entity.prefab === 'platform',
+    )
     .map((entity) => ({
       id: entity.id,
       ...position(entity.props),

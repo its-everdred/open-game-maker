@@ -80,6 +80,8 @@ export function Palette({
               >
                 {item.thumbnail ? (
                   <img src={item.thumbnail} alt="" />
+                ) : asset && /\.(png|jpe?g|webp)(?:\?|$)/i.test(asset.url) ? (
+                  <img src={asset.url} alt="" />
                 ) : asset ? (
                   <SceneryThumbnail key={asset.url} url={asset.url} />
                 ) : (

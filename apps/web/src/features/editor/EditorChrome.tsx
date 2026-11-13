@@ -17,7 +17,7 @@ import { Palette } from './Palette';
 import { Rail } from './Rail';
 import { loadSnapPrefs, saveSnapPrefs, type SnapPrefs } from './SnapPrefs';
 import { Tools } from './Tools';
-import { sceneryLightIntent } from './transactions';
+import { createIntent, sceneryLightIntent } from './transactions';
 import './editor.css';
 
 type EditorChromeProps = {
@@ -33,6 +33,7 @@ type EditorChromeProps = {
   onDelete(entityId: string): void;
   onDuplicate(entityId: string): void;
   onInstanceCount(change: InstanceCountChange): Promise<PlacementResult>;
+  onSelection?(ids: string[]): void;
   onCanvasChange?(value: { prefab?: string; snap: SnapPrefs }): void;
   onRequestLight?(preset: 'warm-forest' | 'night' | 'cave'): void;
 };
@@ -50,6 +51,7 @@ export function EditorChrome({
   onDelete,
   onDuplicate,
   onInstanceCount,
+  onSelection,
   onCanvasChange,
   onRequestLight,
 }: EditorChromeProps) {
@@ -63,18 +65,35 @@ export function EditorChrome({
   const [snap, setSnap] = useState<SnapPrefs>(() => loadSnapPrefs(gameId, manifest.grid?.size ?? 1));
   const [toolsTarget, setToolsTarget] = useState<HTMLElement | null>(null);
   const controls = useMemo(() => manifestControls(manifest), [manifest]);
+  const palette = useMemo(() => {
+    if (!session.doc.globals['scenery.backdrop'] || !sceneryAssets) return manifest.palette;
+    const images = sceneryAssets.filter((asset) => /\.(png|jpe?g|webp)(?:\?|$)/i.test(asset.url));
+    const categories = [...manifest.palette.categories];
+    if (!categories.some((candidate) => candidate.id === 'backdrops'))
+      categories.push({ id: 'backdrops', label: 'Backdrops', kind: 'items' });
+    const items = [...manifest.palette.items];
+    for (const asset of images) {
+      const prefab = `scenery-backdrop:${asset.id}`;
+      if (!items.some((item) => item.prefab === prefab))
+        items.push({
+          prefab,
+          label: asset.id.split('/').at(-1) ?? asset.id,
+          category: 'backdrops',
+          thumbnail: asset.url,
+        });
+    }
+    return { categories, items };
+  }, [manifest.palette, sceneryAssets, session.doc.globals]);
   const activeCategory =
-    manifest.palette.categories.find((candidate) => candidate.id === category) ??
-    manifest.palette.categories.find((candidate) =>
-      manifest.palette.items.some((item) => item.category === candidate.id),
-    ) ??
-    manifest.palette.categories[0];
-  const picked = manifest.palette.items.find((item) => item.prefab === pickedPrefab);
+    palette.categories.find((candidate) => candidate.id === category) ??
+    palette.categories.find((candidate) => palette.items.some((item) => item.category === candidate.id)) ??
+    palette.categories[0];
+  const picked = palette.items.find((item) => item.prefab === pickedPrefab);
   useLayoutEffect(() => {
     if (pickedPrefab !== undefined && picked === undefined) setPickedPrefab(undefined);
   }, [picked, pickedPrefab]);
   // Layout, not passive: the canvas must hold the pick in the same commit the palette shows it, or a quick tap
-  // after picking lands as a select and places nothing (#297).
+  // after picking lands as a select and places nothing (issue 297).
   useLayoutEffect(() => onCanvasChange?.({ prefab: picked?.prefab, snap }), [onCanvasChange, picked?.prefab, snap]);
   useLayoutEffect(() => setToolsTarget(document.getElementById('studio-editor-tools')), []);
   const updateSnap = (next: SnapPrefs) => {
@@ -107,13 +126,17 @@ export function EditorChrome({
       onDelete={onDelete}
       onDuplicate={onDuplicate}
       onInstanceCount={onInstanceCount}
+      onSelect={(ids) => {
+        session.setSelection(ids);
+        onSelection?.(ids);
+      }}
     />
   );
   return (
     <div className="editor-chrome">
       <Rail
-        categories={manifest.palette.categories}
-        items={manifest.palette.items}
+        categories={palette.categories}
+        items={palette.items}
         sceneryAssets={sceneryAssets}
         buildPinnedAssets={buildPinnedAssets}
         active={activeCategory?.id ?? ''}
@@ -121,7 +144,7 @@ export function EditorChrome({
       />
       {activeCategory?.kind === 'items' ? (
         <Palette
-          palette={manifest.palette}
+          palette={palette}
           category={activeCategory.id}
           title={activeCategory.label}
           showTabs={false}
@@ -129,6 +152,32 @@ export function EditorChrome({
           buildPinnedAssets={buildPinnedAssets}
           onCategory={setCategory}
           onPick={(prefab) => {
+            if (prefab.startsWith('scenery-backdrop:')) {
+              setPickedPrefab(undefined);
+              onTool('select');
+              const settings =
+                session.doc.globals['scenery.backdrop'] ??
+                (session.doc.globals['scenery.settings'] as { backdrop?: unknown } | undefined)?.backdrop;
+              if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return;
+              void session.submit(
+                createIntent(
+                  session.doc,
+                  [
+                    {
+                      op: 'set',
+                      control: 'scenery.backdrop',
+                      targets: 'global',
+                      value: {
+                        ...settings,
+                        assetId: prefab.slice('scenery-backdrop:'.length),
+                      },
+                    },
+                  ],
+                  'Changed backdrop',
+                ),
+              );
+              return;
+            }
             setPickedPrefab(prefab);
             onTool('place');
           }}
@@ -182,6 +231,8 @@ function manifestControls(manifest: GameManifest): ControlDecl[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((candidate) => {
     const parsed = controlDeclSchema.safeParse(candidate);
-    return parsed.success && !['scenery.lighting', 'scenery.terrain'].includes(parsed.data.id) ? [parsed.data] : [];
+    return parsed.success && !['scenery.lighting', 'scenery.terrain', 'scenery.backdrop'].includes(parsed.data.id)
+      ? [parsed.data]
+      : [];
   });
 }

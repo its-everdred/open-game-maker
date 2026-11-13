@@ -1,4 +1,11 @@
-import { createSceneryController, sceneryFromDesign, sceneryPalette, type SceneryPaletteItem } from '@gm/sdk/scenery';
+import {
+  createPaintedBackground,
+  createSceneryController,
+  paintedSceneryControls,
+  sceneryFromDesign,
+  sceneryPalette,
+  type SceneryPaletteItem,
+} from '@gm/sdk/scenery';
 import type { DesignDoc, GameManifest, TargetRef } from '@ogm/contracts/browser';
 import {
   BoxGeometry,
@@ -17,6 +24,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import type { ScenerySource } from './api';
 import { disposeModel } from './dispose-model';
 import type { GameFrameController, GameFrameState } from './frame';
+import { mountPaintedPreview } from './painted-preview';
 
 /** A local diorama for a game that does not yet have a runnable build. */
 export function mountSceneryPreview(
@@ -25,6 +33,11 @@ export function mountSceneryPreview(
   initial: DesignDoc,
   onState: (state: GameFrameState) => void,
 ): GameFrameController {
+  const imageIds = new Set(
+    source.assets.filter((entry) => /\.(?:png|jpe?g|webp)$/i.test(entry.path)).map((entry) => entry.id),
+  );
+  const mixed = source.scene.dimension === '3d' || source.scene.items.some((item) => !imageIds.has(item.assetId));
+  if (source.scene.backdrop && !mixed) return mountPaintedPreview(container, source, initial, onState);
   const items: SceneryPaletteItem[] = source.assets
     .filter((entry) => /\.(?:glb|gltf)$/i.test(entry.path))
     .map((entry) => {
@@ -39,6 +52,28 @@ export function mountSceneryPreview(
       return { assetId: entry.id, name, category, sha256: entry.sha256 };
     });
   const palette = sceneryPalette(items, source.assets);
+  if (source.scene.backdrop) {
+    palette.categories.push(
+      { id: 'backdrops', label: 'Backdrops', kind: 'items' },
+      { id: 'sprites', label: 'Items', kind: 'items' },
+    );
+    for (const asset of source.assets.filter((entry) => imageIds.has(entry.id))) {
+      const label = asset.id.split('/').at(-1) ?? asset.id;
+      palette.items.push({
+        prefab: `scenery-backdrop:${asset.id}`,
+        label,
+        category: 'backdrops',
+        thumbnail: asset.url,
+      });
+      palette.items.push({
+        prefab: `scenery:${asset.id}`,
+        label,
+        category: 'sprites',
+        thumbnail: asset.url,
+        tag: 'painted-sprite',
+      });
+    }
+  }
   const manifest: GameManifest = {
     id: 'scenery-preview',
     sdk: '*',
@@ -48,6 +83,7 @@ export function mountSceneryPreview(
     view: 'fixed',
     dimension: '3d',
     capabilities: ['editor.project', 'scenery'],
+    controls: source.scene.backdrop ? paintedSceneryControls : [],
     palette,
     tools: ['select', 'place'],
     gizmos: Object.fromEntries(palette.items.map((item) => [item.prefab, ['translate', 'rotateYaw']])),
@@ -72,6 +108,13 @@ export function mountSceneryPreview(
   const plane = new Plane(new Vector3(0, 1, 0), 0);
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const urls = new Map(source.assets.map((asset) => [asset.id, asset.url]));
+  const painted = source.scene.backdrop
+    ? createPaintedBackground(scene, (id) => {
+        const url = urls.get(id);
+        if (!url) throw new Error('asset unavailable');
+        return url;
+      })
+    : undefined;
   const models = new Map<string, ReturnType<GLTFLoader['loadAsync']>>();
   const scenery = createSceneryController({
     parent: scene,
@@ -104,6 +147,7 @@ export function mountSceneryPreview(
     camera.top = 10;
     camera.bottom = -10;
     camera.updateProjectionMatrix();
+    painted?.resize(width, height);
     draw();
   };
   const observer = new ResizeObserver(resize);
@@ -113,12 +157,17 @@ export function mountSceneryPreview(
     doc = next;
     const data = 'scenery.settings' in next.globals ? sceneryFromDesign(next, source.assets) : source.scene;
     try {
-      await scenery.update(data);
+      await scenery.update(
+        painted ? { ...data, items: data.items.filter((item) => !imageIds.has(item.assetId)) } : data,
+      );
+      if (disposed || current !== revision) return;
+      if (painted) await painted.update({ ...data, items: data.items.filter((item) => imageIds.has(item.assetId)) });
     } catch (error) {
       if (disposed || current !== revision) return;
       throw error;
     }
     if (disposed || current !== revision) return;
+    painted?.resize(container.clientWidth, container.clientHeight);
     const ids = new Map(
       Object.values(doc.entities)
         .filter((entity) => entity.prefab.startsWith('scenery:'))
@@ -144,7 +193,10 @@ export function mountSceneryPreview(
       while (object && !object.userData.entityId && object.parent) object = object.parent;
       if (typeof object.userData.entityId === 'string') return [{ kind: 'entity', id: object.userData.entityId }];
     }
-    return [];
+    return (painted?.pick(x, y) ?? []).flatMap((item) => {
+      const entity = Object.values(doc.entities).find((entry) => (entry.props.sceneryItemId ?? entry.id) === item);
+      return entity ? [{ kind: 'entity' as const, id: entity.id }] : [];
+    });
   };
   const state: GameFrameState = {
     bridgeState: 'ready',
@@ -175,7 +227,9 @@ export function mountSceneryPreview(
       for (const callback of picked) callback(targets);
     },
     pickAt: async (x, y) => pick(x, y),
-    project: async (x, y) => {
+    project: async (x, y, prefab) => {
+      if (painted && prefab?.startsWith('scenery:') && imageIds.has(prefab.slice('scenery:'.length)))
+        return painted.project(x, y);
       ray(x, y);
       const hit = raycaster.ray.intersectPlane(plane, new Vector3());
       return hit ? [hit.x, hit.y, hit.z] : null;
@@ -185,6 +239,12 @@ export function mountSceneryPreview(
       if (!entity) return;
       const pose = entity.props.pose as { position?: number[] } | undefined;
       if (!pose?.position || pose.position.length !== 3) return;
+      if (painted && imageIds.has(entity.prefab.slice('scenery:'.length))) {
+        const point = painted.screen(pose.position as [number, number, number]);
+        for (const callback of screens)
+          callback({ id: entity.id, x: point.x * container.clientWidth, y: point.y * container.clientHeight });
+        return;
+      }
       const p = new Vector3(...(pose.position as [number, number, number])).project(camera);
       for (const callback of screens)
         callback({
@@ -221,6 +281,7 @@ export function mountSceneryPreview(
       revision++;
       observer.disconnect();
       scenery.dispose();
+      painted?.dispose();
       for (const model of models.values()) void model.then(({ scene }) => disposeModel(scene)).catch(() => undefined);
       models.clear();
       ground.geometry.dispose();

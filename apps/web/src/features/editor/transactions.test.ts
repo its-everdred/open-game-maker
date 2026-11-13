@@ -11,6 +11,7 @@ import { apply, canonical } from '@ogm/design-log/browser';
 
 import {
   coalesceIntents,
+  copyEntity,
   createEntityIntent,
   createIntent,
   createStableId,
@@ -44,6 +45,17 @@ function speed(value: number): EditorCommand {
 }
 
 describe('editor transaction intents', () => {
+  it('copies a scenery entity with a distinct scene item identity', () => {
+    const source = {
+      ...baseDoc().entities[entityId]!,
+      prefab: 'scenery:tree',
+      props: { sceneryItemId: 'oak', scale: [1, 2, 1] },
+    };
+    const copy = copyEntity(source, 'e_01BX5ZZKBKACTAV9WEVGEMMVS0');
+    expect(copy.props).toEqual({ scale: [1, 2, 1] });
+    expect(copy.id).not.toBe(source.id);
+    expect(source.props.sceneryItemId).toBe('oak');
+  });
   it('replays and undoes a combined scenery rotation and scale', () => {
     const doc = baseDoc();
     doc.entities[entityId]!.prefab = 'scenery:tree';

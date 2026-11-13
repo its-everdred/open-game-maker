@@ -202,6 +202,11 @@ describe('scenery build integration', () => {
       JSON.stringify({
         version: 1,
         items: [{ id: 'oak', assetId: id, position: [1, 0, 2], rotation: [0, 0, 0], scale: [1, 1, 1], layer: 'back' }],
+        backdrop: {
+          assetId: id,
+          landscape: { fit: 'cover', anchor: [0.5, 0.5] },
+          portrait: { fit: 'contain', anchor: [0.5, 1] },
+        },
         terrain: [],
         lighting: 'night',
         camera: { position: [0, 5, 5], target: [0, 0, 0], zoom: 1 },
@@ -230,6 +235,10 @@ describe('scenery build integration', () => {
       expect.objectContaining({ prefab: `scenery:${id}`, props: expect.objectContaining({ sceneryItemId: 'oak' }) }),
     ]);
     expect(result.globals['scenery.settings'].lighting).toBe('night');
+    expect(result.globals['scenery.backdrop'].assetId).toBe(id);
+    expect(JSON.parse(files['manifest.json']!).controls).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'scenery.backdrop', scope: 'global' })]),
+    );
     const first = Object.keys(result.entities)[0];
     gmBuildArtifacts({ manifest, designDir: design }).generateBundle.call({
       emitFile(file) {

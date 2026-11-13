@@ -96,7 +96,7 @@ for (const [device, viewport] of Object.entries(landscapes)) {
     const play = spotlight.getByRole('button', { name: 'Play Goblin Cellar' });
     await play.scrollIntoViewIfNeeded();
     await expect(play).toBeInViewport();
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await page.locator('.studio-library-volume button').press('Shift+F10');
     await page.getByRole('button', { name: 'Decisions: 3' }).click();
     await expect(page.getByRole('button', { name: 'Blobs character voices, Goblin Cellar' })).toBeVisible();
 

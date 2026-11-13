@@ -121,6 +121,50 @@ stored in degrees in the editor and radians in scenery data. These adapters do n
 The Water tab paints grass, path, and water bands; each stroke is one undoable edit. Games that accept these edits
 declare the global `scenery.terrain` custom control shown by the 3D template, so terrain survives a build switch.
 
+### Painted scenes
+
+Lock the backdrop and each transparent cut-out image as separate assets. Add their IDs to `scenery.json`:
+
+```json
+{
+  "version": 1,
+  "dimension": "2d",
+  "viewport": { "width": 640, "height": 480 },
+  "backdrop": {
+    "assetId": "forest-background",
+    "landscape": { "fit": "cover", "anchor": [0.5, 1] },
+    "portrait": { "fit": "contain", "anchor": [0.5, 0.5] }
+  },
+  "items": [
+    { "id": "oak-1", "assetId": "oak-cutout", "position": [240, 180, 0], "rotation": [0, 0, 0],
+      "scale": [1, 1, 1], "layer": "mid", "parallax": 0.5 }
+  ],
+  "terrain": [],
+  "lighting": "warm-forest",
+  "camera": { "position": [0, 0, 1], "target": [0, 0, 0], "zoom": 1 }
+}
+```
+
+Set `dimension` to the game's dimension, so the no-build editor can offer models in a 3D scene before one is placed.
+Set `viewport` to the game's logical size; the 2D template and no-build preview default to 640×480. The fit rule is
+chosen by display aspect; anchors range from 0 (left/top) to 1 (right/bottom). Item positions and
+image dimensions use game pixels, centred on the item; Z orders items within each back/mid/front layer. Scale multiplies
+the image's intrinsic size, rotation Z is in radians, and parallax is the fraction of camera movement applied to the
+item (1 follows the world, 0 stays fixed). The backdrop always stays behind the items. The editor can swap a locked
+image as the backdrop and move, scale, delete, change depth, or adjust parallax on each cut-out. Once a game has wired
+the shared renderer, changing this file and its lock changes the scene without changing game code.
+
+For Canvas games, load each referenced image from the asset loader, put its source and intrinsic size in a map, and
+call `drawPaintedScenery(context, sceneryFromDesign(doc, lockedAssets), images, viewport)` before drawing gameplay.
+The viewport supplies logical width and height, optional physical `aspect`, and optional camera displacement. Phaser games can use
+`createPaintedScenery` from `@gm/sdk/phaser`: supply the scene and a function resolving locked IDs to asset URLs,
+call `update` when the design changes, `resize` when the viewport changes, and `dispose` on scene shutdown. See the
+2D template for the game lifecycle integration. Games must preserve scenery globals and entities in their design
+schema and expose picking and placement for the shared editor.
+For games mixing world-space models with screen-space sprites, `screenToWorld(nx, ny, prefab)` receives the optional
+prefab being placed or moved. Use it to select the appropriate projection; existing games may continue accepting only
+the first two arguments.
+
 Workers can reconcile creator edits by saving the latest `gm design current --json` result and running
 `gm scenery sync --design <snapshot.json>` before changing `scenery.json`. Sync replaces the scene file with the
 validated scenery in that snapshot; obtain a fresh snapshot first.

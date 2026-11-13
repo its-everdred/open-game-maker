@@ -186,6 +186,71 @@ describe('EditorChrome', () => {
     );
   });
 
+  it('swaps the backdrop and lists placed scenery', () => {
+    const submit = vi.fn();
+    const setSelection = vi.fn();
+    const onTool = vi.fn();
+    const onCanvasChange = vi.fn();
+    const backdrop = {
+      assetId: 'forest',
+      landscape: { fit: 'cover', anchor: [0.5, 0.5] },
+      portrait: { fit: 'contain', anchor: [0.5, 0.5] },
+    };
+    const sceneryManifest = {
+      ...manifest,
+      capabilities: ['scenery'],
+      palette: {
+        categories: [{ id: 'backdrops', label: 'Backdrops', kind: 'items' }],
+        items: [
+          { prefab: 'scenery-backdrop:clearing', label: 'Clearing', category: 'backdrops' },
+          { prefab: 'scenery:tree', label: 'Tree', category: 'backdrops' },
+        ],
+      },
+    } as GameManifest;
+    const scenerySession = {
+      ...session,
+      doc: {
+        schemaVersion: 1,
+        globals: { 'scenery.backdrop': backdrop },
+        entities: { tree: { id: 'tree', prefab: 'scenery:oak', level: 'main', origin: 'creator', props: {} } },
+      },
+      submit,
+      setSelection,
+    } as unknown as EditorSessionState;
+    render(
+      <EditorChrome
+        gameId="game"
+        manifest={sceneryManifest}
+        session={scenerySession}
+        onCommand={vi.fn()}
+        onTool={onTool}
+        onCanvasChange={onCanvasChange}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={vi.fn()}
+        onInstanceCount={vi.fn()}
+      />,
+    );
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Tree' }));
+    expect(onCanvasChange).toHaveBeenLastCalledWith(expect.objectContaining({ prefab: 'scenery:tree' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Clearing' }));
+    expect(onCanvasChange).toHaveBeenLastCalledWith(expect.objectContaining({ prefab: undefined }));
+    expect(onTool).toHaveBeenLastCalledWith('select');
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patches: [
+          expect.objectContaining({
+            path: ['globals', 'scenery.backdrop'],
+            value: { ...backdrop, assetId: 'clearing' },
+          }),
+        ],
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'oak' }));
+    expect(setSelection).toHaveBeenCalledWith(['tree']);
+  });
+
   it('maps real editor controls into the prototype rail, tray, and inspector regions', () => {
     const { container } = render(<Screen />);
 

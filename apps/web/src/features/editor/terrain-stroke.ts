@@ -45,7 +45,7 @@ export function useTerrainStroke(
   );
   const addPoint = (stroke: Stroke, event: Pointer) => {
     const point = normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
-    stroke.points.push(frame.project(point.x, point.y).catch(() => null));
+    stroke.points.push(frame.project(point.x, point.y, `scenery-band:${stroke.kind}`).catch(() => null));
     stroke.x = event.clientX;
     stroke.y = event.clientY;
   };
