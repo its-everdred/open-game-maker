@@ -89,7 +89,7 @@ jobs:
     name: workspace
     needs: changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -107,6 +107,22 @@ jobs:
       - run: pnpm --filter '!ogm' --filter '!@ogm/voice-host' -r --if-present run build
       - name: Core package publish dry run
         run: node packages/core-release/dist/bin.js publish --root . --dry-run
+      - run: node .github/scripts/smoke-workspace.mjs
+
+  browser:
+    name: browser tests
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: corepack enable || npm i -g pnpm@10.33.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter '!ogm' --filter '!@ogm/voice-host' -r --if-present run build
       - name: Browser tests (packages that declare test:browser)
         env:
           BROWSER_CHANGED: ${{ needs.changes.outputs.browser }}
@@ -123,12 +139,27 @@ jobs:
           else
             echo "no browser tests"
           fi
+
+  ops:
+    name: ops shell tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: corepack enable || npm i -g pnpm@10.33.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter '!ogm' --filter '!@ogm/voice-host' -r --if-present run build
+      - name: Install Chromium
+        run: pnpm --dir packages/gm-verify exec playwright install --with-deps chromium
       - name: Ops shell tests (ops/test/*.sh, added by OGM-002/006/008)
         run: |
           shopt -s nullglob; rc=0
           for t in ops/test/*.sh; do echo "== $t"; bash "$t" || rc=1; done
           exit $rc
-      - run: node .github/scripts/smoke-workspace.mjs
 
   voice_host:
     name: voice host
@@ -166,7 +197,7 @@ jobs:
 
   required:
     name: required
-    needs: [changes, workspace, voice_host]
+    needs: [changes, workspace, browser, ops, voice_host]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -174,11 +205,13 @@ jobs:
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           WORKSPACE_RESULT: ${{ needs.workspace.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+          OPS_RESULT: ${{ needs.ops.result }}
           VOICE_HOST_RESULT: ${{ needs.voice_host.result }}
         run: |
-          if [[ "$CHANGES_RESULT" == "success" && "$WORKSPACE_RESULT" == "success" && ( "$VOICE_HOST_RESULT" == "success" || "$VOICE_HOST_RESULT" == "skipped" ) ]]; then
+          if [[ "$CHANGES_RESULT" == "success" && "$WORKSPACE_RESULT" == "success" && "$BROWSER_RESULT" == "success" && "$OPS_RESULT" == "success" && ( "$VOICE_HOST_RESULT" == "success" || "$VOICE_HOST_RESULT" == "skipped" ) ]]; then
             exit 0
           fi
 
-          echo "required check failed: changes=$CHANGES_RESULT workspace=$WORKSPACE_RESULT voice-host=$VOICE_HOST_RESULT" >&2
+          echo "required check failed: changes=$CHANGES_RESULT workspace=$WORKSPACE_RESULT browser=$BROWSER_RESULT ops=$OPS_RESULT voice-host=$VOICE_HOST_RESULT" >&2
           exit 1
