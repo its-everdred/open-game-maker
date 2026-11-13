@@ -112,6 +112,31 @@ export function updateEntityPoseIntent(doc: DesignDoc, entityId: string, pose: P
   return { label, commands: [command], patches, inverse, doc: apply(doc, patches) };
 }
 
+export function updateSceneryTransformIntent(
+  doc: DesignDoc,
+  entityId: string,
+  pose: Pose,
+  scale: [number, number, number],
+  label: string,
+): EditorIntent {
+  const entity = doc.entities[entityId];
+  if (!entity?.prefab.startsWith('scenery:') || scale.some((part) => !Number.isFinite(part) || part <= 0)) {
+    throw new InvalidEditorIntentError('invalid scenery transform');
+  }
+  const intent = updateEntityPoseIntent(doc, entityId, pose, label);
+  const previous = entity.props.scale;
+  const path = ['entities', entityId, 'props', 'scale'];
+  const patch: Patch = { op: previous === undefined ? 'add' : 'replace', path, value: scale };
+  const inverse: Patch = previous === undefined ? { op: 'remove', path } : { op: 'replace', path, value: previous };
+  const commands: EditorCommand[] = [
+    { op: 'invoke', command: 'entity.transform', args: { entityId, pose, scale }, targets: [entityId] },
+  ];
+  const patches = [...intent.patches, patch];
+  const inverses = [inverse, ...intent.inverse];
+  validateIntentPatches(patches, inverses);
+  return { label, commands, patches, inverse: inverses, doc: apply(doc, patches) };
+}
+
 export function coalesceIntents(intents: readonly EditorIntent[], label: string): EditorIntent {
   if (intents.length === 0) throw new InvalidEditorIntentError('cannot coalesce an empty intent list');
 
@@ -210,6 +235,15 @@ function replayCommand(doc: DesignDoc, command: EditorCommand, label: string): E
   if (command.command === 'entity.transform') {
     const pose = poseSchema.safeParse(args?.pose);
     if (!pose.success) throw new InvalidEditorIntentError('entity.transform pose is invalid');
+    if (Array.isArray(args?.scale) && args.scale.length === 3 && args.scale.every((part) => typeof part === 'number')) {
+      return updateSceneryTransformIntent(
+        doc,
+        stringArg(args, 'entityId'),
+        pose.data,
+        args.scale as [number, number, number],
+        label,
+      );
+    }
     return updateEntityPoseIntent(doc, stringArg(args, 'entityId'), pose.data, label);
   }
   throw new InvalidEditorIntentError(`unsupported invoke command ${command.command}`);

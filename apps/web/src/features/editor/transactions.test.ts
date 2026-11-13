@@ -17,6 +17,7 @@ import {
   replayIntent,
   sceneryLightIntent,
   toTransactionBody,
+  updateSceneryTransformIntent,
 } from './transactions';
 
 const entityId = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
@@ -43,6 +44,29 @@ function speed(value: number): EditorCommand {
 }
 
 describe('editor transaction intents', () => {
+  it('replays and undoes a combined scenery rotation and scale', () => {
+    const doc = baseDoc();
+    doc.entities[entityId]!.prefab = 'scenery:tree';
+    const intent = updateSceneryTransformIntent(
+      doc,
+      entityId,
+      { position: [1, 0, 2], rotationY: 90 },
+      [2, 2, 2],
+      'Transform',
+    );
+    expect(apply(intent.doc, intent.inverse)).toEqual(doc);
+    expect(replayIntent(intent, doc).doc).toEqual(intent.doc);
+    const second = updateSceneryTransformIntent(
+      intent.doc,
+      entityId,
+      { position: [1, 0, 2], rotationY: 120 },
+      [3, 3, 3],
+      'Transform',
+    );
+    const stroke = coalesceIntents([intent, second], 'Transform');
+    expect(apply(doc, stroke.patches)).toEqual(second.doc);
+    expect(apply(second.doc, stroke.inverse)).toEqual(doc);
+  });
   it('replays and undoes scenery lighting changes', () => {
     const doc = baseDoc();
     doc.globals['scenery.settings'] = { version: 1, lighting: 'night', terrain: [], camera: {} };

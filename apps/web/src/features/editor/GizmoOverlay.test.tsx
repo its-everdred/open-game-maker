@@ -180,6 +180,58 @@ describe('GizmoOverlay', () => {
     expect(test.commitStroke.mock.calls[0]?.[0][0].doc.entities[entityId].props.pose.position).toEqual([12, 10, 1]);
   });
 
+  it('pinches and rotates a scenery item as one undoable stroke', async () => {
+    const test = harness();
+    test.session.getState().doc = {
+      ...doc,
+      entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } },
+    };
+    test.frame.pickAt = vi.fn().mockResolvedValue([{ kind: 'entity', id: entityId }]);
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 });
+    await act(async () => {});
+    fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'touch', clientX: 20, clientY: 10 });
+    fireEvent.pointerMove(canvas, { pointerId: 2, pointerType: 'touch', clientX: 10, clientY: 30 });
+    fireEvent.pointerUp(canvas, { pointerId: 2, pointerType: 'touch' });
+    expect(test.commitStroke).toHaveBeenCalledOnce();
+    const changed = test.commitStroke.mock.calls[0]?.[0][0].doc.entities[entityId].props;
+    expect(changed.scale).toEqual([2, 2, 2]);
+    expect(changed.pose.rotationY).toBeCloseTo(90);
+  });
+
+  it('restores the design when a pinch is cancelled', async () => {
+    const test = harness();
+    test.session.getState().doc = {
+      ...doc,
+      entities: { [entityId]: { ...doc.entities[entityId]!, prefab: 'scenery:tree' } },
+    };
+    test.frame.pickAt = vi.fn().mockResolvedValue([{ kind: 'entity', id: entityId }]);
+    render(
+      <GizmoOverlay
+        frame={test.frame}
+        manifest={manifest}
+        session={test.session}
+        snap={{ version: 1, enabled: false, grid: 1 }}
+      />,
+    );
+    const canvas = screen.getByLabelText('Editor canvas');
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 });
+    await act(async () => {});
+    fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'touch', clientX: 20, clientY: 10 });
+    fireEvent.pointerMove(canvas, { pointerId: 2, pointerType: 'touch', clientX: 30, clientY: 10 });
+    fireEvent.pointerCancel(canvas, { pointerId: 2, pointerType: 'touch' });
+    expect(test.commitStroke).not.toHaveBeenCalled();
+    expect(test.frame.applyDesign).toHaveBeenLastCalledWith(4, test.session.getState().doc, []);
+  });
+
   it('uses game projection for a 3D placement, including a quick release', async () => {
     const test = harness();
     test.frame.project = vi.fn().mockResolvedValue([2, 0, -1]);

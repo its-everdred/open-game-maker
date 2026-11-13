@@ -124,7 +124,11 @@ function recordEntityOverride(
       };
     }
     if (previous?.kind === 'create') {
-      entityOps[args.entityId] = { ...previous, props: { ...previous.props, pose: args.pose }, txId: tx.id };
+      entityOps[args.entityId] = {
+        ...previous,
+        props: { ...previous.props, pose: args.pose, ...(Array.isArray(args.scale) ? { scale: args.scale } : {}) },
+        txId: tx.id,
+      };
     }
   }
 }
@@ -163,13 +167,15 @@ function recordSceneryUndo(entityOps: Record<string, EntityOverride>, tx: Transa
       }
     } else if (
       field === 'props' &&
-      property === 'pose' &&
+      (property === 'pose' || property === 'scale') &&
       patch.path.length === 4 &&
       previous?.kind === 'create' &&
-      previous.prefab.startsWith('scenery:') &&
-      patch.op !== 'remove'
+      previous.prefab.startsWith('scenery:')
     ) {
-      entityOps[id] = { ...previous, props: { ...previous.props, pose: patch.value }, txId: tx.id };
+      const props = { ...previous.props };
+      if (patch.op === 'remove') delete props[property];
+      else props[property] = patch.value;
+      entityOps[id] = { ...previous, props, txId: tx.id };
     }
   }
 }

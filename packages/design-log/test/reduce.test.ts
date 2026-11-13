@@ -78,6 +78,33 @@ describe('reduce', () => {
     expect(result.entityOps[created]).toMatchObject({ kind: 'create', props: { pose } });
   });
 
+  it('retains scale during a scenery transform and its undo', () => {
+    const created = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+    const pose = { position: [0, 0, 0], rotationY: 90 };
+    const txs = [
+      transaction(
+        1,
+        [
+          {
+            op: 'invoke',
+            command: 'entity.create',
+            args: { entityId: created, parent: 'main', prefab: 'scenery:tree', props: { pose } },
+          },
+        ],
+        [],
+      ),
+      transaction(
+        2,
+        [{ op: 'invoke', command: 'entity.transform', args: { entityId: created, pose, scale: [2, 2, 2] } }],
+        [],
+      ),
+    ];
+    const input = { gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: baseDoc(), txs };
+    expect(reduce(input).entityOps[created]).toMatchObject({ props: { scale: [2, 2, 2] } });
+    txs.push(transaction(3, [], [{ op: 'remove', path: ['entities', created, 'props', 'scale'] }]));
+    expect(reduce(input).entityOps[created]).not.toHaveProperty('props.scale');
+  });
+
   it('retains a moved scenery entity originating in the base design', () => {
     const base = baseDoc();
     base.entities[ids.entity] = { ...base.entities[ids.entity]!, prefab: 'scenery:tree' };

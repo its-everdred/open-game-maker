@@ -22,6 +22,7 @@ import {
   createStableId,
   deleteEntityIntent,
   updateEntityPoseIntent,
+  updateSceneryTransformIntent,
   type EditorIntent,
 } from './transactions';
 
@@ -57,7 +58,18 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const surfaceRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<Ghost | undefined>(undefined);
   const dragRef = useRef<Drag | undefined>(undefined);
-  const touchesRef = useRef(new Set<number>());
+  const touchesRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<
+    | {
+        ids: [number, number];
+        distance: number;
+        angle: number;
+        entity: Entity;
+        doc: EditorSessionState['doc'];
+        intents: EditorIntent[];
+      }
+    | undefined
+  >(undefined);
   const holdRef = useRef<
     | {
         pointerId: number;
@@ -102,6 +114,7 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
       if (holdRef.current) clearTimeout(holdRef.current.timer);
       holdRef.current = undefined;
       touchesRef.current.clear();
+      pinchRef.current = undefined;
       if (validationTimerRef.current !== undefined) clearTimeout(validationTimerRef.current);
       validationTimerRef.current = undefined;
       pendingValidationRef.current = undefined;
@@ -180,10 +193,30 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (session.getState().readOnly) return;
     if (event.pointerType === 'touch') {
-      touchesRef.current.add(event.pointerId);
+      touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size > 1) {
+        const held = holdRef.current;
+        const state = session.getState();
+        const entity = held?.picked ? state.doc.entities[held.picked] : undefined;
         if (holdRef.current) clearTimeout(holdRef.current.timer);
         holdRef.current = undefined;
+        if (touchesRef.current.size === 2 && entity?.prefab.startsWith('scenery:')) {
+          if (dragRef.current?.projection) dragRef.current.projection.cancelled = true;
+          dragRef.current = undefined;
+          frame.applyDesign(state.headRev, state.doc, []);
+          const ids = [...touchesRef.current.keys()] as [number, number];
+          const first = touchesRef.current.get(ids[0])!;
+          const second = touchesRef.current.get(ids[1])!;
+          pinchRef.current = {
+            ids,
+            distance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+            angle: Math.atan2(second.y - first.y, second.x - first.x),
+            entity,
+            doc: state.doc,
+            intents: [],
+          };
+          capturePointer(event.currentTarget, event.pointerId);
+        }
         return;
       }
     }
@@ -231,6 +264,36 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (touchesRef.current.has(event.pointerId))
+      touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const pinch = pinchRef.current;
+    if (pinch?.ids.includes(event.pointerId)) {
+      const first = touchesRef.current.get(pinch.ids[0]);
+      const second = touchesRef.current.get(pinch.ids[1]);
+      if (!first || !second) return;
+      const factor = Math.max(0.1, Math.min(10, Math.hypot(second.x - first.x, second.y - first.y) / pinch.distance));
+      const originalScale =
+        Array.isArray(pinch.entity.props.scale) &&
+        pinch.entity.props.scale.length === 3 &&
+        pinch.entity.props.scale.every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0)
+          ? (pinch.entity.props.scale as [number, number, number])
+          : [1, 1, 1];
+      const pose = poseFromProps(pinch.entity.props.pose);
+      pose.rotationY =
+        (pose.rotationY ?? 0) + ((Math.atan2(second.y - first.y, second.x - first.x) - pinch.angle) * 180) / Math.PI;
+      const scale = originalScale.map((n) => n * factor) as [number, number, number];
+      const intent = updateSceneryTransformIntent(
+        pinch.doc,
+        pinch.entity.id,
+        pose,
+        scale,
+        `Transformed ${pinch.entity.prefab}`,
+      );
+      pinch.intents.push(intent);
+      pinch.doc = intent.doc;
+      frame.applyDesign(session.getState().headRev, intent.doc, intent.patches);
+      return;
+    }
     const held = holdRef.current;
     if (held && event.pointerId === held.pointerId && Math.hypot(event.clientX - held.x, event.clientY - held.y) > 12) {
       clearTimeout(held.timer);
@@ -324,6 +387,13 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     touchesRef.current.delete(event.pointerId);
+    const pinch = pinchRef.current;
+    if (pinch?.ids.includes(event.pointerId)) {
+      pinchRef.current = undefined;
+      if (pinch.intents.length)
+        void session.getState().commitStroke(pinch.intents, `Transformed ${pinch.entity.prefab}`);
+      return;
+    }
     if (holdRef.current?.pointerId === event.pointerId) {
       clearTimeout(holdRef.current.timer);
       holdRef.current = undefined;
@@ -349,6 +419,11 @@ export function GizmoOverlay({ activePrefab, frame, manifest, session, snap }: G
 
   const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
     touchesRef.current.delete(event.pointerId);
+    if (pinchRef.current?.ids.includes(event.pointerId)) {
+      pinchRef.current = undefined;
+      const state = session.getState();
+      frame.applyDesign(state.headRev, state.doc, []);
+    }
     if (holdRef.current?.pointerId === event.pointerId) {
       clearTimeout(holdRef.current.timer);
       holdRef.current = undefined;
