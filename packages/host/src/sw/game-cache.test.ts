@@ -19,6 +19,15 @@ describe('classifyGameRequest', () => {
     });
   });
 
+  it('never caches a revocable preview URL', () => {
+    expect(classifyGameRequest(new Request('https://games.test/g/a/pv-123/index.html'), 'https://games.test')).toEqual({
+      strategy: 'pass',
+    });
+    expect(classifyGameRequest(new Request('https://games.test/p/a/pv-123/index.html'), 'https://games.test')).toEqual({
+      strategy: 'pass',
+    });
+  });
+
   it('passes unrelated, malformed, non-GET, and cross-origin requests through', () => {
     expect(classifyGameRequest(new Request('https://other.test/g/a/b/index.html'), 'https://games.test')).toEqual({
       strategy: 'pass',

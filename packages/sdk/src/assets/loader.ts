@@ -13,6 +13,7 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import {
   ASSET_CACHE_NAME,
   CACHE_LOCK_NAME,
+  isPrivatePreviewUrl,
   matchCachedAsset,
   prepare as prepareCache,
   type LedgerBuild,
@@ -109,7 +110,7 @@ export class AssetLoader {
     this.tier = options.tier;
     this.#manifestUrl = absoluteUrl(options.manifestUrl);
     this.#basisPath = new URL(options.basisPath ?? 'basis/', this.#manifestUrl).toString();
-    this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.#audioContext = options.audioContext;
     this.#planUrl = new URL(options.planUrl ?? 'cache-plan.json', this.#manifestUrl).toString();
     this.#send = options.send;
@@ -235,7 +236,9 @@ export class AssetLoader {
         const results = await Promise.allSettled(
           [...files].map(async (file) => {
             const bytes = await this.#fetchFile(file);
-            const storage = this.#cacheStorage ?? globalThis.caches;
+            const storage = isPrivatePreviewUrl(this.#manifestUrl)
+              ? undefined
+              : (this.#cacheStorage ?? globalThis.caches);
             if (storage) {
               try {
                 const cache = await storage.open(ASSET_CACHE_NAME);
@@ -250,7 +253,7 @@ export class AssetLoader {
         const failure = results.find((result) => result.status === 'rejected');
         if (failure?.status === 'rejected') throw failure.reason;
       };
-      const locks = globalThis.navigator?.locks;
+      const locks = isPrivatePreviewUrl(this.#manifestUrl) ? undefined : globalThis.navigator?.locks;
       if (locks) await locks.request(CACHE_LOCK_NAME, { mode: 'shared' }, fetchFiles);
       else await fetchFiles();
       if (this.#groupTokens.get(name) !== token) throw new Error(`Asset group load canceled: ${name}`);
@@ -329,7 +332,8 @@ export class AssetLoader {
     if (existing) return existing;
 
     const url = new URL(file, this.#manifestUrl).toString();
-    const request = matchCachedAsset(url, this.#cacheStorage)
+    const cached = isPrivatePreviewUrl(url) ? Promise.resolve(undefined) : matchCachedAsset(url, this.#cacheStorage);
+    const request = cached
       .then(async (cached) => {
         const response = cached ?? (await this.#fetch(url));
         if (!response.ok) throw new Error(`Failed to fetch asset file ${url}: HTTP ${response.status}`);

@@ -139,6 +139,25 @@ function setup(cachePlan: CachePlan, cacheStorage = new MemoryCacheStorage()): T
 }
 
 describe('prepare asset cache', () => {
+  it('fetches private preview assets without writing the shared cache or ledger', async () => {
+    const ready = { ...entry('a', 4), url: '../a/a.webp' };
+    const stream = { ...entry('b', 3, 'stream'), url: '../a/b.mp3' };
+    const context = setup(plan([ready, stream]));
+    const lockRequest = vi.spyOn(context.locks, 'request');
+    const databaseOpen = vi.spyOn(indexedDB, 'open');
+    const result = await prepare(
+      { plan: 'https://game.test/p/game/pv-secret/assets/cache-plan.json', tier: 'desktop', send: context.send },
+      context,
+    );
+    await vi.waitFor(() => expect(context.requestOrder.some((url) => url.includes('/a/b.mp3'))).toBe(true));
+    expect(result?.fetchedFiles).toBe(1);
+    expect(context.cacheStorage.opened).toEqual([]);
+    expect(context.cacheStorage.cache.entries.size).toBe(0);
+    expect(databaseOpen).not.toHaveBeenCalled();
+    expect(context.evictionScheduler).not.toHaveBeenCalled();
+    expect(lockRequest).not.toHaveBeenCalled();
+    databaseOpen.mockRestore();
+  });
   it('does not fetch lazy-only entries during ready or stream preparation', async () => {
     const ready = { ...entry('a', 4), assetPhasesByTier: { desktop: ['boot'] } };
     const lazy = { ...entry('b', 4), assetPhasesByTier: { desktop: ['lazy:backdrop-nim'] } };

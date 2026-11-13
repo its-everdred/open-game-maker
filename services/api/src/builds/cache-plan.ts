@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { open, readdir, readFile, rename, rm } from 'node:fs/promises';
+import { open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, relative, sep } from 'node:path';
 
 import { cachePlanSchema, type CachePlan, type CachePlanEntry, type LoadPhase, type Tier } from '@ogm/contracts';
@@ -22,6 +22,7 @@ export async function completeBuildCache(input: {
   buildId: string;
   previousBuildId: string | null;
   sdkVersion: string;
+  privateAssets?: boolean;
 }): Promise<void> {
   const assetDirectory = join(input.files, 'a');
   const assetFiles = await fileNames(assetDirectory);
@@ -29,8 +30,12 @@ export async function completeBuildCache(input: {
   const plan = await readPlan(planFile, assetFiles.length === 0);
   if (!plan) return;
 
-  await storeAssets(input.root, assetDirectory, assetFiles, plan);
-  await rm(assetDirectory, { recursive: true, force: true });
+  await storeAssets(input.root, assetDirectory, assetFiles, plan, input.privateAssets === true);
+  if (input.privateAssets) {
+    await rewritePrivateManifest(input.files);
+  } else {
+    await rm(assetDirectory, { recursive: true, force: true });
+  }
 
   const codeEntries = await codeFiles(input.files);
   const entries = [...plan.entries.filter(({ kind }) => kind !== 'code'), ...codeEntries];
@@ -39,7 +44,7 @@ export async function completeBuildCache(input: {
     gameId: input.gameId,
     buildId: input.buildId,
     sdkVersion: input.sdkVersion,
-    entries,
+    entries: input.privateAssets ? entries.map((entry) => ({ ...entry, url: privateUrl(entry.url) })) : entries,
     totals: totalsFor(plan.tiers, entries),
   };
   if (input.previousBuildId) {
@@ -103,7 +108,13 @@ async function fileNames(directory: string): Promise<string[]> {
   return entries.map(({ name }) => name).sort();
 }
 
-async function storeAssets(root: string, directory: string, files: string[], plan: CachePlan): Promise<void> {
+async function storeAssets(
+  root: string,
+  directory: string,
+  files: string[],
+  plan: CachePlan,
+  privateAssets: boolean,
+): Promise<void> {
   const planned = new Map(
     plan.entries
       .filter(({ url }) => url.startsWith('/a/'))
@@ -120,8 +131,30 @@ async function storeAssets(root: string, directory: string, files: string[], pla
     if (sha256 !== entry.sha256 || !file.startsWith(`${sha256}.`) || bytes.length !== entry.bytes) {
       throw new BuildCacheError('cache_plan_assets_mismatch');
     }
-    await putBlob(root, source);
+    if (!privateAssets) await putBlob(root, source);
   }
+}
+
+function privateUrl(value: string): string {
+  return value.startsWith('/a/') ? `../a/${value.slice(3)}` : value;
+}
+
+function privateValue(value: unknown): unknown {
+  if (typeof value === 'string') return privateUrl(value);
+  if (Array.isArray(value)) return value.map(privateValue);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [privateUrl(key), privateValue(child)]));
+  }
+  return value;
+}
+
+async function rewritePrivateManifest(files: string): Promise<void> {
+  const path = join(files, 'assets', 'manifest.json');
+  const raw = await readFile(path, 'utf8').catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  });
+  if (raw !== null) await writeFile(path, `${JSON.stringify(privateValue(JSON.parse(raw) as unknown), null, 2)}\n`);
 }
 
 async function codeFiles(root: string): Promise<CachePlanEntry[]> {
