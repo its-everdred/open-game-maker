@@ -31,6 +31,7 @@ export const apiEnvSpec = {
   OGM_GAME_TEMPLATE_REF: { kind: 'string', default: 'game-2d@1' },
   // The one implementation repository this instance keeps its games in, as `owner/repository`.
   OGM_INSTANCE_REPO: { kind: 'string' },
+  OGM_INSTANCE_OWNER_ID: { kind: 'string', required: false },
   OGM_BUILDER_BOT_TOKEN: { kind: 'secret' },
   OGM_BUILDER_BOT_LOGIN: { kind: 'string' },
   OGM_INTAKE_GITHUB_TOKEN: { kind: 'secret' },

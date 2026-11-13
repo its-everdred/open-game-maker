@@ -73,6 +73,7 @@ const deps: AppDeps = {
     commitServiceToken: env.OGM_COMMIT_SERVICE_TOKEN,
     gameTemplateRef: env.OGM_GAME_TEMPLATE_REF,
     instanceRepo: parseRepositoryName(env.OGM_INSTANCE_REPO),
+    instanceOwnerId: env.OGM_INSTANCE_OWNER_ID,
     gamesRoot: env.OGM_GAMES_ROOT ?? join(env.OGM_DATA_DIR, '..', 'games'),
     vapidKeyFile: env.OGM_VAPID_KEY_FILE,
     vapidSubject: `mailto:${env.OGM_VAPID_SUBJECT}`,

@@ -48,7 +48,7 @@ export function readEnvFile(file: string): Record<string, string> {
   return values;
 }
 
-function hostEnv(ctx: GmContext, home: string) {
+export function hostEnv(ctx: GmContext, home: string) {
   // OGM_ENV_DIR names the host's env directory, as for the other host tools.
   const file = readEnvFile(join(ctx.env?.OGM_ENV_DIR || join(home, '.config', 'ogm', 'env'), 'api.env'));
   const source: Record<string, string> = {};
@@ -96,7 +96,7 @@ function reason(error: unknown): string {
  * an immediate rerun published) is tried once more. A timeout is not, as the API may still be working on the request,
  * and nor is an answer that breaks off: the API has acted by then, and a second upload would publish a second build.
  */
-async function request(url: string, init: RequestInit): Promise<{ status: number; body: string }> {
+export async function request(url: string, init: RequestInit): Promise<{ status: number; body: string }> {
   for (let attempt = 1; ; attempt += 1) {
     let response: Response;
     try {
@@ -142,13 +142,14 @@ async function readFacts(api: string, token: string, slug: string): Promise<Fact
 export const command: GmCommand = {
   name: 'publish',
   summary: "build a registered game at its repository's main (or a commit) and publish it",
-  usage: '[<slug>] [--sha <ref>] [--checkout <path>] [--api <url>] [--keep]',
+  usage: '[<slug>] [--sha <ref>] [--checkout <path>] [--api <url>] [--keep] [--dry-run]',
   example: 'publish blobs --sha 4a3e51ee',
   flags: {
     sha: { type: 'string', help: "commit or ref to build (default the game repository's remote main)" },
     checkout: { type: 'string', help: "repository checkout to build from (default the game daemon's checkout)" },
     api: { type: 'string', help: 'API base URL (default http://127.0.0.1:$OGM_API_PORT from api.env)' },
     keep: { type: 'boolean', default: false, help: 'keep the scratch worktree and the archive' },
+    'dry-run': { type: 'boolean', default: false, help: 'show registered game facts without building or publishing' },
   },
   async run(ctx, args, flags) {
     if (args.length > 1) throw new UsageError('gm publish takes at most one game slug', 'gm help publish');
@@ -170,6 +171,11 @@ export const command: GmCommand = {
     };
 
     const facts = await readFacts(api, token, slug);
+    if (flags['dry-run'] === true) {
+      if (ctx.json) printJson(ctx, facts);
+      else ctx.out(`registered ${facts.slug}: ${facts.repoPath} (${facts.gameId})`);
+      return EXIT.ok;
+    }
     const checkout = typeof flags.checkout === 'string' ? flags.checkout : facts.checkout;
     if (!checkout) throw new UsageError('no checkout', 'pass --checkout <path> or register the game with a daemon');
     if (!existsSync(checkout)) throw new UsageError(`checkout not found: ${checkout}`, 'pass --checkout <path>');

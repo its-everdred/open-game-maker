@@ -11,6 +11,9 @@ import type { ApiBindings, AppDeps } from '../app/types.js';
 import { ARCHIVE_LIMITS } from '../builds/untar.js';
 import { findGameBySlugOrId } from '../games/slug.js';
 import { reviewNumber } from '../reviews/numbers.js';
+import { parseBody } from '../app/validate.js';
+import { gameResponse } from '../games/games.js';
+import { OperatorRegisterBody, registerOperatorGame } from './register.js';
 import { publishArchive } from './publish.js';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
@@ -34,9 +37,18 @@ function gameFor(deps: AppDeps, ref: string) {
 // What the host script needs to build the game at a SHA and to say what it is replacing: the game's folder in the
 // instance repository, the checkout the daemon row registered and the build the main branch serves now.
 function facts(deps: AppDeps, game: ReturnType<typeof gameFor>) {
-  const daemon = game.slug
+  const ownDaemon = game.slug
     ? deps.db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).get()
     : undefined;
+  const repoDaemons =
+    game.githubOwner && game.githubRepo
+      ? deps.db
+          .select()
+          .from(schema.gameDaemons)
+          .where(eq(schema.gameDaemons.repo, `${game.githubOwner}/${game.githubRepo}`.toLowerCase()))
+          .all()
+      : [];
+  const daemon = ownDaemon ?? (repoDaemons.length === 1 ? repoDaemons[0] : undefined);
   const branch = deps.db
     .select({ id: schema.branches.id, latestBuildId: schema.branches.latestBuildId })
     .from(schema.branches)
@@ -77,6 +89,11 @@ function facts(deps: AppDeps, game: ReturnType<typeof gameFor>) {
 }
 
 const routes = new Hono<ApiBindings>()
+  .post('/games', async (c) => {
+    requireOperator(c);
+    const result = registerOperatorGame(c.get('deps'), await parseBody(c, OperatorRegisterBody));
+    return c.json(gameResponse(result.game), result.created ? 201 : 200);
+  })
   .get('/games/:ref', (c) => {
     requireOperator(c);
     const deps = c.get('deps');
