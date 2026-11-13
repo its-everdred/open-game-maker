@@ -131,7 +131,7 @@ function recordEntityOverride(
 
 // Undo transactions contain inverse patches rather than commands. Fold scenery
 // changes into the same working set so a later build does not resurrect them.
-function recordSceneryUndo(entityOps: Record<string, EntityOverride>, baseDoc: DesignDoc, tx: Transaction): void {
+function recordSceneryUndo(entityOps: Record<string, EntityOverride>, tx: Transaction): void {
   for (const patch of tx.patches) {
     const [root, id, field, property] = patch.path;
     if (root !== 'entities' || typeof id !== 'string') continue;
@@ -152,16 +152,14 @@ function recordSceneryUndo(entityOps: Record<string, EntityOverride>, baseDoc: D
         typeof entity.level === 'string' &&
         props
       ) {
-        if (baseDoc.entities[id]) delete entityOps[id];
-        else
-          entityOps[id] = {
-            kind: 'create',
-            entityId: id,
-            parent: entity.level,
-            prefab: entity.prefab,
-            props,
-            txId: tx.id,
-          };
+        entityOps[id] = {
+          kind: 'create',
+          entityId: id,
+          parent: entity.level,
+          prefab: entity.prefab,
+          props,
+          txId: tx.id,
+        };
       }
     } else if (
       field === 'props' &&
@@ -190,7 +188,7 @@ export function reduce(input: ReduceInput): WorkingSet {
     previousRevision = tx.rev;
     const transactionBase = input.baseDocs?.[tx.baseBuildId] ?? input.baseDoc;
     if (tx.commands.length === 0) {
-      recordSceneryUndo(entityOps, transactionBase, tx);
+      recordSceneryUndo(entityOps, tx);
       for (const patch of tx.patches) {
         if (patch.path.length !== 2 || patch.path[0] !== 'globals' || patch.path[1] !== 'scenery.lighting') continue;
         const command: Extract<EditorCommand, { op: 'set' | 'reset' }> =

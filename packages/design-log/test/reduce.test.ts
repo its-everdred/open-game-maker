@@ -92,6 +92,18 @@ describe('reduce', () => {
     expect(result.entityOps[ids.entity]).toMatchObject({ kind: 'create', props: { pose } });
   });
 
+  it('restores a moved base scenery entity after undoing its deletion', () => {
+    const base = baseDoc();
+    base.entities[ids.entity] = { ...base.entities[ids.entity]!, prefab: 'scenery:tree' };
+    const restored = { ...base.entities[ids.entity]!, props: { pose: { position: [5, 0, 0] } } };
+    const txs = [
+      transaction(1, [{ op: 'invoke', command: 'entity.delete', args: { entityId: ids.entity } }], []),
+      transaction(2, [], [{ op: 'add', path: ['entities', ids.entity], value: restored }]),
+    ];
+    const result = reduce({ gameId: ids.game, branchId: ids.branch, buildId: ids.build, baseDoc: base, txs });
+    expect(result.entityOps[ids.entity]).toMatchObject({ kind: 'create', props: restored.props });
+  });
+
   it('preserves an undone scenery move and placement when reducing patch-only undo transactions', () => {
     const created = 'e_01BX5ZZKBKACTAV9WEVGEMMVRZ';
     const original = { position: [1, 0, 0] };
