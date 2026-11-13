@@ -16,6 +16,7 @@ type PaletteProps = {
   onCategory?(id: string): void;
   onPick(prefab: string): void;
   sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
+  buildPinnedAssets?: boolean;
 };
 
 export function Palette({
@@ -26,6 +27,7 @@ export function Palette({
   onCategory,
   onPick,
   sceneryAssets,
+  buildPinnedAssets,
 }: PaletteProps) {
   const [localCategory, setLocalCategory] = useState(palette.categories[0]?.id ?? '');
   const active = category ?? localCategory;
@@ -62,7 +64,7 @@ export function Palette({
         {palette.items
           .filter((item) => item.category === active)
           .map((item) => {
-            const asset = sceneryAsset(item, sceneryAssets);
+            const asset = sceneryAsset(item, sceneryAssets, buildPinnedAssets);
             return (
               <button
                 className="palette-item tap-primary"

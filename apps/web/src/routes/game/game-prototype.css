@@ -704,7 +704,7 @@
   .game-screen.is-editing.is-scenery .editor-rail button {
     flex: 1;
     height: auto;
-    min-height: 70px;
+    min-height: 106px;
     padding: 6px;
     font-size: 18px;
   }

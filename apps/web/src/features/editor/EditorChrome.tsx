@@ -25,6 +25,7 @@ type EditorChromeProps = {
   manifest: GameManifest;
   session: EditorSessionState;
   sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
+  buildPinnedAssets?: boolean;
   onCommand(command: EditorCommand): void;
   onTool(tool: string): void;
   onUndo(): void;
@@ -41,6 +42,7 @@ export function EditorChrome({
   manifest,
   session,
   sceneryAssets,
+  buildPinnedAssets,
   onCommand,
   onTool,
   onUndo,
@@ -104,6 +106,7 @@ export function EditorChrome({
         categories={manifest.palette.categories}
         items={manifest.palette.items}
         sceneryAssets={sceneryAssets}
+        buildPinnedAssets={buildPinnedAssets}
         active={activeCategory?.id ?? ''}
         onChange={setCategory}
       />
@@ -114,6 +117,7 @@ export function EditorChrome({
           title={activeCategory.label}
           showTabs={false}
           sceneryAssets={sceneryAssets}
+          buildPinnedAssets={buildPinnedAssets}
           onCategory={setCategory}
           onPick={(prefab) => {
             setPickedPrefab(prefab);

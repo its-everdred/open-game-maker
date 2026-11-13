@@ -17,6 +17,7 @@ import { mediaSigner } from '../build-chat/media.js';
 import { getChatRow, listCommands } from '../build-chat/store.js';
 import { findGameForFamily } from '../games/games.js';
 import { authorizedGame } from '../games/authorize.js';
+import { listEditorPreviews } from '../previews/store.js';
 import { readGameLock, readSceneryFile, readScenerySource } from './source.js';
 import { scopePaletteItems } from './scope-palette.js';
 import { selectStageMedia } from './stage.js';
@@ -40,8 +41,32 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
     if (!daemon || !game.githubPath) throw new HttpError(404, 'scenery_source_unavailable');
     return { game, path: game.githubPath, checkout: daemon.checkoutPath };
   }
-  async function source(c: Parameters<typeof requirePrincipal>[0], includeUpdatedAt = true, branchName?: string) {
+  async function source(
+    c: Parameters<typeof requirePrincipal>[0],
+    includeUpdatedAt = true,
+    branchName?: string,
+    buildId?: string,
+  ) {
     const target = checkout(c);
+    if (buildId) {
+      const build = c
+        .get('deps')
+        .db.select({ gitSha: schema.builds.gitSha })
+        .from(schema.builds)
+        .where(and(eq(schema.builds.id, buildId), eq(schema.builds.gameId, target.game.id)))
+        .get();
+      const preview =
+        !build && /^preview-[0-9a-f-]{36}$/u.test(buildId)
+          ? (await listEditorPreviews(c.get('deps'), target.game.id)).find((item) => item.buildId === buildId)
+          : undefined;
+      const gitSha = build?.gitSha ?? preview?.sha;
+      if (!gitSha) throw new HttpError(404, 'scenery_source_unavailable');
+      try {
+        return await readScenerySource(target.checkout, target.path, false, gitSha);
+      } catch {
+        throw new HttpError(404, 'scenery_source_unavailable');
+      }
+    }
     const selected = branchName ?? c.req.query('branch') ?? 'main';
     const branch =
       selected === 'main'
@@ -189,7 +214,8 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       return c.json(palette);
     })
     .get('/games/:gameId/scenery/source', async (c) => {
-      const bundle = await source(c);
+      const buildId = c.req.query('build');
+      const bundle = await source(c, true, undefined, buildId);
       const deps = c.get('deps');
       const gameId = c.req.param('gameId');
       const selected = c.req.query('branch') ?? 'main';
@@ -218,22 +244,31 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
             .all(),
         );
       const mainFileTime = selected === 'main' ? bundle.updatedAt : undefined;
-      const updatedAt =
-        lastEdit && (!mainFileTime || Date.parse(lastEdit) > Date.parse(mainFileTime)) ? lastEdit : mainFileTime;
+      const updatedAt = buildId
+        ? undefined
+        : lastEdit && (!mainFileTime || Date.parse(lastEdit) > Date.parse(mainFileTime))
+          ? lastEdit
+          : mainFileTime;
       const assets = bundle.lock.assets.map((entry, index) => ({
         id: entry.id,
         path: entry.path,
         sha256: entry.sha256,
-        url: `${prefix}/games/${encodeURIComponent(c.req.param('gameId'))}/scenery/assets/${index}${selected === 'main' ? '' : `~${Buffer.from(selected).toString('base64url')}`}/${entry.sha256}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
+        url: `${prefix}/games/${encodeURIComponent(c.req.param('gameId'))}/scenery/assets/${index}${buildId ? `~build.${Buffer.from(buildId).toString('base64url')}` : selected === 'main' ? '' : `~${Buffer.from(selected).toString('base64url')}`}/${entry.sha256}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
       }));
       c.header('Cache-Control', 'private, no-store');
       return c.json({ scene: bundle.scene, assets, ...(updatedAt ? { updatedAt } : {}) });
     })
     .get('/games/:gameId/scenery/assets/:index/:hash/*', async (c) => {
       const index = c.req.param('index');
-      const match = /^(\d+)(?:~([A-Za-z0-9_-]+))?$/u.exec(index);
+      const match = /^(\d+)(?:~(?:(build)\.)?([A-Za-z0-9_-]+))?$/u.exec(index);
       if (!match) throw new HttpError(404, 'scenery_asset_unavailable');
-      const bundle = await source(c, false, match[2] ? Buffer.from(match[2], 'base64url').toString('utf8') : 'main');
+      const selection = match[3] ? Buffer.from(match[3], 'base64url').toString('utf8') : undefined;
+      const bundle = await source(
+        c,
+        false,
+        match[2] ? undefined : (selection ?? 'main'),
+        match[2] ? selection : undefined,
+      );
       const entry = bundle.lock.assets[Number(match[1])];
       const marker = `/scenery/assets/${index}/${c.req.param('hash')}/`;
       const pathname = new URL(c.req.url).pathname;

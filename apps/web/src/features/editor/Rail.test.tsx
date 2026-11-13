@@ -22,3 +22,18 @@ it('uses a hash-matched real scenery model for its category thumbnail', () => {
   rerender(<Rail {...props} sceneryAssets={[{ id: 'oak', sha256: 'matching', url: '/oak.glb' }]} />);
   expect(screen.getByRole('presentation')).toHaveAttribute('data-url', '/oak.glb');
 });
+
+it('uses a native prefab asset for its category without changing the selection ID', () => {
+  const onChange = vi.fn();
+  render(
+    <Rail
+      categories={[{ id: 'monsters', label: 'Monsters', kind: 'items' }]}
+      items={[{ prefab: 'goblin1', label: 'Goblin', category: 'monsters', assetId: 'orc', assetSha: 'hash' }]}
+      sceneryAssets={[{ id: 'orc', sha256: 'hash', url: '/orc.glb' }]}
+      onChange={onChange}
+    />,
+  );
+  expect(screen.getByRole('presentation')).toHaveAttribute('data-url', '/orc.glb');
+  screen.getByRole('button', { name: 'Monsters' }).click();
+  expect(onChange).toHaveBeenCalledWith('monsters');
+});

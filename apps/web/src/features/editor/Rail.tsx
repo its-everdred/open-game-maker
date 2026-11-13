@@ -12,12 +12,14 @@ export function Rail({
   categories,
   items = [],
   sceneryAssets = [],
+  buildPinnedAssets = false,
   active,
   onChange,
 }: {
   categories: Category[];
   items?: Item[];
   sceneryAssets?: readonly { id: string; sha256: string; url: string }[];
+  buildPinnedAssets?: boolean;
   active?: string;
   onChange(id: string): void;
 }) {
@@ -26,10 +28,11 @@ export function Rail({
       {categories.map((category) => {
         const item = items.find(
           (candidate) =>
-            candidate.category === category.id && (candidate.thumbnail || sceneryAsset(candidate, sceneryAssets)),
+            candidate.category === category.id &&
+            (candidate.thumbnail || sceneryAsset(candidate, sceneryAssets, buildPinnedAssets)),
         );
         const thumbnail = item?.thumbnail;
-        const asset = sceneryAsset(item, sceneryAssets);
+        const asset = sceneryAsset(item, sceneryAssets, buildPinnedAssets);
         return (
           <button
             className="tap-secondary"

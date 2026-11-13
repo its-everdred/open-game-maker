@@ -28,6 +28,43 @@ const palette: GameManifest['palette'] = {
 afterEach(cleanup);
 
 describe('Palette', () => {
+  it('renders an unhashed scenery prefab only from a build-pinned lock', () => {
+    const scenery = {
+      categories: [{ id: 'props', label: 'Forest', kind: 'items' as const }],
+      items: [{ prefab: 'scenery:lantern', label: 'Lantern', category: 'props' }],
+    };
+    const assets = [{ id: 'lantern', sha256: 'locked', url: '/lantern.glb' }];
+    const { rerender } = render(<Palette palette={scenery} onPick={vi.fn()} sceneryAssets={assets} />);
+    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+    rerender(<Palette palette={scenery} onPick={vi.fn()} sceneryAssets={assets} buildPinnedAssets />);
+    expect(screen.getByRole('presentation')).toHaveAttribute('data-url', '/lantern.glb');
+    rerender(
+      <Palette
+        palette={{ ...scenery, items: [{ prefab: 'native', label: 'Lantern', category: 'props', assetId: 'lantern' }] }}
+        onPick={vi.fn()}
+        sceneryAssets={assets}
+        buildPinnedAssets
+      />,
+    );
+    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+  });
+  it('renders a native prefab model only when its explicit asset ID and hash match', () => {
+    const native = {
+      categories: [{ id: 'monsters', label: 'Monsters', kind: 'items' as const }],
+      items: [{ prefab: 'goblin1', label: 'Goblin', category: 'monsters', assetId: 'orc', assetSha: 'matching' }],
+    };
+    const onPick = vi.fn();
+    const { rerender } = render(
+      <Palette palette={native} onPick={onPick} sceneryAssets={[{ id: 'orc', sha256: 'old', url: '/orc.glb' }]} />,
+    );
+    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+    rerender(
+      <Palette palette={native} onPick={onPick} sceneryAssets={[{ id: 'orc', sha256: 'matching', url: '/orc.glb' }]} />,
+    );
+    expect(screen.getByRole('presentation')).toHaveAttribute('data-url', '/orc.glb');
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Goblin' }));
+    expect(onPick).toHaveBeenCalledWith('goblin1');
+  });
   it('renders a model thumbnail only when the source hash matches the built palette', () => {
     const scenery = {
       categories: [{ id: 'trees', label: 'Trees', kind: 'items' as const }],

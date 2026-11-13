@@ -151,13 +151,20 @@ export function GameScreen() {
     retry: false,
   });
   const waitingForStage = noBuild && !waitingForPreview && !activePreview && stage.isPending;
+  const hasPaletteAssetIds = !!frameState.manifest?.palette?.items.some((item) => typeof item.assetId === 'string');
+  const hasSceneryPrefabs = !!frameState.manifest?.palette?.items.some((item) => item.prefab.startsWith('scenery:'));
+  const paletteBuildId =
+    hasPaletteAssetIds || hasSceneryPrefabs
+      ? (activePreview?.buildId ?? (!noBuild ? activeSnapshot?.buildId : undefined))
+      : undefined;
   const scenerySource = useQuery({
-    queryKey: ['scenery-source', gameId, jobBranch],
-    queryFn: () => getScenerySource(gameId, jobBranch),
+    queryKey: ['scenery-source', gameId, jobBranch, paletteBuildId],
+    queryFn: () =>
+      paletteBuildId ? getScenerySource(gameId, jobBranch, paletteBuildId) : getScenerySource(gameId, jobBranch),
     enabled:
       gameId !== '' &&
       ((noBuild && !waitingForPreview && !waitingForStage && !activePreview) ||
-        (mode === 'edit' && !!frameState.manifest?.capabilities.includes('scenery'))),
+        (mode === 'edit' && (!!frameState.manifest?.capabilities.includes('scenery') || hasPaletteAssetIds))),
     retry: false,
     refetchInterval: noBuild && !activePreview ? 5_000 : false,
   });
@@ -702,6 +709,7 @@ export function GameScreen() {
           gameId={gameId}
           manifest={editorManifest}
           sceneryAssets={scenerySource.data?.assets}
+          buildPinnedAssets={!!paletteBuildId && !activePreview && !!scenerySource.data}
           session={sessionView}
           onRequestLight={noBuild && !sidePreview ? requestLight : undefined}
           onCommand={(command) => {
