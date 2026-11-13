@@ -47,6 +47,7 @@ export async function installGameApi(page: Page): Promise<GameApiFixture> {
       });
     }
     if (path === '/jobs' && request.method() === 'GET') return json(route, { jobs: [] });
+    if (path === '/games/game/workers' && request.method() === 'GET') return json(route, { workers: [] });
     if (path === '/games/game/published') return json(route, { error: 'not_found' }, 404);
     if (path === '/games/game/saves') return json(route, { error: 'not_found' }, 404);
     if (path === '/games/game/branches/main/design' && request.method() === 'GET') {

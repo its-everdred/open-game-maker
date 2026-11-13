@@ -26,6 +26,7 @@ async function fixture(): Promise<{ destination: string; prototype: string; shel
     writeFile(join(prototype, 'index.html'), '<title>Open Game Maker 2000</title><main>prototype</main>'),
     writeFile(join(prototype, 'app.js'), "navigator.serviceWorker.register('sw.js').catch(() => {});\n"),
     writeFile(join(prototype, 'data.js'), 'window.prototypeData = true;\n'),
+    writeFile(join(prototype, 'scenes.js'), 'im.src = src;\n'),
     writeFile(
       join(prototype, 'sw.js'),
       "const BUILD = '__BUILD__', CACHE = 'ogm-' + BUILD, ASSETS = 'ogm-assets';\nself.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== ASSETS).map(k => caches.delete(k))))));\n",
@@ -63,6 +64,9 @@ describe('prototype deploy staging', () => {
     await expect(readFile(join(destination, 'demo', 'index.html'), 'utf8')).resolves.toBe('demo');
     await expect(readFile(join(destination, 'town', 'index.html'), 'utf8')).resolves.toBe('town');
     await expect(readFile(join(destination, 'icons', 'icon-192.png'), 'utf8')).resolves.toBe('icon');
+    await expect(readFile(join(destination, 'scenes.js'), 'utf8')).resolves.toContain(
+      'new URL(src, import.meta.url).href',
+    );
   });
 
   it('keeps every asset for an instance and isolates the prototype service worker', async () => {

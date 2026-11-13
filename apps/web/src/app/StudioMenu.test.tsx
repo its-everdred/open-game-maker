@@ -81,6 +81,7 @@ const state = vi.hoisted(() => ({
   decisions: [] as TestDecision[],
   sessions: [] as Array<{ game_id: string; game_title: string; count: number }>,
   energy: { data: undefined as EnergyView | undefined },
+  workers: [] as Array<{ ticket: string; title: string; percent: number | null; etaSeconds: number | null }>,
 }));
 
 const sound = vi.hoisted(() => ({
@@ -99,6 +100,8 @@ vi.mock('../features/build-chat/jobs', () => ({
   useMyJobs: () => state.jobs,
   setJobPaused: jobControls.setJobPaused,
 }));
+vi.mock('../features/worker-builds/useWorkers', () => ({ useWorkers: () => ({ workers: state.workers, feeds: [] }) }));
+vi.mock('../features/worker-builds/useWorkerReviews', () => ({ useWorkerReviews: () => [] }));
 vi.mock('../features/build-chat/Chat', () => ({
   Chat: ({ jobId }: { jobId?: string }) => <p>conversation {jobId}</p>,
 }));
@@ -198,6 +201,7 @@ afterEach(() => {
   state.decisions = [];
   state.sessions = [];
   state.energy = { data: undefined };
+  state.workers = [];
   sound.setMuted.mockReset();
   sound.setVolume.mockReset();
   auth.signOut.mockReset();
@@ -207,6 +211,12 @@ afterEach(() => {
 });
 
 describe('StudioMenu', () => {
+  it('shows live worker progress in the builds control', () => {
+    state.workers = [{ ticket: '12', title: 'Forest backdrop', percent: 50, etaSeconds: 10 }];
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    expect(screen.getByText('Forest backdrop · about 10s left')).toBeVisible();
+  });
   it('applies the play theme and restores the default when the game leaves', () => {
     const view = render(
       <MemoryRouter>
@@ -251,14 +261,7 @@ describe('StudioMenu', () => {
     const trigger = screen.getByRole('button', { name: 'Menu' });
 
     fireEvent.click(trigger);
-    expect(circleNames()).toEqual([
-      'Builds: 42%',
-      'Energy: Unknown',
-      'Mute',
-      'Report a problem',
-      'Credits',
-      'Sign out',
-    ]);
+    expect(circleNames()).toEqual(['Jobs: 42%', 'Energy: Unknown', 'Mute', 'Report a problem', 'Credits', 'Sign out']);
     expect(document.querySelector('.studio-menu-sheet')).toBeNull();
 
     fireEvent.click(trigger);
@@ -449,7 +452,7 @@ describe('StudioMenu', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Building Moon Vault');
 
     fireEvent.click(trigger);
-    const builds = screen.getByRole('button', { name: 'Builds: 42%' });
+    const builds = screen.getByRole('button', { name: 'Jobs: 42%' });
     expect(ringOf(builds)).toBe('42 100');
     fireEvent.click(builds);
     expect(screen.getByRole('button', { name: /Build the moon gate.*Active.*Building rooms.*42%/ })).toBeVisible();
@@ -490,7 +493,7 @@ describe('StudioMenu', () => {
     state.jobs = { jobs: [finished], active: [], games: [{ id: 'game-1', title: 'Moon Vault' }] };
     renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Builds: 100%' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs: 100%' }));
     expect(screen.getByRole('button', { name: /Build the moon gate.*Finished.*Ready to try.*100%/ })).toBeVisible();
 
     act(() => vi.advanceTimersByTime(5 * 60 * 1000 + 1));
@@ -649,13 +652,13 @@ describe('StudioMenu', () => {
     expect(screen.queryByRole('list', { name: 'Decisions' })).not.toBeInTheDocument();
     // Each circle owns its sheet: going from Decisions to Builds switches, it does not fold the list away.
     fireEvent.click(screen.getByRole('button', { name: 'Decisions: 3' }));
-    fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
+    fireEvent.click(screen.getByRole('button', { name: /^Jobs: / }));
     expect(screen.getByRole('list', { name: 'Build progress' })).toBeVisible();
-    expect(screen.getByRole('button', { name: /^Builds: / })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /^Jobs: / })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('button', { name: 'Decisions: 3' })).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
+    fireEvent.click(screen.getByRole('button', { name: /^Jobs: / }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
+    fireEvent.click(screen.getByRole('button', { name: /^Jobs: / }));
     const moon = screen.getByRole('group', { name: 'Moon Vault builds' });
     expect(moon).toHaveTextContent('Choose the moon gatePausedWaiting for your answer');
     expect(moon).toHaveTextContent('Paint the observatoryParked');
@@ -699,7 +702,7 @@ describe('StudioMenu', () => {
     jobControls.setJobPaused.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('daemon down'));
     renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    fireEvent.click(screen.getByRole('button', { name: /^Builds: / }));
+    fireEvent.click(screen.getByRole('button', { name: /^Jobs: / }));
 
     expect(screen.queryByRole('button', { name: 'Pause Light the beacon' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Resume Light the beacon' })).not.toBeInTheDocument();
@@ -720,7 +723,7 @@ describe('StudioMenu', () => {
     state.jobs = { jobs: [job], active: [job], games: [{ id: 'game-1', title: 'Moon Vault' }] };
     renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Builds: 42%' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs: 42%' }));
 
     fireEvent.click(screen.getByRole('button', { name: /Build the moon gate/ }));
 

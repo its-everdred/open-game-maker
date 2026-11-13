@@ -50,9 +50,9 @@ export const prototypePaletteNormalizationCss = `
     background: color-mix(in srgb, var(--new-color) 10%, rgba(255, 255, 255, 0.02)) !important;
   }
   .new-next {
-    background: color-mix(in srgb, var(--yellow-b) 30%, rgba(24, 22, 32, 0.35)) !important;
-    color: var(--ink) !important;
-    box-shadow: 0 10px 30px -10px var(--yellow-b) !important;
+    background: var(--action-primary) !important;
+    color: var(--dark) !important;
+    box-shadow: var(--pop-sm) !important;
   }
   .new-summary {
     background: rgba(255, 255, 255, 0.05) !important;

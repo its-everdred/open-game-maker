@@ -1,3 +1,4 @@
+import type { Showcase } from './showcase';
 import type { Branch, Job, JobKind, JobState } from '@ogm/contracts';
 
 export type { Branch };
@@ -5,6 +6,7 @@ export type { Branch };
 // OGM-012's list response currently has no shared client type. Optional fields are the forward-compatible display
 // projection named by OGM-073; the adapter keeps today's smaller response useful while those fields land.
 export type GameSummary = {
+  showcase?: Showcase;
   id: string;
   familyId: string;
   ownerId: string;

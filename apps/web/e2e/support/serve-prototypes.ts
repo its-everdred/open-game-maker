@@ -3,7 +3,8 @@ import { createServer } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const port = 43176;
+// eslint-disable-next-line no-restricted-properties
+const port = Number.parseInt(process.env.OGM_PROTOTYPE_E2E_PORT ?? '43176', 10);
 const repo = resolve(import.meta.dirname, '../../../..');
 const roots = {
   studio: 'prototypes/studio-v0',

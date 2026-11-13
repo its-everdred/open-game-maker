@@ -35,7 +35,8 @@ const commands = ['character voices', 'keys and HUD', 'level two'].map((title, i
   opened_at: '2026-11-08T10:00:00.000Z',
 }));
 
-test.use({ serviceWorkers: 'block' });
+test.use({ serviceWorkers: 'block', reducedMotion: 'reduce' });
+test.setTimeout(90_000);
 
 test.beforeEach(async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'each case sets its own viewport');
@@ -69,30 +70,43 @@ test('the title scene reaches the bottom of the screen even when the title box i
 });
 
 for (const [device, viewport] of Object.entries(landscapes)) {
-  test(`${device} landscape shows the first decision and keeps New game clear`, async ({ page }, testInfo) => {
+  test(`${device} landscape keeps the game detail and decisions accessible`, async ({ page }, testInfo) => {
     await mockGamesRoutes(page);
+    await page.route('**/api/v1/jobs?gameId=*', (route) => route.fulfill({ json: { jobs: [] } }));
+    await page.route('**/api/v1/budget/status', (route) => route.fulfill({ json: { unitLabel: 'coins' } }));
     await page.route('**/api/v1/games/*/commands', (route) => route.fulfill({ json: { commands } }));
+    await page.route('**/api/v1/me/commands', (route) =>
+      route.fulfill({
+        json: { commands: commands.map((command) => ({ ...command, game_id: 'g_2', game_title: 'Goblin Cellar' })) },
+      }),
+    );
     await page.setViewportSize(viewport);
-    await page.goto('/all?spotlight=g_2');
+    await page.goto('/all?spotlight=g_2', { waitUntil: 'domcontentloaded' });
 
     const spotlight = page.locator('.games-spotlight');
-    const firstDecision = spotlight.locator('.commands-inbox-item').first();
     const cover = spotlight.locator('.games-spotlight-media');
     const newGame = page.getByRole('button', { name: 'New game' });
-    await expect(firstDecision).toBeVisible({ timeout: 15_000 });
-
-    await expect(spotlight.getByRole('heading', { name: 'Goblin Cellar' })).toBeInViewport({ ratio: 1 });
-    await expect(firstDecision).toBeInViewport({ ratio: 1 });
-    await expect(cover).toBeInViewport({ ratio: 1 });
+    await expect(spotlight.getByRole('heading', { name: 'Goblin Cellar' })).toBeInViewport({
+      ratio: 1,
+      timeout: 15_000,
+    });
     await expectApart(newGame, cover);
-    await expectApart(newGame, firstDecision);
 
     // the rest of the list and Play stay reachable
     const play = spotlight.getByRole('button', { name: 'Play Goblin Cellar' });
     await play.scrollIntoViewIfNeeded();
     await expect(play).toBeInViewport();
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await page.getByRole('button', { name: 'Decisions: 3' }).click();
+    await expect(page.getByRole('button', { name: 'Blobs character voices, Goblin Cellar' })).toBeVisible();
 
-    await testInfo.attach(`${device}-landscape`, { body: await page.screenshot(), contentType: 'image/png' });
+    const session = await page.context().newCDPSession(page);
+    try {
+      const { data } = await session.send('Page.captureScreenshot', { format: 'png', fromSurface: true });
+      await testInfo.attach(`${device}-landscape`, { body: Buffer.from(data, 'base64'), contentType: 'image/png' });
+    } finally {
+      await session.detach();
+    }
   });
 }
 

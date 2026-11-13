@@ -1,0 +1,869 @@
+[
+  {
+    "id": "goblin-cellar",
+    "title": "Goblin Cellar",
+    "by": "ogm-team",
+    "font": "Lilita One",
+    "color": "#fabd2f",
+    "badge": "",
+    "tagline": "Build a dungeon, fill it with goblins, then fight your way out.",
+    "genres": ["RPG", "Battle"],
+    "vibe": ["Cozy", "Epic"],
+    "art": "Toy 3D",
+    "players": "Single player",
+    "world": "Dungeon",
+    "controls": "Keyboard · Mouse · Touch",
+    "rating": 4.8,
+    "votes": "2.1k",
+    "plays": "31.4k",
+    "updated": "Today",
+    "version": "1.12.5",
+    "played": "5h 25m",
+    "packs": ["Kenney Mini Dungeon", "Kenney RPG Audio", "Kenney Music Loops"],
+    "labels": ["Goblin fight", "Editor", "Exploring", "Victory"],
+    "desc": "The dungeon from our first prototype. Place walls, goblins and treasure in the editor, press Try it! and play what you built. Every game in this prototype opens here.",
+    "displayTags": [
+      {
+        "key": "rpg",
+        "label": "RPG",
+        "kind": "genre",
+        "color": "hsl(47 72% 66%)"
+      },
+      {
+        "key": "battle",
+        "label": "Battle",
+        "kind": "genre",
+        "color": "hsl(165 72% 66%)"
+      },
+      {
+        "key": "cozy",
+        "label": "Cozy",
+        "kind": "vibe",
+        "color": "hsl(180 72% 66%)"
+      },
+      {
+        "key": "epic",
+        "label": "Epic",
+        "kind": "vibe",
+        "color": "hsl(210 72% 66%)"
+      },
+      {
+        "key": "toy3d",
+        "label": "Toy 3D",
+        "kind": "art",
+        "color": "hsl(198 72% 66%)"
+      },
+      {
+        "key": "dungeon",
+        "label": "Dungeon",
+        "kind": "world",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "restorebound",
+    "title": "RestoreBound",
+    "by": "mossbyte",
+    "font": "Press Start 2P",
+    "color": "#fbf1c7",
+    "badge": "Featured",
+    "tagline": "A sleepy village, one repair at a time.",
+    "genres": ["Adventure", "Craft"],
+    "vibe": ["Cozy", "Calm"],
+    "art": "16-bit pixel",
+    "players": "Single player · Co-op 2",
+    "world": "Farm",
+    "controls": "Keyboard · Gamepad · Touch",
+    "rating": 4.7,
+    "votes": "1.6k",
+    "plays": "22.8k",
+    "updated": "2 days ago",
+    "version": "2.7.14",
+    "played": "3h 52m",
+    "packs": ["Kenney Tiny Town", "Kenney Tiny Dungeon"],
+    "labels": ["Rebuilding", "Village walk"],
+    "desc": "Gather timber, fix roofs and bring neighbours home. Each repaired house unlocks a new shop and a new tune.",
+    "displayTags": [
+      {
+        "key": "adventure",
+        "label": "Adventure",
+        "kind": "genre",
+        "color": "hsl(24 72% 66%)"
+      },
+      {
+        "key": "craft",
+        "label": "Craft",
+        "kind": "genre",
+        "color": "hsl(259 72% 66%)"
+      },
+      {
+        "key": "cozy",
+        "label": "Cozy",
+        "kind": "vibe",
+        "color": "hsl(180 72% 66%)"
+      },
+      {
+        "key": "calm",
+        "label": "Calm",
+        "kind": "vibe",
+        "color": "hsl(300 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "farm",
+        "label": "Farm",
+        "kind": "world",
+        "color": "hsl(270 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "coop",
+        "label": "Co-op 2",
+        "kind": "players",
+        "color": "hsl(47 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "mossy-leap",
+    "title": "Mossy Leap",
+    "by": "ravenquill",
+    "font": "Press Start 2P",
+    "color": "#b8bb26",
+    "badge": "",
+    "tagline": "Hop, bop and collect every coin in the Greenwood.",
+    "genres": ["Platformer"],
+    "vibe": ["Cute", "Retro"],
+    "art": "16-bit pixel",
+    "players": "Single player",
+    "world": "Forest",
+    "controls": "Keyboard · Gamepad",
+    "rating": 4.5,
+    "votes": "980",
+    "plays": "14.1k",
+    "updated": "1 week ago",
+    "version": "1.9.3",
+    "played": "2h 08m",
+    "packs": ["Kenney Pixel Platformer"],
+    "labels": ["Greenwood run", "Waterfall gaps"],
+    "desc": "Twelve short levels of tight jumps, hidden blocks and grumpy bats. Speedrun timer included.",
+    "displayTags": [
+      {
+        "key": "platformer",
+        "label": "Platformer",
+        "kind": "genre",
+        "color": "hsl(189 72% 66%)"
+      },
+      {
+        "key": "cute",
+        "label": "Cute",
+        "kind": "vibe",
+        "color": "hsl(90 72% 66%)"
+      },
+      {
+        "key": "retro",
+        "label": "Retro",
+        "kind": "vibe",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "forest",
+        "label": "Forest",
+        "kind": "world",
+        "color": "hsl(30 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "skyward-squadron",
+    "title": "Skyward Squadron",
+    "by": "ace_tern",
+    "font": "Bungee",
+    "color": "#83a598",
+    "badge": "",
+    "tagline": "Island-hopping dogfights over a pixel sea.",
+    "genres": ["Shooter"],
+    "vibe": ["Retro", "Epic"],
+    "art": "16-bit pixel",
+    "players": "Single player · Co-op 2",
+    "world": "Ocean",
+    "controls": "Keyboard · Gamepad · Touch",
+    "rating": 4.6,
+    "votes": "1.2k",
+    "plays": "18.9k",
+    "updated": "Yesterday",
+    "version": "1.15.22",
+    "played": "4h 41m",
+    "packs": ["Kenney Pixel Shmup"],
+    "labels": ["Wave 3", "Bomber boss"],
+    "desc": "A vertical shooter with chunky planes, island bases and a bomber boss that fills the sky. A boss rush mode is being built right now.",
+    "displayTags": [
+      {
+        "key": "shooter",
+        "label": "Shooter",
+        "kind": "genre",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "retro",
+        "label": "Retro",
+        "kind": "vibe",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "epic",
+        "label": "Epic",
+        "kind": "vibe",
+        "color": "hsl(210 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "ocean",
+        "label": "Ocean",
+        "kind": "world",
+        "color": "hsl(120 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "coop",
+        "label": "Co-op 2",
+        "kind": "players",
+        "color": "hsl(47 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "powder-rush",
+    "title": "Powder Rush",
+    "by": "snowmode",
+    "font": "Bungee",
+    "color": "#fbf1c7",
+    "badge": "",
+    "tagline": "Carve the slalom. Outrun the yeti.",
+    "genres": ["Racing", "Sports"],
+    "vibe": ["Funny", "Retro"],
+    "art": "16-bit pixel",
+    "players": "Single player · Versus 2",
+    "world": "Snow",
+    "controls": "Keyboard · Gamepad · Touch",
+    "rating": 4.4,
+    "votes": "640",
+    "plays": "9.7k",
+    "updated": "3 days ago",
+    "version": "0.6.9",
+    "played": "1h 17m",
+    "packs": ["Kenney Tiny Ski"],
+    "labels": ["Slalom", "Yeti chase"],
+    "desc": "Hit every gate for a time bonus. Miss three and the yeti wakes up.",
+    "displayTags": [
+      {
+        "key": "racing",
+        "label": "Racing",
+        "kind": "genre",
+        "color": "hsl(94 72% 66%)"
+      },
+      {
+        "key": "sports",
+        "label": "Sports",
+        "kind": "genre",
+        "color": "hsl(71 72% 66%)"
+      },
+      {
+        "key": "funny",
+        "label": "Funny",
+        "kind": "vibe",
+        "color": "hsl(270 72% 66%)"
+      },
+      {
+        "key": "retro",
+        "label": "Retro",
+        "kind": "vibe",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "snow",
+        "label": "Snow",
+        "kind": "world",
+        "color": "hsl(210 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "versus",
+        "label": "Versus 2",
+        "kind": "players",
+        "color": "hsl(94 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "little-fronts",
+    "title": "Little Fronts",
+    "by": "hexhound",
+    "font": "Bungee",
+    "color": "#b8bb26",
+    "badge": "",
+    "tagline": "Turn-based skirmishes on a pocket-sized map.",
+    "genres": ["Strategy", "Battle"],
+    "vibe": ["Cool", "Retro"],
+    "art": "16-bit pixel",
+    "players": "Single player · Versus 2 · Online",
+    "world": "Forest",
+    "controls": "Mouse · Touch",
+    "rating": 4.3,
+    "votes": "410",
+    "plays": "6.2k",
+    "updated": "5 days ago",
+    "version": "0.8.31",
+    "played": "6h 03m",
+    "packs": ["Kenney Tiny Battle"],
+    "labels": ["Move phase", "Artillery"],
+    "desc": "Capture factories, roll out tanks and hold the bridge. Matches take about ten minutes.",
+    "displayTags": [
+      {
+        "key": "strategy",
+        "label": "Strategy",
+        "kind": "genre",
+        "color": "hsl(118 72% 66%)"
+      },
+      {
+        "key": "battle",
+        "label": "Battle",
+        "kind": "genre",
+        "color": "hsl(165 72% 66%)"
+      },
+      {
+        "key": "cool",
+        "label": "Cool",
+        "kind": "vibe",
+        "color": "hsl(60 72% 66%)"
+      },
+      {
+        "key": "retro",
+        "label": "Retro",
+        "kind": "vibe",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "forest",
+        "label": "Forest",
+        "kind": "world",
+        "color": "hsl(30 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "versus",
+        "label": "Versus 2",
+        "kind": "players",
+        "color": "hsl(94 72% 66%)"
+      },
+      {
+        "key": "online",
+        "label": "Online",
+        "kind": "players",
+        "color": "hsl(141 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "crypt-crawlers",
+    "title": "Crypt Crawlers",
+    "by": "dicegoblin",
+    "font": "Press Start 2P",
+    "color": "#fb4934",
+    "badge": "Co-op",
+    "tagline": "Four heroes, one crypt, too many slimes.",
+    "genres": ["Roguelike", "RPG"],
+    "vibe": ["Funny", "Epic"],
+    "art": "16-bit pixel",
+    "players": "Co-op 2–4 · Online",
+    "world": "Dungeon",
+    "controls": "Keyboard · Gamepad",
+    "rating": 4.6,
+    "votes": "1.4k",
+    "plays": "20.3k",
+    "updated": "4 days ago",
+    "version": "1.11.7",
+    "played": "8h 46m",
+    "packs": ["Kenney Tiny Dungeon"],
+    "labels": ["Room brawl", "Treasure room"],
+    "desc": "A couch co-op crawler. Share potions, revive each other and argue over who opens the chest.",
+    "displayTags": [
+      {
+        "key": "roguelike",
+        "label": "Roguelike",
+        "kind": "genre",
+        "color": "hsl(236 72% 66%)"
+      },
+      {
+        "key": "rpg",
+        "label": "RPG",
+        "kind": "genre",
+        "color": "hsl(47 72% 66%)"
+      },
+      {
+        "key": "funny",
+        "label": "Funny",
+        "kind": "vibe",
+        "color": "hsl(270 72% 66%)"
+      },
+      {
+        "key": "epic",
+        "label": "Epic",
+        "kind": "vibe",
+        "color": "hsl(210 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "dungeon",
+        "label": "Dungeon",
+        "kind": "world",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "coop",
+        "label": "Co-op 2–4",
+        "kind": "players",
+        "color": "hsl(47 72% 66%)"
+      },
+      {
+        "key": "online",
+        "label": "Online",
+        "kind": "players",
+        "color": "hsl(141 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "nebula-run",
+    "title": "Nebula Run",
+    "by": "stardrift",
+    "font": "Russo One",
+    "color": "#d3869b",
+    "badge": "",
+    "tagline": "Thread the asteroid belt at full burn.",
+    "genres": ["Shooter"],
+    "vibe": ["Future", "Epic"],
+    "art": "Cartoon",
+    "players": "Single player",
+    "world": "Space",
+    "controls": "Keyboard · Gamepad · Touch",
+    "rating": 4.2,
+    "votes": "530",
+    "plays": "8.8k",
+    "updated": "2 weeks ago",
+    "version": "0.5.12",
+    "played": "47m",
+    "packs": ["Kenney Space Shooter Remastered"],
+    "labels": ["Asteroid belt", "Mothership"],
+    "desc": "Arcade space shooting with drifting meteors, shield pickups and a score chase.",
+    "displayTags": [
+      {
+        "key": "shooter",
+        "label": "Shooter",
+        "kind": "genre",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "future",
+        "label": "Future",
+        "kind": "vibe",
+        "color": "hsl(30 72% 66%)"
+      },
+      {
+        "key": "epic",
+        "label": "Epic",
+        "kind": "vibe",
+        "color": "hsl(210 72% 66%)"
+      },
+      {
+        "key": "cartoon",
+        "label": "Cartoon",
+        "kind": "art",
+        "color": "hsl(99 72% 66%)"
+      },
+      {
+        "key": "spaceW",
+        "label": "Space",
+        "kind": "world",
+        "color": "hsl(60 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "turbo-tumble",
+    "title": "Turbo Tumble",
+    "by": "gridlock",
+    "font": "Russo One",
+    "color": "#fabd2f",
+    "badge": "Party",
+    "tagline": "Four cars, three laps, zero brakes.",
+    "genres": ["Racing"],
+    "vibe": ["Funny", "Cool"],
+    "art": "Cartoon",
+    "players": "Party 2–4 · Online",
+    "world": "City",
+    "controls": "Gamepad · Keyboard",
+    "rating": 4.5,
+    "votes": "870",
+    "plays": "12.6k",
+    "updated": "6 days ago",
+    "version": "0.7.4",
+    "played": "2h 33m",
+    "packs": ["Kenney Racing Pack"],
+    "labels": ["Chase cam", "Full track"],
+    "desc": "Top-down party racing. Bump rivals into the tyre walls and steal the lead on the last corner.",
+    "displayTags": [
+      {
+        "key": "racing",
+        "label": "Racing",
+        "kind": "genre",
+        "color": "hsl(94 72% 66%)"
+      },
+      {
+        "key": "funny",
+        "label": "Funny",
+        "kind": "vibe",
+        "color": "hsl(270 72% 66%)"
+      },
+      {
+        "key": "cool",
+        "label": "Cool",
+        "kind": "vibe",
+        "color": "hsl(60 72% 66%)"
+      },
+      {
+        "key": "cartoon",
+        "label": "Cartoon",
+        "kind": "art",
+        "color": "hsl(99 72% 66%)"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "kind": "world",
+        "color": "hsl(90 72% 66%)"
+      },
+      {
+        "key": "party",
+        "label": "Party 2–4",
+        "kind": "players",
+        "color": "hsl(189 72% 66%)"
+      },
+      {
+        "key": "online",
+        "label": "Online",
+        "kind": "players",
+        "color": "hsl(141 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "brick-bloom",
+    "title": "Brick Bloom",
+    "by": "petalpush",
+    "font": "Lilita One",
+    "color": "#8ec07c",
+    "badge": "",
+    "tagline": "Break bricks, grow combos, clear the garden.",
+    "genres": ["Puzzle"],
+    "vibe": ["Calm", "Cute"],
+    "art": "Cartoon",
+    "players": "Single player",
+    "world": "Sky islands",
+    "controls": "Mouse · Touch",
+    "rating": 4.1,
+    "votes": "300",
+    "plays": "5.4k",
+    "updated": "1 week ago",
+    "version": "0.3.18",
+    "played": "1h 02m",
+    "packs": ["Kenney Puzzle Pack"],
+    "labels": ["Level 3", "Combo chain"],
+    "desc": "A soft take on brick breaking. Chain hits to bloom flowers across the board.",
+    "displayTags": [
+      {
+        "key": "puzzle",
+        "label": "Puzzle",
+        "kind": "genre",
+        "color": "hsl(141 72% 66%)"
+      },
+      {
+        "key": "calm",
+        "label": "Calm",
+        "kind": "vibe",
+        "color": "hsl(300 72% 66%)"
+      },
+      {
+        "key": "cute",
+        "label": "Cute",
+        "kind": "vibe",
+        "color": "hsl(90 72% 66%)"
+      },
+      {
+        "key": "cartoon",
+        "label": "Cartoon",
+        "kind": "art",
+        "color": "hsl(99 72% 66%)"
+      },
+      {
+        "key": "sky",
+        "label": "Sky islands",
+        "kind": "world",
+        "color": "hsl(180 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "lantern-hollow",
+    "title": "Lantern Hollow",
+    "by": "moth.wing",
+    "font": "Creepster",
+    "color": "#d3869b",
+    "badge": "New",
+    "tagline": "Your lantern is running out. Something is following the light.",
+    "genres": ["Adventure"],
+    "vibe": ["Creepy"],
+    "art": "16-bit pixel",
+    "players": "Single player",
+    "world": "Haunted",
+    "controls": "Keyboard · Gamepad",
+    "rating": 4.4,
+    "votes": "220",
+    "plays": "3.1k",
+    "updated": "Today",
+    "version": "0.2.6",
+    "played": "38m",
+    "packs": ["Kenney Tiny Dungeon"],
+    "labels": ["Graveyard", "Crypt"],
+    "desc": "A short spooky crawl where light is your only weapon. Keep the oil topped up and the ghosts at bay.",
+    "displayTags": [
+      {
+        "key": "adventure",
+        "label": "Adventure",
+        "kind": "genre",
+        "color": "hsl(24 72% 66%)"
+      },
+      {
+        "key": "creepy",
+        "label": "Creepy",
+        "kind": "vibe",
+        "color": "hsl(150 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "haunted",
+        "label": "Haunted",
+        "kind": "world",
+        "color": "hsl(300 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "frostbite-peaks",
+    "title": "Frostbite Peaks",
+    "by": "ravenquill",
+    "font": "Press Start 2P",
+    "color": "#83a598",
+    "badge": "",
+    "tagline": "Night climbs on icy ledges.",
+    "genres": ["Platformer"],
+    "vibe": ["Calm", "Retro"],
+    "art": "16-bit pixel",
+    "players": "Single player",
+    "world": "Snow",
+    "controls": "Keyboard · Gamepad",
+    "rating": 4.3,
+    "votes": "450",
+    "plays": "7.5k",
+    "updated": "3 weeks ago",
+    "version": "0.8.2",
+    "played": "1h 49m",
+    "packs": ["Kenney Pixel Platformer"],
+    "labels": ["Snowfall", "Ice caves"],
+    "desc": "The sequel to Mossy Leap, under a full moon. Slippery ledges, snowmen and a long climb to the summit.",
+    "displayTags": [
+      {
+        "key": "platformer",
+        "label": "Platformer",
+        "kind": "genre",
+        "color": "hsl(189 72% 66%)"
+      },
+      {
+        "key": "calm",
+        "label": "Calm",
+        "kind": "vibe",
+        "color": "hsl(300 72% 66%)"
+      },
+      {
+        "key": "retro",
+        "label": "Retro",
+        "kind": "vibe",
+        "color": "hsl(0 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "snow",
+        "label": "Snow",
+        "kind": "world",
+        "color": "hsl(210 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      }
+    ]
+  },
+  {
+    "id": "puddle-postal",
+    "title": "Puddle Postal",
+    "by": "you",
+    "font": "Lilita One",
+    "color": "#83a598",
+    "badge": "",
+    "tagline": "A frog mail carrier on a rainy island.",
+    "genres": ["Adventure"],
+    "vibe": ["Cozy"],
+    "art": "16-bit pixel",
+    "players": "Single player",
+    "world": "Ocean",
+    "controls": "Keyboard · Touch",
+    "rating": null,
+    "votes": "",
+    "plays": "0",
+    "updated": "Building",
+    "version": "0.1.0",
+    "played": "0m",
+    "packs": ["Kenney Tiny Town"],
+    "labels": ["First island"],
+    "desc": "You described this one earlier. It plays in Goblin Cellar until the real builder exists.",
+    "scene": "restorebound",
+    "displayTags": [
+      {
+        "key": "adventure",
+        "label": "Adventure",
+        "kind": "genre",
+        "color": "hsl(24 72% 66%)"
+      },
+      {
+        "key": "cozy",
+        "label": "Cozy",
+        "kind": "vibe",
+        "color": "hsl(180 72% 66%)"
+      },
+      {
+        "key": "bit16",
+        "label": "16-bit pixel",
+        "kind": "art",
+        "color": "hsl(66 72% 66%)"
+      },
+      {
+        "key": "ocean",
+        "label": "Ocean",
+        "kind": "world",
+        "color": "hsl(120 72% 66%)"
+      },
+      {
+        "key": "solo",
+        "label": "Solo",
+        "kind": "players",
+        "color": "hsl(0 72% 66%)"
+      }
+    ]
+  }
+]

@@ -93,6 +93,12 @@ export async function stagePrototype(prototypeDirectory, shellDirectory, destina
   await Promise.all(
     scripts.map((entry) => cp(join(prototypeDirectory, entry.name), join(destination, entry.name), { force: true })),
   );
+  // The app imports these scenes from outside /proto; resolve their art beside the module, not the caller's URL.
+  const scenesPath = join(destination, 'scenes.js');
+  const scenes = await readFile(scenesPath, 'utf8');
+  const scopedScenes = scenes.replace('im.src = src;', 'im.src = new URL(src, import.meta.url).href;');
+  if (scopedScenes === scenes) throw new Error('prototype scene asset URL pattern was not found');
+  await writeFile(scenesPath, scopedScenes);
   await Promise.all(
     GENERATED_DIRECTORIES.map((directory) =>
       cp(join(prototypeDirectory, directory), join(destination, directory), { recursive: true }),

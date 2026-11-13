@@ -28,6 +28,7 @@ export const STATIC_STEPS = {
     key: 'genre',
     title: 'Genre',
     ask: 'What kind of game is it?',
+    hint: 'Pick up to 3',
     max: 3,
     options: [
       option('shooter', 'Shooter'),
@@ -50,6 +51,7 @@ export const STATIC_STEPS = {
     key: 'vibe',
     title: 'Vibe',
     ask: 'How should it feel?',
+    hint: 'Pick up to 3',
     max: 3,
     options: [
       option('retro', 'Retro'),
@@ -69,6 +71,7 @@ export const STATIC_STEPS = {
     key: 'world',
     title: 'World',
     ask: 'Where does it take place?',
+    hint: 'Pick up to 3',
     max: 3,
     options: [
       option('dungeon', 'Dungeon'),
@@ -113,7 +116,7 @@ function labelsFor(key: 'genre' | 'vibe' | 'world', picks: string[]): string[] {
   return picks.map((pick) => labels.get(pick) ?? pick);
 }
 
-export function scopeChoicesFrom(choices: NewGameChoices): ScopeChoices {
+export function scopeChoicesFrom(choices: NewGameChoices, familyViews: string[] = []): ScopeChoices {
   const other = (Object.entries(choices) as [ChoiceKey, StepChoice | undefined][])
     .flatMap(([key, value]) => (key !== 'sound' && value?.other ? [`${key}: ${value.other}`] : []))
     .join('\n');
@@ -124,7 +127,7 @@ export function scopeChoicesFrom(choices: NewGameChoices): ScopeChoices {
     family: choices.family?.picks[0] ?? 'any',
     world: labelsFor('world', choices.world?.picks ?? []).join(', ') || 'Open-ended',
     players: choices.players?.picks.includes('multi') ? 'multi' : 'single',
-    pov: choices.view?.picks[0] ?? 'fixed',
+    pov: choices.view?.picks[0] ?? viewsFor(familyViews, choices.genre?.picks ?? [])[0] ?? 'fixed',
     ...(audio ? { audio } : {}),
     ...(other ? { other } : {}),
   };

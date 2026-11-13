@@ -21,6 +21,10 @@
   background: var(--surface-page);
 }
 
+.app-chrome:has(.review-screen) > .studio-backdrop {
+  display: none;
+}
+
 .studio-logo {
   position: fixed;
   z-index: 46;
@@ -42,7 +46,9 @@
   object-fit: contain;
 }
 
-.app-chrome.is-game-playing .studio-logo {
+.app-chrome.is-game-playing .studio-logo,
+.app-chrome:has(.game-screen.is-editing) .studio-logo,
+.app-chrome:has(.showcase-play) .studio-logo {
   display: none;
 }
 
@@ -53,6 +59,10 @@
   right: max(16px, var(--safe-r));
   width: 50px;
   height: 50px;
+}
+
+.studio-menu-control:has(.worker-tracker) {
+  right: max(76px, calc(var(--safe-r) + 60px));
 }
 
 .studio-menu-button,
@@ -228,6 +238,10 @@
 }
 
 .menu-circle[data-done='true'] {
+  --ring-color: var(--green-b);
+}
+
+.menu-circle[data-worker-builds='true'] {
   --ring-color: var(--green-b);
 }
 
@@ -545,4 +559,33 @@ button.studio-menu-questions {
   background: var(--action-primary);
   color: var(--action-primary-text);
   font-weight: 700;
+}
+
+.studio-editor-tools {
+  width: min(22rem, 100%);
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+  pointer-events: auto;
+}
+.studio-editor-tools:empty {
+  display: none;
+}
+.studio-editor-tools .editor-tools {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.studio-editor-tools .editor-inspector {
+  position: static;
+  width: auto;
+  max-height: 35vh;
+  margin-top: 12px;
+  overflow: auto;
 }

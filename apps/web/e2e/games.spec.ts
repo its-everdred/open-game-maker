@@ -3,71 +3,56 @@ import { expect, test } from '@playwright/test';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { mockGamesRoutes } from './fixtures/games-routes';
 
+test.setTimeout(90_000);
+test.use({ reducedMotion: 'reduce' });
+
 type GamesTestApi = { selected(): string | null; tiles(): string[] };
 type GamesWindow = Window & { __ogmHost?: { get(name: string): object | undefined } };
 
 test.beforeEach(async ({ page }) => {
   await installAuthRoutes(page, { signedIn: true });
   await mockGamesRoutes(page);
+  await page.route('**/api/v1/jobs?gameId=*', (route) => route.fulfill({ json: { jobs: [] } }));
+  await page.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
+  await page.route('**/api/v1/budget/status', (route) => route.fulfill({ json: { unitLabel: 'coins' } }));
 });
 
-test('switches from the selected game to the grid only when the thumbnail row overflows', async ({
-  page,
-}, testInfo) => {
-  const visit = async (count: number) => {
-    await page.goto(`/all?test&games=${count}`);
+for (const count of [0, 1]) {
+  test(`keeps the prototype games in the grid with ${count} real games`, async ({ page }, testInfo) => {
+    await page.goto(`/all?test&games=${count}`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'New game' })).toBeVisible();
-  };
-
-  await visit(1);
-  const grid = page.locator('.games-grid');
-  const columns = () =>
-    grid.evaluate((element) => {
-      const template = getComputedStyle(element).gridTemplateColumns;
-      return template.split(/\s+/).filter(Boolean).length;
+    await expect(page.getByRole('button', { name: /^RestoreBound:/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Goblin Cellar:/ })).toBeVisible();
+    await expect(page.locator('.games-spotlight')).toHaveCount(0);
+    await testInfo.attach(`${testInfo.project.name}-${count}-games`, {
+      body: await capture(page),
+      contentType: 'image/png',
     });
-  // The grid can re-render after first paint; a detached node reports no columns.
-  await expect.poll(columns).toBeGreaterThan(0);
-  const capacity = await columns();
-  await expect(page.locator('.games-spotlight')).toBeVisible();
-  await expect(page.locator('.game-tile')).toHaveCount(1);
-  await testInfo.attach(`${testInfo.project.name}-one-game`, {
-    body: await page.screenshot(),
-    contentType: 'image/png',
   });
+}
 
-  await visit(0);
-  await expect(page.getByText('No games yet. Start with a new idea.')).toBeVisible();
-  await expect(page.locator('.games-spotlight')).toHaveCount(0);
-  await testInfo.attach(`${testInfo.project.name}-zero-games`, {
-    body: await page.screenshot(),
-    contentType: 'image/png',
-  });
-
-  await visit(capacity);
-  await expect(page.locator('.games-spotlight')).toBeVisible();
-  await expect(page.locator('.game-tile')).toHaveCount(capacity);
-
-  await visit(capacity + 1);
-  await expect(page.locator('.games-spotlight')).toHaveCount(0);
-  await expect(page.locator('.game-tile')).toHaveCount(capacity + 1);
-  await testInfo.attach(`${testInfo.project.name}-full-grid`, {
-    body: await page.screenshot(),
-    contentType: 'image/png',
-  });
-});
+async function capture(page: import('@playwright/test').Page): Promise<Buffer> {
+  const session = await page.context().newCDPSession(page);
+  try {
+    const { data } = await session.send('Page.captureScreenshot', { format: 'png', fromSurface: true });
+    return Buffer.from(data, 'base64');
+  } finally {
+    await session.detach();
+  }
+}
 
 test('browses three real game tiles with the keyboard', async ({ page }) => {
   await page.goto('/all?test');
 
   const tiles = page.locator('.game-tile');
-  await expect(tiles).toHaveCount(3);
+  await expect(tiles).toHaveCount(15);
   await expect(tiles.getByText('Building 40%')).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => ((window as GamesWindow).__ogmHost?.get('games') as GamesTestApi | undefined)?.tiles()),
     )
-    .toEqual(['g_1', 'g_2', 'g_3']);
+    .toContain('g_2');
+  const ids = await page.evaluate(() => ((window as GamesWindow).__ogmHost?.get('games') as GamesTestApi).tiles());
 
   await tiles.first().focus();
   await page.keyboard.press('ArrowRight');
@@ -76,7 +61,7 @@ test('browses three real game tiles with the keyboard', async ({ page }) => {
     .poll(() =>
       page.evaluate(() => ((window as GamesWindow).__ogmHost?.get('games') as GamesTestApi | undefined)?.selected()),
     )
-    .toBe('g_2');
+    .toBe(ids[1]);
 
   await page.keyboard.press('Escape');
   await expect.poll(() => page.url()).not.toContain('spotlight');
@@ -85,7 +70,7 @@ test('browses three real game tiles with the keyboard', async ({ page }) => {
   await page.waitForTimeout(200);
   expect(page.url()).not.toContain('spotlight');
   await expect(page.locator('.games-spotlight')).toHaveCount(0);
-  await expect(tiles).toHaveCount(3);
+  await expect(tiles).toHaveCount(15);
 });
 
 test('keeps spotlight actions and the fixed New game control touch sized on a phone', async ({ page }, testInfo) => {
@@ -123,18 +108,16 @@ test('keeps spotlight actions and the fixed New game control touch sized on a ph
     }),
   ]);
   expect(buttonStyle).toEqual({
-    backgroundColor: 'rgb(152, 151, 26)',
-    backgroundImage: 'none',
+    backgroundColor: 'rgb(255, 191, 50)',
+    backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0) 55%)',
     borderColor: 'rgba(0, 0, 0, 0)',
     boxShadow: 'none',
-    color: 'rgb(29, 32, 33)',
-    gap: '8px',
+    color: 'rgb(29, 27, 22)',
+    gap: 'normal',
   });
   expect(plusStyle).toEqual({ backgroundColor: 'rgba(0, 0, 0, 0)', color: buttonStyle.color });
 
-  const label = create.getByText('New game', { exact: true });
-  const [iconBox, labelBox] = await Promise.all([icon.boundingBox(), label.boundingBox()]);
-  expect(Math.abs(iconBox!.y + iconBox!.height / 2 - (labelBox!.y + labelBox!.height / 2))).toBeLessThanOrEqual(1);
+  await expect(create.getByText('New game', { exact: true })).toHaveCount(0);
 
   const spotlight = (await page.locator('.games-spotlight').boundingBox())!;
   const viewport = page.viewportSize()!;

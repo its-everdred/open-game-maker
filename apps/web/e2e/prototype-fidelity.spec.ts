@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
@@ -9,7 +9,8 @@ import { installGameApi } from './support/mock-game-api';
 import { prototypePaletteNormalizationCss } from './support/prototype-palette';
 import { attachComparison, prototypeThresholds } from './support/visual-compare';
 
-const referenceOrigin = 'http://127.0.0.1:43176';
+// eslint-disable-next-line no-restricted-properties
+const referenceOrigin = `http://127.0.0.1:${process.env.OGM_PROTOTYPE_E2E_PORT ?? '43176'}`;
 const townStub = readFileSync(new URL('./fixtures/town-stub/index.html', import.meta.url), 'utf8');
 const neutralImage = Buffer.from(
   '<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="788"><rect width="1400" height="788" fill="#6b6570"/></svg>',
@@ -110,6 +111,14 @@ for (const scenario of scenarios) {
         await page.setViewportSize(viewport);
         await page.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
         const masks = await test.step('prepare app and prototype', () => scenario.prepare(page, reference));
+        if (scenario.name === 'editor') {
+          const appShell = await capture(page, []);
+          writeFileSync(testInfo.outputPath(`editor-${viewport.name}-app-shell.png`), appShell);
+          await testInfo.attach(`editor-${viewport.name}-app-shell`, {
+            body: appShell,
+            contentType: 'image/png',
+          });
+        }
         await test.step('normalize pages', () => Promise.all([normalize(page), normalize(reference)]));
         // Capture through CDP after normalization. Playwright's screenshot helper waits
         // on every web font, including the intentionally unavailable prototype fonts.
@@ -257,16 +266,10 @@ async function prepareCreationOption(app: Page, reference: Page): Promise<Masks>
   const appChoice = app.getByRole('button', { name: 'Adventure' });
   const referenceChoice = reference.getByRole('button', { name: 'Adventure' });
   await appChoice.click();
-  await referenceChoice.evaluate((button) => button.setAttribute('aria-pressed', 'true'));
+  await referenceChoice.click();
   await Promise.all([
     expect(appChoice).toHaveAttribute('aria-pressed', 'true'),
     expect(referenceChoice).toHaveAttribute('aria-pressed', 'true'),
-  ]);
-  // #462 intentionally replaces the prototype's pick-limit hint with capacity dots.
-  // Remove both affordances so this comparison continues to own the surrounding shell.
-  await Promise.all([
-    app.locator('.new-pick-capacity').evaluate((capacity) => capacity.remove()),
-    reference.locator('#wz-hint').evaluate((hint) => hint.remove()),
   ]);
   return { app: [], reference: [] };
 }
@@ -280,13 +283,6 @@ async function prepareCreationTalk(app: Page, reference: Page): Promise<Masks> {
     reference.goto(`${referenceOrigin}/studio/index.html#new`, { waitUntil: 'domcontentloaded' }),
   ]);
   for (let step = 0; step < 5; step += 1) await reference.locator('#wz-next').click();
-  await reference.locator('#wz-dots').evaluate((dots) => {
-    const extra = document.createElement('i');
-    extra.className = 'now';
-    dots.querySelector('.now')?.classList.replace('now', 'done');
-    dots.append(extra);
-    dots.setAttribute('aria-label', 'Step 7 of 7');
-  });
   await Promise.all([
     expect(app.getByRole('heading', { name: 'Talk it through' })).toBeVisible(),
     expect(reference.locator('#wz-title')).toHaveText('Talk it through'),
@@ -305,6 +301,16 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
   await installGameApi(app);
   await app.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
   await app.route('**/api/v1/me', (route) => route.fulfill({ json: { platformRole: 'none' } }));
+  await app.route('**/api/v1/energy', (route) =>
+    route.fulfill({
+      json: {
+        level: 'limited',
+        preference: 'balanced',
+        windows: [],
+        services: [],
+      },
+    }),
+  );
   await app.route('**/api/v1/games/game/branches', (route) => route.fulfill({ json: { branches: [] } }));
   await app.route('**/api/v1/games', (route) => route.fulfill({ json: { games: [] } }));
   await app.route('**/api/v1/budget/status', (route) => route.fulfill({ json: { unitLabel: 'coins' } }));
@@ -335,10 +341,50 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
     }
     if (trayTitle) trayTitle.textContent = 'Actors';
   });
+  // The requested editor revision removes the prototype's header and uses a compact side column in landscape.
+  if (reference.viewportSize()!.width > reference.viewportSize()!.height) {
+    await reference.addStyleTag({
+      content: `
+      #editor { grid-template-columns: minmax(0, 1fr) minmax(220px, 25%); grid-template-rows: auto 180px minmax(0, 1fr);
+        grid-template-areas: 'stage rail' 'stage tray' 'stage .'; }
+      #editor::before { background: #fdf1d8; }
+      #editor .topbar, #editor #inspector, #tray h2 { display: none; }
+      #rail { flex-direction: row; padding-top: 60px; }
+      #rail button { flex: 0 0 72px; min-height: 0; font-size: 14px; }
+      #rail .thumb { width: 36px; height: 36px; }
+    `,
+    });
+  }
   await Promise.all([
     expect(app.locator('.editor-chrome')).toBeAttached(),
+    expect(app.locator('.editor-rail')).toBeVisible(),
+    expect(app.locator('.editor-rail button').first()).toBeVisible(),
     expect(reference.locator('#editor')).toBeVisible(),
   ]);
+  if (app.viewportSize()!.width < app.viewportSize()!.height) {
+    const [stage, rail] = await Promise.all([
+      app.locator('.game-stage').boundingBox(),
+      app.locator('.editor-rail').boundingBox(),
+    ]);
+    const previewFraction = stage!.height / app.viewportSize()!.height;
+    expect(previewFraction).toBeGreaterThanOrEqual(0.65);
+    expect(previewFraction).toBeLessThanOrEqual(0.7);
+    expect(rail!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height);
+  } else {
+    const [stage, rail] = await Promise.all([
+      app.locator('.game-stage').boundingBox(),
+      app.locator('.editor-rail').boundingBox(),
+    ]);
+    expect(rail!.x).toBeGreaterThanOrEqual(stage!.x + stage!.width);
+    expect(rail!.height / app.viewportSize()!.height).toBeLessThan(0.3);
+    const palette = await app.locator('.editor-palette').boundingBox();
+    expect(palette!.height).toBeLessThanOrEqual(180);
+  }
+  await app.getByRole('button', { name: 'Menu', exact: true }).click();
+  await expect(app.locator('#studio-editor-tools .editor-inspector')).toBeVisible();
+  await app.getByRole('button', { name: 'Menu', exact: true }).click();
+  await expect(app.locator('.editor-rail button').first()).toBeEnabled();
+  await app.locator('.editor-rail button').first().click();
   return { app: [app.locator('.game-stage')], reference: [reference.locator('#stage')] };
 }
 
@@ -366,9 +412,13 @@ async function neutralizeReferenceAssets(page: Page): Promise<void> {
       });
     };
   });
-  await page.route(/127\.0\.0\.1:43176\/ui\/.*\.js$/i, (route) => route.abort());
-  await page.route(/127\.0\.0\.1:43176\/(?:studio|ui)\/.*\.(?:png|jpe?g|webp|gif)$/i, (route) =>
-    route.fulfill({ contentType: 'image/svg+xml', body: neutralImage }),
+  await page.route(
+    (url) => url.origin === referenceOrigin && /^\/ui\/.*\.js$/i.test(url.pathname),
+    (route) => route.abort(),
+  );
+  await page.route(
+    (url) => url.origin === referenceOrigin && /^\/(?:studio|ui)\/.*\.(?:png|jpe?g|webp|gif)$/i.test(url.pathname),
+    (route) => route.fulfill({ contentType: 'image/svg+xml', body: neutralImage }),
   );
 }
 
@@ -381,7 +431,7 @@ async function normalize(page: Page): Promise<void> {
       ${prototypePaletteNormalizationCss}
       *, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }
       html, body, button, input, textarea { font-family: Arial, sans-serif !important; }
-      #bg canvas, .studio-backdrop canvas { visibility: hidden !important; }
+      #bg canvas, .studio-backdrop canvas, .studio-backdrop .glow-backdrop { visibility: hidden !important; }
       #bg, .studio-backdrop { background: #0f0e16 !important; }
     `,
   });

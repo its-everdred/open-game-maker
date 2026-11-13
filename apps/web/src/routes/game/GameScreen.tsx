@@ -21,6 +21,8 @@ import {
 } from '../../features/editor/api';
 import { inspectBuildChange, readyBuildSignal } from '../../features/editor/builds';
 import { EditorChrome } from '../../features/editor/EditorChrome';
+import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
+import { FocusZone } from '../../lib/input';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
 import {
@@ -46,7 +48,6 @@ import { RoomLayer } from '../../features/room/RoomLayer';
 import { useRoomRuntime } from '../../features/room/useRoomRuntime';
 import { useBranches } from '../games/useBranches';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
-import { PlayEditBar } from './PlayEditBar';
 import { LoadingLayer } from './LoadingLayer';
 import { gameLoadActivity } from './load-analytics';
 import { PlatformHud } from './PlatformHud';
@@ -325,7 +326,7 @@ export function GameScreen() {
       mode === 'play' || frameState.manifest?.capabilities.includes('scenery')
         ? {
             actions: [
-              { id: 'games', label: 'Games', icon: 'games', onSelect: () => void leaveRoom() },
+              { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
               ...(mode === 'play'
                 ? [
                     {
@@ -333,7 +334,9 @@ export function GameScreen() {
                       label: 'Edit',
                       icon: 'edit',
                       disabled: room.snapshot?.role === 'peer',
-                      onSelect: () => requestMode('edit'),
+                      onSelect: (): void => {
+                        void requestMode('edit');
+                      },
                     },
                   ]
                 : []),
@@ -348,17 +351,20 @@ export function GameScreen() {
             extras: gameExtraElements('topbar', extraProps),
             button: frameState.manifest?.playMenuButton,
           }
-        : undefined,
-    [
-      askForChange,
-      extraProps,
-      frameState.manifest?.playMenuButton,
-      frameState.manifest?.capabilities,
-      leaveRoom,
-      mode,
-      requestMode,
-      room.snapshot?.role,
-    ],
+        : {
+            actions: [
+              { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
+              {
+                id: 'ask-change',
+                label: 'Ask for a change',
+                icon: 'speak',
+                disabled: room.snapshot?.role === 'peer',
+                onSelect: askForChange,
+              },
+            ],
+            extras: gameExtraElements('topbar', extraProps),
+          },
+    [askForChange, extraProps, frameState.manifest?.playMenuButton, leaveRoom, mode, requestMode, room.snapshot?.role],
   );
   useGameMenuControls(playMenuControls);
 
@@ -374,19 +380,24 @@ export function GameScreen() {
       aria-label="Play and edit"
     >
       {mode === 'edit' ? (
-        <PlayEditBar
-          title={game.data?.title ?? ''}
-          mode={mode}
-          saved={savedLabel(editStartup ?? sessionView?.saved)}
-          build={build}
-          playLabel={frameState.manifest?.playLabel}
-          compact={frameState.manifest?.capabilities.includes('scenery')}
-          onBack={() => void leaveRoom()}
-          onMode={requestMode}
-          onAsk={askForChange}
-        >
-          <GameExtras placement="topbar" {...extraProps} />
-        </PlayEditBar>
+        <>
+          <FocusZone id={EDITOR_FOCUS_ZONES.bar} className="editor-play-zone">
+            <button
+              className="editor-play-button"
+              type="button"
+              aria-label="Play"
+              disabled={room.snapshot?.role === 'peer'}
+              onClick={() => requestMode('play')}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 3v18l14-9z" />
+              </svg>
+            </button>
+          </FocusZone>
+          <output className="sr" aria-live="polite">
+            {savedLabel(editStartup ?? sessionView?.saved)}
+          </output>
+        </>
       ) : null}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />

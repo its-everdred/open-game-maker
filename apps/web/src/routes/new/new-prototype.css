@@ -16,6 +16,10 @@
   padding-left: 104px;
 }
 
+.new-game-head > .new-head-back {
+  grid-column: 1;
+}
+
 .new-game-head > h1 {
   grid-column: 2;
   margin: 0;
@@ -24,14 +28,35 @@
 }
 
 .new-back {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
   padding: 6px 12px;
   border: 1px solid var(--rule);
   border-radius: 999px;
   background: var(--action-secondary);
   backdrop-filter: var(--glass);
+  font: 600 15px var(--display);
 }
 
-.new-dots {
+.new-back::before {
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+  border-right: 8px solid var(--ink);
+  border-left: 0;
+  content: '';
+}
+
+.new-back::after {
+  position: absolute;
+  inset: -7px;
+  content: '';
+}
+
+.new-game-head > .new-dots {
   grid-column: 3;
   justify-self: end;
 }
@@ -63,9 +88,10 @@
   gap: 16px;
 }
 
-.new-option {
+.new-game-screen .new-option {
   min-height: 150px;
   padding: 14px 10px;
+  font: 600 18px var(--display);
 }
 
 .new-game-foot {
@@ -127,7 +153,7 @@
     font-size: clamp(25px, 9vw, 38px);
   }
 
-  .new-dots {
+  .new-game-head > .new-dots {
     grid-column: 1 / -1;
     justify-self: center;
   }
@@ -137,7 +163,7 @@
     gap: 10px;
   }
 
-  .new-option {
+  .new-game-screen .new-option {
     min-height: 112px;
     padding: 10px 4px;
   }

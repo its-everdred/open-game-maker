@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router';
 
 import type { DesignDoc } from '@ogm/contracts/browser';
 
@@ -7,7 +8,14 @@ import { queryClient } from '../../app/query';
 import { mountGameFrame } from '../../features/editor/frame';
 import { api } from '../../lib/api/client';
 
-export type Preview = { ticket: string; buildId: string; accessId: string; createdAt: string; pendingMessage?: string };
+export type Preview = {
+  ticket: string;
+  buildId: string;
+  accessId: string;
+  createdAt: string;
+  pendingMessage?: string;
+  title?: string;
+};
 const key = (gameId: string) => ['game-previews', gameId] as const;
 
 export function usePreviews(gameId: string) {
@@ -20,6 +28,16 @@ export function usePreviews(gameId: string) {
 }
 
 export function PreviewReviews({ gameId, previews }: { gameId: string; previews: Preview[] }) {
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash.startsWith('#preview-')) {
+      try {
+        document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+      } catch {
+        // An invalid fragment cannot identify a preview.
+      }
+    }
+  }, [hash, previews]);
   return (
     <>
       {previews.map((preview) => (
@@ -68,7 +86,11 @@ function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) 
     return () => frame.dispose();
   }, [design.data, gameId, preview.accessId]);
   return (
-    <section className="review-deck" aria-label={`Preview for ticket ${preview.ticket}`}>
+    <section
+      id={`preview-${preview.buildId}`}
+      className="review-deck"
+      aria-label={`Preview for ticket ${preview.ticket}`}
+    >
       <div className="review-deck-playable">
         <div className="review-deck-playable-frame" ref={container} />
         {frameError || design.isError ? <p role="status">The game did not load.</p> : null}

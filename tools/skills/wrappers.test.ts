@@ -72,13 +72,13 @@ describe('gm wrappers of the vendored tool sets', () => {
     expect(mock).toContain("Upstream's fal generation is not vendored");
   });
 
-  it('gm-ui-hud names frontend-design and keeps it behind the approved targets and the Gruvbox palette', () => {
+  it('gm-ui-hud names frontend-design and keeps it behind the approved targets and prototype palette', () => {
     const hud = text('gm-ui-hud');
 
     expect(hud).toContain('`.claude/skills/vendor/frontend-design/frontend-design/SKILL.md`');
     expect(existsSync(join(skills, 'vendor/frontend-design/frontend-design/SKILL.md'))).toBe(true);
     expect(hud).toContain("the game's approved targets");
-    expect(hud).toContain("the app's Gruvbox palette win over its suggestions");
+    expect(hud).toContain("the app's prototype palette tokens win over its suggestions");
   });
 
   it('roles recommend Sprite Forge, video-to-game and frontend-design on the roles the ticket names', () => {

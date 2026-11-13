@@ -9,10 +9,10 @@
   min-width: 28px;
   min-height: 20px;
   padding: 2px 6px;
-  border: 1px solid var(--gruvbox-bg0-h);
+  border: 1px solid var(--surface-deep);
   border-radius: 5px;
-  background: var(--gruvbox-purple);
-  color: var(--gruvbox-bg0-h);
+  background: var(--purple-b);
+  color: var(--surface-deep);
   font: 800 12px/1 var(--body);
   letter-spacing: 0.04em;
 }

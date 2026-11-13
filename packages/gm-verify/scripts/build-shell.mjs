@@ -14,6 +14,8 @@ await build({
   bundle: true,
   format: 'esm',
   platform: 'browser',
+  // Prototype art is supplied at runtime by the app, not embedded in the standalone shell bundle.
+  external: ['/proto/*'],
   outfile: join(out, 'host-shell.js'),
   logLevel: 'warning',
 });

@@ -1,4 +1,4 @@
-/* The review deck (A3): one card at a time, full width on a phone, in the studio's Gruvbox dark look. The deck sits in
+/* The review deck (A3): one card at a time, full width on a phone, in the studio's prototype look. The deck sits in
    the Commands inbox or in its own deep-linked screen, so it uses the same glass card, rule and display type as the
    rest of the studio and adds no chrome of its own. */
 .review-deck {
@@ -106,13 +106,13 @@
 
 .review-deck-stamp-like {
   left: 16px;
-  color: var(--gruvbox-aqua, var(--aqua-b));
+  color: var(--aqua-b, var(--aqua-b));
   transform: rotate(-14deg);
 }
 
 .review-deck-stamp-dislike {
   right: 16px;
-  color: var(--gruvbox-red, var(--red-b));
+  color: var(--red-b, var(--red-b));
   transform: rotate(14deg);
 }
 

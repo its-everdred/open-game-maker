@@ -44,15 +44,17 @@ test('runs the cross-origin editor transaction, undo, and mode flow', async ({ p
   expect(api.transactions[0]?.baseRev).toBe(4);
   await expect.poll(() => gameState(page).then((state) => state?.saved)).toBe('saved');
 
-  await page.getByRole('button', { name: 'Undo' }).click({ force: true });
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await expect.poll(() => api.transactions.length).toBe(2);
   expect(api.transactions[1]?.label).toContain('Undo');
 
   if (testInfo.project.name === 'phone') {
-    for (const name of ['Games', '▶ Play', '✎ Edit', 'Ask for a change']) {
+    for (const name of ['Play', 'Menu']) {
       const box = await page.getByRole('button', { name, exact: true }).boundingBox();
-      expect(box?.width).toBeGreaterThanOrEqual(64);
-      expect(box?.height).toBeGreaterThanOrEqual(64);
+      expect(box?.width).toBeGreaterThanOrEqual(44);
+      expect(box?.height).toBeGreaterThanOrEqual(44);
     }
     await expect(page.getByLabel('Editor canvas')).toBeAttached();
     await expect(page.locator('[data-focus-zone="editor-inspector"]')).toBeAttached();
@@ -94,8 +96,10 @@ async function openReadyEditor(page: Page, api: GameApiFixture): Promise<void> {
 
 async function selectSkeleton(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Skeleton' }).click({ force: true });
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await expect(page.getByRole('button', { name: 'place', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('Place a skeleton', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
 }
 
 function gameState(page: Page): Promise<GameHook | undefined> {

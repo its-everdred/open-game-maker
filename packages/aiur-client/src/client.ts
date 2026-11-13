@@ -11,11 +11,13 @@ import {
   IssueEntrySchema,
   MessageResultSchema,
   SpendCapSchema,
+  StateSchema,
   TicketProgressSchema,
   TicketUsageSchema,
   UsageAccountsSchema,
   parseContract,
   type CancelResult,
+  type AiurState,
   type Decision,
   type EventPage,
   type IssueEntry,
@@ -73,9 +75,10 @@ export type DecisionMediaFile = { mime: string; body: ReadableStream<Uint8Array>
 
 export interface AiurClient {
   readonly baseUrl: string;
+  state(signal?: AbortSignal): Promise<AiurState>;
   issue(id: string): Promise<IssueEntry>;
   usage(id: string): Promise<TicketUsage>;
-  progress(id: string, limit?: number): Promise<TicketProgress>;
+  progress(id: string, limit?: number, signal?: AbortSignal): Promise<TicketProgress>;
   setSpendCap(id: string, usd: string): Promise<SpendCap>;
   cancel(id: string): Promise<CancelResult>;
   pause(id: string): Promise<void>;
@@ -184,6 +187,10 @@ export function createAiurClient(
 
   return {
     baseUrl,
+    async state(signal) {
+      const { body } = await fetchResponse('GET', '/api/v1/state', { signal });
+      return parseContract(StateSchema, body);
+    },
     async issue(id) {
       const { body } = await fetchResponse('GET', `/api/v1/${encodeURIComponent(id)}`);
       return parseContract(IssueEntrySchema, body);
@@ -192,9 +199,9 @@ export function createAiurClient(
       const { body } = await fetchResponse('GET', `/api/v1/${encodeURIComponent(id)}/usage`);
       return parseContract(TicketUsageSchema, body);
     },
-    async progress(id, limit) {
+    async progress(id, limit, signal) {
       const query = limit === undefined ? '' : `?limit=${encodeURIComponent(String(limit))}`;
-      const { body } = await fetchResponse('GET', `/api/v1/${encodeURIComponent(id)}/progress${query}`);
+      const { body } = await fetchResponse('GET', `/api/v1/${encodeURIComponent(id)}/progress${query}`, { signal });
       return parseContract(TicketProgressSchema, body);
     },
     async setSpendCap(id, usd) {

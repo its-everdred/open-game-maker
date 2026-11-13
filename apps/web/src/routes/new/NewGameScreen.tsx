@@ -36,14 +36,16 @@ const VIEW_LABELS: Record<string, string> = {
 };
 
 const STEP_COLORS: Record<ChoiceKey, string> = {
-  genre: 'var(--gruvbox-orange)',
-  vibe: 'var(--gruvbox-purple)',
-  family: 'var(--gruvbox-blue)',
-  sound: 'var(--gruvbox-red)',
-  world: 'var(--gruvbox-green)',
-  players: 'var(--gruvbox-aqua)',
-  view: 'var(--gruvbox-yellow)',
+  genre: 'var(--orange-b)',
+  vibe: 'var(--purple-b)',
+  family: 'var(--blue-b)',
+  sound: 'var(--red-b)',
+  world: 'var(--green-b)',
+  players: 'var(--aqua-b)',
+  view: 'var(--yellow-b)',
 };
+
+const PROTOTYPE_STEPS: StepKey[] = ['genre', 'vibe', 'family', 'world', 'players', 'talk'];
 
 const testState: { step: StepKey; picks: NewGameChoices; sessionId?: string } = {
   step: 'genre',
@@ -70,7 +72,7 @@ export function NewGameScreen() {
   );
   const audioFamilies = audio.data ?? [];
   const step = validStep(search.get('step'));
-  const stepIndex = STEP_ORDER.indexOf(step);
+  const stepIndex = step === 'sound' ? 2 : step === 'view' ? 4 : PROTOTYPE_STEPS.indexOf(step);
   const selectedFamily = families.find(({ id }) => id === choices.family?.picks[0]);
 
   testState.step = step;
@@ -149,13 +151,13 @@ export function NewGameScreen() {
 
   const back = () => {
     if (stepIndex === 0) navigate('/all');
-    else go(STEP_ORDER[stepIndex - 1]!);
+    else go(step === 'sound' ? 'family' : step === 'view' ? 'players' : PROTOTYPE_STEPS[stepIndex - 1]!);
   };
 
   // A Sound step with no carded audio offers no tiles; skip past it rather than show an empty screen.
   useEffect(() => {
     if (step !== 'sound' || audio.isLoading || audioFamilies.length > 0) return;
-    go(STEP_ORDER[STEP_ORDER.indexOf('sound') + 1] ?? 'talk');
+    go('world');
   }, [audio.isLoading, audioFamilies.length, go, step]);
 
   const current =
@@ -172,8 +174,8 @@ export function NewGameScreen() {
           </button>
         </div>
         <h1>{step === 'talk' ? 'Talk it through' : current?.title}</h1>
-        <div className="new-dots" role="img" aria-label={`Step ${stepIndex + 1} of ${STEP_ORDER.length}`}>
-          {STEP_ORDER.map((key, index) => (
+        <div className="new-dots" role="img" aria-label={`Step ${stepIndex + 1} of ${PROTOTYPE_STEPS.length}`}>
+          {PROTOTYPE_STEPS.map((key, index) => (
             <i className={index < stepIndex ? 'done' : index === stepIndex ? 'now' : ''} key={key} />
           ))}
         </div>
@@ -187,6 +189,7 @@ export function NewGameScreen() {
         {step === 'talk' ? (
           <TalkStep
             choices={choices}
+            familyViews={selectedFamily?.views}
             gameId={gameId}
             createError={createError}
             onRetry={() => setCreateAttempt((current) => current + 1)}
@@ -280,7 +283,9 @@ export function NewGameScreen() {
           <button
             className="new-next tap-primary"
             type="button"
-            onClick={() => go(STEP_ORDER[stepIndex + 1] ?? 'talk')}
+            onClick={() =>
+              go(step === 'sound' ? 'world' : step === 'view' ? 'talk' : (PROTOTYPE_STEPS[stepIndex + 1] ?? 'talk'))
+            }
           >
             {count ? 'Next' : 'Skip'}
           </button>
@@ -313,7 +318,7 @@ function stepDefinition(
   if (step === 'family') {
     return {
       key: 'family',
-      title: 'Style',
+      title: 'Art',
       ask: 'What should it look like?',
       hint: 'Pick one',
       max: 1,
@@ -335,12 +340,14 @@ function stepDefinition(
 
 function TalkStep({
   choices,
+  familyViews,
   gameId,
   createError,
   onRetry,
   onSession,
 }: {
   choices: NewGameChoices;
+  familyViews?: string[];
   gameId?: string;
   createError: string;
   onRetry(): void;
@@ -383,7 +390,7 @@ function TalkStep({
         </p>
       ) : null}
       {gameId ? (
-        <ScopeChat gameId={gameId} choices={scopeChoicesFrom(choices)} onSession={onSession} />
+        <ScopeChat gameId={gameId} choices={scopeChoicesFrom(choices, familyViews)} onSession={onSession} />
       ) : createError ? null : (
         <p role="status">Creating your game…</p>
       )}
