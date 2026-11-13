@@ -364,7 +364,7 @@ steps:
           # OGM_INSTANCE_ALL_ASSETS=1 is the generated instance default; licensed files stay gitignored and are staged only for this deploy.
           # Set VITE_GAMES_ORIGIN=https://<tailnet-host>:10000 in web.env; deploy.sh bakes it in and refuses without it.
           # Set VITE_API_ORIGIN=https://<tailnet-host>:8443 in web.env; deploy.sh writes _redirects from it.
-          # Optional: export OGM_DEPLOY_LOAD_SECONDS=<seconds> to override the 60-second title readiness window.
+          # Optional: export OGM_DEPLOY_LOAD_SECONDS=<seconds> to override the 240-second title readiness window.
           # Set OGM_APP_ORIGIN=<app-origin> in games.env so the games host allows the app as a frame ancestor.
           apps/web/tools/town.sh
           apps/web/tools/deploy.sh --dry-run
