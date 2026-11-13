@@ -83,7 +83,7 @@ export function EditorChrome({
     if (pickedPrefab !== undefined && picked === undefined) setPickedPrefab(undefined);
   }, [picked, pickedPrefab]);
   // Layout, not passive: the canvas must hold the pick in the same commit the palette shows it, or a quick tap
-  // after picking lands as a select and places nothing (#297).
+  // after picking lands as a select and places nothing (issue 297).
   useLayoutEffect(() => onCanvasChange?.({ prefab: picked?.prefab, snap }), [onCanvasChange, picked?.prefab, snap]);
   useLayoutEffect(() => setToolsTarget(document.getElementById('studio-editor-tools')), []);
   const updateSnap = (next: SnapPrefs) => {
