@@ -13,12 +13,14 @@ import {
   acquireLease,
   getDesignSnapshot,
   getGame,
+  getScenerySource,
   getOptionalReapply,
   heartbeatLease,
   listJobs,
   postAnalyticsEvent,
   postTransaction,
   releaseLease,
+  NO_BUILD_ID,
   submitReapply,
   type DesignSnapshot,
 } from '../../features/editor/api';
@@ -35,6 +37,8 @@ import {
 import { LeaseController } from '../../features/editor/lease';
 import { ReapplyCard } from '../../features/editor/ReapplyCard';
 import { createEditorSession, type EditorSessionState } from '../../features/editor/session';
+import { bootstrapScenery } from '../../features/editor/scenery-bootstrap';
+import { mountSceneryPreview } from '../../features/editor/scenery-preview';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
 import { connectTransactionStream } from '../../features/editor/stream';
 import {
@@ -42,6 +46,7 @@ import {
   createIntent,
   createStableId,
   deleteEntityIntent,
+  toTransactionBody,
 } from '../../features/editor/transactions';
 import { pushToast } from '../../lib/notify/slice';
 import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
@@ -116,6 +121,11 @@ export function GameScreen() {
   const inspectedBuildRef = useRef<string | undefined>(undefined);
   const inspectedJobRef = useRef<string | undefined>(undefined);
   const activeSnapshot = adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
+  const scenerySource = useQuery({
+    queryKey: ['scenery-source', gameId],
+    queryFn: () => getScenerySource(gameId),
+    enabled: gameId !== '' && activeSnapshot?.buildId === NO_BUILD_ID,
+  });
   const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
   const reportGameLoad = useCallback(
@@ -166,21 +176,34 @@ export function GameScreen() {
     const container = containerRef.current;
     const snapshot = activeSnapshot;
     if (container === null || snapshot === undefined || gameId === '') return;
+    if (snapshot.buildId === NO_BUILD_ID && scenerySource.data === undefined) {
+      if (scenerySource.isError) setFrameState({ bridgeState: 'error', dropped: 0 });
+      return;
+    }
     setFrameState(initialFrameState);
-    const controller = mountGameFrame({
-      container,
-      gamesOrigin,
-      gameId,
-      buildId: snapshot.buildId,
-      mode,
-      design: snapshot,
-      build,
-      onState: setFrameState,
-      onSaveWrite: () => setLastSaveAt(new Date().toISOString()),
-      onRoomMessage: room.handleGameMessage,
-      onLoadDone: (measurement) => reportGameLoad(measurement, 'ok'),
-      onLoadStalled: (measurement) => reportGameLoad(measurement, 'fail'),
-    });
+    let controller: GameFrameController;
+    try {
+      controller =
+        snapshot.buildId === NO_BUILD_ID
+          ? mountSceneryPreview(container, scenerySource.data!, snapshot.doc, setFrameState)
+          : mountGameFrame({
+              container,
+              gamesOrigin,
+              gameId,
+              buildId: snapshot.buildId,
+              mode,
+              design: snapshot,
+              build,
+              onState: setFrameState,
+              onSaveWrite: () => setLastSaveAt(new Date().toISOString()),
+              onRoomMessage: room.handleGameMessage,
+              onLoadDone: (measurement) => reportGameLoad(measurement, 'ok'),
+              onLoadStalled: (measurement) => reportGameLoad(measurement, 'fail'),
+            });
+    } catch {
+      setFrameState({ bridgeState: 'error', dropped: 0 });
+      return;
+    }
     frameRef.current = controller;
     setFrameController(controller);
     setWatcherCamera('follow');
@@ -189,7 +212,18 @@ export function GameScreen() {
       if (frameRef.current === controller) frameRef.current = undefined;
       setFrameController((current) => (current === controller ? undefined : current));
     };
-  }, [activeSnapshot, branch, build, frameAttempt, gameId, gamesOrigin, reportGameLoad, room.handleGameMessage]);
+  }, [
+    activeSnapshot,
+    branch,
+    build,
+    frameAttempt,
+    gameId,
+    gamesOrigin,
+    reportGameLoad,
+    room.handleGameMessage,
+    scenerySource.data,
+    scenerySource.isError,
+  ]);
 
   useEffect(() => {
     frameRef.current?.setMode(mode);
@@ -201,7 +235,13 @@ export function GameScreen() {
   }, [frameController, mode, room.snapshot?.phase, room.snapshot?.role, watcherCamera]);
 
   useEffect(() => {
-    if (mode !== 'edit' || room.snapshot?.role === 'peer' || activeSnapshot === undefined || gameId === '') {
+    if (
+      mode !== 'edit' ||
+      room.snapshot?.role === 'peer' ||
+      activeSnapshot === undefined ||
+      gameId === '' ||
+      (activeSnapshot.buildId === NO_BUILD_ID && scenerySource.data === undefined)
+    ) {
       setSessionStore(undefined);
       setEditStartup(undefined);
       return;
@@ -234,22 +274,53 @@ export function GameScreen() {
       },
     });
 
-    void lease.start().then(async (result) => {
-      if (!active) {
-        await lease.stop();
-        return;
-      }
-      if (!result.ok) return;
-      editor = createSession(gameId, branch, sessionId, result.lease.token, snapshot, frameRef);
-      setSessionStore(editor);
-      setEditStartup(undefined);
-      stream = connectTransactionStream({
-        gameId,
-        branch,
-        after: snapshot.rev,
-        receive: (transaction) => editor?.getState().receive(transaction),
+    void lease
+      .start()
+      .then(async (result) => {
+        if (!active) {
+          await lease.stop();
+          return;
+        }
+        if (!result.ok) return;
+        let initial = snapshot;
+        if (snapshot.buildId === NO_BUILD_ID) {
+          initial = await getDesignSnapshot(gameId, branch);
+          if (initial.buildId !== NO_BUILD_ID) {
+            if (active) setAdopted({ gameId, branch, snapshot: initial });
+            return;
+          }
+          const intent = await bootstrapScenery(initial.doc, scenerySource.data!.scene);
+          if (intent) {
+            const saved = await postTransaction(
+              gameId,
+              branch,
+              toTransactionBody(intent, {
+                baseRev: initial.rev,
+                leaseToken: result.lease.token,
+                baseBuildId: NO_BUILD_ID,
+                sessionId,
+              }),
+            );
+            if (!saved.ok) throw new Error('initial scenery could not be saved');
+            initial = { ...initial, rev: saved.rev, doc: intent.doc };
+          }
+        }
+        if (!active) return;
+        frameRef.current?.applyDesign(initial.rev, initial.doc, []);
+        editor = createSession(gameId, branch, sessionId, result.lease.token, initial, frameRef);
+        setSessionStore(editor);
+        setEditStartup(undefined);
+        stream = connectTransactionStream({
+          gameId,
+          branch,
+          after: initial.rev,
+          receive: (transaction) => editor?.getState().receive(transaction),
+        });
+      })
+      .catch(() => {
+        if (active) setEditStartup('not-saved');
+        void lease.stop();
       });
-    });
 
     return () => {
       active = false;
@@ -257,7 +328,7 @@ export function GameScreen() {
       void lease.stop();
       setSessionStore(undefined);
     };
-  }, [activeSnapshot, branch, gameId, mode, room.snapshot?.role]);
+  }, [activeSnapshot, branch, gameId, mode, room.snapshot?.role, scenerySource.data]);
 
   useEffect(() => {
     if (sessionStore === undefined) {
@@ -351,17 +422,21 @@ export function GameScreen() {
   );
   const playMenuControls = useMemo(
     () =>
-      mode === 'play'
+      mode === 'play' || frameState.manifest?.capabilities.includes('scenery')
         ? {
             actions: [
               { id: 'games', label: 'Games', icon: 'games', onSelect: () => void leaveRoom() },
-              {
-                id: 'edit',
-                label: 'Edit',
-                icon: 'edit',
-                disabled: room.snapshot?.role === 'peer',
-                onSelect: () => requestMode('edit'),
-              },
+              ...(mode === 'play'
+                ? [
+                    {
+                      id: 'edit',
+                      label: 'Edit',
+                      icon: 'edit',
+                      disabled: room.snapshot?.role === 'peer',
+                      onSelect: () => requestMode('edit'),
+                    },
+                  ]
+                : []),
               {
                 id: 'ask-change',
                 label: 'Ask for a change',
@@ -374,7 +449,16 @@ export function GameScreen() {
             button: frameState.manifest?.playMenuButton,
           }
         : undefined,
-    [askForChange, extraProps, frameState.manifest?.playMenuButton, leaveRoom, mode, requestMode, room.snapshot?.role],
+    [
+      askForChange,
+      extraProps,
+      frameState.manifest?.playMenuButton,
+      frameState.manifest?.capabilities,
+      leaveRoom,
+      mode,
+      requestMode,
+      room.snapshot?.role,
+    ],
   );
   useGameMenuControls(playMenuControls);
 
@@ -385,7 +469,10 @@ export function GameScreen() {
     activeSnapshot !== undefined;
 
   return (
-    <section className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}`} aria-label="Play and edit">
+    <section
+      className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}${frameState.manifest?.capabilities.includes('scenery') ? ' is-scenery' : ''}${['not-saved', 'read-only', 'retrying'].includes(editStartup ?? sessionView?.saved ?? '') ? ' is-unsaved' : ''}`}
+      aria-label="Play and edit"
+    >
       {mode === 'edit' ? (
         <PlayEditBar
           title={game.data?.title ?? ''}
@@ -507,7 +594,14 @@ export function GameScreen() {
       ) : null}
       {frameState.bridgeState === 'error' ? (
         <div className="screen-error" role="alert">
-          <button className="tap-primary" type="button" onClick={() => setFrameAttempt((attempt) => attempt + 1)}>
+          <button
+            className="tap-primary"
+            type="button"
+            onClick={() => {
+              if (activeSnapshot?.buildId === NO_BUILD_ID) void scenerySource.refetch();
+              setFrameAttempt((attempt) => attempt + 1);
+            }}
+          >
             Try again
           </button>
         </div>

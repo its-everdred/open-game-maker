@@ -4,6 +4,8 @@ import { savesListPath, savesPath, type DesignDoc } from '@ogm/contracts/browser
 
 import {
   getOptionalPublished,
+  getDesignSnapshot,
+  NO_BUILD_ID,
   getOptionalSaves,
   postAnalyticsEvent,
   postTransaction,
@@ -40,6 +42,11 @@ afterEach(() => {
 });
 
 describe('editor API classifications', () => {
+  it('represents an unbuilt snapshot with the reserved empty build id', async () => {
+    const doc = { schemaVersion: 1, globals: {}, entities: {} };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, { rev: 0, buildId: null, doc })));
+    await expect(getDesignSnapshot(gameId, 'main')).resolves.toEqual({ rev: 0, buildId: NO_BUILD_ID, doc });
+  });
   it('posts one load activity through the analytics ingest client', async () => {
     const fetch = vi.fn().mockResolvedValue(response(202, { accepted: 1, rejected: [] }));
     vi.stubGlobal('fetch', fetch);

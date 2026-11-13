@@ -40,6 +40,95 @@
   box-shadow: none;
 }
 
+/* Scenery uses the game preview as its main workspace while the shared editor is being generalised. */
+.game-screen.is-editing.is-scenery {
+  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-rows: 112px minmax(0, 1fr) 150px;
+  grid-template-areas: 'stage rail' 'stage insp' 'stage tray';
+}
+
+.game-screen.is-editing.is-scenery .editor-rail {
+  flex-direction: row;
+  align-items: end;
+  padding: 4px;
+  gap: 2px;
+}
+
+.game-screen.is-editing.is-scenery .editor-rail button {
+  height: 48px;
+  min-height: 0;
+  padding: 0;
+  flex: 0 0 40px;
+  font-size: 10px;
+}
+
+.game-screen.is-editing.is-scenery .editor-palette {
+  align-items: stretch;
+}
+
+.game-screen.is-editing.is-scenery .editor-palette h2,
+.game-screen.is-editing.is-scenery .inspector-empty {
+  display: none;
+}
+
+.game-screen.is-editing.is-scenery .editor-rail img,
+.game-screen.is-editing.is-scenery .rail-letter {
+  width: 24px;
+  height: 24px;
+  font-size: 17px;
+}
+
+.game-screen.is-editing.is-scenery .play-bar {
+  position: absolute;
+  z-index: 15;
+  top: max(12px, var(--safe-t));
+  right: max(72px, calc(var(--safe-r) + 72px));
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.game-screen.is-editing.is-scenery .play-bar > :not(.mode-segment),
+.game-screen.is-editing.is-scenery .mode-segment [data-mode='edit'] {
+  display: none;
+}
+
+.game-screen.is-editing.is-scenery .mode-segment {
+  border: 0;
+  box-shadow: none;
+}
+
+.game-screen.is-editing.is-scenery.is-unsaved .play-bar > .saved-state {
+  display: block;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--editor-card);
+  color: var(--ink);
+}
+
+.game-screen.is-editing.is-scenery .mode-segment [data-mode='play'] {
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--action-primary);
+  color: var(--action-primary-text);
+  font-size: 0;
+}
+
+.game-screen.is-editing.is-scenery .mode-segment [data-mode='play']::after {
+  content: '▶';
+  font-size: 18px;
+}
+
+.game-screen.is-editing.is-scenery .editor-chrome > .palette-items {
+  grid-area: tray;
+}
+
 .game-screen .play-bar,
 .game-stage,
 .editor-rail,
@@ -387,6 +476,28 @@
     gap: 0;
   }
 
+  .game-screen.is-editing.is-scenery {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 65dvh) 56px minmax(0, 1fr);
+    grid-template-areas: 'stage' 'rail' 'tray';
+  }
+
+  .game-screen.is-editing.is-scenery .editor-tools {
+    align-self: end;
+    margin: 0 0 8px;
+  }
+
+  .game-screen.is-editing.is-scenery .editor-rail button {
+    height: auto;
+    flex: 1;
+    flex-direction: row;
+    font-size: 13px;
+  }
+
+  .game-screen.is-editing.is-scenery .editor-rail {
+    align-items: stretch;
+  }
+
   .game-screen .play-bar {
     padding: 6px max(8px, var(--safe-r)) 6px max(8px, var(--safe-l));
     gap: 6px;
@@ -495,5 +606,18 @@
     font-size: 14px;
     white-space: normal;
     text-align: center;
+  }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .game-screen.is-editing.is-scenery {
+    grid-template-columns: minmax(0, 1fr) 210px;
+    grid-template-rows: 56px minmax(0, 1fr);
+    grid-template-areas: 'stage rail' 'stage tray';
+  }
+
+  .game-screen.is-editing.is-scenery .editor-tools {
+    grid-area: tray;
+    align-self: end;
   }
 }

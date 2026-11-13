@@ -12,6 +12,7 @@ import type {
   SaveSlot,
   Transaction,
 } from '@ogm/contracts/browser';
+import type { Scenery } from '@ogm/contracts/scenery';
 import { SaveRevisionSchema, savesListPath, savesPath, type SaveListQuery } from '@ogm/contracts/browser';
 import { PatchTooLargeError, validatePatches } from '@ogm/design-log/browser';
 
@@ -29,6 +30,8 @@ export type GameMetadata = {
 };
 
 export type DesignSnapshot = { rev: number; buildId: string; doc: DesignDoc };
+export const NO_BUILD_ID = 'build_00000000000000000000000000';
+export type ScenerySource = { scene: Scenery; assets: { id: string; path: string; url: string }[] };
 export type Lease = { token: number; expiresAt: string };
 export type TransactionBody = {
   baseRev: number;
@@ -70,8 +73,15 @@ export function postAnalyticsEvent(event: ActivityEvent): Promise<IngestResponse
   return api('/analytics/events', { method: 'POST', json: { events: [event] } });
 }
 
-export function getDesignSnapshot(gameId: string, branch: string): Promise<DesignSnapshot> {
-  return api(branchPath(gameId, branch, '/design'));
+export async function getDesignSnapshot(gameId: string, branch: string): Promise<DesignSnapshot> {
+  const snapshot = await api<{ rev: number; buildId: string | null; doc: DesignDoc }>(
+    branchPath(gameId, branch, '/design'),
+  );
+  return { ...snapshot, buildId: snapshot.buildId ?? NO_BUILD_ID };
+}
+
+export function getScenerySource(gameId: string): Promise<ScenerySource> {
+  return api(`/games/${segment(gameId)}/scenery/source`);
 }
 
 export async function acquireLease(gameId: string, branch: string, sessionId: string): Promise<LeaseResult> {
