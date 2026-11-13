@@ -402,7 +402,7 @@ describe('GameScreen', () => {
     expect(host.mountGameFrame).not.toHaveBeenCalled();
     expect(editorApi.getPreviewDesign).not.toHaveBeenCalled();
   });
-  it('does not load the shared main scenery into an unbuilt side branch', async () => {
+  it('requests branch-scoped scenery for an unbuilt side branch', async () => {
     branchList.value = [
       { id: 'b_main', name: 'main' },
       { id: 'b_side', name: 'side' },
@@ -417,7 +417,7 @@ describe('GameScreen', () => {
     await waitFor(() =>
       expect(view.container.querySelector('img[src="https://example.test/concept.webp"]')).not.toBeNull(),
     );
-    expect(editorApi.getScenerySource).not.toHaveBeenCalled();
+    await waitFor(() => expect(editorApi.getScenerySource).toHaveBeenCalledWith('game', 'b_side'));
     expect(preview.mountSceneryPreview).not.toHaveBeenCalled();
   });
   it.each(['t3:fixture/tree', 'scope:0'])(
@@ -573,6 +573,55 @@ describe('GameScreen', () => {
     await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
     expect(editorApi.postTransaction).not.toHaveBeenCalled();
   });
+  it('keeps a long terrain request within the builder field limit', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getScenerySource.mockResolvedValue({
+      scene: {
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+    act(() =>
+      preview.mountSceneryPreview.mock.calls.at(-1)?.[3]({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: ['scenery'],
+          palette: {
+            categories: [{ id: 'terrain', label: 'Terrain', kind: 'items' }],
+            items: [{ prefab: 'scenery-band:path', label: 'Path', category: 'terrain' }],
+          },
+          tools: ['place'],
+          gizmos: {},
+          presentation: { minLogical: { w: 100, h: 100 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'Path' }), { pointerId: 1 });
+    const canvas = await screen.findByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 2, clientX: 0, clientY: 0 });
+    for (let i = 1; i < 256; i++) fireEvent.pointerMove(canvas, { pointerId: 2, clientX: i / 3, clientY: i / 4 });
+    fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 100, clientY: 100 });
+    await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+    const request = fallbackAdmission.admitJob.mock.calls[0]![0];
+    expect(request.plan.scope.included[0].length).toBeLessThanOrEqual(4000);
+    expect(request.plan.tickets[0].acceptanceCriteria[0].length).toBeLessThanOrEqual(4000);
+    expect(JSON.stringify(request.plan)).toContain('[1,1]');
+  });
+
   it('requests a lighting change before a playable build', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,

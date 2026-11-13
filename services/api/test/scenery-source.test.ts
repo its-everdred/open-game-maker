@@ -203,7 +203,7 @@ describe('no-build scenery source', () => {
         label: 'Edit scene',
         baseBuildId: 'none',
         commandsJson: '[]',
-        patchesJson: '[]',
+        patchesJson: JSON.stringify([{ op: 'replace', path: ['globals', 'scenery.terrain'], value: [] }]),
         inverseJson: '[]',
         createdAt: '2026-11-12T00:00:00.000Z',
       })
@@ -211,6 +211,9 @@ describe('no-build scenery source', () => {
     expect(await (await app.request(url, { headers: asUser(ids.creator) })).json()).toMatchObject({
       updatedAt: '2026-11-12T00:00:00.000Z',
     });
+    const sideScene = await (await app.request(`${url}?branch=side`, { headers: asUser(ids.creator) })).json();
+    expect(sideScene).toMatchObject({ scene: { items: [], terrain: [] } });
+    expect(sideScene).not.toHaveProperty('updatedAt');
     writeFileSync(join(game, 'scenery.json'), '{invalid');
     expect((await app.request(fallbackUrl, { headers: asUser(ids.creator) })).status).toBe(200);
     expect((await app.request(url, { headers: asUser(ids.creator) })).status).toBe(404);

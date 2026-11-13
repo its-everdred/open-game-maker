@@ -318,10 +318,11 @@ export function GizmoOverlay({
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (requestPointerRef.current !== undefined) {
       if (requestPointerRef.current === event.pointerId && activePrefab?.startsWith('scenery-band:')) {
-        if (requestPathRef.current.length < 255)
-          requestPathRef.current.push(
-            normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()),
-          );
+        if (requestPathRef.current.length >= 255)
+          requestPathRef.current = requestPathRef.current.filter((_, index) => index % 2 === 0);
+        requestPathRef.current.push(
+          normalizeFramePoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()),
+        );
       }
       return;
     }
