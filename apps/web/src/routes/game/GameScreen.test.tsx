@@ -415,6 +415,56 @@ describe('GameScreen', () => {
     expect(host.mountGameFrame).not.toHaveBeenCalled();
     expect(editorApi.getPreviewDesign).not.toHaveBeenCalled();
   });
+  it('edits a side-branch preview locally without admitting a job or saving a transaction', async () => {
+    branchList.value = [{ id: 'b_side', name: 'side' }];
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getEditorPreviews.mockResolvedValue({
+      previews: [
+        { ticket: '12', branchId: 'b_side', buildId: 'preview-1', accessId: 'pv-1', createdAt: '2026-11-13T00:00:00Z' },
+      ],
+    });
+    renderGame('/g/game?v=b_side&mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ buildId: 'pv-1' })));
+    act(() =>
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          id: 'game',
+          capabilities: [],
+          palette: {
+            categories: [{ id: 'actors', label: 'Actors', kind: 'items' }],
+            items: [{ prefab: 'skeleton', label: 'Skeleton', category: 'actors' }],
+          },
+          tools: ['place'],
+          gizmos: {},
+          presentation: { minLogical: { w: 100, h: 100 } },
+          dimension: '2d',
+          view: 'main',
+          saves: false,
+        },
+      }),
+    );
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'Skeleton' }), { pointerId: 1 });
+    const canvas = screen.getByLabelText('Editor canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.pointerDown(canvas, { pointerId: 2, clientX: 25, clientY: 50 });
+    await waitFor(() => expect(host.controller.validatePlacement).toHaveBeenCalled());
+    fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 25, clientY: 50 });
+    await waitFor(() =>
+      expect(host.controller.applyDesign).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({ entities: expect.objectContaining({}) }),
+        expect.arrayContaining([expect.objectContaining({ path: expect.arrayContaining(['entities']) })]),
+      ),
+    );
+    expect(editorApi.postTransaction).not.toHaveBeenCalled();
+    expect(fallbackAdmission.admitJob).not.toHaveBeenCalled();
+  });
   it('requests branch-scoped scenery for an unbuilt side branch', async () => {
     branchList.value = [
       { id: 'b_main', name: 'main' },

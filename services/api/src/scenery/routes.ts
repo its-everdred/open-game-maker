@@ -40,10 +40,31 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
     if (!daemon || !game.githubPath) throw new HttpError(404, 'scenery_source_unavailable');
     return { game, path: game.githubPath, checkout: daemon.checkoutPath };
   }
-  async function source(c: Parameters<typeof requirePrincipal>[0], includeUpdatedAt = true) {
+  async function source(c: Parameters<typeof requirePrincipal>[0], includeUpdatedAt = true, branchName?: string) {
     const target = checkout(c);
+    const selected = branchName ?? c.req.query('branch') ?? 'main';
+    const branch =
+      selected === 'main'
+        ? undefined
+        : c
+            .get('deps')
+            .db.select()
+            .from(schema.branches)
+            .where(
+              and(
+                eq(schema.branches.gameId, target.game.id),
+                or(eq(schema.branches.id, selected), eq(schema.branches.name, selected)),
+              ),
+            )
+            .get();
+    if (selected !== 'main' && !branch) throw new HttpError(404, 'scenery_source_unavailable');
     try {
-      return await readScenerySource(target.checkout, target.path, includeUpdatedAt);
+      return await readScenerySource(
+        target.checkout,
+        target.path,
+        includeUpdatedAt,
+        branch?.name === 'main' ? undefined : branch?.gitRef,
+      );
     } catch {
       throw new HttpError(404, 'scenery_source_unavailable');
     }
@@ -202,26 +223,17 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
         id: entry.id,
         path: entry.path,
         sha256: entry.sha256,
-        url: `${prefix}/games/${encodeURIComponent(c.req.param('gameId'))}/scenery/assets/${index}/${entry.sha256}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
+        url: `${prefix}/games/${encodeURIComponent(c.req.param('gameId'))}/scenery/assets/${index}${selected === 'main' ? '' : `~${Buffer.from(selected).toString('base64url')}`}/${entry.sha256}/${entry.path.split('/').map(encodeURIComponent).join('/')}`,
       }));
       c.header('Cache-Control', 'private, no-store');
-      const scene =
-        selected === 'main'
-          ? bundle.scene
-          : {
-              version: 1 as const,
-              items: [],
-              terrain: [],
-              lighting: 'warm-forest' as const,
-              camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
-            };
-      return c.json({ scene, assets, ...(updatedAt ? { updatedAt } : {}) });
+      return c.json({ scene: bundle.scene, assets, ...(updatedAt ? { updatedAt } : {}) });
     })
     .get('/games/:gameId/scenery/assets/:index/:hash/*', async (c) => {
-      const bundle = await source(c, false);
       const index = c.req.param('index');
-      if (!/^\d+$/.test(index)) throw new HttpError(404, 'scenery_asset_unavailable');
-      const entry = bundle.lock.assets[Number(index)];
+      const match = /^(\d+)(?:~([A-Za-z0-9_-]+))?$/u.exec(index);
+      if (!match) throw new HttpError(404, 'scenery_asset_unavailable');
+      const bundle = await source(c, false, match[2] ? Buffer.from(match[2], 'base64url').toString('utf8') : 'main');
+      const entry = bundle.lock.assets[Number(match[1])];
       const marker = `/scenery/assets/${index}/${c.req.param('hash')}/`;
       const pathname = new URL(c.req.url).pathname;
       const offset = pathname.indexOf(marker);
@@ -246,6 +258,7 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
           path,
           assetsRoot,
           blobStore: c.get('deps').blobStore,
+          commit: bundle.commit,
         });
         const mime: Record<string, string> = {
           '.glb': 'model/gltf-binary',

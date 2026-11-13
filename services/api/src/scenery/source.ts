@@ -11,6 +11,27 @@ import { AssetsLockSchema, parseScenery, type AssetsLock, type Scenery } from '@
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const runFile = promisify(execFile);
 
+async function branchObject(root: string, ref: string): Promise<string> {
+  const result = await runFile('git', ['-C', root, 'rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`], {
+    timeout: 5_000,
+  });
+  const sha = result.stdout.trim();
+  if (!/^[a-f0-9]{40,64}$/u.test(sha)) throw new Error('invalid branch');
+  return sha;
+}
+
+async function branchFile(root: string, sha: string, path: string): Promise<Buffer> {
+  if (isAbsolute(path) || path.split('/').some((part) => part === '..' || part === '.'))
+    throw new Error('invalid path');
+  const prefix = (await runFile('git', ['-C', root, 'rev-parse', '--show-prefix'], { timeout: 5_000 })).stdout.trim();
+  const result = await runFile('git', ['-C', root, 'show', `${sha}:${prefix}${path}`], {
+    timeout: 5_000,
+    maxBuffer: MAX_FILE_BYTES,
+    encoding: 'buffer',
+  });
+  return result.stdout;
+}
+
 async function sceneUpdatedAt(root: string, path: string): Promise<string> {
   const modified = (await stat(path)).mtime.toISOString();
   try {
@@ -49,7 +70,31 @@ export async function readScenerySource(
   checkout: string,
   gamePath: string,
   includeUpdatedAt = true,
-): Promise<{ root: string; lock: AssetsLock; scene: Scenery; updatedAt?: string }> {
+  ref?: string,
+): Promise<{ root: string; lock: AssetsLock; scene: Scenery; updatedAt?: string; commit?: string }> {
+  if (ref) {
+    const root = await contained(checkout, gamePath);
+    const commit = await branchObject(root, ref);
+    const lock = AssetsLockSchema.parse(
+      JSON.parse((await branchFile(root, commit, 'assets.lock.json')).toString('utf8')),
+    );
+    let sceneFile: Buffer | undefined;
+    try {
+      sceneFile = await branchFile(root, commit, 'scenery.json');
+    } catch {
+      sceneFile = undefined;
+    }
+    const data: unknown = sceneFile
+      ? JSON.parse(sceneFile.toString('utf8'))
+      : {
+          version: 1,
+          items: [],
+          terrain: [],
+          lighting: 'warm-forest',
+          camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+        };
+    return { root, lock, scene: parseScenery(data, lock.assets), commit };
+  }
   const { root, lock } = await readGameLock(checkout, gamePath);
   let data: unknown;
   let updatedAt: string | undefined;
@@ -78,6 +123,7 @@ export async function readSceneryFile(options: {
   path: string;
   assetsRoot?: string;
   blobStore: BlobStore;
+  commit?: string;
 }): Promise<Uint8Array> {
   const entry = options.lock.assets.find((candidate) => candidate.id === options.assetId);
   if (!entry) throw new Error('asset not locked');
@@ -126,9 +172,12 @@ export async function readSceneryFile(options: {
       if (!found) throw new Error('asset library unavailable');
       root = found;
     }
-    const path = await contained(root, file.path);
-    if ((await stat(path)).size > MAX_FILE_BYTES) throw new Error('locked file too large');
-    bytes = await readFile(path);
+    if (options.commit && entry.source !== 'library') bytes = await branchFile(root, options.commit, file.path);
+    else {
+      const path = await contained(root, file.path);
+      if ((await stat(path)).size > MAX_FILE_BYTES) throw new Error('locked file too large');
+      bytes = await readFile(path);
+    }
     if (bytes.byteLength > MAX_FILE_BYTES) throw new Error('locked file too large');
   }
   if (createHash('sha256').update(bytes).digest('hex') !== file.sha256) throw new Error('locked file hash mismatch');

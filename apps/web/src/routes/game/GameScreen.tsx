@@ -200,7 +200,10 @@ export function GameScreen() {
     retry: false,
   });
   const fallbackActive = nativePaletteEmpty && fallback.data?.mode === 'request';
-  const requestOnly = fallbackActive || noBuild;
+  const sideBranch =
+    branches.data?.some(({ id, name }) => (id === branch || name === branch) && name !== 'main') === true;
+  const sidePreview = noBuild && sideBranch && !fallbackActive && !activeStage;
+  const requestOnly = fallbackActive || (noBuild && !sidePreview);
   const editorManifest = useMemo(() => {
     if (!frameState.manifest) return undefined;
     return fallbackActive && fallback.data
@@ -209,6 +212,10 @@ export function GameScreen() {
   }, [frameState.manifest, fallbackActive, fallback.data]);
   const submitEditRequest = useCallback(
     (request: CreateJobRequest) => {
+      if (request.branchId !== 'main') {
+        pushToast('Changes to this version stay in the preview.');
+        return;
+      }
       if (fallbackInFlight.current) return;
       fallbackInFlight.current = true;
       void admitJob(request)
@@ -413,6 +420,7 @@ export function GameScreen() {
     role: room.snapshot?.role,
     activeSnapshot,
     requestOnlySnapshot,
+    previewOnly: sidePreview,
     source: previewSource,
     frameRef,
     setAdopted,
@@ -604,7 +612,7 @@ export function GameScreen() {
             snap={canvasOptions.snap}
             onRequestPlacement={requestOnly ? requestFallbackPlacement : undefined}
             onRequestDelete={
-              noBuild
+              noBuild && !sidePreview
                 ? (entity) =>
                     submitEditRequest(
                       editJobRequest(
@@ -617,7 +625,7 @@ export function GameScreen() {
                 : undefined
             }
             onRequestTransform={
-              noBuild
+              noBuild && !sidePreview
                 ? (entity, gizmo, target) =>
                     submitEditRequest(
                       editJobRequest(
@@ -680,9 +688,9 @@ export function GameScreen() {
           manifest={editorManifest}
           sceneryAssets={scenerySource.data?.assets}
           session={sessionView}
-          onRequestLight={noBuild ? requestLight : undefined}
+          onRequestLight={noBuild && !sidePreview ? requestLight : undefined}
           onCommand={(command) => {
-            if (noBuild) {
+            if (noBuild && !sidePreview) {
               submitEditRequest(
                 editJobRequest(
                   { gameId, branchId: jobBranch },
@@ -703,7 +711,7 @@ export function GameScreen() {
           onRedo={() => void sessionStore.getState().redo()}
           onDelete={(entityId) => {
             const state = sessionStore.getState();
-            if (noBuild) {
+            if (noBuild && !sidePreview) {
               submitEditRequest(
                 editJobRequest(
                   { gameId, branchId: jobBranch },
@@ -722,7 +730,7 @@ export function GameScreen() {
             const state = sessionStore.getState();
             const source = state.doc.entities[entityId];
             if (source === undefined) return;
-            if (noBuild) {
+            if (noBuild && !sidePreview) {
               submitEditRequest(
                 editJobRequest(
                   { gameId, branchId: jobBranch },
@@ -737,7 +745,7 @@ export function GameScreen() {
             void state.submit(createEntityIntent(state.doc, entity, `Copied ${source.prefab}`));
           }}
           onInstanceCount={(change) => {
-            if (noBuild) {
+            if (noBuild && !sidePreview) {
               submitEditRequest(
                 editJobRequest(
                   { gameId, branchId: jobBranch },

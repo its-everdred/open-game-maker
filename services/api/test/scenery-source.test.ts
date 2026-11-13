@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -46,6 +46,36 @@ function fixture() {
 }
 
 describe('no-build scenery source', () => {
+  it('reads the selected branch lock and vendored bytes without using the checkout', async () => {
+    const { root, game, blobStore } = fixture();
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args]);
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-qm', 'main');
+    const originalLock = readFileSync(join(game, 'assets.lock.json'));
+    const bytes = Buffer.from('branch-only model');
+    writeFileSync(join(game, 'models', 'tree model.glb'), bytes);
+    const lockPath = join(game, 'assets.lock.json');
+    const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+    lock.assets[0].sha256 = createHash('sha256').update(bytes).digest('hex');
+    writeFileSync(lockPath, JSON.stringify(lock));
+    git('add', '.');
+    git('commit', '-qm', 'side asset');
+    git('branch', 'side');
+    const branch = await readScenerySource(root, 'games/fixture', false, 'refs/heads/side');
+    writeFileSync(lockPath, originalLock);
+    writeFileSync(join(game, 'models', 'tree model.glb'), 'locked model');
+    const result = await readSceneryFile({
+      root: branch.root,
+      lock: branch.lock,
+      assetId: lock.assets[0].id,
+      path: lock.assets[0].path,
+      blobStore,
+      commit: branch.commit,
+    });
+    expect(Buffer.from(result)).toEqual(bytes);
+  });
   it('uses the tracked scene commit time rather than checkout file time', async () => {
     const { root, game } = fixture();
     const scenePath = join(game, 'scenery.json');
@@ -211,9 +241,42 @@ describe('no-build scenery source', () => {
     expect(await (await app.request(url, { headers: asUser(ids.creator) })).json()).toMatchObject({
       updatedAt: '2026-11-12T00:00:00.000Z',
     });
-    const sideScene = await (await app.request(`${url}?branch=side`, { headers: asUser(ids.creator) })).json();
-    expect(sideScene).toMatchObject({ scene: { items: [], terrain: [] } });
-    expect(sideScene).not.toHaveProperty('updatedAt');
+    expect((await app.request(`${url}?branch=side`, { headers: asUser(ids.creator) })).status).toBe(404);
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args]);
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-qm', 'main');
+    const branchModel = Buffer.from('side model');
+    writeFileSync(join(game, 'models', 'tree model.glb'), branchModel);
+    const lockPath = join(game, 'assets.lock.json');
+    const oldLock = readFileSync(lockPath);
+    const sideLock = JSON.parse(oldLock.toString());
+    sideLock.assets[0].sha256 = createHash('sha256').update(branchModel).digest('hex');
+    writeFileSync(lockPath, JSON.stringify(sideLock));
+    git('add', '.');
+    git('commit', '-qm', 'side');
+    git('branch', 'side');
+    writeFileSync(lockPath, oldLock);
+    writeFileSync(join(game, 'models', 'tree model.glb'), 'locked model');
+    deps.db
+      .insert(schema.branches)
+      .values({
+        id: 'side-branch',
+        gameId: ids.game,
+        name: 'side',
+        gitRef: 'refs/heads/side',
+        status: 'active',
+        createdBy: ids.creator,
+        createdAt: now,
+      })
+      .run();
+    const sideResponse = await app.request(`${url}?branch=side`, { headers: asUser(ids.creator) });
+    expect(sideResponse.status).toBe(200);
+    const side = await sideResponse.json();
+    expect(side.assets[0].sha256).toBe(sideLock.assets[0].sha256);
+    const sideAsset = await app.request(side.assets[0].url, { headers: asUser(ids.creator) });
+    expect(Buffer.from(await sideAsset.arrayBuffer())).toEqual(branchModel);
     writeFileSync(join(game, 'scenery.json'), '{invalid');
     expect((await app.request(fallbackUrl, { headers: asUser(ids.creator) })).status).toBe(200);
     expect((await app.request(url, { headers: asUser(ids.creator) })).status).toBe(404);

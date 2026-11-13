@@ -25,6 +25,7 @@ type Options = {
   role?: string;
   activeSnapshot?: DesignSnapshot;
   requestOnlySnapshot?: DesignSnapshot;
+  previewOnly?: boolean;
   source?: ScenerySource;
   frameRef: RefObject<GameFrameController | undefined>;
   setAdopted: Dispatch<SetStateAction<Adoption | undefined>>;
@@ -37,6 +38,7 @@ export function useEditorSession({
   role,
   activeSnapshot,
   requestOnlySnapshot,
+  previewOnly = false,
   source,
   frameRef,
   setAdopted,
@@ -53,8 +55,8 @@ export function useEditorSession({
         if (!active) return;
         const initial = intent ? { ...requestOnlySnapshot, doc: intent.doc } : requestOnlySnapshot;
         if (source) frameRef.current?.applyDesign(initial.rev, initial.doc, []);
-        const editor = createSession(gameId, branch, 'preview', 0, initial, frameRef);
-        editor.setState({ readOnly: true });
+        const editor = createSession(gameId, branch, 'preview', 0, initial, frameRef, previewOnly);
+        if (!previewOnly) editor.setState({ readOnly: true });
         setSessionStore(editor);
       })().catch(() => {
         if (active) setEditStartup('not-saved');
@@ -157,7 +159,7 @@ export function useEditorSession({
       void lease.stop();
       setSessionStore(undefined);
     };
-  }, [activeSnapshot, requestOnlySnapshot, branch, gameId, mode, role, source, frameRef, setAdopted]);
+  }, [activeSnapshot, requestOnlySnapshot, previewOnly, branch, gameId, mode, role, source, frameRef, setAdopted]);
 
   useEffect(() => {
     if (sessionStore === undefined) {
@@ -178,13 +180,17 @@ function createSession(
   leaseToken: number,
   snapshot: DesignSnapshot,
   frameRef: RefObject<GameFrameController | undefined>,
+  previewOnly = false,
 ) {
+  let previewRev = snapshot.rev;
   return createEditorSession({
     sessionId,
     leaseToken,
     snapshot,
+    ephemeral: previewOnly,
     api: {
-      postTransaction: (body) => postTransaction(gameId, branch, body),
+      postTransaction: (body) =>
+        previewOnly ? Promise.resolve({ ok: true as const, rev: ++previewRev }) : postTransaction(gameId, branch, body),
       getSnapshot: () => getDesignSnapshot(gameId, branch),
     },
     applyDesign: (doc, patches, rev) => frameRef.current?.applyDesign(rev, doc, patches),
