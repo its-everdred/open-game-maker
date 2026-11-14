@@ -7,7 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { resolveContainedPath } from '../../context.js';
 
-function rejectSymlinkDirectories(path: string): void {
+export function rejectSymlinkDirectories(path: string): void {
   for (let current = path; ; current = dirname(current)) {
     try {
       if (lstatSync(current).isSymbolicLink())
@@ -25,9 +25,16 @@ export async function runChild(
   env: NodeJS.ProcessEnv,
   timeout: number,
   signal: AbortSignal,
+  executable = 'pnpm',
+  quietStdout = false,
 ): Promise<number> {
   return new Promise((resolveCode, reject) => {
-    const child = spawn('pnpm', args, { cwd, env, stdio: 'inherit', detached: true });
+    const child = spawn(executable, args, {
+      cwd,
+      env,
+      stdio: quietStdout ? ['ignore', 'ignore', 'inherit'] : 'inherit',
+      detached: true,
+    });
     let timedOut = false;
     const stop = () => {
       if (child.pid) {

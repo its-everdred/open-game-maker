@@ -20,3 +20,16 @@ await build({
   logLevel: 'warning',
 });
 copyFileSync(join(root, 'shell', 'host-shell.html'), join(out, 'host-shell.html'));
+
+// The core tarball carries the real app and its capture runner, so game workers need no core checkout.
+const appOut = join(root, 'dist', 'app-capture');
+mkdirSync(appOut, { recursive: true });
+await build({
+  entryPoints: [join(root, 'app-capture', 'runner.ts')],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  packages: 'external',
+  outfile: join(appOut, 'runner.js'),
+  logLevel: 'warning',
+});

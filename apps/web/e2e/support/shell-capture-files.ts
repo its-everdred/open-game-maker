@@ -11,3 +11,12 @@ export function captureFile(dist: string, suffix: string): string | null {
     return null;
   }
 }
+
+/** A URL path is percent-encoded; resolve its decoded form with the same containment check. */
+export function captureUrlFile(dist: string, suffix: string): string | null {
+  try {
+    return captureFile(dist, decodeURIComponent(suffix));
+  } catch {
+    return null;
+  }
+}
