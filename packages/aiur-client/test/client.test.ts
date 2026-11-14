@@ -167,14 +167,12 @@ describe('createAiurClient', () => {
   });
 
   it('accepts a successful keyed replay', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        jsonResponse({
-          ...(fixture('control') as Record<string, unknown>),
-          output: 'already ran\n__AIUR_CONTROL_EXIT__:0',
-        }),
-      );
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...(fixture('control') as Record<string, unknown>),
+        output: 'already ran\n__AIUR_CONTROL_EXIT__:0',
+      }),
+    );
     await expect(createAiurClient(daemon, fetchImpl).rework('42', 'reason', 'key')).resolves.toBeUndefined();
   });
 
