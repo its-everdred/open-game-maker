@@ -158,6 +158,10 @@ describe('createAiurClient', () => {
     expect(first.contract_version).toBe(2);
     expect(first.expression).toContain(Buffer.from(reason).toString('base64'));
     expect(first.expression).not.toContain(reason);
+    const longReason = `<!-- gm-review-verdict:long -->\n${'notes '.repeat(900)}`;
+    await client.rework('42', longReason, 'review-round:long');
+    const longCall = JSON.parse(String(fetchImpl.mock.calls[2]![1]?.body));
+    expect(longCall.expression).toContain(Buffer.from(longReason).toString('base64'));
     await expect(client.rework('x', reason, 'key')).rejects.toThrow();
   });
 

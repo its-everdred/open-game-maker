@@ -34,7 +34,10 @@ export default new Hono<ApiBindings>()
   .get('/games/:gameId/previews', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     const deps = c.get('deps');
-    const previews = await listPreviews(deps, game.id);
+    const previews = (await listPreviews(deps, game.id)).filter((preview) => {
+      const round = roundForBuild(deps.db, game.id, preview.ticket, preview.buildId);
+      return !round || round.verdict === null;
+    });
     const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
     const named = await Promise.all(
       previews.map(async (preview) => {

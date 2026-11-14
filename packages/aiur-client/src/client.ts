@@ -237,7 +237,7 @@ export function createAiurClient(
     resume: (id) => writeWithoutResult(`/api/v1/${encodeURIComponent(id)}/resume`),
     message: (id, text, messageId, signal) => sendMessage(id, text, messageId, signal),
     async rework(id, reason, key) {
-      if (!ISSUE_ID.test(id) || !reason.trim() || reason.length > 4000) throw new TypeError('Invalid rework request');
+      if (!ISSUE_ID.test(id) || !reason.trim()) throw new TypeError('Invalid rework request');
       const bytes = createHash('sha256').update(key).digest().subarray(0, 16);
       bytes[6] = (bytes[6]! & 0x0f) | 0x70;
       bytes[8] = (bytes[8]! & 0x3f) | 0x80;
