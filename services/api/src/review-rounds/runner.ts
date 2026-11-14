@@ -6,7 +6,8 @@ import { aiurReworkDelivery } from './aiur-delivery.js';
 import { recordReconcileHeartbeat } from './heartbeat.js';
 import { dispatchRework } from './rework.js';
 import { advanceApproval } from './approval.js';
-import { readTrack } from './tracks.js';
+import { listTracks } from './tracks.js';
+import { phaseOwner } from './owners.js';
 import { reviewDaemonForGame } from './daemon.js';
 import type { ReviewIssues } from './issues.js';
 import { inspectReviewOwners } from './monitor.js';
@@ -58,7 +59,14 @@ export function createReviewSync(deps: {
           const daemon = reviewDaemonForGame(deps.db, round.gameId);
           if (!game?.slug || !game.githubOwner || !game.githubRepo || !game.githubPath || !daemon)
             throw new Error('review_game_not_configured');
-          const track = await readTrack(daemon.checkoutPath, game.githubPath, round.sha, round.track);
+          const tracks = await listTracks(daemon.checkoutPath, game.githubPath, round.sha);
+          const currentTracks = await listTracks(daemon.checkoutPath, game.githubPath);
+          for (const candidate of [...tracks, ...currentTracks]) {
+            const first = candidate.phases[0];
+            if (first) phaseOwner(deps.db, round.gameId, candidate, first.id);
+          }
+          const track = tracks.find((candidate) => candidate.id === round.track);
+          if (!track) throw new Error('review_track_not_found');
           if (round.verdict === 'kill') {
             await stopReview(
               deps.db,

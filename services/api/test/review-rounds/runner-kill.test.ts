@@ -8,7 +8,7 @@ import { GAME, seedDesignGame } from '../design-decisions/fixtures.js';
 import { makeDeps } from '../helpers.js';
 
 vi.mock('../../src/review-rounds/tracks.js', () => ({
-  listTracks: async () => [],
+  listTracks: async () => [{ id: 'art', category: 'art', phases: [{ id: 'concept', ticket: '42', template: 'art' }] }],
   readTrack: async () => ({ id: 'art', category: 'art', phases: [{ id: 'concept', ticket: '42', template: 'art' }] }),
 }));
 
