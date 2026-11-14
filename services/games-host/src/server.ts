@@ -141,14 +141,20 @@ export function createApp(options: GamesHostOptions): Hono {
 }
 
 // Preview access IDs are short-lived capabilities issued only by the authorized review API. Resolve every request
-// against the current ticket record so answering or replacing it immediately revokes the old capability.
+// against ticket and history records so answering or replacing a preview revokes its previous capability.
 async function previewDirectory(root: string, gameId: string, accessId: string): Promise<string | null> {
   buildDir(root, gameId, 'preview-check');
   if (!/^pv-[0-9a-f-]{36}$/u.test(accessId)) return null;
   const directory = join(root, '.previews', gameId);
   const names = await readdir(directory).catch(() => [] as string[]);
-  for (const name of names.filter((entry) => /^[1-9]\d{0,15}\.json$/u.test(entry))) {
-    const raw = await readFile(join(directory, name), 'utf8').catch(() => '');
+  const historyDir = join(directory, '.history');
+  const history = await readdir(historyDir).catch(() => [] as string[]);
+  const files = [
+    ...names.filter((entry) => /^[1-9]\d{0,15}\.json$/u.test(entry)).map((name) => join(directory, name)),
+    ...history.filter((entry) => /^preview-[0-9a-f-]{36}\.json$/u.test(entry)).map((name) => join(historyDir, name)),
+  ];
+  for (const file of files) {
+    const raw = await readFile(file, 'utf8').catch(() => '');
     let row: { gameId?: unknown; accessId?: unknown; accessExpiresAt?: unknown; buildId?: unknown; answered?: unknown };
     try {
       row = JSON.parse(raw) as typeof row;

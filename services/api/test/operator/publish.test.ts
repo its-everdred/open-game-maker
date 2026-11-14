@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { schema } from '@ogm/db';
@@ -10,6 +11,7 @@ import { PUBLISH_ACTOR } from '../../src/operator/publish.js';
 import operatorRoutes, { prefix as operatorPrefix } from '../../src/operator/routes.js';
 import { builtFiles, ids, SHA, world } from '../builds/fixtures.js';
 import { INTERNAL_TOKEN } from '../helpers.js';
+import { answerRound, postRound } from '../../src/review-rounds/store.js';
 
 const NEWER_SHA = 'f'.repeat(40);
 
@@ -43,6 +45,89 @@ function buildRow(deps: ReturnType<typeof operator>['deps'], jobId: string) {
 function branchRow(deps: ReturnType<typeof operator>['deps']) {
   return deps.db.select().from(schema.branches).where(eq(schema.branches.id, ids.main)).get()!;
 }
+
+describe('operator review stalls', () => {
+  it('requires the internal credential', async () => {
+    const { app } = operator();
+    expect((await app.request(`${operatorPrefix}/review-stalls`)).status).toBe(401);
+    const response = await app.request(`${operatorPrefix}/review-stalls`, {
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ worker: [], creator: [], missing: [] });
+  });
+});
+
+it('allows host closure only after an owned phase is approved', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ogm-close-gate-'));
+  try {
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args])
+        .toString()
+        .trim();
+    git('init', '-q');
+    mkdirSync(join(root, 'games/castle-game/review/tracks'), { recursive: true });
+    writeFileSync(
+      join(root, 'games/castle-game/review/tracks/art.json'),
+      JSON.stringify({ id: 'art', category: 'art', phases: [{ id: 'concept', ticket: '42', template: 'art' }] }),
+    );
+    git('add', 'games');
+    git('commit', '-qm', 'track');
+    const sha = git('rev-parse', 'HEAD');
+    const { app, deps } = operator();
+    deps.db
+      .update(schema.games)
+      .set({ githubOwner: 'owner', githubRepo: 'repo' })
+      .where(eq(schema.games.id, ids.game))
+      .run();
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'castle-game',
+        repo: 'owner/repo',
+        checkoutPath: root,
+        unit: 'fixture',
+        envFile: '/fixture',
+        port: 23456,
+        status: 'running',
+        createdAt: '2026-01-01T00:00:00Z',
+      })
+      .run();
+    const request = () =>
+      app.request(`${operatorPrefix}/games/castle-game/review-close/42?sha=${sha}`, {
+        headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+      });
+    expect(await (await request()).json()).toEqual({ allowed: false });
+    postRound(deps.db, {
+      id: 'r',
+      gameId: ids.game,
+      track: 'art',
+      phase: 'concept',
+      category: 'art',
+      round: 1,
+      ticket: '42',
+      sha,
+      media: '[]',
+      postedAt: '2026-01-01T00:00:00Z',
+    });
+    answerRound(deps.db, ids.game, 'r', {
+      verdict: 'approved',
+      notes: null,
+      source: 'preview',
+      at: '2026-01-01T01:00:00Z',
+    });
+    expect(await (await request()).json()).toEqual({ allowed: true });
+    writeFileSync(
+      join(root, 'games/castle-game/review/tracks/sound.json'),
+      JSON.stringify({ id: 'sound', category: 'sound', phases: [{ id: 'cue', ticket: '42', template: 'sound' }] }),
+    );
+    git('add', 'games');
+    git('commit', '-qm', 'add sound track');
+    expect(await (await request()).json()).toEqual({ allowed: false });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 describe('operator publish', () => {
   it('describes a registered game so the host script knows where to build', async () => {

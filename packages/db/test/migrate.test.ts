@@ -62,6 +62,7 @@ describe('migrate', () => {
         '20261108155353_review_drafts.sql',
         '20261109125710_command_rename.sql',
         '20261110053451_allow_ai_generated_assets.sql',
+        '20261114130207_review_rounds.sql',
       ],
     });
     expect(migrate({ sqlite })).toEqual({ applied: [] });
@@ -110,6 +111,7 @@ describe('migrate', () => {
       'migration:20261108155353_review_drafts.sql',
       'migration:20261109125710_command_rename.sql',
       'migration:20261110053451_allow_ai_generated_assets.sql',
+      'migration:20261114130207_review_rounds.sql',
     ]);
     sqlite.close();
   });

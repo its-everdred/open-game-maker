@@ -75,14 +75,21 @@ against the job's Command and calls aiur's canonical Decision API with the Comma
 from the inbox, from the job conversation modal and from an inline Command card are the same operation. A `409`
 means another writer answered first and the returned status is the winner's.
 
+## Track review rounds
+
+The Review view shows open art and sound rounds posted with `gm review post`, using their stored stills or capture clips.
+The game owner can answer Looks right or Needs work with a note; the answer is recorded against that round. Gameplay
+rounds appear as playable previews and include their design question.
+An unanswered round gets one recorded notification after 24 hours. Waiting never records an answer.
+
 ## Preview reviews
 
 A game's Review view also lists workspace previews sent with `gm preview`. Each preview plays in its card and offers
-Looks right or Needs work with an optional note. The answer is delivered to the ticket that uploaded the build; the
+Looks right or Needs work with an optional note of up to 3,900 characters. The answer is delivered to the ticket that uploaded the build; the
 card leaves the queue after delivery and a later upload opens a new one. Preview files and assets use a short-lived,
 revocable access URL issued to a game editor and an isolated frame, and never change the live build or share its asset cache.
 After a verdict, the editor can still show the latest preview for its game branch while the build remains unmerged;
-the previous review URL is revoked. Single-choice Commands can also be
+the previous review URL is revoked. Editors can retrieve retained builds through `GET /api/v1/games/:gameId/editor/preview-history`; the response issues short-lived access links for the prior rounds. Single-choice Commands can also be
 answered from the queue using their letter buttons and an optional note; opening a row still shows its media deck.
 
 ## Skipping a question

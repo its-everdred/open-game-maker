@@ -15,6 +15,12 @@ import { parseBody } from '../app/validate.js';
 import { gameResponse } from '../games/games.js';
 import { OperatorRegisterBody, registerOperatorGame } from './register.js';
 import { publishArchive } from './publish.js';
+import { reviewStalls } from '../review-rounds/stalls.js';
+import { reconcileStale } from '../review-rounds/heartbeat.js';
+import { reviewAllowsClose } from '../review-rounds/close-gate.js';
+import { phaseOwner } from '../review-rounds/owners.js';
+import { listTracks } from '../review-rounds/tracks.js';
+import { reviewDaemonForGame } from '../review-rounds/daemon.js';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
 // not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
@@ -89,6 +95,47 @@ function facts(deps: AppDeps, game: ReturnType<typeof gameFor>) {
 }
 
 const routes = new Hono<ApiBindings>()
+  .get('/games/:ref/review-close/:ticket', async (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    const daemon = reviewDaemonForGame(deps.db, game.id);
+    if (!daemon || !game.githubPath) throw new HttpError(503, 'review_tracks_unavailable');
+    const ticket = c.req.param('ticket');
+    if (!/^[1-9][0-9]*$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
+    const sha = c.req.query('sha');
+    if (!sha || !SHA.test(sha)) throw new HttpError(400, 'invalid_sha');
+    // Seed first-phase owners from the committed definitions before deciding that a ticket is untracked.
+    const reviewedTracks = await listTracks(daemon.checkoutPath, game.githubPath, sha);
+    const currentTracks = await listTracks(daemon.checkoutPath, game.githubPath);
+    for (const track of [...reviewedTracks, ...currentTracks]) {
+      const first = track.phases[0];
+      if (first) phaseOwner(deps.db, game.id, track, first.id);
+    }
+    const owners = deps.db
+      .select()
+      .from(schema.reviewPhaseOwners)
+      .where(eq(schema.reviewPhaseOwners.gameId, game.id))
+      .all();
+    const rounds = deps.db.select().from(schema.reviewRounds).where(eq(schema.reviewRounds.gameId, game.id)).all();
+    return c.json({
+      allowed: reviewAllowsClose(
+        ticket,
+        game.id,
+        owners.map((owner) => ({ ...owner, status: '' })),
+        rounds,
+      ),
+    });
+  })
+  .get('/review-health', (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    return c.json({ stale: reconcileStale(deps.db, Date.now(), deps.config.commandPollMs ?? 5000) });
+  })
+  .get('/review-stalls', (c) => {
+    requireOperator(c);
+    return c.json(reviewStalls(c.get('deps').db, Date.now()));
+  })
   .post('/games', async (c) => {
     requireOperator(c);
     const result = registerOperatorGame(c.get('deps'), await parseBody(c, OperatorRegisterBody));

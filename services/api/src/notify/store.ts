@@ -109,19 +109,22 @@ export function insertNotification(
 export function listNotifications(
   sqlite: Sqlite,
   userId: string,
-  options: { unread?: boolean; limit?: number },
+  options: { unread?: boolean; limit?: number; kind?: NotificationKind },
 ): Notification[] {
   const unread = options.unread ? 'AND read_at IS NULL' : '';
+  const kind = options.kind ? 'AND kind = ?' : '';
   return (
     sqlite
       .prepare(
         `SELECT ${notificationColumns}
          FROM notifications
-         WHERE user_id = ? ${unread}
+         WHERE user_id = ? ${unread} ${kind}
          ORDER BY created_at DESC, rowid DESC
          LIMIT ?`,
       )
-      .all(userId, options.limit ?? 50) as NotificationRow[]
+      .all(
+        ...(options.kind ? [userId, options.kind, options.limit ?? 50] : [userId, options.limit ?? 50]),
+      ) as NotificationRow[]
   ).map(toNotification);
 }
 

@@ -3,13 +3,13 @@ import { streamSSE } from 'hono/streaming';
 import webpush from 'web-push';
 import { z } from 'zod';
 
-import { NotificationTrigger, PushSubscriptionInput } from '@ogm/contracts';
+import { NotificationKind, NotificationTrigger, PushSubscriptionInput, type Notification } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
-import { deliver } from './deliver.js';
+import { deliver, deliverStored } from './deliver.js';
 import { deleteSubscription, listNotifications, markRead, replayNotifications, upsertSubscription } from './store.js';
 import { createStreamHub, formatSseFrame, type SSEWriter, type StreamHub } from './stream.js';
 import { loadOrCreateVapid } from './vapid.js';
@@ -20,12 +20,14 @@ type NotifyRuntime = {
   publicKey: string;
   stream: StreamHub;
   deliver: (trigger: z.output<typeof NotificationTrigger>) => Promise<{ delivered: number }>;
+  deliverStored: (notification: Notification) => Promise<void>;
 };
 
 const runtimes = new WeakMap<AppDeps, NotifyRuntime>();
 const subscriptionEndpoint = z.object({ endpoint: z.string().url() });
 const notificationQuery = z.object({
   unread: z.literal('1').optional(),
+  kind: NotificationKind.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
@@ -41,7 +43,13 @@ export function setup(deps: AppDeps): void {
   const stream = createStreamHub();
   const deliverTrigger = (trigger: z.output<typeof NotificationTrigger>) =>
     deliver({ sqlite: deps.sqlite, stream, push: webpush, log: deps.log }, trigger);
-  runtimes.set(deps, { publicKey: vapid.publicKey, stream, deliver: deliverTrigger });
+  runtimes.set(deps, {
+    publicKey: vapid.publicKey,
+    stream,
+    deliver: deliverTrigger,
+    deliverStored: (notification) =>
+      deliverStored({ sqlite: deps.sqlite, stream, push: webpush, log: deps.log }, notification),
+  });
   deps.events.on('notify', (trigger) => {
     void deliverTrigger(trigger).catch((error: unknown) => {
       deps.log({ event: 'notification-delivery-error', stack: error instanceof Error ? error.stack : String(error) });
@@ -110,7 +118,11 @@ export default new Hono<ApiBindings>()
   .get('/api/v1/notifications', (c) => {
     const query = parseQuery(c, notificationQuery);
     return c.json(
-      listNotifications(c.get('deps').sqlite, userId(c), { unread: query.unread === '1', limit: query.limit }),
+      listNotifications(c.get('deps').sqlite, userId(c), {
+        unread: query.unread === '1',
+        limit: query.limit,
+        kind: query.kind,
+      }),
     );
   })
   .post('/api/v1/notifications/:id/read', (c) => {

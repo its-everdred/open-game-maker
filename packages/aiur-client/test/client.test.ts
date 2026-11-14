@@ -141,6 +141,55 @@ describe('createAiurClient', () => {
     expect(fetchImpl.mock.calls[0]![1]?.signal).toBe(signal);
   });
 
+  it('sends stable rework keys and encodes the reason as data', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+      jsonResponse({
+        ...(fixture('control') as Record<string, unknown>),
+        output: 'ticket is in agent:rework\n__AIUR_CONTROL_EXIT__:0',
+      }),
+    );
+    const client = createAiurClient(daemon, fetchImpl);
+    const reason = '<!-- gm-review-verdict:one -->\nNotes: "quoted"';
+    await client.rework('42', reason, 'review-round:one');
+    await client.rework('42', reason, 'review-round:one');
+    const first = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
+    const second = JSON.parse(String(fetchImpl.mock.calls[1]![1]?.body));
+    expect(first.request_id).toBe(second.request_id);
+    expect(first.contract_version).toBe(2);
+    expect(first.expression).toContain(Buffer.from(reason).toString('base64'));
+    expect(first.expression).not.toContain(reason);
+    const longReason = `<!-- gm-review-verdict:long -->\n${'notes '.repeat(900)}`;
+    await client.rework('42', longReason, 'review-round:long');
+    const longCall = JSON.parse(String(fetchImpl.mock.calls[2]![1]?.body));
+    expect(longCall.expression).toContain(Buffer.from(longReason).toString('base64'));
+    await expect(client.rework('x', reason, 'key')).rejects.toThrow();
+  });
+
+  it('does not treat a failed rework control call as success', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...(fixture('control') as Record<string, unknown>),
+        output: 'agent:rework was written but delivery failed\n__AIUR_CONTROL_EXIT__:1',
+      }),
+    );
+    await expect(createAiurClient(daemon, fetchImpl).rework('42', 'reason', 'key')).rejects.toThrow(
+      'aiur_rework_unconfirmed',
+    );
+  });
+
+  it('reads queued and delivered ticket transcript pages', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ events: [{ body: 'marker', turn_id: 'turn-1' }], pagination: { next_cursor: '7' } }),
+      );
+    const client = createAiurClient(daemon, fetchImpl);
+    expect(await client.ticketTranscript('42')).toEqual({
+      events: [{ body: 'marker', turn_id: 'turn-1' }],
+      nextCursor: '7',
+    });
+  });
+
   it('builds the exact allowlisted control expression and validates ids locally', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(fixture('control')));
     const client = createAiurClient(daemon, fetchImpl);
@@ -156,6 +205,35 @@ describe('createAiurClient', () => {
 
     await expect(client.nudgeTodo(['abc'])).rejects.toThrow('Invalid issue identifier');
     expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('reports a failed todo control result', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...(fixture('control') as Record<string, unknown>),
+        output: 'could not queue\n__AIUR_CONTROL_EXIT__:1',
+      }),
+    );
+    await expect(createAiurClient(daemon, fetchImpl).nudgeTodo(['42'])).rejects.toThrow('aiur_todo_failed');
+  });
+
+  it('queues a review phase without clearing other tickets and requires an affirmative exit marker', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...(fixture('control') as Record<string, unknown>),
+          output: 'queued 1 ticket(s)\n__AIUR_CONTROL_EXIT__:0\n',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...(fixture('control') as Record<string, unknown>), output: 'unknown outcome' }),
+      );
+    const client = createAiurClient(daemon, fetchImpl);
+    await client.enqueueTodo(['42']);
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse(String(init?.body)).expression).toBe('todo(["42"], only: false, emit_exit_marker: true)');
+    await expect(client.enqueueTodo(['42'])).rejects.toThrow('aiur_todo_unconfirmed');
   });
 
   it('uses the supervisor token for decision calls and requires it', async () => {

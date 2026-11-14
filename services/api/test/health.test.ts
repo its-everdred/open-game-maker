@@ -1,6 +1,7 @@
 import { HealthResponse } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
+import { recordReconcileHeartbeat } from '../src/review-rounds/heartbeat.js';
 import { recordDaemonReadTokenStatus, recordSupervisorTokenStatus } from '../src/job-commands/health.js';
 import { makeApp } from './helpers.js';
 
@@ -14,13 +15,23 @@ describe('GET /healthz', () => {
     expect(body.uptimeSec).toBeGreaterThanOrEqual(5);
   });
 
+  it('exposes a stopped review reconciler in health details', async () => {
+    const { app, deps } = await makeApp();
+    recordReconcileHeartbeat(deps.db, Date.now() - (deps.config.commandPollMs ?? 5000) * 2);
+    const stale = HealthResponse.parse(await (await app.request('/healthz')).json());
+    expect(stale.details).toMatchObject({ review_rounds: { ok: false } });
+    recordReconcileHeartbeat(deps.db, Date.now());
+    const fresh = HealthResponse.parse(await (await app.request('/healthz')).json());
+    expect(fresh.details).toMatchObject({ review_rounds: { ok: true } });
+  });
+
   it('reports daemon slugs with missing command supervisor tokens', async () => {
     const { app, deps } = await makeApp();
     recordSupervisorTokenStatus(deps, 'game-1', true);
 
     const response = await app.request('/healthz');
     const body = HealthResponse.parse(await response.json());
-    expect(body.details).toEqual({
+    expect(body.details).toMatchObject({
       command_decisions: { ok: false, missing_supervisor_token_daemons: ['game-1'] },
     });
   });
@@ -30,14 +41,14 @@ describe('GET /healthz', () => {
     recordDaemonReadTokenStatus(deps, 'game-1', true);
 
     const missing = HealthResponse.parse(await (await app.request('/healthz')).json());
-    expect(missing.details).toEqual({
+    expect(missing.details).toMatchObject({
       command_decisions: { ok: false, missing_supervisor_token_daemons: ['game-1'] },
     });
 
     recordDaemonReadTokenStatus(deps, 'game-1', false);
 
     const recovered = HealthResponse.parse(await (await app.request('/healthz')).json());
-    expect(recovered.details).toEqual({
+    expect(recovered.details).toMatchObject({
       command_decisions: { ok: true, missing_supervisor_token_daemons: [] },
     });
     expect(deps.lines.filter((line) => line.event === 'daemon-read-token-status')).toEqual([

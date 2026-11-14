@@ -2,7 +2,13 @@ import { z } from 'zod';
 
 import { Id, IsoTime } from './api.js';
 
-export const NotificationKind = z.enum(['build.done', 'job.started', 'scope.agreed', 'intake.report']);
+export const NotificationKind = z.enum([
+  'build.done',
+  'job.started',
+  'scope.agreed',
+  'intake.report',
+  'review.reminder',
+]);
 export const Notification = z.object({
   id: Id,
   userId: Id,

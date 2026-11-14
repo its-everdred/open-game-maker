@@ -1,6 +1,6 @@
 import type { AiurClient, Decision } from '@ogm/aiur-client';
 import { decisionKeyMarker, waitKeyOfLabel, waitLabel, waitMarker, type DecisionWait } from '@ogm/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createDecisionWaitPoller, LABEL_REREAD_MS } from '../../src/decision-waits/poller.js';
 import type { WaitingTicket, WaitTickets } from '../../src/decision-waits/tickets.js';
@@ -147,6 +147,23 @@ function answerJson(comment: string): Record<string, unknown> {
   expect(match).not.toBeNull();
   return JSON.parse(match![1]!) as Record<string, unknown>;
 }
+
+describe('review sync scheduling', () => {
+  it('runs on every poll even when no decision labels need rereading', async () => {
+    const syncReviewRounds = vi.fn().mockResolvedValue(undefined);
+    const fake = aiur(() => []);
+    const instance = createDecisionWaitPoller({
+      daemons: async () => [{ slug: 'blobs', repo: REPO }],
+      clientFor: async () => fake.client,
+      tickets: github([]).api,
+      log: () => {},
+      syncReviewRounds,
+    });
+    await instance.tick();
+    await instance.tick();
+    expect(syncReviewRounds).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('decision waits', () => {
   it('releases a ticket parked on a decision key on the first poll after the answer, with the answer written in', async () => {

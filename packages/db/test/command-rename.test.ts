@@ -43,7 +43,7 @@ describe('command rename migration', () => {
       VALUES ('m_2', 'j_1', '2026-11-08T10:01:00.000Z', 'agent', 'text', 'hello');
     `);
 
-    expect(migrate({ sqlite }).applied).toEqual([RENAME, AI_SETTING]);
+    expect(migrate({ sqlite }).applied).toEqual([RENAME, AI_SETTING, '20261114130207_review_rounds.sql']);
 
     expect(sqlite.prepare('SELECT decision_id, version, status FROM commands').all()).toEqual([
       { decision_id: 'd_1', version: 2, status: 'open' },

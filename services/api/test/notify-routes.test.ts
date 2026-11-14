@@ -102,6 +102,11 @@ describe('notification routes', () => {
     expect(listed.status).toBe(200);
     expect(await listed.json()).toEqual([expect.objectContaining({ id: unread.id, readAt: null })]);
 
+    const remindersOnly = await app.request('/api/v1/notifications?unread=1&kind=review.reminder', {
+      headers: { 'x-test-user': 'one' },
+    });
+    expect(await remindersOnly.json()).toEqual([]);
+
     const forbidden = await app.request(`/api/v1/notifications/${unread.id}/read`, {
       method: 'POST',
       headers: { 'x-test-user': 'two' },

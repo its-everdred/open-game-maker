@@ -15,6 +15,7 @@ export type Preview = {
   createdAt: string;
   pendingMessage?: string;
   title?: string;
+  question?: string;
 };
 const key = (gameId: string) => ['game-previews', gameId] as const;
 
@@ -66,7 +67,7 @@ function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) 
     mutationFn: (verdict: 'looks right' | 'needs work') =>
       api(`${path}/answer`, {
         method: 'POST',
-        json: { buildId: preview.buildId, verdict, ...(actualNote.trim() ? { note: actualNote.trim() } : {}) },
+        json: { buildId: preview.buildId, verdict, ...(actualNote.trim() ? { note: actualNote } : {}) },
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
     onError: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
@@ -95,12 +96,13 @@ function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) 
         <div className="review-deck-playable-frame" ref={container} />
         {frameError || design.isError ? <p role="status">The game did not load.</p> : null}
       </div>
+      {preview.question ? <p>{preview.question}</p> : null}
       <label>
         Note (optional)
         <textarea
           value={actualNote}
           readOnly={pending !== null}
-          maxLength={4000}
+          maxLength={3900}
           onChange={(event) => setNote(event.target.value)}
         />
       </label>

@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Notify = typeof import('./index') & typeof import('./slice');
@@ -125,6 +125,42 @@ describe('useNotificationFeed', () => {
     );
 
     expect(notify.notifyState().toasts.map((t) => t.text)).toEqual(['Build started']);
+    unmount();
+  });
+
+  it('shows a review reminder from the notification stream', () => {
+    const { unmount } = renderHook(() => notify.useNotificationFeed());
+    const source = FakeEventSource.instances.at(-1)!;
+    source.dispatchEvent(
+      new MessageEvent('review.reminder', {
+        data: JSON.stringify({ title: 'A review is waiting', body: 'Lantern Bay' }),
+      }),
+    );
+    expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual(['A review is waiting — Lantern Bay']);
+    unmount();
+  });
+
+  it('shows an unread review reminder after reconnecting and marks it read', async () => {
+    respond({
+      '/api/v1/notifications?unread=1&kind=review.reminder&limit=100': () =>
+        json([{ id: 'n-1', kind: 'review.reminder', title: 'A review is waiting', body: 'Lantern Bay' }]),
+      '/api/v1/notifications/n-1/read': () => new Response(null, { status: 204 }),
+    });
+    const { unmount } = renderHook(() => notify.useNotificationFeed());
+    const source = FakeEventSource.instances.at(-1)!;
+    source.onopen?.();
+    await waitFor(() =>
+      expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual(['A review is waiting — Lantern Bay']),
+    );
+    expect(calls.some((call) => call.url === '/api/v1/notifications/n-1/read' && call.init?.method === 'POST')).toBe(
+      true,
+    );
+    source.dispatchEvent(
+      new MessageEvent('review.reminder', {
+        data: JSON.stringify({ id: 'n-1', title: 'A review is waiting', body: 'Lantern Bay' }),
+      }),
+    );
+    expect(notify.notifyState().toasts).toHaveLength(1);
     unmount();
   });
 

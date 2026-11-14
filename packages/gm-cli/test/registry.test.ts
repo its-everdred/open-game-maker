@@ -103,6 +103,8 @@ describe('command registry', () => {
       'qa look',
       'qa open',
       'qa room',
+      'review close-check',
+      'review post',
       'run',
       'scenery add',
       'scenery list',

@@ -94,6 +94,7 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
           : [],
       });
     if (path === `/api/v1/games/${gameId}/review-drafts`) return json({ drafts: [] });
+    if (path === `/api/v1/games/${gameId}/review-rounds`) return json({ rounds: [] });
     if (path === `/api/v1/games/${gameId}/previews`)
       return json({
         previews: buildId
@@ -133,10 +134,10 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
   const still = testInfo.outputPath('preview-review.png');
   await page.screenshot({ path: still });
   await testInfo.attach('preview-review', { path: still, contentType: 'image/png' });
-  await card.getByLabel('Note (optional)').fill('The jump feels good');
+  await card.getByLabel('Note (optional)').fill('  The jump feels good  ');
   await card.getByRole('button', { name: 'Looks right' }).click();
   await expect(card).toHaveCount(0);
-  expect(answer).toEqual({ buildId: first, verdict: 'looks right', note: 'The jump feels good' });
+  expect(answer).toEqual({ buildId: first, verdict: 'looks right', note: '  The jump feels good  ' });
   buildId = second;
   await expect(card).toBeVisible({ timeout: 10_000 });
   await expect(card.locator('iframe')).toHaveAttribute('src', new RegExp(access(second)));

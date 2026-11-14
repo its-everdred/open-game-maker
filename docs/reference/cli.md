@@ -42,6 +42,29 @@ or `aiur/<number>` branch; pass `--ticket` when neither is available. Worker pre
 request; the creator's verdict and optional note go back to that ticket. The game branch defaults to `main`; pass
 `--branch <id>` for another game branch so the editor shows the preview on the correct version.
 
+## Post a review round
+
+```text
+gm review post <submission.json>
+```
+
+In a configured worker workspace, the submission uses that ticket's scoped relay credential.
+
+Host merge tools can call `gm review close-check <game> <ticket> <sha>` before closing a ticket. It exits successfully
+only when the API confirms that the ticket's review phases permit closure; missing configuration and API errors refuse it.
+
+A review Command can also be tied to the round with `gm decide --key <round-id>` and the explicit option IDs
+`approved`, `needs_work`, and `kill`. Only the game owner's answer is applied to the round.
+
+The JSON carries a stable UUID `id` (reuse it when retrying), the `track`, `phase`, `category` (`art`, `gameplay`,
+or `sound`), owning `ticket`, commit `sha`, optional `prNumber`, and `media` array. Track definitions live in the
+committed game directory at `review/tracks/<track>.json`, with the track `id`, `category`, and an ordered `phases` array.
+Each phase has an `id` and literal `template`; the first can specify its existing `ticket`. The API records the owner
+of later phases when approval creates their tickets. Gameplay submissions need
+a `build` reference from `gm preview` and a `question`. Sound submissions need a `clip` reference to a stored MP4
+containing video and audio, with `hasAudio: true`; an audio file alone is rejected. Art stills and clips use stored
+blob hashes as `ref`; media entries use `kind` and `ref`.
+
 ## Verify a game
 
 ```text
