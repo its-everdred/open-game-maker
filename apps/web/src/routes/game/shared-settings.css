@@ -48,10 +48,10 @@
   height: 100%;
 }
 .shared-settings details {
-  border: 2px solid #69517d;
+  border: 2px solid var(--settings-row-border);
   border-radius: 18px;
   overflow: hidden;
-  background: #49365e;
+  background: var(--settings-row);
 }
 .shared-settings summary {
   cursor: pointer;
@@ -135,7 +135,7 @@ body:has(.shared-settings) .studio-menu-tray {
   width: 22px;
   height: 22px;
   margin-top: -8px;
-  border: 3px solid #19b7b0;
+  border: 3px solid var(--settings-slider-outline);
   border-radius: 50%;
   background: white;
 }
@@ -147,7 +147,7 @@ body:has(.shared-settings) .studio-menu-tray {
 .shared-settings-content input[type='range']::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  border: 3px solid #19b7b0;
+  border: 3px solid var(--settings-slider-outline);
   border-radius: 50%;
   background: white;
 }
