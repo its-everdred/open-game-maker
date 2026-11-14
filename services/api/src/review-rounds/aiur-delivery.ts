@@ -38,8 +38,6 @@ export function aiurReworkDelivery(
       throw new Error('aiur_transcript_search_incomplete');
     },
     async rework(ticket, reason) {
-      const issue = await client.issue(ticket);
-      if (issue.status === 'running') throw new Error('review_worker_running');
       await client.rework(ticket, reason, `review-round:${roundId}`);
     },
   };

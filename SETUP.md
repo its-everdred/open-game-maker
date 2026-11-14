@@ -282,7 +282,7 @@ Command:
 ```sh
 # Set AIUR_API_URL, AIUR_API_TOKEN, OGM_BUILDER_WORKSPACES_ROOT,
 # OGM_BUILDER_BOT_TOKEN, and OGM_BUILDER_BOT_LOGIN in api.env.
-systemctl --user restart ogm-api
+systemctl --user restart ogm-api ogm-review-watchdog
 ```
 
 Writes: `~/.config/ogm/env/api.env`, `~/.config/ogm/env/ogm-aiur@<slug>.env`

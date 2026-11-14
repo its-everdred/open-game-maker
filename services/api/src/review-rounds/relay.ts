@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { ApiBindings, AppDeps } from '../app/types.js';
+import type { ReviewSubmission } from '@ogm/contracts';
 import { buildRoutes } from '../builds/routes.js';
 
 // The preview relay has already checked the ticket-scoped grant and game/repository binding.
@@ -9,6 +10,11 @@ export async function submitRelayedReview(
   slug: string,
   repo: string,
   submission: unknown,
+  submitReview?: (
+    deps: AppDeps,
+    gameId: string,
+    submission: ReviewSubmission,
+  ) => Promise<{ id: string; round: number }>,
 ): Promise<{ id: string; round: number }> {
   const app = new Hono<ApiBindings>();
   app.use(async (c, next) => {
@@ -17,7 +23,7 @@ export async function submitRelayedReview(
   });
   app.route(
     '/internal',
-    buildRoutes({ daemonForSecret: async () => null, gameForSecret: async () => ({ slug, repo }) }),
+    buildRoutes({ daemonForSecret: async () => null, gameForSecret: async () => ({ slug, repo }), submitReview }),
   );
   const response = await app.request(`/internal/games/${encodeURIComponent(slug)}/review-rounds`, {
     method: 'POST',

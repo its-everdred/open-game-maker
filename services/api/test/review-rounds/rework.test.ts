@@ -28,7 +28,8 @@ it('persists intent before dispatch and finds the marker after an indeterminate 
   });
   const round = getRound(deps.db, GAME, 'round-1')!;
   let queued = false;
-  const findMarker = vi.fn(async () => (queued ? { runId: 'run-1' } : null));
+  let started = false;
+  const findMarker = vi.fn(async () => (queued ? { runId: started ? 'run-1' : null } : null));
   const rework = vi.fn(async (_ticket: string, reason: string) => {
     expect(deps.db.select().from(schema.reviewDispatchIntents).get()).toMatchObject({
       roundId: 'round-1',
@@ -36,19 +37,22 @@ it('persists intent before dispatch and finds the marker after an indeterminate 
       state: 'dispatching',
     });
     expect(reason).toBe(`${reworkMarker('round-1')}\n  Please fix\nthis.  \n<!-- gm-review-end -->`);
-    queued = true;
-    throw new Error('response lost');
+    if (!queued) {
+      queued = true;
+      throw new Error('response lost');
+    }
   });
   const delivery = { findMarker, rework };
   const now = () => '2026-01-01T02:00:00Z';
   await expect(dispatchRework(deps.db, round, delivery, now)).rejects.toThrow('response lost');
+  started = true;
   expect(await dispatchRework(deps.db, round, delivery, now)).toBe('consumed');
   expect(await dispatchRework(deps.db, round, delivery, now)).toBe('consumed');
-  expect(rework).toHaveBeenCalledTimes(1);
+  expect(rework).toHaveBeenCalledTimes(2);
   expect(getRound(deps.db, GAME, 'round-1')?.consumedByRun).toBe('run-1');
 });
 
-it('does not dispatch if marker lookup fails', async () => {
+it('does not redispatch a confirmed request when turn lookup fails', async () => {
   const deps = makeDeps();
   seedDesignGame(deps);
   postRound(deps.db, {
@@ -78,5 +82,14 @@ it('does not dispatch if marker lookup fails', async () => {
       () => 'now',
     ),
   ).rejects.toThrow('offline');
-  expect(rework).not.toHaveBeenCalled();
+  expect(rework).toHaveBeenCalledOnce();
+  await expect(
+    dispatchRework(
+      deps.db,
+      getRound(deps.db, GAME, 'r')!,
+      { rework, findMarker: vi.fn().mockRejectedValue(new Error('offline')) },
+      () => 'now',
+    ),
+  ).rejects.toThrow('offline');
+  expect(rework).toHaveBeenCalledOnce();
 });

@@ -41,6 +41,17 @@ the deliverable gate are `python3 -I scripts/assets/set_critic.py`; detail is in
 
 ## Deliver
 
+- For a tracked phase, post every creator review with `gm review post <submission.json>` from the game workspace.
+  Use a fresh UUID `id`, the track and phase IDs from `review/tracks/`, the category, ticket number as a string,
+  and the full commit SHA. Include `prNumber` when available and `media` entries with blob references: stills use
+  `{ "kind": "still", "ref": "sha256:..." }`, motion uses an MP4 `{ "kind": "clip", "ref": "sha256:...", "hasAudio": false }`,
+  and sound uses a capture clip with `hasAudio: true`. Gameplay needs `gm preview --ticket <number>` first, a
+  `{ "kind": "build", "ref": "<build-id>" }` entry and a `question`. The submission must reference uploaded
+  media; for local PNG, JPEG or MP4 files use `file:<path>` as the ref and `gm review post` uploads them. Copy
+  captures from the shared `assets-local/review` library into the workspace first. Keep the same UUID when retrying
+  an uncertain post; use a new UUID for the next round.
+- Host merge runners must gate ticket closure with `gm review close-check "$game" "$ticket" "$sha"`; close only
+  on exit zero. Any nonzero exit, including an unavailable API, leaves the ticket open for a later retry.
 - Each ready post names the skills used and links the score JSON when available; record each posted file with `python3 scripts/meta/skill-usage/artifacts.py --repo <repo> --ticket <number> --commit <sha> --post-id <comment-id> [--turn-id <turn-id>] --skill <skill> [--target <file>] [--score <json>] <file>`, then run `scripts/meta/skill-usage/collect.sh`.
 
 - `apps/web/title-town/tools/capture.mjs record` encodes H.264 `yuv420p`, 960 px wide, CRF 27, `+faststart` (a 2-minute clip is about 5-10 MB).

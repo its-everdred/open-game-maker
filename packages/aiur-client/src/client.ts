@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { AiurConfigError, AiurHttpError, AiurUnavailableError } from './errors.js';
 import {
@@ -237,13 +237,14 @@ export function createAiurClient(
     resume: (id) => writeWithoutResult(`/api/v1/${encodeURIComponent(id)}/resume`),
     message: (id, text, messageId, signal) => sendMessage(id, text, messageId, signal),
     async rework(id, reason, key) {
-      if (!ISSUE_ID.test(id) || !reason.trim()) throw new TypeError('Invalid rework request');
-      const bytes = createHash('sha256').update(key).digest().subarray(0, 16);
+      if (!ISSUE_ID.test(id) || !reason.trim() || !key.trim()) throw new TypeError('Invalid rework request');
+      const bytes = randomBytes(16);
       bytes[6] = (bytes[6]! & 0x0f) | 0x70;
       bytes[8] = (bytes[8]! & 0x3f) | 0x80;
       const hex = bytes.toString('hex');
       const requestId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
       const encoded = Buffer.from(reason).toString('base64');
+      const encodedKey = Buffer.from(key).toString('base64');
       const { body } = await fetchResponse('POST', '/api/v1/control', {
         write: true,
         signal: AbortSignal.timeout(45000),
@@ -251,18 +252,14 @@ export function createAiurClient(
           contract: 'aiur.control.call',
           contract_version: 2,
           request_id: requestId,
-          expression: `Aiur.AgentControlCLI.rework(${JSON.stringify(id)}, Base.decode64!("${encoded}"))`,
+          expression: `Aiur.AgentControlCLI.rework(${JSON.stringify(id)}, Base.decode64!("${encoded}"), key: Base.decode64!("${encodedKey}"))`,
           command: 'rework',
           max_scope: 'write',
           timeout_ms: 30000,
         },
       });
       const result = parseContract(ControlResultSchema, body);
-      if (
-        typeof result.output !== 'string' ||
-        !result.output.includes('agent:rework') ||
-        !/__AIUR_CONTROL_EXIT__:0(?:\s|$)/u.test(result.output)
-      )
+      if (typeof result.output !== 'string' || !/__AIUR_CONTROL_EXIT__:0(?:\s|$)/u.test(result.output))
         throw new Error('aiur_rework_unconfirmed');
     },
     async ticketTranscript(id, cursor) {

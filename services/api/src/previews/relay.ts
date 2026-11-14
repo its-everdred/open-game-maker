@@ -3,8 +3,10 @@ import { constants } from 'node:fs';
 import { open, readFile, readdir, readlink, realpath, rename, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, sep } from 'node:path';
+import { Readable } from 'node:stream';
 
 import { schema } from '@ogm/db';
+import { ReviewSubmission } from '@ogm/contracts';
 
 import type { AppDeps } from '../app/types.js';
 import { ARCHIVE_LIMITS } from '../builds/untar.js';
@@ -13,6 +15,11 @@ import { findGameBySlugOrId } from '../games/slug.js';
 import { hookPreviewToken } from '../internal/bundle.js';
 import { createPreview } from './store.js';
 import { submitRelayedReview } from '../review-rounds/relay.js';
+import { reviewDaemonForGame } from '../review-rounds/daemon.js';
+import { readTrack } from '../review-rounds/tracks.js';
+import { phaseOwner } from '../review-rounds/owners.js';
+import { submitRound } from '../review-rounds/store.js';
+import { withArtifactMutation } from '../builds/artifact-lock.js';
 import type { PreviewTicketVerifier } from './ticket.js';
 
 const requestName = /^[0-9a-f-]{36}\.json$/u;
@@ -30,6 +37,7 @@ type Request = {
   branch: string;
   kind?: string;
   submission?: unknown;
+  attachments?: unknown;
 };
 type RepoGrant = { repo: string; ticket: string; game: string; grant: string; secret: string; workspace: string };
 
@@ -144,12 +152,113 @@ async function processRequest(
           data.submission.sha !== data.sha
         )
           throw new Error('invalid_request');
-        const round = await submitRelayedReview(
-          deps,
-          data.slug,
-          `${game.githubOwner}/${game.githubRepo}`,
-          data.submission,
-        );
+        const submission = ReviewSubmission.safeParse(data.submission);
+        const attachments = data.attachments ?? [];
+        if (!submission.success || !Array.isArray(attachments)) throw new Error('invalid_request');
+        const daemon = reviewDaemonForGame(deps.db, game.id);
+        if (!daemon || !game.githubPath) throw new Error('invalid_request');
+        const track = await readTrack(daemon.checkoutPath, game.githubPath, data.sha, submission.data.track);
+        if (
+          track.category !== submission.data.category ||
+          !track.phases.some((phase) => phase.id === submission.data.phase) ||
+          phaseOwner(deps.db, game.id, track, submission.data.phase) !== submission.data.ticket
+        )
+          throw new Error('invalid_request');
+        const seen = new Set<number>();
+        let totalBytes = 0;
+        const staged: { bytes: Buffer; mime: string; hash: `sha256:${string}` }[] = [];
+        for (const attachment of attachments) {
+          if (!attachment || typeof attachment !== 'object' || !('index' in attachment) || !('mime' in attachment))
+            throw new Error('invalid_request');
+          const { index, mime } = attachment;
+          if (!Number.isInteger(index) || typeof index !== 'number' || index < 0 || seen.has(index))
+            throw new Error('invalid_request');
+          seen.add(index);
+          const item = submission.data.media[index];
+          if (
+            !item ||
+            (item.kind !== 'still' && item.kind !== 'clip') ||
+            !(item.kind === 'clip' ? mime === 'video/mp4' : mime === 'image/png' || mime === 'image/jpeg')
+          )
+            throw new Error('invalid_request');
+          const file = await openWithin(join(dir, `${filename.slice(0, -5)}.${index}.media`), dir, constants.O_RDONLY);
+          try {
+            const size = (await file.stat()).size;
+            totalBytes += size;
+            if (size <= 0 || totalBytes > Math.min(deps.config.blobPutMaxBytes, 64 * 1024 * 1024))
+              throw new Error('invalid_request');
+            const bytes = Buffer.alloc(size + 1);
+            const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+            if (
+              bytesRead !== size ||
+              `sha256:${createHash('sha256').update(bytes.subarray(0, size)).digest('hex')}` !== item.ref
+            )
+              throw new Error('invalid_request');
+            staged.push({ bytes: bytes.subarray(0, size), mime, hash: item.ref as `sha256:${string}` });
+          } finally {
+            await file.close();
+          }
+        }
+        let round;
+        if (staged.length === 0) {
+          round = await submitRelayedReview(deps, data.slug, `${game.githubOwner}/${game.githubRepo}`, data.submission);
+        } else {
+          if (submission.data.category === 'gameplay') throw new Error('invalid_request');
+          round = await withArtifactMutation(async () => {
+            const overlay = {
+              ...deps.blobStore,
+              put: deps.blobStore.put.bind(deps.blobStore),
+              delete: deps.blobStore.delete.bind(deps.blobStore),
+              signedGet: deps.blobStore.signedGet.bind(deps.blobStore),
+              head: async (hash: `sha256:${string}`) => {
+                const existing = await deps.blobStore.head(hash);
+                if (existing) return existing;
+                const item = staged.find((candidate) => candidate.hash === hash);
+                return item ? { hash, bytes: item.bytes.length, mime: item.mime } : null;
+              },
+              open: async (hash: `sha256:${string}`) => {
+                const item = staged.find((candidate) => candidate.hash === hash);
+                const metadata = await deps.blobStore.head(hash);
+                if (metadata && item && metadata.mime !== item.mime) return null;
+                const existing = await deps.blobStore.open(hash);
+                if (existing) return existing;
+                return item
+                  ? { ref: { hash, bytes: item.bytes.length, mime: item.mime }, stream: Readable.from(item.bytes) }
+                  : null;
+              },
+            };
+            class Rollback extends Error {
+              constructor(readonly result: { id: string; round: number }) {
+                super('rollback');
+              }
+            }
+            await submitRelayedReview(
+              { ...deps, blobStore: overlay },
+              data.slug,
+              `${game.githubOwner}/${game.githubRepo}`,
+              data.submission,
+              async (_deps, gameId, value) => {
+                try {
+                  deps.db.transaction((tx) => {
+                    throw new Rollback(submitRound(tx, gameId, value));
+                  });
+                } catch (error) {
+                  if (error instanceof Rollback) return error.result;
+                  throw error;
+                }
+                throw new Error('review_preflight_failed');
+              },
+            );
+            for (const attachment of staged) await deps.blobStore.put(attachment.bytes, attachment.mime);
+            return submitRelayedReview(
+              deps,
+              data.slug,
+              `${game.githubOwner}/${game.githubRepo}`,
+              data.submission,
+              async (_deps, gameId, value) => submitRound(deps.db, gameId, value),
+            );
+          });
+        }
         result = { state: 'done', id: round.id, round: round.round };
         await response.writeFile(Buffer.from(JSON.stringify(result)));
         return;

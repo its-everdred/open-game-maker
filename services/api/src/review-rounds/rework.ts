@@ -30,12 +30,20 @@ export async function dispatchRework(
   if (!intent || intent.ticket !== round.ticket) throw new Error('review_intent_mismatch');
   if (intent.state === 'consumed') return 'consumed';
   const marker = reworkMarker(round.id);
-  let found = await delivery.findMarker(round.ticket, marker);
-  if (found === null) {
-    // Preserve the creator's exact words following the marker.
-    await delivery.rework(round.ticket, `${marker}\n${round.notes ?? ''}\n<!-- gm-review-end -->`);
-    found = await delivery.findMarker(round.ticket, marker);
+  // A confirmed dispatch is checkpointed so the receipt's 24-hour expiry cannot queue it again.
+  if (intent.state === 'dispatching') {
+    try {
+      await delivery.rework(round.ticket, `${marker}\n${round.notes ?? ''}\n<!-- gm-review-end -->`);
+    } catch (error) {
+      // A queued marker alone does not prove the state transition succeeded; a consuming turn does.
+      if (!(await delivery.findMarker(round.ticket, marker))?.runId) throw error;
+    }
+    db.update(schema.reviewDispatchIntents)
+      .set({ state: 'delivered' })
+      .where(eq(schema.reviewDispatchIntents.roundId, round.id))
+      .run();
   }
+  const found = await delivery.findMarker(round.ticket, marker);
   if (!found?.runId) return 'pending';
   const runId = found.runId;
   db.transaction((tx) => {

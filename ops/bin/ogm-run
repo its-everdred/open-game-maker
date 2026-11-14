@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-  printf 'usage: ogm-run <api|rooms|games|commit|voice-host|intake|drive-sync|aiur|backup|core-bump> [slug]\n' >&2
+  printf 'usage: ogm-run <api|review-watchdog|rooms|games|commit|voice-host|intake|drive-sync|aiur|backup|core-bump> [slug]\n' >&2
   exit 64
 }
 
@@ -46,6 +46,11 @@ shift
 case "$name" in
   api)
     run_node_service api api
+    ;;
+  review-watchdog)
+    [[ -n ${OGM_API_PORT:-} && -f $OGM_REPO/packages/config/dist/index.js ]] && command -v node >/dev/null 2>&1 ||
+      placeholder review-watchdog 'waiting for API configuration and dependencies'
+    exec node "$OGM_REPO/services/api/src/review-rounds/watchdog.mjs"
     ;;
   rooms)
     run_node_service rooms rooms

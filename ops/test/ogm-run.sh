@@ -13,7 +13,7 @@ empty_repo=$scratch/empty-repo
 home=$scratch/home
 mkdir -p "$empty_repo" "$home"
 
-for service in api rooms games commit voice-host intake; do
+for service in api review-watchdog rooms games commit voice-host intake; do
   set +e
   HOME=$home OGM_REPO=$empty_repo timeout 2 "$repo/ops/bin/ogm-run" "$service" \
     > "$scratch/$service.out" 2> "$scratch/$service.err"
