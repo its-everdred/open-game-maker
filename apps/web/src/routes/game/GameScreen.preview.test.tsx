@@ -635,6 +635,47 @@ describe('GameScreen previews', () => {
     expect(host.mountGameFrame).not.toHaveBeenCalled();
   });
 
+  it('opens shared settings when playing a new empty game', async () => {
+    editorApi.getDesignSnapshot.mockResolvedValue({
+      rev: 0,
+      buildId: editorApi.NO_BUILD_ID,
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    editorApi.getScenerySource.mockResolvedValue({
+      scene: {
+        version: 1,
+        items: [],
+        terrain: [],
+        lighting: 'warm-forest',
+        camera: { position: [8, 8, 8], target: [0, 0, 0], zoom: 1 },
+      },
+      assets: [],
+    });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled());
+    act(() =>
+      preview.mountSceneryPreview.mock.calls.at(-1)?.[3]({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          capabilities: ['scenery'],
+          palette: { categories: [], items: [] },
+          tools: [],
+          gizmos: {},
+          inputs: { actions: [] },
+          presentation: { minLogical: { w: 100, h: 100 } },
+          dimension: '3d',
+          view: 'fixed',
+        },
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Play', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+    const pause = await screen.findByRole('dialog', { name: 'Paused' });
+    fireEvent.click(within(pause).getByRole('button', { name: 'Settings' }));
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeVisible();
+  });
+
   it('requests a scenery placement before a playable build', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
