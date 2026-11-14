@@ -64,6 +64,7 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
 }, 250_000);
 
 it('fails instead of publishing stills when the game never connects', async () => {
+  expect(existsSync(runner)).toBe(true);
   const root = mkdtempSync(join(tmpdir(), 'gm-app-capture-broken-'));
   const game = join(root, 'game');
   const out = join(root, 'shots');
