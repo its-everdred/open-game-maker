@@ -60,7 +60,7 @@ use. Work here the way those agents will work: dogfood the skills.
   CLI refuses an Executor answer, so relay Kevin's standing words with `operator-relay-answer <id> --expected-version 1 --option
   <id> --quote "<his words>" --relayed-by nuc-ogm-executor --idempotency-key <k>` (three QA-path workers sat 40–75 min on 2026-11-02).
   When the host is saturated (load > ~80, PSI > 90, RPCs time out), lower `max_concurrent_agents` in `.aiur/config` (hot-reload)
-  instead of `set max-agents` (the RPC times out too); restore it when load drops.
+  or `set max-agents` (retry.sh; it may time out); then check `status` AGENTS shows the new ceiling: on 2026-11-14 (pin 17ca2db8b) a config edit 10→4 never applied ("configured cap 10") and only `set max-agents` took; restore it when load drops.
   Config changes hot-reload: the daemon watches `.aiur/config` and applies it within a second without dropping agent turns
   (back the file up first; use only keys the running build knows; `aiur-main status` shows `CONFIG RELOAD REJECTED` on a
   bad file). Never stop/relaunch the daemon for a config change.
