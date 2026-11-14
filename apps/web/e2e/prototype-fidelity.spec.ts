@@ -110,6 +110,7 @@ for (const scenario of scenarios) {
       try {
         await page.setViewportSize(viewport);
         await page.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
+        await page.route('**/api/v1/notifications?*', (route) => route.fulfill({ json: [] }));
         const masks = await test.step('prepare app and prototype', () => scenario.prepare(page, reference));
         if (scenario.name === 'editor') {
           const appShell = await capture(page, []);
