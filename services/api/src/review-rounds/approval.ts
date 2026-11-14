@@ -75,7 +75,13 @@ export async function advanceApproval(input: {
         ? await issues.integrated(repo, round.sha)
         : await issues.merged(repo, round.prNumber, round.sha);
     if (!integrated) return;
-    await client.enqueueTodo([nextTicket]);
+    if (intent.runId !== nextTicket) {
+      await client.enqueueTodo([nextTicket]);
+      db.update(schema.reviewDispatchIntents)
+        .set({ runId: nextTicket })
+        .where(eq(schema.reviewDispatchIntents.roundId, round.id))
+        .run();
+    }
   }
   // GitHub merge is independent; every known phase owned by this ticket must be approved before closing.
   const owners = db
