@@ -7,7 +7,7 @@ import { recordReconcileHeartbeat } from './heartbeat.js';
 import { dispatchRework } from './rework.js';
 import { advanceApproval } from './approval.js';
 import { readTrack } from './tracks.js';
-import { daemonRowForGame } from '../jobs/daemons.js';
+import { reviewDaemonForGame } from './daemon.js';
 import type { ReviewIssues } from './issues.js';
 import { inspectReviewOwners } from './monitor.js';
 import { syncCommandVerdicts } from './command-verdicts.js';
@@ -55,7 +55,7 @@ export function createReviewSync(deps: {
           await dispatchRework(deps.db, round, delivery, () => new Date(now()).toISOString());
         } else {
           const game = deps.db.select().from(schema.games).where(eq(schema.games.id, round.gameId)).get();
-          const daemon = daemonRowForGame(deps.db, round.gameId);
+          const daemon = reviewDaemonForGame(deps.db, round.gameId);
           if (!game?.slug || !game.githubOwner || !game.githubRepo || !game.githubPath || !daemon)
             throw new Error('review_game_not_configured');
           const track = await readTrack(daemon.checkoutPath, game.githubPath, round.sha, round.track);

@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { AiurClient } from '@ogm/aiur-client';
 import { schema, type Db } from '@ogm/db';
-import { daemonRowForGame } from '../jobs/daemons.js';
+import { reviewDaemonForGame } from './daemon.js';
 import { phaseOwner } from './owners.js';
 import { listTracks } from './tracks.js';
 
@@ -16,7 +16,7 @@ export async function inspectReviewOwners(deps: {
 }): Promise<void> {
   const games = deps.db.select().from(schema.games).all();
   for (const game of games) {
-    const daemon = daemonRowForGame(deps.db, game.id);
+    const daemon = reviewDaemonForGame(deps.db, game.id);
     if (!daemon || !game.githubPath || (daemon.status !== 'running' && daemon.status !== 'idle')) continue;
     try {
       for (const track of await listTracks(daemon.checkoutPath, game.githubPath)) {

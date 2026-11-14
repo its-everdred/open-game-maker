@@ -29,7 +29,7 @@ it('alarms for a review owner with no open round and clears it when one is poste
     seedDesignGame(deps);
     deps.db
       .update(schema.games)
-      .set({ slug: 'fixture', githubPath: 'games/fixture' })
+      .set({ slug: 'fixture', githubPath: 'games/fixture', githubOwner: 'owner', githubRepo: 'repo' })
       .where(eq(schema.games.id, GAME))
       .run();
     deps.db

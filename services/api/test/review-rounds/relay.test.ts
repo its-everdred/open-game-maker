@@ -38,7 +38,7 @@ it('accepts only the granted ticket for a worker review submission', async () =>
     deps.db
       .insert(schema.gameDaemons)
       .values({
-        slug: 'castle-game',
+        slug: 'shared-repo-daemon',
         repo: REPO,
         checkoutPath: workspace,
         unit: 'fixture',

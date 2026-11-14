@@ -32,6 +32,7 @@ import { startScheduler } from './jobs/scheduler.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
 import { createReviewSync } from './review-rounds/runner.js';
+import { reviewClientForGame } from './review-rounds/daemon.js';
 import { getNotifyRuntime } from './notify/routes.js';
 import { createReviewIssues } from './review-rounds/issues.js';
 import { createWaitTickets } from './decision-waits/tickets.js';
@@ -180,7 +181,7 @@ const decisionWaits = createDecisionWaitPoller({
     db,
     sqlite,
     publishReminder: (notification) => getNotifyRuntime(deps).deliverStored(notification),
-    clientForGame: daemonDirectory.clientForGame,
+    clientForGame: reviewClientForGame(db, fleet),
     issues: createReviewIssues(env.OGM_INTAKE_GITHUB_TOKEN),
     log,
   }),

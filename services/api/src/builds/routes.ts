@@ -14,7 +14,7 @@ import { isCaptureWithAudio } from '../review-rounds/audio.js';
 import { isReviewStill } from '../review-rounds/still.js';
 import { readTrack } from '../review-rounds/tracks.js';
 import { phaseOwner } from '../review-rounds/owners.js';
-import { daemonRowForGame } from '../jobs/daemons.js';
+import { reviewDaemonForGame } from '../review-rounds/daemon.js';
 import { BuildCacheError } from './cache-plan.js';
 import { awaitsBuild, isPublishing, publishStaged, runCompleted, stageArtifact } from './publish.js';
 import { ARCHIVE_LIMITS, BadArchive } from './untar.js';
@@ -146,7 +146,7 @@ export function buildRoutes(opts: {
       }
       const parsed = ReviewSubmission.safeParse(body);
       if (!parsed.success) return c.json({ error: { code: 'invalid_round', details: parsed.error.issues } }, 400);
-      const daemonRow = daemonRowForGame(deps.db, game.id);
+      const daemonRow = reviewDaemonForGame(deps.db, game.id);
       if (!daemonRow || !game.githubPath) return c.json({ error: { code: 'track_checkout_unavailable' } }, 503);
       let track: ReviewTrack;
       try {
