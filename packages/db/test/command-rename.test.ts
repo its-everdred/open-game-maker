@@ -46,8 +46,7 @@ describe('command rename migration', () => {
     expect(migrate({ sqlite }).applied).toEqual([
       RENAME,
       AI_SETTING,
-      '20261114115521_review_rounds.sql',
-      '20261114122217_review_phase_owners.sql',
+      '20261114130207_review_rounds.sql',
     ]);
 
     expect(sqlite.prepare('SELECT decision_id, version, status FROM commands').all()).toEqual([

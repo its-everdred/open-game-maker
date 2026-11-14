@@ -20,9 +20,12 @@ export async function readTrack(checkout: string, gamePath: string, sha: string,
   return definition;
 }
 
-export async function listTracks(checkout: string, gamePath: string): Promise<ReviewTrack[]> {
+export async function listTracks(checkout: string, gamePath: string, revision = 'HEAD'): Promise<ReviewTrack[]> {
   if (!/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/u.test(gamePath)) throw new Error('invalid_track_reference');
-  const head = (await exec('git', ['-C', checkout, 'rev-parse', '--verify', 'HEAD'], { timeout: 15000 })).stdout.trim();
+  if (revision !== 'HEAD' && !/^[a-f0-9]{40}$/u.test(revision)) throw new Error('invalid_track_reference');
+  const head = (
+    await exec('git', ['-C', checkout, 'rev-parse', '--verify', `${revision}^{commit}`], { timeout: 15000 })
+  ).stdout.trim();
   if (!/^[a-f0-9]{40}$/u.test(head)) throw new Error('invalid_track_reference');
   const directory = `${gamePath}/review/tracks/`;
   const names = (
