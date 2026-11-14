@@ -96,3 +96,58 @@
 .shared-settings-content p {
   margin: 0;
 }
+
+/* Keep the studio actions behind the settings dialog until the player returns. */
+body:has(.shared-settings) .studio-menu-tray {
+  display: none;
+}
+.shared-settings summary {
+  display: flex;
+  align-items: center;
+  list-style: none;
+}
+.shared-settings summary::-webkit-details-marker {
+  display: none;
+}
+.shared-settings summary::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  margin-left: auto;
+  border-right: 3px solid currentColor;
+  border-bottom: 3px solid currentColor;
+  transform: rotate(45deg) translateY(-3px);
+}
+.shared-settings details[open] > summary::after {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+.shared-settings-content input[type='range'] {
+  appearance: none;
+  background: transparent;
+}
+.shared-settings-content input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green);
+}
+.shared-settings-content input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border: 3px solid #19b7b0;
+  border-radius: 50%;
+  background: white;
+}
+.shared-settings-content input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green);
+}
+.shared-settings-content input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 3px solid #19b7b0;
+  border-radius: 50%;
+  background: white;
+}

@@ -121,6 +121,23 @@ for (const viewport of viewports) {
   });
 }
 
+test('settings hides the game menu until returning to pause', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'desktop covers the shared menu interaction');
+  await installAuthRoutes(page, { signedIn: true });
+  await installGameApi(page);
+  await openReadyGame(page);
+  await page.getByRole('button', { name: 'Menu' }).click({ force: true });
+  const menuRow = page.getByRole('group', { name: 'Menu' });
+  await expect(menuRow).toBeVisible();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'Settings' }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await expect(settings).toBeVisible();
+  await expect(menuRow).toBeHidden();
+  await expect(settings.locator('summary').filter({ hasText: 'Sound' })).toHaveCSS('list-style-type', 'none');
+  await settings.getByRole('button', { name: 'Back' }).click();
+  await expect(menuRow).toBeVisible();
+});
+
 test('opening the menu in a room does not pause the game', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'desktop covers the room lifecycle rule');
   await installAuthRoutes(page, { signedIn: true });

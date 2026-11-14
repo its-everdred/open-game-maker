@@ -669,8 +669,8 @@ describe('GameScreen previews', () => {
         },
       }),
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Play', exact: true }));
-    fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Play$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Menu$/ }));
     const pause = await screen.findByRole('dialog', { name: 'Paused' });
     fireEvent.click(within(pause).getByRole('button', { name: 'Settings' }));
     expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeVisible();
