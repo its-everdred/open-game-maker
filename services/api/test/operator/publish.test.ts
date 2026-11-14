@@ -58,6 +58,61 @@ describe('operator review stalls', () => {
   });
 });
 
+it('fetches a remote-only review commit and reports an unknown commit', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ogm-close-fetch-'));
+  const remote = join(root, 'remote');
+  const checkout = join(root, 'checkout');
+  try {
+    mkdirSync(remote);
+    const git = (dir: string, ...args: string[]) =>
+      execFileSync('git', ['-C', dir, '-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args])
+        .toString()
+        .trim();
+    git(remote, 'init', '-q');
+    git(remote, 'commit', '--allow-empty', '-qm', 'initial');
+    execFileSync('git', ['clone', '-q', remote, checkout]);
+    mkdirSync(join(remote, 'games/castle-game/review/tracks'), { recursive: true });
+    writeFileSync(
+      join(remote, 'games/castle-game/review/tracks/art.json'),
+      JSON.stringify({ id: 'art', category: 'art', phases: [{ id: 'concept', ticket: '42', template: 'art' }] }),
+    );
+    git(remote, 'add', 'games');
+    git(remote, 'commit', '-qm', 'track');
+    const sha = git(remote, 'rev-parse', 'HEAD');
+    const { app, deps } = operator();
+    deps.db
+      .update(schema.games)
+      .set({ githubOwner: 'owner', githubRepo: 'repo' })
+      .where(eq(schema.games.id, ids.game))
+      .run();
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'castle-game',
+        repo: 'owner/repo',
+        checkoutPath: checkout,
+        unit: 'fixture',
+        envFile: '/fixture',
+        port: 23456,
+        status: 'running',
+        createdAt: '2026-01-01T00:00:00Z',
+      })
+      .run();
+    const request = (revision: string) =>
+      app.request(`${operatorPrefix}/games/castle-game/review-close/42?sha=${revision}`, {
+        headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+      });
+    const fetched = await request(sha);
+    expect(fetched.status).toBe(200);
+    expect(await fetched.json()).toEqual({ allowed: false });
+    const unknown = await request('f'.repeat(40));
+    expect(unknown.status).toBe(409);
+    expect(await unknown.json()).toEqual({ error: 'unknown_commit' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it('allows host closure only after an owned phase is approved', async () => {
   const root = mkdtempSync(join(tmpdir(), 'ogm-close-gate-'));
   try {

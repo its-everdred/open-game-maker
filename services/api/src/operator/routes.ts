@@ -21,6 +21,7 @@ import { reviewAllowsClose } from '../review-rounds/close-gate.js';
 import { phaseOwner } from '../review-rounds/owners.js';
 import { listTracks } from '../review-rounds/tracks.js';
 import { reviewDaemonForGame } from '../review-rounds/daemon.js';
+import { ensureCommit } from './ensure-commit.js';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
 // not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
@@ -105,6 +106,7 @@ const routes = new Hono<ApiBindings>()
     if (!/^[1-9][0-9]*$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
     const sha = c.req.query('sha');
     if (!sha || !SHA.test(sha)) throw new HttpError(400, 'invalid_sha');
+    await ensureCommit(daemon.checkoutPath, sha);
     // Seed first-phase owners from the committed definitions before deciding that a ticket is untracked.
     const reviewedTracks = await listTracks(daemon.checkoutPath, game.githubPath, sha);
     const currentTracks = await listTracks(daemon.checkoutPath, game.githubPath);
