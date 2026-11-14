@@ -7,6 +7,22 @@ after_create: |
   case "$ticket" in ''|*[!0-9]*) rm -f .gm/context/ticket ;; *) printf '%s\n' "$ticket" > .gm/context/ticket ;; esac
   rm -f .gm/context/bundle.json .gm/context/bundle.missing .gm/context/design.json .gm/context/design.missing
   secret="$(cat "${OGM_HOOK_SECRET_FILE:?}" 2>/dev/null || true)"
+  rm -f .gm/context/preview.json
+  if [ -n "$secret" ]; then
+    umask 077
+    printf %s "$secret" | OGM_PREVIEW_TICKET="$ticket" OGM_PREVIEW_GRANTS="$(dirname "$OGM_HOOK_SECRET_FILE")/preview-grants" node -e '
+      const fs = require("node:fs"), crypto = require("node:crypto");
+      const ticket = process.env.OGM_PREVIEW_TICKET;
+      if (!/^[1-9]\d{0,15}$/.test(ticket)) process.exit(1);
+      const grant = crypto.randomUUID();
+      const workspace = crypto.createHash("sha256").update(process.cwd()).digest("hex");
+      fs.mkdirSync(process.env.OGM_PREVIEW_GRANTS, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(process.env.OGM_PREVIEW_GRANTS + "/" + workspace + ".json", JSON.stringify({ ticket, grant }), { mode: 0o600 });
+      const payload = Buffer.from(JSON.stringify({ ticket, grant })).toString("base64url");
+      const signature = crypto.createHmac("sha256", fs.readFileSync(0, "utf8")).update("preview:" + payload).digest("base64url");
+      fs.writeFileSync(".gm/context/preview.json", JSON.stringify({ token: payload + "." + signature }), { mode: 0o600 });
+    ' || rm -f .gm/context/preview.json
+  fi
   if [ -n "$secret" ] && curl -fsS --max-time 20 -H "Authorization: Bearer ${secret}" \
       "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/bundle" \
       -o .gm/context/bundle.json; then
@@ -51,6 +67,13 @@ before_remove: |
   ticket="${AIUR_HOOK_TICKET_IDENTIFIER:-}"
   secret="$(cat "${OGM_HOOK_SECRET_FILE:-/nonexistent}" 2>/dev/null || true)"
   root="$(pwd -P)"
+  if [ -n "${OGM_HOOK_SECRET_FILE:-}" ]; then
+    OGM_PREVIEW_GRANTS="$(dirname "$OGM_HOOK_SECRET_FILE")/preview-grants" node -e '
+      const fs = require("node:fs"), crypto = require("node:crypto");
+      const workspace = crypto.createHash("sha256").update(process.cwd()).digest("hex");
+      fs.rmSync(process.env.OGM_PREVIEW_GRANTS + "/" + workspace + ".json", { force: true });
+    ' || true
+  fi
   # Build what the workspace holds now; a stale dist/ from an earlier run never leaves it.
   if [ -n "$ticket" ] && [ -n "$secret" ]; then
     rm -rf dist

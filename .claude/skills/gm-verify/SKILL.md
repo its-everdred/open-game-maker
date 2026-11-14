@@ -57,3 +57,7 @@ the deliverable gate are `python3 -I scripts/assets/set_critic.py`; detail is in
 - Then record the first visit and reload and look at every other frame (black frames, a pop between poster and live, a stale build). After deploying, also load
   the live site in a browser that had the old build: cached files must never mix old code with new data.
 - Say what was checked and what wasn't (for example "not checked on iPhone Safari").
+
+## Playable previews
+
+Run `gm preview --ticket <number>` from the game workspace to upload a review build. New worker workspaces receive a ticket-scoped upload credential from the daemon hook; recreate workspaces made before the hook was updated to provision it; removing the workspace or rotating the daemon secret revokes it. It grants preview uploads only for that ticket and game. Never copy the credential into commits or build output. If an upload times out after an API restart, rerun `gm preview` to submit a fresh request.

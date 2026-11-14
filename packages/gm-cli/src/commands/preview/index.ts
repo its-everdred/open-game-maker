@@ -1,5 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
@@ -26,8 +37,13 @@ export const command: GmCommand = {
     const branchId = typeof flags.branch === 'string' ? flags.branch : 'main';
     if (!/^[A-Za-z0-9_-]{1,200}$/u.test(branchId))
       throw new UsageError('invalid game branch', 'gm preview --branch <id>');
-    if (!ctx.blobApi)
-      throw new UsageError('no daemon upload configuration', 'set OGM_INTERNAL_URL and OGM_HOOK_SECRET_FILE');
+    const previewFile = join(root, '.gm', 'context', 'preview.json');
+    const scoped = existsSync(previewFile)
+      ? (JSON.parse(readFileSync(previewFile, 'utf8')) as { token?: string })
+      : null;
+    const workerUpload = scoped?.token ? { token: scoped.token } : null;
+    if (!workerUpload && !ctx.blobApi)
+      throw new UsageError('no daemon upload configuration', 'run inside a configured worker workspace');
     let game = gameDir(ctx.cwd, root);
     const isGame = (dir: string) =>
       existsSync(join(dir, 'package.json')) &&
@@ -104,23 +120,62 @@ export const command: GmCommand = {
       const tar = spawnSync('tar', ['--format=ustar', '-czf', archive, '-C', stage, '.'], { encoding: 'utf8' });
       if (tar.status !== 0)
         throw new CommandError(`cannot archive the build: ${tar.stderr || tar.error?.message || ''}`);
-      const secret = readFileSync(ctx.blobApi.secretFile, 'utf8').trim();
-      if (!secret) throw new CommandError('daemon hook secret is empty');
-      const url = `${ctx.blobApi.url.replace(/\/+$/, '')}/internal/games/${encodeURIComponent(slug)}/previews/${ticket}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${secret}`,
-          'x-gm-sha': sha,
-          'x-gm-branch': branchId,
-          'content-type': 'application/gzip',
-        },
-        body: readFileSync(archive),
-        signal: AbortSignal.timeout(300_000),
-      });
-      const body = await response.text();
-      if (response.status !== 201) throw new CommandError(`preview upload failed (HTTP ${response.status}): ${body}`);
-      const preview = JSON.parse(body) as { buildId: string; gameId: string };
+      let preview: { buildId: string; gameId: string };
+      if (workerUpload) {
+        const directory = join(root, '.gm', 'preview');
+        mkdirSync(directory, { recursive: true, mode: 0o700 });
+        const id = randomUUID();
+        const requestFile = join(directory, `${id}.json`);
+        const archiveFile = join(directory, `${id}.tgz`);
+        const responseFile = join(directory, `${id}.response`);
+        try {
+          writeFileSync(archiveFile, readFileSync(archive), { mode: 0o600, flag: 'wx' });
+          writeFileSync(
+            `${requestFile}.tmp`,
+            JSON.stringify({ state: 'pending', token: workerUpload.token, ticket, slug, sha, branch: branchId }),
+            { mode: 0o600, flag: 'wx' },
+          );
+          renameSync(`${requestFile}.tmp`, requestFile);
+          const deadline = Date.now() + 300_000;
+          let result: { state: string; gameId?: string; buildId?: string; error?: string } | undefined;
+          while (Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            try {
+              result = JSON.parse(readFileSync(responseFile, 'utf8')) as typeof result;
+            } catch {
+              continue;
+            }
+            if (result?.state === 'failed') throw new CommandError(result.error || 'preview upload failed');
+            if (result?.state === 'done' && result.gameId && result.buildId) break;
+          }
+          if (result?.state !== 'done' || !result.gameId || !result.buildId)
+            throw new CommandError('preview upload timed out waiting for the host relay');
+          preview = { gameId: result.gameId, buildId: result.buildId };
+        } finally {
+          rmSync(`${requestFile}.tmp`, { force: true });
+          rmSync(requestFile, { force: true });
+          rmSync(responseFile, { force: true });
+          rmSync(archiveFile, { force: true });
+        }
+      } else {
+        const secret = readFileSync(ctx.blobApi!.secretFile, 'utf8').trim();
+        if (!secret) throw new CommandError('daemon hook secret is empty');
+        const url = `${ctx.blobApi!.url.replace(/\/+$/, '')}/internal/games/${encodeURIComponent(slug)}/previews/${ticket}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${secret}`,
+            'x-gm-sha': sha,
+            'x-gm-branch': branchId,
+            'content-type': 'application/gzip',
+          },
+          body: readFileSync(archive),
+          signal: AbortSignal.timeout(300_000),
+        });
+        const body = await response.text();
+        if (response.status !== 201) throw new CommandError(`preview upload failed (HTTP ${response.status}): ${body}`);
+        preview = JSON.parse(body) as { buildId: string; gameId: string };
+      }
       if (ctx.json) printJson(ctx, { state: 'done', ticket, sha, gameId: preview.gameId, buildId: preview.buildId });
       else ctx.out(`preview ready for ticket ${ticket}: ${preview.buildId}`);
       return EXIT.ok;

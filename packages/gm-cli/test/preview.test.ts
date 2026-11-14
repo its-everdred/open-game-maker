@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { gm, tempDir } from './helpers.js';
 
 describe('gm preview', () => {
-  it('builds the current uncommitted workspace and uploads it to the ticket without publishing', async () => {
+  it.each(['scoped', 'daemon'] as const)('uploads the current workspace with %s credentials', async (credential) => {
     const root = tempDir('gm-preview-');
     const game = join(root, 'games', 'blobs');
     const bin = join(root, 'bin');
@@ -27,8 +27,7 @@ describe('gm preview', () => {
     git('commit', '-qm', 'fixture');
     const sha = git('rev-parse', 'HEAD');
     writeFileSync(join(game, 'current.txt'), 'uncommitted workspace');
-    const secretFile = join(root, 'secret');
-    writeFileSync(secretFile, 'fixture-secret');
+    mkdirSync(join(root, '.gm', 'context'), { recursive: true });
     writeFileSync(
       join(bin, 'pnpm'),
       `#!/bin/sh\nset -eu\ntest -z "\${OGM_HOOK_SECRET_FILE:-}"\nmkdir -p dist/design\ncp current.txt dist/index.html\necho '{}' > dist/manifest.json\necho '{"folded":true}' > dist/design/design.json\necho '{}' > dist/credits.json\n`,
@@ -49,21 +48,56 @@ describe('gm preview', () => {
       });
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    let relay: ReturnType<typeof setInterval> | undefined;
     try {
       const port = (server.address() as AddressInfo).port;
+      const url = `http://127.0.0.1:${port}`;
+      const secretFile = join(root, 'hook-secret');
+      if (credential === 'scoped') {
+        writeFileSync(join(root, '.gm', 'context', 'preview.json'), JSON.stringify({ token: 'scoped-token' }));
+      } else {
+        writeFileSync(secretFile, 'daemon-secret');
+      }
+      if (credential === 'scoped') {
+        relay = setInterval(() => {
+          const dir = join(root, '.gm', 'preview');
+          if (!existsSync(dir)) return;
+          const file = readdirSync(dir).find((name) => name.endsWith('.json'));
+          if (!file) return;
+          const path = join(dir, file);
+          expect(statSync(dir).mode & 0o777).toBe(0o700);
+          expect(statSync(path).mode & 0o777).toBe(0o600);
+          expect(statSync(join(dir, file.replace(/\.json$/, '.tgz'))).mode & 0o777).toBe(0o600);
+          const request = JSON.parse(readFileSync(path, 'utf8')) as {
+            state: string;
+            token: string;
+            sha: string;
+            branch: string;
+          };
+          if (request.state !== 'pending') return;
+          received.path = '/internal/games/blobs/previews/42';
+          received.auth = `Bearer ${request.token}`;
+          received.sha = request.sha;
+          received.branch = request.branch;
+          received.body = readFileSync(join(dir, file.replace(/\.json$/, '.tgz')));
+          writeFileSync(
+            join(dir, file.replace(/\.json$/, '.response')),
+            JSON.stringify({ state: 'done', gameId: 'g_game', buildId: 'preview-123' }),
+          );
+        }, 20);
+      }
       const result = await gm(['preview', '--branch', 'branch-a', '--json'], {
         cwd: root,
         env: {
           PATH: `${bin}:${process.env.PATH ?? ''}`,
-          OGM_INTERNAL_URL: `http://127.0.0.1:${port}`,
-          OGM_HOOK_SECRET_FILE: secretFile,
+          ...(credential === 'daemon' ? { OGM_INTERNAL_URL: url, OGM_HOOK_SECRET_FILE: secretFile } : {}),
         },
       });
       expect(result.code).toBe(0);
       expect(JSON.stringify(result)).not.toContain('pv-secret');
       expect(received).toMatchObject({
         path: '/internal/games/blobs/previews/42',
-        auth: 'Bearer fixture-secret',
+        auth: `Bearer ${credential === 'scoped' ? 'scoped-token' : 'daemon-secret'}`,
         sha,
         branch: 'branch-a',
       });
@@ -77,6 +111,7 @@ describe('gm preview', () => {
       );
       expect(readFileSync(join(game, 'current.txt'), 'utf8')).toBe('uncommitted workspace');
     } finally {
+      if (relay) clearInterval(relay);
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

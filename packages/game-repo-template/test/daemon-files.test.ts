@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -132,6 +133,14 @@ describe('after_create hook', () => {
     expect(existsSync(join(dir, '.gm/context/bundle.json'))).toBe(false);
   });
 
+  it('provisions a scoped credential without an API URL', async () => {
+    const { dir, result } = await runHook({ OGM_INTERNAL_URL: '' });
+    expect(result.status).toBe(0);
+    const preview = JSON.parse(readFileSync(join(dir, '.gm/context/preview.json'), 'utf8')) as { token: string };
+    expect(preview.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(preview).not.toHaveProperty('url');
+  });
+
   it('downloads the current creator design for the worker as context', async () => {
     const base = await api((req, res) => {
       if (req.url === '/internal/jobs/by-ticket/12/bundle') {
@@ -155,6 +164,14 @@ describe('after_create hook', () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, '.gm/context/design.json'), 'utf8')).doc.globals.scenery).toBe('forest');
     expect(readFileSync(join(dir, '.gm/context/ticket'), 'utf8')).toBe('12\n');
+    const preview = JSON.parse(readFileSync(join(dir, '.gm/context/preview.json'), 'utf8')) as {
+      token: string;
+    };
+    expect(preview.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    const [payload, signature] = preview.token.split('.');
+    expect(JSON.parse(Buffer.from(payload!, 'base64url').toString('utf8')).ticket).toBe('12');
+    expect(signature).toBe(createHmac('sha256', SECRET).update(`preview:${payload}`).digest('base64url'));
+    expect(readFileSync(join(dir, '.gm/context/preview.json'), 'utf8')).not.toContain(SECRET);
   });
 
   it('marks malformed design responses unavailable instead of trusting them', async () => {

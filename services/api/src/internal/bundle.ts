@@ -16,6 +16,7 @@ import { playerView } from '../energy/view.js';
 import { paidApisDuringGameplay } from '../gameplay/policy.js';
 import { scopeSessions } from '../scope/store.js';
 import { LEAKY } from './leaky.js';
+import { verifyPreviewToken } from '../builds/preview-token.js';
 
 // Resolves an after_create hook's bearer to the one game repo whose daemon holds that secret, or null.
 export type HookDaemonResolver = (secret: string, deps: AppDeps) => Promise<string | null>;
@@ -41,6 +42,25 @@ export function hookSecretGame(home: string): HookGameResolver {
       );
       if (stored !== undefined && stored.trim() !== '' && timingSafeEqual(given, digest(stored.trim())))
         return { repo: row.repo, slug: row.slug };
+    }
+    return null;
+  };
+}
+
+export function hookPreviewToken(home: string) {
+  return async (
+    token: string,
+    deps: AppDeps,
+  ): Promise<{ repo: string; slug: string; ticket: string; grant: string } | null> => {
+    for (const row of await deps.db
+      .select({ slug: schema.gameDaemons.slug, repo: schema.gameDaemons.repo })
+      .from(schema.gameDaemons)) {
+      const secret = await readFile(join(home, '.config/ogm/daemons', row.slug, 'hook-secret'), 'utf8').catch(
+        () => undefined,
+      );
+      if (!secret?.trim()) continue;
+      const claims = verifyPreviewToken(token, secret.trim());
+      if (claims) return { repo: row.repo, slug: row.slug, ticket: claims.ticket, grant: claims.grant };
     }
     return null;
   };
