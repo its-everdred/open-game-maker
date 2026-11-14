@@ -13,7 +13,9 @@ export function aiurReworkDelivery(
       let cursor: string | undefined;
       for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
         const page = await client.ticketTranscript(ticket, cursor);
-        if (page.events.some((event) => event.body.includes(marker))) {
+        const marked = page.events.find((event) => event.body.includes(marker));
+        if (marked) {
+          if (marked.turn_id) return { runId: marked.turn_id };
           const issue = await client.issue(ticket);
           const run = issue.running;
           const started = run?.started_at;

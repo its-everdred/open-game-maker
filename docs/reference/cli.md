@@ -48,6 +48,9 @@ request; the creator's verdict and optional note go back to that ticket. The gam
 gm review post <submission.json>
 ```
 
+A review Command can also be tied to the round with `gm decide --key <round-id>` and the explicit option IDs
+`approved`, `needs_work`, and `kill`. Only the game owner's answer is applied to the round.
+
 The JSON carries a stable UUID `id` (reuse it when retrying), the `track`, `phase`, `category` (`art`, `gameplay`,
 or `sound`), owning `ticket`, commit `sha`, optional `prNumber`, and `media` array. Track definitions live in the
 committed game directory at `review/tracks/<track>.json`, with the track `id`, `category`, and an ordered `phases` array.
