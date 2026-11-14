@@ -12,6 +12,7 @@ import type { ReviewIssues } from './issues.js';
 import { inspectReviewOwners } from './monitor.js';
 import { syncCommandVerdicts } from './command-verdicts.js';
 import { queueReviewReminders } from './reminders.js';
+import { stopReview } from './kill.js';
 
 export function createReviewSync(deps: {
   db: Db;
@@ -40,7 +41,7 @@ export function createReviewSync(deps: {
         or(
           and(eq(schema.reviewRounds.verdict, 'needs_work'), isNull(schema.reviewRounds.consumedByRun)),
           and(
-            eq(schema.reviewRounds.verdict, 'approved'),
+            or(eq(schema.reviewRounds.verdict, 'approved'), eq(schema.reviewRounds.verdict, 'kill')),
             sql`NOT EXISTS (SELECT 1 FROM review_dispatch_intents i WHERE i.round_id = ${schema.reviewRounds.id} AND i.state = 'consumed')`,
           ),
         ),
@@ -58,16 +59,26 @@ export function createReviewSync(deps: {
           if (!game?.slug || !game.githubOwner || !game.githubRepo || !game.githubPath || !daemon)
             throw new Error('review_game_not_configured');
           const track = await readTrack(daemon.checkoutPath, game.githubPath, round.sha, round.track);
-          await advanceApproval({
-            db: deps.db,
-            round,
-            track,
-            repo: `${game.githubOwner}/${game.githubRepo}`,
-            slug: game.slug,
-            issues: deps.issues,
-            client,
-            now: () => new Date(now()).toISOString(),
-          });
+          if (round.verdict === 'kill') {
+            await stopReview(
+              deps.db,
+              round,
+              track,
+              `${game.githubOwner}/${game.githubRepo}`,
+              deps.issues,
+              new Date(now()).toISOString(),
+            );
+          } else
+            await advanceApproval({
+              db: deps.db,
+              round,
+              track,
+              repo: `${game.githubOwner}/${game.githubRepo}`,
+              slug: game.slug,
+              issues: deps.issues,
+              client,
+              now: () => new Date(now()).toISOString(),
+            });
         }
       } catch (error) {
         deps.log({ event: 'review_round_sync_error', roundId: round.id, error: (error as Error).name });

@@ -3,6 +3,7 @@ import { createIssuesClient } from '@ogm/builder';
 export type ReviewIssues = {
   ensureFollowup(repo: string, slug: string, marker: string, issue: { title: string; body: string }): Promise<string>;
   close(repo: string, ticket: string): Promise<void>;
+  cancel(repo: string, ticket: string): Promise<void>;
   merged(repo: string, pr: number, sha: string): Promise<boolean>;
 };
 
@@ -73,6 +74,10 @@ export function createReviewIssues(token: string, fetchImpl: typeof fetch = glob
     async close(repo, ticket) {
       if (!/^[1-9]\d{0,15}$/u.test(ticket)) throw new Error('invalid_ticket');
       await request('PATCH', `${repoPath(repo)}/issues/${ticket}`, { state: 'closed', state_reason: 'completed' });
+    },
+    async cancel(repo, ticket) {
+      if (!/^[1-9]\d{0,15}$/u.test(ticket)) throw new Error('invalid_ticket');
+      await request('PATCH', `${repoPath(repo)}/issues/${ticket}`, { state: 'closed', state_reason: 'not_planned' });
     },
   };
 }

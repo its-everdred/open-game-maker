@@ -3,7 +3,7 @@ import { streamSSE } from 'hono/streaming';
 import webpush from 'web-push';
 import { z } from 'zod';
 
-import { NotificationTrigger, PushSubscriptionInput, type Notification } from '@ogm/contracts';
+import { NotificationKind, NotificationTrigger, PushSubscriptionInput, type Notification } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
@@ -27,6 +27,7 @@ const runtimes = new WeakMap<AppDeps, NotifyRuntime>();
 const subscriptionEndpoint = z.object({ endpoint: z.string().url() });
 const notificationQuery = z.object({
   unread: z.literal('1').optional(),
+  kind: NotificationKind.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
@@ -117,7 +118,11 @@ export default new Hono<ApiBindings>()
   .get('/api/v1/notifications', (c) => {
     const query = parseQuery(c, notificationQuery);
     return c.json(
-      listNotifications(c.get('deps').sqlite, userId(c), { unread: query.unread === '1', limit: query.limit }),
+      listNotifications(c.get('deps').sqlite, userId(c), {
+        unread: query.unread === '1',
+        limit: query.limit,
+        kind: query.kind,
+      }),
     );
   })
   .post('/api/v1/notifications/:id/read', (c) => {

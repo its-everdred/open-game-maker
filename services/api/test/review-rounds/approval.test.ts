@@ -54,7 +54,7 @@ it.each(['art', 'gameplay'] as const)(
       },
     );
     const close = vi.fn(async () => {});
-    const nudgeTodo = vi.fn(async () => {});
+    const enqueueTodo = vi.fn(async () => {});
     const input = {
       db: deps.db,
       round,
@@ -62,14 +62,14 @@ it.each(['art', 'gameplay'] as const)(
       repo: 'owner/repo',
       slug: 'game',
       issues: { ensureFollowup, close, merged: vi.fn().mockResolvedValue(true) },
-      client: { nudgeTodo },
+      client: { enqueueTodo },
       now: () => '2026-01-01T02:00:00Z',
     };
     await expect(advanceApproval(input)).rejects.toThrow('response lost');
     await advanceApproval(input);
     await advanceApproval(input);
     expect(created).toBe(1);
-    expect(nudgeTodo).toHaveBeenCalledOnce();
+    expect(enqueueTodo).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
     expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('77');
   },
@@ -126,7 +126,7 @@ it('keeps an owner open while another assigned phase is unapproved', async () =>
     repo: 'owner/repo',
     slug: 'game',
     issues: { ensureFollowup: vi.fn(), close, merged: vi.fn().mockResolvedValue(true) },
-    client: { nudgeTodo: vi.fn() },
+    client: { enqueueTodo: vi.fn() },
     now: () => '2026-01-01T02:00:00Z',
   });
   expect(close).not.toHaveBeenCalled();
@@ -162,7 +162,7 @@ it('files the follow-up immediately and queues it after the approved PR merges',
     close: vi.fn(),
     merged: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
   };
-  const client = { nudgeTodo: vi.fn() };
+  const client = { enqueueTodo: vi.fn() };
   const input = {
     db: deps.db,
     round: getRound(deps.db, GAME, 'r')!,
@@ -175,9 +175,9 @@ it('files the follow-up immediately and queues it after the approved PR merges',
   };
   await advanceApproval(input);
   expect(issues.ensureFollowup).toHaveBeenCalledOnce();
-  expect(client.nudgeTodo).not.toHaveBeenCalled();
+  expect(client.enqueueTodo).not.toHaveBeenCalled();
   expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('77');
   await advanceApproval(input);
   expect(issues.ensureFollowup).toHaveBeenCalledOnce();
-  expect(client.nudgeTodo).toHaveBeenCalledWith(['77']);
+  expect(client.enqueueTodo).toHaveBeenCalledWith(['77']);
 });

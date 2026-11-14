@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import type { AiurClient, Decision } from '@ogm/aiur-client';
 import { decisionKeyMarker } from '@ogm/contracts';
 import { syncCommandVerdicts } from '../../src/review-rounds/command-verdicts.js';
@@ -31,7 +31,8 @@ it('accepts only the game owner’s keyed verdict and preserves their notes', as
       actor: { kind: 'operator', id: 'someone-else' },
     },
   } as unknown as Decision;
-  const client = { decisions: async () => [decision] } as unknown as AiurClient;
+  const decisions = vi.fn(async () => [decision]);
+  const client = { decisions } as unknown as AiurClient;
   const sync = () =>
     syncCommandVerdicts(
       deps.db,
@@ -40,6 +41,7 @@ it('accepts only the game owner’s keyed verdict and preserves their notes', as
       () => {},
     );
   await sync();
+  expect(decisions).toHaveBeenCalledWith({ ticket: '42', limit: 100 }, expect.any(AbortSignal));
   expect(getRound(deps.db, GAME, 'round')?.verdict).toBeNull();
   (decision.answer as unknown as { actor: { id: string } }).actor.id = OWNER;
   await sync();
@@ -48,4 +50,38 @@ it('accepts only the game owner’s keyed verdict and preserves their notes', as
     notes: '  Fix this.  ',
     verdictSource: 'command',
   });
+});
+
+it.each(['42', 'null', '"quoted"', '{"notes":"literal"}'])('preserves JSON-shaped creator notes: %s', async (note) => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  postRound(deps.db, {
+    id: 'round',
+    gameId: GAME,
+    track: 'art',
+    phase: 'concept',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: '2026-01-01T00:00:00Z',
+  });
+  const client = {
+    decisions: async () => [
+      {
+        ticket: { identifier: '42' },
+        created_at: '2026-01-01T00:01:00Z',
+        context: { long_context_markdown: decisionKeyMarker('round') },
+        answer: { selected_option_id: 'needs_work', custom_response: note, actor: { kind: 'operator', id: OWNER } },
+      },
+    ],
+  } as unknown as AiurClient;
+  await syncCommandVerdicts(
+    deps.db,
+    async () => client,
+    () => '2026-01-01T01:00:00Z',
+    () => {},
+  );
+  expect(getRound(deps.db, GAME, 'round')?.notes).toBe(note);
 });

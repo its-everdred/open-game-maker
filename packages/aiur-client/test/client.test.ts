@@ -204,15 +204,32 @@ describe('createAiurClient', () => {
   });
 
   it('reports a failed todo control result', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...(fixture('control') as Record<string, unknown>),
+        output: 'could not queue\n__AIUR_CONTROL_EXIT__:1',
+      }),
+    );
+    await expect(createAiurClient(daemon, fetchImpl).nudgeTodo(['42'])).rejects.toThrow('aiur_todo_failed');
+  });
+
+  it('queues a review phase without clearing other tickets and requires an affirmative exit marker', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(
+      .mockResolvedValueOnce(
         jsonResponse({
           ...(fixture('control') as Record<string, unknown>),
-          output: 'could not queue\n__AIUR_CONTROL_EXIT__:1',
+          output: 'queued 1 ticket(s)\n__AIUR_CONTROL_EXIT__:0\n',
         }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...(fixture('control') as Record<string, unknown>), output: 'unknown outcome' }),
       );
-    await expect(createAiurClient(daemon, fetchImpl).nudgeTodo(['42'])).rejects.toThrow('aiur_todo_failed');
+    const client = createAiurClient(daemon, fetchImpl);
+    await client.enqueueTodo(['42']);
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse(String(init?.body)).expression).toBe('todo(["42"], only: false, emit_exit_marker: true)');
+    await expect(client.enqueueTodo(['42'])).rejects.toThrow('aiur_todo_unconfirmed');
   });
 
   it('uses the supervisor token for decision calls and requires it', async () => {

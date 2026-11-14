@@ -92,6 +92,7 @@ export interface AiurClient {
     signal?: AbortSignal,
   ): Promise<{ request_id: string; warning?: 'outcome_unknown' }>;
   nudgeTodo(ids: string[]): Promise<void>;
+  enqueueTodo(ids: string[], signal?: AbortSignal): Promise<void>;
   rework(id: string, reason: string, key: string): Promise<void>;
   ticketTranscript(
     id: string,
@@ -199,7 +200,9 @@ export function createAiurClient(
       return parseContract(StateSchema, body);
     },
     async issue(id) {
-      const { body } = await fetchResponse('GET', `/api/v1/${encodeURIComponent(id)}`);
+      const { body } = await fetchResponse('GET', `/api/v1/${encodeURIComponent(id)}`, {
+        signal: AbortSignal.timeout(15000),
+      });
       return parseContract(IssueEntrySchema, body);
     },
     async usage(id) {
@@ -313,6 +316,19 @@ export function createAiurClient(
       const result = parseContract(ControlResultSchema, body);
       if (typeof result.output === 'string' && /__AIUR_CONTROL_EXIT__:(?!0(?:\s|$))/.test(result.output))
         throw new Error('aiur_todo_failed');
+    },
+    async enqueueTodo(ids, signal) {
+      if (ids.length === 0 || ids.some((id) => !ISSUE_ID.test(id)))
+        throw new TypeError('Invalid issue identifier in todo list');
+      const expression = `todo([${ids.map((id) => JSON.stringify(id)).join(',')}], only: false, emit_exit_marker: true)`;
+      const { body } = await fetchResponse('POST', '/api/v1/control', {
+        body: { contract: 'aiur.control.call', contract_version: 1, expression, max_scope: 'write' },
+        write: true,
+        signal: signal ?? AbortSignal.timeout(15000),
+      });
+      const result = parseContract(ControlResultSchema, body);
+      if (typeof result.output !== 'string' || !/(?:^|\n)__AIUR_CONTROL_EXIT__:0\s*$/u.test(result.output))
+        throw new Error('aiur_todo_unconfirmed');
     },
     async accounts() {
       const { body } = await fetchResponse('GET', '/api/v1/usage/accounts');

@@ -22,9 +22,10 @@ function verdictOf(
     return null;
   let option = answer.selected_option_id ?? answer.option_id ?? answer.option;
   let response: unknown = answer.custom_response;
-  if (typeof response === 'string') {
+  if (!option && typeof response === 'string') {
     try {
-      response = JSON.parse(response) as unknown;
+      const parsed: unknown = JSON.parse(response);
+      if (parsed && typeof parsed === 'object' && ('answers' in parsed || 'notes' in parsed)) response = parsed;
     } catch {
       /* plain creator note */
     }
@@ -64,7 +65,7 @@ export async function syncCommandVerdicts(
       const game = db.select().from(schema.games).where(eq(schema.games.id, round.gameId)).get();
       if (!game?.ownerId) continue;
       const client = await clientForGame(round.gameId);
-      const decisions = await client.decisions({ ticket: round.ticket, limit: 100 });
+      const decisions = await client.decisions({ ticket: round.ticket, limit: 100 }, AbortSignal.timeout(15000));
       const matching = decisions
         .filter(
           (decision) =>
