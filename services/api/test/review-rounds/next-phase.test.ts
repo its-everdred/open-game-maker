@@ -12,7 +12,10 @@ const round: ReviewRound = {
   ticket: '42',
   prNumber: 7,
   sha: 'a'.repeat(40),
-  media: '[]',
+  media: JSON.stringify([
+    { kind: 'still', ref: `sha256:${'a'.repeat(64)}` },
+    { kind: 'audio', ref: 'private-ref' },
+  ]),
   question: null,
   postedAt: '2026-01-01T00:00:00Z',
   verdict: 'approved',
@@ -28,6 +31,8 @@ it('creates a stable phase marker and names the approved concept in the conversi
   const ticket = nextPhaseTicket(round);
   expect(ticket.title).toContain('asset pack');
   expect(ticket.body).toContain('Approved review round: round-1');
+  expect(ticket.body).toContain(`sha256:${'a'.repeat(64)}`);
+  expect(ticket.body).not.toContain('private-ref');
   expect(ticket.body).toContain(nextPhaseMarker(round));
   expect(nextPhaseMarker({ ...round, id: 'round-2' } as ReviewRound)).toBe(nextPhaseMarker(round));
   expect(() => nextPhaseTicket({ ...round, verdict: 'needs_work' })).toThrow('review_round_not_approved');

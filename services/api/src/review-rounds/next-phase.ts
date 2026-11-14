@@ -7,7 +7,11 @@ export function nextPhaseMarker(round: Pick<ReviewRound, 'gameId' | 'track' | 'p
 
 export function nextPhaseTicket(round: ReviewRound): { title: string; body: string } {
   if (round.verdict !== 'approved') throw new Error('review_round_not_approved');
-  const approval = `Approved review round: ${round.id}\nTrack: ${round.track}\nPhase: ${round.phase}\nApproved commit: ${round.sha}${round.prNumber === null ? '' : `\nReview PR: #${round.prNumber}`}`;
+  const media = (JSON.parse(round.media) as { kind: string; ref: string }[]).filter(
+    (item) =>
+      /^sha256:[a-f0-9]{64}$/u.test(item.ref) || (item.kind === 'build' && /^[A-Za-z0-9_-]{1,200}$/u.test(item.ref)),
+  );
+  const approval = `Approved review round: ${round.id}\nTrack: ${round.track}\nPhase: ${round.phase}\nApproved commit: ${round.sha}${round.prNumber === null ? '' : `\nReview PR: #${round.prNumber}`}\nApproved media: ${JSON.stringify(media)}`;
   const scope =
     round.category === 'art'
       ? {
