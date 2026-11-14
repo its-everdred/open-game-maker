@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 
 import { Hono, type Context } from 'hono';
+import type { BlobHash } from '@ogm/blob-store';
 import { ReviewSubmission, type ReviewTrack } from '@ogm/contracts';
 import { bodyLimit } from 'hono/body-limit';
 
@@ -10,7 +11,9 @@ import { findGameBySlugOrId } from '../games/slug.js';
 import { createPreview, listEditorPreviews } from '../previews/store.js';
 import { getRound, submitRound } from '../review-rounds/store.js';
 import { isCaptureWithAudio } from '../review-rounds/audio.js';
+import { isReviewStill } from '../review-rounds/still.js';
 import { readTrack } from '../review-rounds/tracks.js';
+import { phaseOwner } from '../review-rounds/owners.js';
 import { daemonRowForGame } from '../jobs/daemons.js';
 import { BuildCacheError } from './cache-plan.js';
 import { awaitsBuild, isPublishing, publishStaged, runCompleted, stageArtifact } from './publish.js';
@@ -156,8 +159,25 @@ export function buildRoutes(opts: {
       } catch {
         return c.json({ error: { code: 'track_not_found' } }, 422);
       }
-      if (!track.phases.some((phase) => phase.id === parsed.data.phase && phase.ticket === parsed.data.ticket))
+      if (
+        track.category !== parsed.data.category ||
+        !track.phases.some((phase) => phase.id === parsed.data.phase) ||
+        phaseOwner(deps.db, game.id, track, parsed.data.phase) !== parsed.data.ticket
+      )
         return c.json({ error: { code: 'track_owner_mismatch' } }, 422);
+      if (parsed.data.category === 'art' && !getRound(deps.db, game.id, parsed.data.id)) {
+        const assets = parsed.data.media.filter((media) => media.kind === 'still' || media.kind === 'clip');
+        for (const asset of assets) {
+          if (!/^sha256:[0-9a-f]{64}$/u.test(asset.ref))
+            return c.json({ error: { code: 'review_media_invalid' } }, 422);
+          const ref = await deps.blobStore.head(asset.ref as BlobHash);
+          if (
+            !ref ||
+            (asset.kind === 'still' ? !(await isReviewStill(deps.blobStore, asset.ref)) : ref.mime !== 'video/mp4')
+          )
+            return c.json({ error: { code: 'review_media_invalid' } }, 422);
+        }
+      }
       if (parsed.data.category === 'sound' && !getRound(deps.db, game.id, parsed.data.id)) {
         const clips = parsed.data.media.filter((media) => media.kind === 'clip' && media.hasAudio);
         let valid = false;
@@ -190,7 +210,7 @@ export function buildRoutes(opts: {
       } catch (error) {
         if (
           error instanceof Error &&
-          ['review_submission_conflict', 'review_build_already_used'].includes(error.message)
+          ['review_submission_conflict', 'review_build_already_used', 'review_phase_not_ready'].includes(error.message)
         )
           return c.json({ error: { code: error.message } }, 409);
         throw error;

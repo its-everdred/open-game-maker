@@ -52,7 +52,7 @@ describe('operator review stalls', () => {
       headers: { 'x-ogm-internal': INTERNAL_TOKEN },
     });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ worker: [], creator: [] });
+    expect(await response.json()).toEqual({ worker: [], creator: [], missing: [] });
   });
 });
 

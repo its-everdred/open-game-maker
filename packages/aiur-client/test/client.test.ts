@@ -162,14 +162,12 @@ describe('createAiurClient', () => {
   });
 
   it('does not treat a failed rework control call as success', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        jsonResponse({
-          ...(fixture('control') as Record<string, unknown>),
-          output: 'agent:rework was written but delivery failed\n__AIUR_CONTROL_EXIT__:1',
-        }),
-      );
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...(fixture('control') as Record<string, unknown>),
+        output: 'agent:rework was written but delivery failed\n__AIUR_CONTROL_EXIT__:1',
+      }),
+    );
     await expect(createAiurClient(daemon, fetchImpl).rework('42', 'reason', 'key')).rejects.toThrow(
       'aiur_rework_unconfirmed',
     );
@@ -203,6 +201,18 @@ describe('createAiurClient', () => {
 
     await expect(client.nudgeTodo(['abc'])).rejects.toThrow('Invalid issue identifier');
     expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('reports a failed todo control result', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({
+          ...(fixture('control') as Record<string, unknown>),
+          output: 'could not queue\n__AIUR_CONTROL_EXIT__:1',
+        }),
+      );
+    await expect(createAiurClient(daemon, fetchImpl).nudgeTodo(['42'])).rejects.toThrow('aiur_todo_failed');
   });
 
   it('uses the supervisor token for decision calls and requires it', async () => {

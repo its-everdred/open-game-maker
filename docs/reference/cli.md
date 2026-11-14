@@ -50,9 +50,12 @@ gm review post <submission.json>
 
 The JSON carries a stable UUID `id` (reuse it when retrying), the `track`, `phase`, `category` (`art`, `gameplay`,
 or `sound`), owning `ticket`, commit `sha`, optional `prNumber`, and `media` array. Track definitions live in the
-committed game directory at `review/tracks/<track>.json`; the phase must name that ticket. Gameplay submissions need
+committed game directory at `review/tracks/<track>.json`, with the track `id`, `category`, and an ordered `phases` array.
+Each phase has an `id` and literal `template`; the first can specify its existing `ticket`. The API records the owner
+of later phases when approval creates their tickets. Gameplay submissions need
 a `build` reference from `gm preview` and a `question`. Sound submissions need a `clip` reference to a stored MP4
-containing video and audio, with `hasAudio: true`; an audio file alone is rejected. Media entries use `kind` and `ref`.
+containing video and audio, with `hasAudio: true`; an audio file alone is rejected. Art stills and clips use stored
+blob hashes as `ref`; media entries use `kind` and `ref`.
 
 ## Verify a game
 

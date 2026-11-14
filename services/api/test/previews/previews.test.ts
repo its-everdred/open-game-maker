@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 
 import previewRoutes from '../../src/previews/routes.js';
+import roundRoutes from '../../src/review-rounds/routes.js';
 import { previewDirectory } from '../../src/previews/store.js';
 import { daemonRowForGame } from '../../src/jobs/daemons.js';
 import { createApp } from '../../src/app/app.js';
@@ -28,6 +29,7 @@ function setup() {
       gameForSecret: async (secret) => (secret === SECRET ? { repo: REPO, slug: 'castle-game' } : null),
       trackFor: async (_checkout, _path, _sha, id) => ({
         id,
+        category: id === 'sound' ? 'sound' : id === 'game' ? 'gameplay' : 'art',
         phases: [{ id: id === 'sound' ? 'cue' : 'concept', ticket: '12', template: 'next' }],
       }),
     }),
@@ -37,6 +39,7 @@ function setup() {
   const message = vi.fn(async () => ({}));
   deps.aiurClientForGame = vi.fn(async () => ({ message }) as never);
   app.route('/api/v1', previewRoutes);
+  app.route('/api/v1', roundRoutes);
   const upload = (ticket = '12', auth = SECRET, body = archive(), branch = 'main') =>
     app.request(`http://example.test/internal/games/castle-game/previews/${ticket}`, {
       method: 'POST',
@@ -73,6 +76,52 @@ function enableTracks(deps: ReturnType<typeof setup>['deps']) {
 }
 
 describe('review round previews', () => {
+  it('shows an art round and records the owner verdict exactly once', async () => {
+    const { deps, app } = setup();
+    enableTracks(deps);
+    const image = await deps.blobStore.put(
+      readFileSync(new URL('../build-chat/fixtures/tiny.png', import.meta.url)),
+      'image/png',
+    );
+    const id = 'd9428888-122b-4b0e-b1c8-9f7900000010';
+    const posted = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        track: 'art',
+        phase: 'concept',
+        category: 'art',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'still', ref: image.hash }],
+      }),
+    });
+    expect(posted.status).toBe(201);
+    const list = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
+      headers: asUser(ids.user),
+    });
+    expect(await list.json()).toMatchObject({ rounds: [{ id, media: [{ kind: 'still', url: expect.any(String) }] }] });
+    const answer = (verdict: string) =>
+      app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/${id}/answer`, {
+        method: 'POST',
+        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+        body: JSON.stringify({ verdict, note: '  Keep\nthis.  ' }),
+      });
+    expect((await answer('needs_work')).status).toBe(200);
+    expect((await answer('needs_work')).status).toBe(200);
+    expect((await answer('approved')).status).toBe(409);
+    expect(deps.db.select().from(schema.reviewRounds).get()).toMatchObject({
+      verdict: 'needs_work',
+      notes: '  Keep\nthis.  ',
+    });
+    expect(
+      await (
+        await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, { headers: asUser(ids.user) })
+      ).json(),
+    ).toEqual({ rounds: [] });
+  });
+
   it('refuses a round from a ticket that does not own the phase', async () => {
     const { app, deps } = setup();
     enableTracks(deps);
@@ -91,6 +140,24 @@ describe('review round previews', () => {
     });
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({ error: { code: 'track_owner_mismatch' } });
+  });
+  it('does not let a gameplay track evade preview requirements by claiming another category', async () => {
+    const { app, deps } = setup();
+    enableTracks(deps);
+    const response = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'd9428888-122b-4b0e-b1c8-9f7900000005',
+        track: 'game',
+        phase: 'concept',
+        category: 'art',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'still', ref: 'concept' }],
+      }),
+    });
+    expect(response.status).toBe(422);
   });
   it('refuses a sound round when the declared capture does not exist', async () => {
     const { app, deps } = setup();

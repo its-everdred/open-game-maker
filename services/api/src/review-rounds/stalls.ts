@@ -1,4 +1,5 @@
 import { schema, type Db } from '@ogm/db';
+import { like } from 'drizzle-orm';
 
 import type { ReviewRound } from './store.js';
 
@@ -6,14 +7,24 @@ const SIX_HOURS = 6 * 60 * 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
 
 // A later submission for the same phase ends a worker stall, regardless of that new round's verdict.
-export function reviewStalls(db: Db, now: number): { worker: ReviewRound[]; creator: ReviewRound[] } {
+export function reviewStalls(
+  db: Db,
+  now: number,
+): { worker: ReviewRound[]; creator: ReviewRound[]; missing: unknown[] } {
   const rounds = db.select().from(schema.reviewRounds).all();
   const latest = new Map<string, number>();
   for (const round of rounds) {
     const key = JSON.stringify([round.gameId, round.track, round.phase]);
     latest.set(key, Math.max(latest.get(key) ?? 0, round.round));
   }
+  const missing = db
+    .select()
+    .from(schema.appMeta)
+    .where(like(schema.appMeta.key, 'review:missing:%'))
+    .all()
+    .map((row) => JSON.parse(row.value) as unknown);
   return {
+    missing,
     worker: rounds.filter((round) => {
       const key = JSON.stringify([round.gameId, round.track, round.phase]);
       return (

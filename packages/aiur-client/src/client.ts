@@ -310,7 +310,9 @@ export function createAiurClient(
         },
         write: true,
       });
-      parseContract(ControlResultSchema, body);
+      const result = parseContract(ControlResultSchema, body);
+      if (typeof result.output === 'string' && /__AIUR_CONTROL_EXIT__:(?!0(?:\s|$))/.test(result.output))
+        throw new Error('aiur_todo_failed');
     },
     async accounts() {
       const { body } = await fetchResponse('GET', '/api/v1/usage/accounts');

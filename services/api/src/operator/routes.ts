@@ -17,6 +17,7 @@ import { OperatorRegisterBody, registerOperatorGame } from './register.js';
 import { publishArchive } from './publish.js';
 import { reviewStalls } from '../review-rounds/stalls.js';
 import { reconcileStale } from '../review-rounds/heartbeat.js';
+import { markReminded } from '../review-rounds/store.js';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
 // not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
@@ -91,6 +92,11 @@ function facts(deps: AppDeps, game: ReturnType<typeof gameFor>) {
 }
 
 const routes = new Hono<ApiBindings>()
+  .post('/review-rounds/:id/reminded', (c) => {
+    requireOperator(c);
+    const recorded = markReminded(c.get('deps').db, c.req.param('id'), new Date().toISOString());
+    return c.json({ recorded });
+  })
   .get('/review-health', (c) => {
     requireOperator(c);
     const deps = c.get('deps');

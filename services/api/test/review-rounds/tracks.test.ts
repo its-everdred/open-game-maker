@@ -18,7 +18,7 @@ it('reads the track definition at the submitted commit, not a later checkout edi
     const file = join(root, 'games', 'sample', 'review', 'tracks', 'art.json');
     writeFileSync(
       file,
-      JSON.stringify({ id: 'art', phases: [{ id: 'concept', ticket: '42', template: 'asset-pack' }] }),
+      JSON.stringify({ id: 'art', category: 'art', phases: [{ id: 'concept', ticket: '42', template: 'asset-pack' }] }),
     );
     git('add', 'games');
     git('commit', '-qm', 'track');

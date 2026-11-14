@@ -39,6 +39,7 @@ describe('review submissions', () => {
     expect(
       ReviewTrack.safeParse({
         id: 'art',
+        category: 'art',
         phases: [
           { id: 'concept', ticket: '1', template: 'a' },
           { id: 'concept', ticket: '2', template: 'b' },

@@ -1,32 +1,73 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { AiurClient } from '@ogm/aiur-client';
 import { schema, type Db } from '@ogm/db';
 import { aiurReworkDelivery } from './aiur-delivery.js';
 import { recordReconcileHeartbeat } from './heartbeat.js';
 import { dispatchRework } from './rework.js';
+import { advanceApproval } from './approval.js';
+import { readTrack } from './tracks.js';
+import { daemonRowForGame } from '../jobs/daemons.js';
+import type { ReviewIssues } from './issues.js';
+import { inspectReviewOwners } from './monitor.js';
+import { syncCommandVerdicts } from './command-verdicts.js';
 
 export function createReviewSync(deps: {
   db: Db;
   clientForGame: (gameId: string) => Promise<AiurClient>;
+  issues: ReviewIssues;
   log: (line: Record<string, unknown>) => void;
   now?: () => number;
 }) {
   const now = deps.now ?? Date.now;
   return async () => {
+    recordReconcileHeartbeat(deps.db, now());
+    await syncCommandVerdicts(deps.db, deps.clientForGame, () => new Date(now()).toISOString(), deps.log);
     const rounds = deps.db
       .select()
       .from(schema.reviewRounds)
-      .where(and(eq(schema.reviewRounds.verdict, 'needs_work'), isNull(schema.reviewRounds.consumedByRun)))
+      .where(
+        or(
+          and(eq(schema.reviewRounds.verdict, 'needs_work'), isNull(schema.reviewRounds.consumedByRun)),
+          and(
+            eq(schema.reviewRounds.verdict, 'approved'),
+            sql`NOT EXISTS (SELECT 1 FROM review_dispatch_intents i WHERE i.round_id = ${schema.reviewRounds.id} AND i.state = 'consumed')`,
+          ),
+        ),
+      )
       .all();
     for (const round of rounds) {
       try {
         const client = await deps.clientForGame(round.gameId);
-        const delivery = aiurReworkDelivery(client, round.id, round.verdictAt!);
-        await dispatchRework(deps.db, round, delivery, () => new Date(now()).toISOString());
+        if (round.verdict === 'needs_work') {
+          const delivery = aiurReworkDelivery(client, round.id, round.verdictAt!);
+          await dispatchRework(deps.db, round, delivery, () => new Date(now()).toISOString());
+        } else {
+          const game = deps.db.select().from(schema.games).where(eq(schema.games.id, round.gameId)).get();
+          const daemon = daemonRowForGame(deps.db, round.gameId);
+          if (!game?.slug || !game.githubOwner || !game.githubRepo || !game.githubPath || !daemon)
+            throw new Error('review_game_not_configured');
+          const track = await readTrack(daemon.checkoutPath, game.githubPath, round.sha, round.track);
+          await advanceApproval({
+            db: deps.db,
+            round,
+            track,
+            repo: `${game.githubOwner}/${game.githubRepo}`,
+            slug: game.slug,
+            issues: deps.issues,
+            client,
+            now: () => new Date(now()).toISOString(),
+          });
+        }
       } catch (error) {
-        deps.log({ event: 'review_round_rework_error', roundId: round.id, error: (error as Error).name });
+        deps.log({ event: 'review_round_sync_error', roundId: round.id, error: (error as Error).name });
       }
     }
+    await inspectReviewOwners({
+      db: deps.db,
+      clientForGame: deps.clientForGame,
+      log: deps.log,
+      now: () => new Date(now()).toISOString(),
+    });
     recordReconcileHeartbeat(deps.db, now());
   };
 }

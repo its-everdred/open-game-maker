@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, max, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { ReviewSubmission } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
 
@@ -98,7 +98,7 @@ export function submitRound(db: Db, gameId: string, submission: ReviewSubmission
       if (used) throw new Error('review_build_already_used');
     }
     const latest = tx
-      .select({ round: max(schema.reviewRounds.round) })
+      .select({ round: schema.reviewRounds.round, verdict: schema.reviewRounds.verdict })
       .from(schema.reviewRounds)
       .where(
         and(
@@ -107,7 +107,9 @@ export function submitRound(db: Db, gameId: string, submission: ReviewSubmission
           eq(schema.reviewRounds.phase, submission.phase),
         ),
       )
+      .orderBy(desc(schema.reviewRounds.round))
       .get();
+    if (latest && latest.verdict !== 'needs_work') throw new Error('review_phase_not_ready');
     const row: NewReviewRound = {
       id: submission.id,
       gameId,
@@ -140,4 +142,21 @@ export function roundForBuild(db: Db, gameId: string, ticket: string, buildId: s
       ),
     )
     .get();
+}
+
+// A digest acknowledges delivery once; acknowledgement never invents a verdict.
+export function markReminded(db: Db, id: string, at: string): boolean {
+  const result = db
+    .update(schema.reviewRounds)
+    .set({ remindedAt: at })
+    .where(
+      and(
+        eq(schema.reviewRounds.id, id),
+        isNull(schema.reviewRounds.verdict),
+        isNull(schema.reviewRounds.remindedAt),
+        sql`julianday(${schema.reviewRounds.postedAt}) <= julianday(${at}) - 1`,
+      ),
+    )
+    .run();
+  return result.changes === 1;
 }

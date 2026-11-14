@@ -7,7 +7,7 @@ export function nextPhaseMarker(round: Pick<ReviewRound, 'gameId' | 'track' | 'p
 
 export function nextPhaseTicket(round: ReviewRound): { title: string; body: string } {
   if (round.verdict !== 'approved') throw new Error('review_round_not_approved');
-  const approval = `Approved review round: ${round.id}\nTrack: ${round.track}\nPhase: ${round.phase}`;
+  const approval = `Approved review round: ${round.id}\nTrack: ${round.track}\nPhase: ${round.phase}\nApproved commit: ${round.sha}${round.prNumber === null ? '' : `\nReview PR: #${round.prNumber}`}`;
   const scope =
     round.category === 'art'
       ? {

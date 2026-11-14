@@ -56,7 +56,24 @@ describe('review round posting', () => {
     const first = submitRound(deps.db, GAME, submission);
     expect(submitRound(deps.db, GAME, submission)).toEqual(first);
     expect(() => submitRound(deps.db, GAME, { ...submission, ticket: '43' })).toThrow('review_submission_conflict');
-    expect(submitRound(deps.db, GAME, { ...submission, id: 'd9428888-122b-4b0e-b1c8-9f7900000002' }).round).toBe(2);
+    const next = { ...submission, id: 'd9428888-122b-4b0e-b1c8-9f7900000002' };
+    expect(() => submitRound(deps.db, GAME, next)).toThrow('review_phase_not_ready');
+    answerRound(deps.db, GAME, first.id, {
+      verdict: 'needs_work',
+      notes: null,
+      source: 'preview',
+      at: '2026-01-01T01:00:00Z',
+    });
+    expect(submitRound(deps.db, GAME, next).round).toBe(2);
+    answerRound(deps.db, GAME, next.id, {
+      verdict: 'approved',
+      notes: null,
+      source: 'preview',
+      at: '2026-01-01T02:00:00Z',
+    });
+    expect(() => submitRound(deps.db, GAME, { ...next, id: 'd9428888-122b-4b0e-b1c8-9f7900000003' })).toThrow(
+      'review_phase_not_ready',
+    );
   });
 });
 

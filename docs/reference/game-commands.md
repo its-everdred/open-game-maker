@@ -75,6 +75,12 @@ against the job's Command and calls aiur's canonical Decision API with the Comma
 from the inbox, from the job conversation modal and from an inline Command card are the same operation. A `409`
 means another writer answered first and the returned status is the winner's.
 
+## Track review rounds
+
+The Review view shows open art and sound rounds posted with `gm review post`, using their stored stills or capture clips.
+The game owner can answer Looks right or Needs work with a note; the answer is recorded against that round. Gameplay
+rounds appear as playable previews and include their design question.
+
 ## Preview reviews
 
 A game's Review view also lists workspace previews sent with `gm preview`. Each preview plays in its card and offers

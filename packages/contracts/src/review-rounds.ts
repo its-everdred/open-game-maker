@@ -7,12 +7,13 @@ const Ticket = z.string().regex(/^[1-9]\d{0,15}$/u);
 export const ReviewTrack = z
   .object({
     id: Key,
+    category: z.enum(['art', 'gameplay', 'sound']),
     phases: z
       .array(
         z
           .object({
             id: Key,
-            ticket: Ticket,
+            ticket: Ticket.optional(),
             template: z.string().min(1),
           })
           .strict(),
@@ -47,6 +48,8 @@ export const ReviewSubmission = z
   })
   .strict()
   .superRefine((round, ctx) => {
+    if (round.category === 'art' && !round.media.some((media) => media.kind === 'still' || media.kind === 'clip'))
+      ctx.addIssue({ code: 'custom', message: 'art requires a still or capture clip', path: ['media'] });
     if (round.category === 'sound' && !round.media.some((media) => media.kind === 'clip' && media.hasAudio))
       ctx.addIssue({ code: 'custom', message: 'sound requires a capture clip with audio', path: ['media'] });
     if (round.category === 'gameplay') {

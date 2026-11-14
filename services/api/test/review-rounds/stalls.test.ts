@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { schema } from '@ogm/db';
 
 import { missingOpenRounds, reviewStalls } from '../../src/review-rounds/stalls.js';
-import { answerRound, consumeRound, postRound } from '../../src/review-rounds/store.js';
+import { answerRound, consumeRound, markReminded, postRound } from '../../src/review-rounds/store.js';
 import { GAME, seedDesignGame } from '../design-decisions/fixtures.js';
 import { makeDeps } from '../helpers.js';
 
@@ -36,6 +36,17 @@ it('lists an overdue worker until a new round arrives, and never treats a remind
     worker: [],
     creator: [{ id: 'second', verdict: null }],
   });
+  expect(markReminded(deps.db, 'second', '2026-01-02T06:59:59Z')).toBe(false);
+  expect(markReminded(deps.db, 'second', '2026-01-02T07:00:00Z')).toBe(true);
+  expect(markReminded(deps.db, 'second', '2026-01-02T08:00:00Z')).toBe(false);
+  expect(reviewStalls(deps.db, Date.parse('2026-01-02T08:00:00Z')).creator).toEqual([]);
+  expect(
+    deps.db
+      .select()
+      .from(schema.reviewRounds)
+      .all()
+      .find((round) => round.id === 'second')?.verdict,
+  ).toBeNull();
 });
 
 it('identifies a human-review owner who has not posted an open round', () => {
