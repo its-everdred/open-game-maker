@@ -61,7 +61,12 @@ it.each(['art', 'gameplay'] as const)(
       track,
       repo: 'owner/repo',
       slug: 'game',
-      issues: { ensureFollowup, close, merged: vi.fn().mockResolvedValue(true) },
+      issues: {
+        ensureFollowup,
+        close,
+        merged: vi.fn().mockResolvedValue(true),
+        integrated: vi.fn().mockResolvedValue(true),
+      },
       client: { enqueueTodo },
       now: () => '2026-01-01T02:00:00Z',
     };
@@ -91,6 +96,56 @@ it('seeds the initial owner once and does not preassign later phases', () => {
     '42',
   );
   expect(phaseOwner(deps.db, GAME, track, 'build')).toBeNull();
+});
+
+it('waits for an approved commit without a PR to reach main before starting the next phase', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  postRound(deps.db, {
+    id: 'r',
+    gameId: GAME,
+    track: 'art',
+    phase: 'concept',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: '2026-01-01T00:00:00Z',
+  });
+  answerRound(deps.db, GAME, 'r', { verdict: 'approved', notes: null, source: 'command', at: '2026-01-01T01:00:00Z' });
+  const track = {
+    id: 'art',
+    category: 'art' as const,
+    phases: [
+      { id: 'concept', ticket: '42', template: 'art' },
+      { id: 'build', template: 'build' },
+    ],
+  };
+  const issues = {
+    ensureFollowup: vi.fn().mockResolvedValue('77'),
+    close: vi.fn(),
+    merged: vi.fn(),
+    integrated: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
+  };
+  const client = { enqueueTodo: vi.fn() };
+  const input = {
+    db: deps.db,
+    round: getRound(deps.db, GAME, 'r')!,
+    track,
+    repo: 'owner/repo',
+    slug: 'game',
+    issues,
+    client,
+    now: () => '2026-01-01T02:00:00Z',
+  };
+  await advanceApproval(input);
+  expect(issues.ensureFollowup).toHaveBeenCalledOnce();
+  expect(client.enqueueTodo).not.toHaveBeenCalled();
+  expect(issues.close).not.toHaveBeenCalled();
+  await advanceApproval(input);
+  expect(issues.integrated).toHaveBeenCalledWith('owner/repo', 'a'.repeat(40));
+  expect(client.enqueueTodo).toHaveBeenCalledOnce();
 });
 
 it('keeps an owner open while another assigned phase is unapproved', async () => {
@@ -125,7 +180,12 @@ it('keeps an owner open while another assigned phase is unapproved', async () =>
     track,
     repo: 'owner/repo',
     slug: 'game',
-    issues: { ensureFollowup: vi.fn(), close, merged: vi.fn().mockResolvedValue(true) },
+    issues: {
+      ensureFollowup: vi.fn(),
+      close,
+      merged: vi.fn().mockResolvedValue(true),
+      integrated: vi.fn().mockResolvedValue(true),
+    },
     client: { enqueueTodo: vi.fn() },
     now: () => '2026-01-01T02:00:00Z',
   });
@@ -161,6 +221,7 @@ it('files the follow-up immediately and queues it after the approved PR merges',
     ensureFollowup: vi.fn().mockResolvedValue('77'),
     close: vi.fn(),
     merged: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
+    integrated: vi.fn(),
   };
   const client = { enqueueTodo: vi.fn() };
   const input = {

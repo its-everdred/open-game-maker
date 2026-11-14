@@ -5,6 +5,7 @@ export type ReviewIssues = {
   close(repo: string, ticket: string): Promise<void>;
   cancel(repo: string, ticket: string): Promise<void>;
   merged(repo: string, pr: number, sha: string): Promise<boolean>;
+  integrated(repo: string, sha: string): Promise<boolean>;
 };
 
 // A marker is searched on every pass, including after an indeterminate POST. No POST is retried in the same pass.
@@ -70,6 +71,15 @@ export function createReviewIssues(token: string, fetchImpl: typeof fetch = glob
       )
         throw new Error('review_pr_changed');
       return typeof value.merged_at === 'string';
+    },
+    async integrated(repo, sha) {
+      if (!/^[a-f0-9]{40}$/u.test(sha)) throw new Error('invalid_review_sha');
+      const value = await request('GET', `${repoPath(repo)}/compare/${sha}...main`);
+      if (!value || typeof value !== 'object' || !('status' in value) || typeof value.status !== 'string')
+        throw new Error('github_review_invalid_response');
+      if (!['identical', 'ahead', 'behind', 'diverged'].includes(value.status))
+        throw new Error('github_review_invalid_response');
+      return value.status === 'identical' || value.status === 'ahead';
     },
     async close(repo, ticket) {
       if (!/^[1-9]\d{0,15}$/u.test(ticket)) throw new Error('invalid_ticket');

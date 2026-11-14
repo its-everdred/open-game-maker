@@ -46,7 +46,7 @@ it('reconciles a creator kill verdict exactly once without filing a follow-up', 
     postedAt: '2026-01-01T00:00:00Z',
   });
   answerRound(deps.db, GAME, 'r', { verdict: 'kill', notes: null, source: 'command', at: '2026-01-01T01:00:00Z' });
-  const issues = { ensureFollowup: vi.fn(), close: vi.fn(), cancel: vi.fn(), merged: vi.fn() };
+  const issues = { ensureFollowup: vi.fn(), close: vi.fn(), cancel: vi.fn(), merged: vi.fn(), integrated: vi.fn() };
   const client = { issue: async () => ({ status: 'idle', idle: { state: 'in-progress' } }) } as unknown as AiurClient;
   const sync = createReviewSync({ db: deps.db, issues, clientForGame: async () => client, log: () => {} });
   await sync();

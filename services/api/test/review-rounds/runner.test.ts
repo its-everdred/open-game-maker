@@ -44,7 +44,7 @@ it('dispatches a needs-work verdict once and records the worker session after it
   } as unknown as AiurClient;
   const sync = createReviewSync({
     db: deps.db,
-    issues: { ensureFollowup: vi.fn(), close: vi.fn(), cancel: vi.fn(), merged: vi.fn() },
+    issues: { ensureFollowup: vi.fn(), close: vi.fn(), cancel: vi.fn(), merged: vi.fn(), integrated: vi.fn() },
     clientForGame: async () => client,
     log: () => {},
     now: () => Date.parse('2026-01-01T01:01:00Z'),

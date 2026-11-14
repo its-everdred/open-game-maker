@@ -14,7 +14,7 @@ export async function advanceApproval(input: {
   track: ReviewTrack;
   repo: string;
   slug: string;
-  issues: Pick<ReviewIssues, 'ensureFollowup' | 'close' | 'merged'>;
+  issues: Pick<ReviewIssues, 'ensureFollowup' | 'close' | 'merged' | 'integrated'>;
   client: Pick<AiurClient, 'enqueueTodo'>;
   now: () => string;
 }): Promise<void> {
@@ -70,7 +70,11 @@ export async function advanceApproval(input: {
       });
     }
     // A follow-up is filed immediately, but starts only after its approved source commit reaches the base.
-    if (round.prNumber !== null && !(await issues.merged(repo, round.prNumber, round.sha))) return;
+    const integrated =
+      round.prNumber === null
+        ? await issues.integrated(repo, round.sha)
+        : await issues.merged(repo, round.prNumber, round.sha);
+    if (!integrated) return;
     await client.enqueueTodo([nextTicket]);
   }
   // GitHub merge is independent; every known phase owned by this ticket must be approved before closing.

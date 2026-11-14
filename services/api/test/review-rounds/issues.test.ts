@@ -29,3 +29,14 @@ it('closes a killed review as not planned', async () => {
   expect(String(url)).toContain('/repos/owner/repo/issues/42');
   expect(JSON.parse(String(init?.body))).toEqual({ state: 'closed', state_reason: 'not_planned' });
 });
+
+it.each([
+  ['identical', true],
+  ['ahead', true],
+  ['behind', false],
+  ['diverged', false],
+])('recognizes whether the approved commit is in main (%s)', async (status, expected) => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ status }), { status: 200 }));
+  expect(await createReviewIssues('fixture-token', fetchImpl).integrated('owner/repo', 'a'.repeat(40))).toBe(expected);
+  expect(String(fetchImpl.mock.calls[0]![0])).toContain(`/compare/${'a'.repeat(40)}...main`);
+});

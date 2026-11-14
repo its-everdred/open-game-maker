@@ -52,7 +52,7 @@ it('does not close a shared ticket until every committed first phase is approved
     });
     answerRound(deps.db, GAME, id, { verdict: 'approved', notes: null, source: 'command', at: '2026-01-01T01:00:00Z' });
   };
-  const issues = { ensureFollowup: vi.fn(), close: vi.fn(), cancel: vi.fn(), merged: vi.fn() };
+  const issues = { ensureFollowup: vi.fn(), close: vi.fn(), cancel: vi.fn(), merged: vi.fn(), integrated: vi.fn() };
   const client = { issue: async () => ({ status: 'idle', idle: { state: 'in-progress' } }) } as unknown as AiurClient;
   const sync = createReviewSync({ db: deps.db, issues, clientForGame: async () => client, log: () => {} });
   add('art-round', 'art', 'concept', 'art');
