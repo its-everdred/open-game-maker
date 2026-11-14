@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -115,7 +115,7 @@ describe('after_create hook', () => {
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
     const status = await new Promise<number | null>((resolve) => child.on('close', resolve));
-    return { dir, result: { status, stderr } };
+    return { dir, secretFile, result: { status, stderr } };
   }
 
   async function api(handler: Parameters<typeof createServer>[1]): Promise<string> {
@@ -134,11 +134,24 @@ describe('after_create hook', () => {
   });
 
   it('provisions a scoped credential without an API URL', async () => {
-    const { dir, result } = await runHook({ OGM_INTERNAL_URL: '' });
+    const { dir, secretFile, result } = await runHook({ OGM_INTERNAL_URL: '' });
     expect(result.status).toBe(0);
     const preview = JSON.parse(readFileSync(join(dir, '.gm/context/preview.json'), 'utf8')) as { token: string };
     expect(preview.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(preview).not.toHaveProperty('url');
+    const claims = JSON.parse(Buffer.from(preview.token.split('.')[0]!, 'base64url').toString('utf8')) as {
+      ticket: string;
+      grant: string;
+    };
+    const workspaceHash = createHash('sha256').update(dir).digest('hex');
+    expect(JSON.parse(readFileSync(join(secretFile, '..', 'preview-grants', `${workspaceHash}.json`), 'utf8'))).toEqual(
+      claims,
+    );
+    execFileSync('bash', ['-c', parse(renderDaemonFiles().hooks).before_remove as string], {
+      cwd: dir,
+      env: { PATH: HOOK_PATH, HOME: dir, OGM_HOOK_SECRET_FILE: secretFile },
+    });
+    expect(existsSync(join(secretFile, '..', 'preview-grants', `${workspaceHash}.json`))).toBe(false);
   });
 
   it('downloads the current creator design for the worker as context', async () => {

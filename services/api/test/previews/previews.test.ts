@@ -155,6 +155,43 @@ describe('preview builds', () => {
       );
       await scanPreviewRelay(deps, home);
       expect(JSON.parse(readFileSync(join(dir, `${crossGame}.response`), 'utf8')).state).toBe('failed');
+      const anotherDir = join(home, '.local/share/ogm/daemons/castle-game/workspaces/another/.gm/preview');
+      mkdirSync(anotherDir, { recursive: true });
+      const replay = randomUUID();
+      writeFileSync(join(anotherDir, `${replay}.tgz`), archive());
+      writeFileSync(
+        join(anotherDir, `${replay}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: mintPreviewToken(SECRET, '12', grant),
+          ticket: '12',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+        }),
+      );
+      await scanPreviewRelay(deps, home);
+      expect(JSON.parse(readFileSync(join(anotherDir, `${replay}.response`), 'utf8')).state).toBe('failed');
+      const outside = join(home, 'outside');
+      const validRequest = JSON.stringify({
+        state: 'pending',
+        token: mintPreviewToken(SECRET, '12', grant),
+        ticket: '12',
+        slug: 'castle-game',
+        sha: SHA,
+        branch: 'main',
+      });
+      writeFileSync(outside, validRequest);
+      const symlink = randomUUID(),
+        hardlink = randomUUID();
+      symlinkSync(outside, join(dir, `${symlink}.json`));
+      linkSync(outside, join(dir, `${hardlink}.json`));
+      writeFileSync(join(dir, `${symlink}.tgz`), archive());
+      writeFileSync(join(dir, `${hardlink}.tgz`), archive());
+      await scanPreviewRelay(deps, home);
+      expect(existsSync(join(dir, `${symlink}.response`))).toBe(false);
+      expect(existsSync(join(dir, `${hardlink}.response`))).toBe(false);
+      expect(readFileSync(outside, 'utf8')).toBe(validRequest);
       rmSync(grantPath);
       const revoked = randomUUID();
       writeFileSync(join(dir, `${revoked}.tgz`), archive());
@@ -171,13 +208,6 @@ describe('preview builds', () => {
       );
       await scanPreviewRelay(deps, home);
       expect(JSON.parse(readFileSync(join(dir, `${revoked}.response`), 'utf8')).state).toBe('failed');
-
-      const outside = join(home, 'outside');
-      writeFileSync(outside, 'untouched');
-      symlinkSync(outside, join(dir, `${randomUUID()}.json`));
-      linkSync(outside, join(dir, `${randomUUID()}.json`));
-      await scanPreviewRelay(deps, home);
-      expect(readFileSync(outside, 'utf8')).toBe('untouched');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
