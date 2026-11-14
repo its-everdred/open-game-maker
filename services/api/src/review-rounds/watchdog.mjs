@@ -4,6 +4,9 @@ import { promisify } from 'node:util';
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import process from 'node:process';
+import console from 'node:console';
+import { clearInterval, setInterval } from 'node:timers';
 import { loadEnv } from '@ogm/config';
 
 const exec = promisify(execFile);
@@ -26,9 +29,11 @@ export async function alertOperator(
 }
 
 // Runs outside the API process so an unavailable API also triggers an operator alarm.
-export async function reviewHealthy(port, timeoutMs, fetchImpl = fetch) {
+export async function reviewHealthy(port, timeoutMs, fetchImpl = globalThis.fetch) {
   try {
-    const response = await fetchImpl(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(timeoutMs) });
+    const response = await fetchImpl(`http://127.0.0.1:${port}/healthz`, {
+      signal: globalThis.AbortSignal.timeout(timeoutMs),
+    });
     const body = await response.json();
     return response.ok && body?.details?.review_rounds?.ok === true;
   } catch {
