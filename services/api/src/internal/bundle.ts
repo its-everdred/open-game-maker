@@ -51,7 +51,7 @@ export function hookPreviewToken(home: string) {
   return async (
     token: string,
     deps: AppDeps,
-  ): Promise<{ repo: string; slug: string; ticket: string; grant: string } | null> => {
+  ): Promise<{ repo: string; slug: string; ticket: string; grant: string; game: string } | null> => {
     for (const row of await deps.db
       .select({ slug: schema.gameDaemons.slug, repo: schema.gameDaemons.repo })
       .from(schema.gameDaemons)) {
@@ -60,7 +60,7 @@ export function hookPreviewToken(home: string) {
       );
       if (!secret?.trim()) continue;
       const claims = verifyPreviewToken(token, secret.trim());
-      if (claims) return { repo: row.repo, slug: row.slug, ticket: claims.ticket, grant: claims.grant };
+      if (claims) return { repo: row.repo, slug: row.slug, ticket: claims.ticket, grant: claims.grant, game: claims.game };
     }
     return null;
   };

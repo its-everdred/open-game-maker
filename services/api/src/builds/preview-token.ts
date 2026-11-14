@@ -2,10 +2,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const ticketPattern = /^[1-9]\d{0,15}$/u;
 
-type Claims = { ticket: string; grant: string };
+type Claims = { ticket: string; game: string; grant: string; expires: number };
 
-export function mintPreviewToken(secret: string, ticket: string, grant: string): string {
-  const payload = Buffer.from(JSON.stringify({ ticket, grant })).toString('base64url');
+export function mintPreviewToken(secret: string, ticket: string, grant: string, game: string): string {
+  const payload = Buffer.from(
+    JSON.stringify({ ticket, grant, game, expires: Date.now() + 2 * 60 * 60 * 1000 }),
+  ).toString('base64url');
   const signature = createHmac('sha256', secret).update(`preview:${payload}`).digest('base64url');
   return `${payload}.${signature}`;
 }
@@ -21,6 +23,11 @@ export function verifyPreviewToken(token: string, secret: string): Claims | null
     if (
       typeof claims.ticket !== 'string' ||
       !ticketPattern.test(claims.ticket) ||
+      typeof claims.game !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,200}$/u.test(claims.game) ||
+      typeof claims.expires !== 'number' ||
+      claims.expires <= Date.now() ||
+      claims.expires > Date.now() + 2 * 60 * 60 * 1000 ||
       typeof claims.grant !== 'string' ||
       !/^[0-9a-f-]{36}$/u.test(claims.grant)
     )

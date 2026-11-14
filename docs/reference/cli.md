@@ -37,7 +37,7 @@ gm preview [--ticket <number>] [--branch <id>] [--json]
 
 From the game folder (or a sparse workspace with one game), build the current workspace, including uncommitted edits,
 and send it to the game's review queue without changing the live build. The ticket defaults to the current agent ticket
-or `aiur/<number>` branch; pass `--ticket` when neither is available. Worker workspaces receive a scoped preview credential from their daemon hook. On the daemon host, `OGM_INTERNAL_URL` and
+or `aiur/<number>` branch; pass `--ticket` when neither is available. Worker preview uploads use a short-lived, ticket-and-game-scoped credential and the host relay; see the `gm-verify` skill for daemon hook setup. On the daemon host, `OGM_INTERNAL_URL` and
 `OGM_HOOK_SECRET_FILE` provide the upload connection. A new upload for the same game and ticket replaces the review
 request; the creator's verdict and optional note go back to that ticket. The game branch defaults to `main`; pass
 `--branch <id>` for another game branch so the editor shows the preview on the correct version.

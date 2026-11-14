@@ -26,7 +26,7 @@ describe('renderDaemonFiles', () => {
     expect(hooks).toBe(fixture('hooks.expected'));
     expect(hooks).not.toMatch(/\/(home|Users|root|tmp)\//);
     expect(hooks).not.toMatch(/(aiur_|ghp_|github_pat_|sk-)[A-Za-z0-9]/);
-    expect(Object.keys(parse(hooks))).toEqual(['after_create', 'before_remove']);
+    expect(Object.keys(parse(hooks))).toEqual(['after_create', 'before_run', 'before_remove']);
   });
 
   it('renders a game daemon’s sparse checkout and game-scope prompt', () => {
@@ -99,7 +99,8 @@ describe('after_create hook', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ogm-hook-ws-'));
     const secretFile = join(mkdtempSync(join(tmpdir(), 'ogm-hook-secret-')), 'hook-secret');
     writeFileSync(secretFile, SECRET);
-    const script = parse(renderDaemonFiles().hooks).after_create as string;
+    const hooks = parse(renderDaemonFiles().hooks) as { after_create: string; before_run: string };
+    const script = `${hooks.after_create}\n${hooks.before_run}`;
     const child = spawn('bash', ['-c', script], {
       cwd: dir,
       env: {
