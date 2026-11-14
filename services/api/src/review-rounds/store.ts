@@ -98,7 +98,11 @@ export function submitRound(db: Db, gameId: string, submission: ReviewSubmission
       if (used) throw new Error('review_build_already_used');
     }
     const latest = tx
-      .select({ round: schema.reviewRounds.round, verdict: schema.reviewRounds.verdict })
+      .select({
+        round: schema.reviewRounds.round,
+        verdict: schema.reviewRounds.verdict,
+        consumedByRun: schema.reviewRounds.consumedByRun,
+      })
       .from(schema.reviewRounds)
       .where(
         and(
@@ -109,7 +113,7 @@ export function submitRound(db: Db, gameId: string, submission: ReviewSubmission
       )
       .orderBy(desc(schema.reviewRounds.round))
       .get();
-    if (latest && latest.verdict !== 'needs_work') throw new Error('review_phase_not_ready');
+    if (latest && (latest.verdict !== 'needs_work' || !latest.consumedByRun)) throw new Error('review_phase_not_ready');
     const row: NewReviewRound = {
       id: submission.id,
       gameId,

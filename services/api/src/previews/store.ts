@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { access as fileAccess, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { creditsDocumentSchema, DesignDocSchema, gameManifestSchema } from '@ogm/contracts';
+import { creditsDocumentSchema, DesignDocSchema, gameManifestSchema, type ReviewSubmission } from '@ogm/contracts';
 import { buildDir, markComplete } from '@ogm/games-host/layout';
 
 import type { AppDeps } from '../app/types.js';
@@ -11,7 +11,7 @@ import { completeBuildCache } from '../builds/cache-plan.js';
 import { BadArchive, untarGz } from '../builds/untar.js';
 import { scanBuild } from '../gameplay/paid-integrations.js';
 import { paidApisDuringGameplay } from '../gameplay/policy.js';
-import { answerRound, roundForBuild } from '../review-rounds/store.js';
+import { answerRound, getRound, roundForBuild, submitRound } from '../review-rounds/store.js';
 
 export type Preview = {
   gameId: string;
@@ -82,6 +82,10 @@ export async function createPreview(
     const temporary = join(directory, `.${buildId}`);
     const target = join(directory, '.builds', buildId);
     const previous = await readPreview(join(directory, `${ticket}.json`));
+    if (previous) {
+      const round = roundForBuild(deps.db, gameId, ticket, previous.buildId);
+      if (round && round.verdict === null) throw new BadArchive('review_round_open');
+    }
     let installed = false;
     try {
       await mkdir(temporary, { recursive: true });
@@ -133,6 +137,24 @@ export async function createPreview(
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }
+  });
+}
+
+// Serialize posting against preview replacement and recheck the exact current build under the same lock.
+export async function submitReviewRound(deps: AppDeps, gameId: string, submission: ReviewSubmission) {
+  return withArtifactMutation(async () => {
+    if (getRound(deps.db, gameId, submission.id)) return submitRound(deps.db, gameId, submission);
+    if (submission.category === 'gameplay') {
+      const preview = await readPreview(join(root(deps, gameId), `${submission.ticket}.json`));
+      if (
+        !preview ||
+        preview.answered ||
+        preview.sha !== submission.sha ||
+        !submission.media.some((item) => item.kind === 'build' && item.ref === preview.buildId)
+      )
+        throw new Error('preview_not_found');
+    }
+    return submitRound(deps.db, gameId, submission);
   });
 }
 

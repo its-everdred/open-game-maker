@@ -8,8 +8,8 @@ import { bodyLimit } from 'hono/body-limit';
 import type { ApiBindings } from '../app/types.js';
 import { hookSecretFiles, hookSecretGame, type HookDaemonResolver, type HookGameResolver } from '../internal/bundle.js';
 import { findGameBySlugOrId } from '../games/slug.js';
-import { createPreview, listEditorPreviews } from '../previews/store.js';
-import { getRound, submitRound } from '../review-rounds/store.js';
+import { createPreview, listEditorPreviews, submitReviewRound } from '../previews/store.js';
+import { getRound } from '../review-rounds/store.js';
 import { isCaptureWithAudio } from '../review-rounds/audio.js';
 import { isReviewStill } from '../review-rounds/still.js';
 import { readTrack } from '../review-rounds/tracks.js';
@@ -205,9 +205,11 @@ export function buildRoutes(opts: {
           return c.json({ error: { code: 'preview_not_found' } }, 422);
       }
       try {
-        const round = submitRound(deps.db, game.id, parsed.data);
+        const round = await submitReviewRound(deps, game.id, parsed.data);
         return c.json({ id: round.id, round: round.round }, 201);
       } catch (error) {
+        if (error instanceof Error && error.message === 'preview_not_found')
+          return c.json({ error: { code: 'preview_not_found' } }, 422);
         if (
           error instanceof Error &&
           ['review_submission_conflict', 'review_build_already_used', 'review_phase_not_ready'].includes(error.message)

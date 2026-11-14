@@ -64,6 +64,8 @@ describe('review round posting', () => {
       source: 'preview',
       at: '2026-01-01T01:00:00Z',
     });
+    expect(() => submitRound(deps.db, GAME, next)).toThrow('review_phase_not_ready');
+    consumeRound(deps.db, GAME, first.id, 'run-1', '2026-01-01T01:01:00Z');
     expect(submitRound(deps.db, GAME, next).round).toBe(2);
     answerRound(deps.db, GAME, next.id, {
       verdict: 'approved',
