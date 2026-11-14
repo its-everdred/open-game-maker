@@ -113,6 +113,17 @@ assert_eq 1 "$code" '--check should fail when a service names no start entry'
 assert_grep 'no start entry: services/commit/package.json' "$scratch/nostart.txt"
 printf '{"scripts":{"start":"node dist/main.js"}}\n' > "$OGM_REPO/services/commit/package.json"
 
+mkdir -p "$HOME/.local/state/ogm"
+printf '{"stale":true}\n' > "$HOME/.local/state/ogm/review-watchdog.json"
+set +e
+"$status" --check > "$scratch/review-alert.txt"
+code=$?
+set -e
+assert_eq 1 "$code" '--check should fail when the review watchdog alerts'
+assert_grep 'review reconciler stale or API unavailable' "$scratch/review-alert.txt"
+printf '{"stale":false}\n' > "$HOME/.local/state/ogm/review-watchdog.json"
+"$status" --check > /dev/null || fail '--check should pass after the review watchdog recovers'
+
 touch -d '3 days ago' "$OGM_BACKUP_STATE/last-ok"
 set +e
 "$status" --check > "$scratch/stale.txt"

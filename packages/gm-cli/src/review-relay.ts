@@ -9,6 +9,7 @@ export async function submitReviewRelay(
   slug: string,
   token: string,
   submission: ReviewSubmission,
+  attachments: { index: number; bytes: Buffer; mime: string }[] = [],
 ): Promise<string> {
   const directory = join(root, '.gm', 'preview');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -16,6 +17,8 @@ export async function submitReviewRelay(
   const requestFile = join(directory, `${id}.json`);
   const responseFile = join(directory, `${id}.response`);
   try {
+    for (const attachment of attachments)
+      writeFileSync(join(directory, `${id}.${attachment.index}.media`), attachment.bytes, { mode: 0o600, flag: 'wx' });
     writeFileSync(
       `${requestFile}.tmp`,
       JSON.stringify({
@@ -27,6 +30,7 @@ export async function submitReviewRelay(
         sha: submission.sha,
         branch: 'main',
         submission,
+        attachments: attachments.map(({ index, mime }) => ({ index, mime })),
       }),
       { mode: 0o600, flag: 'wx' },
     );
@@ -46,6 +50,7 @@ export async function submitReviewRelay(
     }
     throw new CommandError('review submission timed out waiting for the host relay');
   } finally {
+    for (const attachment of attachments) rmSync(join(directory, `${id}.${attachment.index}.media`), { force: true });
     rmSync(`${requestFile}.tmp`, { force: true });
     rmSync(requestFile, { force: true });
     rmSync(responseFile, { force: true });

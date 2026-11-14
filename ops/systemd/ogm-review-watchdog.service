@@ -1,0 +1,17 @@
+[Unit]
+Description=OGM review reconciler watchdog
+After=ogm-api.service
+
+[Service]
+Type=simple
+Slice=ogm.slice
+Environment=OGM_REPO=@REPO@
+EnvironmentFile=-%h/.config/ogm/env/api.env
+ExecStart=@REPO@/ops/bin/ogm-run review-watchdog
+Restart=always
+RestartSec=1
+NoNewPrivileges=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

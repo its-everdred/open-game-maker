@@ -7,7 +7,7 @@ export const reviewDispatchIntents = sqliteTable('review_dispatch_intents', {
     .primaryKey()
     .references(() => reviewRounds.id, { onDelete: 'cascade' }),
   ticket: text('ticket').notNull(),
-  state: text('state', { enum: ['dispatching', 'consumed'] }).notNull(),
+  state: text('state', { enum: ['dispatching', 'delivered', 'consumed'] }).notNull(),
   createdAt: text('created_at').notNull(),
   runId: text('run_id'),
 });

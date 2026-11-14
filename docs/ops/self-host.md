@@ -1,5 +1,11 @@
 # Self-hosting: the lines to change
 
+The host setup installs `ogm-review-watchdog`, a separate user service that checks the API's review reconciler.
+It records a durable warning visible in `ops/bin/ogm-status --check` and broadcasts to logged-in terminals if the
+heartbeat stops or the API cannot be reached. It records recovery when it resumes.
+Run `ops/bin/ogm-host-setup.sh` after updating to install the unit;
+inspect it with `journalctl --user -u ogm-review-watchdog`.
+
 The repo is set up for one existing host. On another host, fill these placeholders once and edit these lines by hand;
 everything else comes from env files ([runbook.md](runbook.md) "Per-unit values").
 

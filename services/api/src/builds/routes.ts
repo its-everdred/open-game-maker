@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 
 import { Hono, type Context } from 'hono';
 import type { BlobHash } from '@ogm/blob-store';
-import { ReviewSubmission, type ReviewTrack } from '@ogm/contracts';
+import { ReviewSubmission, type ReviewTrack, type ReviewSubmission as ReviewSubmissionType } from '@ogm/contracts';
 import { bodyLimit } from 'hono/body-limit';
 
 import type { ApiBindings } from '../app/types.js';
@@ -28,6 +28,11 @@ export function buildRoutes(opts: {
   daemonForSecret: HookDaemonResolver;
   gameForSecret?: HookGameResolver;
   trackFor?: (checkout: string, gamePath: string, sha: string, track: string) => Promise<ReviewTrack>;
+  submitReview?: (
+    deps: import('../app/types.js').AppDeps,
+    gameId: string,
+    submission: ReviewSubmissionType,
+  ) => Promise<{ id: string; round: number }>;
 }) {
   // Who is uploading for which job: a response refuses the upload before any body is read.
   async function admit(c: Context<ApiBindings>) {
@@ -205,7 +210,7 @@ export function buildRoutes(opts: {
           return c.json({ error: { code: 'preview_not_found' } }, 422);
       }
       try {
-        const round = await submitReviewRound(deps, game.id, parsed.data);
+        const round = await (opts.submitReview ?? submitReviewRound)(deps, game.id, parsed.data);
         return c.json({ id: round.id, round: round.round }, 201);
       } catch (error) {
         if (error instanceof Error && error.message === 'preview_not_found')

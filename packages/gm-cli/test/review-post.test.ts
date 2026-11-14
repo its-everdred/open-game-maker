@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -43,8 +44,10 @@ it('submits from a worker using its scoped relay credential', async () => {
     category: 'art',
     ticket: '42',
     sha: 'a'.repeat(40),
-    media: [{ kind: 'still', ref: 'sha256:' + 'a'.repeat(64) }],
+    media: [{ kind: 'still', ref: 'file:' + join(root, 'still.png') }],
   };
+  const image = Buffer.from('test image');
+  writeFileSync(join(root, 'still.png'), image);
   const file = join(root, 'round.json');
   writeFileSync(file, JSON.stringify(submission));
   let handled = false;
@@ -54,9 +57,12 @@ it('submits from a worker using its scoped relay credential', async () => {
     const request = JSON.parse(readFileSync(join(relay, name), 'utf8')) as {
       token: string;
       submission: typeof submission;
+      attachments: { index: number; mime: string }[];
     };
     expect(request.token).toBe('scoped-token');
-    expect(request.submission).toEqual(submission);
+    expect(request.submission.media[0]!.ref).toBe(`sha256:${createHash('sha256').update(image).digest('hex')}`);
+    expect(request.attachments).toEqual([{ index: 0, mime: 'image/png' }]);
+    expect(readFileSync(join(relay, name.replace(/\.json$/u, '.0.media')))).toEqual(image);
     writeFileSync(
       join(relay, name.replace(/\.json$/u, '.response')),
       JSON.stringify({ state: 'done', id: submission.id, round: 1 }),

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -66,10 +66,7 @@ it('accepts only the granted ticket for a worker review submission', async () =>
       .token;
     const dir = join(workspace, '.gm/preview');
     mkdirSync(dir);
-    const image = await deps.blobStore.put(
-      readFileSync(new URL('../build-chat/fixtures/tiny.png', import.meta.url)),
-      'image/png',
-    );
+    const image = readFileSync(new URL('../build-chat/fixtures/tiny.png', import.meta.url));
     const submission = {
       id: randomUUID(),
       track: 'art',
@@ -77,10 +74,12 @@ it('accepts only the granted ticket for a worker review submission', async () =>
       category: 'art',
       ticket: '12',
       sha,
-      media: [{ kind: 'still', ref: image.hash }],
+      media: [{ kind: 'still', ref: `sha256:${createHash('sha256').update(image).digest('hex')}` }],
     };
-    const send = async (ticket: string, submitted = submission) => {
+    const send = async (ticket: string, submitted = submission, media = image, extra?: Buffer) => {
       const id = randomUUID();
+      writeFileSync(join(dir, `${id}.0.media`), media);
+      if (extra) writeFileSync(join(dir, `${id}.1.media`), extra);
       writeFileSync(
         join(dir, `${id}.json`),
         JSON.stringify({
@@ -92,6 +91,7 @@ it('accepts only the granted ticket for a worker review submission', async () =>
           sha,
           branch: 'main',
           submission: submitted,
+          attachments: [{ index: 0, mime: 'image/png' }, ...(extra ? [{ index: 1, mime: 'image/png' }] : [])],
         }),
       );
       await scanPreviewRelay(deps, home, async () => true);
@@ -99,8 +99,46 @@ it('accepts only the granted ticket for a worker review submission', async () =>
     };
     expect(await send('13')).toMatchObject({ state: 'failed' });
     expect(await send('12', { ...submission, ticket: '13' })).toMatchObject({ state: 'failed' });
+    expect(await send('12', submission, Buffer.from('tampered'))).toMatchObject({ state: 'failed' });
+    const limit = deps.config.blobPutMaxBytes;
+    deps.config.blobPutMaxBytes = image.length - 1;
+    expect(await send('12')).toMatchObject({ state: 'failed' });
+    expect(await deps.blobStore.head(submission.media[0]!.ref as `sha256:${string}`)).toBeNull();
+    deps.config.blobPutMaxBytes = limit;
+    const collision = Buffer.concat([image, Buffer.from('collision')]);
+    const collisionRef = (await deps.blobStore.put(collision, 'video/mp4')).hash;
+    const fresh = Buffer.concat([image, Buffer.from('fresh')]);
+    const freshRef = `sha256:${createHash('sha256').update(fresh).digest('hex')}` as const;
+    expect(
+      await send(
+        '12',
+        {
+          ...submission,
+          media: [
+            { kind: 'still', ref: collisionRef },
+            { kind: 'still', ref: freshRef },
+          ],
+        },
+        collision,
+        fresh,
+      ),
+    ).toMatchObject({ state: 'failed' });
+    expect(await deps.blobStore.head(freshRef)).toBeNull();
     expect(await send('12')).toMatchObject({ state: 'done', id: submission.id });
+    expect(await deps.blobStore.head(submission.media[0]!.ref as `sha256:${string}`)).not.toBeNull();
     expect(deps.db.select().from(schema.reviewRounds).all()).toHaveLength(1);
+    const bad = Buffer.from('invalid image');
+    const badRef = `sha256:${createHash('sha256').update(bad).digest('hex')}` as const;
+    expect(
+      await send('12', { ...submission, id: randomUUID(), media: [{ kind: 'still', ref: badRef }] }, bad),
+    ).toMatchObject({ state: 'failed' });
+    expect(await deps.blobStore.head(badRef)).toBeNull();
+    const altered = Buffer.concat([image, Buffer.from('different')]);
+    const alteredRef = `sha256:${createHash('sha256').update(altered).digest('hex')}` as const;
+    expect(await send('12', { ...submission, media: [{ kind: 'still', ref: alteredRef }] }, altered)).toMatchObject({
+      state: 'failed',
+    });
+    expect(await deps.blobStore.head(alteredRef)).toBeNull();
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

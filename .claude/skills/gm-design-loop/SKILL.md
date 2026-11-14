@@ -36,8 +36,9 @@ or the documented stall procedure applies. Include the score JSON and side-by-si
      building while they look; fold their notes in at the next step.
 5. **Verify by looking** (`gm-verify`) before anything is sent: stills at desktop and phone sizes, a timeline of the
    motion, and a look at every frame you cite.
-6. **Deliver for a phone.** MP4 clips on an artifact page with posters and one line per option, then the specific
-   questions (which option, what to change). Deploy only when the creator says so.
+6. **Deliver for a phone.** Post each track review round with `gm review post` as described in `gm-verify` so it
+   reaches the review screen and its verdict returns to the worker. Use MP4 for motion and a clip with audio for
+   sound. Deploy only when the creator says so.
 7. **Persist decisions** where the next agent will find them: the scene list and taste in memory, product-level
    decisions in the scope. Maintain `games/<game>/design/MEDIA.md` as an index of the game's concept art and current
    media, updating it as media changes. Lessons about the process itself go through `meta-improve`.

@@ -23,6 +23,10 @@ backup_state=${OGM_BACKUP_STATE:-$HOME/.local/state/ogm/backup}
 sections=(units placeholders listeners disk sizes backup ingress)
 declare -A out
 problems=()
+review_alert=$HOME/.local/state/ogm/review-watchdog.json
+if [[ -f $review_alert ]] && node -e 'try { process.exit(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).stale === true ? 0 : 1) } catch { process.exit(0) }' "$review_alert"; then
+  problems+=('review reconciler stale or API unavailable')
+fi
 
 out[units]=$(systemctl --user list-units 'ogm-*' --all --no-pager --plain --no-legend 2>&1)
 while read -r unit _ active _; do

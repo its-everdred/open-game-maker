@@ -154,15 +154,26 @@ describe('createAiurClient', () => {
     await client.rework('42', reason, 'review-round:one');
     const first = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
     const second = JSON.parse(String(fetchImpl.mock.calls[1]![1]?.body));
-    expect(first.request_id).toBe(second.request_id);
+    expect(first.request_id).not.toBe(second.request_id);
     expect(first.contract_version).toBe(2);
     expect(first.expression).toContain(Buffer.from(reason).toString('base64'));
+    expect(first.expression).toContain(`key: Base.decode64!("${Buffer.from('review-round:one').toString('base64')}")`);
     expect(first.expression).not.toContain(reason);
     const longReason = `<!-- gm-review-verdict:long -->\n${'notes '.repeat(900)}`;
     await client.rework('42', longReason, 'review-round:long');
     const longCall = JSON.parse(String(fetchImpl.mock.calls[2]![1]?.body));
     expect(longCall.expression).toContain(Buffer.from(longReason).toString('base64'));
     await expect(client.rework('x', reason, 'key')).rejects.toThrow();
+  });
+
+  it('accepts a successful keyed replay', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        ...(fixture('control') as Record<string, unknown>),
+        output: 'already ran\n__AIUR_CONTROL_EXIT__:0',
+      }),
+    );
+    await expect(createAiurClient(daemon, fetchImpl).rework('42', 'reason', 'key')).resolves.toBeUndefined();
   });
 
   it('does not treat a failed rework control call as success', async () => {

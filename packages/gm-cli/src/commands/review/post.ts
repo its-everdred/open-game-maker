@@ -1,11 +1,13 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { join, relative, resolve, sep } from 'node:path';
 import { basename } from 'node:path';
+import { createHash } from 'node:crypto';
 
 import { ReviewSubmission } from '@ogm/contracts';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 import { submitReviewRelay } from '../../review-relay.js';
+import { putBlob } from '../../blobs.js';
 
 export const command: GmCommand = {
   name: 'review post',
@@ -22,18 +24,43 @@ export const command: GmCommand = {
     }
     const parsed = ReviewSubmission.safeParse(input);
     if (!parsed.success) throw new CommandError(parsed.error.issues.map((issue) => issue.message).join('; '));
-    const root = workspaceRoot(ctx.cwd);
+    const root = realpathSync(workspaceRoot(ctx.cwd));
+    const attachments: { index: number; bytes: Buffer; mime: string }[] = [];
+    for (const [index, media] of parsed.data.media.entries()) {
+      if ((media.kind !== 'still' && media.kind !== 'clip') || !media.ref.startsWith('file:')) continue;
+      const path = realpathSync(resolve(ctx.cwd, media.ref.slice(5)));
+      const local = relative(root, path);
+      if (!local || local === '..' || local.startsWith(`..${sep}`) || local.split(sep).includes('.gm'))
+        throw new CommandError('review media must be inside the workspace outside .gm');
+      const mime = media.kind === 'clip' ? 'video/mp4' : /\.png$/iu.test(path) ? 'image/png' : 'image/jpeg';
+      if (
+        (media.kind === 'clip' && !/\.mp4$/iu.test(path)) ||
+        (media.kind === 'still' && !/\.(png|jpe?g)$/iu.test(path))
+      )
+        throw new CommandError('review media must be a PNG, JPEG, or MP4');
+      const stat = statSync(path);
+      if (!stat.isFile() || stat.size <= 0 || stat.size > 64 * 1024 * 1024)
+        throw new CommandError('invalid review media size');
+      const bytes = readFileSync(path);
+      if (!bytes.length || bytes.length > 64 * 1024 * 1024) throw new CommandError('review media exceeds size limit');
+      media.ref = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+      attachments.push({ index, bytes, mime });
+    }
     const slug = basename(gameDir(ctx.cwd, root));
     const previewFile = join(root, '.gm', 'context', 'preview.json');
     const scoped = existsSync(previewFile)
       ? (JSON.parse(readFileSync(previewFile, 'utf8')) as { token?: unknown })
       : null;
     if (typeof scoped?.token === 'string' && scoped.token) {
-      ctx.out(await submitReviewRelay(root, slug, scoped.token, parsed.data));
+      ctx.out(await submitReviewRelay(root, slug, scoped.token, parsed.data, attachments));
       return EXIT.ok;
     }
     if (!ctx.blobApi)
       throw new UsageError('no daemon upload configuration', 'run inside a configured worker workspace');
+    for (const attachment of attachments) {
+      const media = parsed.data.media[attachment.index]!;
+      await putBlob(ctx, attachment.bytes, media.ref.slice(7), attachment.mime);
+    }
     const secret = readFileSync(ctx.blobApi.secretFile, 'utf8').trim();
     if (!secret) throw new CommandError('daemon hook secret is empty');
     const response = await fetch(

@@ -18,7 +18,7 @@ export default new Hono<ApiBindings>().get('/healthz', (c) => {
       details: {
         command_decisions: commandHealthDetails(c.get('deps')),
         review_rounds: {
-          ok: !reconcileStale(c.get('deps').db, Date.now(), c.get('deps').config.commandPollMs ?? 5000),
+          ok: !reconcileStale(c.get('deps').db, Date.now(), (c.get('deps').config.commandPollMs ?? 5000) * 0.75),
         },
       },
     }),
