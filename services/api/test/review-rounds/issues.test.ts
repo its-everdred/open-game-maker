@@ -40,3 +40,19 @@ it.each([
   expect(await createReviewIssues('fixture-token', fetchImpl).integrated('owner/repo', 'a'.repeat(40))).toBe(expected);
   expect(String(fetchImpl.mock.calls[0]![0])).toContain(`/compare/${'a'.repeat(40)}...main`);
 });
+
+it('waits until the PR merge commit, including a squash merge, is in main', async () => {
+  const headSha = 'a'.repeat(40);
+  const mergeSha = 'b'.repeat(40);
+  const pull = { head: { sha: headSha }, merged_at: '2026-01-01T00:00:00Z', merge_commit_sha: mergeSha };
+  const fetchImpl = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(JSON.stringify(pull), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'diverged' }), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(pull), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'ahead' }), { status: 200 }));
+  const issues = createReviewIssues('fixture-token', fetchImpl);
+  expect(await issues.merged('owner/repo', 8, headSha)).toBe(false);
+  expect(await issues.merged('owner/repo', 8, headSha)).toBe(true);
+  expect(String(fetchImpl.mock.calls[1]![0])).toContain(`/compare/${mergeSha}...main`);
+});

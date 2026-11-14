@@ -27,6 +27,15 @@ export function createReviewIssues(token: string, fetchImpl: typeof fetch = glob
     if (!response.ok) throw new Error(`github_review_http_${response.status}`);
     return response.status === 204 ? null : ((await response.json()) as unknown);
   }
+  async function integrated(repo: string, sha: string): Promise<boolean> {
+    if (!/^[a-f0-9]{40}$/u.test(sha)) throw new Error('invalid_review_sha');
+    const value = await request('GET', `${repoPath(repo)}/compare/${sha}...main`);
+    if (!value || typeof value !== 'object' || !('status' in value) || typeof value.status !== 'string')
+      throw new Error('github_review_invalid_response');
+    if (!['identical', 'ahead', 'behind', 'diverged'].includes(value.status))
+      throw new Error('github_review_invalid_response');
+    return value.status === 'identical' || value.status === 'ahead';
+  }
   return {
     async ensureFollowup(repo, slug, marker, issue) {
       const label = `game:${slug}`;
@@ -70,17 +79,12 @@ export function createReviewIssues(token: string, fetchImpl: typeof fetch = glob
         !('merged_at' in value)
       )
         throw new Error('review_pr_changed');
-      return typeof value.merged_at === 'string';
+      if (typeof value.merged_at !== 'string') return false;
+      if (!('merge_commit_sha' in value) || typeof value.merge_commit_sha !== 'string')
+        throw new Error('review_merge_commit_missing');
+      return integrated(repo, value.merge_commit_sha);
     },
-    async integrated(repo, sha) {
-      if (!/^[a-f0-9]{40}$/u.test(sha)) throw new Error('invalid_review_sha');
-      const value = await request('GET', `${repoPath(repo)}/compare/${sha}...main`);
-      if (!value || typeof value !== 'object' || !('status' in value) || typeof value.status !== 'string')
-        throw new Error('github_review_invalid_response');
-      if (!['identical', 'ahead', 'behind', 'diverged'].includes(value.status))
-        throw new Error('github_review_invalid_response');
-      return value.status === 'identical' || value.status === 'ahead';
-    },
+    integrated,
     async close(repo, ticket) {
       if (!/^[1-9]\d{0,15}$/u.test(ticket)) throw new Error('invalid_ticket');
       await request('PATCH', `${repoPath(repo)}/issues/${ticket}`, { state: 'closed', state_reason: 'completed' });
