@@ -17,7 +17,6 @@ import { OperatorRegisterBody, registerOperatorGame } from './register.js';
 import { publishArchive } from './publish.js';
 import { reviewStalls } from '../review-rounds/stalls.js';
 import { reconcileStale } from '../review-rounds/heartbeat.js';
-import { markReminded } from '../review-rounds/store.js';
 import { reviewAllowsClose } from '../review-rounds/close-gate.js';
 import { phaseOwner } from '../review-rounds/owners.js';
 import { listTracks } from '../review-rounds/tracks.js';
@@ -124,11 +123,6 @@ const routes = new Hono<ApiBindings>()
         rounds,
       ),
     });
-  })
-  .post('/review-rounds/:id/reminded', (c) => {
-    requireOperator(c);
-    const recorded = markReminded(c.get('deps').db, c.req.param('id'), new Date().toISOString());
-    return c.json({ recorded });
   })
   .get('/review-health', (c) => {
     requireOperator(c);

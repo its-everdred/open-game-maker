@@ -113,3 +113,11 @@ export async function deliver(deps: DeliverDeps, trigger: NotificationTrigger): 
   await runWithConcurrency(pushes, 8, ({ subscription, notification }) => pushOne(deps, subscription, notification));
   return { delivered: recipients.length };
 }
+
+// Deliver an already-persisted item without inserting a duplicate inbox row.
+export async function deliverStored(deps: DeliverDeps, notification: Notification): Promise<void> {
+  deps.stream.publish(notification.userId, notification);
+  await runWithConcurrency(subscriptionsFor(deps.sqlite, notification.userId), 8, (subscription) =>
+    pushOne(deps, subscription, notification),
+  );
+}

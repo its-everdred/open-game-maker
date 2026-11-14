@@ -6,7 +6,7 @@ import { pushToast } from './slice';
 // One SSE connection for the whole app, shared by every screen that shows the feed. EventSource reconnects by itself
 // after a dropped connection; a stream that never opens (OGM-016 not merged, signed out) gets at most five open
 // attempts (four retries) with backoff and is then left closed.
-const EVENTS = ['build.done', 'job.started', 'intake.report'] as const;
+const EVENTS = ['build.done', 'job.started', 'intake.report', 'review.reminder'] as const;
 type NotificationKind = (typeof EVENTS)[number];
 type NotificationListener = (kind: NotificationKind, event: MessageEvent<string>) => void;
 const MAX_FAILED_OPENS = 5;

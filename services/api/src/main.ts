@@ -32,6 +32,7 @@ import { startScheduler } from './jobs/scheduler.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
 import { createReviewSync } from './review-rounds/runner.js';
+import { getNotifyRuntime } from './notify/routes.js';
 import { createReviewIssues } from './review-rounds/issues.js';
 import { createWaitTickets } from './decision-waits/tickets.js';
 import { createTicketTitleReader, createWorkpadReader } from './worker-progress/workpad.js';
@@ -177,13 +178,14 @@ const decisionWaits = createDecisionWaitPoller({
   tickets: createWaitTickets(env.OGM_INTAKE_GITHUB_TOKEN),
   syncReviewRounds: createReviewSync({
     db,
+    sqlite,
+    publishReminder: (notification) => getNotifyRuntime(deps).deliverStored(notification),
     clientForGame: daemonDirectory.clientForGame,
     issues: createReviewIssues(env.OGM_INTAKE_GITHUB_TOKEN),
     log,
   }),
   log,
 });
-decisionWaits.start(env.OGM_COMMAND_POLL_MS);
 const stopBriefingPush =
   env.OGM_VOICE_HOST_INTERNAL_URL && env.OGM_VOICE_INTERNAL_SECRET
     ? startBriefingPush({
@@ -220,6 +222,7 @@ const feed = startFeedConsumers({
 
 const app = createApp(deps);
 for (const { prefix, file } of (await scanRoutes(app, { deps })).mounted) log({ event: 'mounted', prefix, file });
+decisionWaits.start(env.OGM_COMMAND_POLL_MS);
 
 const server = serve({ fetch: app.fetch, hostname: API_HOST, port: env.OGM_API_PORT });
 server.once('listening', () => log({ event: 'listening', host: API_HOST, port: env.OGM_API_PORT }));

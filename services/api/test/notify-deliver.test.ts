@@ -1,9 +1,9 @@
 import type { NotificationTrigger, PushSubscriptionInput } from '@ogm/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
-import { deliver } from '../src/notify/deliver.js';
+import { deliver, deliverStored } from '../src/notify/deliver.js';
 import { render } from '../src/notify/render.js';
-import { listNotifications, subscriptionsFor, upsertSubscription } from '../src/notify/store.js';
+import { insertNotification, listNotifications, subscriptionsFor, upsertSubscription } from '../src/notify/store.js';
 import { createStreamHub } from '../src/notify/stream.js';
 import { makeDeps } from './helpers.js';
 
@@ -47,6 +47,22 @@ describe('notification rendering', () => {
 });
 
 describe('deliver', () => {
+  it('pushes an existing reminder without writing a second inbox item', async () => {
+    const deps = makeDeps();
+    upsertSubscription(deps.sqlite, ids.userOne, subscription('https://push.example.test/one'));
+    const notification = insertNotification(deps.sqlite, {
+      userId: ids.userOne,
+      kind: 'review.reminder',
+      title: 'A review is waiting',
+      body: 'Lantern Bay',
+    });
+    const push = { sendNotification: vi.fn().mockResolvedValue({ statusCode: 201 }) };
+    const stream = { publish: vi.fn() };
+    await deliverStored({ sqlite: deps.sqlite, stream, push }, notification);
+    expect(push.sendNotification).toHaveBeenCalledOnce();
+    expect(stream.publish).toHaveBeenCalledWith(ids.userOne, notification);
+    expect(listNotifications(deps.sqlite, ids.userOne, {})).toHaveLength(1);
+  });
   it('inserts one row per recipient, publishes each row, and pushes the minimal payload', async () => {
     const deps = makeDeps();
     upsertSubscription(deps.sqlite, ids.userOne, subscription('https://push.example.test/one'));

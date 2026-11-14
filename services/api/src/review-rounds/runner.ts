@@ -1,6 +1,7 @@
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { AiurClient } from '@ogm/aiur-client';
-import { schema, type Db } from '@ogm/db';
+import { schema, type Db, type Sqlite } from '@ogm/db';
+import type { Notification } from '@ogm/contracts';
 import { aiurReworkDelivery } from './aiur-delivery.js';
 import { recordReconcileHeartbeat } from './heartbeat.js';
 import { dispatchRework } from './rework.js';
@@ -10,6 +11,7 @@ import { daemonRowForGame } from '../jobs/daemons.js';
 import type { ReviewIssues } from './issues.js';
 import { inspectReviewOwners } from './monitor.js';
 import { syncCommandVerdicts } from './command-verdicts.js';
+import { queueReviewReminders } from './reminders.js';
 
 export function createReviewSync(deps: {
   db: Db;
@@ -17,11 +19,20 @@ export function createReviewSync(deps: {
   issues: ReviewIssues;
   log: (line: Record<string, unknown>) => void;
   now?: () => number;
+  sqlite?: Sqlite;
+  publishReminder?: (notification: Notification) => Promise<void>;
 }) {
   const now = deps.now ?? Date.now;
   return async () => {
     recordReconcileHeartbeat(deps.db, now());
     await syncCommandVerdicts(deps.db, deps.clientForGame, () => new Date(now()).toISOString(), deps.log);
+    if (deps.sqlite) {
+      for (const notification of queueReviewReminders(deps.db, deps.sqlite, now())) {
+        void deps.publishReminder?.(notification).catch((error: unknown) => {
+          deps.log({ event: 'review_reminder_stream_error', error: (error as Error).name });
+        });
+      }
+    }
     const rounds = deps.db
       .select()
       .from(schema.reviewRounds)

@@ -80,6 +80,7 @@ means another writer answered first and the returned status is the winner's.
 The Review view shows open art and sound rounds posted with `gm review post`, using their stored stills or capture clips.
 The game owner can answer Looks right or Needs work with a note; the answer is recorded against that round. Gameplay
 rounds appear as playable previews and include their design question.
+An unanswered round gets one recorded notification after 24 hours. Waiting never records an answer.
 
 ## Preview reviews
 

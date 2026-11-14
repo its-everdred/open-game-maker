@@ -128,6 +128,18 @@ describe('useNotificationFeed', () => {
     unmount();
   });
 
+  it('shows a review reminder from the notification stream', () => {
+    const { unmount } = renderHook(() => notify.useNotificationFeed());
+    const source = FakeEventSource.instances.at(-1)!;
+    source.dispatchEvent(
+      new MessageEvent('review.reminder', {
+        data: JSON.stringify({ title: 'A review is waiting', body: 'Lantern Bay' }),
+      }),
+    );
+    expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual(['A review is waiting — Lantern Bay']);
+    unmount();
+  });
+
   it('shares one connection until the final feed user unmounts', () => {
     const first = renderHook(() => notify.useNotificationFeed());
     const second = renderHook(() => notify.useNotificationFeed());
