@@ -809,6 +809,44 @@
                   "minimum": 0,
                   "maximum": 1
                 },
+                "musicVolume": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "gameOptions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string",
+                        "description": "Text option value"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  }
+                },
+                "keyboardBindings": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
                 "textScale": {
                   "type": "number",
                   "exclusiveMinimum": 0
@@ -2869,6 +2907,159 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 80
+                    },
+                    "controlBindings": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    },
+                    "controlReservedKeys": {
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    },
+                    "gameOptions": {
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "toggle"
+                              },
+                              "default": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "kind",
+                              "default"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "choice"
+                              },
+                              "default": {
+                                "type": "string",
+                                "maxLength": 64
+                              },
+                              "choices": {
+                                "minItems": 1,
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "maxLength": 64
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "label"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "kind",
+                              "default",
+                              "choices"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "number"
+                              },
+                              "default": {
+                                "type": "number"
+                              },
+                              "min": {
+                                "type": "number"
+                              },
+                              "max": {
+                                "type": "number"
+                              },
+                              "step": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "kind",
+                              "default",
+                              "min",
+                              "max",
+                              "step"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        ]
+                      }
                     },
                     "playMenuButton": {
                       "type": "object",

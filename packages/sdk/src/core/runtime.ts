@@ -60,6 +60,8 @@ export class RuntimeImpl<D, S> implements Runtime<D, S> {
   private liveFrame: number | undefined;
   private lastFrameMs: number | undefined;
   private inputMerger: InputMerger | undefined;
+  private keyboardBindings: Record<string, string> | undefined;
+  private defaultKeyboardBindings: Record<string, string> = {};
   private replayingInput = false;
   private currentLocalPlayerIndex = 0;
   private readonly pendingHostFrames: ActionFrame[] = [];
@@ -84,6 +86,13 @@ export class RuntimeImpl<D, S> implements Runtime<D, S> {
     this.clock = clock;
     this.rng = rng;
     this.currentMode = mode;
+    this.cleanupCallbacks.add(
+      host.settings.onChange((settings) => {
+        if (JSON.stringify(this.keyboardBindings) === JSON.stringify(settings.keyboardBindings)) return;
+        this.keyboardBindings = settings.keyboardBindings;
+        this.inputMerger?.setKeyboardMapping(this.keyboardBindings ?? this.defaultKeyboardBindings);
+      }),
+    );
     this.clock.onStep((_dt, frames) => {
       if (this.inputMerger && !this.replayingInput) {
         for (const frame of this.pendingHostFrames.splice(0)) this.inputMerger.acceptHostFrame(frame);
@@ -148,6 +157,8 @@ export class RuntimeImpl<D, S> implements Runtime<D, S> {
       },
     });
     this.inputMerger = merger;
+    this.defaultKeyboardBindings = { ...options.mapping.keyboard };
+    if (this.keyboardBindings) merger.setKeyboardMapping(this.keyboardBindings);
     return merger;
   }
 

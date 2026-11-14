@@ -135,6 +135,11 @@ export const hostToGameSchema = z
       z.looseObject({
         mute: z.boolean(),
         volume: z.number().min(0).max(1),
+        musicVolume: z.number().min(0).max(1).optional(),
+        gameOptions: z
+          .record(z.string(), z.union([z.boolean(), z.string().describe('Text option value'), z.number()]))
+          .optional(),
+        keyboardBindings: z.record(z.string().min(1).max(64), z.string().min(1).max(64)).optional(),
         textScale: z.number().positive(),
         reduceMotion: z.boolean(),
       }),

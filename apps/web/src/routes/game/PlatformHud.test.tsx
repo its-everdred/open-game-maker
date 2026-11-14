@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 
 import type { SaveSlot } from '@ogm/contracts/browser';
 
@@ -44,6 +45,91 @@ afterEach(() => {
 });
 
 describe('PlatformHud', () => {
+  it('shows settings during live room play and persists game switches', async () => {
+    localStorage.clear();
+    const test = frameHarness();
+    const options = [{ id: 'hints', label: 'Hints', kind: 'toggle' as const, default: true }];
+    const view = render(
+      <MemoryRouter>
+        <PlatformHud
+          build="draft"
+          frame={test.frame}
+          gameId="game"
+          open
+          paused={false}
+          saveContext={saveContext}
+          saves={false}
+          gameOptions={options}
+          onResume={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(test.frame.pause).not.toHaveBeenCalled();
+    expect(test.frame.setSettings).toHaveBeenCalledWith(expect.objectContaining({ gameOptions: { hints: true } }));
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByText('Game options'));
+    fireEvent.click(screen.getByLabelText('Hints'));
+    await waitFor(() =>
+      expect(test.frame.setSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ gameOptions: { hints: false } }),
+      ),
+    );
+    view.unmount();
+    const next = frameHarness();
+    render(
+      <MemoryRouter>
+        <PlatformHud
+          build="draft"
+          frame={next.frame}
+          gameId="game"
+          paused={false}
+          saveContext={saveContext}
+          saves={false}
+          gameOptions={options}
+          onResume={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(next.frame.setSettings).toHaveBeenCalledWith(expect.objectContaining({ gameOptions: { hints: false } }));
+    localStorage.clear();
+  });
+
+  it('persists game keyboard bindings and restores the declared defaults', async () => {
+    localStorage.clear();
+    const test = frameHarness();
+    const defaults = { Space: 'jump' };
+    render(
+      <MemoryRouter>
+        <PlatformHud
+          build="draft"
+          frame={test.frame}
+          gameId="game"
+          paused
+          saveContext={saveContext}
+          saves={false}
+          controlBindings={defaults}
+          onResume={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByText('Controls'));
+    fireEvent.click(screen.getByRole('button', { name: 'jump: Space' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'jump: press a key' }), { code: 'KeyJ' });
+    await waitFor(() =>
+      expect(test.frame.setSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ keyboardBindings: { KeyJ: 'jump' } }),
+      ),
+    );
+    expect(JSON.parse(localStorage.getItem('ogm.controls.game')!)).toEqual({ KeyJ: 'jump' });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset controls' }));
+    await waitFor(() =>
+      expect(test.frame.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ keyboardBindings: defaults })),
+    );
+    expect(localStorage.getItem('ogm.controls.game')).toBeNull();
+    localStorage.clear();
+  });
+
   it('renders no separate Pause control while the game menu is closed', () => {
     const test = frameHarness();
     render(
@@ -409,6 +495,7 @@ describe('PlatformHud', () => {
     expect(test.frame.setSettings).toHaveBeenCalledWith({
       mute: false,
       volume: 1,
+      musicVolume: 1,
       textScale: 1,
       reduceMotion: expect.any(Boolean),
     });

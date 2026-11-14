@@ -17,6 +17,19 @@ const control = {
 };
 
 describe('game contract', () => {
+  it('rejects game options with inconsistent defaults or duplicate identifiers', () => {
+    const choice = { id: 'mode', label: 'Mode', kind: 'choice', default: 'a', choices: [{ value: 'a', label: 'A' }] };
+    const number = { id: 'level', label: 'Level', kind: 'number', default: 2, min: 1, max: 5, step: 1 };
+    expect(gameManifestSchema.safeParse({ ...manifest(), gameOptions: [choice, number] }).success).toBe(true);
+    for (const gameOptions of [
+      [{ ...choice, default: 'missing' }],
+      [{ ...number, min: 6 }],
+      [{ ...number, default: 6 }],
+      [{ ...number, default: 1.5 }],
+      [choice, choice],
+    ])
+      expect(gameManifestSchema.safeParse({ ...manifest(), gameOptions }).success).toBe(false);
+  });
   it('accepts short palette item tags and rejects oversized tags', () => {
     const palette = (manifest() as { palette: { items: Record<string, unknown>[] } }).palette;
     const withTag = (tag: string) => ({

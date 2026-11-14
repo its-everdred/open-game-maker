@@ -7,7 +7,7 @@ description: Lay out the game's own HUD and screens around the host's platform H
 
 ## Two HUDs
 
-The host owns the platform HUD: pause, saves, settings (volume, mute, text size, reduced motion), achievement
+The host owns the platform HUD: pause, saves, settings (sound and music volume, controls, text size, reduced motion), achievement
 toasts, and leaving the game. Never draw, restyle, cover, or duplicate it. The game owns only what the game knows:
 score, health, timer, objective, inventory, prompts, and its title, won, and lost screens. Pause is the host's: the SDK
 stops the clock and calls `GameInstance.pause`, then `GameInstance.resume`; the game draws no pause menu of its own.
@@ -44,6 +44,7 @@ player sees what a phone player sees.
 - Keep strong contrast against moving backgrounds: a solid or blurred plate behind text, not a thin outline alone.
 - If the game draws its own button, primary targets are at least 64 px and secondary targets at least 44 px.
 - Honour `reduceMotion`: no shaking, flashing, or sliding HUD; change values in place.
+- Forward settings to `audio.applySettings` and apply `gameOptions`; see the SDK README for shared keyboard controls.
 - Pair numbers with an icon or word, and keep a message on screen long enough to read aloud.
 - Captions never depend on hearing. Show the first of `sentences()` before calling `play()`, then let the `onSentence`
   callback move the caption. A rendered line plays nothing and fires no callbacks while audio is muted or locked, so

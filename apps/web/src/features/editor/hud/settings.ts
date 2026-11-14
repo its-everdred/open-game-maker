@@ -4,6 +4,7 @@ const STORAGE_KEY = 'ogm.settings';
 const defaults = (reduceMotion: boolean): PlayerSettings => ({
   mute: false,
   volume: 1,
+  musicVolume: 1,
   textScale: 1,
   reduceMotion,
 });
@@ -39,6 +40,7 @@ function normalizeSettings(value: Record<string, unknown>, fallback: PlayerSetti
   return {
     mute: typeof value.mute === 'boolean' ? value.mute : fallback.mute,
     volume: finiteBound(value.volume, 0, 1, fallback.volume),
+    musicVolume: finiteBound(value.musicVolume, 0, 1, finiteBound(value.volume, 0, 1, fallback.musicVolume ?? 1)),
     textScale: finiteBound(value.textScale, 0.75, 2, fallback.textScale),
     reduceMotion: typeof value.reduceMotion === 'boolean' ? value.reduceMotion : fallback.reduceMotion,
   };
