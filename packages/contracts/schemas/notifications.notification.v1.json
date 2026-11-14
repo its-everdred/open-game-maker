@@ -16,7 +16,8 @@
         "build.done",
         "job.started",
         "scope.agreed",
-        "intake.report"
+        "intake.report",
+        "review.reminder"
       ]
     },
     "title": {
