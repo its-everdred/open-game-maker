@@ -20,7 +20,9 @@ const manifestFile = captureFile(dist, 'manifest.json');
 const manifest = manifestFile ? (JSON.parse(readFileSync(manifestFile, 'utf8')) as { title?: unknown }) : {};
 const title = typeof manifest.title === 'string' ? manifest.title : 'Local game';
 const web = fileURLToPath(new URL('./web/', import.meta.url));
+console.error('shell capture: starting app server');
 const server = await serveStatic(web);
+console.error('shell capture: launching Chromium');
 const browser = await chromium
   .launch({ headless: true, args: softwareArg === '1' ? SOFTWARE_ARGS : GPU_ARGS })
   .catch(async (error: unknown) => {
@@ -40,6 +42,7 @@ try {
   ] as const;
   for (const [width, height] of testFastArg === '--test-fast' ? viewports.slice(0, 1) : viewports) {
     const size = `${width}x${height}`;
+    console.error(`shell capture: opening ${size}`);
     const context = await browser.newContext({
       viewport: { width, height },
       deviceScaleFactor: testFastArg === '--test-fast' ? 1 : 2,
@@ -72,6 +75,7 @@ try {
         timeout: 30_000,
       });
       await page.goto(new URL('g/game?test=1', server.url).href);
+      console.error(`shell capture: waiting for game entry at ${size}`);
       const response = await entry;
       if (!response.ok()) throw new Error(`game entry failed: ${response.status()}`);
       await page.locator('.game-frame iframe').waitFor({ state: 'visible', timeout: 30_000 });
@@ -85,12 +89,14 @@ try {
         { timeout: 30_000 },
       );
       if ((await state.jsonValue()) !== 'ready') throw new Error('game bridge did not become ready');
+      console.error(`shell capture: game ready at ${size}`);
       await page.waitForTimeout(settleMs);
       const check = () => {
         if (errors.length) throw new Error(errors.join('\n'));
       };
       check();
       await page.screenshot({ path: resolve(out, `play-${size}.png`), timeout: 120_000 });
+      console.error(`shell capture: play still captured at ${size}`);
       const game = page.frameLocator('.game-frame iframe');
       for (const text of taps) {
         await game.getByText(text, { exact: true }).first().tap({ timeout: 45_000 });

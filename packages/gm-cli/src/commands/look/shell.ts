@@ -27,6 +27,21 @@ function outputPath(path: string): string {
   return resolve(realpathSync(ancestor), relative(ancestor, path));
 }
 
+export function captureScratch(cwd: string, base = tmpdir()): { path: string; local: boolean } {
+  try {
+    return { path: mkdtempSync(resolve(base, 'gm-look-shell-')), local: false };
+  } catch (error) {
+    if (!['EACCES', 'EROFS', 'ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+    try {
+      return { path: mkdtempSync(resolve(cwd, '.gm-look-shell-')), local: true };
+    } catch (cause) {
+      throw new CommandError(
+        `cannot create shell capture scratch directory: ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
+    }
+  }
+}
+
 export const command: GmCommand = {
   name: 'look shell',
   summary: 'capture a local game in the real app shell with mocked sign-in',
@@ -59,7 +74,7 @@ export const command: GmCommand = {
       )
         throw new UsageError(`game build is missing ${name}`, 'build the game before gm look shell');
     }
-    const temp = mkdtempSync(resolve(tmpdir(), 'gm-look-shell-'));
+    const { path: temp, local: localTemp } = captureScratch(ctx.cwd);
     const lock = resolve(out, '.gm-shell-lock');
     try {
       mkdirSync(out, { recursive: true });
@@ -77,16 +92,44 @@ export const command: GmCommand = {
     process.once('SIGTERM', stop);
     const deadline = Date.now() + timeout * 1000;
     let slot: { release(): void } | undefined;
+    let stage = 'waiting for a capture slot';
     try {
       const { acquireSlot } = await import('@ogm/gm-verify');
-      slot = await acquireSlot({
-        runtimeDir: ctx.config.runtimeDir,
-        waitMs: Math.min(timeout * 1000, 600_000),
-        signal: abort.signal,
-      });
+      const slotOptions = { waitMs: Math.min(timeout * 1000, 600_000), signal: abort.signal };
+      const workspaceRuntime = resolve(ctx.cwd, '.gm-verify-runtime');
+      let runtimeDir = ctx.config.runtimeDir ?? (localTemp ? workspaceRuntime : undefined);
+      if (localTemp && ctx.config.runtimeDir) {
+        try {
+          const root = resolve(ctx.config.runtimeDir, 'ogm-verify');
+          mkdirSync(root, { recursive: true });
+          rmdirSync(mkdtempSync(resolve(root, '.probe-')));
+        } catch (error) {
+          if (!['EACCES', 'EROFS', 'ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? ''))
+            throw error;
+          runtimeDir = workspaceRuntime;
+        }
+      }
+      try {
+        slot = await acquireSlot({
+          ...slotOptions,
+          runtimeDir,
+        });
+      } catch (error) {
+        if (
+          !localTemp ||
+          !ctx.config.runtimeDir ||
+          !['EACCES', 'EROFS', 'ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')
+        )
+          throw error;
+        slot = await acquireSlot({ ...slotOptions, runtimeDir: workspaceRuntime });
+      }
       const remaining = deadline - Date.now();
-      if (remaining <= 0) return EXIT.timeout;
+      if (remaining <= 0) {
+        ctx.err('shell capture timed out while waiting for a capture slot');
+        return EXIT.timeout;
+      }
       const runner = fileURLToPath(import.meta.resolve('@ogm/gm-verify/app-capture'));
+      stage = 'running the browser';
       const result = await runChild(
         ctx.cwd,
         [
@@ -98,13 +141,21 @@ export const command: GmCommand = {
           flags.mp4 ? '1' : '0',
           ctx.config.verifySoftwareGl ? '1' : '0',
         ],
-        ctx.env ?? {},
+        localTemp ? { ...ctx.env, TMPDIR: temp } : (ctx.env ?? {}),
         remaining,
         abort.signal,
         process.execPath,
         ctx.json,
       );
-      if (result !== 0) return result;
+      if (result !== 0) {
+        ctx.err(
+          result === EXIT.timeout
+            ? 'shell capture timed out while running the browser'
+            : `shell capture runner exited with code ${result}`,
+        );
+        return result;
+      }
+      stage = 'publishing stills';
       const prefixes = ['play', 'menu', ...(taps.length ? ['ingame'] : []), ...(flags.edit ? ['edit'] : [])];
       const names = sizes.flatMap((size) => [
         ...prefixes.map((prefix) => `${prefix}-${size}.png`),
@@ -163,7 +214,10 @@ export const command: GmCommand = {
       return EXIT.ok;
     } catch (error) {
       if (abort.signal.aborted) return 130;
-      if (Date.now() >= deadline) return EXIT.timeout;
+      if (Date.now() >= deadline) {
+        ctx.err(`shell capture timed out while ${stage}`);
+        return EXIT.timeout;
+      }
       throw new CommandError(`shell capture failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       slot?.release();
