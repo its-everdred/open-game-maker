@@ -31,7 +31,7 @@ it.skipIf(!sandboxAvailable)(
       );
       const env: NodeJS.ProcessEnv = {
         PATH: '/usr/bin:/bin',
-        HOME: '/home/sandbox',
+        HOME: '/srv',
         GM_VERIFY_SOFTWARE_GL: '1',
         XDG_RUNTIME_DIR: '/usr/local',
         PLAYWRIGHT_BROWSERS_PATH: '/mnt',
