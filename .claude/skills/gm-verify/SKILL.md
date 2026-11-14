@@ -57,3 +57,9 @@ the deliverable gate are `python3 -I scripts/assets/set_critic.py`; detail is in
 - Then record the first visit and reload and look at every other frame (black frames, a pop between poster and live, a stale build). After deploying, also load
   the live site in a browser that had the old build: cached files must never mix old code with new data.
 - Say what was checked and what wasn't (for example "not checked on iPhone Safari").
+
+## Playable previews
+
+Run `gm preview --ticket <number>` in the game workspace. The daemon refreshes its ticket-and-game-scoped preview credential in `before_run`; it expires after two hours, the host refreshes it while the ticket remains open, and the host refuses uploads for closed tickets or changed game labels. A shared repository daemon must add `node <core-checkout>/scripts/preview/repository-hook.ts create || true` to its `before_run` hook and `node <core-checkout>/scripts/preview/repository-hook.ts remove || true` to its `before_remove` hook. Replace `<core-checkout>` with the installed core checkout. Existing workspaces receive a credential on their next run. If an upload times out after an API restart, rerun `gm preview`.
+
+Workers on this host share one operator and trust level: a worker with access to another workspace may read its preview token. The accepted risk is limited to uploading a preview for that one ticket and game; the token cannot publish or access other APIs. Never copy it into commits or build output. A daemon-authenticated broker is a future hardening step.

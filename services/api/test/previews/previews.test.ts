@@ -1,7 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { chmodSync, existsSync, linkSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import { mkdtempSync } from 'node:fs';
 
 import { schema } from '@ogm/db';
 import { createApp as createGamesHost } from '../../../games-host/src/server.js';
@@ -10,9 +13,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import previewRoutes from '../../src/previews/routes.js';
 import { previewDirectory } from '../../src/previews/store.js';
+import { scanPreviewRelay } from '../../src/previews/relay.js';
+import { previewTicketVerifier } from '../../src/previews/ticket.js';
 import { daemonRowForGame } from '../../src/jobs/daemons.js';
 import { createApp } from '../../src/app/app.js';
 import { buildRoutes } from '../../src/builds/routes.js';
+import { mintPreviewToken } from '../../src/builds/preview-token.js';
+import { hookPreviewToken } from '../../src/internal/bundle.js';
 import { asUser } from '../helpers.js';
 import { builtFiles, ids, REPO, SECRET, SHA, world } from '../builds/fixtures.js';
 
@@ -24,7 +31,7 @@ function setup() {
   app.route(
     '/internal',
     buildRoutes({
-      daemonForSecret: async () => null,
+      daemonForSecret: async (secret) => (secret === SECRET ? REPO : null),
       gameForSecret: async (secret) => (secret === SECRET ? { repo: REPO, slug: 'castle-game' } : null),
     }),
   );
@@ -53,6 +60,308 @@ function setup() {
 }
 
 describe('preview builds', () => {
+  it('rejects closed tickets and changed game labels', async () => {
+    let state = 'open';
+    let label = 'game:castle-game';
+    const verify = previewTicketVerifier(
+      'fixture',
+      async () => new Response(JSON.stringify({ state, labels: [{ name: label }] })),
+    );
+    expect(await verify(REPO, '12', 'castle-game', true)).toBe(true);
+    state = 'closed';
+    expect(await verify(REPO, '12', 'castle-game', true)).toBe(false);
+    state = 'open';
+    label = 'game:other-game';
+    expect(await verify(REPO, '12', 'castle-game', true)).toBe(false);
+    label = '';
+    const noLabel = previewTicketVerifier(
+      'fixture',
+      async () => new Response(JSON.stringify({ state: 'open', labels: [] })),
+    );
+    expect(await noLabel(REPO, '12', 'castle-game', false)).toBe(true);
+    expect(await noLabel(REPO, '12', 'castle-game', true)).toBe(false);
+  });
+  it('publishes from a shared repository daemon workspace using its host hook', async () => {
+    const { deps } = setup();
+    const home = mkdtempSync(join(tmpdir(), 'preview-repo-relay-'));
+    try {
+      const workspace = join(home, 'workspaces', '12');
+      mkdirSync(workspace, { recursive: true });
+      execFileSync('git', ['init', '-q', workspace]);
+      execFileSync('git', ['-C', workspace, 'remote', 'add', 'origin', `https://github.com/${REPO}.git`]);
+      const hook = fileURLToPath(new URL('../../../../scripts/preview/repository-hook.ts', import.meta.url));
+      const bin = join(home, 'bin');
+      mkdirSync(bin);
+      writeFileSync(join(bin, 'gh'), `#!/bin/sh\necho '{"state":"open","labels":[{"name":"game:castle-game"}]}'\n`);
+      chmodSync(join(bin, 'gh'), 0o755);
+      const hookOptions = {
+        cwd: workspace,
+        env: {
+          HOME: home,
+          PATH: `${bin}:/usr/bin:/bin`,
+          AIUR_HOOK_TICKET_IDENTIFIER: '12',
+          THIS_REPOSITORY_URL: `https://github.com/${REPO}.git`,
+        },
+      };
+      execFileSync(process.execPath, [hook, 'create'], hookOptions);
+      const token = (JSON.parse(readFileSync(join(workspace, '.gm/context/preview.json'), 'utf8')) as { token: string })
+        .token;
+      const dir = join(workspace, '.gm/preview');
+      mkdirSync(dir);
+      const id = randomUUID();
+      writeFileSync(join(dir, `${id}.tgz`), archive());
+      writeFileSync(
+        join(dir, `${id}.json`),
+        JSON.stringify({ state: 'pending', token, ticket: '12', slug: 'castle-game', sha: SHA, branch: 'main' }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${id}.response`), 'utf8')).state).toBe('done');
+      const [owner, repo] = REPO.split('/');
+      deps.db
+        .insert(schema.games)
+        .values({
+          id: 'g_shared_other',
+          familyId: ids.family,
+          ownerId: ids.user,
+          title: 'Other',
+          slug: 'shared-other',
+          githubPath: 'games/shared-other',
+          githubOwner: owner,
+          githubRepo: repo,
+          visibility: 'private',
+          repoVisibility: 'private',
+          createdAt: '2026-11-13T00:00:00.000Z',
+        })
+        .run();
+      const otherGame = randomUUID();
+      writeFileSync(join(dir, `${otherGame}.tgz`), archive());
+      writeFileSync(
+        join(dir, `${otherGame}.json`),
+        JSON.stringify({ state: 'pending', token, ticket: '12', slug: 'shared-other', sha: SHA, branch: 'main' }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${otherGame}.response`), 'utf8')).state).toBe('failed');
+      vi.useFakeTimers();
+      try {
+        vi.advanceTimersByTime(100 * 60 * 1000);
+        await scanPreviewRelay(deps, home, async () => true);
+        const refreshed = (
+          JSON.parse(readFileSync(join(workspace, '.gm/context/preview.json'), 'utf8')) as { token: string }
+        ).token;
+        expect(refreshed).not.toBe(token);
+      } finally {
+        vi.useRealTimers();
+      }
+      const closed = randomUUID();
+      writeFileSync(join(dir, `${closed}.tgz`), archive());
+      writeFileSync(
+        join(dir, `${closed}.json`),
+        JSON.stringify({ state: 'pending', token, ticket: '12', slug: 'castle-game', sha: SHA, branch: 'main' }),
+      );
+      await scanPreviewRelay(deps, home, async () => false);
+      expect(JSON.parse(readFileSync(join(dir, `${closed}.response`), 'utf8')).state).toBe('failed');
+      execFileSync('git', ['-C', workspace, 'remote', 'set-url', 'origin', 'https://github.com/example/other.git']);
+      execFileSync(process.execPath, [hook, 'remove'], hookOptions);
+      const revoked = randomUUID();
+      writeFileSync(join(dir, `${revoked}.tgz`), archive());
+      writeFileSync(
+        join(dir, `${revoked}.json`),
+        JSON.stringify({ state: 'pending', token, ticket: '12', slug: 'castle-game', sha: SHA, branch: 'main' }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(existsSync(join(dir, `${revoked}.response`))).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+  it('publishes a scoped workspace request without network or a registered job', async () => {
+    const { deps } = setup();
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'castle-game',
+        repo: REPO,
+        checkoutPath: '/fixture',
+        unit: 'fixture',
+        envFile: '/fixture',
+        port: 12345,
+        status: 'running',
+        createdAt: '2026-11-13T00:00:00.000Z',
+      })
+      .run();
+    const home = mkdtempSync(join(tmpdir(), 'preview-relay-'));
+    try {
+      const secretDir = join(home, '.config/ogm/daemons/castle-game');
+      mkdirSync(secretDir, { recursive: true });
+      writeFileSync(join(secretDir, 'hook-secret'), SECRET);
+      const dir = join(home, '.local/share/ogm/daemons/castle-game/workspaces/12/.gm/preview');
+      mkdirSync(dir, { recursive: true });
+      const grant = randomUUID();
+      const workspace = join(dir, '..', '..');
+      const grantDir = join(secretDir, 'preview-grants');
+      mkdirSync(grantDir);
+      const grantPath = join(grantDir, `${createHash('sha256').update(workspace).digest('hex')}.json`);
+      writeFileSync(grantPath, JSON.stringify({ ticket: '12', grant }));
+      const id = randomUUID();
+      writeFileSync(join(dir, `${id}.tgz`), archive());
+      writeFileSync(
+        join(dir, `${id}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: mintPreviewToken(SECRET, '12', grant, 'castle-game'),
+          ticket: '12',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      const reply = JSON.parse(readFileSync(join(dir, `${id}.response`), 'utf8')) as {
+        state: string;
+        gameId: string;
+        buildId: string;
+      };
+      expect(reply.state).toBe('done');
+      expect(reply.gameId).toBe(ids.game);
+      expect(existsSync(join(previewDirectory(deps, ids.game, reply.buildId), 'index.html'))).toBe(true);
+      const other = randomUUID();
+      writeFileSync(join(dir, `${other}.tgz`), archive());
+      writeFileSync(
+        join(dir, `${other}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: mintPreviewToken(SECRET, '12', grant, 'castle-game'),
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${other}.response`), 'utf8')).state).toBe('failed');
+      const [owner, repo] = REPO.split('/');
+      deps.db
+        .insert(schema.games)
+        .values({
+          id: 'g_other',
+          familyId: ids.family,
+          ownerId: ids.user,
+          title: 'Other',
+          slug: 'other-game',
+          githubPath: 'games/other-game',
+          githubOwner: owner,
+          githubRepo: repo,
+          visibility: 'private',
+          repoVisibility: 'private',
+          createdAt: '2026-11-13T00:00:00.000Z',
+        })
+        .run();
+      const crossGame = randomUUID();
+      writeFileSync(join(dir, `${crossGame}.tgz`), archive());
+      writeFileSync(
+        join(dir, `${crossGame}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: mintPreviewToken(SECRET, '12', grant, 'castle-game'),
+          ticket: '12',
+          slug: 'other-game',
+          sha: SHA,
+          branch: 'main',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${crossGame}.response`), 'utf8')).state).toBe('failed');
+      const anotherDir = join(home, '.local/share/ogm/daemons/castle-game/workspaces/another/.gm/preview');
+      mkdirSync(anotherDir, { recursive: true });
+      const replay = randomUUID();
+      writeFileSync(join(anotherDir, `${replay}.tgz`), archive());
+      writeFileSync(
+        join(anotherDir, `${replay}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: mintPreviewToken(SECRET, '12', grant, 'castle-game'),
+          ticket: '12',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(anotherDir, `${replay}.response`), 'utf8')).state).toBe('failed');
+      const outside = join(home, 'outside');
+      const validRequest = JSON.stringify({
+        state: 'pending',
+        token: mintPreviewToken(SECRET, '12', grant, 'castle-game'),
+        ticket: '12',
+        slug: 'castle-game',
+        sha: SHA,
+        branch: 'main',
+      });
+      writeFileSync(outside, validRequest);
+      const symlink = randomUUID(),
+        hardlink = randomUUID();
+      symlinkSync(outside, join(dir, `${symlink}.json`));
+      linkSync(outside, join(dir, `${hardlink}.json`));
+      writeFileSync(join(dir, `${symlink}.tgz`), archive());
+      writeFileSync(join(dir, `${hardlink}.tgz`), archive());
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(existsSync(join(dir, `${symlink}.response`))).toBe(false);
+      expect(existsSync(join(dir, `${hardlink}.response`))).toBe(false);
+      expect(readFileSync(outside, 'utf8')).toBe(validRequest);
+      rmSync(grantPath);
+      const revoked = randomUUID();
+      writeFileSync(join(dir, `${revoked}.tgz`), archive());
+      writeFileSync(
+        join(dir, `${revoked}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: mintPreviewToken(SECRET, '12', grant, 'castle-game'),
+          ticket: '12',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${revoked}.response`), 'utf8')).state).toBe('failed');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+  it('verifies scoped tokens across API restarts and rejects rotation', async () => {
+    const { deps } = setup();
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'castle-game',
+        repo: REPO,
+        checkoutPath: '/fixture',
+        unit: 'fixture',
+        envFile: '/fixture',
+        port: 12345,
+        status: 'running',
+        createdAt: '2026-11-13T00:00:00.000Z',
+      })
+      .run();
+    const home = mkdtempSync(join(tmpdir(), 'preview-token-'));
+    const dir = join(home, '.config/ogm/daemons/castle-game');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'hook-secret'), SECRET);
+    const grant = randomUUID();
+    const token = mintPreviewToken(SECRET, '12', grant, 'castle-game');
+    expect(await hookPreviewToken(home)(token, deps)).toMatchObject({ repo: REPO, ticket: '12' });
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(365 * 24 * 60 * 60 * 1000);
+      expect(await hookPreviewToken(home)(token, deps)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await hookPreviewToken(home)(`${token}x`, deps)).toBeNull();
+    writeFileSync(join(dir, 'hook-secret'), 'rotated');
+    expect(await hookPreviewToken(home)(token, deps)).toBeNull();
+    rmSync(home, { recursive: true, force: true });
+  });
   it('keeps an answered preview available to its branch with a rotated access token', async () => {
     const { deps, upload, list, editorList, answer } = setup();
     const build = (await (await upload('12', SECRET, archive(), 'branch-a')).json()) as { buildId: string };
