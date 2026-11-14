@@ -31,6 +31,21 @@ for (const count of [0, 1]) {
   });
 }
 
+test('places the games grid behind the floating controls', async ({ page }, testInfo) => {
+  await page.setViewportSize(
+    testInfo.project.name === 'phone' ? { width: 390, height: 844 } : { width: 1180, height: 820 },
+  );
+  await page.goto('/all?test&games=0', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.games-spotlight')).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const grid = await page.locator('.games-grid').boundingBox();
+      const floor = await page.locator('.games-floor').boundingBox();
+      return grid && floor ? grid.y - floor.y : null;
+    })
+    .toBe(0);
+});
+
 async function capture(page: import('@playwright/test').Page): Promise<Buffer> {
   const session = await page.context().newCDPSession(page);
   try {
