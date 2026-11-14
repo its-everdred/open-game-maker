@@ -70,7 +70,7 @@ Run `gm look score` and `gm look judge` on your changed screens against their ta
 - Bind local servers to `127.0.0.1`, never `0.0.0.0`.
 - GPU Chromium is the default. Use SwiftShader only when the environment requires it and record that fact.
 - Wait up to 10 minutes for a capture slot. If a capture process stays at 0% CPU for 10 minutes, kill it by PID and retry once. If GPU startup stalls, rerun with `GM_VERIFY_SOFTWARE_GL=1` and record the fallback.
-- For app-shell touch stills without a QA account, use `gm capture shell --web <apps/web> --dist <game/dist> --out <directory>`; repeat `--tap <text>` for successive game actions. The shell mocks sign-in and game APIs: report it as local, not production or Safari.
+- For app-shell touch stills without a QA account, use `gm look shell --dist <game/dist> --out <directory>`; use `--tap 'Play>Endless'` for successive game actions, `--edit` for the editor, and `--mp4` for motion. The shell mocks sign-in and game APIs: report it as local, not production or Safari.
 - After every `gm run`, send exactly one current still or clip with `gm chat post`.
 - Never install software or add a paid visual judge to verify a game.
 - Always list `iPhone Safari` and `sound` as unchecked unless an operator actually checked them.

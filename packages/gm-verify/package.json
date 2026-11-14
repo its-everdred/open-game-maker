@@ -21,19 +21,21 @@
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
     },
+    "./app-capture": "./dist/app-capture/runner.js",
     "./schemas/*": "./schemas/*"
   },
   "scripts": {
-    "build": "tsc -b && node scripts/build-shell.mjs",
+    "build": "pnpm --filter @ogm/web run build:deps && tsc -b && node scripts/build-shell.mjs && node scripts/build-app-capture.mjs",
+    "prepack": "pnpm build",
     "preemit": "pnpm build",
     "emit": "node scripts/emit-schema.mjs",
     "pretypecheck": "pnpm --filter @ogm/contracts --filter @ogm/config --filter @ogm/room-protocol --filter @ogm/iframe-bridge --filter @gm/host --filter @ogm/design-log build && pnpm build",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p scenarios/tsconfig.json && tsc -p shell/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p scenarios/tsconfig.json && tsc -p shell/tsconfig.json && tsc -p app-capture/tsconfig.json",
     "pretest": "pnpm --filter @ogm/contracts --filter @ogm/room-protocol build && pnpm build && node scripts/emit-schema.mjs --check",
     "test": "vitest run",
-    "pretest:browser": "pnpm --filter @ogm/contracts --filter @ogm/iframe-bridge --filter @gm/host build && pnpm build",
+    "pretest:browser": "pnpm build",
     "test:browser": "vitest run --config vitest.browser.config.ts",
-    "lint": "eslint src scenarios shell",
+    "lint": "eslint src scenarios shell app-capture",
     "scenario": "pnpm --filter @ogm/contracts --filter @ogm/config --filter @ogm/room-protocol --filter @ogm/iframe-bridge --filter @gm/host --filter @ogm/design-log --filter @gm/sdk --filter @ogm/rooms build && pnpm build && node scenarios/scenario.ts"
   },
   "dependencies": {

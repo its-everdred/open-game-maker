@@ -16,17 +16,21 @@ export type GameApiFixture = {
   script(...results: ScriptedTransactionResult[]): void;
 };
 
-const buildId = 'b_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+export const buildId = 'b_01BX5ZZKBKACTAV9WEVGEMMVRZ';
 /* The Draft path starts from the fixture build's folded design, as the API's base doc does for a real build. */
 const buildDesign = new URL('../fixtures/bridge-game/design/design.json', import.meta.url);
 
-export async function installGameApi(page: Page): Promise<GameApiFixture> {
+export async function installGameApi(
+  page: Page,
+  initialDesign?: DesignDoc,
+  title = 'Goblin Cellar',
+): Promise<GameApiFixture> {
   let rev = 4;
-  let doc = JSON.parse(readFileSync(buildDesign, 'utf8')) as DesignDoc;
+  let doc = initialDesign ?? (JSON.parse(readFileSync(buildDesign, 'utf8')) as DesignDoc);
   const attempts: TransactionBody[] = [];
   const transactions: TransactionBody[] = [];
   const scripted: ScriptedTransactionResult[] = [];
-  let markTransactionStreamReady = () => undefined;
+  let markTransactionStreamReady: () => void = () => undefined;
   const transactionStreamReady = new Promise<void>((resolve) => {
     markTransactionStreamReady = resolve;
   });
@@ -41,7 +45,7 @@ export async function installGameApi(page: Page): Promise<GameApiFixture> {
         id: 'game',
         familyId: 'family',
         ownerId: 'user',
-        title: 'Goblin Cellar',
+        title,
         visibility: 'private',
         repoVisibility: 'private',
       });
