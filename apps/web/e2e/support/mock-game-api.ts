@@ -40,6 +40,7 @@ export async function installGameApi(
     const url = new URL(request.url());
     const path = url.pathname.slice('/api/v1'.length);
     if (path === '/notifications/stream') return eventStream(route);
+    if (path === '/notifications' && request.method() === 'GET') return json(route, []);
     if (path === '/games/game' && request.method() === 'GET') {
       return json(route, {
         id: 'game',
