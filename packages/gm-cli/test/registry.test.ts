@@ -61,6 +61,7 @@ describe('command registry', () => {
       'chat post',
       'check',
       'check assets',
+      'check boot',
       'check hooks',
       'check static',
       'checkpoint open',

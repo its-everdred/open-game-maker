@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   processRequest,
@@ -85,6 +85,69 @@ describe('verify queue', () => {
     expect(seen[0].record).toEqual({ seconds: 4, fps: 60, native: true });
     expect(seen[0].aiurIssue).toBe(45);
     expect(seen[0].aiurRunId).toBe('aiur/45');
+  });
+
+  it('runs a boot request on the host and publishes its result', async () => {
+    const { workspace } = workspaces();
+    const dir = submitRequest(workspace, request({ args: { viewport: 'both', tier: 'mobile', boot: true } }));
+    const bootRunner = vi.fn(
+      async (options: Parameters<NonNullable<import('../src/queue.js').ProcessOptions['bootRunner']>>[0]) => {
+        writeFileSync(join(options.outDir, 'phone.png'), 'screenshot');
+        return {
+          gate: 'L1' as const,
+          ok: false,
+          durationMs: 1,
+          checks: [{ id: 'boot' as const, ok: false, detail: 'blank frame' }],
+        };
+      },
+    );
+    const report = await processRequest(workspace, dir, { runner: fakeRunner([]), bootRunner, software: true });
+    expect(report.verdict).toBe('fail');
+    expect(report.error).toContain('blank frame');
+    expect(bootRunner.mock.calls[0]![0].viewports).toEqual(['phone', 'tablet-landscape']);
+    expect(existsSync(join(dir, 'phone.png'))).toBe(true);
+    expect((await waitForReport(dir)).verdict).toBe('fail');
+  });
+
+  it('does not start a boot request whose caller deadline already expired', async () => {
+    const { workspace } = workspaces();
+    const dir = submitRequest(
+      workspace,
+      request({ deadlineAt: Date.now() - 1, args: { viewport: 'phone', tier: 'mobile', boot: true } }),
+    );
+    const bootRunner = vi.fn();
+    const report = await processRequest(workspace, dir, { runner: fakeRunner([]), bootRunner, software: true });
+    expect(report.verdict).toBe('error');
+    expect(report.error).toContain('deadline exceeded before capture');
+    expect(bootRunner).not.toHaveBeenCalled();
+  });
+
+  it('cancels a boot request when the host deadline expires', async () => {
+    const { workspace } = workspaces();
+    const dir = submitRequest(
+      workspace,
+      request({ deadlineAt: Date.now() + 1_000, args: { viewport: 'phone', tier: 'mobile', boot: true } }),
+    );
+    let aborted = false;
+    const bootRunner: NonNullable<import('../src/queue.js').ProcessOptions['bootRunner']> = async (options) => {
+      options.signal!.addEventListener(
+        'abort',
+        () => {
+          aborted = true;
+        },
+        { once: true },
+      );
+      return new Promise(() => {});
+    };
+    const report = await processRequest(workspace, dir, {
+      runner: fakeRunner([]),
+      bootRunner,
+      software: true,
+      timeoutMs: 10_000,
+    });
+    expect(report.verdict).toBe('fail');
+    expect(report.error).toContain('deadline');
+    expect(aborted).toBe(true);
   });
 
   it('claims each request once, so a second pass does not run it again', async () => {

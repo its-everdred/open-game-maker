@@ -38,7 +38,21 @@ export interface RuntimeHooks extends GmTestHooks {
 }
 
 export class SdkHooks<D, S> implements RuntimeHooks {
-  ready = false;
+  private readyValue = false;
+  private readySet = false;
+
+  get ready(): boolean {
+    return this.readyValue;
+  }
+
+  set ready(value: boolean) {
+    const explicit = this.readySet;
+    this.readySet = true;
+    this.readyValue = value;
+    // The first assignment belongs to SDK boot. A later true is the game's
+    // signal that its own assets and first frame are ready, including in a published build.
+    if (value && explicit && typeof window !== 'undefined') window.dispatchEvent(new Event('gm-frame-ready'));
+  }
   readonly marks: [string, number][];
   private readonly frames: { tick: number; frame: ActionFrame }[] = [];
   private readonly inputHistory: { tick: number; frame: ActionFrame }[] = [];

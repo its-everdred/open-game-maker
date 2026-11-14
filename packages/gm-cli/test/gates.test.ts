@@ -36,8 +36,36 @@ const state = vi.hoisted(() => ({
     ],
     report: '/game/shots/test/report.json',
   } as GateResult,
+  bootCode: 0,
+  bootStalls: false,
+  bootAborted: false,
+  bootDeadline: undefined as number | undefined,
   l0Options: undefined as unknown,
   l1Options: undefined as unknown,
+}));
+
+vi.mock('../src/commands/check/boot.js', async (original) => ({
+  ...(await original<typeof import('../src/commands/check/boot.js')>()),
+  checkBoot: async (_ctx: unknown, _dist: unknown, _views: unknown, signal?: AbortSignal, deadlineAt?: number) => {
+    state.bootDeadline = deadlineAt;
+    if (state.bootStalls)
+      await new Promise<void>((resolve) =>
+        signal?.addEventListener(
+          'abort',
+          () => {
+            state.bootAborted = true;
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+    return {
+      gate: 'L1',
+      ok: state.bootCode === 0,
+      durationMs: 1,
+      checks: [{ id: 'boot', ok: state.bootCode === 0 }],
+    };
+  },
 }));
 
 vi.mock('@ogm/gm-verify', async (original) => ({
@@ -54,6 +82,10 @@ vi.mock('@ogm/gm-verify', async (original) => ({
 }));
 
 beforeEach(() => {
+  state.bootCode = 0;
+  state.bootStalls = false;
+  state.bootAborted = false;
+  state.bootDeadline = undefined;
   state.l0Options = undefined;
   state.l1Options = undefined;
   state.l0 = {
@@ -150,6 +182,24 @@ describe('gm check', () => {
 });
 
 describe('gm test', () => {
+  it('stops when the boot gate fails', async () => {
+    state.bootCode = 1;
+    const result = await gm(['test']);
+    expect(result.code).toBe(1);
+    expect(state.l1Options).toBeUndefined();
+    const json = await gm(['test', '--json']);
+    expect(JSON.parse(json.out[0]!)).toMatchObject({ gate: 'L1', ok: false, checks: [{ id: 'boot', ok: false }] });
+  });
+  it('applies the overall deadline while boot is stalled', async () => {
+    state.bootStalls = true;
+    const result = await gm(['test', '--deadline', '1']);
+    expect(result.code).toBe(1);
+    expect(result.err.join(' ')).toContain('overall deadline exceeded during boot');
+    expect(state.bootAborted).toBe(true);
+    expect(state.bootDeadline).toEqual(expect.any(Number));
+    expect(state.l1Options).toBeUndefined();
+  });
+
   it('passes ticks, inputs and output through to L1 and prints the report path', async () => {
     const cwd = tempDir();
     const result = await gm(
@@ -161,12 +211,13 @@ describe('gm test', () => {
     expect(state.l1Options).toEqual(
       expect.objectContaining({
         ticks: 3_600,
-        deadlineMs: 30_000,
         inputs: [],
         outDir: join(cwd, 'proof'),
         source: 'gm test',
       }),
     );
+    expect((state.l1Options as { deadlineMs: number }).deadlineMs).toBeGreaterThan(0);
+    expect((state.l1Options as { deadlineMs: number }).deadlineMs).toBeLessThanOrEqual(30_000);
   });
 
   it('only invokes a backstop supplied by the executable', async () => {

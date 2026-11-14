@@ -23,6 +23,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "pnpm --filter @ogm/contracts --filter @ogm/iframe-bridge --filter @gm/sdk --filter @ogm/config --filter @ogm/asset-cards --filter @ogm/asset-measure --filter @ogm/blob-store --filter @ogm/game-repo-template --filter @ogm/gm-verify build",
     "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "lint": "eslint src"
   },
   "dependencies": {

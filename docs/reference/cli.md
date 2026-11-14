@@ -48,6 +48,7 @@ request; the creator's verdict and optional note go back to that ticket. The gam
 gm check [--json]
 gm check static [--json]
 gm check hooks [--json]
+gm check boot [--dist <dir>] [--viewport both|phone|tablet-landscape] [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--deadline <seconds>] [--serve <dir>] [--out <dir>] [--json]
 gm run [--verify-source] [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
 gm look sheet <screen> --still <png> [--target <png>]
@@ -60,7 +61,14 @@ gm look evidence --body <file> [--json]
 `hooks` to select only that gate group. Failures name `file:line` where available and exit 1; `--json` emits the L0
 gate result.
 
-`gm test` serves the built game from `dist/` on `127.0.0.1`, advances 3,600 fixed ticks by default, applies an optional
+`gm check boot` serves the build and checks readiness and visible frames at phone and landscape sizes. Frames with
+more than 98% of pixels near one color fail. It writes
+`shots/boot/phone.png` and `shots/boot/tablet-landscape.png`; `--dist` selects a build directory and `--viewport`
+selects both sizes (the default) or one size. Published games signal
+that their first frame is ready by setting `runtime.hooks.ready = true` after loading assets and rendering. Rebuild older
+published builds with the current SDK before using this check; they do not emit the frame-ready signal.
+
+`gm test` first runs the boot check, then serves the built game from `dist/` on `127.0.0.1`, advances 3,600 fixed ticks by default, applies an optional
 logical-input script, checks a save-state round trip, writes a HUD still, runs `promises/*.spec.ts`, and writes
 `shots/test/report.json`. A failed or unavailable check exits 1. `--serve`, `--ticks`, and `--out` override the defaults;
 `--json` emits the L1 gate result and report path. The deadline defaults to 120 seconds plus one second per 30 ticks,

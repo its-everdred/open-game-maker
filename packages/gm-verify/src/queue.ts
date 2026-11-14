@@ -39,6 +39,7 @@ import {
 import { RUN_TIMEOUT_MS, type RunVerifyOptions } from './run.js';
 import { SLOT_WAIT_MS } from './semaphore.js';
 import { serveStatic } from './server.js';
+import { runBoot, type BootViewport } from './boot.js';
 
 export const QUEUE_DIR = join('.gm', 'verify');
 const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -67,8 +68,10 @@ export const verifyRequestSchema = z.strictObject({
   aiurIssue: z.number().int().positive().optional(),
   aiurRunId: z.string().min(1).max(200).optional(),
   serveDir: z.string().min(1),
+  deadlineAt: z.number().int().nonnegative().optional(),
   args: z.strictObject({
     viewport: viewportSetSchema,
+    boot: z.boolean().optional(),
     /* The signed-in app frame needs a URL and a storage state, which a request never carries. */
     frame: z.enum(['host', 'bare']).optional(),
     tier: tierSchema,
@@ -104,16 +107,17 @@ export function submitRequest(workspace: string, request: VerifyRequest): string
 
 export async function waitForReport(
   dir: string,
-  options: { timeoutMs?: number; pollMs?: number } = {},
+  options: { timeoutMs?: number; pollMs?: number; signal?: AbortSignal } = {},
 ): Promise<VerifyReport> {
   /* the host may wait for a slot first, and one synchronous encode can outlast the run timer */
   const timeoutMs = options.timeoutMs ?? SLOT_WAIT_MS + RUN_TIMEOUT_MS + FFMPEG_TIMEOUT_MS + 60_000;
   const deadline = Date.now() + timeoutMs;
   const path = join(dir, 'report.json');
   for (;;) {
+    if (options.signal?.aborted) throw new Error('boot check deadline exceeded');
     if (existsSync(path)) return verifyReportSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
     if (Date.now() >= deadline) throw new Error(`no report from the host runner after ${timeoutMs} ms (${path})`);
-    await sleep(options.pollMs ?? 1_000);
+    await sleep(options.pollMs ?? 1_000, undefined, { signal: options.signal });
   }
 }
 
@@ -146,6 +150,7 @@ export type Runner = (options: RunVerifyOptions) => Promise<{ report: VerifyRepo
 
 export type ProcessOptions = {
   runner: Runner;
+  bootRunner?: typeof runBoot;
   software: boolean;
   slots?: RunVerifyOptions['slots'];
   timeoutMs?: number;
@@ -213,8 +218,62 @@ async function capture(root: string, dir: string, staging: string, options: Proc
     return fail(`serveDir ${request.serveDir} is not a directory inside the workspace`, request);
   const server = await serveStatic(serveDir);
   try {
+    if (request.args.boot) {
+      const selected = request.args.viewport;
+      if (selected !== 'both' && selected !== 'phone' && selected !== 'tablet-landscape')
+        return fail('invalid boot viewport', request);
+      const viewports: BootViewport[] = selected === 'both' ? ['phone', 'tablet-landscape'] : [selected];
+      const hostMs = Math.min(options.timeoutMs ?? RUN_TIMEOUT_MS, (request.deadlineAt ?? Infinity) - Date.now());
+      if (hostMs <= 0) return fail('host boot deadline exceeded before capture', request);
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<Awaited<ReturnType<typeof runBoot>>>((done) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          done({
+            gate: 'L1',
+            ok: false,
+            durationMs: hostMs,
+            checks: [{ id: 'boot', ok: false, detail: 'host boot deadline exceeded' }],
+          });
+        }, hostMs);
+      });
+      let gate: Awaited<ReturnType<typeof runBoot>>;
+      try {
+        gate = await Promise.race([
+          (options.bootRunner ?? runBoot)({
+            url: server.url,
+            outDir: staging,
+            viewports,
+            software: options.software,
+            runtimeDir: options.slots?.runtimeDir,
+            signal: controller.signal,
+          }),
+          timeout,
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+      const report = errorReport(
+        runId,
+        gate.checks
+          .filter((check) => !check.ok)
+          .map((check) => check.detail)
+          .join('; '),
+        request,
+      );
+      report.verdict = gate.ok ? 'pass' : 'fail';
+      if (gate.ok) delete report.error;
+      report.frames = viewports
+        .filter((viewport) => existsSync(join(staging, `${viewport}.png`)))
+        .map((viewport) => ({ t: 0, path: `${viewport}.png`, viewport }));
+      writeReport(staging, report);
+      return report;
+    }
+    const args = { ...request.args };
+    delete args.boot;
     const { report } = await options.runner({
-      ...request.args,
+      ...args,
       url: server.url,
       outDir: staging,
       runId,

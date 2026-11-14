@@ -67,6 +67,7 @@ function promiseFiles(root: string): string[] {
 }
 
 type PromiseRunnerOptions = {
+  serveDir?: string;
   replay?: (bundle: ReplayBundle, options: ReplayOptions) => Promise<ReplayResult>;
   spawn?: (command: string, args: string[], options: SpawnOptions) => SpawnResult | Promise<SpawnResult>;
   software?: boolean;
@@ -118,7 +119,7 @@ export async function runPromiseSpecs(root: string, options: PromiseRunnerOption
         result = await (options.replay ?? replayBrowser)(
           { ...promise, errors: promise.expectedError ? [{ message: promise.expectedError }] : [], probes: {} },
           {
-            serveDir: join(root, 'dist'),
+            serveDir: resolve(root, options.serveDir ?? 'dist'),
             outDir: join(privateDir, replayPromiseKey(promise)),
             software: options.software,
             wallClockMs: options.wallClockMs,
@@ -405,6 +406,7 @@ export async function runL1(root: string, options: RunL1Options = {}): Promise<G
         checks.push(
           await watchdog.wait(
             runPromiseSpecs(root, {
+              serveDir: options.serveDir,
               software: options.software,
               wallClockMs: Math.max(1, watchdog.endAt - Date.now()),
               deadlineAt: watchdog.endAt,
