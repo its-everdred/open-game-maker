@@ -31,7 +31,10 @@ function harness(manifest: GameManifest) {
   const clock = new FixedClock();
   const runtime = new RuntimeImpl(
     { net: hooks } as unknown as GameInstance<unknown, unknown>,
-    { dispatchInput: (frames: ActionFrame[]) => dispatched.push([...frames]) } as unknown as SdkHostApi,
+    {
+      dispatchInput: (frames: ActionFrame[]) => dispatched.push([...frames]),
+      settings: { onChange: () => () => undefined },
+    } as unknown as SdkHostApi,
     'draft',
     'play',
     new EventRing(),
