@@ -1,9 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { basename } from 'node:path';
 
 import { ReviewSubmission } from '@ogm/contracts';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
+import { submitReviewRelay } from '../../review-relay.js';
 
 export const command: GmCommand = {
   name: 'review post',
@@ -20,10 +22,18 @@ export const command: GmCommand = {
     }
     const parsed = ReviewSubmission.safeParse(input);
     if (!parsed.success) throw new CommandError(parsed.error.issues.map((issue) => issue.message).join('; '));
-    if (!ctx.blobApi)
-      throw new UsageError('no daemon upload configuration', 'set OGM_INTERNAL_URL and OGM_HOOK_SECRET_FILE');
     const root = workspaceRoot(ctx.cwd);
     const slug = basename(gameDir(ctx.cwd, root));
+    const previewFile = join(root, '.gm', 'context', 'preview.json');
+    const scoped = existsSync(previewFile)
+      ? (JSON.parse(readFileSync(previewFile, 'utf8')) as { token?: unknown })
+      : null;
+    if (typeof scoped?.token === 'string' && scoped.token) {
+      ctx.out(await submitReviewRelay(root, slug, scoped.token, parsed.data));
+      return EXIT.ok;
+    }
+    if (!ctx.blobApi)
+      throw new UsageError('no daemon upload configuration', 'run inside a configured worker workspace');
     const secret = readFileSync(ctx.blobApi.secretFile, 'utf8').trim();
     if (!secret) throw new CommandError('daemon hook secret is empty');
     const response = await fetch(

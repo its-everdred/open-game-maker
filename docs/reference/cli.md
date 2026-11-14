@@ -48,6 +48,8 @@ request; the creator's verdict and optional note go back to that ticket. The gam
 gm review post <submission.json>
 ```
 
+In a configured worker workspace, the submission uses that ticket's scoped relay credential.
+
 Host merge tools can call `gm review close-check <game> <ticket> <sha>` before closing a ticket. It exits successfully
 only when the API confirms that the ticket's review phases permit closure; missing configuration and API errors refuse it.
 

@@ -12,6 +12,7 @@ import { mintPreviewToken, verifyPreviewToken } from '../builds/preview-token.js
 import { findGameBySlugOrId } from '../games/slug.js';
 import { hookPreviewToken } from '../internal/bundle.js';
 import { createPreview } from './store.js';
+import { submitRelayedReview } from '../review-rounds/relay.js';
 import type { PreviewTicketVerifier } from './ticket.js';
 
 const requestName = /^[0-9a-f-]{36}\.json$/u;
@@ -20,7 +21,16 @@ const ticketPattern = /^[1-9]\d{0,15}$/u;
 const branchPattern = /^[A-Za-z0-9_-]{1,200}$/u;
 
 const refreshAttempts = new Map<string, number>();
-type Request = { state: string; token: string; ticket: string; slug: string; sha: string; branch: string };
+type Request = {
+  state: string;
+  token: string;
+  ticket: string;
+  slug: string;
+  sha: string;
+  branch: string;
+  kind?: string;
+  submission?: unknown;
+};
 type RepoGrant = { repo: string; ticket: string; game: string; grant: string; secret: string; workspace: string };
 
 // Check the opened descriptor, not only the path: workers control every workspace directory.
@@ -52,10 +62,10 @@ async function processRequest(
     directory = await open(dir, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     if ((await readlink(`/proc/self/fd/${directory.fd}`)) !== dir) return;
     request = await openWithin(join(dir, filename), dir, constants.O_RDONLY);
-    if ((await request.stat()).size > 8192) return;
-    const requestBuffer = Buffer.alloc(8193);
+    if ((await request.stat()).size > 65536) return;
+    const requestBuffer = Buffer.alloc(65537);
     const requestRead = await request.read(requestBuffer, 0, requestBuffer.length, 0);
-    if (requestRead.bytesRead > 8192) return;
+    if (requestRead.bytesRead > 65536) return;
     const data = JSON.parse(requestBuffer.subarray(0, requestRead.bytesRead).toString('utf8')) as Request;
     if (data.state !== 'pending') return;
     response = await open(
@@ -63,7 +73,7 @@ async function processRequest(
       constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
       0o600,
     );
-    let result: Record<string, string>;
+    let result: Record<string, string | number>;
     try {
       if (
         typeof data.token !== 'string' ||
@@ -124,6 +134,27 @@ async function processRequest(
         !(await verifyTicket(`${game.githubOwner}/${game.githubRepo}`, data.ticket, data.slug, !!repoGrant))
       )
         throw new Error('unauthorized');
+      if (data.kind === 'review') {
+        if (
+          !data.submission ||
+          typeof data.submission !== 'object' ||
+          !('ticket' in data.submission) ||
+          data.submission.ticket !== data.ticket ||
+          !('sha' in data.submission) ||
+          data.submission.sha !== data.sha
+        )
+          throw new Error('invalid_request');
+        const round = await submitRelayedReview(
+          deps,
+          data.slug,
+          `${game.githubOwner}/${game.githubRepo}`,
+          data.submission,
+        );
+        result = { state: 'done', id: round.id, round: round.round };
+        await response.writeFile(Buffer.from(JSON.stringify(result)));
+        return;
+      }
+      if (data.kind !== undefined) throw new Error('invalid_request');
       const archive = await openWithin(join(dir, filename.replace(/\.json$/u, '.tgz')), dir, constants.O_RDONLY);
       let bytes: Buffer;
       try {
