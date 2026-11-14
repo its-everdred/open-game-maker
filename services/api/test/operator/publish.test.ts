@@ -76,6 +76,11 @@ it('allows host closure only after an owned phase is approved', async () => {
     const sha = git('rev-parse', 'HEAD');
     const { app, deps } = operator();
     deps.db
+      .update(schema.games)
+      .set({ githubOwner: 'owner', githubRepo: 'repo' })
+      .where(eq(schema.games.id, ids.game))
+      .run();
+    deps.db
       .insert(schema.gameDaemons)
       .values({
         slug: 'castle-game',
@@ -112,6 +117,13 @@ it('allows host closure only after an owned phase is approved', async () => {
       at: '2026-01-01T01:00:00Z',
     });
     expect(await (await request()).json()).toEqual({ allowed: true });
+    writeFileSync(
+      join(root, 'games/castle-game/review/tracks/sound.json'),
+      JSON.stringify({ id: 'sound', category: 'sound', phases: [{ id: 'cue', ticket: '42', template: 'sound' }] }),
+    );
+    git('add', 'games');
+    git('commit', '-qm', 'add sound track');
+    expect(await (await request()).json()).toEqual({ allowed: false });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
