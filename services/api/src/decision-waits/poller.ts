@@ -9,6 +9,7 @@ type PollerDeps = {
   daemons: () => Promise<{ slug: string; repo: string }[]>;
   clientFor: (slug: string) => Promise<AiurClient | null>;
   tickets: WaitTickets;
+  syncReviewRounds?: () => Promise<void>;
   log: (line: LogLine) => void;
   now?: () => number;
 };
@@ -72,6 +73,13 @@ export function createDecisionWaitPoller(deps: PollerDeps) {
     if (running) return;
     running = true;
     try {
+      if (deps.syncReviewRounds) {
+        try {
+          await deps.syncReviewRounds();
+        } catch (error) {
+          deps.log({ event: 'review_round_sync_error', error: (error as Error).name });
+        }
+      }
       for (const { slug, repo } of await deps.daemons()) {
         try {
           await pollDaemon(slug, repo);

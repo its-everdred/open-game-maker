@@ -29,6 +29,7 @@ import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projec
 import { startScheduler } from './jobs/scheduler.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
+import { createReviewSync } from './review-rounds/runner.js';
 import { createWaitTickets } from './decision-waits/tickets.js';
 import { createTicketTitleReader, createWorkpadReader } from './worker-progress/workpad.js';
 import { startBriefingPush } from './voice/briefing-push.js';
@@ -170,6 +171,7 @@ const decisionWaits = createDecisionWaitPoller({
       .map(({ slug, repo }) => ({ slug, repo })),
   clientFor: daemonDirectory.clientForSlug,
   tickets: createWaitTickets(env.OGM_INTAKE_GITHUB_TOKEN),
+  syncReviewRounds: createReviewSync({ db, clientForGame: daemonDirectory.clientForGame, log }),
   log,
 });
 decisionWaits.start(env.OGM_COMMAND_POLL_MS);

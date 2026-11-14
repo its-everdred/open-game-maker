@@ -78,11 +78,11 @@ means another writer answered first and the returned status is the winner's.
 ## Preview reviews
 
 A game's Review view also lists workspace previews sent with `gm preview`. Each preview plays in its card and offers
-Looks right or Needs work with an optional note. The answer is delivered to the ticket that uploaded the build; the
+Looks right or Needs work with an optional note of up to 3,900 characters. The answer is delivered to the ticket that uploaded the build; the
 card leaves the queue after delivery and a later upload opens a new one. Preview files and assets use a short-lived,
 revocable access URL issued to a game editor and an isolated frame, and never change the live build or share its asset cache.
 After a verdict, the editor can still show the latest preview for its game branch while the build remains unmerged;
-the previous review URL is revoked. Single-choice Commands can also be
+the previous review URL is revoked. Editors can retrieve retained builds through `GET /api/v1/games/:gameId/editor/preview-history`; the response issues short-lived access links for the prior rounds. Single-choice Commands can also be
 answered from the queue using their letter buttons and an optional note; opening a row still shows its media deck.
 
 ## Skipping a question

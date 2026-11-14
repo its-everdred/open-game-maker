@@ -42,6 +42,18 @@ or `aiur/<number>` branch; pass `--ticket` when neither is available. The daemon
 request; the creator's verdict and optional note go back to that ticket. The game branch defaults to `main`; pass
 `--branch <id>` for another game branch so the editor shows the preview on the correct version.
 
+## Post a review round
+
+```text
+gm review post <submission.json>
+```
+
+The JSON carries a stable UUID `id` (reuse it when retrying), the `track`, `phase`, `category` (`art`, `gameplay`,
+or `sound`), owning `ticket`, commit `sha`, optional `prNumber`, and `media` array. Track definitions live in the
+committed game directory at `review/tracks/<track>.json`; the phase must name that ticket. Gameplay submissions need
+a `build` reference from `gm preview` and a `question`. Sound submissions need a `clip` reference to a stored MP4
+containing video and audio, with `hasAudio: true`; an audio file alone is rejected. Media entries use `kind` and `ref`.
+
 ## Verify a game
 
 ```text

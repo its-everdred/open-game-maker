@@ -26,6 +26,10 @@ function setup() {
     buildRoutes({
       daemonForSecret: async () => null,
       gameForSecret: async (secret) => (secret === SECRET ? { repo: REPO, slug: 'castle-game' } : null),
+      trackFor: async (_checkout, _path, _sha, id) => ({
+        id,
+        phases: [{ id: id === 'sound' ? 'cue' : 'concept', ticket: '12', template: 'next' }],
+      }),
     }),
   );
   const [owner, repo] = REPO.split('/');
@@ -51,6 +55,128 @@ function setup() {
     });
   return { deps, app, upload, list, editorList, answer, message };
 }
+
+function enableTracks(deps: ReturnType<typeof setup>['deps']) {
+  deps.db
+    .insert(schema.gameDaemons)
+    .values({
+      slug: 'castle-game',
+      repo: REPO,
+      checkoutPath: '/fixture',
+      unit: 'fixture',
+      envFile: '/fixture',
+      port: 12345,
+      status: 'running',
+      createdAt: '2026-11-13T00:00:00Z',
+    })
+    .run();
+}
+
+describe('review round previews', () => {
+  it('refuses a round from a ticket that does not own the phase', async () => {
+    const { app, deps } = setup();
+    enableTracks(deps);
+    const response = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'd9428888-122b-4b0e-b1c8-9f7900000004',
+        track: 'art',
+        phase: 'concept',
+        category: 'art',
+        ticket: '99',
+        sha: SHA,
+        media: [{ kind: 'still', ref: 'concept' }],
+      }),
+    });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: { code: 'track_owner_mismatch' } });
+  });
+  it('refuses a sound round when the declared capture does not exist', async () => {
+    const { app, deps } = setup();
+    enableTracks(deps);
+    const response = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'd9428888-122b-4b0e-b1c8-9f7900000003',
+        track: 'sound',
+        phase: 'cue',
+        category: 'sound',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'clip', ref: `sha256:${'a'.repeat(64)}`, hasAudio: true }],
+      }),
+    });
+    expect(response.status).toBe(422);
+  });
+  it('refuses a gameplay round without a real preview for its ticket and SHA', async () => {
+    const { app, deps } = setup();
+    enableTracks(deps);
+    const response = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'd9428888-122b-4b0e-b1c8-9f7900000002',
+        track: 'game',
+        phase: 'concept',
+        category: 'gameplay',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'build', ref: 'preview-fake' }],
+        question: 'Is it fun?',
+      }),
+    });
+    expect(response.status).toBe(422);
+  });
+  it('records a verdict against the posted build and retains the prior build', async () => {
+    const { deps, app, upload, answer, message } = setup();
+    enableTracks(deps);
+    const first = (await (await upload()).json()) as { buildId: string };
+    const posted = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'd9428888-122b-4b0e-b1c8-9f7900000001',
+        track: 'game',
+        phase: 'concept',
+        category: 'gameplay',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'build', ref: first.buildId }],
+        question: 'Is it fun?',
+      }),
+    });
+    expect(posted.status).toBe(201);
+    expect((await answer(first.buildId, '  Keep this\nexactly.  ')).status).toBe(200);
+    expect(message).not.toHaveBeenCalled();
+    expect(deps.db.select().from(schema.reviewRounds).get()).toMatchObject({
+      verdict: 'approved',
+      notes: '  Keep this\nexactly.  ',
+      verdictSource: 'preview',
+    });
+    const before = (await (
+      await app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, { headers: asUser(ids.user) })
+    ).json()) as { previews: { accessId: string }[] };
+    expect((await upload()).status).toBe(201);
+    expect(existsSync(join(previewDirectory(deps, ids.game, first.buildId), 'index.html'))).toBe(true);
+    const history = (await (
+      await app.request(`http://example.test/api/v1/games/${ids.game}/editor/preview-history`, {
+        headers: asUser(ids.user),
+      })
+    ).json()) as { previews: { buildId: string; accessId: string }[] };
+    expect(history.previews).toHaveLength(1);
+    expect(history.previews[0]?.buildId).toBe(first.buildId);
+    expect(history.previews[0]?.accessId).not.toBe(before.previews[0]?.accessId);
+    const host = createGamesHost({
+      root: deps.config.gamesRoot,
+      appOrigin: 'https://app.example.test',
+      version: 'test',
+    });
+    expect((await host.request(`/p/${ids.game}/${before.previews[0]!.accessId}/index.html`)).status).toBe(404);
+    expect((await host.request(`/p/${ids.game}/${history.previews[0]!.accessId}/index.html`)).status).toBe(200);
+  });
+});
 
 describe('preview builds', () => {
   it('keeps an answered preview available to its branch with a rotated access token', async () => {

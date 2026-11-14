@@ -44,6 +44,18 @@ function branchRow(deps: ReturnType<typeof operator>['deps']) {
   return deps.db.select().from(schema.branches).where(eq(schema.branches.id, ids.main)).get()!;
 }
 
+describe('operator review stalls', () => {
+  it('requires the internal credential', async () => {
+    const { app } = operator();
+    expect((await app.request(`${operatorPrefix}/review-stalls`)).status).toBe(401);
+    const response = await app.request(`${operatorPrefix}/review-stalls`, {
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ worker: [], creator: [] });
+  });
+});
+
 describe('operator publish', () => {
   it('describes a registered game so the host script knows where to build', async () => {
     const { app } = operator();

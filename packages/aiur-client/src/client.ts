@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { AiurConfigError, AiurHttpError, AiurUnavailableError } from './errors.js';
 import {
   CancelResultSchema,
@@ -90,6 +92,11 @@ export interface AiurClient {
     signal?: AbortSignal,
   ): Promise<{ request_id: string; warning?: 'outcome_unknown' }>;
   nudgeTodo(ids: string[]): Promise<void>;
+  rework(id: string, reason: string, key: string): Promise<void>;
+  ticketTranscript(
+    id: string,
+    cursor?: string,
+  ): Promise<{ events: { body: string; turn_id: string | null }[]; nextCursor: string | null }>;
   accounts(): Promise<UsageAccounts>;
   events(after: number, limit: number, patterns: string[]): Promise<EventPage>;
   eventsToken(): Promise<{ token: string; expires_in_seconds: number }>;
@@ -226,6 +233,70 @@ export function createAiurClient(
     pause: (id) => writeWithoutResult(`/api/v1/${encodeURIComponent(id)}/pause`),
     resume: (id) => writeWithoutResult(`/api/v1/${encodeURIComponent(id)}/resume`),
     message: (id, text, messageId, signal) => sendMessage(id, text, messageId, signal),
+    async rework(id, reason, key) {
+      if (!ISSUE_ID.test(id) || !reason.trim() || reason.length > 4000) throw new TypeError('Invalid rework request');
+      const bytes = createHash('sha256').update(key).digest().subarray(0, 16);
+      bytes[6] = (bytes[6]! & 0x0f) | 0x70;
+      bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+      const hex = bytes.toString('hex');
+      const requestId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+      const encoded = Buffer.from(reason).toString('base64');
+      const { body } = await fetchResponse('POST', '/api/v1/control', {
+        write: true,
+        signal: AbortSignal.timeout(45000),
+        body: {
+          contract: 'aiur.control.call',
+          contract_version: 2,
+          request_id: requestId,
+          expression: `Aiur.AgentControlCLI.rework(${JSON.stringify(id)}, Base.decode64!("${encoded}"))`,
+          command: 'rework',
+          max_scope: 'write',
+          timeout_ms: 30000,
+        },
+      });
+      const result = parseContract(ControlResultSchema, body);
+      if (
+        typeof result.output !== 'string' ||
+        !result.output.includes('agent:rework') ||
+        !/__AIUR_CONTROL_EXIT__:0(?:\s|$)/u.test(result.output)
+      )
+        throw new Error('aiur_rework_unconfirmed');
+    },
+    async ticketTranscript(id, cursor) {
+      if (!ISSUE_ID.test(id)) throw new TypeError('Invalid issue identifier');
+      const query = new URLSearchParams({ limit: '50', ...(cursor === undefined ? {} : { cursor: String(cursor) }) });
+      const { body } = await fetchResponse('GET', `/api/v1/${encodeURIComponent(id)}/events?${query.toString()}`, {
+        signal: AbortSignal.timeout(15000),
+      });
+      if (
+        !body ||
+        typeof body !== 'object' ||
+        !('events' in body) ||
+        !Array.isArray(body.events) ||
+        !('pagination' in body) ||
+        !body.pagination ||
+        typeof body.pagination !== 'object' ||
+        !('next_cursor' in body.pagination)
+      )
+        throw new Error('aiur_transcript_invalid');
+      const next = body.pagination.next_cursor;
+      if (next !== null && (typeof next !== 'string' || !/^[0-9]+$/u.test(next)))
+        throw new Error('aiur_transcript_invalid');
+      return {
+        events: body.events.flatMap((event: unknown) => {
+          if (!event || typeof event !== 'object') throw new Error('aiur_transcript_invalid');
+          if ('type' in event && event.type === 'diff') return [];
+          if (!('body' in event) || typeof event.body !== 'string') throw new Error('aiur_transcript_invalid');
+          return [
+            {
+              body: event.body,
+              turn_id: 'turn_id' in event && typeof event.turn_id === 'string' ? event.turn_id : null,
+            },
+          ];
+        }),
+        nextCursor: next,
+      };
+    },
     async nudgeTodo(ids) {
       if (ids.length === 0 || ids.some((id) => !ISSUE_ID.test(id)))
         throw new TypeError('Invalid issue identifier in todo list');

@@ -11,6 +11,7 @@ import { completeBuildCache } from '../builds/cache-plan.js';
 import { BadArchive, untarGz } from '../builds/untar.js';
 import { scanBuild } from '../gameplay/paid-integrations.js';
 import { paidApisDuringGameplay } from '../gameplay/policy.js';
+import { answerRound, roundForBuild } from '../review-rounds/store.js';
 
 export type Preview = {
   gameId: string;
@@ -119,10 +120,12 @@ export async function createPreview(
         answered: false,
         ...access(),
       };
-      await writePreview(join(directory, `${ticket}.json`), preview);
       if (previous && /^preview-[0-9a-f-]{36}$/u.test(previous.buildId)) {
-        await rm(join(directory, '.builds', previous.buildId), { recursive: true, force: true }).catch(() => undefined);
+        const history = join(directory, '.history');
+        await mkdir(history, { recursive: true });
+        await writePreview(join(history, `${previous.buildId}.json`), { ...previous, ...access() });
       }
+      await writePreview(join(directory, `${ticket}.json`), preview);
       return preview;
     } catch (error) {
       if (installed) await rm(target, { recursive: true, force: true });
@@ -130,6 +133,33 @@ export async function createPreview(
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }
+  });
+}
+
+// History is separate from the current queue so an old round can be inspected without reopening it.
+export async function listPreviewHistory(deps: AppDeps, gameId: string): Promise<Preview[]> {
+  checkKey(deps, gameId, '1');
+  return withArtifactMutation(async () => {
+    const directory = join(root(deps, gameId), '.history');
+    const names = await readdir(directory).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [] as string[];
+      throw error;
+    });
+    const history: Preview[] = [];
+    for (const name of names.filter((entry) => /^preview-[0-9a-f-]{36}\.json$/u.test(entry))) {
+      const preview = await readPreview(join(directory, name));
+      if (!preview || preview.gameId !== gameId || `${preview.buildId}.json` !== name) continue;
+      try {
+        await fileAccess(join(previewDirectory(deps, gameId, preview.buildId), 'index.html'));
+      } catch {
+        continue;
+      }
+      const refreshed =
+        Date.parse(preview.accessExpiresAt) > Date.now() + 5 * 60_000 ? preview : { ...preview, ...access() };
+      if (refreshed !== preview) await writePreview(join(directory, name), refreshed);
+      history.push(refreshed);
+    }
+    return history.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   });
 }
 
@@ -186,6 +216,8 @@ export async function answerPreview(
   ticket: string,
   buildId: string,
   message: string,
+  verdict: 'looks right' | 'needs work',
+  note: string | undefined,
 ): Promise<boolean> {
   checkKey(deps, gameId, ticket);
   return withArtifactMutation(async () => {
@@ -193,6 +225,22 @@ export async function answerPreview(
     const preview = await readPreview(file);
     if (!preview || preview.answered || preview.buildId !== buildId) return false;
     if (preview.pendingMessage !== undefined && preview.pendingMessage !== message) return false;
+    const round = roundForBuild(deps.db, gameId, ticket, buildId);
+    if (
+      round &&
+      !answerRound(deps.db, gameId, round.id, {
+        verdict: verdict === 'looks right' ? 'approved' : 'needs_work',
+        notes: note ?? null,
+        source: 'preview',
+        at: new Date().toISOString(),
+      })
+    )
+      return false;
+    if (round) {
+      // The durable ledger is the outbox for track rounds; the reconciler owns their delivery.
+      await writePreview(file, { ...preview, ...access(), pendingMessage: message, answered: true });
+      return true;
+    }
     if (preview.pendingMessage === undefined) await writePreview(file, { ...preview, pendingMessage: message });
     const client = await deps.aiurClientForGame(gameId);
     const receipt = await client.message(ticket, message, `preview:${buildId}`, AbortSignal.timeout(20_000));
