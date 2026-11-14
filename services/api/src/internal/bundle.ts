@@ -60,7 +60,8 @@ export function hookPreviewToken(home: string) {
       );
       if (!secret?.trim()) continue;
       const claims = verifyPreviewToken(token, secret.trim());
-      if (claims) return { repo: row.repo, slug: row.slug, ticket: claims.ticket, grant: claims.grant, game: claims.game };
+      if (claims)
+        return { repo: row.repo, slug: row.slug, ticket: claims.ticket, grant: claims.grant, game: claims.game };
     }
     return null;
   };
