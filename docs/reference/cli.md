@@ -48,6 +48,9 @@ request; the creator's verdict and optional note go back to that ticket. The gam
 gm review post <submission.json>
 ```
 
+Host merge tools can call `gm review close-check <game> <ticket> <sha>` before closing a ticket. It exits successfully
+only when the API confirms that the ticket's review phases permit closure; missing configuration and API errors refuse it.
+
 A review Command can also be tied to the round with `gm decide --key <round-id>` and the explicit option IDs
 `approved`, `needs_work`, and `kill`. Only the game owner's answer is applied to the round.
 
