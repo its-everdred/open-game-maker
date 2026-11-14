@@ -20,7 +20,15 @@ const sdkExports = {
   HudModel: hudModelSchema,
   SpokenText,
   Viewport: { w: 1, h: 1, dpr: 1, orientation: 1, safe: 1 } satisfies Record<keyof Viewport, 1>,
-  PlayerSettings: { mute: 1, volume: 1, textScale: 1, reduceMotion: 1 } satisfies Record<keyof PlayerSettings, 1>,
+  PlayerSettings: {
+    mute: 1,
+    volume: 1,
+    musicVolume: 1,
+    textScale: 1,
+    reduceMotion: 1,
+    gameOptions: 1,
+    keyboardBindings: 1,
+  } satisfies Record<keyof PlayerSettings, 1>,
   MultiplayerHooks: { spawn: 1, despawn: 1, snapshot: 1, applySnapshot: 1, hud: 1 } satisfies Record<
     keyof MultiplayerHooks,
     1

@@ -16,6 +16,8 @@ type AudioWindow = Window & {
 export interface AudioGraph {
   context: AudioContext;
   master: GainNode;
+  soundVolume: GainNode;
+  musicVolume: GainNode;
   buses: AudioBuses;
 }
 
@@ -27,15 +29,19 @@ export function createAudioGraph(win: Window, AudioContextCtor?: typeof AudioCon
   const context = new Context();
   const master = context.createGain();
   master.connect(context.destination);
+  const soundVolume = context.createGain();
+  const musicVolume = context.createGain();
+  soundVolume.connect(master);
+  musicVolume.connect(master);
 
   const buses = Object.fromEntries(
     Object.entries(BUS_GAINS).map(([name, value]) => {
       const bus = context.createGain();
       bus.gain.value = value;
-      bus.connect(master);
+      bus.connect(name === 'music' ? musicVolume : soundVolume);
       return [name, bus];
     }),
   ) as AudioBuses;
 
-  return { context, master, buses };
+  return { context, master, soundVolume, musicVolume, buses };
 }

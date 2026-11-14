@@ -75,6 +75,10 @@ export class InputMerger {
     this.setHeld(frame.playerIndex, frame.source, frame.actions);
   }
 
+  setKeyboardMapping(mapping: RigInputMapping['keyboard']): void {
+    this.keyboard?.setMapping(mapping);
+  }
+
   inject(frame: ActionFrame): void {
     if (!this.validPlayer(frame.playerIndex)) {
       this.dropped += 1;

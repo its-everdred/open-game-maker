@@ -1,5 +1,24 @@
 # Game SDK
 
+## Shared player settings
+
+The host owns the settings menu. Subscribe with `host.settings.onChange` and pass the received settings to
+`audio.applySettings(settings)` so sound and music levels are applied independently. Existing builds that select only
+`mute` and `volume` must forward `musicVolume` too. Handle `textScale` and `reduceMotion` in the game UI.
+
+Games may declare `gameOptions` in their manifest, for example
+`[{ "id": "hints", "label": "Hints", "kind": "toggle", "default": true }]`. The host presents these options and sends their values
+in `settings.gameOptions`. Options can also be `choice` (with labelled `choices`) or `number` (with `min`, `max`, and `step`); subscribe to settings and apply them in the game. Options are stored per game on the device.
+Both `musicVolume` and `gameOptions` are optional for compatibility with older hosts.
+The emitted JSON Schema checks option structure; cross-field checks for unique IDs, valid defaults, and number steps
+are enforced by the Zod manifest validator used by the SDK and host.
+
+To let players change keyboard controls, declare the complete code-to-action `controlBindings` mapping in the manifest,
+matching the mapping passed to `runtime.attachInput`. The shared menu sends `keyboardBindings`, and the runtime applies
+them to its keyboard input. Games using their own input handling must apply that field themselves. Escape remains a host
+hotkey and cannot be rebound in the shared menu. List any additional `runtime.attachInput` hotkeys in the manifest's
+`controlReservedKeys` array so the menu does not offer them as bindings.
+
 ## Lazy asset groups
 
 Register assets with `--phase lazy:backdrop-nim`; unmarked assets belong to boot. During the match countdown, call

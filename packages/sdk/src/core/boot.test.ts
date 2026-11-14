@@ -327,6 +327,37 @@ describe('boot', () => {
     );
   });
 
+  it('applies host keyboard bindings to the runtime input', async () => {
+    const { runtime } = await start();
+    const canvas = document.createElement('canvas');
+    const input = runtime.attachInput({
+      canvas,
+      mapping: { keyboard: { KeyG: 'go' }, touch: 'stick', gamepad: {}, pointerLock: false },
+    });
+    bridge.onMessage!(
+      message('settings', {
+        mute: false,
+        volume: 1,
+        textScale: 1,
+        reduceMotion: false,
+        keyboardBindings: { KeyJ: 'go' },
+      }),
+    );
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' }));
+    expect(input.sample(1)[0]!.actions).toEqual({ go: true });
+    bridge.onMessage!(
+      message('settings', {
+        mute: false,
+        volume: 0.5,
+        textScale: 1,
+        reduceMotion: false,
+        keyboardBindings: { KeyJ: 'go' },
+      }),
+    );
+    expect(input.sample(2)[0]!.actions).toEqual({ go: true });
+    runtime.dispose();
+  });
+
   it('owns host net input and post-step snapshots through Runtime.net', async () => {
     const { runtime } = await start();
     const received = vi.fn();

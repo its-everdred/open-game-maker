@@ -30,6 +30,7 @@ export type {
 export interface AudioSettings {
   mute: boolean;
   volume: number;
+  musicVolume?: number;
 }
 
 export interface CreateAudioOptions {
@@ -79,7 +80,9 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
   if (!fetcher) throw new Error('createAudio requires fetch when no audio loader is supplied');
 
   let settings = normalizeSettings(options.settings ?? { mute: false, volume: 1 });
-  graph.master.gain.value = settings.mute ? 0 : settings.volume;
+  graph.master.gain.value = settings.mute ? 0 : 1;
+  graph.musicVolume.gain.value = settings.musicVolume ?? 1;
+  graph.soundVolume.gain.value = settings.volume;
 
   const relay = new AudioRelay(options.bridge);
   const resolveUrl = options.resolveUrl ?? ((id: string) => id);
@@ -121,7 +124,7 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
     songs.stop();
   };
   const applyMaster = () => {
-    const gain = relay.enabled || settings.mute ? 0 : settings.volume;
+    const gain = relay.enabled || settings.mute ? 0 : 1;
     graph.master.gain.setTargetAtTime(gain, graph.context.currentTime, 0.05);
   };
   const play = (id: string, playOptions: PlayOptions = {}): AudioHandle | null => {
@@ -156,6 +159,8 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
     applySettings: (next) => {
       settings = normalizeSettings(next);
       applyMaster();
+      graph.musicVolume.gain.setTargetAtTime(settings.musicVolume ?? 1, graph.context.currentTime, 0.05);
+      graph.soundVolume.gain.setTargetAtTime(settings.volume, graph.context.currentTime, 0.05);
       unlock.refresh();
     },
     renderCue: (id, renderOptions) => {
@@ -186,5 +191,9 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
 }
 
 function normalizeSettings(settings: AudioSettings): AudioSettings {
-  return { mute: settings.mute, volume: Math.max(0, Math.min(1, settings.volume)) };
+  return {
+    mute: settings.mute,
+    volume: Math.max(0, Math.min(1, settings.volume)),
+    musicVolume: Math.max(0, Math.min(1, settings.musicVolume ?? settings.volume)),
+  };
 }

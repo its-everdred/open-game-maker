@@ -138,6 +138,65 @@ export const gameManifestSchema = z.looseObject({
   gizmos: z.record(z.string(), z.array(z.enum(['translate', 'rotateYaw', 'elevate', 'splinePoints']))),
   grid: z.looseObject({ size: z.number().positive(), units: z.string().max(16) }).optional(),
   playLabel: z.string().min(1).max(80).optional(),
+  /** Keyboard code to action mappings exposed to the shared controls menu. */
+  controlBindings: z.record(z.string().min(1).max(64), z.string().min(1).max(64)).optional(),
+  /** Extra game hotkeys that the shared menu must not reassign. */
+  controlReservedKeys: z.array(z.string().min(1).max(64)).max(64).optional(),
+  /** Optional game-specific settings presented by the shared menu. */
+  gameOptions: z
+    .array(
+      z.union([
+        z.looseObject({
+          id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
+          label,
+          kind: z.literal('toggle'),
+          default: z.boolean(),
+        }),
+        z
+          .looseObject({
+            id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
+            label,
+            kind: z.literal('choice'),
+            default: z.string().max(64),
+            choices: z
+              .array(z.looseObject({ value: z.string().max(64), label }))
+              .min(1)
+              .max(20),
+          })
+          .refine(
+            (option) =>
+              option.choices.some((choice) => choice.value === option.default) &&
+              new Set(option.choices.map((choice) => choice.value)).size === option.choices.length,
+            'Choice values must be unique and include the default',
+          ),
+        z
+          .looseObject({
+            id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
+            label,
+            kind: z.literal('number'),
+            default: z.number(),
+            min: z.number(),
+            max: z.number(),
+            step: z.number().positive(),
+          })
+          .refine(
+            (option) =>
+              option.min <= option.max &&
+              option.default >= option.min &&
+              option.default <= option.max &&
+              Math.abs(
+                (option.default - option.min) / option.step - Math.round((option.default - option.min) / option.step),
+              ) < 1e-9,
+            'Number default must be within bounds and aligned to step',
+          ),
+      ]),
+    )
+    .max(20)
+    .refine(
+      (options) => new Set(options.map((option) => option.id)).size === options.length,
+      'Option IDs must be unique',
+    )
+    .optional(),
   /** Appearance of the shell menu button while playing this game. */
   playMenuButton: z
     .looseObject({ colour: z.string().regex(/^#[0-9a-fA-F]{6}$/u), icon: z.enum(['pause', 'menu']) })
@@ -266,7 +325,15 @@ export type Viewport = {
   orientation: 'landscape' | 'portrait';
   safe: Insets;
 };
-export type PlayerSettings = { mute: boolean; volume: number; textScale: number; reduceMotion: boolean };
+export type PlayerSettings = {
+  mute: boolean;
+  volume: number;
+  musicVolume?: number;
+  textScale: number;
+  reduceMotion: boolean;
+  gameOptions?: Record<string, boolean | string | number>;
+  keyboardBindings?: Record<string, string>;
+};
 
 /** A4 §6 host surface plus test-hook registration. */
 export interface HostApi {

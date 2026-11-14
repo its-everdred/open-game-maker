@@ -23,7 +23,7 @@ export class KeyboardInput {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly mapping: RigInputMapping['keyboard'],
+    private mapping: RigInputMapping['keyboard'],
     private readonly onActions: (actions: Record<string, ActionValue>) => void,
     private readonly onRawKey: (key: RawKey) => void,
     hotkeys: Iterable<string> = ['Escape'],
@@ -42,8 +42,20 @@ export class KeyboardInput {
     this.canvas.removeEventListener('blur', this.onBlur);
   }
 
+  setMapping(mapping: RigInputMapping['keyboard']): void {
+    this.pressed.clear();
+    this.mapping = { ...mapping };
+    this.emit();
+  }
+
   private readonly onKeyDown = (event: KeyboardEvent) => {
-    if (preventDefaultCodes.has(event.code)) event.preventDefault();
+    if (
+      (event.ctrlKey || event.altKey || event.metaKey) &&
+      !/^(Control|Alt|Meta)(Left|Right)$/.test(event.code) &&
+      !this.hotkeys.has(event.code)
+    )
+      return;
+    if (preventDefaultCodes.has(event.code) || this.mapping[event.code]) event.preventDefault();
     if (this.hotkeys.has(event.code)) {
       this.onRawKey({ code: event.code, down: true });
       return;
@@ -54,7 +66,7 @@ export class KeyboardInput {
   };
 
   private readonly onKeyUp = (event: KeyboardEvent) => {
-    if (preventDefaultCodes.has(event.code)) event.preventDefault();
+    if (preventDefaultCodes.has(event.code) || this.mapping[event.code]) event.preventDefault();
     if (this.hotkeys.has(event.code)) {
       this.onRawKey({ code: event.code, down: false });
       return;

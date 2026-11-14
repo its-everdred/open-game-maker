@@ -34,6 +34,27 @@ function setup() {
 }
 
 describe('InputMerger', () => {
+  it('replaces keyboard bindings and clears keys held under the previous mapping', () => {
+    const { canvas, merger } = setup();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    expect(merger.sample(1)[0]!.actions).toEqual({ move: { x: 0, y: 1 } });
+    merger.setKeyboardMapping({ KeyJ: 'jump' });
+    expect(merger.sample(2)[0]!.actions).toEqual({});
+    const key = new KeyboardEvent('keydown', { code: 'KeyJ', cancelable: true });
+    canvas.dispatchEvent(key);
+    expect(key.defaultPrevented).toBe(true);
+    expect(merger.sample(3)[0]!.actions).toEqual({ jump: true });
+  });
+
+  it('keeps modifier keys usable as existing bindings while leaving browser shortcuts alone', () => {
+    const { canvas, merger } = setup();
+    merger.setKeyboardMapping({ ControlLeft: 'crouch', KeyW: 'move.up' });
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'ControlLeft', ctrlKey: true }));
+    const shortcut = new KeyboardEvent('keydown', { code: 'KeyW', ctrlKey: true, cancelable: true });
+    canvas.dispatchEvent(shortcut);
+    expect(shortcut.defaultPrevented).toBe(false);
+    expect(merger.sample(1)[0]!.actions).toEqual({ crouch: true });
+  });
   it('merges local keyboard with host gamepad and gives gamepad action ties priority', () => {
     const { canvas, host, merger } = setup();
     host({ playerIndex: 0, tick: 0, source: 'gamepad', actions: { jump: true, move: { x: 0.5, y: 0 } } });

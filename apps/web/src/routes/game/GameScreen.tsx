@@ -674,9 +674,15 @@ export function GameScreen() {
         frameState.manifest !== undefined &&
         activeSnapshot !== undefined ? (
           <PlatformHud
+            key={`platform-hud-${gameId}`}
             build={build}
             frame={frameRef.current}
             gameId={gameId}
+            actions={frameState.manifest.inputs.actions}
+            controlBindings={frameState.manifest.controlBindings}
+            controlReservedKeys={frameState.manifest.controlReservedKeys}
+            gameOptions={frameState.manifest.gameOptions}
+            open={menuOpen}
             paused={menuOpen && roomId === undefined}
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
             saves={frameState.manifest.saves}
