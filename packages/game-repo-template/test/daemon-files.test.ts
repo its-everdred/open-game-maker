@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash, createHmac } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -25,7 +26,7 @@ describe('renderDaemonFiles', () => {
     expect(hooks).toBe(fixture('hooks.expected'));
     expect(hooks).not.toMatch(/\/(home|Users|root|tmp)\//);
     expect(hooks).not.toMatch(/(aiur_|ghp_|github_pat_|sk-)[A-Za-z0-9]/);
-    expect(Object.keys(parse(hooks))).toEqual(['after_create', 'before_remove']);
+    expect(Object.keys(parse(hooks))).toEqual(['after_create', 'before_run', 'before_remove']);
   });
 
   it('renders a game daemon’s sparse checkout and game-scope prompt', () => {
@@ -98,7 +99,8 @@ describe('after_create hook', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ogm-hook-ws-'));
     const secretFile = join(mkdtempSync(join(tmpdir(), 'ogm-hook-secret-')), 'hook-secret');
     writeFileSync(secretFile, SECRET);
-    const script = parse(renderDaemonFiles().hooks).after_create as string;
+    const hooks = parse(renderDaemonFiles().hooks) as { after_create: string; before_run: string };
+    const script = `${hooks.after_create}\n${hooks.before_run}`;
     const child = spawn('bash', ['-c', script], {
       cwd: dir,
       env: {
@@ -114,7 +116,7 @@ describe('after_create hook', () => {
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
     const status = await new Promise<number | null>((resolve) => child.on('close', resolve));
-    return { dir, result: { status, stderr } };
+    return { dir, secretFile, result: { status, stderr } };
   }
 
   async function api(handler: Parameters<typeof createServer>[1]): Promise<string> {
@@ -130,6 +132,27 @@ describe('after_create hook', () => {
     expect(execFileSync('git', ['branch', '--show-current'], { cwd: dir, encoding: 'utf8' }).trim()).toBe('aiur/12');
     expect(readFileSync(join(dir, '.gm/context/bundle.missing'), 'utf8')).toBe('bundle unavailable\n');
     expect(existsSync(join(dir, '.gm/context/bundle.json'))).toBe(false);
+  });
+
+  it('provisions a scoped credential without an API URL', async () => {
+    const { dir, secretFile, result } = await runHook({ OGM_INTERNAL_URL: '' });
+    expect(result.status).toBe(0);
+    const preview = JSON.parse(readFileSync(join(dir, '.gm/context/preview.json'), 'utf8')) as { token: string };
+    expect(preview.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(preview).not.toHaveProperty('url');
+    const claims = JSON.parse(Buffer.from(preview.token.split('.')[0]!, 'base64url').toString('utf8')) as {
+      ticket: string;
+      grant: string;
+    };
+    const workspaceHash = createHash('sha256').update(dir).digest('hex');
+    expect(JSON.parse(readFileSync(join(secretFile, '..', 'preview-grants', `${workspaceHash}.json`), 'utf8'))).toEqual(
+      claims,
+    );
+    execFileSync('bash', ['-c', parse(renderDaemonFiles().hooks).before_remove as string], {
+      cwd: dir,
+      env: { PATH: HOOK_PATH, HOME: dir, OGM_HOOK_SECRET_FILE: secretFile },
+    });
+    expect(existsSync(join(secretFile, '..', 'preview-grants', `${workspaceHash}.json`))).toBe(false);
   });
 
   it('downloads the current creator design for the worker as context', async () => {
@@ -155,6 +178,14 @@ describe('after_create hook', () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, '.gm/context/design.json'), 'utf8')).doc.globals.scenery).toBe('forest');
     expect(readFileSync(join(dir, '.gm/context/ticket'), 'utf8')).toBe('12\n');
+    const preview = JSON.parse(readFileSync(join(dir, '.gm/context/preview.json'), 'utf8')) as {
+      token: string;
+    };
+    expect(preview.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    const [payload, signature] = preview.token.split('.');
+    expect(JSON.parse(Buffer.from(payload!, 'base64url').toString('utf8')).ticket).toBe('12');
+    expect(signature).toBe(createHmac('sha256', SECRET).update(`preview:${payload}`).digest('base64url'));
+    expect(readFileSync(join(dir, '.gm/context/preview.json'), 'utf8')).not.toContain(SECRET);
   });
 
   it('marks malformed design responses unavailable instead of trusting them', async () => {

@@ -1,3 +1,5 @@
+import { startPreviewRelay } from './previews/relay.js';
+import { previewTicketVerifier } from './previews/ticket.js';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -114,6 +116,7 @@ deps.registry.aiurClientFor = daemonDirectory.clientForSlug;
 deps.registry.workerWorkpad = createWorkpadReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.workerTitle = createTicketTitleReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.issueStateWriter = issues;
+startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));
 
 const budgetDefaults = {
   dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
