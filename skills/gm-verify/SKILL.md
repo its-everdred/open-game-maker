@@ -9,8 +9,8 @@ Never report a visual result you have not looked at. Code, logs, and a passing c
 
 ## Gates first
 
-1. Run `gm check`; fix every L0 failure.
-2. Run `gm test --ticks 3600`; fix every L1 failure. `gm test` exits on its own; never wrap it in a wait; on a stall exit, read the diagnostic.
+1. Run `gm check`; fix every L0 failure. After building, run `gm check boot --dist dist` before marking the game ready; fix a blank frame or missing readiness at either viewport.
+2. Build a separate test-mode artifact with `pnpm exec vite build --mode test --outDir .gm-test-dist`, then run `gm test --serve .gm-test-dist --ticks 3600`; fix every L1 failure. Keep the published `dist` intact for the boot check. `gm test` exits on its own; never wrap it in a wait; on a stall exit, read the diagnostic.
 3. Fix the first new console error before investigating anything after it.
 4. Run `gm options check` on any option set before it reaches the creator; a rejection in `design/feedback.json` blocks it.
 5. Commit tracked visual changes, then run `gm run --verify-source --frames 0,2,5` (host frame's top bar, Pause and touch overlay at 390x844, 844x390, 820x1180 and 1180x820; `--viewport all` adds desktop) and make the sheet with `gm shot --sheet shots/`.

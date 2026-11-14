@@ -74,14 +74,14 @@ describe('L1 promise specs', () => {
       return { status: 0, stdout: '', stderr: '' };
     });
 
-    await expect(runPromiseSpecs(root, { replay: runReplay, spawn })).resolves.toEqual({
+    await expect(runPromiseSpecs(root, { replay: runReplay, spawn, serveDir: 'test-build' })).resolves.toEqual({
       id: 'promises',
       ok: true,
       detail: '1 promise spec(s)',
     });
     expect(runReplay).toHaveBeenCalledWith(
       expect.objectContaining(replayJson),
-      expect.objectContaining({ serveDir: join(root, 'dist') }),
+      expect.objectContaining({ serveDir: join(root, 'test-build') }),
     );
   });
 

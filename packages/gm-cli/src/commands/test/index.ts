@@ -1,9 +1,12 @@
 import { resolve } from 'node:path';
 
+import type { GateResult } from '@ogm/gm-verify';
+
 import { UsageError, type GmCommand } from '../../command.js';
 import { niceCapture } from '../run/index.js';
 import { printGate } from '../check/index.js';
 import { testSoftwareRenderer } from '../../test-renderer.js';
+import { checkBoot } from '../check/boot.js';
 
 export const command: GmCommand = {
   name: 'test',
@@ -34,13 +37,44 @@ export const command: GmCommand = {
       }
     }
 
+    const started = Date.now();
+    const deadlineMs =
+      flags.deadline !== undefined
+        ? (flags.deadline as number) * 1_000
+        : Math.min(1_200_000, 120_000 + (ticks / 30) * 1_000);
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<GateResult>((resolveTimeout) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        ctx.onTestTimeout?.();
+        resolveTimeout({
+          gate: 'L1',
+          ok: false,
+          durationMs: Date.now() - started,
+          checks: [{ id: 'boot', ok: false, detail: 'overall deadline exceeded during boot' }],
+        });
+      }, deadlineMs);
+    });
+    let boot: GateResult;
+    try {
+      boot = await Promise.race([
+        checkBoot(ctx, flags.serve as string, undefined, controller.signal, started + deadlineMs),
+        timeout,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!boot.ok) return printGate(ctx, boot);
+    const remainingMs = Math.max(1, deadlineMs - (Date.now() - started));
+
     niceCapture();
     const result = await verify.runL1(ctx.cwd, {
       serveDir: flags.serve as string,
       outDir: resolve(ctx.cwd, flags.out as string),
       ...(inputs ? { inputs } : {}),
       ticks,
-      ...(flags.deadline !== undefined ? { deadlineMs: (flags.deadline as number) * 1_000 } : {}),
+      deadlineMs: remainingMs,
       progress: ctx.json ? ctx.err : ctx.out,
       onTimeout: (reason: string) => {
         ctx.err(`${reason}; writing diagnostic to ${resolve(ctx.cwd, flags.out as string)}`);

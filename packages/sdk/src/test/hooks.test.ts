@@ -43,6 +43,21 @@ describe('runtime hooks', () => {
     bridge.send.mockReset();
   });
 
+  it('signals frame readiness only when the game explicitly completes boot', async () => {
+    const listener = vi.fn();
+    window.addEventListener('gm-frame-ready', listener);
+    try {
+      const { runtime } = await start();
+      expect(listener).not.toHaveBeenCalled();
+      runtime.hooks.ready = false;
+      expect(listener).not.toHaveBeenCalled();
+      runtime.hooks.ready = true;
+      expect(listener).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener('gm-frame-ready', listener);
+    }
+  });
+
   it('advances sixty steps and renders once', async () => {
     const { runtime } = await start();
     const onFrame = vi.fn();
