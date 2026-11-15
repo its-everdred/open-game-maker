@@ -200,6 +200,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .showcase-ambient,
+  .is-selected .showcase-ambient {
+    animation: none;
+    transition: none;
+  }
   .game-cell-exiting,
   .games-grid [role='gridcell'].is-selected > .game-cell-tile {
     animation: none;

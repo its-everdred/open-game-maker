@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { Icon } from '../../components/Icon';
 import { Cover } from './Cover';
+import { Ambient } from './Ambient';
 import { GameTrailer } from './GameTrailer';
 import { splatMask } from './splatMask';
 import type { GameSummary } from './types';
@@ -47,9 +48,7 @@ export function ShowcaseSpotlight({
         }
       }}
     >
-      <div className="showcase-ambient" aria-hidden="true">
-        <Cover game={game} hero />
-      </div>
+      <Ambient game={game} />
       <button ref={close} type="button" className="games-close" aria-label="Close game" onClick={onClose}>
         <span aria-hidden="true">×</span>
       </button>
