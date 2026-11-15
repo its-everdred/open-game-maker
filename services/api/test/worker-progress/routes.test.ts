@@ -27,6 +27,8 @@ describe('worker progress route', () => {
         ownerId: user,
         title: 'Game',
         slug: 'test-game',
+        githubOwner: 'owner',
+        githubRepo: 'shared',
         visibility: 'private',
         repoVisibility: 'private',
         createdAt: at,
@@ -72,13 +74,43 @@ describe('worker progress route', () => {
     const denied = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(outsider) });
     expect(denied.status).toBeGreaterThanOrEqual(400);
     expect(state).not.toHaveBeenCalled();
+    const history = vi.fn().mockResolvedValue([
+      {
+        ticket: '11',
+        title: 'Done',
+        outcome: 'Completed',
+        closedAt: at,
+        url: 'https://github.com/owner/shared/issues/11',
+      },
+    ]);
+    deps.registry.workerHistory = history;
+    const deniedHistory = await app.request(`/api/v1/games/${game}/tickets/completed`, { headers: asUser(outsider) });
+    expect(deniedHistory.status).toBeGreaterThanOrEqual(400);
+    expect(history).not.toHaveBeenCalled();
+    const historyResponse = await app.request(`/api/v1/games/${game}/tickets/completed`, { headers: asUser(user) });
+    expect(historyResponse.status).toBe(200);
+    expect(history).toHaveBeenCalledWith('test-game', { owner: 'owner', name: 'shared' });
+    deps.registry.waitingTickets = vi
+      .fn()
+      .mockResolvedValue([{ ticket: '12', title: 'Forest backdrop', state: 'ci-wait' }]);
     const response = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      workers: [{ ticket: '12', title: 'Forest backdrop', percent: 50, etaSeconds: 10, source: 'daemon' }],
+      workers: [
+        {
+          ticket: '12',
+          title: 'Forest backdrop',
+          elapsedSeconds: 10,
+          state: 'ci-wait',
+          percent: null,
+          etaSeconds: null,
+          source: 'unknown',
+        },
+      ],
       cursor: 4,
       completed: [{ ticket: '11', seq: 4, at }],
     });
+    deps.registry.waitingTickets = null;
     deps.aiurClientForGame = async () => {
       throw new HttpError(409, 'daemon_not_found');
     };

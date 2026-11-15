@@ -82,6 +82,18 @@ export interface Registry {
   aiurClientFor: AiurClientResolver | null;
   workerWorkpad: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   workerTitle: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
+  workerHistory:
+    | ((
+        game: string,
+        repo?: { owner: string; name: string },
+      ) => Promise<import('../worker-progress/history.js').PastTicket[]>)
+    | null;
+  waitingTickets:
+    | ((
+        game: string,
+        repo: { owner: string; name: string },
+      ) => Promise<import('../worker-progress/waiting.js').WaitingTicket[]>)
+    | null;
   issueStateWriter: IssueStateWriter | null;
 }
 
@@ -98,6 +110,8 @@ export function createRegistry(): Registry {
     aiurClientFor: null,
     workerWorkpad: null,
     workerTitle: null,
+    workerHistory: null,
+    waitingTickets: null,
     issueStateWriter: null,
   };
 }

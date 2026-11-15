@@ -3,28 +3,27 @@ import { describe, expect, it } from 'vitest';
 import { workerProgress } from '../../src/worker-progress/progress.js';
 
 describe('worker progress', () => {
-  it('prefers the daemon percentage and estimates remaining time from runtime', () => {
+  it('reports the daemon check-in without extrapolating an ETA', () => {
     expect(workerProgress({ percent: 40, runtimeSeconds: 60, workpad: '- [x] Done\n- [ ] Later' })).toEqual({
       percent: 40,
-      etaSeconds: 90,
+      etaSeconds: null,
       source: 'daemon',
     });
+    expect(workerProgress({ percent: 100, runtimeSeconds: 60 }).etaSeconds).toBeNull();
   });
 
-  it('uses workpad checklist completion when daemon progress is unavailable', () => {
-    expect(workerProgress({ runtimeSeconds: 60, workpad: '## Agent Workpad\n- [x] First\n- [ ] Second' })).toEqual({
-      percent: 50,
-      etaSeconds: 60,
-      source: 'workpad',
-    });
-  });
-
-  it('keeps progress and ETA unknown when no estimate is possible', () => {
-    expect(workerProgress({ runtimeSeconds: 60, workpad: 'No checklist' })).toEqual({
+  it('does not turn a workpad checklist into progress', () => {
+    expect(workerProgress({ runtimeSeconds: 60, workpad: '- [x] First\n- [ ] Second' })).toEqual({
       percent: null,
       etaSeconds: null,
       source: 'unknown',
     });
-    expect(workerProgress({ percent: 0, runtimeSeconds: 60 }).etaSeconds).toBeNull();
   });
+});
+
+it('keeps demo and fixture data out of the production worker projection', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../../src/worker-progress/list.ts', import.meta.url), 'utf8');
+  expect(source).not.toMatch(/(?:from\s*|import\s*\()[^\n]*["'][^"']*(?:fixture|demo)/i);
+  expect(workerProgress({ percent: 50, runtimeSeconds: 30 }).etaSeconds).toBeNull();
 });

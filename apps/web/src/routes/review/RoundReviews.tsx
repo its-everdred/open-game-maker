@@ -4,7 +4,12 @@ import { useState } from 'react';
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
 
-type Round = { id: string; ticket: string; question: string | null; media: { kind: 'still' | 'clip'; url: string }[] };
+export type Round = {
+  id: string;
+  ticket: string;
+  question: string | null;
+  media: { kind: 'still' | 'clip'; url: string }[];
+};
 const key = (gameId: string) => ['game-review-rounds', gameId] as const;
 
 export function useReviewRounds(gameId: string) {
@@ -26,7 +31,7 @@ export function RoundReviews({ gameId, rounds }: { gameId: string; rounds: Round
   );
 }
 
-function RoundCard({ gameId, round }: { gameId: string; round: Round }) {
+export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round: Round; onAnswered?(): void }) {
   const [note, setNote] = useState('');
   const answer = useMutation({
     mutationFn: (verdict: 'approved' | 'needs_work') =>
@@ -34,7 +39,10 @@ function RoundCard({ gameId, round }: { gameId: string; round: Round }) {
         method: 'POST',
         json: { verdict, ...(note.trim() ? { note } : {}) },
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: key(gameId) });
+      onAnswered?.();
+    },
   });
   return (
     <section className="review-deck" aria-label={`Review for ticket ${round.ticket}`}>

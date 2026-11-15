@@ -102,6 +102,9 @@ vi.mock('../features/build-chat/jobs', () => ({
 }));
 vi.mock('../features/worker-builds/useWorkers', () => ({ useWorkers: () => ({ workers: state.workers, feeds: [] }) }));
 vi.mock('../features/worker-builds/useWorkerReviews', () => ({ useWorkerReviews: () => [] }));
+vi.mock('../features/worker-builds/usePastTickets', () => ({
+  usePastTickets: () => ({ tickets: [], error: false, loading: false }),
+}));
 vi.mock('../features/build-chat/Chat', () => ({
   Chat: ({ jobId }: { jobId?: string }) => <p>conversation {jobId}</p>,
 }));
@@ -252,7 +255,9 @@ describe('StudioMenu', () => {
     state.workers = [{ ticket: '12', title: 'Forest backdrop', percent: 50, etaSeconds: 10 }];
     renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
-    expect(screen.getByText('Forest backdrop · about 10s left')).toBeVisible();
+    expect(screen.getByText('Forest backdrop')).toBeVisible();
+    expect(screen.getByText('50%')).toBeVisible();
+    expect(screen.queryByText(/left/)).toBeNull();
   });
   it('applies the play theme and restores the default when the game leaves', () => {
     const view = render(

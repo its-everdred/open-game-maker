@@ -145,3 +145,15 @@
   margin-bottom: 5px;
   font: 600 14px var(--display);
 }
+.worker-tracker-list li > button,
+.worker-tracker-list li > a {
+  display: block;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 700 14px var(--display);
+  text-align: left;
+  text-decoration: none;
+}

@@ -48,7 +48,15 @@ export function PreviewReviews({ gameId, previews }: { gameId: string; previews:
   );
 }
 
-function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) {
+export function PreviewCard({
+  gameId,
+  preview,
+  onAnswered,
+}: {
+  gameId: string;
+  preview: Preview;
+  onAnswered?(): void;
+}) {
   const container = useRef<HTMLDivElement>(null);
   const [note, setNote] = useState('');
   const pending = /^Preview review of preview-[0-9a-f-]{36}: (looks right|needs work)\.(?:\n([\s\S]*))?$/u.exec(
@@ -69,7 +77,10 @@ function PreviewCard({ gameId, preview }: { gameId: string; preview: Preview }) 
         method: 'POST',
         json: { buildId: preview.buildId, verdict, ...(actualNote.trim() ? { note: actualNote } : {}) },
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: key(gameId) });
+      onAnswered?.();
+    },
     onError: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
   });
   useEffect(() => {
