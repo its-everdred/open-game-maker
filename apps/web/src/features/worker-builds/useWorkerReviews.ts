@@ -34,14 +34,16 @@ export function useWorkerReviews(games: readonly Game[], creatorId?: string) {
     const rounds = queries[index * 2]?.data as { rounds: Round[] } | undefined;
     const previews = queries[index * 2 + 1]?.data as { previews: Preview[] } | undefined;
     return [
-      ...(rounds?.rounds ?? []).map((round): WorkerReview => {
-        const preview = previews?.previews.find(
-          (item) => item.ticket === round.ticket && item.buildId === round.buildId,
-        );
-        return preview
-          ? { kind: 'preview', gameId: game.id, preview, round }
-          : { kind: 'round', gameId: game.id, round };
-      }),
+      ...(rounds?.rounds ?? [])
+        .filter((round) => !round.buildId || !queries[index * 2 + 1]?.isPending)
+        .map((round): WorkerReview => {
+          const preview = previews?.previews.find(
+            (item) => item.ticket === round.ticket && item.buildId === round.buildId,
+          );
+          return preview
+            ? { kind: 'preview', gameId: game.id, preview, round }
+            : { kind: 'round', gameId: game.id, round };
+        }),
     ];
   });
   return { reviews, error: queries.some((query) => query.isError), loading: queries.some((query) => query.isLoading) };

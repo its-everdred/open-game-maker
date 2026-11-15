@@ -157,3 +157,13 @@
   text-align: left;
   text-decoration: none;
 }
+.build-review-dialog .review-deck-playable {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  overflow: hidden;
+  border-radius: var(--r);
+}
+.build-review-dialog .review-deck-playable-frame {
+  position: absolute;
+  inset: 0;
+}

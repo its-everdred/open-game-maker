@@ -43,7 +43,7 @@ export function ReviewInbox({
   return (
     <Dialog
       title="Needs Review"
-      className="job-conversation-dialog decision-deck"
+      className="job-conversation-dialog decision-deck build-review-dialog"
       backdropClassName="job-conversation-backdrop"
       onClose={onClose}
     >
@@ -60,7 +60,13 @@ export function ReviewInbox({
                 {item.kind === 'still' ? (
                   <img className="review-deck-media" src={item.url} alt="Review" />
                 ) : (
-                  <video className="review-deck-media" src={item.url} controls playsInline />
+                  <video
+                    className="review-deck-media"
+                    style={{ pointerEvents: 'auto' }}
+                    src={item.url}
+                    controls
+                    playsInline
+                  />
                 )}
               </div>
             ))}

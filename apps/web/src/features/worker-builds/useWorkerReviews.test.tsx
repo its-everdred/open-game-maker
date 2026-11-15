@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { useWorkerReviews } from './useWorkerReviews';
@@ -41,6 +41,30 @@ describe('worker reviews', () => {
         },
       ]),
     );
+    unmount();
+    client.clear();
+  });
+  it('does not expose a build-backed round before its preview query settles', async () => {
+    let resolvePreview!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      resolvePreview = resolve;
+    });
+    api.mockImplementation((path: string) =>
+      path.includes('/review-rounds?')
+        ? Promise.resolve({
+            rounds: [{ id: 'r', ticket: '12', category: 'art', buildId: 'b', question: null, media: [] }],
+          })
+        : pending,
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useWorkerReviews([{ id: 'game' }], 'owner'), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    expect(result.current.reviews).toEqual([]);
+    await act(async () => resolvePreview({ previews: [{ ticket: '12', buildId: 'b' }] }));
+    await waitFor(() => expect(result.current.reviews[0]?.kind).toBe('preview'));
     unmount();
     client.clear();
   });

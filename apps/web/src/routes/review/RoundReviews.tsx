@@ -64,7 +64,7 @@ export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round
         </div>
       ))}
       {round.question ? <p>{round.question}</p> : null}
-      {round.category === 'gameplay' && <p role="alert">The playable review is unavailable. Try again later.</p>}
+      {round.buildId && <p role="alert">The playable review is unavailable. Try again later.</p>}
       <label>
         Note (optional)
         <textarea value={note} maxLength={3900} onChange={(event) => setNote(event.target.value)} />
@@ -72,14 +72,14 @@ export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round
       <div className="review-deck-actions">
         <button
           type="button"
-          disabled={answer.isPending || round.category === 'gameplay'}
+          disabled={answer.isPending || Boolean(round.buildId)}
           onClick={() => answer.mutate('approved')}
         >
           Looks right
         </button>
         <button
           type="button"
-          disabled={answer.isPending || round.category === 'gameplay'}
+          disabled={answer.isPending || Boolean(round.buildId)}
           onClick={() => answer.mutate('needs_work')}
         >
           Needs work

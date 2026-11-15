@@ -73,19 +73,12 @@ export function StudioMenu() {
   const isGameView = Boolean(game || isShowcase);
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
-  const { workers, feeds, error: workerError } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
-  const reviewData = useWorkerReviews(
-    isShowcase ? [] : builds.games.filter((game) => !gameId || game.id === gameId),
-    creatorId,
-  );
+  const ownedGames = isShowcase ? [] : builds.games.filter((item) => item.ownerId === creatorId);
+  const { workers, feeds, error: workerError } = useWorkers(ownedGames, gameId, creatorId);
+  const reviewData = useWorkerReviews(ownedGames, creatorId);
   const reviews = reviewData.reviews;
-  const past = usePastTickets(
-    isShowcase ? [] : builds.games.filter((item) => !gameId || item.id === gameId),
-    creatorId,
-  );
-  const reviewCommands = gameId
-    ? decisions.commands.filter((command) => command.game_id === gameId)
-    : decisions.commands;
+  const past = usePastTickets(ownedGames, creatorId);
+  const reviewCommands = decisions.commands;
   const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, creatorId);
   const visibleFinished = isShowcase
     ? []

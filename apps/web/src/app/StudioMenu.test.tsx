@@ -76,7 +76,11 @@ function ThemedControls() {
 
 const state = vi.hoisted(() => ({
   admin: { data: undefined as { platformRole: 'maintainer' | 'admin' | 'none' } | undefined },
-  jobs: { jobs: [] as TestJob[], active: [] as TestJob[], games: [] as Array<{ id: string; title: string }> },
+  jobs: {
+    jobs: [] as TestJob[],
+    active: [] as TestJob[],
+    games: [] as Array<{ id: string; title: string; ownerId?: string }>,
+  },
   session: { data: null as { user: { id: string } } | null },
   decisions: [] as TestDecision[],
   sessions: [] as Array<{ game_id: string; game_title: string; count: number }>,
@@ -94,13 +98,19 @@ const sound = vi.hoisted(() => ({
 const auth = vi.hoisted(() => ({ signOut: vi.fn() }));
 const report = vi.hoisted(() => ({ sendReport: vi.fn() }));
 const jobControls = vi.hoisted(() => ({ setJobPaused: vi.fn() }));
+const workerHooks = vi.hoisted(() => ({ observed: vi.fn() }));
 
 vi.mock('../features/build-chat/jobs', () => ({
   isTerminal: (value: string) => ['done', 'failed', 'cancelled'].includes(value),
   useMyJobs: () => state.jobs,
   setJobPaused: jobControls.setJobPaused,
 }));
-vi.mock('../features/worker-builds/useWorkers', () => ({ useWorkers: () => ({ workers: state.workers, feeds: [] }) }));
+vi.mock('../features/worker-builds/useWorkers', () => ({
+  useWorkers: (games: unknown) => {
+    workerHooks.observed(games);
+    return { workers: state.workers, feeds: [] };
+  },
+}));
 vi.mock('../features/worker-builds/useWorkerReviews', () => ({
   useWorkerReviews: () => ({ reviews: [], error: false, loading: false }),
 }));
@@ -212,10 +222,21 @@ afterEach(() => {
   auth.signOut.mockReset();
   report.sendReport.mockReset();
   jobControls.setJobPaused.mockReset();
+  workerHooks.observed.mockReset();
   vi.useRealTimers();
 });
 
 describe('StudioMenu', () => {
+  it('requests build data only for the signed-in creator’s games', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.jobs.games = [
+      { id: 'mine', title: 'Mine', ownerId: 'user-1' },
+      { id: 'other', title: 'Other', ownerId: 'user-2' },
+    ];
+    renderMenu('/games');
+    expect(workerHooks.observed).toHaveBeenLastCalledWith([{ id: 'mine', title: 'Mine', ownerId: 'user-1' }]);
+  });
+
   it.each(['/all', '/all/', '/new', '/new/'])('keeps the sound control directly available on %s', (path) => {
     renderMenu(path);
     const volume = screen.getByRole('button', { name: 'Mute' });
