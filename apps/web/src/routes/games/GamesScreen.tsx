@@ -3,12 +3,23 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { registerTestApi } from '../../app/testHook';
 import { CopyLink } from './CopyLink';
-import { glideTiles, measureTiles, type TileRects } from './flip';
+import { GameCell } from './GameCell';
+import {
+  cancelGlides,
+  fitExitingLayers,
+  glideCover,
+  glideTiles,
+  measureCovers,
+  measureTiles,
+  type CoverRect,
+  type TileRects,
+} from './flip';
 import { Spotlight } from './Spotlight';
 import { ShowcaseSpotlight } from './ShowcaseSpotlight';
 import { ShowcaseMenuControls } from './ShowcaseMenuControls';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
+import { TransitionGrid } from './TransitionGrid';
 import { gameUpdatedAt, type GameSummary, type JobView } from './types';
 import { indexActiveJobs, useActiveJobs } from './useActiveJobs';
 import { useBranches } from './useBranches';
@@ -45,7 +56,12 @@ export function GamesScreen() {
   const branchesQuery = useBranches(target?.id ?? null);
   const branches = branchesQuery.data ?? [];
   const gridRef = useRef<HTMLDivElement>(null);
+  const pendingRects = useRef<TileRects | null>(null);
+  const pendingFocusId = useRef<string | null>(null);
+  const pendingCovers = useRef<Map<string, CoverRect> | null>(null);
   const previousRects = useRef<TileRects>(new Map());
+  const previousCovers = useRef(new Map<string, CoverRect>());
+  const lastLayout = useRef<{ games: GameSummary[]; selectedId: string | null } | null>(null);
   const activeJobs = useMemo(() => indexActiveJobs(jobs), [jobs]);
   const sortedGames = useMemo(() => sortGames(games, activeJobs), [games, activeJobs]);
   const selectedIndex = selected ? sortedGames.findIndex((game) => game.id === selected.id) : null;
@@ -53,10 +69,16 @@ export function GamesScreen() {
   const initialViewChosen = useRef(false);
   const fitsThumbnailRow = gridCapacity !== null && sortedGames.length <= gridCapacity;
 
+  const captureTransition = () => {
+    pendingRects.current = measureTiles(gridRef.current);
+    pendingCovers.current = measureCovers(gridRef.current);
+  };
+
   const select = (index: number) => {
     const game = sortedGames[index];
     if (!game) return;
     initialViewChosen.current = true;
+    captureTransition();
     const next = new URLSearchParams(searchParams);
     next.set('spotlight', game.id);
     setSearchParams(next, { state: null });
@@ -65,16 +87,11 @@ export function GamesScreen() {
   const close = () => {
     initialViewChosen.current = true;
     const returningTo = selected?.id;
+    captureTransition();
     const next = new URLSearchParams(searchParams);
     next.delete('spotlight');
     setSearchParams(next, { state: { spotlightDismissed: true } });
-    queueMicrotask(() => {
-      if (!returningTo) return;
-      const cell = [...(gridRef.current?.querySelectorAll<HTMLElement>('[data-game-id]') ?? [])].find(
-        (item) => item.dataset.gameId === returningTo,
-      );
-      cell?.querySelector<HTMLButtonElement>('button')?.focus();
-    });
+    pendingFocusId.current = returningTo ?? null;
   };
 
   const open = (index: number, mode: 'play' | 'edit' = 'play', branchId?: string) => {
@@ -122,10 +139,40 @@ export function GamesScreen() {
     spotlightDismissed,
   ]);
 
+  useEffect(() => {
+    if (!pendingFocusId.current || selectedId || !gridRef.current) return;
+    const cell = [...gridRef.current.querySelectorAll<HTMLElement>('[data-game-id]')].find(
+      (item) => item.dataset.gameId === pendingFocusId.current,
+    );
+    cell?.querySelector<HTMLButtonElement>('.game-tile')?.focus();
+    pendingFocusId.current = null;
+  }, [selectedId, gamesQuery.isPending]);
+
   useLayoutEffect(() => {
-    glideTiles(gridRef.current, previousRects.current);
-    previousRects.current = measureTiles(gridRef.current);
-  }, [sortedGames]);
+    const grid = gridRef.current;
+    if (!grid) return;
+    const previousSelection = lastLayout.current?.selectedId;
+    if (lastLayout.current?.games !== sortedGames || previousSelection !== selectedId) {
+      lastLayout.current = { games: sortedGames, selectedId };
+      cancelGlides();
+      fitExitingLayers(grid);
+      const nextRects = measureTiles(grid);
+      const before = pendingRects.current ?? previousRects.current;
+      for (const id of new Set([selectedId, previousSelection])) {
+        if (!id) continue;
+        const cover = pendingCovers.current?.get(id) ?? previousCovers.current.get(id) ?? null;
+        glideCover(grid, before, cover);
+      }
+      glideTiles(grid, before);
+      pendingCovers.current = null;
+      pendingRects.current = null;
+      previousRects.current = nextRects;
+    }
+    return () => {
+      previousRects.current = measureTiles(grid);
+      previousCovers.current = measureCovers(grid);
+    };
+  }, [sortedGames, selectedId, gamesQuery.isPending]);
 
   gamesTestSnapshot.selected = selected?.id ?? null;
   gamesTestSnapshot.tiles = sortedGames.map((game) => game.id);
@@ -143,29 +190,6 @@ export function GamesScreen() {
   return (
     <div className={`games-screen${fitsThumbnailRow ? ' games-single-row' : ''}`}>
       {selected?.showcase && !selected.id.startsWith('showcase:') && <ShowcaseMenuControls game={selected} />}
-      {selected?.showcase ? (
-        <ShowcaseSpotlight
-          game={selected}
-          canOpen={Boolean(
-            (selected.id.startsWith('showcase:') && selected.showcase.id !== 'goblin-cellar') ||
-            (target && (branches.find((branch) => branch.name === 'main') ?? branches[0])?.latestBuildId),
-          )}
-          onPlay={() => open(selectedIndex ?? -1, 'play')}
-          onEdit={() => open(selectedIndex ?? -1, 'edit')}
-          onClose={close}
-        />
-      ) : (
-        selected && (
-          <Spotlight
-            game={selected}
-            branches={branches}
-            job={activeJobs.get(selected.id)}
-            onPlay={(branchId) => open(selectedIndex ?? -1, 'play', branchId)}
-            onEdit={(branchId) => open(selectedIndex ?? -1, 'edit', branchId)}
-            onClose={close}
-          />
-        )
-      )}
 
       {gamesQuery.isError && games.length === 0 ? (
         <RetryLine onRetry={() => void gamesQuery.refetch()} />
@@ -180,29 +204,66 @@ export function GamesScreen() {
             <p className="games-empty">No games yet. Start with a new idea.</p>
           ) : (
             <div className="games-floor">
-              <div ref={gridRef} className="games-grid" role="grid" aria-label="Your games" onKeyDown={nav.onKeyDown}>
+              <TransitionGrid
+                gridRef={gridRef}
+                order={sortedGames}
+                selectedId={selectedId}
+                onSnapshot={captureTransition}
+                onKeyDown={nav.onKeyDown}
+              >
                 {sortedGames.map((game, index) => (
-                  <div
+                  <GameCell
                     key={game.id}
-                    role="gridcell"
-                    data-game-id={game.id}
-                    className={game.id === selected?.id ? 'is-selected' : undefined}
-                  >
-                    <Tile
-                      game={game}
-                      job={activeJobs.get(game.id)}
-                      selected={game.id === selected?.id}
-                      tabIndex={nav.tabIndexFor(index)}
-                      onFocus={() => nav.focusAt(index)}
-                      onClick={() => {
-                        nav.focusAt(index);
-                        select(index);
-                      }}
-                    />
-                    {!game.showcase && <CopyLink id={game.id} slug={game.slug} title={game.title} />}
-                  </div>
+                    game={game}
+                    selected={game.id === selected?.id}
+                    tile={
+                      <>
+                        <Tile
+                          game={game}
+                          sharedCover
+                          job={activeJobs.get(game.id)}
+                          selected={false}
+                          tabIndex={nav.tabIndexFor(index)}
+                          onFocus={() => nav.focusAt(index)}
+                          onClick={() => {
+                            nav.focusAt(index);
+                            select(index);
+                          }}
+                        />
+                        {!game.showcase && <CopyLink id={game.id} slug={game.slug} title={game.title} />}
+                      </>
+                    }
+                    spotlight={
+                      game.id === selected?.id && selected ? (
+                        selected.showcase ? (
+                          <ShowcaseSpotlight
+                            game={selected}
+                            sharedCover
+                            canOpen={Boolean(
+                              (selected.id.startsWith('showcase:') && selected.showcase.id !== 'goblin-cellar') ||
+                              (target &&
+                                (branches.find((branch) => branch.name === 'main') ?? branches[0])?.latestBuildId),
+                            )}
+                            onPlay={() => open(selectedIndex ?? -1, 'play')}
+                            onEdit={() => open(selectedIndex ?? -1, 'edit')}
+                            onClose={close}
+                          />
+                        ) : (
+                          <Spotlight
+                            game={selected}
+                            sharedCover
+                            branches={branches}
+                            job={activeJobs.get(selected.id)}
+                            onPlay={(branchId) => open(selectedIndex ?? -1, 'play', branchId)}
+                            onEdit={(branchId) => open(selectedIndex ?? -1, 'edit', branchId)}
+                            onClose={close}
+                          />
+                        )
+                      ) : null
+                    }
+                  />
                 ))}
-              </div>
+              </TransitionGrid>
             </div>
           )}
         </>
@@ -219,9 +280,7 @@ export function GamesScreen() {
   );
 }
 
-// Changing the spotlight changes the screen error boundary's key, so the route
-// remounts this screen while the closing navigation lands. The dismissal rides
-// along on the history entry so the few-games select view stays dismissed.
+// The dismissal rides on the history entry so the few-games select view stays dismissed.
 function isSpotlightDismissed(state: unknown): boolean {
   return (
     typeof state === 'object' &&

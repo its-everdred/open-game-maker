@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { GameSummary } from './types';
 
-export function GameTrailer({ game }: { game: GameSummary }) {
+export function GameTrailer({ game, transparentPoster = false }: { game: GameSummary; transparentPoster?: boolean }) {
   const portrait = useRef<HTMLVideoElement>(null);
   const landscape = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -20,7 +20,10 @@ export function GameTrailer({ game }: { game: GameSummary }) {
           controls
           playsInline
           preload="none"
-          poster={game.coverUrl ?? undefined}
+          poster={
+            game.coverUrl ??
+            (transparentPoster ? 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E' : undefined)
+          }
           aria-label={`${game.title} trailer`}
           src={game.portraitTrailerUrl}
         />
@@ -31,7 +34,10 @@ export function GameTrailer({ game }: { game: GameSummary }) {
         controls
         playsInline
         preload="none"
-        poster={game.coverUrl ?? undefined}
+        poster={
+          game.coverUrl ??
+          (transparentPoster ? 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E' : undefined)
+        }
         aria-label={`${game.title} trailer`}
         src={game.trailerUrl ?? undefined}
       />

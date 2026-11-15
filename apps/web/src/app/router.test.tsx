@@ -315,6 +315,20 @@ describe('screen route collection', () => {
     expect(screen.getByRole('button', { name: 'Adventure' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('preserves the games screen while spotlight selection changes', async () => {
+    const routes = collectScreenRoutes({
+      '../routes/all/route.tsx': {
+        route: { path: '/all', element: <StatefulScreen />, chrome: 'app', auth: 'none' },
+      },
+    });
+    const router = createMemoryRouter(routes, { initialEntries: ['/all?spotlight=g_1'] });
+    render(<RouterProvider router={router} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Adventure' }));
+    await router.navigate('/all?spotlight=g_2');
+    expect(await screen.findByText('?spotlight=g_2')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Adventure' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('resets screen state when the same route selects another game', async () => {
     const routes = collectScreenRoutes({
       '../routes/games/route.tsx': {

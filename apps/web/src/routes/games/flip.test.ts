@@ -1,10 +1,94 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { glideTiles, type TileRects } from './flip';
+import { glideCover, glideTiles, type TileRects } from './flip';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('glideTiles', () => {
+  it('animates position and size changes in both directions', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false })),
+    );
+    const tile = document.createElement('div');
+    tile.dataset.gameId = 'g_1';
+    tile.animate = vi.fn();
+    tile.getBoundingClientRect = vi.fn(() => ({ left: 0, top: 20, bottom: 220, width: 400, height: 200 }) as DOMRect);
+    const container = document.createElement('div');
+    container.append(tile);
+    glideTiles(container, new Map([['g_1', { left: 100, top: 30, width: 200, height: 100 } as DOMRect]]));
+    expect(tile.animate).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ transform: 'translate(100px, 10px) scale(0.5, 0.5)' })]),
+      expect.objectContaining({ duration: 300 }),
+    );
+  });
+
+  it('keeps the cover at its old rectangle while its cell expands', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false })),
+    );
+    const container = document.createElement('div');
+    container.innerHTML = '<div data-game-id="g_1"><span class="game-cover-host"></span></div>';
+    const cell = container.firstElementChild as HTMLElement;
+    const host = cell.firstElementChild as HTMLElement;
+    cell.getBoundingClientRect = vi.fn(() => ({ left: 0, top: 0, width: 400, height: 400 }) as DOMRect);
+    host.getBoundingClientRect = vi.fn(() => ({ left: 200, top: 0, width: 200, height: 200 }) as DOMRect);
+    host.animate = vi.fn();
+    const before = new Map([['g_1', { left: 100, top: 0, width: 200, height: 200 } as DOMRect]]);
+    glideCover(container, before, { id: 'g_1', rect: { left: 100, top: 0, width: 200, height: 200 } as DOMRect });
+    expect(host.animate).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ transform: 'translate(-200px, 0px) scale(2, 2)' })]),
+      expect.objectContaining({ duration: 300 }),
+    );
+  });
+
+  it('unclips a masked spotlight while its cover moves', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false })),
+    );
+    const container = document.createElement('div');
+    container.innerHTML =
+      '<div data-game-id="g_1"><div class="games-spotlight-media"><span class="game-cover-host"></span></div></div>';
+    const cell = container.firstElementChild as HTMLElement;
+    const media = cell.firstElementChild as HTMLElement;
+    const host = media.firstElementChild as HTMLElement;
+    cell.getBoundingClientRect = vi.fn(() => ({ left: 0, top: 0, width: 400, height: 400 }) as DOMRect);
+    host.getBoundingClientRect = vi.fn(() => ({ left: 200, top: 0, width: 200, height: 200 }) as DOMRect);
+    media.animate = vi.fn();
+    host.animate = vi.fn();
+    glideCover(container, new Map([['g_1', { left: 100, top: 0, width: 200, height: 200 } as DOMRect]]), {
+      id: 'g_1',
+      rect: { left: 100, top: 0, width: 200, height: 200 } as DOMRect,
+    });
+    expect(media.animate).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ maskImage: 'none' })]),
+      expect.anything(),
+    );
+  });
+
+  it('leaves the mask alone when cover geometry has not changed', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false })),
+    );
+    const container = document.createElement('div');
+    container.innerHTML =
+      '<div data-game-id="g_1"><div class="games-spotlight-media"><span class="game-cover-host"></span></div></div>';
+    const cell = container.firstElementChild as HTMLElement;
+    const media = cell.firstElementChild as HTMLElement;
+    const host = media.firstElementChild as HTMLElement;
+    const rect = { left: 0, top: 0, width: 200, height: 200 } as DOMRect;
+    cell.getBoundingClientRect = vi.fn(() => rect);
+    host.getBoundingClientRect = vi.fn(() => rect);
+    media.animate = vi.fn();
+    host.animate = vi.fn();
+    glideCover(container, new Map([['g_1', rect]]), { id: 'g_1', rect });
+    expect(media.animate).not.toHaveBeenCalled();
+    expect(host.animate).not.toHaveBeenCalled();
+  });
+
   it('does not animate reordered tiles when reduced motion is requested', () => {
     vi.stubGlobal(
       'matchMedia',

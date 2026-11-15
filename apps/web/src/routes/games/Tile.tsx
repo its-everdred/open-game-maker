@@ -5,6 +5,7 @@ import { gameTags, type GameSummary, type JobView } from './types';
 
 type TileProps = {
   game: GameSummary;
+  sharedCover?: boolean;
   job?: JobView;
   selected: boolean;
   tabIndex: number;
@@ -12,7 +13,7 @@ type TileProps = {
   onFocus(): void;
 };
 
-export function Tile({ game, job, selected, tabIndex, onClick, onFocus }: TileProps) {
+export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCover }: TileProps) {
   if (game.showcase) {
     const tags = game.showcase.displayTags.filter((tag) => tag.kind === 'genre' || tag.kind === 'vibe').slice(0, 4);
     return (
@@ -26,7 +27,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus }: TilePr
         onFocus={onFocus}
       >
         <span className="game-cover">
-          <Cover game={game} />
+          {sharedCover ? <span data-cover-slot /> : <Cover game={game} />}
           {job && <span className="game-building-chip">{jobLabel(job)}</span>}
           {game.showcase.badge && <span className="game-new-badge">{game.showcase.badge}</span>}
           <span className="game-tile-meta">
@@ -62,7 +63,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus }: TilePr
       onFocus={onFocus}
     >
       <span className="game-cover">
-        <Cover game={game} />
+        {sharedCover ? <span data-cover-slot /> : <Cover game={game} />}
         {job && <span className="game-building-chip">{jobLabel(job)}</span>}
         {!game.publishedReleaseId && <span className="game-new-badge">New</span>}
         <span className="game-tile-meta">

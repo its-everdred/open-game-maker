@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 type SceneModule = {
   ready: Promise<unknown>;
@@ -7,6 +7,7 @@ type SceneModule = {
   blueprint(context: CanvasRenderingContext2D, time: number, width: number, height: number, progress: number): void;
 };
 let sceneModule: Promise<SceneModule> | undefined;
+const lastFrames = new Map<string, HTMLCanvasElement>();
 const sceneArt: Record<string, string> = {
   'goblin-cellar': 'goblin-fight.webp',
   restorebound: 'town.png',
@@ -39,8 +40,17 @@ function loadScenes(): Promise<SceneModule> {
 export function ShowcaseCover({ id, title, hero }: { id: string; title: string; hero: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [painted, setPainted] = useState(false);
+  useLayoutEffect(() => {
+    const target = canvas.current;
+    const previous = lastFrames.get(id);
+    if (!target || !previous) return;
+    target.width = previous.width;
+    target.height = previous.height;
+    target.getContext('2d')?.drawImage(previous, 0, 0);
+    setPainted(true);
+  }, [id]);
   useEffect(() => {
-    setPainted(false);
+    setPainted(lastFrames.has(id));
     let active = true;
     let visible = true;
     let frame = 0;
@@ -80,6 +90,13 @@ export function ShowcaseCover({ id, title, hero }: { id: string; title: string; 
               if (context) scenes.blueprint(context, (now - started) / 1000, 320, 180, 0);
             } else {
               scenes.paint(target, key, hero ? 0 : index, start + (hero && !reduced ? (now - started) / 1000 : 0));
+            }
+            if (!lastFrames.has(key)) {
+              const frameCopy = document.createElement('canvas');
+              frameCopy.width = target.width;
+              frameCopy.height = target.height;
+              frameCopy.getContext('2d')?.drawImage(target, 0, 0);
+              lastFrames.set(key, frameCopy);
             }
             setPainted(true);
           }

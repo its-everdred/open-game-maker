@@ -261,6 +261,26 @@ describe('GamesScreen', () => {
     expect(container.querySelectorAll('.game-tile')).toHaveLength(16);
   });
 
+  it('expands the selected game inside its existing grid position and restores it on close', async () => {
+    const { container } = renderGames('/all?test');
+    const tile = await screen.findByRole('button', { name: /^Goblin Cellar:/ });
+    const cell = tile.closest('[data-game-id]')!;
+    const cover = cell.querySelector('.game-cover-host .game-cover-image');
+    expect(cover).not.toBeNull();
+    const id = cell.getAttribute('data-game-id');
+    const order = [...container.querySelectorAll('[data-game-id]')].map((item) => item.getAttribute('data-game-id'));
+    fireEvent.click(tile);
+    const spotlight = await screen.findByRole('region', { name: /Goblin Cellar spotlight/ });
+    expect(spotlight.closest('[data-game-id]')).toHaveAttribute('data-game-id', id);
+    expect(spotlight.querySelector('.games-spotlight-media .game-cover-image')).toBe(cover);
+    expect([...container.querySelectorAll('[data-game-id]')].map((item) => item.getAttribute('data-game-id'))).toEqual(
+      order,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Close game' }));
+    expect(await screen.findByRole('button', { name: /^Goblin Cellar:/ })).toBeVisible();
+    expect(container.querySelector('[data-game-id="g_2"] .game-cover-image')).toBe(cover);
+  });
+
   it('keeps the grid dismissed after the closing navigation lands', async () => {
     renderGames('/games?test');
     fireEvent.click(await screen.findByRole('button', { name: /^Goblin Cellar:/ }));
@@ -347,7 +367,7 @@ describe('GamesScreen', () => {
     await waitFor(() => expect(close).toHaveFocus());
     fireEvent.keyDown(close, { key: 'Escape' });
     await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight'));
-    expect(tile).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Goblin Cellar/ })).toHaveFocus());
   });
 
   it('does not auto-select again when a user chooses and closes a game before measurement settles', async () => {

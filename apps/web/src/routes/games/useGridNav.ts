@@ -1,3 +1,5 @@
+import { countGridTracks } from './useGridCapacity';
+
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 
 type GridNavOptions = {
@@ -25,12 +27,14 @@ export function useGridNav(options: GridNavOptions) {
   // title and first decision off the top (#629). Moving between tiles afterwards still scrolls them into view.
   const arrived = useRef(false);
   useEffect(() => {
-    const tile = options.containerRef?.current?.querySelectorAll<HTMLButtonElement>('.game-tile')[focused];
+    if (focused === options.selectedIndex) return;
+    const cell = options.containerRef?.current?.querySelectorAll<HTMLElement>('[role=gridcell]')[focused];
+    const tile = cell?.querySelector<HTMLButtonElement>('.game-tile');
     // already focused: StrictMode's second effect run must not spend the arrival
     if (!tile || tile === document.activeElement) return;
     tile.focus({ preventScroll: !arrived.current });
     arrived.current = true;
-  }, [focused, options.containerRef]);
+  }, [focused, options.containerRef, options.selectedIndex]);
 
   const focusAt = useCallback(
     (index: number) => setFocused(Math.max(0, Math.min(index, Math.max(0, options.count - 1)))),
@@ -39,6 +43,7 @@ export function useGridNav(options: GridNavOptions) {
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest('.games-spotlight')) return;
       const columns = Math.max(1, options.columns());
       let next = focused;
 
@@ -74,6 +79,10 @@ export function useGridNav(options: GridNavOptions) {
           return;
       }
 
+      if (next === options.selectedIndex && next !== focused) {
+        const candidate = next + (next > focused ? 1 : -1);
+        next = candidate >= 0 && candidate < options.count ? candidate : focused;
+      }
       event.preventDefault();
       setFocused(next);
     },
@@ -83,15 +92,15 @@ export function useGridNav(options: GridNavOptions) {
   return {
     focused,
     focusAt,
-    tabIndexFor: (index: number) => (index === focused ? 0 : -1),
+    tabIndexFor: (index: number) => {
+      const tabStop = focused === options.selectedIndex ? (focused === 0 ? 1 : 0) : focused;
+      return index === tabStop ? 0 : -1;
+    },
     onKeyDown,
   };
 }
 
 export function measureGridColumns(container: HTMLElement | null): number {
-  const tiles = [...(container?.querySelectorAll<HTMLElement>('[role="gridcell"]') ?? [])];
-  if (tiles.length < 2) return 1;
-  const firstTop = tiles[0]!.offsetTop;
-  const columns = tiles.findIndex((tile) => tile.offsetTop !== firstTop);
-  return columns === -1 ? tiles.length : Math.max(1, columns);
+  if (!container) return 1;
+  return Math.max(1, countGridTracks(getComputedStyle(container).gridTemplateColumns));
 }

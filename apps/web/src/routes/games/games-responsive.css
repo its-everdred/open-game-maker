@@ -6,6 +6,11 @@
     transform: scale(1.035);
   }
 
+  .games-grid [role='gridcell']:has(> .game-cell-exiting) .game-tile {
+    transform: none;
+    transition: none;
+  }
+
   .game-tile:hover {
     box-shadow: 0 24px 64px -8px var(--shadow-color);
   }
@@ -189,6 +194,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .game-cell-exiting,
+  .games-grid [role='gridcell'].is-selected > .game-cell-tile {
+    animation: none;
+    opacity: 0;
+  }
+
+  .game-trailer-layer,
+  .game-trailer-layer.is-closing {
+    animation: none;
+    transition: none;
+  }
+
   .game-tile,
   .game-cover-image,
   .game-cover-placeholder,
