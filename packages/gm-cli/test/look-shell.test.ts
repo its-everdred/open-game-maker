@@ -5,7 +5,13 @@ import { gm, tempDir } from './helpers.js';
 import { run } from '../src/cli.js';
 import { captureScratch } from '../src/commands/look/shell.js';
 
-const capture = vi.hoisted(() => ({ calls: [] as string[][], fail: false, timeout: false }));
+const capture = vi.hoisted(() => ({
+  calls: [] as string[][],
+  fail: false,
+  timeout: false,
+  screenshotTimeout: false,
+  softwareTimeout: false,
+}));
 vi.mock('../src/commands/capture/shell.js', async (original) => {
   const actual = await original<typeof import('../src/commands/capture/shell.js')>();
   return {
@@ -13,6 +19,7 @@ vi.mock('../src/commands/capture/shell.js', async (original) => {
     runChild: async (_cwd: string, args: string[]) => {
       capture.calls.push(args);
       if (capture.timeout) return 3;
+      if (capture.screenshotTimeout && (args[6] === '0' || capture.softwareTimeout)) return 42;
       if (capture.fail) return 1;
       const out = args[2]!;
       for (const size of ['390x844', '844x390', '820x1180', '1180x820']) {
@@ -84,6 +91,48 @@ describe('gm look shell', () => {
       rmSync(root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it('retries a stalled GPU screenshot with software rendering', async () => {
+    const root = tempDir();
+    mkdirSync(join(root, 'dist/design'), { recursive: true });
+    writeFileSync(join(root, 'dist/index.html'), 'game');
+    writeFileSync(join(root, 'dist/design/design.json'), '{}');
+    capture.calls.length = 0;
+    capture.screenshotTimeout = true;
+    try {
+      const result = await gm(['look', 'shell', '--dist', 'dist', '--out', 'shots'], {
+        cwd: root,
+        env: { XDG_RUNTIME_DIR: root },
+      });
+      expect(result.code).toBe(0);
+      expect(capture.calls.map((args) => args[6])).toEqual(['0', '1']);
+      expect(result.err.join('\n')).toContain('retrying all views with SwiftShader');
+      expect(existsSync(join(root, 'shots/play-1180x820.png'))).toBe(true);
+    } finally {
+      capture.screenshotTimeout = false;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('returns the timeout exit code when software capture also stalls', async () => {
+    const root = tempDir();
+    mkdirSync(join(root, 'dist/design'), { recursive: true });
+    writeFileSync(join(root, 'dist/index.html'), 'game');
+    writeFileSync(join(root, 'dist/design/design.json'), '{}');
+    capture.screenshotTimeout = true;
+    capture.softwareTimeout = true;
+    try {
+      const result = await gm(['look', 'shell', '--dist', 'dist', '--out', 'shots'], {
+        cwd: root,
+        env: { XDG_RUNTIME_DIR: root },
+      });
+      expect(result.code).toBe(3);
+    } finally {
+      capture.screenshotTimeout = false;
+      capture.softwareTimeout = false;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it('explains a browser timeout', async () => {
     const root = tempDir();

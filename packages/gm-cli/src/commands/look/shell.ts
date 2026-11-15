@@ -130,23 +130,33 @@ export const command: GmCommand = {
       }
       const runner = fileURLToPath(import.meta.resolve('@ogm/gm-verify/app-capture'));
       stage = 'running the browser';
-      const result = await runChild(
-        ctx.cwd,
-        [
-          runner,
-          dist,
-          temp,
-          JSON.stringify(taps),
-          flags.edit ? '1' : '0',
-          flags.mp4 ? '1' : '0',
-          ctx.config.verifySoftwareGl ? '1' : '0',
-        ],
-        localTemp ? { ...ctx.env, TMPDIR: temp } : (ctx.env ?? {}),
-        remaining,
-        abort.signal,
-        process.execPath,
-        ctx.json,
-      );
+      const runCapture = (software: boolean, remainingMs: number) =>
+        runChild(
+          ctx.cwd,
+          [
+            runner,
+            dist,
+            temp,
+            JSON.stringify(taps),
+            flags.edit ? '1' : '0',
+            flags.mp4 ? '1' : '0',
+            software ? '1' : '0',
+          ],
+          localTemp ? { ...ctx.env, TMPDIR: temp } : (ctx.env ?? {}),
+          remainingMs,
+          abort.signal,
+          process.execPath,
+          ctx.json,
+        );
+      let result = await runCapture(ctx.config.verifySoftwareGl, remaining);
+      if (result === 42 && !ctx.config.verifySoftwareGl && !abort.signal.aborted) {
+        ctx.err('shell capture: GPU screenshot stalled; retrying all views with SwiftShader');
+        rmSync(temp, { recursive: true, force: true });
+        mkdirSync(temp, { recursive: true });
+        const retryRemaining = deadline - Date.now();
+        result = retryRemaining > 0 ? await runCapture(true, retryRemaining) : EXIT.timeout;
+      }
+      if (result === 42) result = EXIT.timeout;
       if (result !== 0) {
         ctx.err(
           result === EXIT.timeout
