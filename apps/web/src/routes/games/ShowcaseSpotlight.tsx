@@ -53,7 +53,7 @@ export function ShowcaseSpotlight({
         <span aria-hidden="true">×</span>
       </button>
       <div className="games-spotlight-copy">
-        <h1 style={{ fontFamily: `'${data.font}', var(--display)` }}>{game.title}</h1>
+        {!game.logoUrl && <h1 style={{ fontFamily: `'${data.font}', var(--display)` }}>{game.title}</h1>}
         <p className="games-tagline">{data.tagline}</p>
         <ul className="showcase-tags" aria-label="Tags">
           {data.displayTags.map((tag, index) => (
@@ -137,6 +137,7 @@ export function ShowcaseSpotlight({
           ) : (
             <Cover game={game} hero />
           )}
+          {game.logoUrl && <img className="game-logo" src={game.logoUrl} alt="" />}
         </span>
       </div>
     </section>

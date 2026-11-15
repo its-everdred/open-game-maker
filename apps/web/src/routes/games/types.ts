@@ -1,3 +1,4 @@
+import { ICONS } from '../../icons';
 import type { Showcase } from './showcase';
 import type { Branch, Job, JobKind, JobState } from '@ogm/contracts';
 
@@ -20,6 +21,7 @@ export type GameSummary = {
   createdAt: string;
   updatedAt?: string;
   lastPlayedAt?: string | null;
+  logoUrl?: string | null;
   coverUrl?: string | null;
   trailerUrl?: string | null;
   portraitTrailerUrl?: string | null;
@@ -40,10 +42,21 @@ export type JobView = Pick<Job, 'id' | 'gameId'> & {
 
 export const TERMINAL_JOB_STATES = new Set<JobState>(['done', 'failed', 'cancelled']);
 
+// Blobs predates manifest genres; its established puzzle genre remains available until it is republished.
+export function gameGenres(game: GameSummary): string[] {
+  return game.choices?.genre ?? (game.slug === 'blobs' ? ['puzzle'] : []);
+}
+
 export function gameTags(game: GameSummary): string[] {
-  return [...new Set([...(game.tags ?? []), ...(game.choices?.genre ?? []), ...(game.choices?.vibe ?? [])])];
+  return [...new Set([...(game.tags ?? []), ...gameGenres(game), ...(game.choices?.vibe ?? [])])];
 }
 
 export function gameUpdatedAt(game: GameSummary): string {
   return game.updatedAt ?? game.createdAt;
+}
+
+/** Genre labels can come from creators; unknown labels use the existing generic icon. */
+export function genreIcon(name: string): string {
+  const key = name.trim().toLowerCase();
+  return Object.hasOwn(ICONS, key) ? key : 'other';
 }

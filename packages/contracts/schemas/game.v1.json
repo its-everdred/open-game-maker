@@ -17,6 +17,19 @@
       "minLength": 1,
       "maxLength": 80
     },
+    "genres": {
+      "maxItems": 4,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+      }
+    },
+    "logo": {
+      "type": "string",
+      "pattern": "^media\\/[a-zA-Z0-9_-]+\\.(png|webp|svg)$"
+    },
     "hostOrigin": {
       "type": "string",
       "format": "uri",

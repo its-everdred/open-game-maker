@@ -104,6 +104,13 @@ export const gameManifestSchema = z.looseObject({
   /** Semver range of the SDK the game targets. */
   sdk: z.string().min(1).max(64),
   title,
+  /** Genre names displayed as icons in the games library. */
+  genres: z.array(z.string().min(1).max(32)).max(4).optional(),
+  /** Build-relative logo image under media/, displayed over game artwork. */
+  logo: z
+    .string()
+    .regex(/^media\/[a-zA-Z0-9_-]+\.(png|webp|svg)$/u)
+    .optional(),
   /** Optional build-time pin for the one HTTP(S) host origin allowed to frame this game. */
   hostOrigin: z
     .string()

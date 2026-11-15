@@ -134,6 +134,13 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
         sdkVersion: manifest.data.sdk,
       });
       await rename(files, buildTarget);
+      await writeFile(
+        join(buildTarget, '.ogm-display.json'),
+        JSON.stringify({
+          logo: manifest.data.logo,
+          genres: manifest.data.genres,
+        }),
+      );
       await markComplete(buildTarget);
       const switchTx = await switchToBuild(deps, design, job.gameId, branch.id, build.id);
       switched = true;

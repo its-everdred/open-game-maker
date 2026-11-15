@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useMatch, useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -54,6 +54,7 @@ import {
   createStableId,
   deleteEntityIntent,
 } from '../../features/editor/transactions';
+import { api } from '../../lib/api/client';
 import { pushToast } from '../../lib/notify/slice';
 import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
 import { RoomLayer } from '../../features/room/RoomLayer';
@@ -545,12 +546,41 @@ export function GameScreen() {
     }),
     [activeSnapshot?.buildId, activateRoom, branch, closeMenu, gameId, leaveRoom, mode, room.session, room.snapshot],
   );
+  const preference = useMutation({
+    mutationFn: (allow: boolean) =>
+      api(`/games/${encodeURIComponent(gameId)}`, {
+        method: 'PATCH',
+        json: { allowAiGeneratedAssets: allow },
+      }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['game', gameId] }),
+        queryClient.invalidateQueries({ queryKey: ['games'] }),
+      ]),
+    onError: () => pushToast('Could not update AI asset setting'),
+  });
+  const preferenceAction = useMemo(
+    () =>
+      mode === 'edit' && game.data
+        ? [
+            {
+              id: 'ai-assets',
+              label: game.data.allowAiGeneratedAssets ? 'Disable AI-generated assets' : 'Enable AI-generated assets',
+              icon: 'other',
+              disabled: preference.isPending,
+              onSelect: () => preference.mutate(!game.data!.allowAiGeneratedAssets),
+            },
+          ]
+        : [],
+    [mode, game.data, preference.isPending, preference.mutate],
+  );
   const playMenuControls = useMemo(
     () =>
       mode === 'play' || frameState.manifest?.capabilities.includes('scenery')
         ? {
             actions: [
               { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
+              ...preferenceAction,
               ...(mode === 'play'
                 ? [
                     {
@@ -578,6 +608,7 @@ export function GameScreen() {
         : {
             actions: [
               { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
+              ...preferenceAction,
               {
                 id: 'ask-change',
                 label: 'Ask for a change',
@@ -588,7 +619,16 @@ export function GameScreen() {
             ],
             extras: gameExtraElements('topbar', extraProps),
           },
-    [askForChange, extraProps, frameState.manifest?.playMenuButton, leaveRoom, mode, requestMode, room.snapshot?.role],
+    [
+      askForChange,
+      extraProps,
+      frameState.manifest?.playMenuButton,
+      leaveRoom,
+      mode,
+      requestMode,
+      room.snapshot?.role,
+      preferenceAction,
+    ],
   );
   useGameMenuControls(playMenuControls);
 

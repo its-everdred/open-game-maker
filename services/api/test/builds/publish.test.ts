@@ -97,6 +97,23 @@ describe('publishing a merged build', () => {
     );
   });
 
+  it('publishes display metadata from a large valid manifest', async () => {
+    const { deps, app } = world();
+    completeRun(deps);
+    const dir = builtFiles();
+    const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>;
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ ...manifest, logo: 'media/logo.png', genres: ['puzzle'], padding: 'x'.repeat(1024 * 1024) }),
+    );
+    const response = await upload(app, archiveOf(dir));
+    expect(response.status).toBe(201);
+    const { buildId } = (await response.json()) as { buildId: string };
+    expect(
+      JSON.parse(readFileSync(join(deps.config.gamesRoot, ids.game, buildId, '.ogm-display.json'), 'utf8')),
+    ).toEqual({ logo: 'media/logo.png', genres: ['puzzle'] });
+  });
+
   it('fails the job when the build has no generated credits document', async () => {
     const { deps, app } = world();
     completeRun(deps);
