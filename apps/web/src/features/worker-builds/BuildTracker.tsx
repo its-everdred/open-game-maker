@@ -5,6 +5,7 @@ import { MenuRing } from '../../components/MenuCircle';
 import { Dialog } from '../../components/Dialog';
 import { ReviewInbox } from './ReviewInbox';
 import { openConversation } from '../build-chat/conversation';
+import { TicketConversation } from './TicketConversation';
 import type { PastTicket } from './usePastTickets';
 import type { WorkerReview } from './useWorkerReviews';
 import type { FinishedWorker } from './useWorkerFinishes';
@@ -36,6 +37,7 @@ type PanelProps = {
   historyLoading?: boolean;
   reviewError?: boolean;
   workerError?: boolean;
+  creatorId?: string;
   jobs?: readonly Job[];
 };
 export function BuildTracker({
@@ -48,6 +50,7 @@ export function BuildTracker({
   historyLoading,
   reviewError,
   workerError,
+  creatorId,
   jobs = [],
   onDismiss,
 }: PanelProps & {
@@ -104,6 +107,7 @@ export function BuildTracker({
           commands={commands}
           past={past}
           historyError={historyError}
+          creatorId={creatorId}
           workerError={workerError}
           reviewError={reviewError}
           historyLoading={historyLoading}
@@ -124,10 +128,12 @@ export function BuildPanel({
   historyLoading,
   reviewError,
   workerError,
+  creatorId,
   jobs = [],
   id,
 }: PanelProps & { id: string }) {
   const [modal, setModal] = useState<'review' | 'completed'>();
+  const [conversation, setConversation] = useState<PastTicket>();
   const reviewCount = reviews.length + commands.length;
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
@@ -210,15 +216,24 @@ export function BuildPanel({
                       {ticket.title} · {ticket.outcome}
                     </button>
                   ) : (
-                    <a href={ticket.url} target="_blank" rel="noreferrer">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModal(undefined);
+                        setConversation(ticket);
+                      }}
+                    >
                       {ticket.title} · {ticket.outcome}
-                    </a>
+                    </button>
                   )}
                 </li>
               );
             })}
           </ul>
         </Dialog>
+      )}
+      {conversation && (
+        <TicketConversation creatorId={creatorId} ticket={conversation} onClose={() => setConversation(undefined)} />
       )}
     </section>
   );

@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BuildPanel, BuildTracker } from './BuildTracker';
 
 vi.mock('./ReviewInbox', () => ({ ReviewInbox: () => <div>Review deck</div> }));
+vi.mock('./TicketConversation', () => ({
+  TicketConversation: ({ ticket }: { ticket: { title: string } }) => <div>Conversation: {ticket.title}</div>,
+}));
 afterEach(cleanup);
 
 describe('build tracker', () => {
@@ -70,9 +73,7 @@ describe('build tracker', () => {
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual(['Newer · Completed', 'Older · Cancelled']);
-    expect(within(dialog).getByRole('link', { name: 'Newer · Completed' })).toHaveAttribute(
-      'href',
-      'https://github.com/owner/game/issues/2',
-    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Newer · Completed' }));
+    expect(screen.getByText('Conversation: Newer')).toBeVisible();
   });
 });

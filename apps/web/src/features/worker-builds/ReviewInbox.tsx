@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CreatorCommand } from '@ogm/contracts';
 import { Dialog } from '../../components/Dialog';
 import { DecisionDeck } from '../commands-inbox/DecisionDeck';
@@ -19,6 +19,13 @@ export function ReviewInbox({
 }) {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
   const [current, setCurrent] = useState<WorkerReview | undefined>(reviews[0]);
+  useEffect(() => {
+    if (current?.kind !== 'round' || !current.round.buildId) return;
+    const recovered = reviews.find(
+      (review) => review.kind === 'preview' && review.gameId === current.gameId && review.round.id === current.round.id,
+    );
+    if (recovered) setCurrent(recovered);
+  }, [current, reviews]);
   if (!current) {
     if (commands[0]) return <DecisionDeck commands={commands} first={commands[0]} onClose={onClose} />;
     return (

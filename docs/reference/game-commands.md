@@ -158,3 +158,10 @@ menu, the editor's feature scoping dock and New Game creation, whose scope sessi
 `apps/web/src/features/aiur/embed.tsx` hands each element a scope (`game`, the game's aiur `tickets`, and Open Game
 Maker's proxy URLs for `commands`, `conversation` and `stream`) plus its features, and reads answers back from the
 element's `aiur-answer` event. Every URL in that scope is an Open Game Maker route: the browser never calls aiur.
+
+## Completed ticket discussions
+
+The Builds panel opens the existing build chat for tickets associated with a job. For a completed ticket without a
+job, it shows only issue comments explicitly marked `<!-- gm:creator-visible -->`. Adding that marker makes the comment
+visible to the game's creator; unmarked operator discussion, agent workpads and Aiur agent-authored bookkeeping stay private. The API rechecks the
+closed issue's current game label before reading its discussion.

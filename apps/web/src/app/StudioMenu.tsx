@@ -405,6 +405,7 @@ export function StudioMenu() {
     sheetContent = (
       <BuildPanel
         key={creatorId ?? 'signed-out'}
+        creatorId={creatorId}
         workers={workers}
         reviews={reviews}
         commands={reviewCommands}
@@ -479,6 +480,7 @@ export function StudioMenu() {
       {!isGameView && (
         <BuildTracker
           key={creatorId ?? 'signed-out'}
+          creatorId={creatorId}
           workers={workers}
           reviews={reviews}
           commands={reviewCommands}

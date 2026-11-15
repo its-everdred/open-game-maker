@@ -20,6 +20,7 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
     (ticket) => (!snapshot.stale || scope.owned.has(ticket.ticket)) && belongsToGame(ticket, scope),
   );
   const allowed = new Map(tickets.map((ticket) => [ticket.ticket, ticket]));
+  const observed = new Set(snapshot.tickets.map((ticket) => ticket.ticket));
   let daemonUnavailable = false;
   const workers = await deps
     .aiurClientForGame(game.id)
@@ -30,8 +31,10 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
     });
   const byTicket = new Map(
     workers
-      .filter((worker) => allowed.has(worker.ticket))
-      .map((worker) => [worker.ticket, { ...worker, title: allowed.get(worker.ticket)!.title }]),
+      .filter(
+        (worker) => allowed.has(worker.ticket) || (!observed.has(worker.ticket) && scope.owned.has(worker.ticket)),
+      )
+      .map((worker) => [worker.ticket, { ...worker, title: allowed.get(worker.ticket)?.title ?? worker.title }]),
   );
   for (const item of tickets) {
     const states = item.labels
@@ -40,6 +43,7 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
       .filter((state) => ['human-review', 'ci-wait', 'merging'].includes(state));
     if (states.length !== 1) continue;
     const prior = byTicket.get(item.ticket);
+    if (prior?.startedAt && item.updatedAt && Date.parse(prior.startedAt) > Date.parse(item.updatedAt)) continue;
     byTicket.set(item.ticket, {
       ...prior,
       ticket: item.ticket,
@@ -75,5 +79,21 @@ routes.get('/games/:gameId/tickets/completed', async (c) => {
     }))
     .sort((a, b) => b.closedAt!.localeCompare(a.closedAt!));
   return c.json({ tickets, stale: snapshot.stale });
+});
+routes.get('/games/:gameId/tickets/:ticket/conversation', async (c) => {
+  const game = authorizedGame(c, 'game.edit');
+  const deps = c.get('deps');
+  const ticketId = c.req.param('ticket');
+  const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
+  if (!repo || !game.slug || !deps.registry.trackerTickets || !deps.registry.ticketConversation)
+    throw new HttpError(503, 'ticket_conversation_unavailable');
+  const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
+  const snapshot = await deps.registry.trackerTickets(repo, 'closed');
+  if (snapshot.stale) throw new HttpError(503, 'ticket_scope_unavailable');
+  if (!snapshot.tickets.some((ticket) => ticket.ticket === ticketId && belongsToGame(ticket, scope)))
+    throw new HttpError(404, 'ticket_not_found');
+  return c.json({
+    messages: await deps.registry.ticketConversation(repo, ticketId, [...scope.slugs], scope.owned.has(ticketId)),
+  });
 });
 export default routes;

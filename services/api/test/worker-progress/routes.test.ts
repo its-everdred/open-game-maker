@@ -105,6 +105,7 @@ describe('worker progress route', () => {
                 title: 'Forest backdrop',
                 outcome: 'Closed',
                 closedAt: null,
+                updatedAt: '2026-11-01T00:00:00Z',
                 url: 'https://github.com/owner/shared/issues/12',
                 labels: ['game:test-game', 'agent:ci-wait'],
               },
@@ -129,6 +130,18 @@ describe('worker progress route', () => {
       ],
       stale: false,
     });
+    const conversation = vi.fn().mockResolvedValue([{ text: 'A creator message' }]);
+    deps.registry.ticketConversation = conversation;
+    const otherConversation = await app.request(`/api/v1/games/${game}/tickets/99/conversation`, {
+      headers: asUser(user),
+    });
+    expect(otherConversation.status).toBe(404);
+    expect(conversation).not.toHaveBeenCalled();
+    const ownConversation = await app.request(`/api/v1/games/${game}/tickets/11/conversation`, {
+      headers: asUser(user),
+    });
+    expect(await ownConversation.json()).toEqual({ messages: [{ text: 'A creator message' }] });
+    expect(conversation).toHaveBeenCalledWith({ owner: 'owner', name: 'shared' }, '11', ['test-game'], false);
     const response = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
     expect(await response.json()).toEqual({
       workers: [
@@ -147,6 +160,11 @@ describe('worker progress route', () => {
       cursor: 4,
       completed: [{ ticket: '11', seq: 4, at }],
     });
+    state.mockResolvedValue({
+      running: [{ issue_identifier: '12', title: 'Forest backdrop', started_at: '2026-11-02T00:00:00Z' }],
+    });
+    const resumed = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect(await resumed.json()).toMatchObject({ workers: [{ ticket: '12', percent: 50, source: 'daemon' }] });
     deps.aiurClientForGame = async () => {
       throw new HttpError(409, 'daemon_not_found');
     };

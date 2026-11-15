@@ -4,6 +4,7 @@ export type TrackerTicket = {
   title: string;
   labels: string[];
   closedAt: string | null;
+  updatedAt: string | null;
   outcome: string;
   url: string;
 };
@@ -55,6 +56,7 @@ export function createTrackerReader(token: string, fetcher: typeof fetch = globa
             title: row.title,
             labels,
             closedAt: typeof row.closed_at === 'string' ? row.closed_at : null,
+            updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null,
             outcome:
               row.state_reason === 'not_planned'
                 ? 'Cancelled'

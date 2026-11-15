@@ -67,7 +67,12 @@ export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round
       {round.buildId && <p role="alert">The playable review is unavailable. Try again later.</p>}
       <label>
         Note (optional)
-        <textarea value={note} maxLength={3900} onChange={(event) => setNote(event.target.value)} />
+        <textarea
+          disabled={Boolean(round.buildId)}
+          value={note}
+          maxLength={3900}
+          onChange={(event) => setNote(event.target.value)}
+        />
       </label>
       <div className="review-deck-actions">
         <button
