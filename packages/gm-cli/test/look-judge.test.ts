@@ -6,6 +6,49 @@ import { describe, expect, it } from 'vitest';
 import { gm, tempDir } from './helpers.js';
 
 describe('gm look judge', () => {
+  it('retries malformed broker JSON once and reports the parsing stage on exhaustion', async () => {
+    const cwd = tempDir('gm-judge-retry-');
+    execFileSync('git', ['init', '-q', cwd]);
+    const pack = join(cwd, '.claude/skills');
+    const dir = join(pack, 'gm-image-mock/scripts');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'request-mock.py'),
+      `import os, sys
+out = sys.argv[sys.argv.index('--out') + 1]
+counter = os.path.join(out, 'counter')
+n = int(open(counter).read()) if os.path.exists(counter) else 0
+open(counter, 'w').write(str(n + 1))
+p = os.path.join(out, 'answer.txt')
+open(p, 'w').write('{"tiers" [8,8,8,8]}' if n != 1 else '{"tiers":[8,8,8,8],"differences":[]}')
+print(p)
+`,
+    );
+    await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } })
+      .png()
+      .toFile(join(cwd, 'a.png'));
+    expect((await gm(['look', 'score', 'a.png', 'a.png'], { cwd })).code).toBe(0);
+    const args = ['look', 'judge', 'look-score.png', '--rubric', 'tiers', '--runs', '1'];
+    const options = { cwd, env: { GM_SKILLS_DIR: pack } };
+    expect((await gm(args, options)).code).toBe(0);
+    // Change the run count to bypass the successful one-run cache.
+    const failed = await gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers', '--runs', '2'], options);
+    expect(failed.code).toBe(1);
+    expect(failed.err.join()).toContain('look judge: broker response JSON parsing failed on run 1 after 2 attempts');
+    writeFileSync(
+      join(dir, 'request-mock.py'),
+      `import os, sys
+out = sys.argv[sys.argv.index('--out') + 1]
+p = os.path.join(out, 'answer.txt')
+open(p, 'w').write('{"tiers":[8,8,8,8,],"differences":["comma, } stays",],}')
+print(p)
+`,
+    );
+    const repaired = await gm(['look', 'judge', 'look-score.png', '--rubric', 'tiers', '--runs', '3'], options);
+    expect(repaired.code).toBe(0);
+    expect(JSON.parse(repaired.out[0]!).differences).toEqual(['comma, } stays']);
+  });
+
   it('reports medians and spread across three broker runs', async () => {
     const cwd = tempDir('gm-judge-median-');
     execFileSync('git', ['init', '-q', cwd]);
@@ -227,8 +270,6 @@ it(
     const passed = await request('{"tiers":[8,9,8,10],"differences":[]}\nVERDICT: pass');
     expect(passed.code).toBe(0);
     expect(JSON.parse(passed.out[0]!).verdict).toBe('pass');
-    const malformed = await request('not JSON\nVERDICT: pass');
-    expect(malformed.code).toBe(1);
     const refused = await request(null);
     expect(refused.code).toBe(1);
     expect(refused.err.join()).toContain('ref refused');
