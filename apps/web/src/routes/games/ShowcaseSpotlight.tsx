@@ -11,8 +11,10 @@ export function ShowcaseSpotlight({
   onPlay,
   onEdit,
   onClose,
+  sharedCover,
 }: {
   game: GameSummary;
+  sharedCover?: boolean;
   canOpen: boolean;
   onPlay(): void;
   onEdit(): void;
@@ -128,7 +130,15 @@ export function ShowcaseSpotlight({
         data-splat={Boolean(mask)}
         style={mask ? { maskImage: `url(${mask})`, WebkitMaskImage: `url(${mask})` } : undefined}
       >
-        <span className="game-cover">{game.trailerUrl ? <GameTrailer game={game} /> : <Cover game={game} hero />}</span>
+        <span className="game-cover">
+          {sharedCover ? (
+            <span data-cover-slot />
+          ) : game.trailerUrl ? (
+            <GameTrailer game={game} />
+          ) : (
+            <Cover game={game} hero />
+          )}
+        </span>
       </div>
     </section>
   );

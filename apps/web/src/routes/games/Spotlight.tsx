@@ -12,6 +12,7 @@ import { jobLabel } from './Tile';
 
 type SpotlightProps = {
   game: GameSummary;
+  sharedCover?: boolean;
   branches: Branch[];
   job?: JobView;
   onPlay(branchId: string): void;
@@ -19,7 +20,7 @@ type SpotlightProps = {
   onClose(): void;
 };
 
-export function Spotlight({ game, branches, job, onPlay, onEdit, onClose }: SpotlightProps) {
+export function Spotlight({ game, branches, job, onPlay, onEdit, onClose, sharedCover }: SpotlightProps) {
   const queryClient = useQueryClient();
   const preference = useMutation({
     mutationFn: (allowAiGeneratedAssets: boolean) =>
@@ -107,7 +108,15 @@ export function Spotlight({ game, branches, job, onPlay, onEdit, onClose }: Spot
         </div>
       </div>
       <div className="games-spotlight-media">
-        <span className="game-cover">{game.trailerUrl ? <GameTrailer game={game} /> : <Cover game={game} />}</span>
+        <span className="game-cover">
+          {sharedCover ? (
+            <span data-cover-slot />
+          ) : game.trailerUrl ? (
+            <GameTrailer game={game} />
+          ) : (
+            <Cover game={game} />
+          )}
+        </span>
       </div>
     </section>
   );

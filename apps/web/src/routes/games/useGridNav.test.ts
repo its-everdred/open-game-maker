@@ -2,13 +2,53 @@ import { act, renderHook } from '@testing-library/react';
 import type { KeyboardEvent } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { useGridNav } from './useGridNav';
+import { measureGridColumns, useGridNav } from './useGridNav';
 
 function key(name: string) {
   return { key: name, preventDefault: vi.fn() } as unknown as KeyboardEvent;
 }
 
 describe('useGridNav', () => {
+  it('counts grid tracks even when the selected cell spans the first row', () => {
+    const container = document.createElement('div');
+    container.style.gridTemplateColumns = '320px 320px 320px';
+    container.innerHTML = '<div role="gridcell" class="is-selected"></div><div role="gridcell"></div>';
+    expect(measureGridColumns(container)).toBe(3);
+  });
+
+  it('keeps an unselected tile in the tab order while a spotlight is open', () => {
+    const { result } = renderHook(() =>
+      useGridNav({
+        count: 3,
+        selectedIndex: 0,
+        columns: () => 3,
+        onSelect: vi.fn(),
+        onOpen: vi.fn(),
+        onClose: vi.fn(),
+      }),
+    );
+    expect(result.current.tabIndexFor(1)).toBe(0);
+  });
+
+  it('does not move keyboard focus into the inert selected tile', () => {
+    const onOpen = vi.fn();
+    const { result } = renderHook(() =>
+      useGridNav({
+        count: 3,
+        selectedIndex: 0,
+        columns: () => 3,
+        onSelect: vi.fn(),
+        onOpen,
+        onClose: vi.fn(),
+      }),
+    );
+    act(() => result.current.focusAt(1));
+    act(() => result.current.onKeyDown(key('ArrowLeft')));
+    expect(result.current.focused).toBe(1);
+    act(() => result.current.onKeyDown(key('Enter')));
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
   it('moves one tile horizontally and one measured row vertically', () => {
     const { result } = renderHook(() =>
       useGridNav({
@@ -68,16 +108,17 @@ describe('useGridNav', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('focuses the selected tile on arrival without scrolling, then scrolls to later tiles', () => {
+  it('focuses the first available tile on arrival without scrolling, then scrolls to later tiles', () => {
     const container = document.createElement('div');
-    container.innerHTML = '<button class="game-tile"></button><button class="game-tile"></button>';
+    container.innerHTML =
+      '<div role="gridcell"><button class="game-tile"></button></div><div role="gridcell"><button class="game-tile"></button></div>';
     document.body.append(container);
     const tiles = [...container.querySelectorAll<HTMLButtonElement>('.game-tile')];
     const focus = tiles.map((tile) => vi.spyOn(tile, 'focus'));
     const { result } = renderHook(() =>
       useGridNav({
         count: 2,
-        selectedIndex: 0,
+        selectedIndex: null,
         columns: () => 2,
         onSelect: vi.fn(),
         onOpen: vi.fn(),

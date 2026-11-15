@@ -17,7 +17,10 @@ export function ScreenErrorBoundary({ children }: { children: ReactNode }) {
   const gameId = params.gameId?.trim() || spotlight || undefined;
 
   return (
-    <Boundary key={`${location.pathname}:${gameId ?? ''}`} context={{ route: location.pathname, gameId }}>
+    <Boundary
+      key={`${location.pathname}:${location.pathname === '/all' ? '' : (gameId ?? '')}`}
+      context={{ route: location.pathname, gameId }}
+    >
       {children}
     </Boundary>
   );
@@ -28,6 +31,12 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
 
   static getDerivedStateFromError(): BoundaryState {
     return { crashed: true };
+  }
+
+  componentDidUpdate(previous: BoundaryProps): void {
+    if (this.state.crashed && previous.context.gameId !== this.props.context.gameId) {
+      this.setState({ crashed: false });
+    }
   }
 
   componentDidCatch(error: Error): void {
