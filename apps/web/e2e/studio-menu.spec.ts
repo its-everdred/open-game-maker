@@ -125,13 +125,12 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
   await expect(page.getByText('40%', { exact: true })).toBeVisible();
   percent = 80;
   await expect(page.getByText('80%', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('button', { name: /Show each build/ }).click();
   await expect(page.getByText('Moon gate', { exact: true })).toBeVisible();
   await capturePhone(page, testInfo, 'worker-builds-expanded');
   complete = true;
   await expect(page.getByRole('status').filter({ hasText: 'Moon gate is ready' })).toBeVisible({ timeout: 15_000 });
   await capturePhone(page, testInfo, 'worker-builds-finished');
-  await page.getByRole('button', { name: '1 build finished' }).click();
+  await page.getByRole('button', { name: 'Completed builds' }).click();
   await expect(page.getByText('Moon gate is ready')).toHaveCount(0);
 });
 

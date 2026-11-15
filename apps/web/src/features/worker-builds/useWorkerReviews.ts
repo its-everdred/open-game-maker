@@ -1,41 +1,50 @@
 import { useQueries } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
-import { gamePath } from '@ogm/contracts/browser';
 import { api } from '../../lib/api/client';
 import type { Preview } from '../../routes/review/PreviewReviews';
-import type { WorkerBuild, WorkerReview } from './BuildTracker';
+import type { Round } from '../../routes/review/RoundReviews';
+
+export type WorkerReview =
+  { kind: 'round'; gameId: string; round: Round } | { kind: 'preview'; gameId: string; preview: Preview; round: Round };
 
 type Game = { id: string; slug?: string | null };
 
-export function useWorkerReviews(games: readonly Game[], workers: readonly WorkerBuild[], creatorId?: string) {
-  const titles = useRef(new Map<string, string>());
-  const scope = useRef(creatorId);
-  if (scope.current !== creatorId) {
-    titles.current.clear();
-    scope.current = creatorId;
-  }
-  useEffect(() => {
-    for (const worker of workers) titles.current.set(worker.ticket, worker.title);
-  }, [workers]);
+// Gameplay rounds are represented by their playable preview; the rounds endpoint excludes them.
+export function useWorkerReviews(games: readonly Game[], creatorId?: string) {
   const queries = useQueries({
-    queries: games.map((game) => ({
-      queryKey: ['build-previews', creatorId, game.id],
-      enabled: Boolean(creatorId && game.slug),
-      queryFn: () => api<{ previews: Preview[] }>(`/games/${encodeURIComponent(game.id)}/previews`),
-      refetchInterval: 5_000,
-      retry: false,
-    })),
+    queries: games.flatMap((game) => [
+      {
+        queryKey: ['game-review-rounds', game.id, creatorId],
+        enabled: Boolean(creatorId),
+        queryFn: () =>
+          api<{ rounds: Round[] }>(`/games/${encodeURIComponent(game.id)}/review-rounds?includeGameplay=1`),
+        refetchInterval: 5_000,
+        retry: false,
+      },
+      {
+        queryKey: ['game-previews', game.id, creatorId],
+        enabled: Boolean(creatorId),
+        queryFn: () => api<{ previews: Preview[] }>(`/games/${encodeURIComponent(game.id)}/previews`),
+        refetchInterval: 5_000,
+        retry: false,
+      },
+    ]),
   });
-  return queries.flatMap((query, index): WorkerReview[] => {
-    const game = games[index]!;
-    if (!game.slug || query.isError || !creatorId) return [];
-    return (query.data?.previews ?? []).map((preview) => {
-      const ticket = `${game.id}:${preview.ticket}`;
-      return {
-        ticket,
-        title: preview.title || titles.current.get(ticket) || 'Ready to review',
-        href: `${gamePath(game.slug!)}/review#preview-${encodeURIComponent(preview.buildId)}`,
-      };
-    });
+  if (!creatorId) return { reviews: [], error: false, loading: false };
+  const reviews = games.flatMap((game, index): WorkerReview[] => {
+    const rounds = queries[index * 2]?.data as { rounds: Round[] } | undefined;
+    const previews = queries[index * 2 + 1]?.data as { previews: Preview[] } | undefined;
+    return [
+      ...(rounds?.rounds ?? [])
+        .filter((round) => !round.buildId || !queries[index * 2 + 1]?.isPending)
+        .map((round): WorkerReview => {
+          const preview = previews?.previews.find(
+            (item) => item.ticket === round.ticket && item.buildId === round.buildId,
+          );
+          return preview
+            ? { kind: 'preview', gameId: game.id, preview, round }
+            : { kind: 'round', gameId: game.id, round };
+        }),
+    ];
   });
+  return { reviews, error: queries.some((query) => query.isError), loading: queries.some((query) => query.isLoading) };
 }

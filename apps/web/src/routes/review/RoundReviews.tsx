@@ -4,7 +4,14 @@ import { useState } from 'react';
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
 
-type Round = { id: string; ticket: string; question: string | null; media: { kind: 'still' | 'clip'; url: string }[] };
+export type Round = {
+  category?: 'art' | 'gameplay' | 'sound';
+  buildId?: string | null;
+  id: string;
+  ticket: string;
+  question: string | null;
+  media: { kind: 'still' | 'clip'; url: string }[];
+};
 const key = (gameId: string) => ['game-review-rounds', gameId] as const;
 
 export function useReviewRounds(gameId: string) {
@@ -26,7 +33,7 @@ export function RoundReviews({ gameId, rounds }: { gameId: string; rounds: Round
   );
 }
 
-function RoundCard({ gameId, round }: { gameId: string; round: Round }) {
+export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round: Round; onAnswered?(): void }) {
   const [note, setNote] = useState('');
   const answer = useMutation({
     mutationFn: (verdict: 'approved' | 'needs_work') =>
@@ -34,7 +41,10 @@ function RoundCard({ gameId, round }: { gameId: string; round: Round }) {
         method: 'POST',
         json: { verdict, ...(note.trim() ? { note } : {}) },
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: key(gameId) });
+      onAnswered?.();
+    },
   });
   return (
     <section className="review-deck" aria-label={`Review for ticket ${round.ticket}`}>
@@ -54,15 +64,29 @@ function RoundCard({ gameId, round }: { gameId: string; round: Round }) {
         </div>
       ))}
       {round.question ? <p>{round.question}</p> : null}
+      {round.buildId && <p role="alert">The playable review is unavailable. Try again later.</p>}
       <label>
         Note (optional)
-        <textarea value={note} maxLength={3900} onChange={(event) => setNote(event.target.value)} />
+        <textarea
+          disabled={Boolean(round.buildId)}
+          value={note}
+          maxLength={3900}
+          onChange={(event) => setNote(event.target.value)}
+        />
       </label>
       <div className="review-deck-actions">
-        <button type="button" disabled={answer.isPending} onClick={() => answer.mutate('approved')}>
+        <button
+          type="button"
+          disabled={answer.isPending || Boolean(round.buildId)}
+          onClick={() => answer.mutate('approved')}
+        >
           Looks right
         </button>
-        <button type="button" disabled={answer.isPending} onClick={() => answer.mutate('needs_work')}>
+        <button
+          type="button"
+          disabled={answer.isPending || Boolean(round.buildId)}
+          onClick={() => answer.mutate('needs_work')}
+        >
           Needs work
         </button>
       </div>

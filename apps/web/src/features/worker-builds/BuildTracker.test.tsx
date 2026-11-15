@@ -1,53 +1,79 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router';
-import { BuildTracker } from './BuildTracker';
+import { BuildPanel, BuildTracker } from './BuildTracker';
 
+vi.mock('./ReviewInbox', () => ({ ReviewInbox: () => <div>Review deck</div> }));
+vi.mock('./TicketConversation', () => ({
+  TicketConversation: ({ ticket }: { ticket: { title: string } }) => <div>Conversation: {ticket.title}</div>,
+}));
 afterEach(cleanup);
 
 describe('build tracker', () => {
-  it('shows the earliest finishing worker and expands each active worker', () => {
+  it('lists live progress without guessing an ETA and shows waiting states instead of a full bar', () => {
     render(
       <BuildTracker
         workers={[
-          { ticket: '1', title: 'Forest backdrop', percent: 40, etaSeconds: 30 },
-          { ticket: '2', title: 'Boss attack', percent: 80, etaSeconds: 5 },
+          { ticket: '1', title: 'Forest backdrop', percent: 40, etaSeconds: null, phase: 'work' },
+          { ticket: '2', title: 'Boss attack', percent: 100, etaSeconds: null, state: 'ci-wait' },
         ]}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /2 builds running/ }));
-    expect(screen.getByText('Boss attack · about 5s left')).toBeVisible();
-    expect(screen.queryByRole('group', { name: 'Demo speed' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Show each build/ }));
     expect(screen.getByText('Forest backdrop')).toBeVisible();
-    expect(screen.getByText('Boss attack')).toBeVisible();
-    expect(screen.getByRole('button', { name: /Hide builds/ })).toHaveAttribute('aria-expanded', 'true');
-  });
-  it('does not invent progress or an ETA when the daemon has no estimate', () => {
-    render(<BuildTracker workers={[{ ticket: '1', title: 'New level', percent: null, etaSeconds: null }]} />);
-    fireEvent.click(screen.getByRole('button', { name: /1 build running/ }));
-    expect(screen.getByText('New level')).toBeVisible();
+    expect(screen.getByText('40%')).toBeVisible();
+    expect(screen.getByText('Waiting for checks')).toBeVisible();
+    expect(screen.queryByText('100%')).toBeNull();
     expect(screen.queryByText(/left/)).toBeNull();
+    const rows = within(screen.getByRole('region', { name: 'Builds' })).getAllByRole('listitem');
+    for (const file of readdirSync('src/features/worker-builds').filter(
+      (name) => /\.tsx?$/.test(name) && !name.includes('.test.'),
+    )) {
+      expect(readFileSync(join('src/features/worker-builds', file), 'utf8')).not.toMatch(
+        /\b(?:demo|fixture)[a-z0-9_]*/i,
+      );
+    }
+    expect(rows.map((row) => row.querySelector('strong')?.textContent).filter(Boolean)).toEqual([
+      'Forest backdrop',
+      'Boss attack',
+    ]);
   });
-  it('shows a confirmed finishing state until it is acknowledged', () => {
-    const dismiss = vi.fn();
-    render(
-      <BuildTracker workers={[]} finished={[{ ticket: 'game:12', title: 'Forest backdrop' }]} onDismiss={dismiss} />,
-    );
-    expect(screen.getByRole('status')).toHaveTextContent('Forest backdrop is ready');
-    fireEvent.click(screen.getByRole('button', { name: '1 build finished' }));
-    expect(dismiss).toHaveBeenCalledOnce();
-  });
-  it('links a handed-off build to its exact review item', () => {
-    render(
-      <MemoryRouter>
-        <BuildTracker
-          workers={[]}
-          reviews={[{ ticket: 'game:12', title: 'Forest backdrop', href: '/forest/review/4' }]}
-        />
-      </MemoryRouter>,
-    );
-    fireEvent.click(screen.getByRole('button', { name: '1 build to review' }));
-    expect(screen.getByRole('link', { name: 'Forest backdrop' })).toHaveAttribute('href', '/forest/review/4');
+  it('opens the review deck and the completed list', () => {
+    const past = [
+      {
+        gameId: 'g',
+        ticket: '2',
+        title: 'Newer',
+        outcome: 'Completed',
+        closedAt: '2026-02-01',
+        url: 'https://github.com/owner/game/issues/2',
+      },
+      {
+        gameId: 'g',
+        ticket: '1',
+        title: 'Older',
+        outcome: 'Cancelled',
+        closedAt: '2026-01-01',
+        url: 'https://github.com/owner/game/issues/1',
+      },
+    ];
+    const reviews = [
+      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
+    ];
+    render(<BuildPanel id="builds" workers={[]} past={past} reviews={reviews} />);
+    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
+    expect(screen.getByText('Review deck')).toBeVisible();
+    cleanup();
+    render(<BuildPanel id="builds" workers={[]} past={past} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
+    const dialog = screen.getByRole('dialog', { name: 'Completed' });
+    expect(
+      within(dialog)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Newer · Completed', 'Older · Cancelled']);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Newer · Completed' }));
+    expect(screen.getByText('Conversation: Newer')).toBeVisible();
   });
 });

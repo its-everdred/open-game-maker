@@ -38,6 +38,7 @@ import { BuildPanel, BuildTracker, combinedPercent } from '../features/worker-bu
 import { useWorkers } from '../features/worker-builds/useWorkers';
 import { useWorkerReviews } from '../features/worker-builds/useWorkerReviews';
 import { useWorkerFinishes } from '../features/worker-builds/useWorkerFinishes';
+import { usePastTickets } from '../features/worker-builds/usePastTickets';
 
 const RECENT_BUILD_MS = 5 * 60 * 1000;
 const MAX_TRACKED_BUILDS = 100;
@@ -72,12 +73,12 @@ export function StudioMenu() {
   const isGameView = Boolean(game || isShowcase);
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
-  const { workers, feeds } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
-  const reviews = useWorkerReviews(
-    isShowcase ? [] : builds.games.filter((game) => !gameId || game.id === gameId),
-    workers,
-    creatorId,
-  );
+  const ownedGames = isShowcase ? [] : builds.games.filter((item) => item.ownerId === creatorId);
+  const { workers, feeds, error: workerError } = useWorkers(ownedGames, gameId, creatorId);
+  const reviewData = useWorkerReviews(ownedGames, creatorId);
+  const reviews = reviewData.reviews;
+  const past = usePastTickets(ownedGames, creatorId);
+  const reviewCommands = decisions.commands;
   const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, creatorId);
   const visibleFinished = isShowcase
     ? []
@@ -100,14 +101,14 @@ export function StudioMenu() {
       if (
         !(target instanceof Node) ||
         root.current?.contains(target) ||
-        (target instanceof Element && target.closest('[data-studio-menu-boundary]'))
+        (target instanceof Element && target.closest('[data-studio-menu-boundary], .job-conversation-backdrop'))
       ) {
         return;
       }
       setOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
       setOpen(false);
     };
     document.addEventListener('pointerdown', outside);
@@ -223,7 +224,16 @@ export function StudioMenu() {
       </button>,
     );
   }
-  if (gameId && (workers.length > 0 || reviews.length > 0)) {
+  if (
+    gameId &&
+    (workers.length > 0 ||
+      reviews.length > 0 ||
+      reviewCommands.length > 0 ||
+      past.tickets.length > 0 ||
+      workerError ||
+      reviewData.error ||
+      past.error)
+  ) {
     circles.push(
       <button
         key="builds"
@@ -382,8 +392,32 @@ export function StudioMenu() {
         ))}
       </ul>
     );
-  } else if (sheet === 'builds' && (workers.length > 0 || reviews.length > 0)) {
-    sheetContent = <BuildPanel workers={workers} reviews={reviews} id="studio-menu-builds" />;
+  } else if (
+    sheet === 'builds' &&
+    (workers.length > 0 ||
+      reviews.length > 0 ||
+      reviewCommands.length > 0 ||
+      past.tickets.length > 0 ||
+      workerError ||
+      reviewData.error ||
+      past.error)
+  ) {
+    sheetContent = (
+      <BuildPanel
+        key={creatorId ?? 'signed-out'}
+        creatorId={creatorId}
+        workers={workers}
+        reviews={reviews}
+        commands={reviewCommands}
+        past={past.tickets}
+        historyError={past.error}
+        workerError={workerError}
+        reviewError={reviewData.error}
+        historyLoading={past.loading}
+        jobs={builds.jobs}
+        id="studio-menu-builds"
+      />
+    );
   } else if (sheet === 'jobs' && buildGroups.length > 0) {
     sheetContent = (
       <ul id="studio-menu-jobs" className="studio-menu-builds" aria-label="Build progress">
@@ -444,7 +478,21 @@ export function StudioMenu() {
         </span>
       )}
       {!isGameView && (
-        <BuildTracker workers={workers} reviews={reviews} finished={visibleFinished} onDismiss={dismissFinished} />
+        <BuildTracker
+          key={creatorId ?? 'signed-out'}
+          creatorId={creatorId}
+          workers={workers}
+          reviews={reviews}
+          commands={reviewCommands}
+          past={past.tickets}
+          historyError={past.error}
+          workerError={workerError}
+          reviewError={reviewData.error}
+          historyLoading={past.loading}
+          jobs={builds.jobs}
+          finished={visibleFinished}
+          onDismiss={dismissFinished}
+        />
       )}
       {isGameView && visibleFinished.length > 0 && (
         <span className="worker-tracker-toast worker-tracker-game-toast" role="status">

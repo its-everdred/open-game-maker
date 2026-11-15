@@ -37,7 +37,12 @@ vi.mock('../features/build-chat/jobs', () => ({
 }));
 
 vi.mock('../features/worker-builds/useWorkers', () => ({ useWorkers: () => ({ workers: [], feeds: [] }) }));
-vi.mock('../features/worker-builds/useWorkerReviews', () => ({ useWorkerReviews: () => [] }));
+vi.mock('../features/worker-builds/useWorkerReviews', () => ({
+  useWorkerReviews: () => ({ reviews: [], error: false, loading: false }),
+}));
+vi.mock('../features/worker-builds/usePastTickets', () => ({
+  usePastTickets: () => ({ tickets: [], error: false, loading: false }),
+}));
 
 vi.mock('../features/commands-inbox/commands', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/commands-inbox/commands')>()),

@@ -1,7 +1,13 @@
 import { useId, useState } from 'react';
-import { Link } from 'react-router';
+import type { CreatorCommand, Job } from '@ogm/contracts';
 import { Icon } from '../../components/Icon';
 import { MenuRing } from '../../components/MenuCircle';
+import { Dialog } from '../../components/Dialog';
+import { ReviewInbox } from './ReviewInbox';
+import { openConversation } from '../build-chat/conversation';
+import { TicketConversation } from './TicketConversation';
+import type { PastTicket } from './usePastTickets';
+import type { WorkerReview } from './useWorkerReviews';
 import type { FinishedWorker } from './useWorkerFinishes';
 import './build-tracker.css';
 
@@ -11,8 +17,10 @@ export type WorkerBuild = {
   percent: number | null;
   etaSeconds: number | null;
   startedAt?: string;
+  elapsedSeconds?: number;
+  state?: string;
+  phase?: string;
 };
-export type WorkerReview = { ticket: string; title: string; href: string };
 
 export function combinedPercent(workers: readonly WorkerBuild[]): number | null {
   return workers.length && workers.every((worker) => worker.percent !== null)
@@ -20,25 +28,54 @@ export function combinedPercent(workers: readonly WorkerBuild[]): number | null 
     : null;
 }
 
+type PanelProps = {
+  workers: WorkerBuild[];
+  reviews?: readonly WorkerReview[];
+  commands?: readonly CreatorCommand[];
+  past?: readonly PastTicket[];
+  historyError?: boolean;
+  historyLoading?: boolean;
+  reviewError?: boolean;
+  workerError?: boolean;
+  creatorId?: string;
+  jobs?: readonly Job[];
+};
 export function BuildTracker({
   workers,
   finished = [],
   reviews = [],
+  commands = [],
+  past = [],
+  historyError,
+  historyLoading,
+  reviewError,
+  workerError,
+  creatorId,
+  jobs = [],
   onDismiss,
-}: {
-  workers: WorkerBuild[];
+}: PanelProps & {
   finished?: readonly FinishedWorker[];
-  reviews?: readonly WorkerReview[];
   onDismiss?(): void;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
-  if (!workers.length && !finished.length && !reviews.length) return null;
+  if (
+    !workers.length &&
+    !finished.length &&
+    !reviews.length &&
+    !commands.length &&
+    !past.length &&
+    !historyError &&
+    !historyLoading &&
+    !workerError &&
+    !reviewError
+  )
+    return null;
   const count = workers.length
     ? `${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running`
-    : reviews.length
-      ? `${reviews.length} ${reviews.length === 1 ? 'build' : 'builds'} to review`
-      : `${finished.length} ${finished.length === 1 ? 'build' : 'builds'} finished`;
+    : reviews.length + commands.length
+      ? `${reviews.length + commands.length} builds to review`
+      : 'Completed builds';
   return (
     <div className="worker-tracker">
       <button
@@ -49,10 +86,10 @@ export function BuildTracker({
         aria-controls={id}
         onClick={() => {
           onDismiss?.();
-          if (workers.length || reviews.length) setOpen(!open);
+          setOpen(!open);
         }}
       >
-        <MenuRing percent={workers.length ? (combinedPercent(workers) ?? undefined) : 100} />
+        <MenuRing percent={workers.length ? (combinedPercent(workers) ?? undefined) : undefined} />
         <Icon name="build" />
         <span className="worker-tracker-count" aria-hidden="true">
           {workers.length || '✓'}
@@ -63,7 +100,21 @@ export function BuildTracker({
           {finished.at(-1)!.title} is ready
         </span>
       )}
-      {open && <BuildPanel workers={workers} reviews={reviews} id={id} />}
+      {open && (
+        <BuildPanel
+          workers={workers}
+          reviews={reviews}
+          commands={commands}
+          past={past}
+          historyError={historyError}
+          creatorId={creatorId}
+          workerError={workerError}
+          reviewError={reviewError}
+          historyLoading={historyLoading}
+          jobs={jobs}
+          id={id}
+        />
+      )}
     </div>
   );
 }
@@ -71,67 +122,125 @@ export function BuildTracker({
 export function BuildPanel({
   workers,
   reviews = [],
+  commands = [],
+  past = [],
+  historyError,
+  historyLoading,
+  reviewError,
+  workerError,
+  creatorId,
+  jobs = [],
   id,
-}: {
-  workers: WorkerBuild[];
-  reviews?: readonly WorkerReview[];
-  id: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  if (!workers.length && !reviews.length) return null;
-  const percent = combinedPercent(workers);
-  const first = [...workers].sort((a, b) => (a.etaSeconds ?? Infinity) - (b.etaSeconds ?? Infinity))[0];
+}: PanelProps & { id: string }) {
+  const [modal, setModal] = useState<'review' | 'completed'>();
+  const [conversation, setConversation] = useState<PastTicket>();
+  const reviewCount = reviews.length + commands.length;
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
       <h2>Builds</h2>
-      {first && (
-        <button
-          type="button"
-          className="worker-tracker-summary"
-          aria-expanded={expanded}
-          aria-controls={`${id}-list`}
-          onClick={() => setExpanded(!expanded)}
-        >
-          <span>
-            {first.title}
-            {first.etaSeconds === null ? '' : ` · about ${formatTime(first.etaSeconds)} left`}
-          </span>
-          <span>{percent === null ? '—' : `${percent}%`}</span>
-          <span className="worker-tracker-bar">
-            <span style={{ width: `${percent ?? 0}%` }} />
-          </span>
-          <small>{expanded ? 'Hide builds ▴' : 'Show each build ▾'}</small>
+      {workerError && <p role="alert">Could not load all build updates.</p>}
+      {reviewError && <p role="alert">Could not load all reviews.</p>}
+      {reviewCount > 0 && (
+        <button type="button" className="worker-tracker-summary" onClick={() => setModal('review')}>
+          {reviewCount} Needs Review
         </button>
       )}
-      {expanded && (
-        <ul id={`${id}-list`} className="worker-tracker-list">
-          {workers.map((worker) => (
-            <li key={worker.ticket}>
-              <div>
-                <strong>{worker.title}</strong>
-                <span>{worker.etaSeconds === null ? '—' : formatTime(worker.etaSeconds)}</span>
-              </div>
-              <span className="worker-tracker-bar">
-                <span style={{ width: `${worker.percent ?? 0}%` }} />
+      <ul className="worker-tracker-list">
+        {workers.map((worker) => (
+          <li key={worker.ticket}>
+            <div>
+              <strong>{worker.title}</strong>
+              <span>
+                {waitingLabel(worker.state) ??
+                  (worker.percent === 100 ? 'Finishing' : worker.percent == null ? '' : `${worker.percent}%`)}
               </span>
-            </li>
-          ))}
-        </ul>
+            </div>
+            {!waitingLabel(worker.state) && worker.percent != null && worker.percent < 100 && (
+              <span className="worker-tracker-bar">
+                <span style={{ width: `${worker.percent}%` }} />
+              </span>
+            )}
+            {(worker.phase || worker.elapsedSeconds != null) && !waitingLabel(worker.state) && (
+              <small>
+                {[
+                  worker.phase,
+                  worker.elapsedSeconds == null
+                    ? undefined
+                    : `${Math.floor(worker.elapsedSeconds / 60)}m ${worker.elapsedSeconds % 60}s elapsed`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </small>
+            )}
+          </li>
+        ))}
+        <li>
+          <button type="button" onClick={() => setModal('completed')}>
+            Completed
+          </button>
+        </li>
+      </ul>
+      {modal === 'review' && <ReviewInbox reviews={reviews} commands={commands} onClose={() => setModal(undefined)} />}
+      {modal === 'completed' && (
+        <Dialog
+          title="Completed"
+          className="job-conversation-dialog"
+          backdropClassName="job-conversation-backdrop"
+          onClose={() => setModal(undefined)}
+        >
+          <button
+            type="button"
+            className="job-conversation-close"
+            aria-label="Close"
+            onClick={() => setModal(undefined)}
+          >
+            ×
+          </button>
+          {historyLoading && <p>Loading completed tickets…</p>}
+          {historyError && <p role="alert">Could not load completed tickets.</p>}
+          <ul className="worker-tracker-list">
+            {past.map((ticket) => {
+              const job =
+                jobs.find((item) => item.id === ticket.jobId) ??
+                jobs.find((item) => item.gameId === ticket.gameId && String(item.aiurIssueNumber) === ticket.ticket);
+              return (
+                <li key={`${ticket.gameId}:${ticket.ticket}`}>
+                  {job ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModal(undefined);
+                        openConversation(job.id);
+                      }}
+                    >
+                      {ticket.title} · {ticket.outcome}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModal(undefined);
+                        setConversation(ticket);
+                      }}
+                    >
+                      {ticket.title} · {ticket.outcome}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Dialog>
       )}
-      {reviews.length > 0 && (
-        <ul className="worker-tracker-list">
-          {reviews.map((review) => (
-            <li key={review.href}>
-              <Link to={review.href}>{review.title}</Link>
-            </li>
-          ))}
-        </ul>
+      {conversation && (
+        <TicketConversation creatorId={creatorId} ticket={conversation} onClose={() => setConversation(undefined)} />
       )}
     </section>
   );
 }
 
-function formatTime(seconds: number): string {
-  const value = Math.max(0, Math.ceil(seconds));
-  return value >= 60 ? `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}` : `${value}s`;
+function waitingLabel(state?: string): string | undefined {
+  return (
+    { 'human-review': 'Needs review', 'ci-wait': 'Waiting for checks', merging: 'Merging' } as Record<string, string>
+  )[state ?? ''];
 }

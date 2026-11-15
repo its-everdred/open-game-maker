@@ -20,6 +20,7 @@ export default new Hono<ApiBindings>()
   .get('/games/:gameId/review-rounds', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     const deps = c.get('deps');
+    const includeGameplay = c.req.query('includeGameplay') === '1';
     const rounds = deps.db
       .select()
       .from(schema.reviewRounds)
@@ -27,7 +28,7 @@ export default new Hono<ApiBindings>()
         and(
           eq(schema.reviewRounds.gameId, game.id),
           isNull(schema.reviewRounds.verdict),
-          ne(schema.reviewRounds.category, 'gameplay'),
+          includeGameplay ? undefined : ne(schema.reviewRounds.category, 'gameplay'),
         ),
       )
       .all();
@@ -48,6 +49,7 @@ export default new Hono<ApiBindings>()
           id: round.id,
           ticket: round.ticket,
           category: round.category,
+          ...(includeGameplay ? { buildId: media.find((item) => item.kind === 'build')?.ref ?? null } : {}),
           question: round.question,
           media: items,
           postedAt: round.postedAt,
