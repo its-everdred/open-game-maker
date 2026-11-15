@@ -56,9 +56,20 @@ Roles: role:gameplay, role:qa
 |---|---|---|---|---|
 | <feature> |  |  | <ticket> |  |
 
+## Game media
+
+| Asset | Ticket | Roles | Blocked by |
+|---|---|---|---|
+| Thumbnail | <thumbnail ticket> | role:visual | <logo and graphics/look tickets> |
+| Trailer | <trailer ticket> | role:visual, role:audio | <gameplay tickets> |
+
+Record these as GitHub native blocked-by edges, not just prose. Refresh the affected media when the style or core gameplay changes.
+
 ## Build Order
 
 ```text
 skeleton
-└─ <feature>: 1 concepts ─ 2 diorama ─ 3 clips ─ 4 slice ─ 5 iterations
+├─ <feature>: 1 concepts ─ 2 diorama ─ 3 clips ─ 4 slice ─ 5 iterations
+├─ logo + graphics/look → thumbnail
+└─ gameplay → trailer
 ```

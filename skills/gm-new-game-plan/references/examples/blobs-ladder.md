@@ -72,6 +72,13 @@ Roles: role:gameplay, role:qa
 | character select | Auto-pick timer | off, 10 s, 20 s | 5 Tune: select timer, Blobs |  |
 | round end | First-match CPU difficulty | easy, normal, hard | 5 Tune: CPU, Blobs |  |
 
+## Game media
+
+| Asset | Ticket | Roles | Blocked by |
+|---|---|---|---|
+| Thumbnail | Thumbnail: Blobs | role:visual | Logo: Blobs; Look: play screen, Blobs |
+| Trailer | Trailer: Blobs | role:visual, role:audio | 4 Slice: play screen, Blobs; 4 Slice: chains, Blobs; 4 Slice: character select, Blobs; 4 Slice: round end, Blobs |
+
 ## Build Order
 
 ```text

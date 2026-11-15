@@ -80,6 +80,22 @@ describe('games-host server', () => {
     expect(unknown.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
+  it('serves gameplay trailers as MP4 video', async () => {
+    await writeFile(join(build, 'trailer.mp4'), 'video');
+    const response = await app().request('/g/demo/b1/trailer.mp4');
+    expect(response.headers.get('content-type')).toBe('video/mp4');
+    expect(await response.text()).toBe('video');
+    const partial = await app().request('/g/demo/b1/trailer.mp4', { headers: { Range: 'bytes=1-3' } });
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get('content-range')).toBe('bytes 1-3/5');
+    expect(await partial.text()).toBe('ide');
+    const suffix = await app().request('/g/demo/b1/trailer.mp4', { headers: { Range: 'bytes=-2' } });
+    expect(await suffix.text()).toBe('eo');
+    const invalid = await app().request('/g/demo/b1/trailer.mp4', { headers: { Range: 'bytes=10-' } });
+    expect(invalid.status).toBe(416);
+    expect(invalid.headers.get('content-range')).toBe('bytes */5');
+  });
+
   it('returns headers without a body for HEAD', async () => {
     const response = await app().request('/g/demo/b1/index.html', { method: 'HEAD' });
 

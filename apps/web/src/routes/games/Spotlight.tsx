@@ -6,6 +6,7 @@ import { CommandsInbox } from '../../features/commands-inbox/CommandsInbox';
 import { openConversation } from '../../features/build-chat/conversation';
 import type { Branch } from './types';
 import { Cover } from './Cover';
+import { GameTrailer } from './GameTrailer';
 import { gameTags, type GameSummary, type JobView } from './types';
 import { jobLabel } from './Tile';
 
@@ -105,10 +106,8 @@ export function Spotlight({ game, branches, job, onPlay, onEdit, onClose }: Spot
           </button>
         </div>
       </div>
-      <div className="games-spotlight-media" aria-hidden="true">
-        <span className="game-cover">
-          <Cover game={game} />
-        </span>
+      <div className="games-spotlight-media">
+        <span className="game-cover">{game.trailerUrl ? <GameTrailer game={game} /> : <Cover game={game} />}</span>
       </div>
     </section>
   );

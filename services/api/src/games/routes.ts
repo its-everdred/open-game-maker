@@ -19,6 +19,7 @@ import {
   listGames,
   provisionGame,
 } from './games.js';
+import { gameMedia } from './media.js';
 import { assignSlug, findGameBySlugOrId } from './slug.js';
 import { CommitServiceRepoProvisioner } from './repo-provisioner.js';
 
@@ -75,7 +76,7 @@ const routes = new Hono<ApiBindings>()
     });
     return c.json(gameResponse(await provisionGame(c.get('deps'), game)), 201);
   })
-  .get('/games', (c) => {
+  .get('/games', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.play', {
@@ -83,7 +84,12 @@ const routes = new Hono<ApiBindings>()
         visibility: 'listed',
       }),
     );
-    return c.json({ games: listGames(c.get('deps').db, principal.familyId, principal.userId).map(gameResponse) });
+    const games = listGames(c.get('deps').db, principal.familyId, principal.userId);
+    const media = await gameMedia(
+      c.get('deps'),
+      games.map((game) => game.id),
+    );
+    return c.json({ games: games.map((game) => ({ ...gameResponse(game), ...media.get(game.id) })) });
   })
   .get('/games/:id', (c) => {
     const principal = requirePrincipal(c, ['user']);
