@@ -21,6 +21,8 @@ export type GameSummary = {
   updatedAt?: string;
   lastPlayedAt?: string | null;
   coverUrl?: string | null;
+  trailerUrl?: string | null;
+  portraitTrailerUrl?: string | null;
   publishedReleaseId?: string | null;
   tagline?: string;
   tags?: string[];

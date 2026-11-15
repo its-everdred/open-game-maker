@@ -25,7 +25,18 @@ describe('check-ladder', () => {
     expect(problems).toContain('3. Rendered gameplay clips: "<feature>" has no ticket');
     expect(problems.every((problem) => !problem.startsWith('stages must be'))).toBe(true);
     const halfFilled = TEMPLATE.replace(/<feature>/g, 'play').replace(/<ticket>/g, 'T1');
-    expect(checkLadder(halfFilled)).toEqual(['Features: replace every <placeholder>', '1. Concepts: replace every <placeholder>']);
+    expect(checkLadder(halfFilled)).toContain('Game media: Thumbnail needs a ticket');
+  });
+
+  it('requires both media tickets, roles and blockers', () => {
+    const missing = BLOBS.replace(/^\| Thumbnail \|.*\n/m, '');
+    expect(checkLadder(missing)).toContain('Game media: expected one Thumbnail ticket');
+    const missingTrailer = BLOBS.replace(/^\| Trailer \|.*\n/m, '');
+    expect(checkLadder(missingTrailer)).toContain('Game media: expected one Trailer ticket');
+    expect(checkLadder(BLOBS.replace('role:visual, role:audio | 4 Slice', 'role:visual | 4 Slice')))
+      .toContain('Game media: Trailer roles must be role:visual, role:audio');
+    expect(checkLadder(BLOBS.replace('Logo: Blobs; Look: play screen, Blobs', '')))
+      .toContain('Game media: Thumbnail needs blockers');
   });
 
   it('reads only the first table of a section, so notes tables beside a stage are allowed', () => {

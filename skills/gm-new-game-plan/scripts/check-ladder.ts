@@ -81,6 +81,22 @@ export function checkLadder(markdown: string): string[] {
     problems.push('Features: fill in one row per feature, each with its flow node');
   if (new Set(features).size !== features.length) problems.push('Features: a feature is listed twice');
 
+  const media = all.find((section) => section.heading === 'Game media');
+  const mediaRows = media ? rows(media) : [];
+  for (const [asset, roles] of [
+    ['Thumbnail', 'role:visual'],
+    ['Trailer', 'role:visual, role:audio'],
+  ] as const) {
+    const matches = mediaRows.filter((row) => row.Asset === asset);
+    if (matches.length !== 1) problems.push(`Game media: expected one ${asset} ticket`);
+    else {
+      const row = matches[0]!;
+      if (!row.Ticket || isPlaceholder(row.Ticket)) problems.push(`Game media: ${asset} needs a ticket`);
+      if (row.Roles !== roles) problems.push(`Game media: ${asset} roles must be ${roles}`);
+      if (!row['Blocked by'] || isPlaceholder(row['Blocked by'])) problems.push(`Game media: ${asset} needs blockers`);
+    }
+  }
+
   const stageSections = all.filter((section) => /^[1-5]\. /.test(section.heading));
   const expected = STAGES.map((stage, index) => `${index + 1}. ${stage.title}`);
   const actual = stageSections.map((section) => section.heading);

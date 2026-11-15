@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
@@ -134,6 +136,49 @@ describe('games routes', () => {
       familyId,
       ownerId: creator.userId,
       visibility: 'private',
+    });
+  });
+
+  it('lists media from the current complete main build', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const { app } = await makeApp(deps);
+    const created = await createGame(app);
+    const { id } = (await created.json()) as { id: string };
+    deps.db
+      .insert(schema.branches)
+      .values({
+        id: 'branch-media',
+        gameId: id,
+        name: 'main',
+        gitRef: 'main',
+        latestBuildId: 'build1',
+        status: 'active',
+        createdBy: creator.userId,
+        createdAt: now,
+      })
+      .run();
+    const directory = join(deps.config.gamesRoot, id, 'build1');
+    mkdirSync(join(directory, 'media'), { recursive: true });
+    for (const file of ['thumbnail.png', 'trailer-landscape.mp4', 'trailer-portrait.mp4'])
+      writeFileSync(join(directory, 'media', file), file);
+    const list = async () =>
+      (
+        (await (await app.request('/api/v1/games', { headers: asUser(creator.userId) })).json()) as {
+          games: Array<Record<string, unknown>>;
+        }
+      ).games[0]!;
+    expect(await list()).not.toHaveProperty('coverUrl');
+    writeFileSync(join(directory, '.complete'), '');
+    expect(
+      (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
+    ).toBe(200);
+    expect(await list()).toMatchObject({
+      lastPlayedAt: expect.any(String),
+      coverUrl: `https://games.example.test/g/${id}/build1/media/thumbnail.png`,
+      trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
+      portraitTrailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-portrait.mp4`,
     });
   });
 
