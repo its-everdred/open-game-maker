@@ -43,10 +43,8 @@ test('keeps the cover moving through selection and browser Back', async ({ page 
     .poll(() => page.evaluate(() => (window as Window & { coverGlides?: number }).coverGlides ?? 0))
     .toBeGreaterThan(0);
   const opening = await rect();
-  const expanded = await page.locator('[data-game-id="g_2"]').evaluate((element: HTMLElement) => ({
-    width: element.offsetWidth,
-    height: element.offsetHeight,
-  }));
+  const expanded = await page.locator('[data-game-id="g_2"]').boundingBox();
+  expect(expanded).not.toBeNull();
   for (const key of ['x', 'y', 'width', 'height'] as const)
     expect(Math.abs(opening[key] - before[key])).toBeLessThan(3);
   await page.goBack();
@@ -54,8 +52,8 @@ test('keeps the cover moving through selection and browser Back', async ({ page 
   const closing = await rect();
   const exiting = await page.locator('[data-game-id="g_2"] .game-cell-exiting').boundingBox();
   expect(exiting).not.toBeNull();
-  expect(Math.abs(exiting!.width - expanded.width)).toBeLessThan(3);
-  expect(Math.abs(exiting!.height - expanded.height)).toBeLessThan(3);
+  expect(Math.abs(exiting!.width - expanded!.width)).toBeLessThan(3);
+  expect(Math.abs(exiting!.height - expanded!.height)).toBeLessThan(3);
   for (const key of ['x', 'y', 'width', 'height'] as const)
     expect(Math.abs(closing[key] - opening[key])).toBeLessThan(3);
 });
