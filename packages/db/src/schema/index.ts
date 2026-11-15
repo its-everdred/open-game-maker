@@ -31,3 +31,4 @@ export * from './review-drafts.js';
 export * from './review-rounds.js';
 export * from './review-dispatch-intents.js';
 export * from './review-phase-owners.js';
+export * from './game-plays.js';

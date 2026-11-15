@@ -63,6 +63,41 @@ async function createGame(
 }
 
 describe('games routes', () => {
+  it('records play per user and refuses unauthorized games', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g-play',
+        familyId,
+        ownerId: creator.userId,
+        title: 'Play',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: now,
+      })
+      .run();
+    const { app } = await makeApp(deps);
+    expect(
+      (await app.request('/api/v1/games/g-play/play', { method: 'POST', headers: asUser(player.userId) })).status,
+    ).toBe(403);
+    expect(
+      (await app.request('/api/v1/games/g-play/play', { method: 'POST', headers: asUser(creator.userId) })).status,
+    ).toBe(200);
+    expect(
+      (await app.request('/api/v1/games/g-play/play', { method: 'POST', headers: asUser(creator.userId) })).status,
+    ).toBe(200);
+    const listed = await app.request('/api/v1/games', { headers: asUser(creator.userId) });
+    const body = (await listed.json()) as { games: { id: string; lastPlayedAt: string | null }[] };
+    expect(body.games[0]).toMatchObject({ id: 'g-play', lastPlayedAt: expect.any(String) });
+    expect(deps.db.select().from(schema.gamePlays).all()).toHaveLength(1);
+    deps.db.update(schema.games).set({ visibility: 'listed' }).run();
+    const otherList = await app.request('/api/v1/games', { headers: asUser(player.userId) });
+    const otherBody = (await otherList.json()) as { games: { lastPlayedAt: string | null }[] };
+    expect(otherBody.games[0]?.lastPlayedAt).toBeNull();
+  });
+
   it('provisions and stores a creator game, then resolves it through the registry', async () => {
     const deps = makeDeps();
     seedFamily(deps);

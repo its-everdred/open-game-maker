@@ -173,6 +173,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it('orders played games newest first ahead of the existing unplayed order', async () => {
+  gamesResponse = games.map((game) => ({
+    ...game,
+    lastPlayedAt: game.id === 'g_3' ? '2026-11-03T00:00:00Z' : game.id === 'g_1' ? '2026-11-04T00:00:00Z' : null,
+  }));
+  renderGames();
+  await waitFor(() => {
+    const ids = [...document.querySelectorAll('[data-game-id]')].map((node) => node.getAttribute('data-game-id'));
+    expect(ids.slice(0, 2)).toEqual(['g_1', 'g_3']);
+    expect(ids.indexOf('g_2')).toBeGreaterThan(1);
+  });
+});
+
 describe('GamesScreen', () => {
   it('opens the selected prototype showcase even when Goblin Cellar has a build', async () => {
     renderGames();

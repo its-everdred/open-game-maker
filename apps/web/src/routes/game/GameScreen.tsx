@@ -28,6 +28,7 @@ import { inspectBuildChange, readyBuildSignal } from '../../features/editor/buil
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
 import { FocusZone } from '../../lib/input';
+import { api } from '../../lib/api/client';
 import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
@@ -95,6 +96,13 @@ export function GameScreen() {
   const mode: 'play' | 'edit' = searchParams.get('mode') === 'edit' ? 'edit' : 'play';
   const gamesOrigin = import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000';
   const game = useQuery({ queryKey: ['game', gameId], queryFn: () => getGame(gameId), enabled: gameId !== '' });
+  const loadedGameId = game.data?.id;
+  useEffect(() => {
+    if (mode !== 'play' || loadedGameId !== gameId || !gameId) return;
+    void api(`/games/${encodeURIComponent(gameId)}/play`, { method: 'POST' })
+      .then(() => queryClient.invalidateQueries({ queryKey: ['games'] }))
+      .catch(() => {});
+  }, [gameId, loadedGameId, mode, queryClient]);
   const design = useQuery({
     queryKey: ['design', gameId, branch],
     queryFn: () => getDesignSnapshot(gameId, branch),
