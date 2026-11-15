@@ -21,6 +21,44 @@ const bridgeOrigin = `http://127.0.0.1:${bridgePort}`;
 
 test.use({ serviceWorkers: 'block' });
 
+test('fits a tall palette thumbnail within landscape cards', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'both landscape sizes are covered in one Chromium session');
+  await installAuthRoutes(page, { signedIn: true });
+  const api = await installGameApi(page);
+  await openReadyEditor(page, api);
+  const card = page.getByRole('button', { name: 'Skeleton' });
+  await card.evaluate(async (element) => {
+    const image = document.createElement('img');
+    image.src =
+      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="200"><rect width="20" height="200" fill="red"/></svg>';
+    element.prepend(image);
+    await image.decode();
+    if (image.naturalWidth !== 20 || image.naturalHeight !== 200) throw new Error('Tall thumbnail did not load');
+  });
+  for (const viewport of [
+    { width: 844, height: 390 },
+    { width: 1180, height: 820 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const bounds = await card.evaluate((element) => {
+      const cardRect = element.getBoundingClientRect();
+      const image = element.querySelector('img')!;
+      const imageRect = image.getBoundingClientRect();
+      const labelRect = element.querySelector('span:not(.ai-badge)')!.getBoundingClientRect();
+      return {
+        cardTop: cardRect.top,
+        imageTop: imageRect.top,
+        imageBottom: imageRect.bottom,
+        labelTop: labelRect.top,
+        fit: getComputedStyle(image).objectFit,
+      };
+    });
+    expect(bounds.imageTop).toBeGreaterThanOrEqual(bounds.cardTop);
+    expect(bounds.imageBottom).toBeLessThanOrEqual(bounds.labelTop);
+    expect(bounds.fit).toBe('contain');
+  }
+});
+
 test('runs the cross-origin editor transaction, undo, and mode flow', async ({ page }, testInfo) => {
   test.slow(); // one test walks load, transaction, undo and play; navigation alone took 13 s on a loaded host
   await installAuthRoutes(page, { signedIn: true });
