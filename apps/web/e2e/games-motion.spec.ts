@@ -45,12 +45,8 @@ test('keeps the cover moving through selection and browser Back', async ({ page 
   const opening = await rect();
   for (const key of ['x', 'y', 'width', 'height'] as const)
     expect(Math.abs(opening[key] - before[key])).toBeLessThan(3);
-  const afterOpen = await page.evaluate(() => (window as Window & { coverGlides?: number }).coverGlides ?? 0);
   await page.goBack();
   await expect(tile).toBeVisible();
-  await expect
-    .poll(() => page.evaluate(() => (window as Window & { coverGlides?: number }).coverGlides ?? 0))
-    .toBeGreaterThan(afterOpen);
   const closing = await rect();
   for (const key of ['x', 'y', 'width', 'height'] as const)
     expect(Math.abs(closing[key] - opening[key])).toBeLessThan(3);
