@@ -26,7 +26,9 @@ export class SdkHostApi implements HostApi {
   ) {}
 
   readonly haptics: HostApi['haptics'] = {
-    pulse: (pattern) => this.send('haptics.pulse', { pattern }),
+    pulse: (pattern) => {
+      if (this.capabilities.has('haptics')) this.send('haptics.pulse', { pattern });
+    },
   };
 
   readonly input: HostApi['input'] = {

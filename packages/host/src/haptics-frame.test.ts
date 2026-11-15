@@ -16,6 +16,7 @@ it('routes game requests through the frame setting', () => {
   } as typeof HostBridge.prototype.on);
   const vibrate = vi.fn();
   Object.defineProperty(navigator, 'vibrate', { configurable: true, value: vibrate });
+  localStorage.setItem('ogm.settings', JSON.stringify({ haptics: false }));
   const frame = createGameFrame({
     container: document.body,
     gamesOrigin: 'https://games.test',
@@ -23,17 +24,17 @@ it('routes game requests through the frame setting', () => {
     gameId: 'g',
     buildId: 'b',
     build: 'draft',
-    mode: 'play',
+    mode: 'edit',
     playerIndex: 0,
     capabilities: [],
     role: () => 'owner',
   });
-  frame.setSettings({ mute: false, volume: 1, textScale: 1, reduceMotion: false, haptics: false });
   pulse?.({ pattern: 'heavy' });
   expect(vibrate).not.toHaveBeenCalled();
   frame.setSettings({ mute: false, volume: 1, textScale: 1, reduceMotion: false, haptics: true });
   pulse?.({ pattern: 'heavy' });
   expect(vibrate).toHaveBeenCalledWith(50);
   frame.dispose();
+  localStorage.removeItem('ogm.settings');
   delete (navigator as Partial<Navigator>).vibrate;
 });

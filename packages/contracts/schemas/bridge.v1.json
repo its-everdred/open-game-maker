@@ -814,6 +814,9 @@
                   "minimum": 0,
                   "maximum": 1
                 },
+                "haptics": {
+                  "type": "boolean"
+                },
                 "gameOptions": {
                   "type": "object",
                   "propertyNames": {
@@ -2629,6 +2632,67 @@
     },
     "GameToHost": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
+              "const": "haptics.pulse"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "light",
+                        "medium",
+                        "heavy"
+                      ]
+                    },
+                    {
+                      "minItems": 1,
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": {}
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
         {
           "type": "object",
           "properties": {

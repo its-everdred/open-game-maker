@@ -195,4 +195,4 @@ updates through the scenery controller, and protecting the game's play-area rect
 
 ## Haptics
 
-Call `host.haptics.pulse('light' | 'medium' | 'heavy')` for a short response, or pass an array of up to five integer millisecond durations (0–100 each), alternating vibration and pauses. The shell rate-limits requests and respects its haptics and reduced-motion settings. Playback requires browser support and user activation; unsupported devices silently do nothing. iOS Safari does not expose the Vibration API, and its native switch feedback is not a reliable programmable fallback.
+Call `host.haptics.pulse('light' | 'medium' | 'heavy')` for a short response, or pass an array of up to five integer millisecond durations (0–100 each), alternating vibration and pauses. The shell rate-limits requests and respects its haptics and reduced-motion settings. Older shells without haptics support silently ignore requests. Playback requires browser support and user activation; unsupported devices silently do nothing. iOS Safari does not expose the Vibration API, and its native switch feedback is not a reliable programmable fallback.
