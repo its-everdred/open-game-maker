@@ -20,6 +20,8 @@ export type GameSummary = {
   createdAt: string;
   updatedAt?: string;
   coverUrl?: string | null;
+  trailerUrl?: string | null;
+  portraitTrailerUrl?: string | null;
   publishedReleaseId?: string | null;
   tagline?: string;
   tags?: string[];

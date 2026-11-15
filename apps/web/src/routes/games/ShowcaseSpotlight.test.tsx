@@ -6,6 +6,20 @@ import { ShowcaseSpotlight } from './ShowcaseSpotlight';
 afterEach(cleanup);
 
 describe('showcase detail', () => {
+  it('shows published media for a real showcase game', () => {
+    const game = {
+      ...mergeShowcase([])[0]!,
+      coverUrl: '/thumbnail.png',
+      trailerUrl: '/landscape.mp4',
+      portraitTrailerUrl: '/portrait.mp4',
+    };
+    render(<ShowcaseSpotlight game={game} canOpen onPlay={vi.fn()} onEdit={vi.fn()} onClose={vi.fn()} />);
+    expect(document.querySelector('img[src="/thumbnail.png"]')).not.toBeNull();
+    expect(document.querySelector('video.game-trailer-portrait')).toHaveAttribute('src', '/portrait.mp4');
+    expect(document.querySelector('video.game-trailer-portrait')).toHaveAttribute('poster', '/thumbnail.png');
+    expect(document.querySelector('video.game-trailer-landscape')).toHaveAttribute('src', '/landscape.mp4');
+  });
+
   it('shows the prototype tags and stats and opens the selected action', () => {
     const game = mergeShowcase([]).find((entry) => entry.title === 'Goblin Cellar')!;
     const play = vi.fn();

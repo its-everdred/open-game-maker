@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { Icon } from '../../components/Icon';
 import { Cover } from './Cover';
+import { GameTrailer } from './GameTrailer';
 import { splatMask } from './splatMask';
 import type { GameSummary } from './types';
 
@@ -126,11 +127,8 @@ export function ShowcaseSpotlight({
         className="games-spotlight-media"
         data-splat={Boolean(mask)}
         style={mask ? { maskImage: `url(${mask})`, WebkitMaskImage: `url(${mask})` } : undefined}
-        aria-hidden="true"
       >
-        <span className="game-cover">
-          <Cover game={game} hero />
-        </span>
+        <span className="game-cover">{game.trailerUrl ? <GameTrailer game={game} /> : <Cover game={game} hero />}</span>
       </div>
     </section>
   );

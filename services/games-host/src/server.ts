@@ -190,6 +190,27 @@ async function serveFile(
     'Content-Type': mimeForPath(file),
     ...extraHeaders,
   });
+  if (mimeForPath(file) === 'video/mp4') {
+    headers.set('Accept-Ranges', 'bytes');
+    const range = context.req.method === 'GET' ? context.req.header('Range') : undefined;
+    const ifRange = context.req.header('If-Range');
+    if (range && (!ifRange || ifRange === headers.get('ETag'))) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (match && (match[1] || match[2])) {
+        const suffix = !match[1];
+        const start = suffix ? Math.max(0, fileStat.size - Number(match[2])) : Number(match[1]);
+        const end = suffix || !match[2] ? fileStat.size - 1 : Math.min(Number(match[2]), fileStat.size - 1);
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= fileStat.size) {
+          headers.set('Content-Range', `bytes */${fileStat.size}`);
+          return new Response(null, { headers, status: 416 });
+        }
+        headers.set('Content-Range', `bytes ${start}-${end}/${fileStat.size}`);
+        headers.set('Content-Length', String(end - start + 1));
+        const stream = createReadStream(file, { start, end });
+        return new Response(Readable.toWeb(stream) as unknown as BodyInit, { headers, status: 206 });
+      }
+    }
+  }
   let bodyFile = file;
   let bodySize: number | undefined = fileStat.size;
   let encoding: 'br' | 'gzip' | null = null;
