@@ -19,6 +19,7 @@ export type Worker = WorkerProgress & {
   elapsedSeconds?: number;
   state?: string;
   phase?: string;
+  running?: boolean;
 };
 
 // The daemon belongs to one game. Only expose creator-facing fields, never its workspace or host details.
@@ -56,11 +57,12 @@ export async function listWorkers(client: WorkerClient): Promise<Worker[]> {
           ? entry.started_at
           : undefined;
       const state = String(entry.state ?? '').replace(/^[^:]+:/, '');
-      const waiting = ['human-review', 'ci-wait', 'merging'].includes(state);
+      const waiting = !snapshot.running.includes(entry) && ['human-review', 'ci-wait', 'merging'].includes(state);
       const phase = reading?.phase?.status === 'known' ? reading.phase.value : undefined;
       return {
         ticket,
         title,
+        ...(snapshot.running.includes(entry) ? { running: true } : {}),
         ...(startedAt ? { startedAt } : {}),
         ...(Number.isFinite(runtimeSeconds) && runtimeSeconds >= 0
           ? { elapsedSeconds: Math.floor(runtimeSeconds) }

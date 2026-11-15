@@ -142,6 +142,10 @@ describe('worker progress route', () => {
     });
     expect(await ownConversation.json()).toEqual({ messages: [{ text: 'A creator message' }] });
     expect(conversation).toHaveBeenCalledWith({ owner: 'owner', name: 'shared' }, '11', ['test-game'], false);
+    state.mockResolvedValue({
+      running: [],
+      idle: [{ issue_identifier: '12', title: 'Forest backdrop', runtime_seconds: 10, state: 'agent:ci-wait' }],
+    });
     const response = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
     expect(await response.json()).toEqual({
       workers: [
@@ -160,11 +164,26 @@ describe('worker progress route', () => {
       cursor: 4,
       completed: [{ ticket: '11', seq: 4, at }],
     });
-    state.mockResolvedValue({
-      running: [{ issue_identifier: '12', title: 'Forest backdrop', started_at: '2026-11-02T00:00:00Z' }],
-    });
+    state.mockResolvedValue({ running: [{ issue_identifier: '12', title: 'Forest backdrop' }] });
     const resumed = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
     expect(await resumed.json()).toMatchObject({ workers: [{ ticket: '12', percent: 50, source: 'daemon' }] });
+    state.mockResolvedValue({
+      running: [
+        { issue_identifier: '13', title: 'New game ticket' },
+        { issue_identifier: '14', title: 'Other game ticket' },
+      ],
+    });
+    deps.registry.trackerTicket = vi.fn(async (_repo, id) => ({
+      ticket: id,
+      title: id === '13' ? 'New game ticket' : 'Other game ticket',
+      labels: [id === '13' ? 'game:test-game' : 'game:other'],
+      closedAt: null,
+      updatedAt: null,
+      outcome: 'Closed',
+      url: 'https://github.com/owner/shared/issues/' + id,
+    }));
+    const newWorker = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect((await newWorker.json()).workers.map((worker: { ticket: string }) => worker.ticket)).toEqual(['13', '12']);
     deps.aiurClientForGame = async () => {
       throw new HttpError(409, 'daemon_not_found');
     };

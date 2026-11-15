@@ -24,6 +24,7 @@ describe('game workers', () => {
     expect(await listWorkers(client)).toEqual([
       {
         ticket: '12',
+        running: true,
         title: 'Painted forest backdrop',
         startedAt: '2026-11-01T00:00:00Z',
         elapsedSeconds: 30,
@@ -33,6 +34,7 @@ describe('game workers', () => {
       },
       {
         ticket: '13',
+        running: true,
         title: 'Add a big boss monster now',
         elapsedSeconds: 20,
         percent: null,

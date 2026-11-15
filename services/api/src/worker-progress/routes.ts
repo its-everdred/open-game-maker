@@ -29,6 +29,20 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
       daemonUnavailable = true;
       return [];
     });
+  const unobserved = workers.filter((worker) => !observed.has(worker.ticket) && !scope.owned.has(worker.ticket));
+  let lookupUnavailable = false;
+  if (deps.registry.trackerTicket) {
+    const results = await Promise.allSettled(
+      unobserved.map((worker) => deps.registry.trackerTicket!(repo, worker.ticket)),
+    );
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        lookupUnavailable = true;
+        continue;
+      }
+      if (result.value && belongsToGame(result.value, scope)) allowed.set(result.value.ticket, result.value);
+    }
+  } else if (unobserved.length) lookupUnavailable = true;
   const byTicket = new Map(
     workers
       .filter(
@@ -43,6 +57,10 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
       .filter((state) => ['human-review', 'ci-wait', 'merging'].includes(state));
     if (states.length !== 1) continue;
     const prior = byTicket.get(item.ticket);
+    if (prior?.running && prior.percent !== null && prior.percent < 100) {
+      byTicket.set(item.ticket, { ...prior, state: 'in-progress' });
+      continue;
+    }
     if (prior?.startedAt && item.updatedAt && Date.parse(prior.startedAt) > Date.parse(item.updatedAt)) continue;
     byTicket.set(item.ticket, {
       ...prior,
@@ -54,7 +72,12 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
       source: 'unknown',
     });
   }
-  return c.json({ workers: [...byTicket.values()], daemonUnavailable, trackerStale: snapshot.stale, ...history });
+  return c.json({
+    workers: [...byTicket.values()],
+    daemonUnavailable: daemonUnavailable || lookupUnavailable,
+    trackerStale: snapshot.stale,
+    ...history,
+  });
 });
 
 routes.get('/games/:gameId/tickets/completed', async (c) => {
