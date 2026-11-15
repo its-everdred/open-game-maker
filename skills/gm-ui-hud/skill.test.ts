@@ -24,6 +24,7 @@ const sdkExports = {
     mute: 1,
     volume: 1,
     musicVolume: 1,
+    haptics: 1,
     textScale: 1,
     reduceMotion: 1,
     gameOptions: 1,
