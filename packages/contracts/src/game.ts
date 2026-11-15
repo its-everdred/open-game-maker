@@ -336,6 +336,7 @@ export type PlayerSettings = {
   mute: boolean;
   volume: number;
   musicVolume?: number;
+  haptics?: boolean;
   textScale: number;
   reduceMotion: boolean;
   gameOptions?: Record<string, boolean | string | number>;
@@ -348,6 +349,7 @@ export interface HostApi {
   input: { on(action: string, cb: (v: ActionValue) => void): () => void };
   viewport: { onChange(cb: (v: Viewport) => void): () => void; current(): Viewport };
   events: { emit(kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown): void };
+  haptics: { pulse(pattern: 'light' | 'medium' | 'heavy' | number[]): void };
   settings: { onChange(cb: (s: PlayerSettings) => void): () => void };
   test: { register(hooks: GmTestHooks): void };
 }

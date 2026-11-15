@@ -496,6 +496,7 @@ describe('PlatformHud', () => {
       mute: false,
       volume: 1,
       musicVolume: 1,
+      haptics: true,
       textScale: 1,
       reduceMotion: expect.any(Boolean),
     });

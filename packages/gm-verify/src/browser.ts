@@ -159,6 +159,8 @@ export type OpenGameOptions = {
   console?: ConsoleCollector;
   readyTimeoutMs?: number;
   contextOptions?: BrowserContextOptions;
+  /** Record SDK sound requests against the deterministic game clock. */
+  trailerAudio?: boolean;
   /** Capture inside the app shell instead of the bare game page. */
   app?: AppFrame;
 };
@@ -187,11 +189,21 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
     /* A service worker would answer game requests before the local-build route sees them. */
     ...(app?.localUrl ? { serviceWorkers: 'block' as const } : {}),
   });
+  if (options.trailerAudio) {
+    await context.addInitScript(() => {
+      (window as unknown as { __gmTrailerAudio: unknown }).__gmTrailerAudio = {
+        timeMs: 0,
+        events: [],
+        unsupported: [],
+      };
+    });
+  }
   if (app?.localUrl) {
     await routeGameToLocal(context, { ...app, localUrl: app.localUrl });
     await context.addInitScript(captureParams, { appOrigin: new URL(app.url).origin, tier: options.tier });
   }
   const page = await context.newPage();
+  if (options.trailerAudio) await page.clock.install();
   const collector = options.console ?? new ConsoleCollector();
   let failEarly: (error: Error) => void = () => {};
   const early = new Promise<never>((_, reject) => {
@@ -231,6 +243,10 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
     ready = true;
     const renderer = await rendererString(page);
     const hooks = await HookDriver.attach(page, options.rig, game);
+    if (options.trailerAudio) {
+      const now = await page.evaluate(() => Date.now());
+      await page.clock.pauseAt(now + 100);
+    }
     return {
       page,
       game,

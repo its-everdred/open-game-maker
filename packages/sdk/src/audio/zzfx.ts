@@ -44,7 +44,7 @@ export class ZzfxPlayer {
 
 // Adapted from zzfx@1.4.0's MIT-licensed buildSamples. The package entry point creates its own
 // AudioContext at import time, so keeping the generator here preserves the SDK's one-context invariant.
-function generateZzfx(values: number[], random: () => number): Float32Array {
+export function generateZzfx(values: number[], random: () => number): Float32Array {
   const volume = values[0] ?? 1;
   const randomness = values[1] ?? 0.05;
   let frequency = values[2] ?? 220;

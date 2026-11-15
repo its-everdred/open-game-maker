@@ -119,6 +119,7 @@ describe('command registry', () => {
       'skills show',
       'skills sync',
       'test',
+      'trailer',
       'verify serve',
     ]);
     for (const command of registry.values()) expect(commandHelp(command).length).toBeLessThanOrEqual(15);

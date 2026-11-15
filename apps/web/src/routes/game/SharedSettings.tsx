@@ -100,6 +100,14 @@ export function SharedSettings({
           <label>
             <input
               type="checkbox"
+              checked={settings.haptics ?? true}
+              onChange={(e) => update({ haptics: e.currentTarget.checked })}
+            />{' '}
+            Haptics
+          </label>
+          <label>
+            <input
+              type="checkbox"
               checked={settings.mute}
               onChange={(e) => update({ mute: e.currentTarget.checked })}
             />{' '}

@@ -45,6 +45,8 @@ describe('shared game settings', () => {
 
     fireEvent.change(screen.getByRole('slider', { name: 'Music volume' }), { target: { value: '0.25' } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ volume: 0.8, musicVolume: 0.25 }));
+    fireEvent.click(screen.getByLabelText('Haptics'));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ haptics: false }));
     fireEvent.click(screen.getByText('Controls'));
     fireEvent.click(screen.getByRole('button', { name: 'jump: Space' }));
     fireEvent.keyDown(screen.getByRole('button', { name: 'jump: press a key' }), { key: 'Tab', code: 'Tab' });
