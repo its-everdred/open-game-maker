@@ -12,6 +12,8 @@ import { serveStatic } from '../src/server';
 import { GPU_ARGS, SOFTWARE_ARGS } from '../src/browser';
 import { encodeMp4 } from '../src/qa/media';
 
+import { captureStill, ScreenshotTimeout } from './still';
+
 const [dist, out, tapsJson, editArg, videoArg, softwareArg, testFastArg] = process.argv.slice(2);
 if (!dist || !out || !tapsJson) throw new Error('missing capture arguments');
 const taps = JSON.parse(tapsJson) as string[];
@@ -24,7 +26,7 @@ console.error('shell capture: starting app server');
 const server = await serveStatic(web);
 console.error('shell capture: launching Chromium');
 const browser = await chromium
-  .launch({ headless: true, args: softwareArg === '1' ? SOFTWARE_ARGS : GPU_ARGS })
+  .launch({ headless: true, args: softwareArg === '1' ? [...SOFTWARE_ARGS, '--disable-gpu-compositing'] : GPU_ARGS })
   .catch(async (error: unknown) => {
     await server.close();
     throw error;
@@ -32,6 +34,7 @@ const browser = await chromium
 const build = buildId;
 // Only the browser fixture invokes the runner directly with this final argument; the CLI never does.
 const settleMs = testFastArg === '--test-fast' ? 1_000 : 14_000;
+const screenshotTimeout = softwareArg === '1' ? 30_000 : 10_000;
 try {
   mkdirSync(out, { recursive: true });
   const viewports = [
@@ -90,12 +93,13 @@ try {
       );
       if ((await state.jsonValue()) !== 'ready') throw new Error('game bridge did not become ready');
       console.error(`shell capture: game ready at ${size}`);
+      if (softwareArg !== '1') await captureStill(page, undefined, `first frame at ${size}`, 5_000);
       await page.waitForTimeout(settleMs);
       const check = () => {
         if (errors.length) throw new Error(errors.join('\n'));
       };
       check();
-      await page.screenshot({ path: resolve(out, `play-${size}.png`), timeout: 120_000 });
+      await captureStill(page, resolve(out, `play-${size}.png`), `play at ${size}`, screenshotTimeout);
       console.error(`shell capture: play still captured at ${size}`);
       const game = page.frameLocator('.game-frame iframe');
       for (const text of taps) {
@@ -105,13 +109,13 @@ try {
       if (taps.length) {
         await page.waitForTimeout(testFastArg === '--test-fast' ? 500 : 9_000);
         check();
-        await page.screenshot({ path: resolve(out, `ingame-${size}.png`), timeout: 120_000 });
+        await captureStill(page, resolve(out, `ingame-${size}.png`), `ingame at ${size}`, screenshotTimeout);
       }
       const menu = page.getByRole('button', { name: 'Menu', exact: true }).first();
       await menu.tap();
       await page.waitForTimeout(1_500);
       check();
-      await page.screenshot({ path: resolve(out, `menu-${size}.png`), timeout: 120_000 });
+      await captureStill(page, resolve(out, `menu-${size}.png`), `menu at ${size}`, screenshotTimeout);
       if (editArg === '1') {
         await page.getByRole('button', { name: 'Edit', exact: true }).tap();
         await page.getByLabel('Editor canvas').waitFor({ timeout: 30_000 });
@@ -126,7 +130,7 @@ try {
         );
         await page.waitForTimeout(1_500);
         check();
-        await page.screenshot({ path: resolve(out, `edit-${size}.png`), timeout: 120_000 });
+        await captureStill(page, resolve(out, `edit-${size}.png`), `edit at ${size}`, screenshotTimeout);
       }
       const video = page.video();
       await context.close();
@@ -135,6 +139,10 @@ try {
       await context.close();
     }
   }
+} catch (error) {
+  if (!(error instanceof ScreenshotTimeout)) throw error;
+  console.error(error.message);
+  process.exitCode = 42;
 } finally {
   try {
     await browser.close();
