@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { NewGameScreen } from './NewGameScreen';
+import { authClient } from '../../lib/api/auth';
+
+// This screen test does not exercise authentication; ScopeChat otherwise mounts the real session atom.
+vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: null, isPending: false }) }));
 
 const catalog = [
   {
@@ -273,6 +277,8 @@ describe('NewGameScreen', () => {
     renderScreen('/new?step=talk');
 
     await waitFor(() => expect(writes.some(({ method }) => method === 'POST')).toBe(true));
+    await screen.findByText('The builder is unavailable right now. Try again later.');
+    expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy();
     for (const heading of ['Players', 'World', 'Art']) {
       fireEvent.click(screen.getByRole('button', { name: 'Back' }));
       await screen.findByRole('heading', { name: heading });
