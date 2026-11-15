@@ -26,7 +26,7 @@
   position: absolute;
   z-index: -1;
   inset: 0;
-  background: var(--surface-page);
+  background: transparent;
   content: '';
   pointer-events: none;
 }
@@ -668,9 +668,6 @@
 .showcase-tile .game-cover::after {
   background: var(--showcase-shade);
 }
-.showcase-spotlight::before {
-  background: transparent;
-}
 .showcase-stars {
   display: flex;
   align-items: center;
@@ -699,8 +696,36 @@
   inset: -10%;
   overflow: hidden;
   filter: blur(70px) saturate(1.7);
-  opacity: 0.55;
+  opacity: 0;
   pointer-events: none;
+  transform: translateZ(0);
+  transition: opacity 300ms var(--games-ease);
+  animation: ambient-drift 30s ease-in-out infinite alternate;
+}
+
+.is-selected .showcase-ambient {
+  opacity: 0.55;
+}
+
+@starting-style {
+  .is-selected .showcase-ambient {
+    opacity: 0;
+  }
+}
+
+.showcase-ambient video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes ambient-drift {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1.04);
+  }
+  to {
+    transform: translate3d(2%, 1%, 0) scale(1.04);
+  }
 }
 
 .games-spotlight-media video {

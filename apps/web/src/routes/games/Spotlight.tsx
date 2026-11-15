@@ -6,6 +6,7 @@ import { CommandsInbox } from '../../features/commands-inbox/CommandsInbox';
 import { openConversation } from '../../features/build-chat/conversation';
 import type { Branch } from './types';
 import { Cover } from './Cover';
+import { Ambient } from './Ambient';
 import { GameTrailer } from './GameTrailer';
 import { gameTags, type GameSummary, type JobView } from './types';
 import { jobLabel } from './Tile';
@@ -48,6 +49,7 @@ export function Spotlight({ game, branches, job, onPlay, onEdit, onClose, shared
         onClose();
       }}
     >
+      <Ambient game={game} />
       <button ref={closeRef} type="button" className="games-close" aria-label="Close game" onClick={onClose}>
         <span aria-hidden="true">×</span>
       </button>
