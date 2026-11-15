@@ -50,6 +50,7 @@ for (const viewport of viewports) {
     expect(glass.backgroundImage).toContain('gradient');
     expect(glass.borderTopWidth).toBe('1px');
 
+
     const gameBox = await page.locator('.game-frame iframe').boundingBox();
     expect(gameBox).not.toBeNull();
     expect(gameBox?.x).toBe(0);
@@ -120,6 +121,40 @@ for (const viewport of viewports) {
     await expect(page.locator('.play-bar')).toHaveCount(0);
   });
 }
+
+test('play menu stays readable over light artwork', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'desktop covers the shared glass styling');
+  await installAuthRoutes(page, { signedIn: true });
+  await installGameApi(page);
+  await openReadyGame(page);
+  const menu = page.getByRole('button', { name: 'Menu' });
+  // Even a game requesting a white tint over white artwork must leave the pale icon readable.
+  const contrast = await menu.evaluate((element) => {
+    const original = element.style.getPropertyValue('--play-menu-colour');
+    element.style.setProperty('--play-menu-colour', 'white');
+    const style = getComputedStyle(element);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext('2d')!;
+    const luminance = (colour: string, background: string) => {
+      context.fillStyle = background;
+      context.fillRect(0, 0, 1, 1);
+      context.fillStyle = colour;
+      context.fillRect(0, 0, 1, 1);
+      const channels = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+    };
+    const background = luminance(style.backgroundColor, 'white');
+    const foreground = luminance(style.color, 'white');
+    if (original) element.style.setProperty('--play-menu-colour', original);
+    else element.style.removeProperty('--play-menu-colour');
+    return (foreground + 0.05) / (background + 0.05);
+  });
+  expect(contrast).toBeGreaterThanOrEqual(4.5);
+});
 
 test('settings hides the game menu until returning to pause', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'desktop covers the shared menu interaction');
