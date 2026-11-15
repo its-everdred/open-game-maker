@@ -174,15 +174,18 @@ afterEach(() => {
 });
 
 it('orders played games newest first ahead of the existing unplayed order', async () => {
-  gamesResponse = games.map((game) => ({
-    ...game,
-    lastPlayedAt: game.id === 'g_3' ? '2026-11-03T00:00:00Z' : game.id === 'g_1' ? '2026-11-04T00:00:00Z' : null,
-  }));
+  gamesResponse = [...games, { ...games[0]!, id: 'g_4', title: 'Fourth', updatedAt: '2026-01-01T00:00:00Z' }].map(
+    (game) => ({
+      ...game,
+      lastPlayedAt: game.id === 'g_3' ? '2026-11-03T00:00:00Z' : game.id === 'g_1' ? '2026-11-04T00:00:00Z' : null,
+    }),
+  );
   renderGames();
   await waitFor(() => {
     const ids = [...document.querySelectorAll('[data-game-id]')].map((node) => node.getAttribute('data-game-id'));
     expect(ids.slice(0, 2)).toEqual(['g_1', 'g_3']);
     expect(ids.indexOf('g_2')).toBeGreaterThan(1);
+    expect(ids.indexOf('g_4')).toBeGreaterThan(ids.indexOf('g_2'));
   });
 });
 

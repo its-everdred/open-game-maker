@@ -85,12 +85,14 @@ describe('games routes', () => {
     expect(
       (await app.request('/api/v1/games/g-play/play', { method: 'POST', headers: asUser(creator.userId) })).status,
     ).toBe(200);
+    deps.db.update(schema.gamePlays).set({ lastPlayedAt: now }).run();
     expect(
       (await app.request('/api/v1/games/g-play/play', { method: 'POST', headers: asUser(creator.userId) })).status,
     ).toBe(200);
     const listed = await app.request('/api/v1/games', { headers: asUser(creator.userId) });
     const body = (await listed.json()) as { games: { id: string; lastPlayedAt: string | null }[] };
     expect(body.games[0]).toMatchObject({ id: 'g-play', lastPlayedAt: expect.any(String) });
+    expect(body.games[0]!.lastPlayedAt! > now).toBe(true);
     expect(deps.db.select().from(schema.gamePlays).all()).toHaveLength(1);
     deps.db.update(schema.games).set({ visibility: 'listed' }).run();
     const otherList = await app.request('/api/v1/games', { headers: asUser(player.userId) });

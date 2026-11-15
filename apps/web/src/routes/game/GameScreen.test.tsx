@@ -122,7 +122,9 @@ function renderGame(entry = '/g/game') {
         <GameMenuProvider>
           <GameMenuProbe />
           <Routes>
-            <Route path="/g/:gameId" element={<GameScreen />} />
+            <Route path="/g/:gameId" element={<GameScreen />}>
+              <Route path="versions" element={<div>Versions</div>} />
+            </Route>
             <Route path="/all" element={<h1>Games destination</h1>} />
           </Routes>
         </GameMenuProvider>
@@ -205,6 +207,16 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('does not record play when opening a nested screen', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchSpy);
+    renderGame('/g/game/versions');
+    await screen.findByText('Versions');
+    await waitFor(() => expect(editorApi.getGame).toHaveBeenCalled());
+    expect(fetchSpy).not.toHaveBeenCalledWith('/api/v1/games/game/play', expect.anything());
+    vi.unstubAllGlobals();
+  });
+
   it('offers an icon-only play control and keeps editor navigation in the menu', async () => {
     const { container } = renderGame('/g/game?mode=edit');
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
