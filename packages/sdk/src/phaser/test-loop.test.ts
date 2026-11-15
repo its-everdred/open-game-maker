@@ -104,6 +104,7 @@ describe('installSdkRenderLoop', () => {
     frames[0]!(1 / 15);
     frames[0]!(1 / 15);
     expect(step.mock.calls[1]![0]).toBeCloseTo(2000 / 15);
+    expect(game.loop.smoothStep).toBe(false);
   });
 
   it('keeps the frame time of the frame it rendered', () => {

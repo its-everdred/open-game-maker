@@ -16,6 +16,7 @@ it('accepts timed actions and clicks across named scenarios within the trailer l
   ]);
   expect(script[1]!.inputs[0]).toMatchObject({ action: 'hardDrop', phase: 'down', playerIndex: 0 });
   expect(script[1]!.surface).toBe('canvas');
+  expect(trailerScriptSchema.parse([{ seconds: 15.125 }])[0]!.seconds).toBe(15.125);
   expect(() => trailerScriptSchema.parse([{ seconds: 14 }])).toThrow('15–30');
   expect(() => trailerScriptSchema.parse([{ seconds: 15, inputs: [{ t: 15, action: 'hardDrop' }] }])).toThrow(
     'outside',

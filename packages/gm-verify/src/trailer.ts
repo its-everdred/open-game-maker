@@ -27,8 +27,6 @@ export const trailerScriptSchema = z
     if (seconds < 15 || seconds > 30)
       ctx.addIssue({ code: 'custom', message: 'trailer duration must be 15–30 seconds' });
     for (const scene of scenarios) {
-      if (Math.abs(scene.seconds * 30 - Math.round(scene.seconds * 30)) > 1e-7)
-        ctx.addIssue({ code: 'custom', message: 'scenario duration must align to a 30 fps frame' });
       if (scene.inputs.some((step) => step.t >= scene.seconds))
         ctx.addIssue({ code: 'custom', message: 'input falls outside its scenario' });
     }

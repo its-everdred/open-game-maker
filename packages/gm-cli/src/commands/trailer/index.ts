@@ -49,6 +49,9 @@ export const command: GmCommand = {
         'check the scenario list',
       );
     }
+    const fps = flags.fps;
+    if (script.some((scene) => Math.abs(scene.seconds * fps - Math.round(scene.seconds * fps)) > 1e-7))
+      throw new UsageError('scenario durations must align to the frame rate', 'check --fps and scenario durations');
     const build = mkdtempSync(join(tmpdir(), 'gm-trailer-build-'));
     try {
       execFileSync('pnpm', ['run', 'build', '--mode', 'test', '--outDir', build], {
