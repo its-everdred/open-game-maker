@@ -200,6 +200,12 @@
     opacity: 0;
   }
 
+  .game-trailer-layer,
+  .game-trailer-layer.is-closing {
+    animation: none;
+    transition: none;
+  }
+
   .game-tile,
   .game-cover-image,
   .game-cover-placeholder,
