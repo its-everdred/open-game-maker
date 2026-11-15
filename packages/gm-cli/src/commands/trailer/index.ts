@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
+import { printJson } from '../../context.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 
 export const command: GmCommand = {
@@ -50,7 +51,10 @@ export const command: GmCommand = {
     }
     const build = mkdtempSync(join(tmpdir(), 'gm-trailer-build-'));
     try {
-      execFileSync('pnpm', ['run', 'build', '--mode', 'test', '--outDir', build], { cwd: game, stdio: 'inherit' });
+      execFileSync('pnpm', ['run', 'build', '--mode', 'test', '--outDir', build], {
+        cwd: game,
+        stdio: ctx.json ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+      });
       const paths = await verify.captureTrailer({
         fps: typeof flags.fps === 'number' ? flags.fps : 30,
         serveDir: build,
@@ -59,7 +63,8 @@ export const command: GmCommand = {
         software: flags.gpu !== true,
         slots: { runtimeDir: ctx.config.runtimeDir },
       });
-      for (const path of paths) ctx.out(`wrote ${path}`);
+      if (ctx.json) printJson(ctx, { paths });
+      else for (const path of paths) ctx.out(`wrote ${path}`);
       return EXIT.ok;
     } finally {
       rmSync(build, { recursive: true, force: true });

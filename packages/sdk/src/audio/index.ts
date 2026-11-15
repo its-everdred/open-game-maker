@@ -224,7 +224,16 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
       stopLocal();
     },
     applySettings: (next) => {
-      settings = normalizeSettings(next);
+      const normalized = normalizeSettings(next);
+      if (
+        capture &&
+        capture.events.length > 0 &&
+        (normalized.mute !== settings.mute ||
+          normalized.volume !== settings.volume ||
+          normalized.musicVolume !== settings.musicVolume)
+      )
+        capture.unsupported.push('audio settings change');
+      settings = normalized;
       applyMaster();
       graph.musicVolume.gain.setTargetAtTime(settings.musicVolume ?? 1, graph.context.currentTime, 0.05);
       graph.soundVolume.gain.setTargetAtTime(settings.volume, graph.context.currentTime, 0.05);

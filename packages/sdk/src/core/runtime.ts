@@ -206,10 +206,10 @@ export class RuntimeImpl<D, S> implements Runtime<D, S> {
     return steps;
   }
 
-  render(): void {
+  render(dt = this.clock.dt): void {
     this.netController?.gate();
     this.netController?.render();
-    for (const listener of this.frameListeners) listener(this.clock.dt);
+    for (const listener of this.frameListeners) listener(dt);
   }
 
   setRenderInfoProvider(provider: () => RenderInfo): void {

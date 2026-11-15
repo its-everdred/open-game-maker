@@ -43,8 +43,7 @@ export async function scriptedFrames(
       now = target;
     }
   };
-  for (let index = 0; index < Math.round(seconds * fps); index += 1) {
-    const frameMs = (index * 1000) / fps;
+  const processUntil = async (frameMs: number) => {
     while (next < actions.length && actions[next]!.t * 1000 <= frameMs + 1e-7) {
       const action = actions[next++]!;
       await advanceTo(action.t * 1000);
@@ -58,8 +57,12 @@ export async function scriptedFrames(
       }
     }
     await advanceTo(frameMs);
+  };
+  for (let index = 0; index < Math.round(seconds * fps); index += 1) {
+    await processUntil((index * 1000) / fps);
     await capture(index);
   }
+  await processUntil(seconds * 1000);
 }
 
 async function timedFrames(
@@ -110,19 +113,12 @@ export async function scriptedCanvasFrames(
 ): Promise<void> {
   const canvas = hooks.game.locator('canvas').first();
   await timedFrames(hooks, script, seconds, fps, async (index) => {
-    const data = await canvas.evaluate(
-      (element, timeMs) => {
-        const state = window as unknown as {
-          __gm?: { renderAt?: (ms: number) => void };
-          __frame?: (seconds: number) => void;
-        };
-        if (state.__gm?.renderAt) state.__gm.renderAt(timeMs);
-        else if (state.__frame) state.__frame(timeMs / 1000);
-        else throw new Error('canvas trailer capture requires a deterministic render hook');
-        return (element as HTMLCanvasElement).toDataURL('image/png');
-      },
-      (index * 1000) / fps,
-    );
+    const data = await canvas.evaluate((element) => {
+      const gm = (window as unknown as { __gm?: { renderTrailer?: () => void } }).__gm;
+      if (!gm?.renderTrailer) throw new Error('game SDK does not support trailer rendering');
+      gm.renderTrailer();
+      return (element as HTMLCanvasElement).toDataURL('image/png');
+    });
     const match = /^data:image\/png;base64,(.+)$/.exec(data);
     if (!match) throw new Error('game canvas did not produce a PNG frame');
     writeFileSync(join(dir, `f${String(index).padStart(5, '0')}.png`), Buffer.from(match[1]!, 'base64'));
@@ -138,14 +134,11 @@ export async function scriptedPageFrames(
   dir: string,
 ): Promise<void> {
   await timedFrames(hooks, script, seconds, fps, async (index) => {
-    await hooks.game.evaluate(
-      (timeMs) => {
-        const gm = (window as unknown as { __gm?: { renderAt?: (ms: number) => void } }).__gm;
-        if (!gm?.renderAt) throw new Error('page trailer capture requires a deterministic render hook');
-        gm.renderAt(timeMs);
-      },
-      (index * 1000) / fps,
-    );
+    await hooks.game.evaluate(() => {
+      const gm = (window as unknown as { __gm?: { renderTrailer?: () => void } }).__gm;
+      if (!gm?.renderTrailer) throw new Error('game SDK does not support trailer rendering');
+      gm.renderTrailer();
+    });
     await hooks.page.screenshot({ path: join(dir, `f${String(index).padStart(5, '0')}.png`), type: 'png' });
   });
 }

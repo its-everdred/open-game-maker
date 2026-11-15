@@ -57,3 +57,13 @@ it('uses the actual simulation tick when a cue occurs during a multi-step advanc
   audio.play('clear', { pitch: 0 });
   expect(capture.events[0]?.timeMs).toBe(500);
 });
+
+it('refuses to silently misrepresent changes to active audio settings', () => {
+  const capture: TrailerAudioCapture = { timeMs: 0, events: [], unsupported: [] };
+  const win = Object.assign(new FakeWindow(), { __gmTrailerAudio: capture });
+  const context = new FakeAudioContext();
+  const audio = createAudio({ rng: () => 0.5, win: asWindow(win), AudioContextCtor: contextConstructor(context) });
+  audio.music('theme');
+  audio.applySettings({ mute: true, volume: 1 });
+  expect(capture.unsupported).toContain('audio settings change');
+});

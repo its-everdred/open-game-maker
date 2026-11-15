@@ -32,6 +32,7 @@ export interface BugBundle {
 
 export interface RuntimeHooks extends GmTestHooks {
   advanceForTrailer(ms: number): void;
+  renderTrailer(): void;
   renderGameToText(): GameTextSnapshot;
   renderInfo(): RuntimeRenderInfo;
   bundle(): BugBundle;
@@ -60,6 +61,7 @@ export class SdkHooks<D, S> implements RuntimeHooks {
   private readonly keyframes: Keyframe<S>[] = [];
   private readonly textKeyframes: { tick: number; text: GameTextSnapshot }[] = [];
   private replaying = false;
+  private trailerSteps = 0;
 
   constructor(
     private readonly runtime: RuntimeImpl<D, S>,
@@ -93,7 +95,12 @@ export class SdkHooks<D, S> implements RuntimeHooks {
 
   /** Advance fixed steps without drawing; the trailer recorder draws once for its output frame. */
   advanceForTrailer(ms: number): void {
-    this.runtime.advance(ms, false);
+    this.trailerSteps += this.runtime.advance(ms, false);
+  }
+
+  renderTrailer(): void {
+    this.runtime.render(this.trailerSteps * this.runtime.clock.dt);
+    this.trailerSteps = 0;
   }
 
   renderAt(ms: number): void {

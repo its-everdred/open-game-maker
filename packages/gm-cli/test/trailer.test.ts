@@ -50,4 +50,10 @@ it('builds the named game in test mode with staged assets before recording', asy
   expect(result.out.join('\n')).toContain('trailer-portrait.mp4');
   expect(captured).toMatchObject({ fps: 15, seconds: 15 });
   expect(existsSync(captured.build)).toBe(false);
+  const json = await gm(['trailer', 'demo', '--script', 'scenes.json', '--out', 'media', '--json'], { cwd: root });
+  expect(json.code).toBe(0);
+  expect(json.out).toHaveLength(1);
+  expect(JSON.parse(json.out[0]!)).toMatchObject({
+    paths: [expect.stringContaining('trailer-portrait.mp4'), expect.stringContaining('trailer-landscape.mp4')],
+  });
 }, 60_000);

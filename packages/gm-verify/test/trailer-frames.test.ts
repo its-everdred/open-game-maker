@@ -47,6 +47,26 @@ describe('scripted trailer frames', () => {
     expect(events).toEqual(['frame 0', 'click [data-play]', 'frame 1']);
   });
 
+  it('processes inputs in the final frame interval without creating another frame', async () => {
+    const inputs: Record<string, unknown>[] = [];
+    let time = 0;
+    let captures = 0;
+    const hooks = {
+      advanceTime: async (ms: number) => {
+        time += ms;
+      },
+      inject: async (frame: { actions: Record<string, unknown> }) => {
+        inputs.push(frame.actions);
+      },
+    };
+    await scriptedFrames(hooks, [action(0.75, 'drop')], 1, 1, async () => {
+      captures++;
+    });
+    expect(captures).toBe(1);
+    expect(time).toBeCloseTo(1000);
+    expect(inputs.some((frame) => frame.drop === true)).toBe(true);
+  });
+
   it('rejects inputs outside the clip', async () => {
     const hooks = { advanceTime: async () => {}, inject: async () => {} };
     await expect(scriptedFrames(hooks, [action(1, 'drop')], 1, 30, async () => {})).rejects.toThrow(
