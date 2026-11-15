@@ -8,6 +8,7 @@ export type PastTicket = {
   outcome: string;
   closedAt: string;
   url: string;
+  jobId?: string | null;
 };
 export function usePastTickets(games: readonly { id: string }[], creatorId?: string) {
   const queries = useQueries({
@@ -15,7 +16,9 @@ export function usePastTickets(games: readonly { id: string }[], creatorId?: str
       queryKey: ['completed-tickets', creatorId, game.id],
       enabled: Boolean(creatorId),
       queryFn: () =>
-        api<{ tickets: Omit<PastTicket, 'gameId'>[] }>(`/games/${encodeURIComponent(game.id)}/tickets/completed`),
+        api<{ tickets: Omit<PastTicket, 'gameId'>[]; stale?: boolean }>(
+          `/games/${encodeURIComponent(game.id)}/tickets/completed`,
+        ),
       refetchInterval: 60_000,
       retry: false,
     })),
@@ -28,7 +31,7 @@ export function usePastTickets(games: readonly { id: string }[], creatorId?: str
           )
           .sort((a, b) => b.closedAt.localeCompare(a.closedAt))
       : [],
-    error: queries.some((query) => query.isError),
+    error: queries.some((query) => query.isError || query.data?.stale),
     loading: queries.some((query) => query.isLoading),
   };
 }

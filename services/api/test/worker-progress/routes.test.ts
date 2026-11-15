@@ -74,27 +74,62 @@ describe('worker progress route', () => {
     const denied = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(outsider) });
     expect(denied.status).toBeGreaterThanOrEqual(400);
     expect(state).not.toHaveBeenCalled();
-    const history = vi.fn().mockResolvedValue([
-      {
-        ticket: '11',
-        title: 'Done',
-        outcome: 'Completed',
-        closedAt: at,
-        url: 'https://github.com/owner/shared/issues/11',
-      },
-    ]);
-    deps.registry.workerHistory = history;
+    const tracker = vi.fn(async (_repo, state: string) =>
+      state === 'closed'
+        ? {
+            stale: false,
+            tickets: [
+              {
+                ticket: '11',
+                title: 'Done',
+                outcome: 'Completed',
+                closedAt: at,
+                url: 'https://github.com/owner/shared/issues/11',
+                labels: ['game:test-game'],
+              },
+              {
+                ticket: '99',
+                title: 'Other',
+                outcome: 'Completed',
+                closedAt: at,
+                url: 'https://github.com/owner/shared/issues/99',
+                labels: ['game:other'],
+              },
+            ],
+          }
+        : {
+            stale: false,
+            tickets: [
+              {
+                ticket: '12',
+                title: 'Forest backdrop',
+                outcome: 'Closed',
+                closedAt: null,
+                url: 'https://github.com/owner/shared/issues/12',
+                labels: ['game:test-game', 'agent:ci-wait'],
+              },
+            ],
+          },
+    );
+    deps.registry.trackerTickets = tracker;
     const deniedHistory = await app.request(`/api/v1/games/${game}/tickets/completed`, { headers: asUser(outsider) });
     expect(deniedHistory.status).toBeGreaterThanOrEqual(400);
-    expect(history).not.toHaveBeenCalled();
+    expect(tracker).not.toHaveBeenCalled();
     const historyResponse = await app.request(`/api/v1/games/${game}/tickets/completed`, { headers: asUser(user) });
-    expect(historyResponse.status).toBe(200);
-    expect(history).toHaveBeenCalledWith('test-game', { owner: 'owner', name: 'shared' });
-    deps.registry.waitingTickets = vi
-      .fn()
-      .mockResolvedValue([{ ticket: '12', title: 'Forest backdrop', state: 'ci-wait' }]);
+    expect(await historyResponse.json()).toEqual({
+      tickets: [
+        {
+          ticket: '11',
+          title: 'Done',
+          outcome: 'Completed',
+          closedAt: at,
+          url: 'https://github.com/owner/shared/issues/11',
+          jobId: null,
+        },
+      ],
+      stale: false,
+    });
     const response = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
-    expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       workers: [
         {
@@ -107,14 +142,30 @@ describe('worker progress route', () => {
           source: 'unknown',
         },
       ],
+      daemonUnavailable: false,
+      trackerStale: false,
       cursor: 4,
       completed: [{ ticket: '11', seq: 4, at }],
     });
-    deps.registry.waitingTickets = null;
     deps.aiurClientForGame = async () => {
       throw new HttpError(409, 'daemon_not_found');
     };
     const noDaemon = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
-    expect(await noDaemon.json()).toEqual({ workers: [], cursor: 4, completed: [{ ticket: '11', seq: 4, at }] });
+    expect(await noDaemon.json()).toEqual({
+      workers: [
+        {
+          ticket: '12',
+          title: 'Forest backdrop',
+          state: 'ci-wait',
+          percent: null,
+          etaSeconds: null,
+          source: 'unknown',
+        },
+      ],
+      daemonUnavailable: true,
+      trackerStale: false,
+      cursor: 4,
+      completed: [{ ticket: '11', seq: 4, at }],
+    });
   });
 });

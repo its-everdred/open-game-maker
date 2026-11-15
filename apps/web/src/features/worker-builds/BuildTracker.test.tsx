@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BuildPanel, BuildTracker } from './BuildTracker';
@@ -21,6 +23,18 @@ describe('build tracker', () => {
     expect(screen.getByText('Waiting for checks')).toBeVisible();
     expect(screen.queryByText('100%')).toBeNull();
     expect(screen.queryByText(/left/)).toBeNull();
+    const rows = within(screen.getByRole('region', { name: 'Builds' })).getAllByRole('listitem');
+    for (const file of readdirSync('src/features/worker-builds').filter(
+      (name) => /\.tsx?$/.test(name) && !name.includes('.test.'),
+    )) {
+      expect(readFileSync(join('src/features/worker-builds', file), 'utf8')).not.toMatch(
+        /\b(?:demo|fixture)[a-z0-9_]*/i,
+      );
+    }
+    expect(rows.map((row) => row.querySelector('strong')?.textContent).filter(Boolean)).toEqual([
+      'Forest backdrop',
+      'Boss attack',
+    ]);
   });
   it('opens the review deck and the completed list', () => {
     const past = [

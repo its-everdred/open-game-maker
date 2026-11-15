@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import previewRoutes from '../../src/previews/routes.js';
 import roundRoutes from '../../src/review-rounds/routes.js';
 import { previewDirectory } from '../../src/previews/store.js';
+import { postRound } from '../../src/review-rounds/store.js';
 import { scanPreviewRelay } from '../../src/previews/relay.js';
 import { previewTicketVerifier } from '../../src/previews/ticket.js';
 import { daemonRowForGame } from '../../src/jobs/daemons.js';
@@ -83,6 +84,32 @@ function enableTracks(deps: ReturnType<typeof setup>['deps']) {
 }
 
 describe('review round previews', () => {
+  it('includes open gameplay rounds only when requested, with their playable build reference', async () => {
+    const { deps, app } = setup();
+    postRound(deps.db, {
+      id: 'round-game',
+      gameId: ids.game,
+      track: 'game',
+      phase: 'play',
+      category: 'gameplay',
+      round: 1,
+      ticket: '12',
+      sha: SHA,
+      media: JSON.stringify([{ kind: 'build', ref: 'preview-build' }]),
+      postedAt: '2026-11-14T00:00:00Z',
+    });
+    const normal = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
+      headers: asUser(ids.user),
+    });
+    expect(await normal.json()).toEqual({ rounds: [] });
+    const included = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds?includeGameplay=1`, {
+      headers: asUser(ids.user),
+    });
+    expect(await included.json()).toMatchObject({
+      rounds: [{ id: 'round-game', category: 'gameplay', buildId: 'preview-build' }],
+    });
+  });
+
   it('shows an art round and records the owner verdict exactly once', async () => {
     const { deps, app } = setup();
     enableTracks(deps);

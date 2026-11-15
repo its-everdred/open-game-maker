@@ -38,8 +38,7 @@ import { getNotifyRuntime } from './notify/routes.js';
 import { createReviewIssues } from './review-rounds/issues.js';
 import { createWaitTickets } from './decision-waits/tickets.js';
 import { createTicketTitleReader, createWorkpadReader } from './worker-progress/workpad.js';
-import { createTicketHistoryReader } from './worker-progress/history.js';
-import { createWaitingTicketReader } from './worker-progress/waiting.js';
+import { createTrackerReader } from './worker-progress/tracker.js';
 import { startBriefingPush } from './voice/briefing-push.js';
 import { questionSession } from './voice/question-session.js';
 
@@ -120,8 +119,7 @@ deps.registry.chatJobs = createChatJobDirectory(db);
 deps.registry.aiurClientFor = daemonDirectory.clientForSlug;
 deps.registry.workerWorkpad = createWorkpadReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.workerTitle = createTicketTitleReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
-deps.registry.workerHistory = createTicketHistoryReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
-deps.registry.waitingTickets = createWaitingTicketReader(env.OGM_INTAKE_GITHUB_TOKEN);
+deps.registry.trackerTickets = createTrackerReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.issueStateWriter = issues;
 startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));
 

@@ -10,9 +10,19 @@ describe('worker reviews', () => {
   it('loads open ledger rounds and playable previews for the creator', async () => {
     api.mockImplementation((path: string) =>
       Promise.resolve(
-        path.endsWith('/review-rounds')
-          ? { rounds: [{ id: 'r', ticket: '12', question: null, media: [] }] }
-          : { previews: [{ ticket: '13', buildId: 'b' }] },
+        path.includes('/review-rounds?')
+          ? {
+              rounds: [
+                { id: 'r', ticket: '12', question: null, media: [] },
+                { id: 'g', ticket: '13', question: null, media: [], category: 'gameplay', buildId: 'b' },
+              ],
+            }
+          : {
+              previews: [
+                { ticket: '13', buildId: 'b' },
+                { ticket: '99', buildId: 'unbacked' },
+              ],
+            },
       ),
     );
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -21,9 +31,14 @@ describe('worker reviews', () => {
     );
     const { result, unmount } = renderHook(() => useWorkerReviews([{ id: 'game' }], 'owner'), { wrapper });
     await waitFor(() =>
-      expect(result.current).toEqual([
+      expect(result.current.reviews).toEqual([
         { kind: 'round', gameId: 'game', round: { id: 'r', ticket: '12', question: null, media: [] } },
-        { kind: 'preview', gameId: 'game', preview: { ticket: '13', buildId: 'b' } },
+        {
+          kind: 'preview',
+          gameId: 'game',
+          preview: { ticket: '13', buildId: 'b' },
+          round: { id: 'g', ticket: '13', question: null, media: [], category: 'gameplay', buildId: 'b' },
+        },
       ]),
     );
     unmount();

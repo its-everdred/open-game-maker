@@ -73,11 +73,12 @@ export function StudioMenu() {
   const isGameView = Boolean(game || isShowcase);
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
-  const { workers, feeds } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
-  const reviews = useWorkerReviews(
+  const { workers, feeds, error: workerError } = useWorkers(isShowcase ? [] : builds.games, gameId, creatorId);
+  const reviewData = useWorkerReviews(
     isShowcase ? [] : builds.games.filter((game) => !gameId || game.id === gameId),
     creatorId,
   );
+  const reviews = reviewData.reviews;
   const past = usePastTickets(
     isShowcase ? [] : builds.games.filter((item) => !gameId || item.id === gameId),
     creatorId,
@@ -114,7 +115,7 @@ export function StudioMenu() {
       setOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
       setOpen(false);
     };
     document.addEventListener('pointerdown', outside);
@@ -230,7 +231,16 @@ export function StudioMenu() {
       </button>,
     );
   }
-  if (gameId && (workers.length > 0 || reviews.length > 0 || reviewCommands.length > 0 || past.tickets.length > 0)) {
+  if (
+    gameId &&
+    (workers.length > 0 ||
+      reviews.length > 0 ||
+      reviewCommands.length > 0 ||
+      past.tickets.length > 0 ||
+      workerError ||
+      reviewData.error ||
+      past.error)
+  ) {
     circles.push(
       <button
         key="builds"
@@ -391,15 +401,24 @@ export function StudioMenu() {
     );
   } else if (
     sheet === 'builds' &&
-    (workers.length > 0 || reviews.length > 0 || reviewCommands.length > 0 || past.tickets.length > 0)
+    (workers.length > 0 ||
+      reviews.length > 0 ||
+      reviewCommands.length > 0 ||
+      past.tickets.length > 0 ||
+      workerError ||
+      reviewData.error ||
+      past.error)
   ) {
     sheetContent = (
       <BuildPanel
+        key={creatorId ?? 'signed-out'}
         workers={workers}
         reviews={reviews}
         commands={reviewCommands}
         past={past.tickets}
         historyError={past.error}
+        workerError={workerError}
+        reviewError={reviewData.error}
         historyLoading={past.loading}
         jobs={builds.jobs}
         id="studio-menu-builds"
@@ -466,11 +485,14 @@ export function StudioMenu() {
       )}
       {!isGameView && (
         <BuildTracker
+          key={creatorId ?? 'signed-out'}
           workers={workers}
           reviews={reviews}
           commands={reviewCommands}
           past={past.tickets}
           historyError={past.error}
+          workerError={workerError}
+          reviewError={reviewData.error}
           historyLoading={past.loading}
           jobs={builds.jobs}
           finished={visibleFinished}

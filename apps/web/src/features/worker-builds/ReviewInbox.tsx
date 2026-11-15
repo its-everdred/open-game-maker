@@ -18,9 +18,7 @@ export function ReviewInbox({
   onClose(): void;
 }) {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
-  const [showCommands, setShowCommands] = useState(reviews.length === 0);
-  const current = reviews.find((review) => !answered.has(keyOf(review)));
-  if (showCommands && commands[0]) return <DecisionDeck commands={commands} first={commands[0]} onClose={onClose} />;
+  const [current, setCurrent] = useState<WorkerReview | undefined>(reviews[0]);
   if (!current) {
     if (commands[0]) return <DecisionDeck commands={commands} first={commands[0]} onClose={onClose} />;
     return (
@@ -37,7 +35,11 @@ export function ReviewInbox({
       </Dialog>
     );
   }
-  const done = () => setAnswered((before) => new Set(before).add(keyOf(current)));
+  const done = () => {
+    const seen = new Set(answered).add(keyOf(current));
+    setAnswered(seen);
+    setCurrent(reviews.find((review) => !seen.has(keyOf(review))));
+  };
   return (
     <Dialog
       title="Needs Review"
@@ -52,12 +54,18 @@ export function ReviewInbox({
         {current.kind === 'round' ? (
           <RoundCard key={keyOf(current)} gameId={current.gameId} round={current.round} onAnswered={done} />
         ) : (
-          <PreviewCard key={keyOf(current)} gameId={current.gameId} preview={current.preview} onAnswered={done} />
-        )}
-        {commands.length > 0 && (
-          <button type="button" onClick={() => setShowCommands(true)}>
-            Questions
-          </button>
+          <div key={keyOf(current)}>
+            {current.round.media.map((item) => (
+              <div className="review-deck-playable" key={item.url}>
+                {item.kind === 'still' ? (
+                  <img className="review-deck-media" src={item.url} alt="Review" />
+                ) : (
+                  <video className="review-deck-media" src={item.url} controls playsInline />
+                )}
+              </div>
+            ))}
+            <PreviewCard gameId={current.gameId} preview={current.preview} onAnswered={done} />
+          </div>
         )}
       </div>
     </Dialog>

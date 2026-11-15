@@ -5,6 +5,8 @@ import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
 
 export type Round = {
+  category?: 'art' | 'gameplay' | 'sound';
+  buildId?: string | null;
   id: string;
   ticket: string;
   question: string | null;
@@ -62,15 +64,24 @@ export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round
         </div>
       ))}
       {round.question ? <p>{round.question}</p> : null}
+      {round.category === 'gameplay' && <p role="alert">The playable review is unavailable. Try again later.</p>}
       <label>
         Note (optional)
         <textarea value={note} maxLength={3900} onChange={(event) => setNote(event.target.value)} />
       </label>
       <div className="review-deck-actions">
-        <button type="button" disabled={answer.isPending} onClick={() => answer.mutate('approved')}>
+        <button
+          type="button"
+          disabled={answer.isPending || round.category === 'gameplay'}
+          onClick={() => answer.mutate('approved')}
+        >
           Looks right
         </button>
-        <button type="button" disabled={answer.isPending} onClick={() => answer.mutate('needs_work')}>
+        <button
+          type="button"
+          disabled={answer.isPending || round.category === 'gameplay'}
+          onClick={() => answer.mutate('needs_work')}
+        >
           Needs work
         </button>
       </div>

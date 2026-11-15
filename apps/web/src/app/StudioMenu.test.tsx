@@ -101,7 +101,9 @@ vi.mock('../features/build-chat/jobs', () => ({
   setJobPaused: jobControls.setJobPaused,
 }));
 vi.mock('../features/worker-builds/useWorkers', () => ({ useWorkers: () => ({ workers: state.workers, feeds: [] }) }));
-vi.mock('../features/worker-builds/useWorkerReviews', () => ({ useWorkerReviews: () => [] }));
+vi.mock('../features/worker-builds/useWorkerReviews', () => ({
+  useWorkerReviews: () => ({ reviews: [], error: false, loading: false }),
+}));
 vi.mock('../features/worker-builds/usePastTickets', () => ({
   usePastTickets: () => ({ tickets: [], error: false, loading: false }),
 }));
@@ -610,6 +612,23 @@ describe('StudioMenu', () => {
 
     expect(screen.getByRole('dialog', { name: 'Voice chat Castle' })).toHaveTextContent('user-1 6');
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('closes a Builds review when the signed-in creator changes', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1')];
+    const view = renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
+    expect(screen.getByText('Which d1?')).toBeVisible();
+    state.session = { data: { user: { id: 'user-2' } } };
+    state.decisions = [decision('d2')];
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('Which d1?')).not.toBeInTheDocument();
   });
 
   // On a shared device, a decision one creator opened must not stay on screen, answerable, for the next account.

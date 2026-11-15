@@ -45,10 +45,10 @@ export async function listWorkers(client: WorkerClient): Promise<Worker[]> {
         typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? value : undefined;
       const runtimeSeconds = typeof entry.runtime_seconds === 'number' ? entry.runtime_seconds : Number.NaN;
       const rawTitle =
-        typeof entry.short_summary === 'string' && entry.short_summary.trim()
-          ? entry.short_summary
-          : typeof entry.title === 'string'
-            ? entry.title
+        typeof entry.title === 'string' && entry.title.trim()
+          ? entry.title
+          : typeof entry.short_summary === 'string'
+            ? entry.short_summary
             : `Ticket #${ticket}`;
       const title = rawTitle.trim() || `Ticket #${ticket}`;
       const startedAt =

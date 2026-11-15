@@ -34,6 +34,8 @@ type PanelProps = {
   past?: readonly PastTicket[];
   historyError?: boolean;
   historyLoading?: boolean;
+  reviewError?: boolean;
+  workerError?: boolean;
   jobs?: readonly Job[];
 };
 export function BuildTracker({
@@ -44,6 +46,8 @@ export function BuildTracker({
   past = [],
   historyError,
   historyLoading,
+  reviewError,
+  workerError,
   jobs = [],
   onDismiss,
 }: PanelProps & {
@@ -59,7 +63,9 @@ export function BuildTracker({
     !commands.length &&
     !past.length &&
     !historyError &&
-    !historyLoading
+    !historyLoading &&
+    !workerError &&
+    !reviewError
   )
     return null;
   const count = workers.length
@@ -98,6 +104,8 @@ export function BuildTracker({
           commands={commands}
           past={past}
           historyError={historyError}
+          workerError={workerError}
+          reviewError={reviewError}
           historyLoading={historyLoading}
           jobs={jobs}
           id={id}
@@ -114,6 +122,8 @@ export function BuildPanel({
   past = [],
   historyError,
   historyLoading,
+  reviewError,
+  workerError,
   jobs = [],
   id,
 }: PanelProps & { id: string }) {
@@ -122,6 +132,8 @@ export function BuildPanel({
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
       <h2>Builds</h2>
+      {workerError && <p role="alert">Could not load all build updates.</p>}
+      {reviewError && <p role="alert">Could not load all reviews.</p>}
       {reviewCount > 0 && (
         <button type="button" className="worker-tracker-summary" onClick={() => setModal('review')}>
           {reviewCount} Needs Review
@@ -182,9 +194,9 @@ export function BuildPanel({
           {historyError && <p role="alert">Could not load completed tickets.</p>}
           <ul className="worker-tracker-list">
             {past.map((ticket) => {
-              const job = jobs.find(
-                (item) => item.gameId === ticket.gameId && String(item.aiurIssueNumber) === ticket.ticket,
-              );
+              const job =
+                jobs.find((item) => item.id === ticket.jobId) ??
+                jobs.find((item) => item.gameId === ticket.gameId && String(item.aiurIssueNumber) === ticket.ticket);
               return (
                 <li key={`${ticket.gameId}:${ticket.ticket}`}>
                   {job ? (

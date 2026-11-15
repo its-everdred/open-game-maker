@@ -6,6 +6,8 @@ type Game = { id: string };
 type WorkersPage = {
   workers: WorkerBuild[];
   cursor?: number;
+  daemonUnavailable?: boolean;
+  trackerStale?: boolean;
   completed?: Array<{ ticket: string; seq: number; at: string }>;
 };
 export type WorkerFeed = {
@@ -43,5 +45,9 @@ export function useWorkers(games: readonly Game[], currentGameId?: string, creat
         ]
       : [],
   );
-  return { workers, feeds };
+  return {
+    workers,
+    feeds,
+    error: queries.some((query) => query.isError || query.data?.daemonUnavailable || query.data?.trackerStale),
+  };
 }

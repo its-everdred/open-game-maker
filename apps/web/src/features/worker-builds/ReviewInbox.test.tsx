@@ -38,3 +38,29 @@ it('answers a ledger round with a note and advances to the next review', async (
   );
   await screen.findByText('Second?');
 });
+
+it('keeps an open review while polling replaces the list', () => {
+  const first = {
+    kind: 'round' as const,
+    gameId: 'g',
+    round: { id: 'a', ticket: '12', question: 'First?', media: [] },
+  };
+  const second = {
+    kind: 'round' as const,
+    gameId: 'g',
+    round: { id: 'b', ticket: '13', question: 'Second?', media: [] },
+  };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} onClose={() => {}} reviews={[first, second]} />
+    </QueryClientProvider>,
+  );
+  fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Keep this' } });
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} onClose={() => {}} reviews={[second]} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('First?')).toBeVisible();
+  expect(screen.getByLabelText('Note (optional)')).toHaveValue('Keep this');
+});
