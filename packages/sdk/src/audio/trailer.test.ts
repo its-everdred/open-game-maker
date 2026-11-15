@@ -25,7 +25,7 @@ it('records requested sample and music assets at the capture clock without depen
   capture.timeMs = 2000;
   audio.music(null);
   expect(capture.events).toEqual([
-    { type: 'music', timeMs: 0, id: 'theme', url: '/assets/theme.ogg', gain: 0.225, fade: 1.2 },
+    { type: 'music', timeMs: 0, id: 'theme', url: '/assets/theme.ogg', gain: 0.5, fade: 1.2 },
     { type: 'sample', timeMs: 1200, id: 'clear', url: '/assets/clear.ogg', gain: expect.closeTo(0.6), rate: 1 },
     { type: 'music-stop', timeMs: 2000, fade: 1.2 },
   ]);
@@ -49,13 +49,13 @@ it('records synthesized effects using the same cached samples as live playback',
   expect(capture.unsupported).toEqual([]);
 });
 
-it('uses the actual simulation tick when a cue occurs during a multi-step advance', () => {
+it('uses presentation time when the simulation clock has been paused', () => {
   const capture: TrailerAudioCapture = { timeMs: 1000, events: [], unsupported: [] };
   const win = Object.assign(new FakeWindow(), { __gmTrailerAudio: capture, __gm: { probes: () => ({ tick: 30 }) } });
   const context = new FakeAudioContext();
   const audio = createAudio({ rng: () => 0.5, win: asWindow(win), AudioContextCtor: contextConstructor(context) });
   audio.play('clear', { pitch: 0 });
-  expect(capture.events[0]?.timeMs).toBe(500);
+  expect(capture.events[0]?.timeMs).toBe(1000);
 });
 
 it('refuses to silently misrepresent changes to active audio settings', () => {
@@ -66,4 +66,24 @@ it('refuses to silently misrepresent changes to active audio settings', () => {
   audio.music('theme');
   audio.applySettings({ mute: true, volume: 1 });
   expect(capture.unsupported).toContain('audio settings change');
+});
+
+it('records music duck and release on the game clock', () => {
+  const capture: TrailerAudioCapture = { timeMs: 0, events: [], unsupported: [] };
+  const win = Object.assign(new FakeWindow(), { __gmTrailerAudio: capture });
+  const context = new FakeAudioContext();
+  const audio = createAudio({ rng: () => 0.5, win: asWindow(win), AudioContextCtor: contextConstructor(context) });
+  audio.music('theme');
+  capture.timeMs = 1000;
+  const now = audio.context.currentTime;
+  context.currentTime += 0.01;
+  audio.buses.music.gain.setTargetAtTime(0.1, now, 0.05);
+  capture.timeMs = 2000;
+  audio.buses.music.gain.value = 0.45;
+  expect(capture.musicGain).toBe(0.45);
+  expect(capture.events.slice(1)).toEqual([
+    { type: 'music-gain', timeMs: 1000, target: 0.1, timeConstant: 0.05 },
+    { type: 'music-gain', timeMs: 2000, target: 0.45, timeConstant: 0 },
+  ]);
+  expect(capture.unsupported).toEqual([]);
 });

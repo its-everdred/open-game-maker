@@ -203,6 +203,7 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
     await context.addInitScript(captureParams, { appOrigin: new URL(app.url).origin, tier: options.tier });
   }
   const page = await context.newPage();
+  if (options.trailerAudio) await page.clock.install();
   const collector = options.console ?? new ConsoleCollector();
   let failEarly: (error: Error) => void = () => {};
   const early = new Promise<never>((_, reject) => {
@@ -242,6 +243,10 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
     ready = true;
     const renderer = await rendererString(page);
     const hooks = await HookDriver.attach(page, options.rig, game);
+    if (options.trailerAudio) {
+      const now = await page.evaluate(() => Date.now());
+      await page.clock.pauseAt(now + 100);
+    }
     return {
       page,
       game,

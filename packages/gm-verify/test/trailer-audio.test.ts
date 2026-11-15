@@ -31,6 +31,48 @@ describe('trailer audio mix', () => {
 const ffmpegAvailable = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
 
 it.skipIf(!ffmpegAvailable)(
+  'applies overlapping music gain ramps to the encoded audio (requires ffmpeg)',
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'trailer-envelope-'));
+    const video = join(dir, 'video.mp4');
+    const cue = join(dir, 'cue.wav');
+    const output = join(dir, 'output.mp4');
+    const run = (args: string[]) => execFileSync('ffmpeg', ['-loglevel', 'error', '-y', ...args]);
+    try {
+      run(['-f', 'lavfi', '-i', 'color=size=16x16:rate=10:duration=2', '-c:v', 'libx264', video]);
+      run(['-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', cue]);
+      run(
+        trailerAudioArgs(video, output, 2, [
+          {
+            file: cue,
+            time: 0,
+            gain: 1,
+            busGain: {
+              initial: 1,
+              targets: [
+                { time: 0.4, target: 0.1, timeConstant: 0.05 },
+                { time: 1, target: 1, timeConstant: 0.05 },
+              ],
+            },
+          },
+        ]),
+      );
+      const pcm = run(['-i', output, '-map', '0:a:0', '-ac', '1', '-ar', '48000', '-f', 'f32le', '-']);
+      const peak = (start: number, end: number) => {
+        let value = 0;
+        for (let i = start * 48000; i < end * 48000; i++) value = Math.max(value, Math.abs(pcm.readFloatLE(i * 4)));
+        return value;
+      };
+      expect(peak(0.7, 0.9)).toBeLessThan(peak(0.1, 0.3) * 0.2);
+      expect(peak(1.4, 1.6)).toBeGreaterThan(peak(0.1, 0.3) * 0.8);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+  30_000,
+);
+
+it.skipIf(!ffmpegAvailable)(
   'mixes a real cue at its recorded time (requires ffmpeg)',
   () => {
     const dir = mkdtempSync(join(tmpdir(), 'trailer-mix-'));

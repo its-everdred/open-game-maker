@@ -73,6 +73,7 @@ async function timedFrames(
   capture: (index: number) => Promise<void>,
 ): Promise<void> {
   let clockMs = 0;
+  let timerMs = 0;
   let queued: Parameters<HookDriver['inject']>[0][] = [];
   const timedHooks = {
     advanceTime: async (ms: number) => {
@@ -92,6 +93,9 @@ async function timedFrames(
         },
         { timeMs: clockMs, delta: ms, input: frames },
       );
+      const nextTimerMs = Math.round(clockMs);
+      if (nextTimerMs > timerMs) await hooks.page.clock.runFor(nextTimerMs - timerMs);
+      timerMs = nextTimerMs;
     },
     inject: async (frame: Parameters<HookDriver['inject']>[0]) => {
       queued.push(frame);

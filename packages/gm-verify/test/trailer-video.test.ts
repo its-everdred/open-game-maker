@@ -35,6 +35,7 @@ it.skipIf(!ffmpegAvailable)(
       const hooks = {
         advanceTime: async () => {},
         inject: async () => {},
+        page: { clock: { runFor: async () => {} } },
         game: { evaluate: async () => {}, locator: () => ({ first: () => ({ evaluate: async () => data }) }) },
       } as unknown as HookDriver;
       await recordTrailerVideo(hooks, { script: [], seconds: 1, fps: 1, orientation: 'portrait' }, output);

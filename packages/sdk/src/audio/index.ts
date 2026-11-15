@@ -6,6 +6,7 @@ import { AudioRelay, type AudioBridge } from './relay.js';
 import { SampleBank, SamplePlayer, type AudioHandle, type AudioLoader, type PlayOptions } from './samples.js';
 import { SongPlayer, type SongHandle, type ToneLoader } from './song.js';
 import { trailerCapture, trailerTime } from './trailer.js';
+import { captureMusicBus } from './trailer-bus.js';
 import { attachSpokenTextRuntime } from './spoken-text.js';
 import { AudioUnlock, type AudioStatus } from './unlock.js';
 import { generateZzfx, ZzfxPlayer, type ZzfxOptions } from './zzfx.js';
@@ -87,6 +88,9 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
 
   const capture = trailerCapture(win);
   if (capture) capture.sdk = true;
+  const exposedBuses = capture
+    ? { ...graph.buses, music: captureMusicBus(graph.buses.music, graph.context, win, capture) }
+    : graph.buses;
   let captureMusic: string | null = null;
   const capturedSynths = new Map<string, number[]>();
   const relay = new AudioRelay(options.bridge);
@@ -137,6 +141,7 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
     if (capture) {
       if (playOptions.at !== undefined) capture.unsupported.push('scheduled sample');
       const bus = playOptions.bus ?? 'sfx';
+      if (bus === 'music') capture.unsupported.push('sample on music bus');
       const pitch = playOptions.pitch ?? 0.06;
       const actualRate = rate * (1 + (random() * 2 - 1) * pitch);
       capture.events.push({
@@ -161,7 +166,7 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
 
   const audio: GmAudio = {
     context: graph.context,
-    buses: graph.buses,
+    buses: exposedBuses,
     unlock: unlock.unlock,
     status: () => (capture ? (settings.mute ? 'off' : 'on') : unlock.status()),
     onStatus: (callback) => unlock.onStatus(callback),
@@ -183,9 +188,7 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
             timeMs: trailerTime(win, capture),
             id,
             url: options.loader?.resolve?.(id).url ?? resolveUrl(id),
-            gain: settings.mute
-              ? 0
-              : (musicOptions.vol ?? 1) * (settings.musicVolume ?? 1) * graph.buses.music.gain.value,
+            gain: settings.mute ? 0 : (musicOptions.vol ?? 1) * (settings.musicVolume ?? 1),
             fade,
           });
         if (musicOptions.loop) capture.unsupported.push('music loop points');
@@ -202,6 +205,7 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
           capturedSynths.set(key, samples);
         }
         const bus = effectOptions?.bus ?? 'sfx';
+        if (bus === 'music') capture.unsupported.push('synth on music bus');
         capture.events.push({
           type: 'synth',
           timeMs: trailerTime(win, capture),
@@ -227,7 +231,7 @@ export function createAudio(options: CreateAudioOptions): GmAudio {
       const normalized = normalizeSettings(next);
       if (
         capture &&
-        capture.events.length > 0 &&
+        capture.events.some((event) => event.type !== 'music-gain') &&
         (normalized.mute !== settings.mute ||
           normalized.volume !== settings.volume ||
           normalized.musicVolume !== settings.musicVolume)

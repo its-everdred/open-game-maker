@@ -63,3 +63,36 @@ it('writes captured synthesized samples as a playable WAV cue', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it('applies music bus automation across overlapping tracks', () => {
+  const root = mkdtempSync(join(tmpdir(), 'trailer-music-gain-'));
+  try {
+    writeFileSync(join(root, 'music.ogg'), 'music');
+    const cues = soundLogCues(
+      {
+        musicGain: 0.45,
+        unsupported: [],
+        events: [
+          { type: 'music', timeMs: 0, id: 'a', url: '/music.ogg', gain: 1, fade: 0 },
+          { type: 'music-gain', timeMs: 1000, target: 0.1, timeConstant: 0.05 },
+          { type: 'music', timeMs: 2000, id: 'b', url: '/music.ogg', gain: 1, fade: 1 },
+          { type: 'music-gain', timeMs: 2500, target: 0.45, timeConstant: 0.1 },
+        ],
+      },
+      root,
+      'http://127.0.0.1:1234/',
+      5,
+    );
+    expect(cues).toHaveLength(2);
+    for (const cue of cues)
+      expect(cue.busGain).toEqual({
+        initial: 0.45,
+        targets: [
+          { time: 1, target: 0.1, timeConstant: 0.05 },
+          { time: 2.5, target: 0.45, timeConstant: 0.1 },
+        ],
+      });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

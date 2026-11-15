@@ -7,8 +7,9 @@ export type SoundEvent =
   | { type: 'sample'; timeMs: number; id: string; url: string; gain: number; rate: number }
   | { type: 'music'; timeMs: number; id: string; url: string; gain: number; fade: number }
   | { type: 'music-stop'; timeMs: number; fade: number }
+  | { type: 'music-gain'; timeMs: number; target: number; timeConstant: number }
   | { type: 'synth'; timeMs: number; samples: number[]; gain: number };
-export type SoundLog = { events: SoundEvent[]; unsupported: string[] };
+export type SoundLog = { events: SoundEvent[]; unsupported: string[]; musicGain?: number };
 
 /** Resolve only files from the game build that the local capture server actually served. */
 function assetPath(root: string, origin: string, rawUrl: string): string {
@@ -59,13 +60,18 @@ export function soundLogCues(
   if (log.unsupported.length)
     throw new Error(`unsupported captured audio: ${[...new Set(log.unsupported)].join(', ')}`);
   const events = log.events;
+  const gainTargets = events.flatMap((event) =>
+    event.type === 'music-gain'
+      ? [{ time: event.timeMs / 1000, target: event.target, timeConstant: event.timeConstant }]
+      : [],
+  );
   const cues: TrailerCue[] = [];
   let lastMs = -1;
   for (const [i, event] of events.entries()) {
     if (!Number.isFinite(event.timeMs) || event.timeMs < lastMs || event.timeMs < 0 || event.timeMs > duration * 1000)
       throw new Error('sound events are outside the clip or out of order');
     lastMs = event.timeMs;
-    if (event.type === 'music-stop') continue;
+    if (event.type === 'music-stop' || event.type === 'music-gain') continue;
     const time = event.timeMs / 1000;
     if (event.type === 'synth') {
       const file = join(scratch, `synth-${i}.wav`);
@@ -84,6 +90,7 @@ export function soundLogCues(
           loop: true,
           length: end - time,
           fadeIn: event.fade,
+          ...(log.musicGain === undefined ? {} : { busGain: { initial: log.musicGain, targets: gainTargets } }),
           ...(next ? { fadeOut: next.fade * 2 } : {}),
         });
     }

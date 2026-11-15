@@ -1,3 +1,5 @@
+import { gainEnvelope, type GainTarget } from './trailer-envelope.js';
+
 /** A sound requested by the game, timed from the start of the recording. */
 export type TrailerCue = {
   file: string;
@@ -8,6 +10,7 @@ export type TrailerCue = {
   length?: number;
   fadeIn?: number;
   fadeOut?: number;
+  busGain?: { initial: number; targets: GainTarget[] };
 };
 
 /** Build an ffmpeg mix without interpolating file names into the filter graph. */
@@ -35,7 +38,10 @@ export function trailerAudioArgs(input: string, output: string, duration: number
     if (cue.fadeIn) parts.push(`afade=t=in:st=0:d=${cue.fadeIn}`);
     if (cue.fadeOut && cue.length)
       parts.push(`afade=t=out:st=${Math.max(0, cue.length - cue.fadeOut)}:d=${cue.fadeOut}`);
-    parts.push(`volume=${cue.gain}`, `adelay=${Math.round(cue.time * 1000)}:all=1[a${i}]`);
+    const volume = cue.busGain
+      ? `volume='${cue.gain}*(${gainEnvelope(cue.busGain.initial, cue.busGain.targets, cue.time)})':eval=frame`
+      : `volume=${cue.gain}`;
+    parts.push(volume, `adelay=${Math.round(cue.time * 1000)}:all=1[a${i}]`);
     return parts.join(',');
   });
   // A silent bed ensures the track spans the complete clip, including gaps and an empty cue list.
