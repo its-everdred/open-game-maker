@@ -69,6 +69,19 @@ describe('runtime hooks', () => {
     expect(onFrame).toHaveBeenCalledOnce();
   });
 
+  it('advances trailer input without rendering until the requested frame', async () => {
+    const { runtime } = await start();
+    const onFrame = vi.fn();
+    runtime.onFrame(onFrame);
+    runtime.hooks.inject({ playerIndex: 0, tick: 1, source: 'network', actions: { go: true } });
+    runtime.hooks.advanceForTrailer(1000);
+    expect(runtime.clock.tick).toBe(60);
+    expect(runtime.instance.serialize().data.counter).toBe(1);
+    expect(onFrame).not.toHaveBeenCalled();
+    runtime.hooks.renderAt(1000);
+    expect(onFrame).toHaveBeenCalledOnce();
+  });
+
   it('consumes injected actions on only the next step', async () => {
     const { runtime } = await start();
     runtime.hooks.inject({ playerIndex: 0, tick: 0, source: 'network', actions: { go: true } });

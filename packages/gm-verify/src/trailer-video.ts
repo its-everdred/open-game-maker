@@ -3,8 +3,8 @@ import { dirname, join } from 'node:path';
 
 import { ffmpeg, FfmpegMissingError, hasFfmpeg } from './capture.js';
 import type { HookDriver } from './hooks.js';
-import type { InputScript } from './inputs.js';
-import { scriptedCanvasFrames } from './trailer-frames.js';
+import type { TrailerInput } from './trailer-script.js';
+import { scriptedCanvasFrames, scriptedPageFrames } from './trailer-frames.js';
 
 export type TrailerSize = 'portrait' | 'landscape';
 
@@ -22,6 +22,8 @@ export function trailerVideoArgs(dir: string, fps: number, orientation: TrailerS
     'libx264',
     '-preset',
     'fast',
+    '-threads',
+    '2',
     '-crf',
     '20',
     '-movflags',
@@ -32,7 +34,13 @@ export function trailerVideoArgs(dir: string, fps: number, orientation: TrailerS
 
 export async function recordTrailerVideo(
   hooks: HookDriver,
-  options: { script: InputScript; seconds: number; fps: number; orientation: TrailerSize },
+  options: {
+    script: TrailerInput[];
+    seconds: number;
+    fps: number;
+    orientation: TrailerSize;
+    surface?: 'canvas' | 'page';
+  },
   output: string,
   binary = 'ffmpeg',
 ): Promise<void> {
@@ -40,7 +48,8 @@ export async function recordTrailerVideo(
   mkdirSync(dirname(output), { recursive: true });
   const frames = mkdtempSync(`${output}.frames-`);
   try {
-    await scriptedCanvasFrames(hooks, options.script, options.seconds, options.fps, frames);
+    const capture = options.surface === 'page' ? scriptedPageFrames : scriptedCanvasFrames;
+    await capture(hooks, options.script, options.seconds, options.fps, frames);
     ffmpeg(binary, trailerVideoArgs(frames, options.fps, options.orientation, output));
   } finally {
     rmSync(frames, { recursive: true, force: true });

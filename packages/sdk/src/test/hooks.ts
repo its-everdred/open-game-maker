@@ -31,6 +31,7 @@ export interface BugBundle {
 }
 
 export interface RuntimeHooks extends GmTestHooks {
+  advanceForTrailer(ms: number): void;
   renderGameToText(): GameTextSnapshot;
   renderInfo(): RuntimeRenderInfo;
   bundle(): BugBundle;
@@ -88,6 +89,11 @@ export class SdkHooks<D, S> implements RuntimeHooks {
 
   advanceTime(ms: number): void {
     this.runtime.advance(ms);
+  }
+
+  /** Advance fixed steps without drawing; the trailer recorder draws once for its output frame. */
+  advanceForTrailer(ms: number): void {
+    this.runtime.advance(ms, false);
   }
 
   renderAt(ms: number): void {

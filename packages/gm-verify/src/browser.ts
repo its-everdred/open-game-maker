@@ -159,6 +159,8 @@ export type OpenGameOptions = {
   console?: ConsoleCollector;
   readyTimeoutMs?: number;
   contextOptions?: BrowserContextOptions;
+  /** Record SDK sound requests against the deterministic game clock. */
+  trailerAudio?: boolean;
   /** Capture inside the app shell instead of the bare game page. */
   app?: AppFrame;
 };
@@ -187,6 +189,15 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
     /* A service worker would answer game requests before the local-build route sees them. */
     ...(app?.localUrl ? { serviceWorkers: 'block' as const } : {}),
   });
+  if (options.trailerAudio) {
+    await context.addInitScript(() => {
+      (window as unknown as { __gmTrailerAudio: unknown }).__gmTrailerAudio = {
+        timeMs: 0,
+        events: [],
+        unsupported: [],
+      };
+    });
+  }
   if (app?.localUrl) {
     await routeGameToLocal(context, { ...app, localUrl: app.localUrl });
     await context.addInitScript(captureParams, { appOrigin: new URL(app.url).origin, tier: options.tier });

@@ -5,21 +5,46 @@ import { scriptedFrames } from '../src/trailer-frames.js';
 const action = (t: number, name: string) => ({ t, action: name, phase: 'down' as const, playerIndex: 0 });
 
 describe('scripted trailer frames', () => {
-  it('advances and injects in game-time order before capturing each frame', async () => {
+  it('keeps a logical input held through simulation ticks and releases it', async () => {
     let time = 0;
-    const events: string[] = [];
+    const frames: Array<Record<string, unknown>> = [];
+    const captures: number[] = [];
     const hooks = {
       advanceTime: async (ms: number) => {
         time += ms;
       },
       inject: async (frame: { actions: Record<string, unknown> }) => {
-        events.push(`input ${Object.keys(frame.actions)[0]} ${time}`);
+        frames.push(frame.actions);
       },
     };
-    await scriptedFrames(hooks, [action(0.5, 'drop'), action(0, 'start'), action(0.25, 'left')], 1, 2, async (i) => {
-      events.push(`frame ${i} ${time}`);
+    await scriptedFrames(
+      hooks,
+      [action(0, 'softDrop'), { ...action(0.25, 'softDrop'), phase: 'up' }],
+      1,
+      2,
+      async () => {
+        captures.push(time);
+      },
+    );
+    expect(captures[0]).toBe(0);
+    expect(captures[1]).toBeCloseTo(500);
+    expect(frames.filter((frame) => frame.softDrop === true)).toHaveLength(15);
+    expect(frames.filter((frame) => frame.softDrop === false)).toHaveLength(1);
+  });
+
+  it('clicks HTML controls before the next frame', async () => {
+    const events: string[] = [];
+    const hooks = {
+      advanceTime: async () => {},
+      inject: async () => {},
+      click: async (selector: string) => {
+        events.push(`click ${selector}`);
+      },
+    };
+    await scriptedFrames(hooks, [{ t: 0.2, click: '[data-play]' }], 1, 2, async (i) => {
+      events.push(`frame ${i}`);
     });
-    expect(events).toEqual(['input start 0', 'frame 0 0', 'input left 250', 'input drop 500', 'frame 1 500']);
+    expect(events).toEqual(['frame 0', 'click [data-play]', 'frame 1']);
   });
 
   it('rejects inputs outside the clip', async () => {
