@@ -70,9 +70,12 @@ export function installSdkRenderLoop<D, S>(runtime: Runtime<D, S>, game: Phaser.
 
   game.loop.sleep();
   game.loop.lastTime = 0;
+  // The SDK supplies deterministic elapsed time, so wall-clock smoothing would
+  // discard long intervals between captured trailer frames.
+  game.loop.smoothStep = false;
 
-  const renderOnce = () => {
-    lastFrameMs = runtime.clock.dt * 1000;
+  const renderOnce = (dt = runtime.clock.dt) => {
+    lastFrameMs = dt * 1000;
     elapsedMs += lastFrameMs;
     draws.begin();
     game.loop.step(elapsedMs);

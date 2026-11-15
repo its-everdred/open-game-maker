@@ -178,7 +178,11 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     hooks.ready = true;
     send('ready', { protocol: SDK_PROTOCOL, manifest: readyManifest(module.manifest, instance), marks });
     for (const envelope of queued.splice(0)) dispatchRuntime(envelope);
-    if (!options.headless) runtime.startLiveLoop();
+    const trailerCapture =
+      build === 'test' &&
+      typeof window !== 'undefined' &&
+      Boolean((window as Window & { __gmTrailerAudio?: unknown }).__gmTrailerAudio);
+    if (!options.headless && !trailerCapture) runtime.startLiveLoop();
     return runtime;
   } catch (error) {
     try {

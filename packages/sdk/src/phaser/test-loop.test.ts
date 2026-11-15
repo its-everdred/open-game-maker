@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { installSdkRenderLoop } from './test-loop.js';
 import type { Runtime } from '../core/runtime.js';
@@ -94,6 +94,17 @@ describe('installSdkRenderLoop', () => {
 
     frames[0]!(1 / 60);
     expect(loop.calls()).toBe(0);
+  });
+
+  it('advances Phaser by the elapsed presentation time supplied by the runtime', () => {
+    const { game } = fakeGame([{}, {}]);
+    const step = vi.spyOn(game.loop, 'step');
+    const { runtime, frames } = fakeRuntime();
+    installSdkRenderLoop(runtime, game);
+    frames[0]!(1 / 15);
+    frames[0]!(1 / 15);
+    expect(step.mock.calls[1]![0]).toBeCloseTo(2000 / 15);
+    expect(game.loop.smoothStep).toBe(false);
   });
 
   it('keeps the frame time of the frame it rendered', () => {

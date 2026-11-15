@@ -57,6 +57,26 @@ describe('boot', () => {
     bridge.onMessage = undefined;
   });
 
+  it('does not start the live frame loop during test trailer capture', async () => {
+    const startLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop');
+    const state = window as Window & { __gmTrailerAudio?: unknown };
+    state.__gmTrailerAudio = {};
+    try {
+      const { module } = createCounterGame();
+      const pending = boot(module, { hostOrigin: 'https://app.test', build: 'test' });
+      await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+      bridge.onMessage!(hello('test'));
+      const runtime = await pending;
+      expect(startLoop).not.toHaveBeenCalled();
+      runtime.clock.advance(1000);
+      expect(runtime.clock.tick).toBe(60);
+      runtime.dispose();
+    } finally {
+      delete state.__gmTrailerAudio;
+      startLoop.mockRestore();
+    }
+  });
+
   it('passes the placement prefab to editor projection', async () => {
     const { runtime } = await start();
     const project = vi.fn(() => [2, 3, 0] as [number, number, number]);

@@ -1,4 +1,5 @@
 import type { AudioStatus } from './unlock.js';
+import { trailerCapture } from './trailer.js';
 import { groupSentences, splitSentences, type AlignmentSegment, type TimedSentence } from './sentences.js';
 
 export type SpokenTextEntry = { key: string; audioUrl: string; alignmentUrl: string };
@@ -45,6 +46,7 @@ export class SpokenText {
   }
 
   play(options: SpokenTextOptions = {}): SpokenTextHandle {
+    if (typeof window !== 'undefined') trailerCapture(window)?.unsupported.push('spoken text');
     return 'bytes' in this.data ? this.playRendered(this.data, options) : this.playFallback(this.data, options);
   }
 
