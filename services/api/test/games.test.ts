@@ -173,12 +173,18 @@ describe('games routes', () => {
     writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ logo: '../logo.png' }));
     writeFileSync(join(directory, '.complete'), '');
     expect(await list()).not.toHaveProperty('logoUrl');
-    writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ logo: 'media/logo.png' }));
+    writeFileSync(
+      join(directory, 'manifest.json'),
+      JSON.stringify({ logo: 'media/logo.png', padding: 'x'.repeat(1024 * 1024) }),
+    );
+    expect(await list()).not.toHaveProperty('logoUrl');
+    writeFileSync(join(directory, '.ogm-display.json'), JSON.stringify({ logo: 'media/logo.png', genres: ['puzzle'] }));
     expect(
       (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
     ).toBe(200);
     expect(await list()).toMatchObject({
       lastPlayedAt: expect.any(String),
+      choices: { genre: ['puzzle'] },
       logoUrl: `https://games.example.test/g/${id}/build1/media/logo.png`,
       coverUrl: `https://games.example.test/g/${id}/build1/media/thumbnail.png`,
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,

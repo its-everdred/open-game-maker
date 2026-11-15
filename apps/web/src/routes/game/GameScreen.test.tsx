@@ -217,6 +217,63 @@ describe('GameScreen', () => {
     vi.unstubAllGlobals();
   });
 
+  it('changes the AI asset preference from the edit menu', async () => {
+    let allowed = true;
+    editorApi.getGame.mockImplementation(async () => ({
+      id: 'game',
+      title: 'Goblin Cellar',
+      allowAiGeneratedAssets: allowed,
+    }));
+    const fetchSpy = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH')
+        allowed = (JSON.parse(String(init.body)) as { allowAiGeneratedAssets: boolean }).allowAiGeneratedAssets;
+      return new Response('{}', { headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    try {
+      renderGame('/g/game?mode=edit');
+      await waitFor(() => expect(editorApi.getGame).toHaveBeenCalled());
+      fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Disable AI-generated assets' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Enable AI-generated assets' }));
+      await screen.findByRole('button', { name: 'Disable AI-generated assets' });
+      expect(
+        fetchSpy.mock.calls
+          .filter(([, init]) => init?.method === 'PATCH')
+          .map(([, init]) => JSON.parse(String(init?.body))),
+      ).toEqual([{ allowAiGeneratedAssets: false }, { allowAiGeneratedAssets: true }]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps the preference action disabled while its updated value reloads', async () => {
+    let finishReload!: (value: { id: string; title: string; allowAiGeneratedAssets: boolean }) => void;
+    editorApi.getGame.mockResolvedValueOnce({ id: 'game', title: 'Goblin Cellar', allowAiGeneratedAssets: true });
+    editorApi.getGame.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishReload = resolve;
+        }),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } })),
+    );
+    try {
+      renderGame('/g/game?mode=edit');
+      await waitFor(() => expect(editorApi.getGame).toHaveBeenCalled());
+      fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Disable AI-generated assets' }));
+      await waitFor(() => expect(editorApi.getGame).toHaveBeenCalledTimes(2));
+      expect(screen.getByRole('button', { name: 'Disable AI-generated assets' })).toBeDisabled();
+      await act(async () => finishReload({ id: 'game', title: 'Goblin Cellar', allowAiGeneratedAssets: false }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Enable AI-generated assets' })).toBeEnabled());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('offers an icon-only play control and keeps editor navigation in the menu', async () => {
     const { container } = renderGame('/g/game?mode=edit');
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());

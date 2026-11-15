@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { access, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { buildDir } from '@ogm/games-host/layout';
@@ -11,14 +11,50 @@ const exists = async (path: string) =>
     () => false,
   );
 
-async function logoPath(directory: string): Promise<string | undefined> {
+const MAX_LEGACY_MANIFEST_BYTES = 1024 * 1024;
+
+async function manifestMedia(directory: string): Promise<{ logo?: string; genres?: string[] }> {
   try {
-    const manifest: unknown = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
-    const logo = (manifest as { logo?: unknown })?.logo;
-    if (typeof logo !== 'string' || !/^media\/[a-zA-Z0-9_-]+\.(png|webp|svg)$/u.test(logo)) return undefined;
-    return (await exists(join(directory, logo))) ? logo : undefined;
+    const file = await open(join(directory, '.ogm-display.json'), 'r').catch(() =>
+      open(join(directory, 'manifest.json'), 'r'),
+    );
+    let bytes: Buffer;
+    try {
+      const size = (await file.stat()).size;
+      if (size > MAX_LEGACY_MANIFEST_BYTES) return {};
+      // One extra byte detects a file that grows between stat and read.
+      const buffer = Buffer.alloc(size + 1);
+      let length = 0;
+      while (length < buffer.length) {
+        const result = await file.read(buffer, length, buffer.length - length, length);
+        if (result.bytesRead === 0) break;
+        length += result.bytesRead;
+      }
+      if (length > size) return {};
+      bytes = buffer.subarray(0, length);
+    } finally {
+      await file.close();
+    }
+    const manifest = JSON.parse(bytes.toString('utf8')) as {
+      logo?: unknown;
+      genres?: unknown;
+    };
+    const logo = manifest.logo;
+    const genres = manifest.genres;
+    return {
+      ...(typeof logo === 'string' &&
+      /^media\/[a-zA-Z0-9_-]+\.(png|webp|svg)$/u.test(logo) &&
+      (await exists(join(directory, logo)))
+        ? { logo }
+        : {}),
+      ...(Array.isArray(genres) &&
+      genres.length <= 4 &&
+      genres.every((g) => typeof g === 'string' && g.length > 0 && g.length <= 32)
+        ? { genres: genres as string[] }
+        : {}),
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -30,36 +66,55 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
     .from(schema.branches)
     .where(and(inArray(schema.branches.gameId, gameIds), eq(schema.branches.name, 'main')))
     .all();
-  const entries = await Promise.all(
-    branches.map(async ({ gameId, buildId }) => {
-      if (!buildId) return [gameId, {}] as const;
-      let directory: string;
-      try {
-        directory = buildDir(deps.config.gamesRoot, gameId, buildId);
-      } catch {
-        return [gameId, {}] as const;
-      }
-      if (!(await exists(join(directory, '.complete')))) return [gameId, {}] as const;
-      const [cover, landscape, portrait, logo] = await Promise.all([
-        exists(join(directory, 'media/thumbnail.png')),
-        exists(join(directory, 'media/trailer-landscape.mp4')),
-        exists(join(directory, 'media/trailer-portrait.mp4')),
-        logoPath(directory),
-      ]);
-      const origin = deps.config.gamesOrigin.replace(/\/$/, '');
-      const base = `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/media`;
-      return [
-        gameId,
-        {
-          ...(logo
-            ? { logoUrl: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${logo}` }
-            : {}),
-          ...(cover ? { coverUrl: `${base}/thumbnail.png` } : {}),
-          ...(landscape ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
-          ...(portrait ? { portraitTrailerUrl: `${base}/trailer-portrait.mp4` } : {}),
-        },
-      ] as const;
-    }),
-  );
+  const entries: Array<
+    readonly [
+      string,
+      {
+        logoUrl?: string;
+        choices?: { genre: string[] };
+        coverUrl?: string;
+        trailerUrl?: string;
+        portraitTrailerUrl?: string;
+      },
+    ]
+  > = [];
+  for (let index = 0; index < branches.length; index += 8) {
+    entries.push(
+      ...(await Promise.all(
+        branches.slice(index, index + 8).map(async ({ gameId, buildId }) => {
+          if (!buildId) return [gameId, {}] as const;
+          let directory: string;
+          try {
+            directory = buildDir(deps.config.gamesRoot, gameId, buildId);
+          } catch {
+            return [gameId, {}] as const;
+          }
+          if (!(await exists(join(directory, '.complete')))) return [gameId, {}] as const;
+          const [cover, landscape, portrait, manifest] = await Promise.all([
+            exists(join(directory, 'media/thumbnail.png')),
+            exists(join(directory, 'media/trailer-landscape.mp4')),
+            exists(join(directory, 'media/trailer-portrait.mp4')),
+            manifestMedia(directory),
+          ]);
+          const origin = deps.config.gamesOrigin.replace(/\/$/, '');
+          const base = `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/media`;
+          return [
+            gameId,
+            {
+              ...(manifest.logo
+                ? {
+                    logoUrl: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
+                  }
+                : {}),
+              ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
+              ...(cover ? { coverUrl: `${base}/thumbnail.png` } : {}),
+              ...(landscape ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
+              ...(portrait ? { portraitTrailerUrl: `${base}/trailer-portrait.mp4` } : {}),
+            },
+          ] as const;
+        }),
+      )),
+    );
+  }
   return new Map(entries);
 }

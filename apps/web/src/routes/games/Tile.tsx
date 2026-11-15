@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Icon } from '../../components/Icon';
 import { Cover } from './Cover';
-import { gameTags, type GameSummary, type JobView } from './types';
+import { gameTags, genreIcon, type GameSummary, type JobView } from './types';
 
 type TileProps = {
   game: GameSummary;
@@ -75,7 +75,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
           {tags.length > 0 && (
             <span className="game-tag-icons" aria-label={tags.join(', ')}>
               {tags.map((tag) => (
-                <Icon key={tag} name={tag} />
+                <Icon key={tag} name={genreIcon(tag)} />
               ))}
             </span>
           )}

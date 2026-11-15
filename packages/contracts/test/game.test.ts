@@ -17,6 +17,12 @@ const control = {
 };
 
 describe('game contract', () => {
+  it('limits genre names and count', () => {
+    expect(gameManifestSchema.safeParse({ ...manifest(), genres: ['puzzle'] }).success).toBe(true);
+    expect(gameManifestSchema.safeParse({ ...manifest(), genres: ['x'.repeat(33)] }).success).toBe(false);
+    expect(gameManifestSchema.safeParse({ ...manifest(), genres: ['a', 'b', 'c', 'd', 'e'] }).success).toBe(false);
+  });
+
   it('rejects game options with inconsistent defaults or duplicate identifiers', () => {
     const choice = { id: 'mode', label: 'Mode', kind: 'choice', default: 'a', choices: [{ value: 'a', label: 'A' }] };
     const number = { id: 'level', label: 'Level', kind: 'number', default: 2, min: 1, max: 5, step: 1 };

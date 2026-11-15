@@ -552,10 +552,11 @@ export function GameScreen() {
         method: 'PATCH',
         json: { allowAiGeneratedAssets: allow },
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['game', gameId] });
-      void queryClient.invalidateQueries({ queryKey: ['games'] });
-    },
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['game', gameId] }),
+        queryClient.invalidateQueries({ queryKey: ['games'] }),
+      ]),
     onError: () => pushToast('Could not update AI asset setting'),
   });
   const preferenceAction = useMemo(

@@ -21,3 +21,5 @@ ffmpeg -i silent.mp4 -i music.wav -i effect.wav -filter_complex '[1:a]atrim=0:18
 Repeat the delay/mix inputs for each effect and repeat the whole cut for portrait as `trailer-portrait.mp4`. Listen and inspect both MP4s, checking synchronization and keeping audio peaks below -1 dBFS. Store the thumbnail at `public/media/thumbnail.png`; the build copies these files to `dist/media/`. Publish the build with `gm publish`. File refresh tickets whenever a major visual or core gameplay change makes either asset stale.
 
 To show a logo over the artwork, put a PNG, WebP, or SVG in `public/media/` and set the published game `manifest.json` field `logo` to its build-relative path, for example `media/logo.png`. The build must copy the image into `dist/media/`. Omit the field to show the game's text title.
+
+Set `genres` in the game manifest to up to four genre names, for example `["puzzle"]`, so the library and spotlight show the game's genre.

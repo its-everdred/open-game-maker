@@ -6,7 +6,7 @@ import type { Branch } from './types';
 import { Icon } from '../../components/Icon';
 import { Cover } from './Cover';
 import { GameTrailer } from './GameTrailer';
-import type { GameSummary, JobView } from './types';
+import { gameGenres, genreIcon, type GameSummary, type JobView } from './types';
 import { jobLabel } from './Tile';
 
 type SpotlightProps = {
@@ -23,7 +23,7 @@ export function Spotlight({ game, branches, job, onPlay, onEdit, onClose, shared
   const closeRef = useRef<HTMLButtonElement>(null);
   const activeBranch = branches.find((branch) => branch.name === 'main') ?? branches[0];
   const canOpen = Boolean(activeBranch?.latestBuildId) && job?.kind !== 'new_game';
-  const tags = game.choices?.genre ?? [];
+  const tags = gameGenres(game);
 
   useEffect(() => closeRef.current?.focus(), [game.id]);
 
@@ -49,7 +49,7 @@ export function Spotlight({ game, branches, job, onPlay, onEdit, onClose, shared
         {tags.length > 0 && (
           <span className="game-tag-icons spotlight-icons" aria-label={tags.join(', ')}>
             {tags.slice(0, 4).map((tag) => (
-              <Icon key={tag} name={tag} />
+              <Icon key={tag} name={genreIcon(tag)} />
             ))}
           </span>
         )}
