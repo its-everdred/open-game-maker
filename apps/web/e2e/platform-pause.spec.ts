@@ -50,7 +50,6 @@ for (const viewport of viewports) {
     expect(glass.backgroundImage).toContain('gradient');
     expect(glass.borderTopWidth).toBe('1px');
 
-
     const gameBox = await page.locator('.game-frame iframe').boundingBox();
     expect(gameBox).not.toBeNull();
     expect(gameBox?.x).toBe(0);
