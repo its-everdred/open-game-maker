@@ -44,6 +44,7 @@ export function glideTiles(container: HTMLElement | null, before: TileRects): vo
     const dy = old.top - next.top;
     const sx = next.width ? old.width / next.width : 1;
     const sy = next.height ? old.height / next.height : 1;
+    const phoneOpening = tile.classList.contains('is-selected') && window.matchMedia('(max-width: 600px)').matches;
     if (
       (dx === 0 && dy === 0 && sx === 1 && sy === 1) ||
       (next.bottom < 0 && old.bottom < 0) ||
@@ -51,10 +52,25 @@ export function glideTiles(container: HTMLElement | null, before: TileRects): vo
       !tile.animate
     )
       continue;
+    // Keep the incoming details legible while the cell changes aspect ratio.
+    const copy = tile.classList.contains('is-selected')
+      ? tile.querySelector<HTMLElement>('.game-cell-spotlight .games-spotlight-copy')
+      : null;
+    if (copy?.animate && (sx !== 1 || sy !== 1) && phoneOpening) {
+      track(
+        copy.animate([{ opacity: 0 }, { opacity: 0, offset: 0.8 }, { opacity: 1 }], {
+          duration: 300,
+          easing: 'cubic-bezier(.22,1,.36,1)',
+        }),
+      );
+    }
     track(
       tile.animate(
         [
-          { transformOrigin: 'top left', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+          {
+            transformOrigin: 'top left',
+            transform: `translate(${dx}px, ${dy}px) scale(${phoneOpening ? 1 : sx}, ${phoneOpening ? 1 : sy})`,
+          },
           { transformOrigin: 'top left', transform: 'none' },
         ],
         {
@@ -91,8 +107,10 @@ export function glideCover(container: HTMLElement, before: TileRects, cover: Cov
   const nextCover = host.getBoundingClientRect();
   if (!nextCell.width || !nextCell.height || !nextCover.width || !nextCover.height || !oldCell.width || !oldCell.height)
     return;
-  const sx = oldCell.width / nextCell.width;
-  const sy = oldCell.height / nextCell.height;
+  // Phone cells move at their final size; only the cover changes size.
+  const phoneOpening = cell.classList.contains('is-selected') && window.matchMedia('(max-width: 600px)').matches;
+  const sx = phoneOpening ? 1 : oldCell.width / nextCell.width;
+  const sy = phoneOpening ? 1 : oldCell.height / nextCell.height;
   const dx = (cover.rect.left - oldCell.left) / sx - (nextCover.left - nextCell.left);
   const dy = (cover.rect.top - oldCell.top) / sy - (nextCover.top - nextCell.top);
   const xScale = cover.rect.width / sx / nextCover.width;

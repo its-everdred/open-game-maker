@@ -23,6 +23,45 @@ describe('glideTiles', () => {
     );
   });
 
+  it('fades incoming details only on phone', () => {
+    let phone = true;
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({ matches: phone && query === '(max-width: 600px)' })),
+    );
+    const container = document.createElement('div');
+    container.innerHTML =
+      '<div data-game-id="g_1" class="is-selected"><div class="game-cell-spotlight"><div class="games-spotlight-copy"></div></div></div>';
+    const cell = container.firstElementChild as HTMLElement;
+    const copy = container.querySelector<HTMLElement>('.games-spotlight-copy')!;
+    cell.animate = vi.fn();
+    copy.animate = vi.fn();
+    cell.getBoundingClientRect = vi.fn(() => ({ left: 0, top: 0, bottom: 600, width: 390, height: 600 }) as DOMRect);
+    glideTiles(container, new Map([['g_1', { left: 0, top: 0, width: 390, height: 220 } as DOMRect]]));
+    expect(cell.animate).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ transform: 'translate(0px, 0px) scale(1, 1)' })]),
+      expect.anything(),
+    );
+    expect(copy.animate).toHaveBeenCalledWith(
+      [{ opacity: 0 }, { opacity: 0, offset: 0.8 }, { opacity: 1 }],
+      expect.objectContaining({ duration: 300 }),
+    );
+    vi.mocked(copy.animate).mockClear();
+    phone = false;
+    glideTiles(container, new Map([['g_1', { left: 0, top: 0, width: 390, height: 220 } as DOMRect]]));
+    expect(copy.animate).not.toHaveBeenCalled();
+    phone = true;
+    cell.classList.remove('is-selected');
+    vi.mocked(cell.animate).mockClear();
+    cell.getBoundingClientRect = vi.fn(() => ({ left: 0, top: 0, bottom: 220, width: 390, height: 220 }) as DOMRect);
+    glideTiles(container, new Map([['g_1', { left: 0, top: 0, width: 390, height: 600 } as DOMRect]]));
+    expect(cell.animate).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ transform: `translate(0px, 0px) scale(1, ${600 / 220})` })]),
+      expect.anything(),
+    );
+    expect(copy.animate).not.toHaveBeenCalled();
+  });
+
   it('keeps the cover at its old rectangle while its cell expands', () => {
     vi.stubGlobal(
       'matchMedia',
@@ -40,6 +79,28 @@ describe('glideTiles', () => {
     expect(host.animate).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ transform: 'translate(-200px, 0px) scale(2, 2)' })]),
       expect.objectContaining({ duration: 300 }),
+    );
+  });
+
+  it('preserves the old cover rectangle when phone cells do not scale', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({ matches: query === '(max-width: 600px)' })),
+    );
+    const container = document.createElement('div');
+    container.innerHTML = '<div data-game-id="g_1" class="is-selected"><span class="game-cover-host"></span></div>';
+    const cell = container.firstElementChild as HTMLElement;
+    const host = cell.firstElementChild as HTMLElement;
+    cell.getBoundingClientRect = vi.fn(() => ({ left: 0, top: 0, width: 390, height: 600 }) as DOMRect);
+    host.getBoundingClientRect = vi.fn(() => ({ left: 0, top: 60, width: 390, height: 220 }) as DOMRect);
+    host.animate = vi.fn();
+    glideCover(container, new Map([['g_1', { left: 0, top: 0, width: 390, height: 220 } as DOMRect]]), {
+      id: 'g_1',
+      rect: { left: 0, top: 0, width: 390, height: 220 } as DOMRect,
+    });
+    expect(host.animate).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ transform: 'translate(0px, -60px) scale(1, 1)' })]),
+      expect.anything(),
     );
   });
 
