@@ -4,6 +4,7 @@ import type { GameManifest } from '@ogm/contracts/game';
 import type { RigInputMapping } from '@ogm/contracts/input';
 
 import { HostBridge, type HostFailure, type Role } from './bridge.js';
+import { HapticsController } from './haptics.js';
 import { GamepadPoller } from './gamepad.js';
 import { TouchOverlay } from './overlay.js';
 import { SettingsController, type Settings } from './settings.js';
@@ -159,6 +160,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     container: options.container,
     send: (value) => bridge.send('viewport', value),
   });
+  const haptics = new HapticsController();
   const settings = new SettingsController((value) => bridge.send('settings', value));
 
   bridge.on('ready', ({ manifest, marks }) => {
@@ -168,6 +170,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     settings.resend();
     options.onReady?.(manifest, marks);
   });
+  bridge.on('haptics.pulse', ({ pattern }) => haptics.pulse(pattern));
   bridge.on('save.write', (payload) => options.onSaveWrite?.(payload));
   bridge.on('event', ({ kind, payload }) => options.onEvent?.(kind, payload));
   bridge.on('load.progress', (payload) => options.onLoad?.({ t: 'load.progress', payload }));
@@ -197,7 +200,10 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
       gamepads.setMode(mode);
       overlay.setEnabled(mode === 'play');
     },
-    setSettings: (value) => settings.set(value),
+    setSettings: (value) => {
+      haptics.setSettings(value);
+      settings.set(value);
+    },
     dispose,
   };
 }

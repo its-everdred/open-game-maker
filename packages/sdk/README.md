@@ -192,3 +192,7 @@ A game can opt in by declaring `scenery` in its manifest capabilities. The Vite 
 `scenery.json` into the build's design document with stable entity IDs (or initializes empty scene settings when the
 file is absent). The 3D template demonstrates loading each locked model with `AssetLoader.object`, applying design
 updates through the scenery controller, and protecting the game's play-area rectangle.
+
+## Haptics
+
+Call `host.haptics.pulse('light' | 'medium' | 'heavy')` for a short response, or pass an array of up to five integer millisecond durations (0–100 each), alternating vibration and pauses. The shell rate-limits requests and respects its haptics and reduced-motion settings. Playback requires browser support and user activation; unsupported devices silently do nothing. iOS Safari does not expose the Vibration API, and its native switch feedback is not a reliable programmable fallback.

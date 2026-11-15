@@ -5,12 +5,19 @@ import { loadSettings, saveSettings } from './settings';
 beforeEach(() => localStorage.clear());
 
 describe('player settings', () => {
+  it('defaults haptics on and persists the opt-out', () => {
+    localStorage.clear();
+    expect(loadSettings().haptics).toBe(true);
+    saveSettings({ ...loadSettings(), haptics: false });
+    expect(loadSettings().haptics).toBe(false);
+  });
   it('falls back safely from malformed storage and honors first-run reduced motion', () => {
     localStorage.setItem('ogm.settings', '{bad json');
     expect(loadSettings(localStorage, () => true)).toEqual({
       mute: false,
       volume: 1,
       musicVolume: 1,
+      haptics: true,
       textScale: 1,
       reduceMotion: true,
     });
@@ -23,6 +30,7 @@ describe('player settings', () => {
       mute: true,
       volume: 1,
       musicVolume: 1,
+      haptics: true,
       textScale: 0.75,
       reduceMotion: false,
     });
@@ -39,6 +47,7 @@ describe('player settings', () => {
       mute: true,
       volume: 1,
       musicVolume: 1,
+      haptics: true,
       textScale: 0.75,
       reduceMotion: false,
     });

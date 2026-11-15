@@ -39,6 +39,7 @@ const sdkExports = {
     viewport: { current: 1, onChange: 1 } satisfies Record<keyof HostApi['viewport'], 1>,
     events: 1,
     settings: { onChange: 1 } satisfies Record<keyof HostApi['settings'], 1>,
+    haptics: { pulse: 1 } satisfies Record<keyof HostApi['haptics'], 1>,
     test: 1,
   } satisfies Record<keyof HostApi, unknown>,
   GameInstance: {
