@@ -57,7 +57,7 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
       .filter((state) => ['human-review', 'ci-wait', 'merging'].includes(state));
     if (states.length !== 1) continue;
     const prior = byTicket.get(item.ticket);
-    if (prior?.running && prior.percent !== null && prior.percent < 100) {
+    if (prior?.running && prior.percent !== 100) {
       byTicket.set(item.ticket, { ...prior, state: 'in-progress' });
       continue;
     }

@@ -68,8 +68,8 @@ describe('worker progress route', () => {
         { issue_identifier: '12', title: 'Forest backdrop', runtime_seconds: 10, workspace_path: '/private/path' },
       ],
     });
-    deps.aiurClientForGame = async () =>
-      ({ state, progress: async () => ({ progress: { status: 'known', percent: 50 } }) }) as unknown as AiurClient;
+    const progress = vi.fn().mockResolvedValue({ progress: { status: 'known', percent: 50 } });
+    deps.aiurClientForGame = async () => ({ state, progress }) as unknown as AiurClient;
     const { app } = await makeApp(deps);
     const denied = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(outsider) });
     expect(denied.status).toBeGreaterThanOrEqual(400);
@@ -167,6 +167,11 @@ describe('worker progress route', () => {
     state.mockResolvedValue({ running: [{ issue_identifier: '12', title: 'Forest backdrop' }] });
     const resumed = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
     expect(await resumed.json()).toMatchObject({ workers: [{ ticket: '12', percent: 50, source: 'daemon' }] });
+    progress.mockResolvedValueOnce({ progress: { status: 'unknown' } });
+    const resumedUnknown = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect(await resumedUnknown.json()).toMatchObject({
+      workers: [{ ticket: '12', state: 'in-progress', percent: null, source: 'unknown' }],
+    });
     state.mockResolvedValue({
       running: [
         { issue_identifier: '13', title: 'New game ticket' },
