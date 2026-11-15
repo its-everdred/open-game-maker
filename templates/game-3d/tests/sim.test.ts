@@ -32,6 +32,7 @@ class TestHost {
   };
 
   readonly events: HostApi['events'] = { emit() {} };
+  readonly haptics: HostApi['haptics'] = { pulse() {} };
   readonly settings: HostApi['settings'] = {
     onChange: () => () => undefined,
   };

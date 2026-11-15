@@ -136,6 +136,7 @@ export const hostToGameSchema = z
         mute: z.boolean(),
         volume: z.number().min(0).max(1),
         musicVolume: z.number().min(0).max(1).optional(),
+        haptics: z.boolean().optional(),
         gameOptions: z
           .record(z.string(), z.union([z.boolean(), z.string().describe('Text option value'), z.number()]))
           .optional(),
@@ -226,6 +227,15 @@ export type HostToGame = z.infer<typeof hostToGameSchema>;
 
 export const gameToHostSchema = z
   .discriminatedUnion('t', [
+    envelope(
+      'haptics.pulse',
+      z.looseObject({
+        pattern: z.union([
+          z.enum(['light', 'medium', 'heavy']),
+          z.array(z.number().int().min(0).max(100)).min(1).max(5),
+        ]),
+      }),
+    ),
     envelope(
       'ready',
       z.looseObject({

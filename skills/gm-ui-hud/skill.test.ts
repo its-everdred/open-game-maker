@@ -24,6 +24,7 @@ const sdkExports = {
     mute: 1,
     volume: 1,
     musicVolume: 1,
+    haptics: 1,
     textScale: 1,
     reduceMotion: 1,
     gameOptions: 1,
@@ -39,6 +40,7 @@ const sdkExports = {
     viewport: { current: 1, onChange: 1 } satisfies Record<keyof HostApi['viewport'], 1>,
     events: 1,
     settings: { onChange: 1 } satisfies Record<keyof HostApi['settings'], 1>,
+    haptics: { pulse: 1 } satisfies Record<keyof HostApi['haptics'], 1>,
     test: 1,
   } satisfies Record<keyof HostApi, unknown>,
   GameInstance: {
