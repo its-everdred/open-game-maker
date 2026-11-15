@@ -48,8 +48,12 @@ describe('haptics', () => {
     localStorage.setItem('ogm.settings', JSON.stringify({ haptics: false }));
     const vibrate = vi.fn();
     vi.stubGlobal('navigator', { vibrate });
-    new HapticsController({ nextPulse: 0 }).pulse('heavy');
+    const haptics = new HapticsController({ nextPulse: 0 });
+    haptics.pulse('heavy');
     expect(vibrate).not.toHaveBeenCalled();
+    haptics.setSettings(settings);
+    haptics.pulse('heavy');
+    expect(vibrate).toHaveBeenCalledWith(50);
     localStorage.removeItem('ogm.settings');
   });
 
@@ -65,5 +69,8 @@ describe('haptics', () => {
     haptics.setSettings(settings);
     haptics.pulse('heavy');
     expect(vibrate).not.toHaveBeenCalled();
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    haptics.pulse('heavy');
+    expect(vibrate).toHaveBeenCalledWith(50);
   });
 });
