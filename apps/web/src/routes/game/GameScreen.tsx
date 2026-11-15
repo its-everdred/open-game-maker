@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Outlet, useMatch, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import type { CreateJobRequest, Entity, ReapplyReport } from '@ogm/contracts/browser';
 
@@ -64,6 +64,7 @@ import { LoadingLayer } from './LoadingLayer';
 import { gameLoadActivity } from './load-analytics';
 import { PlatformHud } from './PlatformHud';
 import { roomFacts } from './room-facts';
+import { recordPlay } from './recordPlay';
 import { UpdateIndicator } from './UpdateIndicator';
 import { gameExtras, type GameExtraProps } from './extras';
 import './game.css';
@@ -92,9 +93,19 @@ export function GameScreen() {
   const { open: menuOpen, setOpen: setMenuOpen } = useGameMenu();
   const branch = searchParams.get('v')?.trim() || 'main';
   const roomId = searchParams.get('room')?.trim() || undefined;
+  const isGameRoute = useMatch('/g/:gameId') !== null;
   const mode: 'play' | 'edit' = searchParams.get('mode') === 'edit' ? 'edit' : 'play';
   const gamesOrigin = import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000';
   const game = useQuery({ queryKey: ['game', gameId], queryFn: () => getGame(gameId), enabled: gameId !== '' });
+  const loadedGameId = game.data?.id;
+  useEffect(() => {
+    if (!isGameRoute || mode !== 'play' || loadedGameId !== gameId || !gameId) return;
+    const controller = new AbortController();
+    void recordPlay(gameId, controller.signal)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['games'] }))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [gameId, isGameRoute, loadedGameId, mode, queryClient]);
   const design = useQuery({
     queryKey: ['design', gameId, branch],
     queryFn: () => getDesignSnapshot(gameId, branch),

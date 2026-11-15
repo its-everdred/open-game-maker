@@ -19,6 +19,7 @@ export type GameSummary = {
   repo: { owner: string; name: string; url?: string; visibility?: 'public' | 'private' } | null;
   createdAt: string;
   updatedAt?: string;
+  lastPlayedAt?: string | null;
   coverUrl?: string | null;
   trailerUrl?: string | null;
   portraitTrailerUrl?: string | null;

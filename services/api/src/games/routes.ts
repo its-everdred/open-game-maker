@@ -84,12 +84,21 @@ const routes = new Hono<ApiBindings>()
         visibility: 'listed',
       }),
     );
-    const games = listGames(c.get('deps').db, principal.familyId, principal.userId);
+    const db = c.get('deps').db;
+    const games = listGames(db, principal.familyId, principal.userId);
+    const plays = db.select().from(schema.gamePlays).where(eq(schema.gamePlays.userId, principal.userId)).all();
+    const playedAt = new Map(plays.map((play) => [play.gameId, play.lastPlayedAt]));
     const media = await gameMedia(
       c.get('deps'),
       games.map((game) => game.id),
     );
-    return c.json({ games: games.map((game) => ({ ...gameResponse(game), ...media.get(game.id) })) });
+    return c.json({
+      games: games.map((game) => ({
+        ...gameResponse(game),
+        ...media.get(game.id),
+        lastPlayedAt: playedAt.get(game.id) ?? null,
+      })),
+    });
   })
   .get('/games/:id', (c) => {
     const principal = requirePrincipal(c, ['user']);
@@ -118,6 +127,25 @@ const routes = new Hono<ApiBindings>()
       }),
     );
     return c.json({ game: gameResponse(game) });
+  })
+  .post('/games/:id/play', (c) => {
+    const principal = requirePrincipal(c, ['user']);
+    const db = c.get('deps').db;
+    const game = findGame(db, c.req.param('id'));
+    requireAuthorization(
+      authorize(actorFromPrincipal(principal), 'game.play', {
+        familyId: game.familyId,
+        ownerId: game.ownerId,
+        visibility: game.visibility,
+        granted: hasGameGrant(db, game.id, principal.userId),
+      }),
+    );
+    const lastPlayedAt = new Date().toISOString();
+    db.insert(schema.gamePlays)
+      .values({ gameId: game.id, userId: principal.userId, lastPlayedAt })
+      .onConflictDoUpdate({ target: [schema.gamePlays.gameId, schema.gamePlays.userId], set: { lastPlayedAt } })
+      .run();
+    return c.json({ lastPlayedAt });
   })
   .patch('/games/:id', async (c) => {
     const principal = requirePrincipal(c, ['user']);

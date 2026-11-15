@@ -138,3 +138,45 @@ test('keeps spotlight actions and the fixed New game control touch sized on a ph
   const viewport = page.viewportSize()!;
   expect(spotlight.height).toBeLessThanOrEqual(viewport.height);
 });
+
+test('orders the library after playing two games', async ({ page }) => {
+  const played = new Map<string, string>();
+  let sequence = 0;
+  const games = ['g_a', 'g_b'].map((id) => ({
+    id,
+    title: id,
+    familyId: 'family',
+    ownerId: 'user',
+    repo: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }));
+  await page.route('**/api/v1/games', (route) =>
+    route.fulfill({
+      json: {
+        games: games.map((game) => ({ ...game, lastPlayedAt: played.get(game.id) ?? null })),
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/games\/g_[ab]$/, (route) => {
+    const id = new URL(route.request().url()).pathname.split('/').at(-1);
+    return route.fulfill({ json: games.find((game) => game.id === id) });
+  });
+  await page.route(/\/api\/v1\/games\/g_[ab]\/play$/, (route) => {
+    const id = new URL(route.request().url()).pathname.split('/').at(-2)!;
+    const lastPlayedAt = `2026-11-15T00:00:0${++sequence}.000Z`;
+    played.set(id, lastPlayedAt);
+    return route.fulfill({ json: { lastPlayedAt } });
+  });
+  for (const id of ['g_b', 'g_a']) {
+    await page.goto(`/g/${id}?mode=play`);
+    await expect.poll(() => played.has(id)).toBe(true);
+  }
+  await page.goto('/all?test');
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-game-id]')
+        .evaluateAll((nodes) => nodes.slice(0, 2).map((node) => node.getAttribute('data-game-id'))),
+    )
+    .toEqual(['g_a', 'g_b']);
+});
