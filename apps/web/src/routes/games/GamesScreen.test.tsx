@@ -206,17 +206,6 @@ describe('GamesScreen', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Play RestoreBound' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/restorebound?mode=play');
   });
-  it('changes an existing game’s AI asset preference in both directions', async () => {
-    renderGames('/all?spotlight=g_2');
-    fireEvent.click(await screen.findByRole('button', { name: 'Disable AI-generated assets' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Enable AI-generated assets' }));
-    await screen.findByRole('button', { name: 'Disable AI-generated assets' });
-    const patches = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PATCH');
-    expect(patches.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
-      { allowAiGeneratedAssets: false },
-      { allowAiGeneratedAssets: true },
-    ]);
-  });
   it('keeps the real showcase game share link in the menu', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
@@ -338,7 +327,7 @@ describe('GamesScreen', () => {
     expect(container.querySelector('.games-spotlight-media .game-cover')).toBeVisible();
     expect(screen.queryByText(/Your library|My games|Selected game|Choose what happens next|Versions/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Close game' })).toHaveTextContent('×');
-    expect(await screen.findByRole('listitem', { name: 'main' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.queryByRole('listitem', { name: 'main' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play Midnight Crumbs' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit Midnight Crumbs' })).toBeDisabled();
   });

@@ -7,6 +7,16 @@ import { ShowcaseSpotlight } from './ShowcaseSpotlight';
 afterEach(cleanup);
 
 describe('showcase detail', () => {
+  it('uses a logo in place of the title', () => {
+    const game = { ...mergeShowcase([])[0]!, logoUrl: '/logo.png' };
+    const { container } = render(
+      <ShowcaseSpotlight game={game} canOpen onPlay={vi.fn()} onEdit={vi.fn()} onClose={vi.fn()} />,
+    );
+    expect(screen.getByRole('region', { name: `${game.title} spotlight` })).toBeInTheDocument();
+    expect(container.querySelector('img[src="/logo.png"]')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: game.title })).not.toBeInTheDocument();
+  });
+
   it('shows published media for a real showcase game', () => {
     const game = {
       ...mergeShowcase([])[0]!,

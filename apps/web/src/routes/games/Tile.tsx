@@ -30,10 +30,13 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
           {sharedCover ? <span data-cover-slot /> : <Cover game={game} />}
           {job && <span className="game-building-chip">{jobLabel(job)}</span>}
           {game.showcase.badge && <span className="game-new-badge">{game.showcase.badge}</span>}
+          {game.logoUrl && <img className="game-logo" src={game.logoUrl} alt="" />}
           <span className="game-tile-meta">
-            <strong style={{ fontFamily: `'${game.showcase.font}', var(--display)`, color: game.showcase.color }}>
-              {game.title}
-            </strong>
+            {!game.logoUrl && (
+              <strong style={{ fontFamily: `'${game.showcase.font}', var(--display)`, color: game.showcase.color }}>
+                {game.title}
+              </strong>
+            )}
             <span className="showcase-tile-row">
               <span className="game-tag-icons" aria-label={tags.map((tag) => tag.label).join(', ')}>
                 {tags.map((tag) => (
@@ -66,8 +69,9 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
         {sharedCover ? <span data-cover-slot /> : <Cover game={game} />}
         {job && <span className="game-building-chip">{jobLabel(job)}</span>}
         {!game.publishedReleaseId && <span className="game-new-badge">New</span>}
+        {game.logoUrl && <img className="game-logo" src={game.logoUrl} alt="" />}
         <span className="game-tile-meta">
-          <strong>{game.title}</strong>
+          {!game.logoUrl && <strong>{game.title}</strong>}
           {tags.length > 0 && (
             <span className="game-tag-icons" aria-label={tags.join(', ')}>
               {tags.map((tag) => (

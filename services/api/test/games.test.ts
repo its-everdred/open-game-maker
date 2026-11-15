@@ -161,7 +161,7 @@ describe('games routes', () => {
       .run();
     const directory = join(deps.config.gamesRoot, id, 'build1');
     mkdirSync(join(directory, 'media'), { recursive: true });
-    for (const file of ['thumbnail.png', 'trailer-landscape.mp4', 'trailer-portrait.mp4'])
+    for (const file of ['thumbnail.png', 'trailer-landscape.mp4', 'trailer-portrait.mp4', 'logo.png'])
       writeFileSync(join(directory, 'media', file), file);
     const list = async () =>
       (
@@ -170,12 +170,16 @@ describe('games routes', () => {
         }
       ).games[0]!;
     expect(await list()).not.toHaveProperty('coverUrl');
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ logo: '../logo.png' }));
     writeFileSync(join(directory, '.complete'), '');
+    expect(await list()).not.toHaveProperty('logoUrl');
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ logo: 'media/logo.png' }));
     expect(
       (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
     ).toBe(200);
     expect(await list()).toMatchObject({
       lastPlayedAt: expect.any(String),
+      logoUrl: `https://games.example.test/g/${id}/build1/media/logo.png`,
       coverUrl: `https://games.example.test/g/${id}/build1/media/thumbnail.png`,
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
       portraitTrailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-portrait.mp4`,
