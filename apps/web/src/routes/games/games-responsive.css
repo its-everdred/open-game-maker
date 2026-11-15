@@ -105,6 +105,12 @@
 }
 
 @media (max-width: 600px) {
+  /* The outgoing tile is compressed into a strip as the phone spotlight grows. */
+  .games-grid [role='gridcell'].is-selected > .game-cell-tile {
+    animation: none;
+    opacity: 0;
+  }
+
   .games-spotlight {
     padding-top: 60px;
   }
