@@ -332,6 +332,7 @@
 }
 
 .game-cell-exiting {
+  z-index: 6;
   animation: game-cell-fade-out 300ms var(--games-ease) both;
 }
 
