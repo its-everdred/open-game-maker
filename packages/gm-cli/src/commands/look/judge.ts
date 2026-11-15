@@ -74,25 +74,42 @@ export const command: GmCommand = {
         const samples: number[][] = [];
         let lastDifferences: string[] = [];
         for (let run = 0; run < runs; run++) {
-          const result = await exec(
-            'python3',
-            [
-              script,
-              '--kind',
-              'look',
-              '--no-look-log',
-              ...[paths[0]!, paths[1]!, snapshot].flatMap((path) => ['--ref', path]),
-              '--prompt-file',
-              question,
-              '--out',
-              scratch,
-            ],
-            { cwd: root, timeout: 620_000 },
-          );
-          const answer = await readFile(resolve(root, result.stdout.trim()), 'utf8');
-          const json = answer.match(/\{[\s\S]*\}/)?.[0];
-          if (!json) throw new Error('look broker returned no JSON');
-          const data: unknown = JSON.parse(json);
+          let data: unknown;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const result = await exec(
+              'python3',
+              [
+                script,
+                '--kind',
+                'look',
+                '--no-look-log',
+                ...[paths[0]!, paths[1]!, snapshot].flatMap((path) => ['--ref', path]),
+                '--prompt-file',
+                question,
+                '--out',
+                scratch,
+              ],
+              { cwd: root, timeout: 620_000 },
+            );
+            const answer = await readFile(resolve(root, result.stdout.trim()), 'utf8');
+            const json = answer.match(/\{[\s\S]*\}/)?.[0];
+            try {
+              if (!json) throw new Error('no JSON object');
+              try {
+                data = JSON.parse(json);
+              } catch {
+                // Strip trailing commas outside strings without altering quoted text.
+                const repaired = json.replace(/("(?:\\.|[^"\\])*"|,\s*(?=[}\]]))/g, (token) =>
+                  token.startsWith('"') ? token : '',
+                );
+                data = JSON.parse(repaired);
+              }
+              break;
+            } catch {
+              if (attempt === 1)
+                throw new Error(`look judge: broker response JSON parsing failed on run ${run + 1} after 2 attempts`);
+            }
+          }
           if (!data || typeof data !== 'object') throw new Error('invalid judge response');
           const { tiers, differences } = data as { tiers?: unknown; differences?: unknown };
           if (
