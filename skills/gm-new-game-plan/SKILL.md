@@ -61,7 +61,7 @@ until the creator picks.
 
 Every game plan files two media tickets in the Build Order and records their native GitHub blocked-by edges:
 
-- **Thumbnail** (`role:visual`): card art combining the approved logo with real in-game graphics, never a mockup. Block it on the logo and graphics/look tickets.
+- **Thumbnail** (`role:visual`): composed scene key art showing the game's characters and world in a memorable moment, with the approved logo. Never use a gameplay screenshot; gameplay belongs in the trailer. Block it on the logo and graphics/look tickets.
 - **Trailer** (`role:visual`, `role:audio`): 15–30 seconds of real gameplay, with the game's own music and sound effects, in portrait and landscape cuts. Block it on the gameplay tickets.
 
 A ticket changing art direction, logo, board or scene look, or core gameplay files the appropriate thumbnail or trailer refresh; the Executor's merge step may file it instead. Keep both current with the published game. Follow `references/game-media.md` for capture and delivery.

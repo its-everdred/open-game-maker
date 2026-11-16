@@ -6,6 +6,12 @@ export type { Branch };
 
 // OGM-012's list response currently has no shared client type. Optional fields are the forward-compatible display
 // projection named by OGM-073; the adapter keeps today's smaller response useful while those fields land.
+export type DisplayImage = {
+  width: number;
+  height: number;
+  sources: Record<'avif' | 'webp' | 'png', { width: number; path: string }[]>;
+};
+
 export type GameSummary = {
   showcase?: Showcase;
   id: string;
@@ -22,6 +28,8 @@ export type GameSummary = {
   updatedAt?: string;
   lastPlayedAt?: string | null;
   logoUrl?: string | null;
+  logoImage?: DisplayImage | null;
+  coverImage?: DisplayImage | null;
   coverUrl?: string | null;
   trailerUrl?: string | null;
   portraitTrailerUrl?: string | null;

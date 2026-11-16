@@ -60,7 +60,7 @@ Roles: role:gameplay, role:qa
 
 | Asset | Ticket | Roles | Blocked by |
 |---|---|---|---|
-| Thumbnail | <thumbnail ticket> | role:visual | <logo and graphics/look tickets> |
+| Thumbnail | <composed character and world scene with logo; never a gameplay screenshot> | role:visual | <logo and graphics/look tickets> |
 | Trailer | <trailer ticket> | role:visual, role:audio | <gameplay tickets> |
 
 Record these as GitHub native blocked-by edges, not just prose. Refresh the affected media when the style or core gameplay changes.

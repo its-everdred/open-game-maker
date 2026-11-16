@@ -4,6 +4,7 @@ import { schema } from '@ogm/db';
 import { buildDir } from '@ogm/games-host/layout';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { AppDeps } from '../app/types.js';
+import type { DisplayImage } from '../builds/display-images.js';
 
 const exists = async (path: string) =>
   access(path).then(
@@ -13,7 +14,9 @@ const exists = async (path: string) =>
 
 const MAX_LEGACY_MANIFEST_BYTES = 1024 * 1024;
 
-async function manifestMedia(directory: string): Promise<{ logo?: string; genres?: string[] }> {
+async function manifestMedia(
+  directory: string,
+): Promise<{ logo?: string; genres?: string[]; images?: Record<string, DisplayImage> }> {
   try {
     const file = await open(join(directory, '.ogm-display.json'), 'r').catch(() =>
       open(join(directory, 'manifest.json'), 'r'),
@@ -38,6 +41,7 @@ async function manifestMedia(directory: string): Promise<{ logo?: string; genres
     const manifest = JSON.parse(bytes.toString('utf8')) as {
       logo?: unknown;
       genres?: unknown;
+      images?: Record<string, DisplayImage>;
     };
     const logo = manifest.logo;
     const genres = manifest.genres;
@@ -47,6 +51,7 @@ async function manifestMedia(directory: string): Promise<{ logo?: string; genres
       (await exists(join(directory, logo)))
         ? { logo }
         : {}),
+      ...(manifest.images && typeof manifest.images === 'object' ? { images: manifest.images } : {}),
       ...(Array.isArray(genres) &&
       genres.length <= 4 &&
       genres.every((g) => typeof g === 'string' && g.length > 0 && g.length <= 32)
@@ -75,6 +80,8 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
         coverUrl?: string;
         trailerUrl?: string;
         portraitTrailerUrl?: string;
+        coverImage?: DisplayImage;
+        logoImage?: DisplayImage;
       },
     ]
   > = [];
@@ -98,6 +105,47 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
           ]);
           const origin = deps.config.gamesOrigin.replace(/\/$/, '');
           const base = `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/media`;
+          const image = (key: string | undefined): DisplayImage | undefined => {
+            const value = key && manifest.images?.[key];
+            if (
+              !value ||
+              !Number.isSafeInteger(value.width) ||
+              !Number.isSafeInteger(value.height) ||
+              value.width <= 0 ||
+              value.height <= 0 ||
+              !value.sources
+            )
+              return undefined;
+            const sources = value.sources;
+            for (const format of ['avif', 'webp', 'png'] as const) {
+              if (
+                !Array.isArray(sources[format]) ||
+                !sources[format].length ||
+                !sources[format].every(
+                  (entry) =>
+                    entry !== null &&
+                    typeof entry === 'object' &&
+                    Number.isSafeInteger(entry.width) &&
+                    entry.width > 0 &&
+                    typeof entry.path === 'string' &&
+                    new RegExp(`^media/ogm-variants/[a-f0-9]{64}\\.${format}$`, 'u').test(entry.path),
+                )
+              )
+                return undefined;
+            }
+            const prefix = `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`;
+            return {
+              ...value,
+              sources: Object.fromEntries(
+                (['avif', 'webp', 'png'] as const).map((format) => [
+                  format,
+                  sources[format].map((entry) => ({ ...entry, path: prefix + entry.path })),
+                ]),
+              ) as DisplayImage['sources'],
+            };
+          };
+          const coverImage = image('media/thumbnail.png');
+          const logoImage = image(manifest.logo);
           return [
             gameId,
             {
@@ -106,6 +154,8 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                     logoUrl: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
                   }
                 : {}),
+              ...(coverImage ? { coverImage } : {}),
+              ...(logoImage ? { logoImage } : {}),
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
               ...(cover ? { coverUrl: `${base}/thumbnail.png` } : {}),
               ...(landscape ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),

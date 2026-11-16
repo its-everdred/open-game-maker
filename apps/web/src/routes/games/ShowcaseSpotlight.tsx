@@ -1,3 +1,4 @@
+import { DisplayImage } from './DisplayImage';
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { Icon } from '../../components/Icon';
 import { Cover } from './Cover';
@@ -137,7 +138,14 @@ export function ShowcaseSpotlight({
           ) : (
             <Cover game={game} hero />
           )}
-          {game.logoUrl && <img className="game-logo" src={game.logoUrl} alt="" />}
+          {game.logoUrl && (
+            <DisplayImage
+              className="game-logo"
+              src={game.logoUrl}
+              image={game.logoImage}
+              sizes="(max-width: 600px) 55vw, 320px"
+            />
+          )}
         </span>
       </div>
     </section>
