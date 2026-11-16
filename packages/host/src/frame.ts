@@ -18,7 +18,8 @@ type AudioRelayPayload = Extract<GameToHost, { t: 'audio.relay' }>['payload'];
 
 export type GameLoadEvent =
   | Pick<Extract<GameToHost, { t: 'load.progress' }>, 't' | 'payload'>
-  | Pick<Extract<GameToHost, { t: 'load.done' }>, 't' | 'payload'>;
+  | Pick<Extract<GameToHost, { t: 'load.done' }>, 't' | 'payload'>
+  | Pick<Extract<GameToHost, { t: 'load.frame' }>, 't' | 'payload'>;
 
 export interface GameFrameOptions {
   container: HTMLElement;
@@ -103,15 +104,32 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   for (const [key, value] of Object.entries(options.params ?? {})) source.searchParams.set(key, value);
   source.searchParams.set('build', options.build);
   source.searchParams.set('protocol', String(SDK_PROTOCOL));
+  source.searchParams.set('frameObserver', '2');
   iframe.src = source.href;
   const layer = document.createElement('div');
   wrapper.append(iframe, layer);
   options.container.append(wrapper);
 
+  let sdkSignalsFrame: boolean | undefined;
+  let pendingObservedFrame = false;
+  const observeFirstFrame = (event: MessageEvent) => {
+    if (
+      !iframe.contentWindow ||
+      event.source !== iframe.contentWindow ||
+      event.origin !== (options.preview ? 'null' : gamesOrigin.origin)
+    )
+      return;
+    if (typeof event.data !== 'object' || event.data === null || event.data.type !== 'ogm.frame.ready.v2') return;
+    if (sdkSignalsFrame === undefined) pendingObservedFrame = true;
+    else if (!sdkSignalsFrame) options.onLoad?.({ t: 'load.frame', payload: {} });
+  };
+  window.addEventListener('message', observeFirstFrame);
+
   let disposed = false;
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    window.removeEventListener('message', observeFirstFrame);
     gamepads.stop();
     overlay.dispose();
     viewport.dispose();
@@ -163,7 +181,9 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   const haptics = new HapticsController();
   const settings = new SettingsController((value) => bridge.send('settings', value));
 
-  bridge.on('ready', ({ manifest, marks }) => {
+  bridge.on('ready', ({ manifest, marks, firstFrameSignal }) => {
+    sdkSignalsFrame = firstFrameSignal === true;
+    if (!sdkSignalsFrame && pendingObservedFrame) options.onLoad?.({ t: 'load.frame', payload: {} });
     gamepads.setMapping(options.inputMapping?.gamepad, manifest.inputs.actions);
     overlay.setInputs(manifest.inputs, options.inputMapping?.touch ?? 'tap');
     viewport.sendNow();
@@ -174,6 +194,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   bridge.on('save.write', (payload) => options.onSaveWrite?.(payload));
   bridge.on('event', ({ kind, payload }) => options.onEvent?.(kind, payload));
   bridge.on('load.progress', (payload) => options.onLoad?.({ t: 'load.progress', payload }));
+  bridge.on('load.frame', (payload) => options.onLoad?.({ t: 'load.frame', payload }));
   bridge.on('load.done', (payload) => options.onLoad?.({ t: 'load.done', payload }));
   bridge.on('audio.relay', (payload) => options.onAudioRelay?.(payload));
   bridge.on('input.rawKey', ({ code, down }) => {

@@ -106,7 +106,11 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
     const integrations = await scanBuild(files);
     if (integrations.credentials.length > 0) throw new PublishFailure('provider_credential');
     if (integrations.paid.length > 0 && !paidApisDuringGameplay(deps.db)) throw new PublishFailure('paid_integration');
-    const images = await makeDisplayImages(files, manifest.data.logo);
+    const images = await makeDisplayImages(
+      files,
+      manifest.data.logo,
+      manifest.data.loading ? [manifest.data.loading.portrait, manifest.data.loading.landscape] : [],
+    );
     const saveSchemaVersion = (manifest.data as Record<string, unknown>).saveSchemaVersion;
     const achievements = await readFile(join(files, 'achievements.json')).catch(() => Buffer.alloc(0));
     const published = await withArtifactMutation(async () => {
@@ -140,6 +144,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
         join(buildTarget, '.ogm-display.json'),
         JSON.stringify({
           logo: manifest.data.logo,
+          loading: manifest.data.loading,
           genres: manifest.data.genres,
           images,
         }),

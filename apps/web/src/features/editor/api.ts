@@ -28,6 +28,15 @@ export type GameMetadata = {
   visibility: 'listed' | 'private';
   repoVisibility: 'public' | 'private';
   allowAiGeneratedAssets: boolean;
+  logoUrl?: string;
+  coverUrl?: string;
+  loadingUrls?: { portrait: string; landscape: string };
+  loadingImages?: {
+    portrait: import('../../routes/games/types').DisplayImage;
+    landscape: import('../../routes/games/types').DisplayImage;
+  };
+  coverImage?: import('../../routes/games/types').DisplayImage;
+  logoImage?: import('../../routes/games/types').DisplayImage;
 };
 
 export type DesignSnapshot = { rev: number; buildId: string; doc: DesignDoc };

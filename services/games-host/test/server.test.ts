@@ -58,6 +58,19 @@ describe('games-host server', () => {
     expect(await response.text()).toBe('<h1>demo</h1>');
   });
 
+  it('installs the versioned frame observer before game scripts only when requested', async () => {
+    await writeFile(join(build, 'index.html'), '<!doctype html><script src="game.js"></script>');
+    const response = await app().request('/g/demo/b1/index.html?frameObserver=2');
+    const html = await response.text();
+    expect(html).toContain('__ogm_frame_observer_v2.js');
+    expect(html.indexOf('__ogm_frame_observer_v2.js')).toBeLessThan(html.indexOf('game.js'));
+    const observer = await app().request('/g/demo/b1/__ogm_frame_observer_v2.js');
+    expect(observer.headers.get('content-type')).toContain('text/javascript');
+    expect(await observer.text()).toContain('gm-frame-ready');
+    const ordinary = await app().request('/g/demo/b1/index.html');
+    expect(await ordinary.text()).not.toContain('__ogm_frame_observer_v2.js');
+  });
+
   it('redirects a build root without a trailing slash so relative URLs stay inside the build', async () => {
     const response = await app().request('/g/demo/b1');
 

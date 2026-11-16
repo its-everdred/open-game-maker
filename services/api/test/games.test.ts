@@ -161,7 +161,14 @@ describe('games routes', () => {
       .run();
     const directory = join(deps.config.gamesRoot, id, 'build1');
     mkdirSync(join(directory, 'media'), { recursive: true });
-    for (const file of ['thumbnail.png', 'trailer-landscape.mp4', 'trailer-portrait.mp4', 'logo.png'])
+    for (const file of [
+      'thumbnail.png',
+      'trailer-landscape.mp4',
+      'trailer-portrait.mp4',
+      'logo.png',
+      'loading-portrait.png',
+      'loading-landscape.png',
+    ])
       writeFileSync(join(directory, 'media', file), file);
     const list = async () =>
       (
@@ -178,7 +185,14 @@ describe('games routes', () => {
       JSON.stringify({ logo: 'media/logo.png', padding: 'x'.repeat(1024 * 1024) }),
     );
     expect(await list()).not.toHaveProperty('logoUrl');
-    writeFileSync(join(directory, '.ogm-display.json'), JSON.stringify({ logo: 'media/logo.png', genres: ['puzzle'] }));
+    writeFileSync(
+      join(directory, '.ogm-display.json'),
+      JSON.stringify({
+        logo: 'media/logo.png',
+        genres: ['puzzle'],
+        loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
+      }),
+    );
     expect(
       (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
     ).toBe(200);
@@ -193,9 +207,12 @@ describe('games routes', () => {
       JSON.stringify({
         logo: 'media/logo.png',
         genres: ['puzzle'],
+        loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
         images: {
           'media/thumbnail.png': { width: 640, height: 360, sources },
           'media/logo.png': { width: 640, height: 360, sources },
+          'media/loading-portrait.png': { width: 640, height: 360, sources },
+          'media/loading-landscape.png': { width: 640, height: 360, sources },
         },
       }),
     );
@@ -210,11 +227,26 @@ describe('games routes', () => {
       },
       logoImage: { height: 360 },
     });
+    const detail = await (await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) })).json();
+    expect(detail).toMatchObject({
+      loadingUrls: { portrait: `https://games.example.test/g/${id}/build1/media/loading-portrait.png` },
+      loadingImages: {
+        portrait: {
+          sources: {
+            avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+          },
+        },
+      },
+    });
     expect(await list()).toMatchObject({
       lastPlayedAt: expect.any(String),
       choices: { genre: ['puzzle'] },
       logoUrl: `https://games.example.test/g/${id}/build1/media/logo.png`,
       coverUrl: `https://games.example.test/g/${id}/build1/media/thumbnail.png`,
+      loadingUrls: {
+        portrait: `https://games.example.test/g/${id}/build1/media/loading-portrait.png`,
+        landscape: `https://games.example.test/g/${id}/build1/media/loading-landscape.png`,
+      },
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
       portraitTrailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-portrait.mp4`,
     });

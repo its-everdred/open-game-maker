@@ -30,6 +30,8 @@ export type GameSummary = {
   logoUrl?: string | null;
   logoImage?: DisplayImage | null;
   coverImage?: DisplayImage | null;
+  loadingUrls?: { portrait: string; landscape: string };
+  loadingImages?: { portrait: DisplayImage; landscape: DisplayImage };
   coverUrl?: string | null;
   trailerUrl?: string | null;
   portraitTrailerUrl?: string | null;
