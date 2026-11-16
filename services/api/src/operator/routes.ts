@@ -14,7 +14,7 @@ import { reviewNumber } from '../reviews/numbers.js';
 import { parseBody } from '../app/validate.js';
 import { gameResponse } from '../games/games.js';
 import { OperatorRegisterBody, registerOperatorGame } from './register.js';
-import { publishArchive } from './publish.js';
+import { PUBLISH_ACTOR, publishArchive } from './publish.js';
 import { reviewStalls } from '../review-rounds/stalls.js';
 import { reconcileStale } from '../review-rounds/heartbeat.js';
 import { reviewAllowsClose } from '../review-rounds/close-gate.js';
@@ -158,6 +158,20 @@ const routes = new Hono<ApiBindings>()
     const number = reviewNumber(deps.db, game.id, c.req.param('decisionId'));
     return c.json({ number, path: reviewPath(game.slug, number) });
   })
+  .get('/games/:ref/builds/:jobId', (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    const jobId = c.req.param('jobId');
+    const job = deps.db
+      .select()
+      .from(schema.jobs)
+      .where(and(eq(schema.jobs.id, jobId), eq(schema.jobs.gameId, game.id)))
+      .get();
+    if (!job || job.creatorId !== PUBLISH_ACTOR) throw new HttpError(404, 'publish_not_found');
+    const build = deps.db.select().from(schema.builds).where(eq(schema.builds.jobId, jobId)).get();
+    return c.json({ state: job.state, buildId: job.state === 'done' && build ? build.id : null });
+  })
   // The operator's host script builds the game and posts the same archive the daemon's hook uploads, so the publisher
   // reads one artifact shape. A second run with a newer SHA stages and publishes the next build.
   .post(
@@ -175,7 +189,10 @@ const routes = new Hono<ApiBindings>()
       const game = gameFor(deps, c.req.param('ref'));
       const gitSha = c.req.header('x-gm-sha') ?? '';
       if (!SHA.test(gitSha)) return c.json({ error: { code: 'invalid_sha' } }, 400);
-      const result = await publishArchive(deps, game, gitSha, Buffer.from(await c.req.arrayBuffer()));
+      const requestId = c.req.header('x-gm-request-id');
+      if (requestId && !/^j_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(requestId))
+        return c.json({ error: { code: 'invalid_request_id' } }, 400);
+      const result = await publishArchive(deps, game, gitSha, Buffer.from(await c.req.arrayBuffer()), requestId);
       if (result.state === 'refused') {
         deps.log({ event: 'build_upload_refused', jobId: result.jobId, gameId: game.id, reason: result.reason });
         return c.json({ error: { code: result.reason } }, 422);

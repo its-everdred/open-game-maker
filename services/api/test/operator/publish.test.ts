@@ -222,6 +222,11 @@ describe('operator publish', () => {
     expect(response.status).toBe(201);
     const body = (await response.json()) as { state: string; jobId: string; buildId: string };
     expect(body.state).toBe('done');
+    const lookup = await app.request(`${operatorPrefix}/games/castle-game/builds/${body.jobId}`, {
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+    });
+    expect(await lookup.json()).toEqual({ state: 'done', buildId: body.buildId });
+    expect((await app.request(`${operatorPrefix}/games/castle-game/builds/${body.jobId}`)).status).toBe(401);
 
     const build = buildRow(deps, body.jobId);
     expect(build).toMatchObject({ id: body.buildId, gameId: ids.game, gitSha: SHA, status: 'tested' });

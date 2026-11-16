@@ -139,6 +139,9 @@ beforeAll(async () => {
           }),
         );
       }
+      if (request.method === 'GET' && request.url?.startsWith('/internal/operator/games/blobs/builds/')) {
+        return json(200, JSON.stringify({ state: 'failed', buildId: null }));
+      }
       if (request.method === 'POST' && request.url === '/internal/operator/games/blobs/builds') {
         if (dropUploads > 0) {
           dropUploads -= 1;
@@ -282,7 +285,7 @@ describe('gm publish', () => {
     expect(run.err[0]).toMatch(
       /^no answer from http:\/\/127\.0\.0\.1:\d+\/internal\/operator\/games\/blobs\/builds: fetch failed \(.+\)$/,
     );
-    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST']);
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST', 'GET']);
     expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
   });
 
@@ -296,7 +299,7 @@ describe('gm publish', () => {
     expect(run.err[0]).toMatch(
       /^the answer from http:\/\/127\.0\.0\.1:\d+\/internal\/operator\/games\/blobs\/builds broke off \(HTTP 201\): /,
     );
-    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST']);
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'GET']);
   });
 
   it('does not send the upload again when it times out, as the API may still be publishing it', async () => {
@@ -362,4 +365,27 @@ describe('gm publish', () => {
     });
     expect(fromEnvDir.err[0]).toContain('game "nope" is not registered');
   });
+});
+
+it('confirms a newly landed build after the upload times out', async () => {
+  const originalFetch = globalThis.fetch;
+  let factsReads = 0;
+  const mock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    if (init?.method === 'POST') throw new DOMException('timed out', 'TimeoutError');
+    factsReads += 1;
+    if (factsReads === 2) return new Response('', { status: 404 });
+    if (factsReads === 3) return new Response(JSON.stringify({ state: 'filed', buildId: null }), { status: 200 });
+    if (factsReads === 4)
+      return new Response(JSON.stringify({ state: 'done', buildId: 'build_landed' }), {
+        status: 200,
+      });
+    return originalFetch(input, init);
+  });
+  try {
+    const run = await publish(['blobs', '--api', api]);
+    expect(run.code).toBe(0);
+    expect(run.out.join('\n')).toContain('build build_landed');
+  } finally {
+    mock.mockRestore();
+  }
 });

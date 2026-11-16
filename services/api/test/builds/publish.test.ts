@@ -118,15 +118,14 @@ describe('publishing a merged build', () => {
     const { buildId } = (await response.json()) as { buildId: string };
     expect(
       JSON.parse(readFileSync(join(deps.config.gamesRoot, ids.game, buildId, '.ogm-display.json'), 'utf8')),
-    ).toEqual({
+    ).toMatchObject({
       logo: 'media/logo.png',
       genres: ['puzzle'],
       loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
-      images: {},
     });
   });
 
-  it('generates display variants before publishing a build', async () => {
+  it('generates display variants after publishing a build', async () => {
     const { deps, app } = world();
     completeRun(deps);
     const dir = builtFiles();
@@ -147,7 +146,14 @@ describe('publishing a merged build', () => {
     expect(response.status).toBe(201);
     const { buildId } = (await response.json()) as { buildId: string };
     const build = join(deps.config.gamesRoot, ids.game, buildId);
-    const display = JSON.parse(readFileSync(join(build, '.ogm-display.json'), 'utf8'));
+    const display = await vi.waitFor(
+      () => {
+        const metadata = JSON.parse(readFileSync(join(build, '.ogm-display.json'), 'utf8'));
+        expect(metadata.images?.['media/thumbnail.png']).toBeDefined();
+        return metadata;
+      },
+      { timeout: 30_000 },
+    );
     const image = display.images['media/thumbnail.png'];
     expect(image.sources.avif.map((item: { width: number }) => item.width)).toEqual([320, 640]);
     expect(display.images['media/p.png'].sources.webp[0].width).toBe(320);

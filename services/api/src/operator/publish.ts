@@ -28,9 +28,9 @@ export type PublishResult =
 // The row is written `filed` with `releasedAt` set: the publisher needs a job that has not finished, while the
 // instance must not count an operator action against a family's job slot or its daemon's concurrency. A publish that
 // throws before the publisher settles the row is settled here instead, so a refused archive leaves nothing behind.
-export function createPublishJob(deps: AppDeps, game: GameRow, gitSha: string): string {
+export function createPublishJob(deps: AppDeps, game: GameRow, gitSha: string, jobId?: string): string {
   const at = new Date().toISOString();
-  const id = `j_${randomUUID()}`;
+  const id = jobId ?? `j_${randomUUID()}`;
   const plan: JobPlan = {
     title: `Publish ${game.title} at ${gitSha.slice(0, 12)}`,
     summary: 'Operator publish of a build for a registered game, staged and published through the build publisher.',
@@ -76,8 +76,9 @@ export async function publishArchive(
   game: GameRow,
   gitSha: string,
   archive: Buffer,
+  requestId?: string,
 ): Promise<PublishResult> {
-  const jobId = createPublishJob(deps, game, gitSha);
+  const jobId = createPublishJob(deps, game, gitSha, requestId);
   try {
     await stageArtifact(deps, jobId, gitSha, archive);
   } catch (error) {
