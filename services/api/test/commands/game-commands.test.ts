@@ -655,6 +655,94 @@ describe('a registered game’s own Commands', () => {
     ]);
   });
 
+  it('retries a ledger failure with the same idempotency key after Aiur accepted', async () => {
+    const item = decision();
+    const { app, deps, answerAsCreator } = await appWithAiur([item]);
+    deps.sqlite.exec(
+      `CREATE TRIGGER reject_review BEFORE INSERT ON command_reviews BEGIN SELECT RAISE(FAIL, 'unavailable'); END`,
+    );
+    const request = () =>
+      app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+        method: 'POST',
+        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+        body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+      });
+    expect((await request()).status).toBe(503);
+    item.answer = { option_id: 'round' };
+    deps.sqlite.exec('DROP TRIGGER reject_review');
+    expect((await request()).status).toBe(200);
+    expect(answerAsCreator).toHaveBeenCalledTimes(2);
+    expect(answerAsCreator.mock.calls.map((call) => (call[1] as { idempotency_key: string }).idempotency_key)).toEqual([
+      'd_aiur_1:2',
+      'd_aiur_1:2',
+    ]);
+    expect(listReviews(deps.db, ids.game)).toHaveLength(1);
+  });
+
+  it('recovers the ledger from an accepted answer after its response is lost', async () => {
+    const item = decision();
+    const answer = vi.fn(async () => {
+      item.answer = { option_id: 'round', actor: { kind: 'operator', id: ids.user } };
+      throw new Error('response lost');
+    });
+    const { app, deps } = await appWithAiur([item], answer);
+    deps.registry.trackerTickets = async () => ({
+      stale: false,
+      tickets: [
+        {
+          ticket: '478',
+          title: 'Ticket',
+          labels: ['game:game-1', 'agent:human-review'],
+          closedAt: null,
+          updatedAt: AT,
+          outcome: 'Closed',
+          url: 'https://example.test/issue',
+        },
+      ],
+    });
+    deps.registry.reviewEpisode = async () => '100@2026-01-01T00:00:00Z';
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+    });
+    expect(response.status).toBe(502);
+    expect(listReviews(deps.db, ids.game)).toHaveLength(0);
+    const missing = await app.request(`/api/v1/games/${ids.game}/tickets/478/missing-review`, {
+      method: 'POST',
+      headers: asUser(ids.user),
+    });
+    expect(missing.status).toBe(409);
+    expect(listReviews(deps.db, ids.game)).toEqual([
+      expect.objectContaining({ decision_id: 'd_aiur_1', option_id: 'round' }),
+    ]);
+  });
+
+  it('installs the guard before waiting for tracker history', async () => {
+    let finish!: (episode: string) => void;
+    const pending = new Promise<string>((resolve) => {
+      finish = resolve;
+    });
+    const { app, deps } = await appWithAiur([decision()]);
+    const read = vi.fn(async () => pending);
+    deps.registry.reviewEpisode = read;
+    const request = app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+    });
+    await vi.waitFor(() => expect(read).toHaveBeenCalled());
+    expect(deps.db.select().from(schema.reviewAnswerGuards).all()).toEqual([
+      expect.objectContaining({
+        source: ids.game,
+        ticket: expect.stringMatching(/^478\/pending@/),
+        episode: expect.stringContaining('"principal"'),
+      }),
+    ]);
+    finish('101@2026-01-01T00:01:00Z');
+    expect((await request).status).toBe(200);
+  });
+
   it('guards the review episode active after an in-flight answer', async () => {
     let finish!: () => void;
     const pending = new Promise<void>((resolve) => {
@@ -670,6 +758,13 @@ describe('a registered game’s own Commands', () => {
       body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
     });
     await vi.waitFor(() => expect(answer).toHaveBeenCalled());
+    expect(deps.db.select().from(schema.reviewAnswerGuards).all()).toEqual([
+      expect.objectContaining({
+        source: ids.game,
+        ticket: expect.stringMatching(/^478\/pending@/),
+        episode: expect.stringContaining('"principal"'),
+      }),
+    ]);
     episode = '101@2026-01-01T00:01:00Z';
     finish();
     expect((await request).status).toBe(200);

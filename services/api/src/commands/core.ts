@@ -13,9 +13,12 @@ import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js
 import { optionMediaFromAiur } from './aiur-media.js';
 import { toGameCommand } from './aiur.js';
 import {
-  markReviewAnswered,
+  bindReviewEpisode,
+  beginReviewAnswer,
+  discardReviewAnswer,
   readReviewEpisode,
   reconcileReviewEpisode,
+  reconcilePendingCommands,
   retainReviewTickets,
   reviewAnswerPending,
 } from '../review-rounds/answer-guard.js';
@@ -107,6 +110,9 @@ export default new Hono<ApiBindings>()
       body.review.dislikes.length === 0 &&
       body.review.notes === undefined;
     const deps = c.get('deps');
+    const guard = body.review
+      ? beginReviewAnswer(deps.db, 'core', command.ticket, `command:${id}:${body.version}`)
+      : undefined;
     try {
       await client.answerAsCreator(id, {
         ticket: command.ticket!,
@@ -117,16 +123,32 @@ export default new Hono<ApiBindings>()
         ...(fields && !singlePick ? { response: fields.response } : { option: body.option_id }),
       });
     } catch (error) {
-      if (error instanceof AiurHttpError && error.status === 409) throw new HttpError(409, 'command_answer_conflict');
+      if (guard && error instanceof AiurHttpError && [400, 403, 404, 422].includes(error.status))
+        discardReviewAnswer(deps.db, 'core', command.ticket, guard);
+      if (error instanceof AiurHttpError && error.status === 409) {
+        if (guard) {
+          const latest = await client.decision(id).catch(() => null);
+          if (
+            latest &&
+            !latest.answer &&
+            !latest.active_answer &&
+            ['open', 'deferred', 'pending'].includes(latest.decision_status)
+          )
+            discardReviewAnswer(deps.db, 'core', command.ticket, guard);
+        }
+        throw new HttpError(409, 'command_answer_conflict');
+      }
       throw new HttpError(502, 'core_daemon_unavailable');
     }
-    const episode = await readReviewEpisode(
-      deps.registry.reviewEpisode,
-      deps.config.coreRepo ?? undefined,
-      command.ticket,
-      ['agent:human-review'],
-    );
-    if (body.review) markReviewAnswered(deps.db, 'core', command.ticket, episode);
+    if (body.review) {
+      const episode = await readReviewEpisode(
+        deps.registry.reviewEpisode,
+        deps.config.coreRepo ?? undefined,
+        command.ticket,
+        ['agent:human-review'],
+      );
+      if (guard) bindReviewEpisode(deps.db, 'core', command.ticket, guard, episode);
+    }
     return c.json({ status: 'answered' });
   })
   .post('/core/tickets/:ticket/missing-review', async (c) => {
@@ -140,6 +162,7 @@ export default new Hono<ApiBindings>()
     ]);
     if (episode === undefined) throw new HttpError(503, 'review_episode_unavailable');
     if (episode === null) throw new HttpError(404, 'review_ticket_not_found');
+    await reconcilePendingCommands(deps.db, 'core', ticket, episode, client);
     await reconcileReviewEpisode(deps.db, 'core', ticket, episode);
     if (reviewAnswerPending(deps.db, 'core', ticket)) throw new HttpError(409, 'review_answer_pending');
     if (!workers.some((worker) => worker.ticket === ticket && worker.state === 'human-review'))

@@ -7,10 +7,12 @@ import { isForCreator } from '../job-commands/correlate.js';
 import {
   readReviewEpisode,
   reconcileReviewEpisode,
+  reconcilePendingCommands,
+  reconcilePendingPreviews,
   retainReviewTickets,
   reviewAnswerPending,
 } from '../review-rounds/answer-guard.js';
-import { listPreviews } from '../previews/store.js';
+import { listEditorPreviews, listPreviewHistory, listPreviews } from '../previews/store.js';
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
 import { authorizedGame } from '../games/authorize.js';
@@ -131,6 +133,20 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
   ]);
   if (episode === undefined) throw new HttpError(503, 'review_episode_unavailable');
   if (episode === null) throw new HttpError(404, 'review_ticket_not_found');
+  const client = await deps.aiurClientForGame(game.id);
+  await reconcilePendingCommands(deps.db, game.id, ticket.ticket, episode, client, deps.log);
+  const previews = [...(await listEditorPreviews(deps, game.id)), ...(await listPreviewHistory(deps, game.id))];
+  reconcilePendingPreviews(
+    deps.db,
+    game.id,
+    ticket.ticket,
+    episode,
+    new Set(
+      previews
+        .filter((preview) => preview.ticket === ticket.ticket && preview.answered)
+        .map((preview) => preview.buildId),
+    ),
+  );
   await reconcileReviewEpisode(deps.db, game.id, ticket.ticket, episode);
   if (reviewAnswerPending(deps.db, game.id, ticket.ticket)) throw new HttpError(409, 'review_answer_pending');
   const round = deps.db
@@ -145,7 +161,6 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
     )
     .get();
   // Do not report a missing review when the daemon cannot confirm its decision feed.
-  const client = await deps.aiurClientForGame(game.id);
   const decisions = await client.decisions({}, AbortSignal.timeout(5000));
   if (
     round ||

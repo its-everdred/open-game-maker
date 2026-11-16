@@ -17,7 +17,12 @@ import { findCommand, parseCommand } from '../build-chat/store.js';
 import { isForCreator } from '../job-commands/correlate.js';
 import { listCreatorCommands, listGameCommands, shownOneByOne } from './list.js';
 import { gameTicketFilter } from './scope.js';
-import { markReviewAnswered, readReviewEpisode } from '../review-rounds/answer-guard.js';
+import {
+  beginReviewAnswer,
+  bindReviewEpisode,
+  discardReviewAnswer,
+  readReviewEpisode,
+} from '../review-rounds/answer-guard.js';
 import { getRound } from '../review-rounds/store.js';
 
 export const prefix = '/api/v1';
@@ -132,6 +137,20 @@ export default new Hono<ApiBindings>()
       review.likes[0] === body.option_id &&
       review.dislikes.length === 0 &&
       review.notes === undefined;
+    const selectedOption = keyedChange ? 'needs_work' : body.option_id;
+    const ledgerInput =
+      review === undefined
+        ? undefined
+        : { gameId: game.id, command, optionId: selectedOption, review: decisionReview! };
+    const answerOption = fields === undefined || singlePick ? body.option_id : undefined;
+    const guard =
+      review === undefined
+        ? undefined
+        : beginReviewAnswer(deps.db, game.id, canonical.ticket, `command:${decisionId}:${body.version}`, {
+            input: ledgerInput!,
+            principal: requirePrincipal(c, ['user']).userId,
+            ...(answerOption ? { option: answerOption } : { response: fields!.response }),
+          });
     try {
       // The creator's own answer (#631): aiur refuses the supervisor's `decide` on a decision only a human may take.
       // A review's answer is its like/dislike map; aiur takes one of an option or a response, never both.
@@ -147,8 +166,20 @@ export default new Hono<ApiBindings>()
         ...(fields === undefined || singlePick ? { option: body.option_id } : { response: fields.response }),
       });
     } catch (error) {
+      if (guard && error instanceof AiurHttpError && [400, 403, 404, 422].includes(error.status))
+        discardReviewAnswer(deps.db, game.id, canonical.ticket, guard);
       // Another writer answered first: aiur's status is final and the inbox refetches.
       if (error instanceof AiurHttpError && error.status === 409) {
+        if (guard) {
+          const latest = await client.decision(decisionId).catch(() => null);
+          if (
+            latest &&
+            !latest.answer &&
+            !latest.active_answer &&
+            ['open', 'deferred', 'pending'].includes(latest.decision_status)
+          )
+            discardReviewAnswer(deps.db, game.id, canonical.ticket, guard);
+        }
         return c.json({ status: 'conflict' as const, by: 'other' as const }, 409);
       }
       deps.log({
@@ -160,6 +191,8 @@ export default new Hono<ApiBindings>()
       });
       throw new HttpError(502, 'aiur_answer_failed');
     }
+    if (ledgerInput && !tryRecordReview(deps.db, ledgerInput, deps.log))
+      throw new HttpError(503, 'review_ledger_pending');
     if (review !== undefined) {
       const episode = await readReviewEpisode(
         deps.registry.reviewEpisode,
@@ -167,17 +200,8 @@ export default new Hono<ApiBindings>()
         canonical.ticket,
         ['agent:human-review', ...(game.slug ? [`${game.slug}:human-review`] : [])],
       );
-      markReviewAnswered(deps.db, game.id, canonical.ticket, episode);
+      if (guard) bindReviewEpisode(deps.db, game.id, canonical.ticket, guard, episode);
     }
-    if (
-      review !== undefined &&
-      !tryRecordReview(
-        deps.db,
-        { gameId: game.id, command, optionId: keyedChange ? 'needs_work' : body.option_id, review: decisionReview! },
-        deps.log,
-      )
-    )
-      throw new HttpError(503, 'review_ledger_pending');
     return c.json(
       { status: 'answered' as const, decision_id: decisionId, option_id: keyedChange ? 'needs_work' : body.option_id },
       200,
