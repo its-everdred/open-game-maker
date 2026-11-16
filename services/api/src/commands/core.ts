@@ -126,7 +126,7 @@ export default new Hono<ApiBindings>()
       command.ticket,
       ['agent:human-review'],
     );
-    markReviewAnswered(deps.db, 'core', command.ticket, episode);
+    if (body.review) markReviewAnswered(deps.db, 'core', command.ticket, episode);
     return c.json({ status: 'answered' });
   })
   .post('/core/tickets/:ticket/missing-review', async (c) => {
