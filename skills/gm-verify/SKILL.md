@@ -34,8 +34,7 @@ A report budget whose status is `over` blocks the PR. Name the tier and measured
 
 ## Matching concept art
 
-On every iteration, capture a settled view with the same camera and size. Measure the concept directly: express sizes
-and positions as fractions of a cell. Run `gm look score <target.png> <candidate.png>` and
+On every iteration, capture a settled view with the same camera and size. Measure the concept directly: express sizes and positions as fractions of a cell. Run `gm look score <target.png> <candidate.png>` and
 `gm look judge <sheet.png> --rubric tiers`. Fix the highest-ranked differences and repeat. Stop when all tiers pass
 at 8 or more. If three iterations fail to beat the best score so far by at least the larger of 0.5 and the reported tier spread, change technique (a different renderer,
 library or layout, not another layer or parameter on the same one); if that stalls too, return to the best checkpoint
