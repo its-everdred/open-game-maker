@@ -98,7 +98,7 @@ export async function reconcilePendingCommands(
   db: Db,
   source: string,
   ticket: string,
-  episode: string,
+  _episode: string,
   client: AiurClient,
   log: (line: Record<string, unknown>) => void = () => {},
 ): Promise<void> {
@@ -138,7 +138,7 @@ export async function reconcilePendingCommands(
             : answer.custom_response === intent.response);
         if (same && !tryRecordReview(db, intent.input, log)) continue;
       }
-      bindReviewEpisode(db, source, ticket, token, episode);
+      bindReviewEpisode(db, source, ticket, token, undefined);
     } else if (decision && ['expired', 'dismissed', 'moot'].includes(decision.decision_status))
       discardReviewAnswer(db, source, ticket, token);
   }
@@ -148,7 +148,7 @@ export function reconcilePendingPreviews(
   db: Db,
   source: string,
   ticket: string,
-  episode: string,
+  _episode: string,
   answeredBuilds: ReadonlySet<string>,
 ): void {
   const prefix = `${ticket}/pending@`;
@@ -162,7 +162,7 @@ export function reconcilePendingPreviews(
     const token = row.ticket.slice(ticket.length + 1);
     const key = Buffer.from(token.slice('pending@'.length), 'base64url').toString('utf8');
     if (key.startsWith('preview:') && answeredBuilds.has(key.slice('preview:'.length)))
-      bindReviewEpisode(db, source, ticket, token, episode);
+      bindReviewEpisode(db, source, ticket, token, undefined);
   }
 }
 

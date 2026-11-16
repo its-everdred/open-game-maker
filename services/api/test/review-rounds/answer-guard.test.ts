@@ -96,9 +96,9 @@ it('reconciles an accepted command after its response was lost', async () => {
       .select()
       .from((await import('@ogm/db')).schema.reviewAnswerGuards)
       .all(),
-  ).toEqual([expect.objectContaining({ source: 'core', ticket: '12', episode: '200@2026-01-01T00:00:00Z' })]);
+  ).toEqual([expect.objectContaining({ source: 'core', ticket: '12', episode: expect.stringMatching(/^unknown@/) })]);
   await reconcileReviewEpisode(db, 'core', '12', '201@2026-01-02T00:00:00Z');
-  expect(reviewAnswerPending(db, 'core', '12')).toBe(false);
+  expect(reviewAnswerPending(db, 'core', '12')).toBe(true);
 });
 
 it('reconciles an answered preview after its response was lost', async () => {
@@ -118,5 +118,5 @@ it('reconciles an answered preview after its response was lost', async () => {
       .select()
       .from((await import('@ogm/db')).schema.reviewAnswerGuards)
       .all(),
-  ).toEqual([expect.objectContaining({ source: 'game', ticket: '12', episode: '200@2026-01-01T00:00:00Z' })]);
+  ).toEqual([expect.objectContaining({ source: 'game', ticket: '12', episode: expect.stringMatching(/^unknown@/) })]);
 });
