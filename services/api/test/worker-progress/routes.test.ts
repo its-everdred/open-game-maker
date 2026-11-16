@@ -208,7 +208,16 @@ describe('worker progress route', () => {
         },
       ],
     }));
+    deps.registry.reviewEpisode = async () => '100@2026-01-01T00:00:00Z';
     const missing = `/api/v1/games/${game}/tickets/12/missing-review`;
+    deps.registry.reviewEpisode = async () => null;
+    expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(404);
+    deps.registry.reviewEpisode = async () => {
+      throw new Error('unavailable');
+    };
+    expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(503);
+    expect(message).not.toHaveBeenCalled();
+    deps.registry.reviewEpisode = async () => '100@2026-01-01T00:00:00Z';
     markReviewAnswered(deps.db, game, '12');
     expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(409);
     expect(message).not.toHaveBeenCalled();
@@ -222,7 +231,7 @@ describe('worker progress route', () => {
     expect(message).toHaveBeenCalledWith(
       '12',
       expect.stringContaining('no review media'),
-      `review-target:12:${at}`,
+      'review-target:12:100',
       expect.any(AbortSignal),
     );
     decisions.mockRejectedValueOnce(new Error('daemon unavailable'));

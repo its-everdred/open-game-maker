@@ -9,7 +9,7 @@ import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
 import { answerRound, getRound } from './store.js';
-import { markReviewAnswered } from './answer-guard.js';
+import { markReviewAnswered, readReviewEpisode } from './answer-guard.js';
 
 export const prefix = '/api/v1';
 const Answer = z
@@ -91,6 +91,12 @@ export default new Hono<ApiBindings>()
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
     if (!round || round.category === 'gameplay') throw new HttpError(404, 'review_round_not_found');
+    const episode = await readReviewEpisode(
+      deps.registry.reviewEpisode,
+      game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined,
+      round.ticket,
+      ['agent:human-review', ...(game.slug ? [`${game.slug}:human-review`] : [])],
+    );
     const ok = deps.db.transaction((tx) => {
       const answered = answerRound(tx, game.id, round.id, {
         verdict: answer.verdict,
@@ -98,7 +104,7 @@ export default new Hono<ApiBindings>()
         source: 'command',
         at: new Date().toISOString(),
       });
-      if (answered) markReviewAnswered(tx, game.id, round.ticket);
+      if (answered) markReviewAnswered(tx, game.id, round.ticket, episode);
       return answered;
     });
     if (!ok) throw new HttpError(409, 'review_round_answered');

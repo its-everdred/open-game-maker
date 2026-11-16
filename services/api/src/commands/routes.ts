@@ -17,7 +17,7 @@ import { findCommand, parseCommand } from '../build-chat/store.js';
 import { isForCreator } from '../job-commands/correlate.js';
 import { listCreatorCommands, listGameCommands, shownOneByOne } from './list.js';
 import { gameTicketFilter } from './scope.js';
-import { markReviewAnswered } from '../review-rounds/answer-guard.js';
+import { markReviewAnswered, readReviewEpisode } from '../review-rounds/answer-guard.js';
 import { getRound } from '../review-rounds/store.js';
 
 export const prefix = '/api/v1';
@@ -160,7 +160,15 @@ export default new Hono<ApiBindings>()
       });
       throw new HttpError(502, 'aiur_answer_failed');
     }
-    if (review !== undefined) markReviewAnswered(deps.db, game.id, canonical.ticket);
+    if (review !== undefined) {
+      const episode = await readReviewEpisode(
+        deps.registry.reviewEpisode,
+        game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined,
+        canonical.ticket,
+        ['agent:human-review', ...(game.slug ? [`${game.slug}:human-review`] : [])],
+      );
+      markReviewAnswered(deps.db, game.id, canonical.ticket, episode);
+    }
     if (
       review !== undefined &&
       !tryRecordReview(

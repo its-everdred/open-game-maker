@@ -6,6 +6,7 @@ export const reviewAnswerGuards = sqliteTable(
   {
     source: text('source').notNull(),
     ticket: text('ticket').notNull(),
+    episode: text('episode'),
     observedReview: integer('observed_review', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [primaryKey({ columns: [table.source, table.ticket] })],

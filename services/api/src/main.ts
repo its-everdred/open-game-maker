@@ -41,6 +41,7 @@ import { createWaitTickets } from './decision-waits/tickets.js';
 import { createTicketTitleReader, createWorkpadReader } from './worker-progress/workpad.js';
 import { createTrackerReader } from './worker-progress/tracker.js';
 import { createTicketLookup } from './worker-progress/lookup.js';
+import { createReviewEpisodeReader } from './worker-progress/review-episode.js';
 import { createTicketConversationReader } from './worker-progress/conversation.js';
 import { startBriefingPush } from './voice/briefing-push.js';
 import { questionSession } from './voice/question-session.js';
@@ -132,6 +133,7 @@ deps.registry.workerWorkpad = createWorkpadReader(deps.config.instanceRepo, env.
 deps.registry.workerTitle = createTicketTitleReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.trackerTickets = createTrackerReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.trackerTicket = createTicketLookup(env.OGM_INTAKE_GITHUB_TOKEN);
+deps.registry.reviewEpisode = createReviewEpisodeReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.ticketConversation = createTicketConversationReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.issueStateWriter = issues;
 startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));

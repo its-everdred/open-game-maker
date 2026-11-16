@@ -10,7 +10,7 @@ import type { ApiBindings } from '../app/types.js';
 import { authorizedGame } from '../games/authorize.js';
 import { requirePrincipal } from '../app/principal.js';
 import { roundForBuild } from '../review-rounds/store.js';
-import { markReviewAnswered } from '../review-rounds/answer-guard.js';
+import { markReviewAnswered, readReviewEpisode } from '../review-rounds/answer-guard.js';
 import { answerPreview, listEditorPreviews, listPreviewHistory, listPreviews, previewDirectory } from './store.js';
 
 export const prefix = '/api/v1';
@@ -67,8 +67,15 @@ export default new Hono<ApiBindings>()
     const round = roundForBuild(c.get('deps').db, game.id, ticket, buildId);
     if (round && requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const message = `Preview review of ${buildId}: ${verdict}.${note ? `\n${note}` : ''}`;
+    const deps = c.get('deps');
     const answered = await answerPreview(c.get('deps'), game.id, ticket, buildId, message, verdict, note);
     if (!answered) throw new HttpError(409, 'preview_changed');
-    markReviewAnswered(c.get('deps').db, game.id, ticket);
+    const episode = await readReviewEpisode(
+      deps.registry.reviewEpisode,
+      game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined,
+      ticket,
+      ['agent:human-review', ...(game.slug ? [`${game.slug}:human-review`] : [])],
+    );
+    markReviewAnswered(deps.db, game.id, ticket, episode);
     return c.json({ status: 'answered' });
   });

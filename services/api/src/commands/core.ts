@@ -14,7 +14,8 @@ import { optionMediaFromAiur } from './aiur-media.js';
 import { toGameCommand } from './aiur.js';
 import {
   markReviewAnswered,
-  observeReviewState,
+  readReviewEpisode,
+  reconcileReviewEpisode,
   retainReviewTickets,
   reviewAnswerPending,
 } from '../review-rounds/answer-guard.js';
@@ -105,6 +106,7 @@ export default new Hono<ApiBindings>()
       body.review.likes[0] === body.option_id &&
       body.review.dislikes.length === 0 &&
       body.review.notes === undefined;
+    const deps = c.get('deps');
     try {
       await client.answerAsCreator(id, {
         ticket: command.ticket!,
@@ -118,7 +120,13 @@ export default new Hono<ApiBindings>()
       if (error instanceof AiurHttpError && error.status === 409) throw new HttpError(409, 'command_answer_conflict');
       throw new HttpError(502, 'core_daemon_unavailable');
     }
-    markReviewAnswered(c.get('deps').db, 'core', command.ticket);
+    const episode = await readReviewEpisode(
+      deps.registry.reviewEpisode,
+      deps.config.coreRepo ?? undefined,
+      command.ticket,
+      ['agent:human-review'],
+    );
+    markReviewAnswered(deps.db, 'core', command.ticket, episode);
     return c.json({ status: 'answered' });
   })
   .post('/core/tickets/:ticket/missing-review', async (c) => {
@@ -126,7 +134,14 @@ export default new Hono<ApiBindings>()
     const ticket = c.req.param('ticket');
     if (!/^[1-9]\d{0,18}$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
     const workers = await reviewWorkers(c.get('deps'));
-    if (reviewAnswerPending(c.get('deps').db, 'core', ticket)) throw new HttpError(409, 'review_answer_pending');
+    const deps = c.get('deps');
+    const episode = await readReviewEpisode(deps.registry.reviewEpisode, deps.config.coreRepo ?? undefined, ticket, [
+      'agent:human-review',
+    ]);
+    if (episode === undefined) throw new HttpError(503, 'review_episode_unavailable');
+    if (episode === null) throw new HttpError(404, 'review_ticket_not_found');
+    await reconcileReviewEpisode(deps.db, 'core', ticket, episode);
+    if (reviewAnswerPending(deps.db, 'core', ticket)) throw new HttpError(409, 'review_answer_pending');
     if (!workers.some((worker) => worker.ticket === ticket && worker.state === 'human-review'))
       throw new HttpError(404, 'review_ticket_not_found');
     const decisions = await coreCall(() => client.decisions({ ticket }, AbortSignal.timeout(5000)));
@@ -138,7 +153,7 @@ export default new Hono<ApiBindings>()
       client.message(
         ticket,
         'This ticket needs a creator review, but no review media was posted. Please post a review with media.',
-        `core-review-target:${ticket}`,
+        `core-review-target:${ticket}:${episode.split('@')[0]}`,
         AbortSignal.timeout(15000),
       ),
     );

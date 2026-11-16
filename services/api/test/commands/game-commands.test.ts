@@ -843,6 +843,7 @@ it('lists and answers core Commands only for the instance owner', async () => {
       },
     ],
   });
+  deps.registry.reviewEpisode = async () => '100@2026-01-01T00:00:00Z';
   const originalTracker = deps.registry.trackerTickets!;
   deps.registry.trackerTickets = async () => ({ stale: true, tickets: [] });
   const partial = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
@@ -897,7 +898,7 @@ it('lists and answers core Commands only for the instance owner', async () => {
   expect(message).toHaveBeenCalledWith(
     '479',
     expect.stringContaining('no review media'),
-    'core-review-target:479',
+    'core-review-target:479:100',
     expect.any(AbortSignal),
   );
   expect(await (await app.request('/api/v1/core/tickets/478/state', { headers: asUser(ids.user) })).json()).toEqual({

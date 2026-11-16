@@ -89,6 +89,9 @@ export interface Registry {
         state: 'open' | 'closed',
       ) => Promise<{ tickets: import('../worker-progress/tracker.js').TrackerTicket[]; stale: boolean }>)
     | null;
+  reviewEpisode:
+    | ((repo: { owner: string; name: string }, ticket: string, labels: readonly string[]) => Promise<string | null>)
+    | null;
   trackerTicket:
     | ((
         repo: { owner: string; name: string },
@@ -122,6 +125,7 @@ export function createRegistry(): Registry {
     workerTitle: null,
     trackerTickets: null,
     trackerTicket: null,
+    reviewEpisode: null,
     ticketConversation: null,
     issueStateWriter: null,
   };

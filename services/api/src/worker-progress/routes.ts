@@ -4,7 +4,12 @@ import { schema } from '@ogm/db';
 import { listGameCommands } from '../commands/list.js';
 import { toGameCommand } from '../commands/aiur.js';
 import { isForCreator } from '../job-commands/correlate.js';
-import { retainReviewTickets, reviewAnswerPending } from '../review-rounds/answer-guard.js';
+import {
+  readReviewEpisode,
+  reconcileReviewEpisode,
+  retainReviewTickets,
+  reviewAnswerPending,
+} from '../review-rounds/answer-guard.js';
 import { listPreviews } from '../previews/store.js';
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
@@ -120,6 +125,13 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
     )
   )
     throw new HttpError(404, 'review_ticket_not_found');
+  const episode = await readReviewEpisode(deps.registry.reviewEpisode, repo, ticket.ticket, [
+    'agent:human-review',
+    ...[...scope.slugs].map((slug) => `${slug}:human-review`),
+  ]);
+  if (episode === undefined) throw new HttpError(503, 'review_episode_unavailable');
+  if (episode === null) throw new HttpError(404, 'review_ticket_not_found');
+  await reconcileReviewEpisode(deps.db, game.id, ticket.ticket, episode);
   if (reviewAnswerPending(deps.db, game.id, ticket.ticket)) throw new HttpError(409, 'review_answer_pending');
   const round = deps.db
     .select({ id: schema.reviewRounds.id })
@@ -153,7 +165,7 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
   const receipt = await client.message(
     ticket.ticket,
     'This ticket needs a creator review, but no review media was posted. Please post a review with media.',
-    `review-target:${ticket.ticket}:${ticket.updatedAt ?? 'open'}`,
+    `review-target:${ticket.ticket}:${episode.split('@')[0]}`,
     AbortSignal.timeout(15000),
   );
   if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
