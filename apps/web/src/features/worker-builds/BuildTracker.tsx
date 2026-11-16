@@ -178,11 +178,12 @@ export function BuildPanel({
   const [filtered, setFiltered] = useState(false);
   const [selectedReview, setSelectedReview] = useState<WorkerReview>();
   const [selectedCommand, setSelectedCommand] = useState<ReviewCommand>();
+  const [selectedTarget, setSelectedTarget] = useState<ReviewTarget>();
   const [expandedWorker, setExpandedWorker] = useState<string>();
   const [conversation, setConversation] = useState<PastTicket>();
   const [detail, setDetail] = useState<DetailTarget>();
-  const reviewCount = reviews.length + commands.length;
   const missingTargets = missingReviewTargets(workers, reviews, commands);
+  const reviewCount = reviews.length + commands.length + missingTargets.length + coreTargets.length;
   const talk = detail && conversationOf(detail, jobs);
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
@@ -211,13 +212,13 @@ export function BuildPanel({
       {workerError && <p role="alert">Could not load all build updates.</p>}
       {reviewError && <p role="alert">Could not load all reviews.</p>}
       {reviewCount > 0 && (
-        <button type="button" className="worker-tracker-summary" onClick={() => setFiltered(true)}>
-          {reviewCount} need review
-        </button>
-      )}
-      {filtered && (
-        <button type="button" onClick={() => setFiltered(false)}>
-          Back to builds
+        <button
+          type="button"
+          className="worker-tracker-summary"
+          aria-expanded={filtered}
+          onClick={() => setFiltered(!filtered)}
+        >
+          Needs review · {reviewCount}
         </button>
       )}
       <ul className="worker-tracker-list">
@@ -236,10 +237,15 @@ export function BuildPanel({
                   onClick={() => {
                     setSelectedReview(review);
                     setSelectedCommand(undefined);
+                    setSelectedTarget(undefined);
                     setModal('review');
                   }}
                 >
                   {title}
+                  <ProgressBar
+                    worker={workers.find((worker) => worker.ticket === `${review.gameId}:${ticket}`)}
+                    label="Needs review"
+                  />
                 </button>
               </li>
             );
@@ -252,15 +258,41 @@ export function BuildPanel({
                 onClick={() => {
                   setSelectedCommand(command);
                   setSelectedReview(undefined);
+                  setSelectedTarget(undefined);
                   setModal('review');
                 }}
               >
                 {command.summary || command.title}
+                <ProgressBar
+                  worker={workers.find((worker) => worker.ticket === `${commandSource(command)}:${command.ticket}`)}
+                  label="Needs review"
+                />
               </button>
             </li>
           ))}
-        {!filtered &&
-          workers.map((worker) => (
+        {filtered &&
+          [...missingTargets, ...coreTargets].map((target) => (
+            <li key={`${targetSource(target)}:${target.ticket}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTarget(target);
+                  setSelectedReview(undefined);
+                  setSelectedCommand(undefined);
+                  setModal('review');
+                }}
+              >
+                {target.title}
+                <ProgressBar
+                  worker={workers.find((worker) => worker.ticket === `${targetSource(target)}:${target.ticket}`)}
+                  label="Needs review"
+                />
+              </button>
+            </li>
+          ))}
+        {workers
+          .filter((worker) => worker.state !== 'human-review')
+          .map((worker) => (
             <li key={worker.ticket}>
               <WorkerRow
                 worker={worker}
@@ -279,11 +311,10 @@ export function BuildPanel({
                   Details
                 </button>
               )}
-              {!waitingLabel(worker.state) && worker.percent != null && worker.percent < 100 && (
-                <span className="worker-tracker-bar">
-                  <span style={{ width: `${worker.percent}%` }} />
-                </span>
-              )}
+              <ProgressBar
+                worker={worker}
+                label={waitingLabel(worker.state) ?? (worker.percent == null ? 'In progress' : `${worker.percent}%`)}
+              />
               {expandedWorker === worker.ticket &&
                 (worker.phase || worker.elapsedSeconds != null) &&
                 !waitingLabel(worker.state) && (
@@ -300,30 +331,11 @@ export function BuildPanel({
                 )}
             </li>
           ))}
-        {!filtered &&
-          coreTargets.map((target) => {
-            const key = `${targetSource(target)}:${target.ticket}`;
-            return (
-              <li key={key}>
-                <button
-                  type="button"
-                  className="worker-tracker-row"
-                  aria-expanded={expandedWorker === key}
-                  onClick={() => setExpandedWorker(expandedWorker === key ? undefined : key)}
-                >
-                  {target.title}
-                </button>
-                {expandedWorker === key && <MissingMedia path={targetPath(target)} />}
-              </li>
-            );
-          })}
-        {!filtered && (
-          <li>
-            <button type="button" onClick={() => setModal('completed')}>
-              Completed
-            </button>
-          </li>
-        )}
+        <li>
+          <button type="button" onClick={() => setModal('completed')}>
+            Completed
+          </button>
+        </li>
       </ul>
       {modal === 'review' && (
         <ReviewInbox
@@ -334,7 +346,7 @@ export function BuildPanel({
           initialCommand={selectedCommand}
           error={reviewError}
           incomplete={reviewLoading || workerError}
-          targets={[]}
+          targets={selectedTarget ? [selectedTarget] : []}
           onClose={() => setModal(undefined)}
         />
       )}
@@ -462,4 +474,25 @@ function waitingLabel(state?: string): string | undefined {
   return (
     { 'human-review': 'Needs review', 'ci-wait': 'Waiting for checks', merging: 'Merging' } as Record<string, string>
   )[state ?? ''];
+}
+
+function ProgressBar({ worker, label }: { worker?: WorkerBuild; label: string }) {
+  const percent = worker?.percent;
+  return (
+    <span
+      className="worker-tracker-bar"
+      role="progressbar"
+      aria-label={`${worker?.title ?? label} progress`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent ?? undefined}
+      aria-valuetext={percent == null ? 'Progress unavailable' : undefined}
+    >
+      <span
+        className={percent == null ? 'worker-tracker-indeterminate' : undefined}
+        style={{ width: `${percent ?? 30}%` }}
+      />
+      <span className="worker-tracker-bar-label">{label}</span>
+    </span>
+  );
 }

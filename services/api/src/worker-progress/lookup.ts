@@ -26,6 +26,10 @@ export function createTicketLookup(token: string, fetcher: typeof fetch = global
         },
         signal: AbortSignal.timeout(15_000),
       });
+      if (response.status === 404) {
+        cache.set(key, { expires: Date.now() + 60_000, ticket: null });
+        return null;
+      }
       if (!response.ok) throw new Error(`Ticket lookup failed (${response.status})`);
       const row: unknown = await response.json();
       if (
