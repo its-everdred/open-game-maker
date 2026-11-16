@@ -10,6 +10,7 @@ export const apiEnvSpec = {
   OGM_API_PORT: { kind: 'port' },
   AIUR_API_URL: { kind: 'url', required: false },
   AIUR_API_TOKEN: { kind: 'secret', required: false },
+  OGM_CORE_BUMP_CORE_REPO: { kind: 'string', required: false },
   OGM_ANALYTICS_RETENTION_DAYS: { kind: 'int', default: '90' },
   OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: { kind: 'int', default: '5000000' },
   OGM_RESET_ZONE_DEFAULT: { kind: 'string', default: hostTimeZone },

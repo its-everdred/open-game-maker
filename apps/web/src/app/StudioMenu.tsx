@@ -38,7 +38,12 @@ import { useAdminMe } from '../routes/admin/api';
 import { requireAdmin } from '../routes/admin/guard';
 import { useGameMenu, type GameMenuAction } from './GameMenu';
 import { VolumeCircle } from './VolumeCircle';
-import { BuildPanel, BuildTracker, combinedPercent } from '../features/worker-builds/BuildTracker';
+import {
+  BuildPanel,
+  BuildTracker,
+  combinedPercent,
+  missingReviewTargets,
+} from '../features/worker-builds/BuildTracker';
 import { useWorkers } from '../features/worker-builds/useWorkers';
 import { useWorkerReviews } from '../features/worker-builds/useWorkerReviews';
 import { useWorkerFinishes } from '../features/worker-builds/useWorkerFinishes';
@@ -84,9 +89,9 @@ export function StudioMenu() {
   const reviewData = useWorkerReviews(ownedGames, creatorId);
   const reviews = reviewData.reviews;
   const past = usePastTickets(ownedGames, creatorId);
-  const gameReviewCommands = useCreatorReviewCommands(creatorId);
+  const gameReview = useCreatorReviewCommands(creatorId);
   const coreReview = useCoreReviewCommands(creatorId);
-  const reviewCommands = [...gameReviewCommands, ...coreReview.commands];
+  const reviewCommands = [...gameReview.commands, ...coreReview.commands];
   const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, creatorId);
   const visibleFinished = isShowcase
     ? []
@@ -101,13 +106,14 @@ export function StudioMenu() {
           `${review.gameId}:${review.kind === 'standalone-preview' ? review.preview.buildId : review.round.id}`,
       ),
       ...coreReview.targets.map((target) => `core:${target.ticket}`),
+      ...missingReviewTargets(workers, reviews, reviewCommands).map((target) => `${target.gameId}:${target.ticket}`),
       ...reviewCommands.map((command) => `${'source' in command ? 'core' : command.game_id}:${command.decision_id}`),
     ]);
     const previous = seenReviews.current;
     if (previous?.creator === creatorId && [...keys].some((key) => !previous.keys.has(key))) setReviewNotice(true);
     if (previous?.creator !== creatorId) setReviewNotice(false);
     seenReviews.current = { creator: creatorId, keys };
-  }, [coreReview.targets, creatorId, reviewCommands, reviewData.loading, reviews]);
+  }, [coreReview.targets, creatorId, reviewCommands, reviewData.loading, reviews, workers]);
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
@@ -256,6 +262,8 @@ export function StudioMenu() {
       past.tickets.length > 0 ||
       workerError ||
       reviewData.error ||
+      gameReview.error ||
+      coreReview.error ||
       past.error)
   ) {
     circles.push(
@@ -425,6 +433,8 @@ export function StudioMenu() {
       past.tickets.length > 0 ||
       workerError ||
       reviewData.error ||
+      gameReview.error ||
+      coreReview.error ||
       past.error)
   ) {
     sheetContent = (
@@ -438,7 +448,7 @@ export function StudioMenu() {
         past={past.tickets}
         historyError={past.error}
         workerError={workerError}
-        reviewError={reviewData.error || coreReview.error}
+        reviewError={reviewData.error || gameReview.error || coreReview.error}
         historyLoading={past.loading}
         jobs={builds.jobs}
         id="studio-menu-builds"
@@ -514,7 +524,7 @@ export function StudioMenu() {
           past={past.tickets}
           historyError={past.error}
           workerError={workerError}
-          reviewError={reviewData.error || coreReview.error}
+          reviewError={reviewData.error || gameReview.error || coreReview.error}
           historyLoading={past.loading}
           jobs={builds.jobs}
           finished={visibleFinished}

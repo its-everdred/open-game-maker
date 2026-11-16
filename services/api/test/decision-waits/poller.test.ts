@@ -227,6 +227,17 @@ describe('decision waits', () => {
     expect(gh.find(51).comments.at(-1)).toContain('not `a`');
   });
 
+  it('keeps option-gated work waiting for a written change request', async () => {
+    const gh = github([{ number: 50, waits: [{ key: 'blobs/diorama', when: 'b' }] }]);
+    const result = answered('b', JSON.stringify({ kind: 'question_answers', answers: [], notes: 'Change it' }));
+    result.answer = { custom_response: JSON.stringify({ kind: 'question_answers', answers: [], notes: 'Change it' }) };
+    const aiurFake = aiur(() => [result]);
+    await poller(gh, aiurFake.client).tick();
+    expect(aiurFake.calls).toEqual([]);
+    expect(gh.find(50).labels).toContain('waits:blobs/diorama');
+    expect(gh.writes).toEqual([]);
+  });
+
   // Several games share one instance repository, and each game's aiur releases only its own tickets.
   it("leaves another game's ticket on the same key for that game's own decision", async () => {
     const gh = github([

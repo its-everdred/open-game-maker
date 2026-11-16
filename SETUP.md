@@ -280,7 +280,8 @@ Check: bash scripts/sandbox/proof/run.sh has no FAIL rows
 Command:
 
 ```sh
-# Set AIUR_API_URL, AIUR_API_TOKEN, OGM_BUILDER_WORKSPACES_ROOT,
+# Set AIUR_API_URL, AIUR_API_TOKEN, OGM_INSTANCE_OWNER_ID,
+# OGM_CORE_BUMP_CORE_REPO, OGM_BUILDER_WORKSPACES_ROOT,
 # OGM_BUILDER_BOT_TOKEN, and OGM_BUILDER_BOT_LOGIN in api.env.
 systemctl --user restart ogm-api ogm-review-watchdog
 ```

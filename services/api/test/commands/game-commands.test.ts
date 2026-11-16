@@ -42,6 +42,9 @@ function seed() {
         familyId: ids.family,
         ownerId: ids.user,
         title: `Game ${id.slice(-1)}`,
+        slug: `game-${id.slice(-1)}`,
+        githubOwner: 'fixture',
+        githubRepo: `game-${id.slice(-1)}`,
         visibility: 'private',
         repoVisibility: 'private',
         createdAt: AT,
@@ -401,6 +404,18 @@ const decision = (overrides: Partial<Decision> = {}): Decision => ({
 
 async function appWithAiur(decisions: Decision[], answerAsCreator = vi.fn(async () => undefined)) {
   const deps = seed();
+  deps.registry.trackerTickets = async (repo) => ({
+    stale: false,
+    tickets: decisions.map((item) => ({
+      ticket: item.ticket.identifier,
+      title: 'Ticket',
+      labels: [`game:${repo.name}`],
+      closedAt: null,
+      updatedAt: AT,
+      outcome: 'Closed',
+      url: 'https://example.test/issue',
+    })),
+  });
   deps.aiurClientForGame = async () =>
     ({
       decisions: async () => decisions,
@@ -586,7 +601,7 @@ describe('a registered game’s own Commands', () => {
   });
 
   it('retains the owning job when a creator answers its review', async () => {
-    const { app, deps } = await appWithAiur([decision()]);
+    const { app, deps, answerAsCreator } = await appWithAiur([decision()]);
     job(deps, ids.job, ids.game, AT);
     deps.db.update(schema.jobs).set({ aiurIssueNumber: 478 }).run();
     command(deps, ids.job, ULID, {
@@ -602,6 +617,7 @@ describe('a registered game’s own Commands', () => {
       body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
     });
     expect(response.status).toBe(200);
+    expect(answerAsCreator).toHaveBeenCalledWith('d_aiur_1', expect.objectContaining({ option: 'round' }));
     expect(listReviews(deps.db, ids.game)).toEqual([expect.objectContaining({ job_id: ids.job, command_id: ULID })]);
   });
 
@@ -702,12 +718,34 @@ it('asks the owning worker once by stable message id when a command has no media
   );
   expect(message).not.toHaveBeenCalled();
   expect((await app.request(path, { method: 'POST', headers: asUser(ids.user) })).status).toBe(200);
-  expect(message).toHaveBeenCalledWith('478', expect.stringContaining('missing media'), 'review-media:d_aiur_1:2');
+  expect(message).toHaveBeenCalledWith(
+    '478',
+    expect.stringContaining('missing media'),
+    'review-media:d_aiur_1:2',
+    expect.any(AbortSignal),
+  );
 });
 
 it('lists and answers core Commands only for the instance owner', async () => {
   const { app, deps } = await appWithAiur([]);
+  deps.registry.coreAiurClient = {} as AiurClient;
+  expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).status).toBe(403);
   deps.config.instanceOwnerId = ids.user;
+  deps.config.coreRepo = { owner: 'fixture', name: 'core' };
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '479',
+        title: 'Review core build',
+        labels: ['agent:human-review'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
   const coreDecision = decision({
     audience: 'creator',
     context: { short_summary: 'Blobs look' },
@@ -750,6 +788,15 @@ it('lists and answers core Commands only for the instance owner', async () => {
       },
     ],
   });
+  const originalTracker = deps.registry.trackerTickets!;
+  deps.registry.trackerTickets = async () => ({ stale: true, tickets: [] });
+  const partial = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
+  expect(partial).toMatchObject({ targetsUnavailable: true, commands: [{ decision_id: 'd_aiur_1' }] });
+  expect(
+    (await app.request('/api/v1/core/tickets/479/missing-review', { method: 'POST', headers: asUser(ids.user) }))
+      .status,
+  ).toBe(503);
+  deps.registry.trackerTickets = originalTracker;
   const path = '/api/v1/core/commands/d_aiur_1/answer';
   const request = () =>
     app.request(path, {
@@ -760,7 +807,13 @@ it('lists and answers core Commands only for the instance owner', async () => {
   expect((await request()).status).toBe(200);
   expect(answerAsCreator).toHaveBeenCalledWith(
     'd_aiur_1',
-    expect.objectContaining({ ticket: '478', principal: ids.user, expected_version: 2, idempotency_key: 'd_aiur_1:2' }),
+    expect.objectContaining({
+      ticket: '478',
+      principal: ids.user,
+      expected_version: 2,
+      idempotency_key: 'd_aiur_1:2',
+      option: 'square',
+    }),
   );
   expect(
     (await app.request('/api/v1/core/commands/d_aiur_1/missing-media', { method: 'POST', headers: asUser(ids.user) }))
@@ -771,10 +824,34 @@ it('lists and answers core Commands only for the instance owner', async () => {
     (await app.request('/api/v1/core/tickets/479/missing-review', { method: 'POST', headers: asUser(ids.user) }))
       .status,
   ).toBe(200);
-  expect(message).toHaveBeenCalledWith('479', expect.stringContaining('no review media'), 'core-review-target:479');
+  expect(message).toHaveBeenCalledWith(
+    '479',
+    expect.stringContaining('no review media'),
+    'core-review-target:479',
+    expect.any(AbortSignal),
+  );
   expect(await (await app.request('/api/v1/core/tickets/478/state', { headers: asUser(ids.user) })).json()).toEqual({
     state: 'in-progress',
   });
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '478',
+        title: 'Review',
+        labels: ['agent:human-review'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
+  const pending = await app.request('/api/v1/core/tickets/478/missing-review', {
+    method: 'POST',
+    headers: asUser(ids.user),
+  });
+  expect(pending.status).toBe(409);
   deps.registry.coreAiurClient = null;
   expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).status).toBe(503);
 });
@@ -792,6 +869,20 @@ it('does not report a declared attachment as absent while its copy is pending', 
         id: 'square',
         label: 'Square blobs',
         media: [{ kind: 'image', locator: { kind: 'attachment', attachment_id: 'b' } }],
+      },
+    ],
+  });
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '478',
+        title: 'Ticket',
+        labels: ['game:game-1'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
       },
     ],
   });
@@ -828,4 +919,36 @@ it('does not expose a core daemon error or its connection details', async () => 
   const response = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
   expect(response.status).toBe(502);
   expect(await response.text()).not.toContain('private-core-value');
+});
+
+it('does not list or answer another game’s decision on a shared daemon', async () => {
+  const { app, deps, answerAsCreator } = await appWithAiur([decision()]);
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '478',
+        title: 'Other game',
+        labels: ['game:game-2'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
+  const listed = await app.request(`/api/v1/games/${ids.game}/commands`, { headers: asUser(ids.user) });
+  expect(await listed.json()).toMatchObject({ commands: [] });
+  const missing = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/missing-media`, {
+    method: 'POST',
+    headers: asUser(ids.user),
+  });
+  expect(missing.status).toBe(404);
+  const answer = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+    method: 'POST',
+    headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+    body: JSON.stringify({ option_id: 'round', version: 2 }),
+  });
+  expect(answer.status).toBe(404);
+  expect(answerAsCreator).not.toHaveBeenCalled();
 });

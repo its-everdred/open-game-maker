@@ -113,6 +113,7 @@ export function BuildTracker({
           workers={workers}
           reviews={reviews}
           commands={commands}
+          error={reviewError}
           targets={targets}
           onClose={() => setOpenReview(false)}
         />
@@ -205,6 +206,7 @@ export function BuildPanel({
           workers={workers}
           reviews={reviews}
           commands={commands}
+          error={reviewError}
           targets={targets}
           onClose={() => setModal(undefined)}
         />
@@ -267,7 +269,7 @@ export function BuildPanel({
   );
 }
 
-function missingReviewTargets(
+export function missingReviewTargets(
   workers: readonly WorkerBuild[],
   reviews: readonly WorkerReview[],
   commands: readonly ReviewCommand[],

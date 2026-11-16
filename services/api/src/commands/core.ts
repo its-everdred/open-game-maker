@@ -3,7 +3,6 @@ import type { GameCommand } from '@ogm/contracts';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { CommandAnswerBody } from '@ogm/contracts';
-import { schema } from '@ogm/db';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
@@ -13,6 +12,12 @@ import { isForCreator } from '../job-commands/correlate.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { optionMediaFromAiur } from './aiur-media.js';
 import { toGameCommand } from './aiur.js';
+import {
+  markReviewAnswered,
+  observeReviewState,
+  retainReviewTickets,
+  reviewAnswerPending,
+} from '../review-rounds/answer-guard.js';
 
 export const prefix = '/api/v1';
 const Answer = CommandAnswerBody.extend({ version: z.number().int().positive() });
@@ -20,10 +25,7 @@ const Answer = CommandAnswerBody.extend({ version: z.number().int().positive() }
 function owner(c: import('hono').Context<ApiBindings>): { client: AiurClient; principal: string } {
   const deps = c.get('deps');
   const principal = requirePrincipal(c, ['user']).userId;
-  const families = deps.config.instanceOwnerId
-    ? []
-    : deps.db.select({ ownerId: schema.families.ownerUserId }).from(schema.families).all();
-  const ownerId = deps.config.instanceOwnerId ?? (families.length === 1 ? families[0]!.ownerId : undefined);
+  const ownerId = deps.config.instanceOwnerId;
   if (!ownerId || principal !== ownerId) throw new HttpError(403, 'forbidden');
   if (!deps.registry.coreAiurClient) throw new HttpError(503, 'core_daemon_unavailable');
   return { client: deps.registry.coreAiurClient, principal };
@@ -65,7 +67,7 @@ export default new Hono<ApiBindings>()
       }),
     );
     const visible = commands.filter((command) => command !== null);
-    const workers = await reviewWorkers(client).catch(() => null);
+    const workers = await reviewWorkers(deps).catch(() => null);
     const targets = (workers ?? [])
       .filter(
         (worker) => worker.state === 'human-review' && !visible.some((command) => command.ticket === worker.ticket),
@@ -94,6 +96,12 @@ export default new Hono<ApiBindings>()
       if (problem) throw new HttpError(400, 'command_review_invalid', problem);
     }
     const fields = body.review ? reviewDecisionFields(command.options, body.review, body.option_id) : undefined;
+    const singlePick =
+      body.review !== undefined &&
+      body.review.likes.length === 1 &&
+      body.review.likes[0] === body.option_id &&
+      body.review.dislikes.length === 0 &&
+      body.review.notes === undefined;
     try {
       await client.answerAsCreator(id, {
         ticket: command.ticket!,
@@ -101,19 +109,21 @@ export default new Hono<ApiBindings>()
         expected_version: body.version,
         idempotency_key: `${id}:${body.version}`,
         rationale: fields?.rationale ?? 'Creator answered the core review',
-        ...(fields ? { response: fields.response } : { option: body.option_id }),
+        ...(fields && !singlePick ? { response: fields.response } : { option: body.option_id }),
       });
     } catch (error) {
       if (error instanceof AiurHttpError && error.status === 409) throw new HttpError(409, 'command_answer_conflict');
       throw new HttpError(502, 'core_daemon_unavailable');
     }
+    markReviewAnswered('core', command.ticket);
     return c.json({ status: 'answered' });
   })
   .post('/core/tickets/:ticket/missing-review', async (c) => {
     const { client } = owner(c);
     const ticket = c.req.param('ticket');
     if (!/^[1-9]\d{0,18}$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
-    const workers = await reviewWorkers(client);
+    const workers = await reviewWorkers(c.get('deps'));
+    if (reviewAnswerPending('core', ticket)) throw new HttpError(409, 'review_answer_pending');
     if (!workers.some((worker) => worker.ticket === ticket && worker.state === 'human-review'))
       throw new HttpError(404, 'review_ticket_not_found');
     const decisions = await coreCall(() => client.decisions({ ticket }, AbortSignal.timeout(5000)));
@@ -126,6 +136,7 @@ export default new Hono<ApiBindings>()
         ticket,
         'This ticket needs a creator review, but no review media was posted. Please post a review with media.',
         `core-review-target:${ticket}`,
+        AbortSignal.timeout(15000),
       ),
     );
     if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
@@ -141,27 +152,35 @@ export default new Hono<ApiBindings>()
         command.ticket!,
         'This creator review is missing media. Please add media for every option and resend it.',
         `review-media:${command.decision_id}:${command.version}`,
+        AbortSignal.timeout(15000),
       ),
     );
     if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
     return c.json({ status: 'asked' });
   });
 
-async function reviewWorkers(client: AiurClient): Promise<{ ticket: string; title: string; state: string }[]> {
-  const state = await coreCall(() => client.state(AbortSignal.timeout(5000)));
-  const entries = [...state.running, ...(state.idle ?? []), ...(state.retrying ?? [])];
-  return entries.flatMap((item) => {
-    const ticket = item.issue_identifier;
-    const status = typeof item.state === 'string' ? item.state.replace(/^[^:]+:/, '') : '';
-    if (typeof ticket !== 'string' || !/^[1-9]\d{0,18}$/u.test(ticket) || status !== 'human-review') return [];
-    return [
-      {
-        ticket,
-        title: typeof item.title === 'string' && item.title.trim() ? item.title : `Ticket ${ticket}`,
-        state: status,
-      },
-    ];
-  });
+async function reviewWorkers(
+  deps: import('../app/types.js').AppDeps,
+): Promise<{ ticket: string; title: string; state: string }[]> {
+  if (!deps.config.coreRepo || !deps.registry.trackerTickets) throw new HttpError(503, 'core_tracker_unavailable');
+  let snapshot: Awaited<ReturnType<NonNullable<typeof deps.registry.trackerTickets>>>;
+  try {
+    snapshot = await deps.registry.trackerTickets(deps.config.coreRepo, 'open');
+  } catch {
+    throw new HttpError(503, 'core_tracker_unavailable');
+  }
+  if (snapshot.stale) throw new HttpError(503, 'core_tracker_unavailable');
+  retainReviewTickets(
+    'core',
+    new Set(
+      snapshot.tickets.filter((ticket) => ticket.labels.includes('agent:human-review')).map((ticket) => ticket.ticket),
+    ),
+  );
+  for (const ticket of snapshot.tickets)
+    observeReviewState('core', ticket.ticket, ticket.labels.includes('agent:human-review'));
+  return snapshot.tickets
+    .filter((ticket) => ticket.labels.includes('agent:human-review'))
+    .map((ticket) => ({ ticket: ticket.ticket, title: ticket.title, state: 'human-review' }));
 }
 
 // Declared media may still be copying: never tell the worker it is missing until a card has no source at all.

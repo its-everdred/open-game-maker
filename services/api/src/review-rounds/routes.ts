@@ -9,6 +9,7 @@ import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
 import { answerRound, getRound } from './store.js';
+import { markReviewAnswered } from './answer-guard.js';
 
 export const prefix = '/api/v1';
 const Answer = z
@@ -78,6 +79,7 @@ export default new Hono<ApiBindings>()
       round.ticket,
       'This creator review is missing media. Please add the media and resend it.',
       `review-media:${round.id}`,
+      AbortSignal.timeout(15000),
     );
     if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
     return c.json({ status: 'asked' });
@@ -96,5 +98,6 @@ export default new Hono<ApiBindings>()
       at: new Date().toISOString(),
     });
     if (!ok) throw new HttpError(409, 'review_round_answered');
+    markReviewAnswered(game.id, round.ticket);
     return c.json({ status: 'answered' });
   });

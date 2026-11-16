@@ -4,6 +4,7 @@ import { schema } from '@ogm/db';
 import { listGameCommands } from '../commands/list.js';
 import { toGameCommand } from '../commands/aiur.js';
 import { isForCreator } from '../job-commands/correlate.js';
+import { observeReviewState, retainReviewTickets, reviewAnswerPending } from '../review-rounds/answer-guard.js';
 import { listPreviews } from '../previews/store.js';
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
@@ -26,6 +27,30 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   const tickets = snapshot.tickets.filter(
     (ticket) => (!snapshot.stale || scope.owned.has(ticket.ticket)) && belongsToGame(ticket, scope),
   );
+  if (!snapshot.stale)
+    retainReviewTickets(
+      game.id,
+      new Set(
+        tickets
+          .filter((ticket) =>
+            ticket.labels.some(
+              (label) =>
+                label === 'agent:human-review' || [...scope.slugs].some((slug) => label === `${slug}:human-review`),
+            ),
+          )
+          .map((ticket) => ticket.ticket),
+      ),
+    );
+  if (!snapshot.stale)
+    for (const ticket of tickets)
+      observeReviewState(
+        game.id,
+        ticket.ticket,
+        ticket.labels.some(
+          (label) =>
+            label === 'agent:human-review' || [...scope.slugs].some((slug) => label === `${slug}:human-review`),
+        ),
+      );
   const allowed = new Map(tickets.map((ticket) => [ticket.ticket, ticket]));
   const observed = new Set(snapshot.tickets.map((ticket) => ticket.ticket));
   let daemonUnavailable = false;
@@ -104,6 +129,7 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
     )
   )
     throw new HttpError(404, 'review_ticket_not_found');
+  if (reviewAnswerPending(game.id, ticket.ticket)) throw new HttpError(409, 'review_answer_pending');
   const round = deps.db
     .select({ id: schema.reviewRounds.id })
     .from(schema.reviewRounds)
@@ -137,6 +163,7 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
     ticket.ticket,
     'This ticket needs a creator review, but no review media was posted. Please post a review with media.',
     `review-target:${ticket.ticket}:${ticket.updatedAt ?? 'open'}`,
+    AbortSignal.timeout(15000),
   );
   if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
   return c.json({ status: 'asked' });

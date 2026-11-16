@@ -126,7 +126,12 @@ describe('review round previews', () => {
     });
     const path = `/api/v1/games/${ids.game}/review-rounds/missing-round/missing-media`;
     expect((await app.request(path, { method: 'POST', headers: asUser(ids.user) })).status).toBe(200);
-    expect(message).toHaveBeenCalledWith('12', expect.stringContaining('missing media'), 'review-media:missing-round');
+    expect(message).toHaveBeenCalledWith(
+      '12',
+      expect.stringContaining('missing media'),
+      'review-media:missing-round',
+      expect.any(AbortSignal),
+    );
     deps.db
       .update(schema.reviewRounds)
       .set({ media: JSON.stringify([{ kind: 'still', ref: `sha256:${'a'.repeat(64)}` }]) })

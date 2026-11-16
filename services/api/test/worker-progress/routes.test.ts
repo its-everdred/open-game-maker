@@ -2,6 +2,7 @@ import { schema } from '@ogm/db';
 import type { AiurClient } from '@ogm/aiur-client';
 import { HttpError } from '../../src/app/errors.js';
 import { postRound } from '../../src/review-rounds/store.js';
+import { markReviewAnswered, observeReviewState } from '../../src/review-rounds/answer-guard.js';
 import { describe, expect, it, vi } from 'vitest';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
@@ -208,12 +209,21 @@ describe('worker progress route', () => {
       ],
     }));
     const missing = `/api/v1/games/${game}/tickets/12/missing-review`;
+    markReviewAnswered(game, '12');
+    expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(409);
+    expect(message).not.toHaveBeenCalled();
+    observeReviewState(game, '12', false);
     expect((await app.request(missing, { method: 'POST', headers: asUser(outsider) })).status).toBeGreaterThanOrEqual(
       400,
     );
     expect(message).not.toHaveBeenCalled();
     expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(200);
-    expect(message).toHaveBeenCalledWith('12', expect.stringContaining('no review media'), `review-target:12:${at}`);
+    expect(message).toHaveBeenCalledWith(
+      '12',
+      expect.stringContaining('no review media'),
+      `review-target:12:${at}`,
+      expect.any(AbortSignal),
+    );
     decisions.mockRejectedValueOnce(new Error('daemon unavailable'));
     expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBeGreaterThanOrEqual(500);
     expect(message).toHaveBeenCalledOnce();

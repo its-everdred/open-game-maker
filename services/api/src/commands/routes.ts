@@ -2,7 +2,7 @@ import { AiurHttpError } from '@ogm/aiur-client';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { CommandAnswerBody, type CreatorCommandsPage, type GameCommandsPage } from '@ogm/contracts';
+import { CommandAnswerBody, type GameCommandsPage } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
@@ -16,6 +16,8 @@ import coreRoutes, { hasMissingDeclaredMedia } from './core.js';
 import { findCommand, parseCommand } from '../build-chat/store.js';
 import { isForCreator } from '../job-commands/correlate.js';
 import { listCreatorCommands, listGameCommands, shownOneByOne } from './list.js';
+import { gameTicketFilter } from './scope.js';
+import { markReviewAnswered } from '../review-rounds/answer-guard.js';
 
 export const prefix = '/api/v1';
 
@@ -41,11 +43,7 @@ export default new Hono<ApiBindings>()
   // The menu's decision inbox: the caller's player-facing Commands across every game they may edit.
   .get('/me/commands', async (c) => {
     const principal = requirePrincipal(c, ['user']);
-    const page: CreatorCommandsPage = await listCreatorCommands(
-      c.get('deps'),
-      principal,
-      c.req.query('includeQuestions') === '1',
-    );
+    const page = await listCreatorCommands(c.get('deps'), principal, c.req.query('includeQuestions') === '1');
     return c.json(page);
   })
   .post('/games/:gameId/commands/:decisionId/missing-media', async (c) => {
@@ -71,6 +69,7 @@ export default new Hono<ApiBindings>()
       command.ticket,
       'This creator review is missing media. Please add media for every option and resend it.',
       `review-media:${command.decision_id}:${command.version}`,
+      AbortSignal.timeout(15000),
     );
     if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
     return c.json({ status: 'asked' });
@@ -94,6 +93,7 @@ export default new Hono<ApiBindings>()
     const decision = await client.decision(decisionId);
     const canonical = isForCreator(decision) ? toGameCommand(decision) : null;
     if (canonical === null || canonical.ticket === null) throw new HttpError(404, 'command_not_found');
+    if (!(await gameTicketFilter(deps, game, true))(canonical.ticket)) throw new HttpError(404, 'command_not_found');
     if (!canonical.options.some((option) => option.id === body.option_id))
       throw new HttpError(400, 'command_option_invalid');
     // Retain the owning job in the ledger; aiur's decision remains authoritative for the options.
@@ -110,6 +110,12 @@ export default new Hono<ApiBindings>()
       if (problem !== null) throw new HttpError(400, 'command_review_invalid', problem);
     }
     const fields = review === undefined ? undefined : reviewDecisionFields(command.options, review, body.option_id);
+    const singlePick =
+      review !== undefined &&
+      review.likes.length === 1 &&
+      review.likes[0] === body.option_id &&
+      review.dislikes.length === 0 &&
+      review.notes === undefined;
     try {
       // The creator's own answer (#631): aiur refuses the supervisor's `decide` on a decision only a human may take.
       // A review's answer is its like/dislike map; aiur takes one of an option or a response, never both.
@@ -122,7 +128,7 @@ export default new Hono<ApiBindings>()
           fields === undefined
             ? 'Creator answered the Command in the game inbox'
             : `Creator answered the Command in the game inbox. ${fields.rationale}`,
-        ...(fields === undefined ? { option: body.option_id } : { response: fields.response }),
+        ...(fields === undefined || singlePick ? { option: body.option_id } : { response: fields.response }),
       });
     } catch (error) {
       // Another writer answered first: aiur's status is final and the inbox refetches.
@@ -138,8 +144,11 @@ export default new Hono<ApiBindings>()
       });
       throw new HttpError(502, 'aiur_answer_failed');
     }
-    if (review !== undefined) {
-      tryRecordReview(deps.db, { gameId: game.id, command, optionId: body.option_id, review }, deps.log);
-    }
+    markReviewAnswered(game.id, canonical.ticket);
+    if (
+      review !== undefined &&
+      !tryRecordReview(deps.db, { gameId: game.id, command, optionId: body.option_id, review }, deps.log)
+    )
+      throw new HttpError(503, 'review_ledger_pending');
     return c.json({ status: 'answered' as const, decision_id: decisionId, option_id: body.option_id }, 200);
   });

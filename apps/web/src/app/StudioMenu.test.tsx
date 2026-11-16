@@ -85,7 +85,13 @@ const state = vi.hoisted(() => ({
   decisions: [] as TestDecision[],
   sessions: [] as Array<{ game_id: string; game_title: string; count: number }>,
   energy: { data: undefined as EnergyView | undefined },
-  workers: [] as Array<{ ticket: string; title: string; percent: number | null; etaSeconds: number | null }>,
+  workers: [] as Array<{
+    ticket: string;
+    title: string;
+    percent: number | null;
+    etaSeconds: number | null;
+    state?: string;
+  }>,
 }));
 
 const sound = vi.hoisted(() => ({
@@ -123,7 +129,10 @@ vi.mock('../features/build-chat/Chat', () => ({
 vi.mock('../features/commands-inbox/commands', () => ({
   answerCommand: vi.fn(async () => undefined),
   useCoreReviewCommands: () => ({ commands: [], targets: [], error: false, loading: false }),
-  useCreatorReviewCommands: (creatorId: string | undefined) => (creatorId ? state.decisions : []),
+  useCreatorReviewCommands: (creatorId: string | undefined) => ({
+    commands: creatorId ? state.decisions : [],
+    error: false,
+  }),
   useCreatorCommands: (creatorId: string | undefined) => ({
     commands: creatorId ? state.decisions : [],
     sessions: creatorId ? state.sessions : [],
@@ -635,6 +644,19 @@ describe('StudioMenu', () => {
 
     expect(screen.getByRole('dialog', { name: 'Voice chat Castle' })).toHaveTextContent('user-1 6');
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('announces a game ticket newly waiting for review', async () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.workers = [{ ticket: 'game:42', title: 'New build', percent: 50, etaSeconds: null, state: 'in-progress' }];
+    const view = renderMenu('/games');
+    state.workers = [{ ticket: 'game:42', title: 'New build', percent: null, etaSeconds: null, state: 'human-review' }];
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('button', { name: 'New review ready' })).toBeVisible();
   });
 
   it('closes a Builds review when the signed-in creator changes', () => {

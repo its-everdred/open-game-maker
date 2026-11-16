@@ -25,17 +25,20 @@ export function ReviewInbox({
   onClose,
   targets = [],
   workers = [],
+  error = false,
 }: {
   reviews: readonly WorkerReview[];
   commands: readonly ReviewCommand[];
   onClose(): void;
   targets?: readonly ReviewTarget[];
   workers?: readonly WorkerBuild[];
+  error?: boolean;
 }) {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
   const [answeredTickets, setAnsweredTickets] = useState<ReadonlySet<string>>(() => new Set());
   const [current, setCurrent] = useState<WorkerReview | undefined>();
   const [command, setCommand] = useState<ReviewCommand | undefined>();
+  const [sending, setSending] = useState(false);
   const [target, setTarget] = useState<(typeof targets)[number] | undefined>();
   useEffect(() => {
     if (current?.kind !== 'round' || !current.round.buildId) return;
@@ -60,20 +63,39 @@ export function ReviewInbox({
       </Dialog>
     );
   }
+  if (command && 'source' in command && command.options.some((option) => option.playable)) {
+    return (
+      <Dialog
+        title="Needs Review"
+        className="job-conversation-dialog build-review-dialog"
+        backdropClassName="job-conversation-backdrop"
+        onClose={() => setCommand(undefined)}
+      >
+        <p role="alert">The playable preview is unavailable.</p>
+        <button type="button" onClick={() => setCommand(undefined)}>
+          Back
+        </button>
+      </Dialog>
+    );
+  }
   if (command && command.options.every(({ media, audio, playable }) => media || audio || playable)) {
     return (
       <Dialog
         title="Needs Review"
         className="job-conversation-dialog decision-deck build-review-dialog"
         backdropClassName="job-conversation-backdrop"
-        onClose={onClose}
+        onClose={() => {
+          if (!sending) onClose();
+        }}
       >
         <div className="decision-deck-body">
-          <button type="button" onClick={() => setCommand(undefined)}>
+          {error && <p role="alert">Could not load all reviews.</p>}
+          <button type="button" disabled={sending} onClick={() => setCommand(undefined)}>
             Back
           </button>
           <CommandReviewCard
             command={command}
+            onSendingChange={setSending}
             ticketState={
               workers.find((worker) => worker.ticket === `${commandSource(command)}:${command.ticket}`)?.state
             }
@@ -114,6 +136,7 @@ export function ReviewInbox({
           ×
         </button>
         <div className="decision-deck-body">
+          {error && <p role="alert">Could not load all reviews.</p>}
           {reviews
             .filter((review) => !answered.has(keyOf(review)))
             .map((review) => (
@@ -154,7 +177,9 @@ export function ReviewInbox({
                 )}
               </div>
             ))}
-          {reviews.length === 0 && commands.length === 0 && targets.length === 0 && <p>All reviews answered.</p>}
+          {!error && reviews.length === 0 && commands.length === 0 && targets.length === 0 && (
+            <p>All reviews answered.</p>
+          )}
         </div>
       </Dialog>
     );

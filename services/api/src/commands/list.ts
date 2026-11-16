@@ -22,7 +22,11 @@ async function optionMedia(deps: AppDeps, jobId: string, mediaId: string, sign: 
 
 // One game's open player-facing Commands, newest first: its jobs' correlated Commands, plus the Commands its own aiur
 // instance holds when no job owns them. Each keeps the short review number it got the first time it was listed.
-export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<GameCommand[]> {
+export async function listGameCommands(
+  deps: AppDeps,
+  game: GameRow,
+  onUnavailable?: () => void,
+): Promise<GameCommand[]> {
   const { sign } = getChatRuntime(deps);
   const commands: GameCommand[] = [];
   const jobs = listJobs(deps.db, game.id);
@@ -76,7 +80,7 @@ export async function listGameCommands(deps: AppDeps, game: GameRow): Promise<Ga
   // A registered game's Commands belong to no job. A decision already listed from a job's Command stays the
   // job's, so one Command never appears twice.
   const listed = new Set(commands.map((command) => command.decision_id));
-  for (const command of await gameCommandsFromAiur(deps, game.id, jobTickets, sign)) {
+  for (const command of await gameCommandsFromAiur(deps, game, jobTickets, sign, onUnavailable)) {
     if (!listed.has(command.decision_id)) commands.push(command);
   }
 
@@ -121,7 +125,8 @@ export async function listCreatorCommands(
   deps: AppDeps,
   principal: UserPrincipal,
   includeQuestions = false,
-): Promise<CreatorCommandsPage> {
+): Promise<CreatorCommandsPage & { unavailable?: boolean }> {
+  let unavailable = false;
   const actor = actorFromPrincipal(principal);
   const games = listGames(deps.db, principal.familyId, principal.userId).filter(
     (game) =>
@@ -136,12 +141,17 @@ export async function listCreatorCommands(
   const perGame = await Promise.all(
     games.map(async (game) => {
       try {
-        return (await listGameCommands(deps, game)).map((command) => ({
+        return (
+          await listGameCommands(deps, game, () => {
+            unavailable = true;
+          })
+        ).map((command) => ({
           ...command,
           game_id: game.id,
           game_title: game.title.slice(0, 200),
         }));
       } catch (error) {
+        unavailable = true;
         deps.log({ event: 'creator_commands_game_failed', gameId: game.id, error: (error as Error).name });
         return [];
       }
@@ -157,5 +167,5 @@ export async function listCreatorCommands(
   const commands = (includeQuestions ? perGame.flat() : shownOneByOne(deps, perGame.flat())).sort(
     (left, right) => Number(right.blocking) - Number(left.blocking) || left.opened_at.localeCompare(right.opened_at),
   );
-  return { commands, question_sessions: questionSessions };
+  return { commands, question_sessions: questionSessions, ...(unavailable ? { unavailable: true } : {}) };
 }

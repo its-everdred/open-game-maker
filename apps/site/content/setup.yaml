@@ -166,7 +166,8 @@ steps:
       - kind: run
         text: Fill the aiur and builder fleet values in api.env; the fleet creates per-game daemon env files on the first job.
         command: |-
-          # Set AIUR_API_URL, AIUR_API_TOKEN, OGM_BUILDER_WORKSPACES_ROOT,
+          # Set AIUR_API_URL, AIUR_API_TOKEN, OGM_INSTANCE_OWNER_ID,
+          # OGM_CORE_BUMP_CORE_REPO, OGM_BUILDER_WORKSPACES_ROOT,
           # OGM_BUILDER_BOT_TOKEN, and OGM_BUILDER_BOT_LOGIN in api.env.
           systemctl --user restart ogm-api ogm-review-watchdog
         writes: [~/.config/ogm/env/api.env, ~/.config/ogm/env/ogm-aiur@<slug>.env]

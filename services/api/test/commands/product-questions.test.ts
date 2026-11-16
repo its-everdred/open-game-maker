@@ -44,6 +44,9 @@ function seed() {
         familyId: ids.family,
         ownerId: ids.user,
         title,
+        slug: title.toLowerCase(),
+        githubOwner: 'fixture',
+        githubRepo: title.toLowerCase(),
         visibility: 'private',
         repoVisibility: 'private',
         createdAt: AT,
@@ -60,6 +63,20 @@ function seed() {
       email: 'creator@example.test',
     },
   ]);
+  deps.registry.trackerTickets = async (repo) => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '12',
+        title: 'Ticket',
+        labels: [`game:${repo.name}`],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
   return deps;
 }
 

@@ -73,7 +73,7 @@ export function keysOf(decision: Decision): string[] {
 
 const PAUSED = /:paused(?:-|$)/;
 
-export type Outcome = 'queued' | 'closed' | 'waiting';
+export type Outcome = 'queued' | 'closed' | 'waiting' | 'needs-choice';
 
 async function releaseTicket(
   client: AiurClient,
@@ -90,6 +90,8 @@ async function releaseTicket(
     .at(-1)?.when;
   // A retry after a failure part-way must not write the answer twice.
   const written = text.includes(ANSWER_MARKER(note.decision_id));
+  // A written change request is not a choice. Keep option-gated work waiting until a choice is made.
+  if (when !== undefined && note.option_id === null) return 'needs-choice';
   if (when !== undefined && when !== note.option_id) {
     if (!written) await tickets.comment(repo, ticket.number, notPickedComment(note, when));
     if (ticket.open) await tickets.setOpen(repo, ticket.number, false);
@@ -130,6 +132,7 @@ export async function releaseKey(
   for (const ticket of waiting) {
     if (!ticket.labels.includes(`game:${slug}`)) continue;
     const outcome = await releaseTicket(client, tickets, repo, key, ticket, note);
+    if (outcome === 'needs-choice') continue;
     await tickets.removeLabel(repo, ticket.number, key);
     released.push({ key, ticket: ticket.number, outcome });
   }

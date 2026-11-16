@@ -53,11 +53,14 @@ export function useCreatorReviewCommands(creatorId: string | undefined) {
   const query = useQuery({
     queryKey: [...creatorCommandsQueryKey, creatorId, 'review'],
     enabled: Boolean(creatorId),
-    queryFn: () => api<CreatorCommandsPage>('/me/commands?includeQuestions=1'),
+    queryFn: () => api<CreatorCommandsPage & { unavailable?: boolean }>('/me/commands?includeQuestions=1'),
     refetchInterval: POLL_MS,
     retry: false,
   });
-  return creatorId ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS;
+  return {
+    commands: creatorId ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS,
+    error: query.isError || query.data?.unavailable === true,
+  };
 }
 
 export function useCoreReviewCommands(creatorId: string | undefined) {

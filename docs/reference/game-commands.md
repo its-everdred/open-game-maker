@@ -79,7 +79,9 @@ means another writer answered first and the returned status is the winner's.
 
 The Builds badge and Needs Review entry open a list of the creator's game Commands, core Commands, and unanswered review rounds.
 Core Commands are labeled Core and are visible only to the instance owner. The API connects to the local core daemon
-using `AIUR_API_URL` and `AIUR_API_TOKEN` from its environment; the core source is unavailable when either is unset.
+using `AIUR_API_URL` and `AIUR_API_TOKEN` from its environment. `OGM_INSTANCE_OWNER_ID` authorizes the owner and
+`OGM_CORE_BUMP_CORE_REPO` identifies the core tracker. The core source or its target list is unavailable when its required
+settings are unset.
 A Command card sends a pick or change note through `POST /api/v1/games/:gameId/commands/:decisionId/answer`
 with the displayed version. Aiur records the creator's answer and the review ledger records its notes.
 

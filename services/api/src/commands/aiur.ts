@@ -6,6 +6,8 @@ import type { AppDeps } from '../app/types.js';
 import type { MediaSigner } from '../build-chat/store.js';
 import { isForCreator, isTextOnly } from '../job-commands/correlate.js';
 import { optionMediaFromAiur, type ResolvedOptionMedia } from './aiur-media.js';
+import { gameTicketFilter } from './scope.js';
+import type { GameRow } from '../games/games.js';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
 // not in any job's Commands: they are read from the instance's own Decision API, whose scoped grant already limits
@@ -99,31 +101,49 @@ async function withinListTimeout<T>(start: (signal: AbortSignal) => Promise<T>):
 // the inbox still lists its jobs' Commands, and the failure is logged rather than failing the whole page.
 export async function gameCommandsFromAiur(
   deps: AppDeps,
-  gameId: string,
+  game: GameRow,
   jobTickets: ReadonlySet<string>,
   sign: MediaSigner,
+  onUnavailable?: () => void,
 ): Promise<GameCommand[]> {
   let client: AiurClient;
   let decisions: Decision[];
   try {
-    const reader = await deps.aiurClientForGame(gameId);
+    const reader = await deps.aiurClientForGame(game.id);
     client = reader;
     decisions = await withinListTimeout((signal) => reader.decisions({}, signal));
   } catch (error) {
+    onUnavailable?.();
     if (error instanceof HttpError) return [];
     if (error instanceof AiurHttpError) {
-      deps.log({ event: 'game_commands_unavailable', gameId, status: error.status });
+      deps.log({ event: 'game_commands_unavailable', gameId: game.id, status: error.status });
       return [];
     }
-    deps.log({ event: 'game_commands_unavailable', gameId, error: (error as Error).name });
+    deps.log({ event: 'game_commands_unavailable', gameId: game.id, error: (error as Error).name });
     return [];
   }
   // A job's Command is already in its build chat, so the game's own read leaves those to the job. An engineering or
   // operations decision goes to the Executor, never to the creator. A Command the inbox would drop anyway is dropped
   // before its media is copied.
-  const open = decisions.filter(
+  const candidates = decisions.filter(
     (decision) =>
       !jobTickets.has(decision.ticket.identifier) &&
+      isOpen(decision) &&
+      isForCreator(decision) &&
+      toGameCommand(decision) !== null,
+  );
+  if (!candidates.length) return [];
+  let allowed: (ticket: string) => boolean;
+  try {
+    allowed = await gameTicketFilter(deps, game);
+  } catch {
+    onUnavailable?.();
+    return [];
+  }
+  const open = candidates.filter(
+    (decision) =>
+      !jobTickets.has(decision.ticket.identifier) &&
+      allowed(decision.ticket.identifier) &&
       isOpen(decision) &&
       isForCreator(decision) &&
       toGameCommand(decision) !== null,

@@ -11,10 +11,12 @@ export function CommandReviewCard({
   command,
   onAnswered,
   ticketState,
+  onSendingChange,
 }: {
   command: ReviewCommand;
   onAnswered(): void;
   ticketState?: string;
+  onSendingChange?(sending: boolean): void;
 }) {
   const [note, setNote] = useState('');
   const [changeOption, setChangeOption] = useState('');
@@ -30,6 +32,7 @@ export function CommandReviewCard({
   });
   const send = async (optionId: string, change: boolean) => {
     setSending(true);
+    onSendingChange?.(true);
     setError(false);
     try {
       await api(`${commandPath(command)}/${encodeURIComponent(command.decision_id)}/answer`, {
@@ -37,11 +40,9 @@ export function CommandReviewCard({
         json: {
           option_id: optionId,
           version: command.version,
-          review: {
-            likes: change ? [] : [optionId],
-            dislikes: change ? [{ option_id: optionId }] : [],
-            ...(note.trim() ? { notes: note.trim() } : {}),
-          },
+          ...(change
+            ? { review: { likes: [], dislikes: [{ option_id: optionId }], notes: note.trim() } }
+            : { review: { likes: [optionId], dislikes: [] } }),
         },
       });
       await Promise.all([
@@ -54,6 +55,7 @@ export function CommandReviewCard({
       setError(true);
     } finally {
       setSending(false);
+      onSendingChange?.(false);
     }
   };
   return (
