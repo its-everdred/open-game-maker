@@ -210,9 +210,11 @@ test.describe('games origin browser boundary', () => {
     await page.goto(allowedParent.origin);
     const gameFrame = await waitForGameFrame(page, gamesOrigin);
     await expect(gameFrame.locator('#ready')).toHaveText('ready');
-    await page.evaluate(() => window.addEventListener('message', (event) => {
-      if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__attachedFrameOrigin', event.origin);
-    }));
+    await page.evaluate(() =>
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__attachedFrameOrigin', event.origin);
+      }),
+    );
     await gameFrame.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 8;
