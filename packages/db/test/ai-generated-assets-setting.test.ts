@@ -45,6 +45,7 @@ describe('AI-generated asset game setting migration', () => {
       '20261114130207_review_rounds.sql',
       '20261115014643_game_plays.sql',
       '20261116045852_review_answer_guards.sql',
+      '20261116135518_review_effort.sql',
     ]);
     expect(sqlite.prepare('SELECT id, allow_ai_generated_assets FROM games').get()).toEqual({
       id: 'g_1',
