@@ -114,8 +114,7 @@ function GameMenuProbe() {
   );
 }
 
-function renderGame(entry = '/g/game') {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderGame(entry = '/g/game', client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[entry]}>
@@ -423,6 +422,20 @@ describe('GameScreen', () => {
     renderGame();
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
     expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+  });
+
+  it('keeps the current game visible when a background design refresh fails', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderGame('/g/game', client);
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    editorApi.getDesignSnapshot.mockRejectedValueOnce(new Error('offline'));
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['design', 'game'] });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(client.getQueryState(['design', 'game', 'main'])?.status).toBe('error');
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    expect(host.controller.dispose).not.toHaveBeenCalled();
   });
 
   it('offers retry when the design request fails', async () => {
