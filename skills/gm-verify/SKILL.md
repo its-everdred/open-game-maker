@@ -23,6 +23,7 @@ A report budget whose status is `over` blocks the PR. Name the tier and measured
 
 ## Look
 
+- For every layout change, mark the board element with `data-gm-play-area` and run `gm look shell` at all four viewports. Read its board fill and horizontal offset numbers; the default gate requires at least 0.90 fill and at most 0.05 offset. For a fixed-aspect board set `data-gm-play-area-aspect` to width divided by height; fill must then reach 90% of the largest rectangle of that aspect that fits. `gm check` rebuilds the game and captures `dist` afresh; the package build script must invoke the game builder directly, not `gm build`. Prepare generated assets with the game's own asset-build settings first. Set `playArea.tap` in `gm.manifest.json` to the `>`-separated actions that enter play; optional `playArea.minFill` and `playArea.maxOffset` override the defaults. Declare reserved vertical control bands in CSS pixels on the board as `data-gm-control-top` and `data-gm-control-bottom` (safe-area insets are measured separately). A missing or hidden board fails the gate. Games without a play area may set `playArea: false` to skip the check.
 - Capture the touch phone and tablet stills, both orientations. Read every tile and name the worst defect first.
 - Motion: a timeline (a follow camera is drawn twice to settle its lag); small events: `--inputs`, closer `--frames`.
 - A target to match? A failed look is the next round's to-do list: work in rounds with `close-the-gap.md` here.
@@ -33,8 +34,7 @@ A report budget whose status is `over` blocks the PR. Name the tier and measured
 
 ## Matching concept art
 
-On every iteration, capture a settled view with the same camera and size. Measure the concept directly: express sizes
-and positions as fractions of a cell. Run `gm look score <target.png> <candidate.png>` and
+On every iteration, capture a settled view with the same camera and size. Measure the concept directly: express sizes and positions as fractions of a cell. Run `gm look score <target.png> <candidate.png>` and
 `gm look judge <sheet.png> --rubric tiers`. Fix the highest-ranked differences and repeat. Stop when all tiers pass
 at 8 or more. If three iterations fail to beat the best score so far by at least the larger of 0.5 and the reported tier spread, change technique (a different renderer,
 library or layout, not another layer or parameter on the same one); if that stalls too, return to the best checkpoint
