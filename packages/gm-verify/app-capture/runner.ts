@@ -33,7 +33,9 @@ const screenshotTimeout = softwareArg === '1' ? 30_000 : 10_000;
 const limits = limitsJson
   ? (JSON.parse(limitsJson) as { minFill?: number; maxOffset?: number; skip?: boolean })
   : undefined;
-const measurements: { viewport: string; fill: number; offset: number; ok: boolean }[] = [];
+const measurements: (
+  { viewport: string; fill: number; offset: number; ok: boolean } | { viewport: string; ok: false; error: string }
+)[] = [];
 try {
   mkdirSync(out, { recursive: true });
   const viewports = [
@@ -117,70 +119,78 @@ try {
           await captureStill(page, resolve(out, `ingame-${size}.png`), `ingame at ${size}`, screenshotTimeout);
         }
         if (!limits?.skip) {
-          const frame = page.frames().find((item) => item.url().includes(`/${build}/index.html`));
-          if (!frame) throw new Error(`game frame missing at ${size}`);
-          const geometry = await frame
-            .evaluate(() => {
-              const board = document.querySelector<HTMLElement>('[data-gm-play-area]');
-              if (!board) throw new Error('missing [data-gm-play-area]');
-              const rect = board.getBoundingClientRect();
-              for (let element: HTMLElement | null = board; element; element = element.parentElement) {
-                const style = getComputedStyle(element);
-                if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0)
-                  throw new Error('play area is hidden');
-                if (element !== board) {
-                  const bounds = element.getBoundingClientRect();
-                  if (
-                    (['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowX) &&
-                      (rect.left < bounds.left - 1 || rect.right > bounds.right + 1)) ||
-                    (['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowY) &&
-                      (rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1))
-                  )
-                    throw new Error('play area is clipped by an ancestor');
+          try {
+            const frame = page.frames().find((item) => item.url().includes(`/${build}/index.html`));
+            if (!frame) throw new Error(`game frame missing at ${size}`);
+            const geometry = await frame
+              .evaluate(() => {
+                const board = document.querySelector<HTMLElement>('[data-gm-play-area]');
+                if (!board) throw new Error('not declared');
+                const rect = board.getBoundingClientRect();
+                for (let element: HTMLElement | null = board; element; element = element.parentElement) {
+                  const style = getComputedStyle(element);
+                  if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0)
+                    throw new Error('play area is hidden');
+                  if (element !== board) {
+                    const bounds = element.getBoundingClientRect();
+                    if (
+                      (['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowX) &&
+                        (rect.left < bounds.left - 1 || rect.right > bounds.right + 1)) ||
+                      (['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowY) &&
+                        (rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1))
+                    )
+                      throw new Error('play area is clipped by an ancestor');
+                  }
                 }
-              }
-              const probe = document.createElement('div');
-              probe.style.cssText =
-                'position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
-              document.body.appendChild(probe);
-              const style = getComputedStyle(probe);
-              const safe = {
-                top: parseFloat(style.paddingTop),
-                right: parseFloat(style.paddingRight),
-                bottom: parseFloat(style.paddingBottom),
-                left: parseFloat(style.paddingLeft),
-              };
-              probe.remove();
-              return {
-                viewport: { width: innerWidth, height: innerHeight },
-                board: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                safe,
-                controls: {
-                  top: Number(board.dataset.gmControlTop ?? 0),
-                  bottom: Number(board.dataset.gmControlBottom ?? 0),
-                },
-                aspect:
-                  board.dataset.gmPlayAreaAspect === undefined ? undefined : Number(board.dataset.gmPlayAreaAspect),
-              };
-            })
-            .catch((error: unknown) => {
-              throw new Error(
-                `play-area measurement at ${size}: ${error instanceof Error ? error.message : String(error)}`,
-              );
+                const probe = document.createElement('div');
+                probe.style.cssText =
+                  'position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+                document.body.appendChild(probe);
+                const style = getComputedStyle(probe);
+                const safe = {
+                  top: parseFloat(style.paddingTop),
+                  right: parseFloat(style.paddingRight),
+                  bottom: parseFloat(style.paddingBottom),
+                  left: parseFloat(style.paddingLeft),
+                };
+                probe.remove();
+                return {
+                  viewport: { width: innerWidth, height: innerHeight },
+                  board: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                  safe,
+                  controls: {
+                    top: Number(board.dataset.gmControlTop ?? 0),
+                    bottom: Number(board.dataset.gmControlBottom ?? 0),
+                  },
+                  aspect:
+                    board.dataset.gmPlayAreaAspect === undefined ? undefined : Number(board.dataset.gmPlayAreaAspect),
+                };
+              })
+              .catch((error: unknown) => {
+                throw new Error(
+                  `play-area measurement at ${size}: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              });
+            if (geometry.aspect !== undefined && (!Number.isFinite(geometry.aspect) || geometry.aspect <= 0))
+              throw new Error(`invalid play-area aspect at ${size}`);
+            const minFill =
+              limits?.minFill ??
+              (geometry.aspect === undefined ? 0.9 : fixedAspectMinimumFill(geometry, geometry.aspect));
+            const measurement = measurePlayArea(geometry, { minFill, maxOffset: limits?.maxOffset ?? 0.05 });
+            measurements.push({
+              viewport: size,
+              ...measurement,
+              ok:
+                measurement.ok &&
+                (geometry.aspect === undefined || matchesPlayAreaAspect(geometry.board, geometry.aspect)),
             });
-          if (geometry.aspect !== undefined && (!Number.isFinite(geometry.aspect) || geometry.aspect <= 0))
-            throw new Error(`invalid play-area aspect at ${size}`);
-          const minFill =
-            limits?.minFill ??
-            (geometry.aspect === undefined ? 0.9 : fixedAspectMinimumFill(geometry, geometry.aspect));
-          const measurement = measurePlayArea(geometry, { minFill, maxOffset: limits?.maxOffset ?? 0.05 });
-          measurements.push({
-            viewport: size,
-            ...measurement,
-            ok:
-              measurement.ok &&
-              (geometry.aspect === undefined || matchesPlayAreaAspect(geometry.board, geometry.aspect)),
-          });
+          } catch (error) {
+            measurements.push({
+              viewport: size,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
         const menu = page.getByRole('button', { name: 'Menu', exact: true }).first();
         await menu.tap();

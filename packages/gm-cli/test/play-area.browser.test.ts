@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
@@ -44,6 +44,35 @@ it('fails gm check for a real small board and identifies its viewport', async ()
     expect(result.code).toBe(1);
     expect(result.err.join('\n')).toContain('at 1180x820');
     expect(result.err.join('\n')).toContain('board fill');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 240_000);
+
+it('publishes all shell stills and reports an undeclared play area without failing capture', async () => {
+  const root = tempDir();
+  const fixture = fileURLToPath(new URL('../../../apps/web/e2e/fixtures/bridge-game/', import.meta.url));
+  try {
+    cpSync(fixture, join(root, 'dist'), { recursive: true });
+    const html = join(root, 'dist/index.html');
+    const source = readFileSync(html, 'utf8');
+    const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+    if (!script) throw new Error('fixture script missing');
+    writeFileSync(join(root, 'dist/fixture.js'), script);
+    writeFileSync(
+      html,
+      source.replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
+    );
+    const result = await gm(['look', 'shell', '--dist', 'dist', '--out', 'shots'], {
+      cwd: root,
+      env: { ...process.env, GM_VERIFY_SOFTWARE_GL: '1', XDG_RUNTIME_DIR: root },
+    });
+    expect(result.code).toBe(0);
+    expect(result.out.join('\n')).toContain('play area: not declared');
+    for (const size of ['390x844', '844x390', '820x1180', '1180x820']) {
+      for (const screen of ['play', 'menu'])
+        expect(existsSync(join(root, 'shots', `${screen}-${size}.png`))).toBe(true);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
