@@ -29,7 +29,7 @@ Ranked by recurrence. Each lesson gives the rule, the creator's words or the evi
 8. **Effort must match the rung, and it sticks to a thread (~8 logs).** Kevin: "way too many claude tokens". xhigh
    workers burned 24% of the week in 7.5 h. A resumed thread kept its old effort until a fresh thread started. →
    Low on mock and prototype, xhigh only for the build. The label sets effort natively each turn (aiur per-turn
-   effort). Until that ships, a rung change starts a fresh thread.
+   effort; verified live in aiur #8025).
 9. **Score against the creator's target, the best result so far and the top gap (~8 logs).** Workers scored against a
    model mock instead of Kevin's crop, compared against their last trial instead of their best, and drifted 20
    iterations on the wrong gap. Judge scores are noisy, so take the median of several runs. → Step 2.
