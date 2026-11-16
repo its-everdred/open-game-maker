@@ -8,6 +8,8 @@ import { command as assetsCommand } from './assets.js';
 import { command as lookCommand } from '../look/check.js';
 import { gameDir } from '../../outbox.js';
 import { checkLoading } from '../../loading-check.js';
+import { checkPlayArea } from '../../play-area-check.js';
+import { findPlayAreaGame } from '../../play-area-config.js';
 
 export function printGate(ctx: GmContext, result: GateResult): number {
   if (ctx.json) ctx.out(JSON.stringify(result));
@@ -48,11 +50,17 @@ export const command: GmCommand = {
     let lookCode: number = EXIT.ok;
     let lookReport: unknown;
     let loadingErrors: string[] = [];
+    let playArea: Awaited<ReturnType<typeof checkPlayArea>> | undefined;
     let game = ctx.cwd;
     try {
       game = gameDir(ctx.cwd);
     } catch {
       // The static gate also works outside a game repository.
+    }
+    const playAreaGame = findPlayAreaGame(ctx.cwd, game);
+    if (playAreaGame) {
+      playArea = await checkPlayArea(ctx, playAreaGame);
+      if (!ctx.json) playArea.output.forEach(playArea.ok ? ctx.out : ctx.err);
     }
     if (existsSync(join(game, 'gm.manifest.json'))) {
       loadingErrors = await checkLoading(game);
@@ -76,13 +84,19 @@ export const command: GmCommand = {
       }
     }
     const gateCode =
-      ctx.json && lookReport !== undefined
+      ctx.json && (lookReport !== undefined || playArea !== undefined)
         ? (ctx.out(
             JSON.stringify({
               ...gate,
-              ok: gate.ok && assetCode === EXIT.ok && lookCode === EXIT.ok && loadingErrors.length === 0,
+              ok:
+                gate.ok &&
+                assetCode === EXIT.ok &&
+                lookCode === EXIT.ok &&
+                loadingErrors.length === 0 &&
+                playArea?.ok !== false,
               look: lookReport,
               loadingErrors,
+              playArea,
             }),
           ),
           gate.ok ? EXIT.ok : EXIT.failed)
@@ -91,7 +105,11 @@ export const command: GmCommand = {
       out.forEach(ctx.out);
       err.forEach(ctx.err);
     }
-    return gateCode === EXIT.ok && assetCode === EXIT.ok && lookCode === EXIT.ok && loadingErrors.length === 0
+    return gateCode === EXIT.ok &&
+      assetCode === EXIT.ok &&
+      lookCode === EXIT.ok &&
+      loadingErrors.length === 0 &&
+      playArea?.ok !== false
       ? EXIT.ok
       : EXIT.failed;
   },

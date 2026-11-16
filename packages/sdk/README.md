@@ -196,3 +196,7 @@ updates through the scenery controller, and protecting the game's play-area rect
 ## Haptics
 
 Call `host.haptics.pulse('light' | 'medium' | 'heavy')` for a short response, or pass an array of up to five integer millisecond durations (0–100 each), alternating vibration and pauses. The shell rate-limits requests and respects its haptics and reduced-motion settings. Older shells without haptics support silently ignore requests. Playback requires browser support and user activation; unsupported devices silently do nothing. iOS Safari does not expose the Vibration API, and its native switch feedback is not a reliable programmable fallback.
+
+## Play-area measurement
+
+Mark the visible board element with `data-gm-play-area`. For reserved control bands inside the game viewport, set `data-gm-control-top` and `data-gm-control-bottom` to their heights in CSS pixels. Fixed-aspect play areas can set `data-gm-play-area-aspect` to their width divided by height; the minimum fill then tracks the largest rectangle of that aspect that fits. The verification shell measures the board after the configured play actions; see the `gm-verify` skill for thresholds and configuration.

@@ -20,7 +20,7 @@
     </style>
   </head>
   <body>
-    <canvas id="game"></canvas>
+    <canvas id="game" data-gm-play-area></canvas>
     <script>
       try {
         navigator.serviceWorker?.register('/game-cache.js', { scope: '/g/' }).catch(() => undefined);
