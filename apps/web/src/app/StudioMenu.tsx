@@ -119,7 +119,7 @@ export function StudioMenu() {
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
   const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
   // The badge counts every open player-facing decision across the creator's games, and each game's quick voice chat
-  // as one entry (#612); red when a decision blocks its build.
+  // as one entry; red when a decision blocks its build.
   const openDecisions = decisions.commands.length + decisions.sessions.length;
   const blocked = decisions.commands.some((command) => command.blocking);
 
