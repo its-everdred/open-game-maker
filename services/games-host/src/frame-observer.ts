@@ -3,18 +3,22 @@ export const FRAME_OBSERVER_FILE = '__ogm_frame_observer_v2.js';
 export const FRAME_OBSERVER = `(() => {
   let sent = false;
   const originals = [];
-  function signal() {
+  function signal(drawn = false) {
     if (sent) return;
     sent = true;
     for (const [prototype, name, original, wrapped] of originals) {
       try { if (prototype[name] === wrapped) prototype[name] = original; } catch {}
     }
+    if (drawn) {
+      window.__ogmObservedFrame = true;
+      window.dispatchEvent(new Event('ogm-observed-frame'));
+    }
     window.parent.postMessage({ type: 'ogm.frame.ready.v2' }, '*');
   }
-  window.addEventListener('gm-frame-ready', signal, { once: true });
+  window.addEventListener('gm-frame-ready', () => signal(), { once: true });
   // Older SDKs have no ready event. Observe the first drawing operation on a visible, connected game canvas.
   for (const [constructor, names] of [
-    [window.CanvasRenderingContext2D, ['drawImage', 'fillRect', 'strokeRect', 'fillText', 'strokeText', 'putImageData', 'fill', 'stroke']],
+    [window.CanvasRenderingContext2D, ['drawImage', 'fillRect', 'strokeRect', 'fillText', 'strokeText', 'putImageData']],
     [window.WebGLRenderingContext, ['drawArrays', 'drawElements']],
     [window.WebGL2RenderingContext, ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']],
   ]) {
@@ -28,6 +32,20 @@ export const FRAME_OBSERVER = `(() => {
         const result = original.apply(this, args);
         if (sent) return result;
         try {
+        // Calls with no vertices, instances, text, or destination area cannot paint a frame.
+        const nonpositive = (value) => typeof value === 'number' && value <= 0;
+        if ((name === 'drawArrays' || name === 'drawArraysInstanced') && (nonpositive(args[2]) || (name === 'drawArraysInstanced' && nonpositive(args[3])))) return result;
+        if ((name === 'drawElements' || name === 'drawElementsInstanced') && (nonpositive(args[1]) || (name === 'drawElementsInstanced' && nonpositive(args[4])))) return result;
+        if ((name === 'fillRect' || name === 'strokeRect') && (!args[2] || !args[3])) return result;
+        if ((name === 'fillText' || name === 'strokeText') && ((typeof args[0] === 'string' && !args[0]) || (args.length > 3 && nonpositive(args[3])))) return result;
+        if (name === 'drawImage') {
+          const source = args[0];
+          const width = source?.videoWidth ?? source?.naturalWidth ?? source?.width;
+          const height = source?.videoHeight ?? source?.naturalHeight ?? source?.height;
+          if ((typeof width === 'number' && width <= 0) || (typeof height === 'number' && height <= 0) || (args.length === 5 && (!args[3] || !args[4])) || (args.length === 9 && (!args[3] || !args[4] || !args[7] || !args[8]))) return result;
+        }
+        if (name !== 'putImageData' && typeof this.globalAlpha === 'number' && this.globalAlpha <= 0) return result;
+        if (name === 'putImageData' && (!args[0]?.width || !args[0]?.height || (args.length >= 7 && (!args[5] || !args[6])))) return result;
           const canvas = this.canvas;
           if (canvas instanceof HTMLCanvasElement && canvas.isConnected) {
             // A WebGL shadow/offscreen pass is not a frame on the game canvas.
@@ -38,7 +56,7 @@ export const FRAME_OBSERVER = `(() => {
               const style = getComputedStyle(node);
               visible = style.visibility === 'visible' && Number(style.opacity) > 0;
             }
-            if (visible) signal();
+            if (visible) signal(true);
           }
         } catch {}
         return result;

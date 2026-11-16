@@ -385,7 +385,7 @@ export function GameScreen() {
   useEffect(() => {
     const container = containerRef.current;
     const snapshot = activeSnapshot;
-    if (container === null || snapshot === undefined || gameId === '' || game.isPending) return;
+    if (container === null || snapshot === undefined || gameId === '') return;
     if (waitingForPreview) return;
     if (waitingForStage) return;
     if (waitingForScenery) return;
@@ -430,7 +430,6 @@ export function GameScreen() {
     };
   }, [
     activeSnapshot,
-    game.isPending,
     branch,
     build,
     frameAttempt,

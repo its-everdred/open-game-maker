@@ -451,6 +451,7 @@ describe('GameScreen', () => {
     editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
     renderGame();
     expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
   });
 
   it('shows the loading layer while the build is being discovered', async () => {

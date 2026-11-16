@@ -162,12 +162,40 @@ test.describe('games origin browser boundary', () => {
     await gameFrame.evaluate(() => {
       const canvas = document.querySelector('canvas')!;
       canvas.style.left = '0';
-      canvas.getContext('2d')!.fillRect(0, 0, 8, 8);
+      canvas.getContext('2d')!.fillRect(0, 0, 0, 8);
     });
+    await gameFrame.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+    expect(await page.evaluate(() => Reflect.get(window, '__drawFrameOrigin'))).toBeUndefined();
+    await gameFrame.evaluate(() => document.querySelector('canvas')!.getContext('2d')!.fillRect(0, 0, 8, 8));
     await expect.poll(() => page.evaluate(() => Reflect.get(window, '__drawFrameOrigin'))).toBe(gamesOrigin);
     expect(await gameFrame.evaluate(() => CanvasRenderingContext2D.prototype.fillRect.toString())).toContain(
       '[native code]',
     );
+  });
+
+  test('detects putImageData even when global alpha is zero', async ({ page }) => {
+    await page.goto(allowedParent.origin);
+    const gameFrame = await waitForGameFrame(page, gamesOrigin);
+    await expect(gameFrame.locator('#ready')).toHaveText('ready');
+    await page.evaluate(() =>
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__pixelsFrameOrigin', event.origin);
+      }),
+    );
+    await gameFrame.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 8;
+      canvas.height = 8;
+      document.body.append(canvas);
+      const context = canvas.getContext('2d')!;
+      context.globalAlpha = 0;
+      const pixels = context.createImageData(1, 1);
+      pixels.data.set([255, 0, 0, 255]);
+      context.putImageData(pixels, 0, 0);
+    });
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, '__pixelsFrameOrigin'))).toBe(gamesOrigin);
   });
 
   for (const context of ['webgl', 'webgl2'] as const)
@@ -217,6 +245,14 @@ test.describe('games origin browser boundary', () => {
       await gameFrame.evaluate(() => {
         const gl = Reflect.get(window, '__testGl') as WebGLRenderingContext;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.drawArrays(gl.POINTS, 0, 0);
+      });
+      await gameFrame.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+      );
+      expect(await page.evaluate(() => Reflect.get(window, '__webglFrameOrigin'))).toBeUndefined();
+      await gameFrame.evaluate(() => {
+        const gl = Reflect.get(window, '__testGl') as WebGLRenderingContext;
         gl.drawArrays(gl.POINTS, 0, 1);
       });
       await expect.poll(() => page.evaluate(() => Reflect.get(window, '__webglFrameOrigin'))).toBe(gamesOrigin);

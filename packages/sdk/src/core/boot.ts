@@ -181,8 +181,15 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       send('load.frame', {});
     };
     if (typeof window !== 'undefined') {
+      const observedFrame = () => {
+        if (hooks.ready) frameReady();
+      };
       window.addEventListener('gm-frame-ready', frameReady, { once: true });
-      runtime.addCleanup(() => window.removeEventListener('gm-frame-ready', frameReady));
+      window.addEventListener('ogm-observed-frame', observedFrame);
+      runtime.addCleanup(() => {
+        window.removeEventListener('gm-frame-ready', frameReady);
+        window.removeEventListener('ogm-observed-frame', observedFrame);
+      });
     }
     marks.push(['frame0', markNow()]);
     hooks.ready = true;
@@ -192,13 +199,10 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       marks,
       firstFrameSignal: true,
     });
-    // Games that use asynchronous setup set hooks.ready false before yielding. Games without an explicit
-    // readiness phase can be revealed after the browser has had a chance to paint their initial content.
+    // A game may draw during mount. Check only after its startup continuation can mark itself unready.
     if (!options.headless && typeof requestAnimationFrame === 'function') {
-      let paintFrame = requestAnimationFrame(() => {
-        paintFrame = requestAnimationFrame(() => {
-          if (hooks.ready) frameReady();
-        });
+      const paintFrame = requestAnimationFrame(() => {
+        if (hooks.ready && Reflect.get(window, '__ogmObservedFrame') === true) frameReady();
       });
       runtime.addCleanup(() => cancelAnimationFrame(paintFrame));
     }
