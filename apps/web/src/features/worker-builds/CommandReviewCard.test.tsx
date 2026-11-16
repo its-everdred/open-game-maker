@@ -63,6 +63,7 @@ it('requires an explicit option for a change request and records it as disliked'
       json: {
         option_id: 'b',
         version: 2,
+        change_request: true,
         review: { likes: [], dislikes: [{ option_id: 'b' }], notes: 'More contrast' },
       },
     }),
@@ -70,7 +71,8 @@ it('requires an explicit option for a change request and records it as disliked'
 });
 
 it('answers a core review without treating it as a game', async () => {
-  const { game_id: _gameId, game_title: _gameTitle, ...core } = command;
+  const { game_id: gameId, game_title: gameTitle, ...core } = command;
+  expect([gameId, gameTitle]).toEqual(['g', 'Game']);
   render(
     <QueryClientProvider client={queryClient}>
       <CommandReviewCard command={{ ...core, source: 'core' }} onAnswered={() => {}} />
