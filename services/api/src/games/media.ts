@@ -14,9 +14,7 @@ const exists = async (path: string) =>
 
 const MAX_LEGACY_MANIFEST_BYTES = 1024 * 1024;
 
-async function manifestMedia(
-  directory: string,
-): Promise<{
+async function manifestMedia(directory: string): Promise<{
   logo?: string;
   genres?: string[];
   images?: Record<string, DisplayImage>;
@@ -88,8 +86,11 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
     readonly [
       string,
       {
+        mediaBuildId?: string;
+        hasLoadingPlan?: boolean;
         logoUrl?: string;
         loadingUrls?: { portrait: string; landscape: string };
+        loadingImages?: { portrait: DisplayImage; landscape: DisplayImage };
         choices?: { genre: string[] };
         coverUrl?: string;
         trailerUrl?: string;
@@ -111,11 +112,12 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
             return [gameId, {}] as const;
           }
           if (!(await exists(join(directory, '.complete')))) return [gameId, {}] as const;
-          const [cover, landscape, portrait, manifest] = await Promise.all([
+          const [cover, landscape, portrait, manifest, hasLoadingPlan] = await Promise.all([
             exists(join(directory, 'media/thumbnail.png')),
             exists(join(directory, 'media/trailer-landscape.mp4')),
             exists(join(directory, 'media/trailer-portrait.mp4')),
             manifestMedia(directory),
+            exists(join(directory, 'assets/cache-plan.json')),
           ]);
           const origin = deps.config.gamesOrigin.replace(/\/$/, '');
           const base = `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/media`;
@@ -160,9 +162,13 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
           };
           const coverImage = image('media/thumbnail.png');
           const logoImage = image(manifest.logo);
+          const loadingPortrait = image(manifest.loading?.portrait);
+          const loadingLandscape = image(manifest.loading?.landscape);
           return [
             gameId,
             {
+              mediaBuildId: buildId,
+              hasLoadingPlan,
               ...(manifest.logo
                 ? {
                     logoUrl: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
@@ -177,6 +183,9 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                       landscape: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.landscape}`,
                     },
                   }
+                : {}),
+              ...(loadingPortrait && loadingLandscape
+                ? { loadingImages: { portrait: loadingPortrait, landscape: loadingLandscape } }
                 : {}),
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
               ...(cover ? { coverUrl: `${base}/thumbnail.png` } : {}),

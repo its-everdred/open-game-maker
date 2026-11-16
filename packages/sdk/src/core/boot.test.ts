@@ -149,6 +149,62 @@ describe('boot', () => {
     }
   });
 
+  it('signals after two paints for a synchronous game and cancels on disposal', async () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const animation = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    const stopLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop').mockImplementation(() => undefined);
+    try {
+      const { module } = createCounterGame();
+      const pending = boot(module, { hostOrigin: 'https://app.test' });
+      await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+      bridge.onMessage!(hello());
+      const runtime = await pending;
+      callbacks[0]!(0);
+      expect(bridge.send).not.toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+      callbacks[1]!(16);
+      runtime.hooks.ready = true;
+      expect(bridge.send.mock.calls.filter(([message]) => message.t === 'load.frame')).toHaveLength(1);
+      runtime.dispose();
+      expect(cancel).toHaveBeenCalledWith(2);
+      window.dispatchEvent(new Event('gm-frame-ready'));
+      expect(bridge.send.mock.calls.filter(([message]) => message.t === 'load.frame')).toHaveLength(1);
+    } finally {
+      animation.mockRestore();
+      cancel.mockRestore();
+      stopLoop.mockRestore();
+    }
+  });
+
+  it('cancels pending paint and readiness signals when disposed', async () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const animation = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    const stopLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop').mockImplementation(() => undefined);
+    try {
+      const { module } = createCounterGame();
+      const pending = boot(module, { hostOrigin: 'https://app.test' });
+      await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+      bridge.onMessage!(hello());
+      const runtime = await pending;
+      callbacks[0]!(0);
+      runtime.dispose();
+      expect(cancel).toHaveBeenCalledWith(2);
+      window.dispatchEvent(new Event('gm-frame-ready'));
+      expect(bridge.send).not.toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+    } finally {
+      animation.mockRestore();
+      cancel.mockRestore();
+      stopLoop.mockRestore();
+    }
+  });
+
   // The host judges stored slots against the schema the running build reports, so ready carries the instance's own.
   it('reports the mounted instance save schema and only a migration it actually implements', async () => {
     const { module } = await start({ migrate: false });

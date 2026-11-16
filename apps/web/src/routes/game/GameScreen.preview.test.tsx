@@ -325,6 +325,7 @@ describe('GameScreen previews', () => {
       expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ buildId: 'pv-1', preview: true })),
     );
     expect(editorApi.getPreviewDesign).toHaveBeenCalledWith('game', '12', 'preview-1');
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
     expect(preview.mountSceneryPreview).not.toHaveBeenCalled();
     act(() =>
       host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({

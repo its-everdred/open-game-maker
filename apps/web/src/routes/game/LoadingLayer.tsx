@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 import type { GameFrameState } from '../../features/editor/frame';
 import { Cover } from '../games/Cover';
+import { DisplayImage as ResponsiveImage } from '../games/DisplayImage';
+import type { DisplayImage } from '../games/types';
 
 type LoadingGame = {
   familyId: string;
@@ -9,6 +11,9 @@ type LoadingGame = {
   coverUrl?: string | null;
   logoUrl?: string | null;
   loadingUrls?: { portrait: string; landscape: string };
+  loadingImages?: { portrait: DisplayImage; landscape: DisplayImage };
+  coverImage?: DisplayImage | null;
+  logoImage?: DisplayImage | null;
 };
 type LayerPhase = 'visible' | 'leaving' | 'removed';
 
@@ -62,14 +67,24 @@ export function LoadingLayer({
       <div className="game-loading-cover">
         <Cover game={game} />
       </div>
-      {game.loadingUrls ? (
+      {game.loadingUrls && game.loadingImages ? (
+        <ResponsiveLoadingArt urls={game.loadingUrls} images={game.loadingImages} />
+      ) : game.loadingUrls ? (
         <picture className="game-loading-art">
           <source media="(orientation: landscape)" srcSet={game.loadingUrls.landscape} />
-          <img src={game.loadingUrls.portrait} alt="" />
+          <img src={game.loadingUrls.portrait} alt="" fetchPriority="high" />
         </picture>
       ) : null}
       <div className="game-loading-glass">
-        {game.logoUrl ? <img className="game-loading-logo" src={game.logoUrl} alt="" /> : null}
+        {game.logoUrl ? (
+          <ResponsiveImage
+            className="game-loading-logo"
+            src={game.logoUrl}
+            image={game.logoImage}
+            sizes="(max-width: 600px) 70vw, 360px"
+            priority
+          />
+        ) : null}
         <div
           className="game-loading-progress"
           role="progressbar"
@@ -87,4 +102,40 @@ export function LoadingLayer({
 
 function prefersReducedMotion(): boolean {
   return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+function ResponsiveLoadingArt({
+  urls,
+  images,
+}: {
+  urls: NonNullable<LoadingGame['loadingUrls']>;
+  images: NonNullable<LoadingGame['loadingImages']>;
+}) {
+  const set = (image: DisplayImage, format: 'avif' | 'webp' | 'png') =>
+    image.sources[format].map(({ path, width }) => `${path} ${width}w`).join(', ');
+  return (
+    <picture className="game-loading-art">
+      {(['avif', 'webp', 'png'] as const).map((format) => (
+        <source
+          key={`l-${format}`}
+          media="(orientation: landscape)"
+          type={`image/${format}`}
+          srcSet={set(images.landscape, format)}
+          sizes="100vw"
+        />
+      ))}
+      {(['avif', 'webp'] as const).map((format) => (
+        <source key={`p-${format}`} type={`image/${format}`} srcSet={set(images.portrait, format)} sizes="100vw" />
+      ))}
+      <img
+        src={urls.portrait}
+        srcSet={set(images.portrait, 'png')}
+        sizes="100vw"
+        width={images.portrait.width}
+        height={images.portrait.height}
+        alt=""
+        fetchPriority="high"
+      />
+    </picture>
+  );
 }

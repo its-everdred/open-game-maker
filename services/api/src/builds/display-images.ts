@@ -13,7 +13,11 @@ export type DisplayImage = {
 };
 
 /** Build display media once, before the build is marked complete. */
-export async function makeDisplayImages(root: string, logo?: string): Promise<Record<string, DisplayImage>> {
+export async function makeDisplayImages(
+  root: string,
+  logo?: string,
+  loading: readonly string[] = [],
+): Promise<Record<string, DisplayImage>> {
   const media = join(root, 'media');
   const output = join(media, 'ogm-variants');
   const entries = await readdir(media, { withFileTypes: true }).catch(() => []);
@@ -22,7 +26,7 @@ export async function makeDisplayImages(root: string, logo?: string): Promise<Re
   for (const entry of entries) {
     if (
       !entry.isFile() ||
-      (entry.name !== 'thumbnail.png' && `media/${entry.name}` !== logo) ||
+      (entry.name !== 'thumbnail.png' && `media/${entry.name}` !== logo && !loading.includes(`media/${entry.name}`)) ||
       !['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(extname(entry.name).toLowerCase())
     )
       continue;

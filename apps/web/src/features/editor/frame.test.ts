@@ -72,7 +72,7 @@ describe('game frame adapter', () => {
       bridgeState: 'ready',
       manifest,
       dropped: 3,
-      load: { phase: 'ready', done: true },
+      load: { phase: 'ready', done: false },
     });
     expect(states.at(-1)).toEqual({ bridgeState: 'ready', dropped: 3 });
 
@@ -274,7 +274,7 @@ describe('game frame adapter', () => {
     });
 
     frameOptions?.onReady?.(manifest, []);
-    expect(controller.state().load).toMatchObject({ done: true });
+    expect(controller.state().load).toMatchObject({ done: false });
 
     frameOptions?.onLoad?.({
       t: 'load.progress',
@@ -294,6 +294,76 @@ describe('game frame adapter', () => {
     expect(controller.state()).toMatchObject({ bridgeState: 'error', errorCode: 'load-stalled' });
     expect(states).toContainEqual(expect.objectContaining({ bridgeState: 'error', errorCode: 'load-stalled' }));
     expect(onLoadStalled).toHaveBeenCalledWith(expect.objectContaining({ fetchedBytes: 40, cachedBytes: 10 }));
+  });
+
+  it('waits for delayed legacy progress and completion before revealing', async () => {
+    vi.useFakeTimers();
+    let opts: GameFrameOptions | undefined;
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      legacyWaitForLoad: true,
+      mode: 'play',
+      design: { rev: 0, doc: {} as DesignDoc },
+      create: (options) => {
+        opts = options;
+        return {
+          bridge: { dropped: 0 },
+          on: vi.fn(() => vi.fn()),
+          setMode: vi.fn(),
+          setSettings: vi.fn(),
+          send: vi.fn(),
+          dispose: vi.fn(),
+        };
+      },
+    });
+    opts?.onReady?.(manifest, []);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(controller.state().firstFrame).not.toBe(true);
+    opts?.onLoad?.({ t: 'load.progress', payload: { phase: 'ready', loaded: 1, total: 4, cachedBytes: 0 } });
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(controller.state().firstFrame).not.toBe(true);
+    opts?.onLoad?.({
+      t: 'load.done',
+      payload: { ms: 1, fetchedBytes: 4, cachedBytes: 0, fetchedFiles: 1, cachedFiles: 0, persisted: false },
+    });
+    expect(controller.state()).toMatchObject({ firstFrame: true, load: { done: true } });
+    controller.dispose();
+  });
+
+  it.each([false, true])('times out missing first frame after ready (assets complete: %s)', async (complete) => {
+    vi.useFakeTimers();
+    let opts: GameFrameOptions | undefined;
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 0, doc: {} as DesignDoc },
+      create: (options) => {
+        opts = options;
+        return {
+          bridge: { dropped: 0 },
+          on: vi.fn(() => vi.fn()),
+          setMode: vi.fn(),
+          setSettings: vi.fn(),
+          send: vi.fn(),
+          dispose: vi.fn(),
+        };
+      },
+    });
+    opts?.onReady?.(manifest, [], true);
+    if (complete)
+      opts?.onLoad?.({
+        t: 'load.done',
+        payload: { ms: 1, fetchedBytes: 1, cachedBytes: 0, fetchedFiles: 1, cachedFiles: 0, persisted: false },
+      });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(controller.state()).toMatchObject({ bridgeState: 'error', errorCode: 'first-frame-stalled' });
+    controller.dispose();
   });
 
   it('keeps first-frame readiness separate from asset completion', () => {

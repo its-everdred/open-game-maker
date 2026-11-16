@@ -1,4 +1,5 @@
 import { act, cleanup, render } from '@testing-library/react';
+import { useLayoutEffect, useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LoadingLayer } from './LoadingLayer';
@@ -45,6 +46,58 @@ describe('LoadingLayer', () => {
     view.rerender(<LoadingLayer game={gameWithArt} load={load} firstFrame />);
     act(() => vi.advanceTimersByTime(50));
     expect(view.container.querySelector('.game-loading-layer')).toHaveClass('is-done');
+  });
+
+  it('selects optimized loading image variants for each orientation', () => {
+    const image = (path: string) => ({
+      width: 640,
+      height: 360,
+      sources: {
+        avif: [{ width: 320, path: `${path}.avif` }],
+        webp: [{ width: 320, path: `${path}.webp` }],
+        png: [{ width: 320, path: `${path}.png` }],
+      },
+    });
+    const view = render(
+      <LoadingLayer
+        game={{
+          ...game,
+          loadingUrls: { portrait: '/p.png', landscape: '/l.png' },
+          loadingImages: { portrait: image('/p'), landscape: image('/l') },
+        }}
+      />,
+    );
+    expect(view.container.querySelector('source[media="(orientation: landscape)"][type="image/avif"]')).toHaveAttribute(
+      'srcset',
+      '/l.avif 320w',
+    );
+    expect(view.container.querySelector('source:not([media])[type="image/avif"]')).toHaveAttribute(
+      'srcset',
+      '/p.avif 320w',
+    );
+  });
+
+  it('returns before paint when another frame starts after the fade', () => {
+    vi.useFakeTimers();
+    const seen: boolean[] = [];
+    const done = { phase: 'ready' as const, loaded: 10, total: 10, done: true };
+    function Probe({ loading }: { loading: boolean }) {
+      const root = useRef<HTMLDivElement>(null);
+      useLayoutEffect(() => {
+        if (loading) seen.push(root.current?.querySelector('.game-loading-layer') !== null);
+      }, [loading]);
+      return (
+        <div ref={root}>
+          <LoadingLayer game={game} load={{ ...done, done: !loading }} firstFrame={!loading} />
+        </div>
+      );
+    }
+    const view = render(<Probe loading={false} />);
+    act(() => vi.advanceTimersByTime(50));
+    act(() => vi.advanceTimersByTime(250));
+    expect(view.container.querySelector('.game-loading-layer')).toBeNull();
+    view.rerender(<Probe loading />);
+    expect(seen).toEqual([true]);
   });
 
   it('shows the game logo while loading', () => {

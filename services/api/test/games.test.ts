@@ -161,6 +161,8 @@ describe('games routes', () => {
       .run();
     const directory = join(deps.config.gamesRoot, id, 'build1');
     mkdirSync(join(directory, 'media'), { recursive: true });
+    mkdirSync(join(directory, 'assets'), { recursive: true });
+    writeFileSync(join(directory, 'assets/cache-plan.json'), '{}');
     for (const file of [
       'thumbnail.png',
       'trailer-landscape.mp4',
@@ -211,6 +213,8 @@ describe('games routes', () => {
         images: {
           'media/thumbnail.png': { width: 640, height: 360, sources },
           'media/logo.png': { width: 640, height: 360, sources },
+          'media/loading-portrait.png': { width: 640, height: 360, sources },
+          'media/loading-landscape.png': { width: 640, height: 360, sources },
         },
       }),
     );
@@ -227,7 +231,16 @@ describe('games routes', () => {
     });
     const detail = await (await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) })).json();
     expect(detail).toMatchObject({
+      mediaBuildId: 'build1',
+      hasLoadingPlan: true,
       loadingUrls: { portrait: `https://games.example.test/g/${id}/build1/media/loading-portrait.png` },
+      loadingImages: {
+        portrait: {
+          sources: {
+            avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+          },
+        },
+      },
     });
     expect(await list()).toMatchObject({
       lastPlayedAt: expect.any(String),

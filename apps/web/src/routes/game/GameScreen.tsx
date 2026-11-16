@@ -138,7 +138,6 @@ export function GameScreen() {
   const inspectedJobRef = useRef<string | undefined>(undefined);
   const activeSnapshot = adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
   const noBuild = activeSnapshot?.buildId === NO_BUILD_ID;
-  useLayoutEffect(() => setFrameState(initialFrameState), [gameId, branch, activeSnapshot?.buildId, frameAttempt]);
   const previews = useQuery({
     queryKey: ['editor-previews', gameId],
     queryFn: () => getEditorPreviews(gameId),
@@ -158,6 +157,10 @@ export function GameScreen() {
   const waitingForPreview =
     noBuild && (previews.isPending || (candidatePreview !== undefined && previewDesign.isPending));
   const activePreview = candidatePreview && previewDesign.data ? candidatePreview : undefined;
+  useLayoutEffect(
+    () => setFrameState(initialFrameState),
+    [gameId, branch, activeSnapshot, activePreview?.accessId, frameAttempt],
+  );
   const stage = useQuery({
     queryKey: ['editor-stage', gameId, jobBranch],
     queryFn: () => getEditorStage(gameId, jobBranch),
@@ -381,7 +384,7 @@ export function GameScreen() {
   useEffect(() => {
     const container = containerRef.current;
     const snapshot = activeSnapshot;
-    if (container === null || snapshot === undefined || gameId === '') return;
+    if (container === null || snapshot === undefined || gameId === '' || game.isPending) return;
     if (waitingForPreview) return;
     if (waitingForStage) return;
     if (waitingForScenery) return;
@@ -402,6 +405,7 @@ export function GameScreen() {
               gamesOrigin,
               gameId,
               buildId: activePreview?.accessId ?? snapshot.buildId,
+              legacyWaitForLoad: game.data?.mediaBuildId === snapshot.buildId && game.data?.hasLoadingPlan === true,
               ...(activePreview ? { preview: true } : {}),
               mode,
               design: activePreview ? previewDesign.data! : snapshot,
@@ -426,6 +430,9 @@ export function GameScreen() {
     };
   }, [
     activeSnapshot,
+    game.isPending,
+    game.data?.mediaBuildId,
+    game.data?.hasLoadingPlan,
     branch,
     build,
     frameAttempt,
