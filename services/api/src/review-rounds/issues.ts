@@ -48,7 +48,9 @@ export function createReviewIssues(token: string, fetchImpl: typeof fetch = glob
       )
         throw new Error('github_review_invalid_response');
       return value.labels.some((label: { name: string }) =>
-        /:(?:todo|queued|in-progress|ci-wait|human-review|rework|merging|blocked|parked|error|done|cancelled|canceled|paused)$/u.test(label.name),
+        /:(?:todo|queued|in-progress|ci-wait|human-review|rework|merging|blocked|parked|error|done|cancelled|canceled|paused)$/u.test(
+          label.name,
+        ),
       );
     },
     async integrated(repo, sha, pr) {
