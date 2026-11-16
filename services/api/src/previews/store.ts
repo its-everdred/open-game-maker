@@ -149,7 +149,8 @@ export async function submitReviewRound(
   audioVerified = false,
 ) {
   return withArtifactMutation(async () => {
-    if (getRound(deps.db, gameId, submission.id)) return submitRound(deps.db, gameId, submission, effort, audioVerified);
+    if (getRound(deps.db, gameId, submission.id))
+      return submitRound(deps.db, gameId, submission, effort, audioVerified);
     if (submission.category === 'gameplay' && submission.media.some((item) => item.kind === 'build')) {
       const preview = await readPreview(join(root(deps, gameId), `${submission.ticket}.json`));
       if (

@@ -32,7 +32,13 @@ it('advances mock to build on the same ticket and closes only after the final ap
     postedAt: '2026-01-01',
   });
   answerRound(deps.db, GAME, 'first', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
-  const issues = { setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() };
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
   let reason = '';
   const delivery = {
     rework: vi.fn(async (_ticket: string, body: string) => {
@@ -47,6 +53,7 @@ it('advances mock to build on the same ticket and closes only after the final ap
     repo: 'owner/repo',
     issues,
     delivery,
+    enqueueLegacy: vi.fn(),
     now: () => '2026-01-03',
   };
   await advanceApproval(input);
@@ -100,7 +107,13 @@ it('does not close a ticket with another owned unapproved phase', async () => {
     postedAt: '2026-01-01',
   });
   answerRound(deps.db, GAME, 'first', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
-  const issues = { setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() };
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
   await advanceApproval({
     db: deps.db,
     round: getRound(deps.db, GAME, 'first')!,
@@ -108,6 +121,7 @@ it('does not close a ticket with another owned unapproved phase', async () => {
     repo: 'owner/repo',
     issues,
     delivery: { rework: vi.fn(), findMarker: vi.fn() },
+    enqueueLegacy: vi.fn(),
     now: () => '2026-01-03',
   });
   expect(issues.close).not.toHaveBeenCalled();
@@ -137,7 +151,13 @@ it('keeps legacy track phase IDs while assigning their next fidelity rung', asyn
     postedAt: '2026-01-01',
   });
   answerRound(deps.db, GAME, 'first', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
-  const issues = { setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() };
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
   const delivery = { rework: vi.fn(), findMarker: vi.fn().mockResolvedValue({ runId: 'run-1' }) };
   await advanceApproval({
     db: deps.db,
@@ -146,6 +166,7 @@ it('keeps legacy track phase IDs while assigning their next fidelity rung', asyn
     repo: 'owner/repo',
     issues,
     delivery,
+    enqueueLegacy: vi.fn(),
     now: () => '2026-01-03',
   });
   expect(issues.setFidelity).toHaveBeenCalledWith('owner/repo', '42', 'prototype', 'medium');
@@ -188,9 +209,15 @@ it('serializes competing transitions on a shared ticket', async () => {
   };
   add('a', 'art', 'mock');
   add('s', 'sound', 'mock');
-  const issues = { setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() };
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
   const delivery = { rework: vi.fn(), findMarker: vi.fn().mockResolvedValue({ runId: 'run-1' }) };
-  const input = { db: deps.db, repo: 'owner/repo', issues, delivery, now: () => '2026-01-03' };
+  const input = { db: deps.db, repo: 'owner/repo', issues, delivery, enqueueLegacy: vi.fn(), now: () => '2026-01-03' };
   await advanceApproval({ ...input, round: getRound(deps.db, GAME, 'a')!, track: art });
   await advanceApproval({ ...input, round: getRound(deps.db, GAME, 's')!, track: sound });
   expect(issues.setFidelity).toHaveBeenCalledTimes(1);
@@ -199,7 +226,8 @@ it('serializes competing transitions on a shared ticket', async () => {
   expect(issues.setFidelity).toHaveBeenLastCalledWith('owner/repo', '42', 'prototype', 'medium');
 });
 
-it.each([false, true])('reconciles a legacy follow-up (already queued: %s)', async (queued) => {
+it.each(['pending', 'queued', 'ambiguous'])('reconciles a legacy follow-up (%s)', async (state) => {
+  const queued = state === 'queued';
   const deps = makeDeps();
   seedDesignGame(deps);
   const track = {
@@ -232,7 +260,15 @@ it.each([false, true])('reconciles a legacy follow-up (already queued: %s)', asy
     .insert(schema.reviewDispatchIntents)
     .values({ roundId: 'r', ticket: '42', state: 'dispatching', createdAt: '2026-01-02', runId: queued ? '77' : null })
     .run();
-  const issues = { setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() };
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
+  if (state === 'ambiguous') issues.legacyStarted.mockResolvedValue(true);
+  const enqueueLegacy = vi.fn();
   const delivery = { rework: vi.fn(), findMarker: vi.fn().mockResolvedValue({ runId: 'run-1' }) };
   await advanceApproval({
     db: deps.db,
@@ -241,16 +277,13 @@ it.each([false, true])('reconciles a legacy follow-up (already queued: %s)', asy
     repo: 'owner/repo',
     issues,
     delivery,
+    enqueueLegacy,
     now: () => '2026-01-03',
   });
-  if (queued) {
-    expect(issues.cancel).not.toHaveBeenCalled();
-    expect(delivery.rework).not.toHaveBeenCalled();
-    expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('77');
-  } else {
-    expect(issues.cancel).toHaveBeenCalledWith('owner/repo', '77');
-    expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('42');
-  }
+  expect(enqueueLegacy).toHaveBeenCalledTimes(state === 'pending' ? 1 : 0);
+  expect(issues.cancel).not.toHaveBeenCalled();
+  expect(delivery.rework).not.toHaveBeenCalled();
+  expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('77');
 });
 
 it('defers a rejected track while another track has an unfinished phase', async () => {
@@ -358,7 +391,13 @@ it('keeps an already queued legacy successor from closing over another pending a
     .insert(schema.reviewDispatchIntents)
     .values({ roundId: 'a', ticket: '42', state: 'dispatching', runId: '77', createdAt: '2026-01-02' })
     .run();
-  const issues = { setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() };
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
   const input = {
     db: deps.db,
     round: getRound(deps.db, GAME, 'a')!,
@@ -366,6 +405,7 @@ it('keeps an already queued legacy successor from closing over another pending a
     repo: 'owner/repo',
     issues,
     delivery: { rework: vi.fn(), findMarker: vi.fn() },
+    enqueueLegacy: vi.fn(),
     now: () => '2026-01-03',
   };
   await advanceApproval(input);

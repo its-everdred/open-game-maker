@@ -121,6 +121,7 @@ export function createReviewSync(deps: {
               track,
               repo: `${game.githubOwner}/${game.githubRepo}`,
               issues: deps.issues,
+              enqueueLegacy: (ticket) => client.enqueueTodo([ticket]),
               delivery: aiurReworkDelivery(client, round.id, round.verdictAt!),
               now: () => new Date(now()).toISOString(),
             });

@@ -26,12 +26,37 @@ after_create: |
     want="$(node -p "require('./.gm/context/bundle.json').skillPackVersion")"
     have="$(node -p "require('./skills.lock').pack" 2>/dev/null || echo none)"
     kind="$(node -p "require('./.gm/context/bundle.json').kind || ''")"
-    if [ "$want" != "$have" ] || { [ "$kind" = feature ] && [ ! -f .claude/skills/gm-prototype/SKILL.md ]; }; then
+    if [ "$kind" = feature ]; then
+      echo "bundle inputs incomplete" > .gm/context/bundle.missing
+    fi
+    if [ "$want" != "$have" ] || [ "$kind" = feature ]; then
       url="$(node -p "require('./.gm/context/bundle.json').skillPackUrl")"
-      if curl -fsS --max-time 60 -H "Authorization: Bearer ${secret}" "$url" -o .gm/context/skills.tgz; then
+      if curl -fsS --max-time 60 --retry 3 --retry-connrefused --retry-delay 1 -H "Authorization: Bearer ${secret}" "$url" -o .gm/context/skills.tgz; then
+        for dir in .claude .claude/skills .codex .codex/skills .agents .agents/skills; do
+          [ ! -L "$dir" ] || { echo "unsafe skill directory" >&2; exit 1; }
+        done
+        mkdir -p .claude/skills .codex/skills .agents/skills
         rm -rf .claude/skills/gm-*
         tar -xzf .gm/context/skills.tgz -C .claude/skills
+        for skill in .claude/skills/gm-*; do
+          [ -f "$skill/SKILL.md" ] || continue
+          name="${skill##*/}"
+          for target in .codex/skills .agents/skills; do
+            if [ -L "$target/$name" ]; then
+              [ "$(readlink "$target/$name")" = "../../.claude/skills/$name" ] || { echo "unsafe skill discovery link" >&2; exit 1; }
+            elif [ -e "$target/$name" ]; then
+              echo "unsafe skill discovery entry" >&2; exit 1
+            else
+              ln -s "../../.claude/skills/$name" "$target/$name"
+            fi
+          done
+        done
       fi
+    fi
+    if [ "$kind" = feature ] && [ ! -f .claude/skills/gm-prototype/SKILL.md ]; then
+      echo "bundle inputs incomplete" > .gm/context/bundle.missing
+      echo "required gm-prototype skill is unavailable" >&2
+      exit 1
     fi
     node -e '
       const ok = (a) => /^a_[0-9a-f-]{36}$/.test(a.blob) && /^\.gm\/inbox\/attachments\/[A-Za-z0-9][A-Za-z0-9._-]{0,239}$/.test(a.path);
@@ -49,8 +74,104 @@ after_create: |
   fi
 before_run: |
   ticket="${AIUR_HOOK_TICKET_IDENTIFIER:-}"
+  recovered_bundle=no
   secret="$(cat "${OGM_HOOK_SECRET_FILE:-/nonexistent}" 2>/dev/null || true)"
   mkdir -p .gm/context
+  if [ ! -f .gm/context/bundle.json ] && [ -n "$ticket" ] && [ -n "$secret" ] && [ -n "${OGM_INTERNAL_URL:-}" ]; then
+    status="$(curl -sS --max-time 20 --retry 3 --retry-connrefused --retry-delay 1 -H "Authorization: Bearer ${secret}" \
+      "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/bundle" -o .gm/context/bundle.retry -w '%{http_code}' || true)"
+    if [ "$status" = 200 ]; then
+      mv .gm/context/bundle.retry .gm/context/bundle.json
+    else
+      rm -f .gm/context/bundle.retry
+      if [ "$status" != 404 ]; then
+        echo "required skill bundle is unavailable" >&2
+        exit 1
+      fi
+    fi
+  fi
+  if [ -f .gm/context/bundle.missing ] && [ -f .gm/context/bundle.json ]; then
+    recovered_bundle=yes
+    design_status="$(curl -sS --max-time 20 --retry 3 --retry-connrefused --retry-delay 1 -H "Authorization: Bearer ${secret}" \
+      "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/design" -o .gm/context/design.json -w '%{http_code}' || true)"
+    if [ "$design_status" != 200 ] && [ "$design_status" != 404 ]; then
+      rm -f .gm/context/design.json
+      echo "design snapshot unavailable" > .gm/context/design.missing
+      exit 1
+    fi
+    if [ "$design_status" = 404 ] || ! node -e '
+        try {
+          const s = JSON.parse(require("node:fs").readFileSync(".gm/context/design.json", "utf8"));
+          const record = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+          if (!Number.isInteger(s.rev) || s.rev < 0 || !(s.buildId === null || typeof s.buildId === "string") ||
+              !record(s.doc) || !Number.isInteger(s.doc.schemaVersion) || !record(s.doc.globals) || !record(s.doc.entities)) process.exit(1);
+        } catch { process.exit(1); }
+      '; then
+      rm -f .gm/context/design.json
+      echo "design snapshot unavailable" > .gm/context/design.missing
+    else
+      rm -f .gm/context/design.missing
+    fi
+    node -e '
+      const ok = (a) => /^a_[0-9a-f-]{36}$/.test(a.blob) && /^\.gm\/inbox\/attachments\/[A-Za-z0-9][A-Za-z0-9._-]{0,239}$/.test(a.path);
+      for (const a of require("./.gm/context/bundle.json").attachments || []) { if (!ok(a)) process.exit(1); console.log(a.blob + " " + a.path); }
+    ' > .gm/context/attachments.retry || exit 1
+    while read -r blob path; do
+      mkdir -p .gm/inbox/attachments
+      if ! curl -fsS --max-time 60 --retry 3 --retry-connrefused --retry-delay 1 -H "Authorization: Bearer ${secret}" \
+        "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/attachments/${blob}" -o "$path"; then
+        rm -f "$path"
+        exit 1
+      fi
+    done < .gm/context/attachments.retry
+    rm -f .gm/context/attachments.retry
+  fi
+  if [ -f .gm/context/bundle.json ] && [ "$(node -p "require('./.gm/context/bundle.json').kind || ''")" = feature ] && { [ ! -f .claude/skills/gm-prototype/SKILL.md ] || [ "$recovered_bundle" = yes ]; }; then
+    url="$(node -p "require('./.gm/context/bundle.json').skillPackUrl")"
+    if [ -z "$secret" ] || ! curl -fsS --max-time 60 --retry 3 --retry-connrefused --retry-delay 1 -H "Authorization: Bearer ${secret}" "$url" -o .gm/context/skills.tgz; then
+      echo "required gm-prototype skill is unavailable" >&2
+      exit 1
+    fi
+    for dir in .claude .claude/skills .codex .codex/skills .agents .agents/skills; do
+      [ ! -L "$dir" ] || { echo "unsafe skill directory" >&2; exit 1; }
+    done
+    mkdir -p .claude/skills .codex/skills .agents/skills
+    rm -rf .claude/skills/gm-*
+    tar -xzf .gm/context/skills.tgz -C .claude/skills || exit 1
+    for skill in .claude/skills/gm-*; do
+      [ -f "$skill/SKILL.md" ] || continue
+      name="${skill##*/}"
+      for target in .codex/skills .agents/skills; do
+        if [ -L "$target/$name" ]; then
+          [ "$(readlink "$target/$name")" = "../../.claude/skills/$name" ] || { echo "unsafe skill discovery link" >&2; exit 1; }
+        elif [ -e "$target/$name" ]; then
+          echo "unsafe skill discovery entry" >&2; exit 1
+        else
+          ln -s "../../.claude/skills/$name" "$target/$name"
+        fi
+      done
+    done
+    if [ ! -f .claude/skills/gm-prototype/SKILL.md ]; then
+      echo "required gm-prototype skill is unavailable" >&2
+      exit 1
+    fi
+  fi
+  if [ -f .gm/context/bundle.json ] && [ "$(node -p "require('./.gm/context/bundle.json').kind || ''")" = feature ]; then
+    for dir in .claude .claude/skills .codex .codex/skills .agents .agents/skills; do
+      [ ! -L "$dir" ] || { echo "unsafe skill directory" >&2; exit 1; }
+    done
+    mkdir -p .codex/skills .agents/skills
+    for target in .codex/skills .agents/skills; do
+      if [ -L "$target/gm-prototype" ]; then
+        [ "$(readlink "$target/gm-prototype")" = '../../.claude/skills/gm-prototype' ] || { echo "unsafe skill discovery link" >&2; exit 1; }
+      elif [ -e "$target/gm-prototype" ]; then
+        echo "unsafe skill discovery entry" >&2; exit 1
+      else
+        ln -s '../../.claude/skills/gm-prototype' "$target/gm-prototype"
+      fi
+    done
+  fi
+  if [ "$recovered_bundle" = yes ]; then rm -f .gm/context/bundle.missing; fi
   rm -f .gm/context/preview.json
   if [ -n "$secret" ]; then
     umask 077

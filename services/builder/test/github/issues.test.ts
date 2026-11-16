@@ -13,14 +13,14 @@ function requestError(status: number, data: unknown, headers: Record<string, str
 describe('GitHub issues writer', () => {
   it('checks the game pinned core commit contains gm-prototype', async () => {
     const sha = 'a'.repeat(40);
-    const manifest = Buffer.from(JSON.stringify({ core: { sha, ref: 'main' } })).toString(
-      'base64',
-    );
+    const manifest = Buffer.from(JSON.stringify({ core: { sha, ref: 'main' } })).toString('base64');
     const request = vi
       .fn<GitHubRequest>()
       .mockResolvedValueOnce(response(200, { encoding: 'base64', content: manifest }))
       .mockResolvedValueOnce(response(200, { type: 'file' }));
-    expect(await createIssuesClient({ token: 'fixture', request }).hasPrototypeSkill('owner/game', 'example/core')).toBe(true);
+    expect(
+      await createIssuesClient({ token: 'fixture', request }).hasPrototypeSkill('owner/game', 'example/core'),
+    ).toBe(true);
     expect(request).toHaveBeenLastCalledWith(
       'GET /repos/{owner}/{repo}/contents/{path}',
       expect.objectContaining({ owner: 'example', repo: 'core', path: 'skills/gm-prototype/SKILL.md', ref: sha }),
@@ -29,8 +29,19 @@ describe('GitHub issues writer', () => {
       .fn<GitHubRequest>()
       .mockResolvedValueOnce(response(200, { encoding: 'base64', content: manifest }))
       .mockRejectedValueOnce(requestError(404, {}));
-    expect(await createIssuesClient({ token: 'fixture', request: missing }).hasPrototypeSkill('owner/game', 'example/core')).toBe(
-      false,
+    expect(
+      await createIssuesClient({ token: 'fixture', request: missing }).hasPrototypeSkill('owner/game', 'example/core'),
+    ).toBe(false);
+    const upstream = vi
+      .fn<GitHubRequest>()
+      .mockResolvedValueOnce(response(200, { encoding: 'base64', content: manifest }))
+      .mockResolvedValueOnce(response(200, { type: 'file' }));
+    expect(await createIssuesClient({ token: 'fixture', request: upstream }).hasPrototypeSkill('owner/game')).toBe(
+      true,
+    );
+    expect(upstream).toHaveBeenLastCalledWith(
+      'GET /repos/{owner}/{repo}/contents/{path}',
+      expect.objectContaining({ repo: 'open-game-maker', ref: sha }),
     );
   });
   it('creates an issue and rejects an ambiguous success without a number', async () => {

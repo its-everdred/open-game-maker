@@ -45,6 +45,7 @@ it('reconciles the two-rung track on one issue without any thread operation', as
     .run();
   const labels = ['phase:mock', 'model:low'];
   const issues = {
+    legacyStarted: vi.fn(),
     ensureFollowup: vi.fn(),
     close: vi.fn(),
     cancel: vi.fn(),
@@ -145,7 +146,7 @@ it('restores a rejected shared track before delivering its note', async () => {
     .insert(schema.reviewDispatchIntents)
     .values({ roundId: 'a', ticket: '42', state: 'consumed', createdAt: '2026-01-02' })
     .run();
-  const issues = { setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() };
+  const issues = { legacyStarted: vi.fn(), integrated: vi.fn(), setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() };
   let message = '';
   const client = {
     rework: vi.fn(async (_id: string, body: string) => {

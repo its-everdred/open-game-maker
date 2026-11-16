@@ -88,9 +88,21 @@ function enableTracks(deps: ReturnType<typeof setup>['deps']) {
 describe('review round previews', () => {
   it('does not expose unverified audio attached to a legacy sound round', async () => {
     const { deps, app } = setup();
-    postRound(deps.db, { id: 'legacy-audio', gameId: ids.game, track: 'sound', phase: 'mock', category: 'sound',
-      round: 1, ticket: '12', sha: SHA, media: JSON.stringify([{ kind: 'audio', ref: `sha256:${'a'.repeat(64)}` }]), postedAt: '2026-01-01' });
-    const response = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, { headers: asUser(ids.user) });
+    postRound(deps.db, {
+      id: 'legacy-audio',
+      gameId: ids.game,
+      track: 'sound',
+      phase: 'mock',
+      category: 'sound',
+      round: 1,
+      ticket: '12',
+      sha: SHA,
+      media: JSON.stringify([{ kind: 'audio', ref: `sha256:${'a'.repeat(64)}` }]),
+      postedAt: '2026-01-01',
+    });
+    const response = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
+      headers: asUser(ids.user),
+    });
     expect(await response.json()).toMatchObject({ rounds: [{ id: 'legacy-audio', media: [] }] });
   });
   it('includes open gameplay rounds only when requested, with their playable build reference', async () => {

@@ -54,6 +54,8 @@ it('does not close a shared ticket until every committed first phase is approved
     answerRound(deps.db, GAME, id, { verdict: 'approved', notes: null, source: 'command', at: '2026-01-01T01:00:00Z' });
   };
   const issues = {
+    legacyStarted: vi.fn(),
+    integrated: vi.fn(),
     setFidelity: vi.fn(),
     ensureFollowup: vi.fn(),
     close: vi.fn(),

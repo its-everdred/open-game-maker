@@ -242,7 +242,13 @@ export function buildRoutes(opts: {
       try {
         const index = track.phases.findIndex((phase) => phase.id === parsed.data.phase);
         const effort = phaseEffort(track.phases[index]!, index);
-        const round = await (opts.submitReview ?? submitReviewRound)(deps, game.id, parsed.data, effort, audioItems.length > 0);
+        const round = await (opts.submitReview ?? submitReviewRound)(
+          deps,
+          game.id,
+          parsed.data,
+          effort,
+          audioItems.length > 0,
+        );
         return c.json({ id: round.id, round: round.round }, 201);
       } catch (error) {
         if (error instanceof Error && error.message === 'preview_not_found')

@@ -267,7 +267,8 @@ async function processRequest(
               `${game.githubOwner}/${game.githubRepo}`,
               data.submission,
               new Set(staged.filter((item) => item.mime.startsWith('audio/')).map((item) => item.hash)),
-              async (_deps, gameId, value, effort, audioVerified) => submitRound(deps.db, gameId, value, effort, audioVerified),
+              async (_deps, gameId, value, effort, audioVerified) =>
+                submitRound(deps.db, gameId, value, effort, audioVerified),
             );
           });
         }

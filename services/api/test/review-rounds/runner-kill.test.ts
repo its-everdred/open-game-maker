@@ -48,6 +48,8 @@ it('reconciles a creator kill verdict exactly once without filing a follow-up', 
   });
   answerRound(deps.db, GAME, 'r', { verdict: 'kill', notes: null, source: 'command', at: '2026-01-01T01:00:00Z' });
   const issues = {
+    legacyStarted: vi.fn(),
+    integrated: vi.fn(),
     setFidelity: vi.fn(),
     ensureFollowup: vi.fn(),
     close: vi.fn(),

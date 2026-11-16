@@ -46,6 +46,8 @@ it('dispatches a needs-work verdict once and records the worker session after it
   const sync = createReviewSync({
     db: deps.db,
     issues: {
+      legacyStarted: vi.fn(),
+      integrated: vi.fn(),
       setFidelity,
       close: vi.fn(),
       cancel: vi.fn(),

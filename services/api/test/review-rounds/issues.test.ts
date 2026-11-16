@@ -28,3 +28,17 @@ it('replaces only fidelity and effort labels, preserving other model labels', as
   await issues.setFidelity('owner/repo', '42', 'build', 'xhigh');
   expect(labels.sort()).toEqual(['bug', 'model:remote', 'model:xhigh', 'phase:build']);
 });
+
+it('detects an already dispatched legacy successor without treating missing state as proof', async () => {
+  const fetchImpl = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      Response.json({ state: 'open', labels: [{ name: 'game:fixture' }, { name: 'agent:in-progress' }] }),
+    )
+    .mockResolvedValueOnce(Response.json({ state: 'open', labels: [{ name: 'game:fixture' }] }))
+    .mockResolvedValueOnce(Response.json({ state: 'open', labels: [{}] }));
+  const issues = createReviewIssues('fixture-token', fetchImpl);
+  expect(await issues.legacyStarted('owner/repo', '77')).toBe(true);
+  expect(await issues.legacyStarted('owner/repo', '77')).toBe(false);
+  await expect(issues.legacyStarted('owner/repo', '77')).rejects.toThrow('github_review_invalid_response');
+});

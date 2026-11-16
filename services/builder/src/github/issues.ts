@@ -99,10 +99,19 @@ export function createIssuesClient(deps: IssuesClientDeps): IssuesClient {
         let canonical = coreRepo;
         if (!canonical && typeof core.source === 'string') {
           const url = new URL(core.source);
-          if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password || url.search || url.hash) return false;
+          if (
+            url.protocol !== 'https:' ||
+            url.hostname !== 'github.com' ||
+            url.username ||
+            url.password ||
+            url.search ||
+            url.hash
+          )
+            return false;
           canonical = url.pathname.replace(/^\//u, '').replace(/\.git$/u, '');
         }
-        if (!canonical) return false;
+        // A minimal core pin has no source field; it refers to the upstream core unless the instance config overrides it.
+        canonical ??= 'its-everdred/open-game-maker';
         const parts = splitRepo(canonical);
         const skill = record(
           (

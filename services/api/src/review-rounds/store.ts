@@ -97,7 +97,10 @@ export function submitRound(
         existing.media === JSON.stringify(submission.media);
       if (!matches) throw new Error('review_submission_conflict');
       if ((existing.effort === null && effort) || (audioVerified && !existing.audioVerified)) {
-        const updated = { effort: existing.effort ?? effort ?? null, audioVerified: existing.audioVerified || audioVerified };
+        const updated = {
+          effort: existing.effort ?? effort ?? null,
+          audioVerified: existing.audioVerified || audioVerified,
+        };
         tx.update(schema.reviewRounds).set(updated).where(eq(schema.reviewRounds.id, existing.id)).run();
         return { ...existing, ...updated };
       }

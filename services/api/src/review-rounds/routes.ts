@@ -49,7 +49,10 @@ export default new Hono<ApiBindings>()
             .filter(
               (item) =>
                 (['still', 'clip'].includes(item.kind) ||
-                  (item.kind === 'audio' && round.audioVerified && round.category === 'sound' && round.phase === 'mock')) &&
+                  (item.kind === 'audio' &&
+                    round.audioVerified &&
+                    round.category === 'sound' &&
+                    round.phase === 'mock')) &&
                 /^sha256:[0-9a-f]{64}$/u.test(item.ref),
             )
             .map(async (item) => ({
@@ -80,7 +83,8 @@ export default new Hono<ApiBindings>()
     if (
       media.some(
         (item) =>
-          ((['still', 'clip'].includes(item.kind) || (item.kind === 'audio' && round.audioVerified)) && /^sha256:[0-9a-f]{64}$/u.test(item.ref)) ||
+          ((['still', 'clip'].includes(item.kind) || (item.kind === 'audio' && round.audioVerified)) &&
+            /^sha256:[0-9a-f]{64}$/u.test(item.ref)) ||
           (item.kind === 'build' && item.ref !== ''),
       )
     )

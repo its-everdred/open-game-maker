@@ -12,11 +12,12 @@ export async function advanceApproval(input: {
   round: ReviewRound;
   track: ReviewTrack;
   repo: string;
-  issues: Pick<ReviewIssues, 'setFidelity' | 'close' | 'cancel'>;
+  issues: Pick<ReviewIssues, 'setFidelity' | 'close' | 'legacyStarted' | 'integrated'>;
+  enqueueLegacy: (ticket: string) => Promise<void>;
   delivery: ReworkDelivery;
   now: () => string;
 }): Promise<void> {
-  const { db, round, track, repo, issues, delivery, now } = input;
+  const { db, round, track, repo, issues, delivery, enqueueLegacy, now } = input;
   if (round.verdict !== 'approved') throw new Error('review_round_not_approved');
   if (
     track.id !== round.track ||
@@ -56,9 +57,19 @@ export async function advanceApproval(input: {
       previous.ticket !== round.ticket &&
       previous.sourceRoundId === round.id &&
       (intent?.state === 'dispatching' || intent?.state === 'delivered') &&
-      intent.runId === previous.ticket
+      (intent.runId === previous.ticket || intent.runId === null)
     ) {
-      // The old reconciler already enqueued this successor. Preserve it rather than duplicate its work.
+      // An old enqueue may have succeeded before its receipt was recorded; never cancel that successor.
+      if (!intent.runId) {
+        if (!(await issues.legacyStarted(repo, previous.ticket))) {
+          if (!(await issues.integrated(repo, round.sha, round.prNumber))) return;
+          await enqueueLegacy(previous.ticket);
+        }
+        db.update(schema.reviewDispatchIntents)
+          .set({ runId: previous.ticket })
+          .where(eq(schema.reviewDispatchIntents.roundId, round.id))
+          .run();
+      }
       const owners = db
         .select()
         .from(schema.reviewPhaseOwners)
@@ -82,26 +93,6 @@ export async function advanceApproval(input: {
         .where(eq(schema.reviewDispatchIntents.roundId, round.id))
         .run();
       return;
-    }
-    if (
-      previous &&
-      previous.ticket !== round.ticket &&
-      previous.sourceRoundId === round.id &&
-      intent?.state === 'dispatching' &&
-      !intent.runId
-    ) {
-      await issues.cancel(repo, previous.ticket);
-      db.update(schema.reviewPhaseOwners)
-        .set({ ticket: round.ticket })
-        .where(
-          and(
-            eq(schema.reviewPhaseOwners.gameId, round.gameId),
-            eq(schema.reviewPhaseOwners.track, round.track),
-            eq(schema.reviewPhaseOwners.phase, next.id),
-            eq(schema.reviewPhaseOwners.ticket, previous.ticket),
-          ),
-        )
-        .run();
     }
     assignPhaseOwner(db, {
       gameId: round.gameId,
