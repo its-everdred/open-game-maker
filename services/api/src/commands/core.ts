@@ -20,7 +20,10 @@ import {
 } from '../review-rounds/answer-guard.js';
 
 export const prefix = '/api/v1';
-const Answer = CommandAnswerBody.extend({ version: z.number().int().positive() });
+const Answer = CommandAnswerBody.extend({
+  version: z.number().int().positive(),
+  change_request: z.boolean().optional(),
+});
 
 function owner(c: import('hono').Context<ApiBindings>): { client: AiurClient; principal: string } {
   const deps = c.get('deps');

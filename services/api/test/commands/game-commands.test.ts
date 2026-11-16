@@ -650,6 +650,9 @@ describe('a registered game’s own Commands', () => {
       () => {},
     );
     expect(getRound(deps.db, ids.game, 'round-id')).toMatchObject({ verdict: 'needs_work', notes: 'Softer edges' });
+    expect(listReviews(deps.db, ids.game)).toEqual([
+      expect.objectContaining({ option_id: 'needs_work', notes: 'Softer edges' }),
+    ]);
   });
 
   it('retains the owning job when a creator answers its review', async () => {
@@ -857,6 +860,21 @@ it('lists and answers core Commands only for the instance owner', async () => {
       body: JSON.stringify({ option_id: 'square', version: 2, review: { likes: ['square'], dislikes: [] } }),
     });
   expect((await request()).status).toBe(200);
+  const changed = await app.request(path, {
+    method: 'POST',
+    headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+    body: JSON.stringify({
+      option_id: 'square',
+      version: 2,
+      change_request: true,
+      review: { likes: [], dislikes: [{ option_id: 'square' }], notes: 'Softer' },
+    }),
+  });
+  expect(changed.status).toBe(200);
+  expect(answerAsCreator).toHaveBeenCalledWith(
+    'd_aiur_1',
+    expect.objectContaining({ response: expect.stringContaining('Softer') }),
+  );
   expect(answerAsCreator).toHaveBeenCalledWith(
     'd_aiur_1',
     expect.objectContaining({

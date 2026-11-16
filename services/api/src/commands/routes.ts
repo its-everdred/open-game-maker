@@ -163,8 +163,15 @@ export default new Hono<ApiBindings>()
     if (review !== undefined) markReviewAnswered(deps.db, game.id, canonical.ticket);
     if (
       review !== undefined &&
-      !tryRecordReview(deps.db, { gameId: game.id, command, optionId: body.option_id, review }, deps.log)
+      !tryRecordReview(
+        deps.db,
+        { gameId: game.id, command, optionId: keyedChange ? 'needs_work' : body.option_id, review: decisionReview! },
+        deps.log,
+      )
     )
       throw new HttpError(503, 'review_ledger_pending');
-    return c.json({ status: 'answered' as const, decision_id: decisionId, option_id: body.option_id }, 200);
+    return c.json(
+      { status: 'answered' as const, decision_id: decisionId, option_id: keyedChange ? 'needs_work' : body.option_id },
+      200,
+    );
   });
