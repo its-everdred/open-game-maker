@@ -182,6 +182,34 @@ describe('games routes', () => {
     expect(
       (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
     ).toBe(200);
+    const sources = Object.fromEntries(
+      ['avif', 'webp', 'png'].map((format) => [
+        format,
+        [{ width: 320, path: `media/ogm-variants/${'a'.repeat(64)}.${format}` }],
+      ]),
+    );
+    writeFileSync(
+      join(directory, '.ogm-display.json'),
+      JSON.stringify({
+        logo: 'media/logo.png',
+        genres: ['puzzle'],
+        images: {
+          'media/thumbnail.png': { width: 640, height: 360, sources },
+          'media/logo.png': { width: 640, height: 360, sources },
+        },
+      }),
+    );
+    expect(await list()).toMatchObject({
+      coverImage: {
+        width: 640,
+        sources: {
+          avif: [
+            { width: 320, path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` },
+          ],
+        },
+      },
+      logoImage: { height: 360 },
+    });
     expect(await list()).toMatchObject({
       lastPlayedAt: expect.any(String),
       choices: { genre: ['puzzle'] },
@@ -190,6 +218,23 @@ describe('games routes', () => {
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
       portraitTrailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-portrait.mp4`,
     });
+    for (const badImage of [
+      { width: 0, height: 360, sources },
+      { width: 640, height: 360, sources: { ...sources, avif: [] } },
+      { width: 640, height: 360, sources: { ...sources, avif: [null] } },
+      { width: 640, height: 360, sources: { ...sources, avif: [{ width: 320, path: '../unsafe.avif' }] } },
+    ]) {
+      writeFileSync(
+        join(directory, '.ogm-display.json'),
+        JSON.stringify({
+          logo: 'media/logo.png',
+          images: { 'media/thumbnail.png': badImage },
+        }),
+      );
+      const game = await list();
+      expect(game).not.toHaveProperty('coverImage');
+      expect(game.coverUrl).toBe(`https://games.example.test/g/${id}/build1/media/thumbnail.png`);
+    }
   });
 
   it('refuses game creation by a player before provisioning', async () => {

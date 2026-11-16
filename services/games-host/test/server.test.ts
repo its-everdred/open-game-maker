@@ -80,6 +80,13 @@ describe('games-host server', () => {
     expect(unknown.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
+  it('serves AVIF display images with immutable caching', async () => {
+    await writeFile(join(build, 'assets', 'image.avif'), 'avif');
+    const response = await app().request('/g/demo/b1/assets/image.avif');
+    expect(response.headers.get('content-type')).toBe('image/avif');
+    expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+  });
+
   it('serves gameplay trailers as MP4 video', async () => {
     await writeFile(join(build, 'trailer.mp4'), 'video');
     const response = await app().request('/g/demo/b1/trailer.mp4');

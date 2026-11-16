@@ -11,6 +11,11 @@ export function GameTrailer({ game, transparentPoster = false }: { game: GameSum
     orientation.addEventListener('change', stopHidden);
     return () => orientation.removeEventListener('change', stopHidden);
   }, [game.portraitTrailerUrl]);
+  const transparent = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E';
+  const posters = game.coverImage?.sources.webp;
+  const poster = transparentPoster
+    ? transparent
+    : (posters?.find((item) => item.width >= 640)?.path ?? posters?.at(-1)?.path ?? game.coverUrl ?? undefined);
   return (
     <>
       {game.portraitTrailerUrl && (
@@ -20,10 +25,7 @@ export function GameTrailer({ game, transparentPoster = false }: { game: GameSum
           controls
           playsInline
           preload="none"
-          poster={
-            game.coverUrl ??
-            (transparentPoster ? 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E' : undefined)
-          }
+          poster={poster}
           aria-label={`${game.title} trailer`}
           src={game.portraitTrailerUrl}
         />
@@ -34,10 +36,7 @@ export function GameTrailer({ game, transparentPoster = false }: { game: GameSum
         controls
         playsInline
         preload="none"
-        poster={
-          game.coverUrl ??
-          (transparentPoster ? 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E' : undefined)
-        }
+        poster={poster}
         aria-label={`${game.title} trailer`}
         src={game.trailerUrl ?? undefined}
       />

@@ -1,6 +1,7 @@
 import { extname } from 'node:path';
 
 const MIME_TYPES: Readonly<Record<string, string>> = {
+  '.avif': 'image/avif',
   '.css': 'text/css; charset=utf-8',
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',

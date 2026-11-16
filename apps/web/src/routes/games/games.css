@@ -363,6 +363,10 @@
     transform 0.5s var(--games-ease);
 }
 
+.game-display-picture {
+  display: contents;
+}
+
 .game-cover,
 .game-cover-image,
 .game-cover-placeholder {

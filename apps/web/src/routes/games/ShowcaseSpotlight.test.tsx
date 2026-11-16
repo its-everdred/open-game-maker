@@ -31,6 +31,28 @@ describe('showcase detail', () => {
     expect(document.querySelector('video.game-trailer-landscape')).toHaveAttribute('src', '/landscape.mp4');
   });
 
+  it('uses the responsive cover beneath a shared trailer without loading the original poster', () => {
+    const sources = Object.fromEntries(
+      ['avif', 'webp', 'png'].map((format) => [
+        format,
+        [
+          { width: 320, path: `/small.${format}` },
+          { width: 640, path: `/large.${format}` },
+        ],
+      ]),
+    );
+    const game = {
+      ...mergeShowcase([])[0]!,
+      coverUrl: '/original.png',
+      trailerUrl: '/trailer.mp4',
+      coverImage: { width: 640, height: 360, sources },
+    } as Parameters<typeof GameTrailer>[0]['game'];
+    const { rerender } = render(<GameTrailer game={game} transparentPoster />);
+    expect(screen.getByLabelText(`${game.title} trailer`).getAttribute('poster')).toMatch(/^data:image\/svg\+xml,/);
+    rerender(<GameTrailer game={game} />);
+    expect(screen.getByLabelText(`${game.title} trailer`)).toHaveAttribute('poster', '/large.webp');
+  });
+
   it('keeps trailer controls and a transparent poster when no cover image exists', () => {
     const game = { ...mergeShowcase([])[0]!, coverUrl: null, trailerUrl: '/landscape.mp4' };
     render(<GameTrailer game={game} transparentPoster />);
