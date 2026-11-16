@@ -1,6 +1,50 @@
 import { and, eq } from 'drizzle-orm';
 import { schema, type Db } from '@ogm/db';
 import type { ReviewTrack } from '@ogm/contracts';
+import type { ReviewRound } from './store.js';
+
+export function otherPhaseInProgress(db: Db, round: ReviewRound): boolean {
+  const owners = db
+    .select()
+    .from(schema.reviewPhaseOwners)
+    .where(eq(schema.reviewPhaseOwners.gameId, round.gameId))
+    .all();
+  const rounds = db.select().from(schema.reviewRounds).where(eq(schema.reviewRounds.gameId, round.gameId)).all();
+  const intents = db
+    .select()
+    .from(schema.reviewDispatchIntents)
+    .where(eq(schema.reviewDispatchIntents.ticket, round.ticket))
+    .all();
+  const activeRework = rounds.some((item) => {
+    if (
+      item.ticket !== round.ticket ||
+      item.verdict !== 'needs_work' ||
+      (item.track === round.track && item.phase === round.phase)
+    )
+      return false;
+    const latest = rounds
+      .filter(
+        (candidate) =>
+          candidate.track === item.track && candidate.phase === item.phase && candidate.ticket === item.ticket,
+      )
+      .every((candidate) => candidate.round <= item.round);
+    return latest && intents.some((intent) => intent.roundId === item.id);
+  });
+  if (activeRework) return true;
+  return owners.some((owner) => {
+    if (
+      owner.ticket !== round.ticket ||
+      !owner.sourceRoundId ||
+      owner.sourceRoundId === round.id ||
+      (owner.track === round.track && owner.phase === round.phase)
+    )
+      return false;
+    const latest = rounds
+      .filter((item) => item.ticket === owner.ticket && item.track === owner.track && item.phase === owner.phase)
+      .sort((a, b) => b.round - a.round)[0];
+    return latest?.verdict !== 'approved';
+  });
+}
 
 export function phaseOwner(db: Db, gameId: string, track: ReviewTrack, phase: string): string | null {
   const stored = db

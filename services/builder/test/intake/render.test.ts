@@ -43,7 +43,7 @@ describe('renderIssue', () => {
     expect(first).toEqual(second);
     expect(first.title).toBe('Add a double jump');
     expect(first.body).toBe(fixture);
-    expect(first.labels).toEqual(['complexity:3', 'feature:gm-j_01JBQ5X7']);
+    expect(first.labels).toEqual(['complexity:3', 'feature:gm-j_01JBQ5X7', 'phase:mock', 'model:low']);
     expect(first.body).not.toContain('not-shipped');
     expect(first.body).not.toContain('@');
   });

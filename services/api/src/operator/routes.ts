@@ -17,9 +17,9 @@ import { OperatorRegisterBody, registerOperatorGame } from './register.js';
 import { PUBLISH_ACTOR, publishArchive } from './publish.js';
 import { reviewStalls } from '../review-rounds/stalls.js';
 import { reconcileStale } from '../review-rounds/heartbeat.js';
-import { reviewAllowsClose } from '../review-rounds/close-gate.js';
+import { reviewAllowsClose, reviewApprovalsSettled } from '../review-rounds/close-gate.js';
 import { phaseOwner } from '../review-rounds/owners.js';
-import { listTracks } from '../review-rounds/tracks.js';
+import { listTracks, reviewCheckout } from '../review-rounds/tracks.js';
 import { reviewDaemonForGame } from '../review-rounds/daemon.js';
 import { ensureCommit } from './ensure-commit.js';
 
@@ -106,10 +106,11 @@ const routes = new Hono<ApiBindings>()
     if (!/^[1-9][0-9]*$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
     const sha = c.req.query('sha');
     if (!sha || !SHA.test(sha)) throw new HttpError(400, 'invalid_sha');
-    await ensureCommit(daemon.checkoutPath, sha);
+    const checkout = await reviewCheckout(daemon.checkoutPath, ticket, daemon.repo);
+    await ensureCommit(checkout, sha);
     // Seed first-phase owners from the committed definitions before deciding that a ticket is untracked.
-    const reviewedTracks = await listTracks(daemon.checkoutPath, game.githubPath, sha);
-    const currentTracks = await listTracks(daemon.checkoutPath, game.githubPath);
+    const reviewedTracks = await listTracks(checkout, game.githubPath, sha);
+    const currentTracks = await listTracks(checkout, game.githubPath);
     for (const track of [...reviewedTracks, ...currentTracks]) {
       const first = track.phases[0];
       if (first) phaseOwner(deps.db, game.id, track, first.id);
@@ -120,13 +121,20 @@ const routes = new Hono<ApiBindings>()
       .where(eq(schema.reviewPhaseOwners.gameId, game.id))
       .all();
     const rounds = deps.db.select().from(schema.reviewRounds).where(eq(schema.reviewRounds.gameId, game.id)).all();
+    const intents = deps.db
+      .select()
+      .from(schema.reviewDispatchIntents)
+      .where(eq(schema.reviewDispatchIntents.ticket, ticket))
+      .all();
     return c.json({
-      allowed: reviewAllowsClose(
-        ticket,
-        game.id,
-        owners.map((owner) => ({ ...owner, status: '' })),
-        rounds,
-      ),
+      allowed:
+        reviewApprovalsSettled(ticket, rounds, intents) &&
+        reviewAllowsClose(
+          ticket,
+          game.id,
+          owners.map((owner) => ({ ...owner, status: '' })),
+          rounds,
+        ),
     });
   })
   .get('/review-health', (c) => {

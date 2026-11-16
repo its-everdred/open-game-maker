@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { BlobHash } from '@ogm/blob-store';
@@ -29,7 +29,15 @@ export default new Hono<ApiBindings>()
         and(
           eq(schema.reviewRounds.gameId, game.id),
           isNull(schema.reviewRounds.verdict),
-          includeGameplay ? undefined : ne(schema.reviewRounds.category, 'gameplay'),
+          includeGameplay
+            ? undefined
+            : or(
+                ne(schema.reviewRounds.category, 'gameplay'),
+                and(
+                  eq(schema.reviewRounds.phase, 'mock'),
+                  sql`NOT EXISTS (SELECT 1 FROM json_each(${schema.reviewRounds.media}) WHERE json_extract(value, '$.kind') = 'build')`,
+                ),
+              ),
         ),
       )
       .all();
@@ -39,7 +47,13 @@ export default new Hono<ApiBindings>()
         const items = await Promise.all(
           media
             .filter(
-              (item) => (item.kind === 'still' || item.kind === 'clip') && /^sha256:[0-9a-f]{64}$/u.test(item.ref),
+              (item) =>
+                (['still', 'clip'].includes(item.kind) ||
+                  (item.kind === 'audio' &&
+                    round.audioVerified &&
+                    round.category === 'sound' &&
+                    round.phase === 'mock')) &&
+                /^sha256:[0-9a-f]{64}$/u.test(item.ref),
             )
             .map(async (item) => ({
               kind: item.kind,
@@ -69,7 +83,8 @@ export default new Hono<ApiBindings>()
     if (
       media.some(
         (item) =>
-          (['still', 'clip'].includes(item.kind) && /^sha256:[0-9a-f]{64}$/u.test(item.ref)) ||
+          ((['still', 'clip'].includes(item.kind) || (item.kind === 'audio' && round.audioVerified)) &&
+            /^sha256:[0-9a-f]{64}$/u.test(item.ref)) ||
           (item.kind === 'build' && item.ref !== ''),
       )
     )
@@ -90,7 +105,11 @@ export default new Hono<ApiBindings>()
     const answer = await parseBody(c, Answer);
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
-    if (!round || round.category === 'gameplay') throw new HttpError(404, 'review_round_not_found');
+    if (
+      !round ||
+      (round.category === 'gameplay' && (JSON.parse(round.media) as Media[]).some((item) => item.kind === 'build'))
+    )
+      throw new HttpError(404, 'review_round_not_found');
     let guard: string | undefined;
     const ok = deps.db.transaction((tx) => {
       const answered = answerRound(tx, game.id, round.id, {

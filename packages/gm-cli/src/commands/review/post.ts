@@ -27,17 +27,32 @@ export const command: GmCommand = {
     const root = realpathSync(workspaceRoot(ctx.cwd));
     const attachments: { index: number; bytes: Buffer; mime: string }[] = [];
     for (const [index, media] of parsed.data.media.entries()) {
-      if ((media.kind !== 'still' && media.kind !== 'clip') || !media.ref.startsWith('file:')) continue;
+      if ((media.kind !== 'still' && media.kind !== 'clip' && media.kind !== 'audio') || !media.ref.startsWith('file:'))
+        continue;
       const path = realpathSync(resolve(ctx.cwd, media.ref.slice(5)));
       const local = relative(root, path);
       if (!local || local === '..' || local.startsWith(`..${sep}`) || local.split(sep).includes('.gm'))
         throw new CommandError('review media must be inside the workspace outside .gm');
-      const mime = media.kind === 'clip' ? 'video/mp4' : /\.png$/iu.test(path) ? 'image/png' : 'image/jpeg';
+      const mime =
+        media.kind === 'clip'
+          ? 'video/mp4'
+          : media.kind === 'audio'
+            ? /\.wav$/iu.test(path)
+              ? 'audio/wav'
+              : /\.mp3$/iu.test(path)
+                ? 'audio/mpeg'
+                : /\.ogg$/iu.test(path)
+                  ? 'audio/ogg'
+                  : 'audio/mp4'
+            : /\.png$/iu.test(path)
+              ? 'image/png'
+              : 'image/jpeg';
       if (
         (media.kind === 'clip' && !/\.mp4$/iu.test(path)) ||
-        (media.kind === 'still' && !/\.(png|jpe?g)$/iu.test(path))
+        (media.kind === 'still' && !/\.(png|jpe?g)$/iu.test(path)) ||
+        (media.kind === 'audio' && !/\.(wav|mp3|ogg|m4a)$/iu.test(path))
       )
-        throw new CommandError('review media must be a PNG, JPEG, or MP4');
+        throw new CommandError('review media must be a PNG, JPEG, MP4, WAV, MP3, OGG, or M4A');
       const stat = statSync(path);
       if (!stat.isFile() || stat.size <= 0 || stat.size > 64 * 1024 * 1024)
         throw new CommandError('invalid review media size');
@@ -55,6 +70,8 @@ export const command: GmCommand = {
       ctx.out(await submitReviewRelay(root, slug, scoped.token, parsed.data, attachments));
       return EXIT.ok;
     }
+    if (parsed.data.media.some((media) => media.kind === 'audio'))
+      throw new CommandError('mock audio requires a ticket-scoped preview credential');
     if (!ctx.blobApi)
       throw new UsageError('no daemon upload configuration', 'run inside a configured worker workspace');
     for (const attachment of attachments) {

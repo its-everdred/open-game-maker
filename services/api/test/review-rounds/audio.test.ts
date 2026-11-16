@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { expect, it } from 'vitest';
-import { isCaptureWithAudio } from '../../src/review-rounds/audio.js';
+import { isCaptureWithAudio, isReviewAudio } from '../../src/review-rounds/audio.js';
 import { makeDeps } from '../helpers.js';
 
 const ffmpegAvailable =
@@ -43,6 +43,21 @@ it.skipIf(!ffmpegAvailable)('checks video and audio streams in the stored captur
     const audible = await deps.blobStore.put(readFileSync(output), 'video/mp4');
     expect(await isCaptureWithAudio(deps.blobStore, audible.hash)).toBe(true);
     expect(await isCaptureWithAudio(deps.blobStore, 'sound.wav')).toBe(false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it.skipIf(!ffmpegAvailable)('checks that mock audio contains a real audio stream (requires ffmpeg)', async () => {
+  const deps = makeDeps();
+  const directory = mkdtempSync(join(tmpdir(), 'ogm-review-sound-'));
+  try {
+    const output = join(directory, 'sound.wav');
+    execFileSync('/usr/bin/ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=duration=0.1', output]);
+    const audio = await deps.blobStore.put(readFileSync(output), 'audio/wav');
+    expect(await isReviewAudio(deps.blobStore, audio.hash)).toBe(true);
+    const invalid = await deps.blobStore.put(Buffer.from('not audio'), 'audio/wav');
+    expect(await isReviewAudio(deps.blobStore, invalid.hash)).toBe(false);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

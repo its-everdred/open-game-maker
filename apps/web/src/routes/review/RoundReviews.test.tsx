@@ -12,6 +12,18 @@ afterEach(() => {
   queryClient.clear();
 });
 
+it('offers playback for an audio mock', () => {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews
+        gameId="game"
+        rounds={[{ id: 'round', ticket: '42', question: null, media: [{ kind: 'audio', url: '/cue.wav' }] }]}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByLabelText('Review audio').getAttribute('src')).toBe('/cue.wav');
+});
+
 it('shows the capture and sends the creator notes without trimming', async () => {
   render(
     <QueryClientProvider client={queryClient}>

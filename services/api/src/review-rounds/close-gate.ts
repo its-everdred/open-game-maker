@@ -1,6 +1,21 @@
 import type { ReviewOwner } from './stalls.js';
 import type { ReviewRound } from './store.js';
 
+export function reviewApprovalsSettled(
+  ticket: string,
+  rounds: readonly ReviewRound[],
+  intents: readonly { roundId: string; state: string }[],
+  exceptRoundId?: string,
+): boolean {
+  return rounds.every(
+    (round) =>
+      round.ticket !== ticket ||
+      round.verdict !== 'approved' ||
+      round.id === exceptRoundId ||
+      intents.some((intent) => intent.roundId === round.id && ['delivered', 'consumed'].includes(intent.state)),
+  );
+}
+
 // A ticket may own more than one phase; every owned phase must have an approved latest round.
 export function reviewAllowsClose(
   ticket: string,

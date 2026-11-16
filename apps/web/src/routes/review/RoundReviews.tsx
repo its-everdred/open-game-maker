@@ -10,7 +10,7 @@ export type Round = {
   id: string;
   ticket: string;
   question: string | null;
-  media: { kind: 'still' | 'clip'; url: string }[];
+  media: { kind: 'still' | 'clip' | 'audio'; url: string }[];
 };
 const key = (gameId: string) => ['game-review-rounds', gameId] as const;
 
@@ -52,6 +52,8 @@ export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round
         <div className="review-deck-playable" key={item.url}>
           {item.kind === 'still' ? (
             <img className="review-deck-media" src={item.url} alt="Review" />
+          ) : item.kind === 'audio' ? (
+            <audio src={item.url} controls aria-label="Review audio" />
           ) : (
             <video
               className="review-deck-media"

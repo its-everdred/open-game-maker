@@ -1,3 +1,4 @@
+import { schema } from '@ogm/db';
 import { expect, it, vi } from 'vitest';
 import { advanceApproval } from '../../src/review-rounds/approval.js';
 import { phaseOwner } from '../../src/review-rounds/owners.js';
@@ -5,13 +6,364 @@ import { answerRound, getRound, postRound } from '../../src/review-rounds/store.
 import { GAME, seedDesignGame } from '../design-decisions/fixtures.js';
 import { makeDeps } from '../helpers.js';
 
-it.each(['art', 'gameplay'] as const)(
-  'creates one %s follow-up, assigns its phase and survives an indeterminate response',
-  async (category) => {
-    const deps = makeDeps();
-    seedDesignGame(deps);
+it('advances mock to build on the same ticket and closes only after the final approval', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const track = {
+    id: 'art',
+    category: 'art' as const,
+    phases: [
+      { id: 'mock', ticket: '42', template: 'mock' },
+      { id: 'build', template: 'Build the approved image' },
+    ],
+  };
+  const sha = 'a'.repeat(40);
+  postRound(deps.db, {
+    id: 'first',
+    gameId: GAME,
+    track: 'art',
+    phase: 'mock',
+    effort: 'low',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha,
+    media: '[{"kind":"still","ref":"sha256:abc"}]',
+    postedAt: '2026-01-01',
+  });
+  answerRound(deps.db, GAME, 'first', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
+  let reason = '';
+  const delivery = {
+    rework: vi.fn(async (_ticket: string, body: string) => {
+      reason = body;
+    }),
+    findMarker: vi.fn(async () => ({ runId: 'run-1' })),
+  };
+  const input = {
+    db: deps.db,
+    round: getRound(deps.db, GAME, 'first')!,
+    track,
+    repo: 'owner/repo',
+    issues,
+    delivery,
+    enqueueLegacy: vi.fn(),
+    now: () => '2026-01-03',
+  };
+  await advanceApproval(input);
+  await advanceApproval(input);
+  expect(issues.setFidelity).toHaveBeenCalledOnce();
+  expect(issues.setFidelity).toHaveBeenCalledWith('owner/repo', '42', 'build', 'xhigh');
+  expect(delivery.rework).toHaveBeenCalledOnce();
+  expect(reason).toContain('Build the approved image');
+  expect(reason).toContain(sha);
+  expect(reason).toContain('sha256:abc');
+  expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('42');
+  expect(issues.close).not.toHaveBeenCalled();
+  postRound(deps.db, {
+    id: 'last',
+    gameId: GAME,
+    track: 'art',
+    phase: 'build',
+    effort: 'xhigh',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha,
+    media: '[]',
+    postedAt: '2026-01-04',
+  });
+  answerRound(deps.db, GAME, 'last', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-05' });
+  await advanceApproval({ ...input, round: getRound(deps.db, GAME, 'last')! });
+  expect(issues.close).toHaveBeenCalledWith('owner/repo', '42');
+});
+
+it('does not close a ticket with another owned unapproved phase', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const track = { id: 'art', category: 'art' as const, phases: [{ id: 'mock', ticket: '42', template: 'mock' }] };
+  phaseOwner(
+    deps.db,
+    GAME,
+    { id: 'sound', category: 'sound', phases: [{ id: 'mock', ticket: '42', template: 'mock' }] },
+    'mock',
+  );
+  postRound(deps.db, {
+    id: 'first',
+    gameId: GAME,
+    track: 'art',
+    phase: 'mock',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: '2026-01-01',
+  });
+  answerRound(deps.db, GAME, 'first', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
+  await advanceApproval({
+    db: deps.db,
+    round: getRound(deps.db, GAME, 'first')!,
+    track,
+    repo: 'owner/repo',
+    issues,
+    delivery: { rework: vi.fn(), findMarker: vi.fn() },
+    enqueueLegacy: vi.fn(),
+    now: () => '2026-01-03',
+  });
+  expect(issues.close).not.toHaveBeenCalled();
+});
+
+it('keeps legacy track phase IDs while assigning their next fidelity rung', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const track = {
+    id: 'art',
+    category: 'art' as const,
+    phases: [
+      { id: 'concept', ticket: '42', template: 'concept' },
+      { id: 'refined', template: 'refine' },
+    ],
+  };
+  postRound(deps.db, {
+    id: 'first',
+    gameId: GAME,
+    track: 'art',
+    phase: 'concept',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: '2026-01-01',
+  });
+  answerRound(deps.db, GAME, 'first', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
+  const delivery = { rework: vi.fn(), findMarker: vi.fn().mockResolvedValue({ runId: 'run-1' }) };
+  await advanceApproval({
+    db: deps.db,
+    round: getRound(deps.db, GAME, 'first')!,
+    track,
+    repo: 'owner/repo',
+    issues,
+    delivery,
+    enqueueLegacy: vi.fn(),
+    now: () => '2026-01-03',
+  });
+  expect(issues.setFidelity).toHaveBeenCalledWith('owner/repo', '42', 'prototype', 'medium');
+  expect(phaseOwner(deps.db, GAME, track, 'refined')).toBe('42');
+});
+
+it('serializes competing transitions on a shared ticket', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const art = {
+    id: 'art',
+    category: 'art' as const,
+    phases: [
+      { id: 'mock', ticket: '42', template: 'mock' },
+      { id: 'build', template: 'build' },
+    ],
+  };
+  const sound = {
+    id: 'sound',
+    category: 'sound' as const,
+    phases: [
+      { id: 'mock', ticket: '42', template: 'mock' },
+      { id: 'prototype', template: 'prototype' },
+    ],
+  };
+  const add = (id: string, track: 'art' | 'sound', phase: string) => {
     postRound(deps.db, {
-      id: 'round-1',
+      id,
+      gameId: GAME,
+      track,
+      phase,
+      category: track,
+      round: 1,
+      ticket: '42',
+      sha: 'a'.repeat(40),
+      media: '[]',
+      postedAt: '2026-01-01',
+    });
+    answerRound(deps.db, GAME, id, { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
+  };
+  add('a', 'art', 'mock');
+  add('s', 'sound', 'mock');
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
+  const delivery = { rework: vi.fn(), findMarker: vi.fn().mockResolvedValue({ runId: 'run-1' }) };
+  const input = { db: deps.db, repo: 'owner/repo', issues, delivery, enqueueLegacy: vi.fn(), now: () => '2026-01-03' };
+  await advanceApproval({ ...input, round: getRound(deps.db, GAME, 'a')!, track: art });
+  await advanceApproval({ ...input, round: getRound(deps.db, GAME, 's')!, track: sound });
+  expect(issues.setFidelity).toHaveBeenCalledTimes(1);
+  add('b', 'art', 'build');
+  await advanceApproval({ ...input, round: getRound(deps.db, GAME, 's')!, track: sound });
+  expect(issues.setFidelity).toHaveBeenLastCalledWith('owner/repo', '42', 'prototype', 'medium');
+});
+
+it.each(['pending', 'queued', 'ambiguous'])('reconciles a legacy follow-up (%s)', async (state) => {
+  const queued = state === 'queued';
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const track = {
+    id: 'art',
+    category: 'art' as const,
+    phases: [
+      { id: 'concept', ticket: '42', template: 'art' },
+      { id: 'build', template: 'build' },
+    ],
+  };
+  postRound(deps.db, {
+    id: 'r',
+    gameId: GAME,
+    track: 'art',
+    phase: 'concept',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: '2026-01-01',
+  });
+  answerRound(deps.db, GAME, 'r', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
+  phaseOwner(deps.db, GAME, track, 'concept');
+  deps.db
+    .insert(schema.reviewPhaseOwners)
+    .values({ gameId: GAME, track: 'art', phase: 'build', ticket: '77', sourceRoundId: 'r' })
+    .run();
+  deps.db
+    .insert(schema.reviewDispatchIntents)
+    .values({ roundId: 'r', ticket: '42', state: 'dispatching', createdAt: '2026-01-02', runId: queued ? '77' : null })
+    .run();
+  const issues = {
+    setFidelity: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
+    integrated: vi.fn().mockResolvedValue(true),
+  };
+  if (state === 'ambiguous') issues.legacyStarted.mockResolvedValue(true);
+  const enqueueLegacy = vi.fn();
+  const delivery = { rework: vi.fn(), findMarker: vi.fn().mockResolvedValue({ runId: 'run-1' }) };
+  await advanceApproval({
+    db: deps.db,
+    round: getRound(deps.db, GAME, 'r')!,
+    track,
+    repo: 'owner/repo',
+    issues,
+    delivery,
+    enqueueLegacy,
+    now: () => '2026-01-03',
+  });
+  expect(enqueueLegacy).toHaveBeenCalledTimes(state === 'pending' ? 1 : 0);
+  expect(issues.cancel).not.toHaveBeenCalled();
+  expect(delivery.rework).not.toHaveBeenCalled();
+  expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('77');
+});
+
+it('defers a rejected track while another track has an unfinished phase', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  postRound(deps.db, {
+    id: 's',
+    gameId: GAME,
+    track: 'sound',
+    phase: 'mock',
+    category: 'sound',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: '2026-01-01',
+  });
+  answerRound(deps.db, GAME, 's', { verdict: 'needs_work', notes: 'fix', source: 'preview', at: '2026-01-02' });
+  postRound(deps.db, {
+    id: 'a',
+    gameId: GAME,
+    track: 'art',
+    phase: 'mock',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: '2026-01-01',
+  });
+  answerRound(deps.db, GAME, 'a', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
+  deps.db
+    .insert(schema.reviewPhaseOwners)
+    .values({ gameId: GAME, track: 'art', phase: 'build', ticket: '42', sourceRoundId: 'a' })
+    .run();
+  const { otherPhaseInProgress } = await import('../../src/review-rounds/owners.js');
+  expect(otherPhaseInProgress(deps.db, getRound(deps.db, GAME, 's')!)).toBe(true);
+});
+
+it('waits for an initial-phase rework on another shared track', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const base = {
+    gameId: GAME,
+    phase: 'mock',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: '2026-01-01',
+  };
+  postRound(deps.db, { ...base, id: 'a', track: 'art', category: 'art' });
+  postRound(deps.db, { ...base, id: 's', track: 'sound', category: 'sound' });
+  answerRound(deps.db, GAME, 'a', { verdict: 'needs_work', notes: 'fix', source: 'preview', at: '2026-01-02' });
+  answerRound(deps.db, GAME, 's', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
+  deps.db
+    .insert(schema.reviewDispatchIntents)
+    .values({ roundId: 'a', ticket: '42', state: 'consumed', createdAt: '2026-01-02' })
+    .run();
+  const { otherPhaseInProgress } = await import('../../src/review-rounds/owners.js');
+  expect(otherPhaseInProgress(deps.db, getRound(deps.db, GAME, 's')!)).toBe(true);
+});
+
+it('keeps an already queued legacy successor from closing over another pending approval', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const track = {
+    id: 'art',
+    category: 'art' as const,
+    phases: [
+      { id: 'concept', ticket: '42', template: 'art' },
+      { id: 'build', template: 'build' },
+    ],
+  };
+  for (const [id, category] of [
+    ['a', 'art'],
+    ['s', 'sound'],
+  ] as const) {
+    postRound(deps.db, {
+      id,
       gameId: GAME,
       track: category,
       phase: 'concept',
@@ -20,272 +372,48 @@ it.each(['art', 'gameplay'] as const)(
       ticket: '42',
       sha: 'a'.repeat(40),
       media: '[]',
-      postedAt: '2026-01-01T00:00:00Z',
+      postedAt: '2026-01-01',
     });
-    answerRound(deps.db, GAME, 'round-1', {
-      verdict: 'approved',
-      notes: null,
-      source: 'preview',
-      at: '2026-01-01T01:00:00Z',
-    });
-    const round = getRound(deps.db, GAME, 'round-1')!;
-    const track = {
-      id: category,
-      category,
-      phases: [
-        { id: 'concept', ticket: '42', template: 'concept' },
-        { id: 'build', template: 'build' },
-      ],
-    };
-    let created = 0;
-    let ticket: string | null = null;
-    const ensureFollowup = vi.fn(
-      async (_repo: string, _slug: string, marker: string, issue: { title: string; body: string }) => {
-        expect(issue.body).toContain('Approved review round: round-1');
-        expect(issue.body).toContain(marker);
-        if (category === 'gameplay') expect(issue.body).toContain('gm preview build');
-        else expect(issue.title).toContain('asset pack');
-        if (!ticket) {
-          ticket = '77';
-          created += 1;
-          throw new Error('response lost');
-        }
-        return ticket;
-      },
-    );
-    const close = vi.fn(async () => {});
-    const enqueueTodo = vi.fn(async () => {});
-    const input = {
-      db: deps.db,
-      round,
-      track,
-      repo: 'owner/repo',
-      slug: 'game',
-      issues: {
-        ensureFollowup,
-        close,
-        merged: vi.fn().mockResolvedValue(true),
-        integrated: vi.fn().mockResolvedValue(true),
-      },
-      client: { enqueueTodo },
-      now: () => '2026-01-01T02:00:00Z',
-    };
-    await expect(advanceApproval(input)).rejects.toThrow('response lost');
-    await advanceApproval(input);
-    await advanceApproval(input);
-    expect(created).toBe(1);
-    expect(enqueueTodo).toHaveBeenCalledOnce();
-    expect(close).toHaveBeenCalledOnce();
-    expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('77');
-  },
-);
-
-it('seeds the initial owner once and does not preassign later phases', () => {
-  const deps = makeDeps();
-  seedDesignGame(deps);
-  const track = {
-    id: 'art',
-    category: 'art' as const,
-    phases: [
-      { id: 'concept', ticket: '42', template: 'concept' },
-      { id: 'build', ticket: '99', template: 'build' },
-    ],
-  };
-  expect(phaseOwner(deps.db, GAME, track, 'concept')).toBe('42');
-  expect(phaseOwner(deps.db, GAME, { ...track, phases: [{ ...track.phases[0]!, ticket: '43' }] }, 'concept')).toBe(
-    '42',
+    answerRound(deps.db, GAME, id, { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-02' });
+  }
+  phaseOwner(deps.db, GAME, track, 'concept');
+  phaseOwner(
+    deps.db,
+    GAME,
+    { id: 'sound', category: 'sound', phases: [{ id: 'concept', ticket: '42', template: 'sound' }] },
+    'concept',
   );
-  expect(phaseOwner(deps.db, GAME, track, 'build')).toBeNull();
-});
-
-it('waits for an approved commit without a PR to reach main before starting the next phase', async () => {
-  const deps = makeDeps();
-  seedDesignGame(deps);
-  postRound(deps.db, {
-    id: 'r',
-    gameId: GAME,
-    track: 'art',
-    phase: 'concept',
-    category: 'art',
-    round: 1,
-    ticket: '42',
-    sha: 'a'.repeat(40),
-    media: '[]',
-    postedAt: '2026-01-01T00:00:00Z',
-  });
-  answerRound(deps.db, GAME, 'r', { verdict: 'approved', notes: null, source: 'command', at: '2026-01-01T01:00:00Z' });
-  const track = {
-    id: 'art',
-    category: 'art' as const,
-    phases: [
-      { id: 'concept', ticket: '42', template: 'art' },
-      { id: 'build', template: 'build' },
-    ],
-  };
+  deps.db
+    .insert(schema.reviewPhaseOwners)
+    .values({ gameId: GAME, track: 'art', phase: 'build', ticket: '77', sourceRoundId: 'a' })
+    .run();
+  deps.db
+    .insert(schema.reviewDispatchIntents)
+    .values({ roundId: 'a', ticket: '42', state: 'dispatching', runId: '77', createdAt: '2026-01-02' })
+    .run();
   const issues = {
-    ensureFollowup: vi.fn().mockResolvedValue('77'),
+    setFidelity: vi.fn(),
     close: vi.fn(),
-    merged: vi.fn(),
-    integrated: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
-  };
-  const client = { enqueueTodo: vi.fn() };
-  const input = {
-    db: deps.db,
-    round: getRound(deps.db, GAME, 'r')!,
-    track,
-    repo: 'owner/repo',
-    slug: 'game',
-    issues,
-    client,
-    now: () => '2026-01-01T02:00:00Z',
-  };
-  await advanceApproval(input);
-  expect(issues.ensureFollowup).toHaveBeenCalledOnce();
-  expect(client.enqueueTodo).not.toHaveBeenCalled();
-  expect(issues.close).not.toHaveBeenCalled();
-  await advanceApproval(input);
-  expect(issues.integrated).toHaveBeenCalledWith('owner/repo', 'a'.repeat(40));
-  expect(client.enqueueTodo).toHaveBeenCalledOnce();
-});
-
-it('does not enqueue the follow-up twice when closing the old ticket needs a retry', async () => {
-  const deps = makeDeps();
-  seedDesignGame(deps);
-  postRound(deps.db, {
-    id: 'r',
-    gameId: GAME,
-    track: 'art',
-    phase: 'concept',
-    category: 'art',
-    round: 1,
-    ticket: '42',
-    sha: 'a'.repeat(40),
-    media: '[]',
-    postedAt: '2026-01-01T00:00:00Z',
-  });
-  answerRound(deps.db, GAME, 'r', { verdict: 'approved', notes: null, source: 'command', at: '2026-01-01T01:00:00Z' });
-  const track = {
-    id: 'art',
-    category: 'art' as const,
-    phases: [
-      { id: 'concept', ticket: '42', template: 'art' },
-      { id: 'build', template: 'build' },
-    ],
-  };
-  const issues = {
-    ensureFollowup: vi.fn().mockResolvedValue('77'),
-    close: vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValue(undefined),
-    merged: vi.fn(),
+    cancel: vi.fn(),
+    legacyStarted: vi.fn().mockResolvedValue(false),
     integrated: vi.fn().mockResolvedValue(true),
   };
-  const client = { enqueueTodo: vi.fn() };
   const input = {
     db: deps.db,
-    round: getRound(deps.db, GAME, 'r')!,
+    round: getRound(deps.db, GAME, 'a')!,
     track,
     repo: 'owner/repo',
-    slug: 'game',
     issues,
-    client,
-    now: () => '2026-01-01T02:00:00Z',
-  };
-  await expect(advanceApproval(input)).rejects.toThrow('unavailable');
-  await advanceApproval(input);
-  expect(client.enqueueTodo).toHaveBeenCalledOnce();
-  expect(issues.close).toHaveBeenCalledTimes(2);
-});
-
-it('keeps an owner open while another assigned phase is unapproved', async () => {
-  const deps = makeDeps();
-  seedDesignGame(deps);
-  const first = {
-    id: 'first',
-    gameId: GAME,
-    track: 'art',
-    phase: 'concept',
-    category: 'art' as const,
-    round: 1,
-    ticket: '42',
-    sha: 'a'.repeat(40),
-    media: '[]',
-    postedAt: '2026-01-01T00:00:00Z',
-  };
-  postRound(deps.db, first);
-  answerRound(deps.db, GAME, first.id, {
-    verdict: 'approved',
-    notes: null,
-    source: 'preview',
-    at: '2026-01-01T01:00:00Z',
-  });
-  const track = { id: 'art', category: 'art' as const, phases: [{ id: 'concept', ticket: '42', template: 'concept' }] };
-  const other = { id: 'sound', category: 'sound' as const, phases: [{ id: 'cue', ticket: '42', template: 'cue' }] };
-  phaseOwner(deps.db, GAME, other, 'cue');
-  const close = vi.fn();
-  await advanceApproval({
-    db: deps.db,
-    round: getRound(deps.db, GAME, 'first')!,
-    track,
-    repo: 'owner/repo',
-    slug: 'game',
-    issues: {
-      ensureFollowup: vi.fn(),
-      close,
-      merged: vi.fn().mockResolvedValue(true),
-      integrated: vi.fn().mockResolvedValue(true),
-    },
-    client: { enqueueTodo: vi.fn() },
-    now: () => '2026-01-01T02:00:00Z',
-  });
-  expect(close).not.toHaveBeenCalled();
-});
-
-it('files the follow-up immediately and queues it after the approved PR merges', async () => {
-  const deps = makeDeps();
-  seedDesignGame(deps);
-  postRound(deps.db, {
-    id: 'r',
-    gameId: GAME,
-    track: 'art',
-    phase: 'concept',
-    category: 'art',
-    round: 1,
-    ticket: '42',
-    prNumber: 8,
-    sha: 'a'.repeat(40),
-    media: '[]',
-    postedAt: '2026-01-01T00:00:00Z',
-  });
-  answerRound(deps.db, GAME, 'r', { verdict: 'approved', notes: null, source: 'preview', at: '2026-01-01T01:00:00Z' });
-  const track = {
-    id: 'art',
-    category: 'art' as const,
-    phases: [
-      { id: 'concept', ticket: '42', template: 'concept' },
-      { id: 'build', template: 'build' },
-    ],
-  };
-  const issues = {
-    ensureFollowup: vi.fn().mockResolvedValue('77'),
-    close: vi.fn(),
-    merged: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
-    integrated: vi.fn(),
-  };
-  const client = { enqueueTodo: vi.fn() };
-  const input = {
-    db: deps.db,
-    round: getRound(deps.db, GAME, 'r')!,
-    track,
-    repo: 'owner/repo',
-    slug: 'game',
-    issues,
-    client,
-    now: () => 'now',
+    delivery: { rework: vi.fn(), findMarker: vi.fn() },
+    enqueueLegacy: vi.fn(),
+    now: () => '2026-01-03',
   };
   await advanceApproval(input);
-  expect(issues.ensureFollowup).toHaveBeenCalledOnce();
-  expect(client.enqueueTodo).not.toHaveBeenCalled();
-  expect(phaseOwner(deps.db, GAME, track, 'build')).toBe('77');
+  expect(issues.close).not.toHaveBeenCalled();
+  deps.db
+    .insert(schema.reviewDispatchIntents)
+    .values({ roundId: 's', ticket: '42', state: 'consumed', createdAt: '2026-01-02' })
+    .run();
   await advanceApproval(input);
-  expect(issues.ensureFollowup).toHaveBeenCalledOnce();
-  expect(client.enqueueTodo).toHaveBeenCalledWith(['77']);
+  expect(issues.close).toHaveBeenCalledWith('owner/repo', '42');
 });

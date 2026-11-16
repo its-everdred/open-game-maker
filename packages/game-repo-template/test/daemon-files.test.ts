@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -79,7 +79,7 @@ describe('after_create hook', () => {
   const servers: Server[] = [];
   afterEach(() => servers.splice(0).forEach((server) => server.close()));
 
-  function gameRepo(): string {
+  function gameRepo(stalePack = false, conflicting = false): string {
     const work = mkdtempSync(join(tmpdir(), 'ogm-hook-src-'));
     for (const file of renderRepoTemplate('game-3d@1', { gameId: 'g1', owner: 'o', visibility: 'private' }, work)
       .files) {
@@ -88,6 +88,12 @@ describe('after_create hook', () => {
       if (file.mode === '120000') execFileSync('ln', ['-s', file.content, path]);
       else writeFileSync(path, file.content);
     }
+    if (stalePack)
+      for (const dir of ['.claude', '.codex', '.agents']) rmSync(join(work, dir), { recursive: true, force: true });
+    if (conflicting) {
+      rmSync(join(work, '.codex/skills/gm-prototype'), { force: true });
+      execFileSync('ln', ['-s', '../../attacker', join(work, '.codex/skills/gm-prototype')]);
+    }
     const git = (...args: string[]) => execFileSync('git', args, { cwd: work, stdio: 'pipe' });
     git('init', '-q', '-b', 'main');
     git('add', '-A');
@@ -95,7 +101,7 @@ describe('after_create hook', () => {
     return work;
   }
 
-  async function runHook(env: Record<string, string>) {
+  async function runHook(env: Record<string, string>, stalePack = false, conflicting = false) {
     const dir = mkdtempSync(join(tmpdir(), 'ogm-hook-ws-'));
     const secretFile = join(mkdtempSync(join(tmpdir(), 'ogm-hook-secret-')), 'hook-secret');
     writeFileSync(secretFile, SECRET);
@@ -106,7 +112,7 @@ describe('after_create hook', () => {
       env: {
         PATH: HOOK_PATH,
         HOME: dir,
-        THIS_REPOSITORY_URL: gameRepo(),
+        THIS_REPOSITORY_URL: gameRepo(stalePack, conflicting),
         THIS_BASE_BRANCH: 'main',
         AIUR_HOOK_TICKET_IDENTIFIER: '12',
         OGM_HOOK_SECRET_FILE: secretFile,
@@ -128,7 +134,7 @@ describe('after_create hook', () => {
 
   it('keeps the clone and marks the bundle missing when the API is down', async () => {
     const { dir, result } = await runHook({ OGM_INTERNAL_URL: 'http://127.0.0.1:9' });
-    expect(result.status).toBe(0);
+    expect(result.status).not.toBe(0);
     expect(execFileSync('git', ['branch', '--show-current'], { cwd: dir, encoding: 'utf8' }).trim()).toBe('aiur/12');
     expect(readFileSync(join(dir, '.gm/context/bundle.missing'), 'utf8')).toBe('bundle unavailable\n');
     expect(existsSync(join(dir, '.gm/context/bundle.json'))).toBe(false);
@@ -237,6 +243,141 @@ describe('after_create hook', () => {
       'aiur/12-double-jump',
     );
     expect(execFileSync('git', ['status', '--short', '--', '.gm'], { cwd: dir, encoding: 'utf8' })).toBe('');
+  });
+
+  it('refreshes a same-version feature pack missing gm-prototype', async () => {
+    const pack = mkdtempSync(join(tmpdir(), 'ogm-hook-prototype-'));
+    mkdirSync(join(pack, 'gm-prototype'));
+    writeFileSync(join(pack, 'gm-prototype/SKILL.md'), 'prototype\n');
+    const tgz = execFileSync('tar', ['-czf', '-', '-C', pack, 'gm-prototype']);
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle')
+        res.end(
+          JSON.stringify({ v: 1, kind: 'feature', skillPackVersion: '0.0.0', skillPackUrl: `${base}/skills.tgz` }),
+        );
+      else if (req.url === '/skills.tgz') res.end(tgz);
+      else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const { dir, result } = await runHook({ OGM_INTERNAL_URL: base }, true);
+    expect(result.status).toBe(0);
+    expect(readFileSync(join(dir, '.claude/skills/gm-prototype/SKILL.md'), 'utf8')).toBe('prototype\n');
+    expect(readFileSync(join(dir, '.codex/skills/gm-prototype/SKILL.md'), 'utf8')).toBe('prototype\n');
+    expect(readFileSync(join(dir, '.agents/skills/gm-prototype/SKILL.md'), 'utf8')).toBe('prototype\n');
+    expect(readFileSync(join(dir, '.gm/context/design.missing'), 'utf8')).toBe('design snapshot unavailable\n');
+  });
+
+  it('retries a missing feature skill in the retained workspace', async () => {
+    const pack = mkdtempSync(join(tmpdir(), 'ogm-hook-retry-'));
+    mkdirSync(join(pack, 'gm-prototype'));
+    writeFileSync(join(pack, 'gm-prototype/SKILL.md'), 'prototype\n');
+    const tgz = execFileSync('tar', ['-czf', '-', '-C', pack, 'gm-prototype']);
+    let ready = false;
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle')
+        res.end(
+          JSON.stringify({ v: 1, kind: 'feature', skillPackVersion: '0.0.0', skillPackUrl: `${base}/missing.tgz` }),
+        );
+      else if (req.url === '/missing.tgz' && ready) res.end(tgz);
+      else if (req.url === '/internal/jobs/by-ticket/12/design')
+        res.end(JSON.stringify({ rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } }));
+      else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const { dir, secretFile, result } = await runHook({ OGM_INTERNAL_URL: base }, true);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('required gm-prototype skill is unavailable');
+    const hook = (parse(renderDaemonFiles().hooks) as { before_run: string }).before_run;
+    mkdirSync(join(dir, '.claude/skills/gm-prototype'), { recursive: true });
+    writeFileSync(join(dir, '.claude/skills/gm-prototype/SKILL.md'), 'rogue\n');
+    const runAgain = () =>
+      spawn('bash', ['-c', hook], {
+        cwd: dir,
+        env: {
+          PATH: HOOK_PATH,
+          OGM_INTERNAL_URL: base,
+          OGM_HOOK_SECRET_FILE: secretFile,
+          AIUR_HOOK_TICKET_IDENTIFIER: '12',
+        },
+      });
+    let child = runAgain();
+    expect(await new Promise<number | null>((resolve) => child.on('close', resolve))).not.toBe(0);
+    expect(existsSync(join(dir, '.gm/context/bundle.missing'))).toBe(true);
+    ready = true;
+    child = runAgain();
+    expect(await new Promise<number | null>((resolve) => child.on('close', resolve))).toBe(0);
+    expect(readFileSync(join(dir, '.agents/skills/gm-prototype/SKILL.md'), 'utf8')).toBe('prototype\n');
+  });
+
+  it('refuses conflicting skill discovery links in a game repository', async () => {
+    const pack = mkdtempSync(join(tmpdir(), 'ogm-hook-conflict-'));
+    mkdirSync(join(pack, 'gm-prototype'));
+    writeFileSync(join(pack, 'gm-prototype/SKILL.md'), 'prototype\n');
+    const tgz = execFileSync('tar', ['-czf', '-', '-C', pack, 'gm-prototype']);
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle')
+        res.end(
+          JSON.stringify({ v: 1, kind: 'feature', skillPackVersion: '0.0.0', skillPackUrl: `${base}/skills.tgz` }),
+        );
+      else if (req.url === '/skills.tgz') res.end(tgz);
+      else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const { result } = await runHook({ OGM_INTERNAL_URL: base }, false, true);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('unsafe skill discovery link');
+  });
+
+  it('retries an unavailable bundle before starting the retained workspace', async () => {
+    const pack = mkdtempSync(join(tmpdir(), 'ogm-hook-bundle-retry-'));
+    mkdirSync(join(pack, 'gm-prototype'));
+    writeFileSync(join(pack, 'gm-prototype/SKILL.md'), 'prototype\n');
+    const tgz = execFileSync('tar', ['-czf', '-', '-C', pack, 'gm-prototype']);
+    let ready = false;
+    const blob = 'a_00000000-0000-4000-8000-000000000001';
+    const base = await api((req, res) => {
+      if (ready && req.url === '/internal/jobs/by-ticket/12/bundle')
+        res.end(
+          JSON.stringify({
+            v: 1,
+            kind: 'feature',
+            skillPackVersion: '0.0.0',
+            skillPackUrl: `${base}/skills.tgz`,
+            attachments: [{ blob, path: `.gm/inbox/attachments/${blob}-notes.md` }],
+          }),
+        );
+      else if (ready && req.url === '/skills.tgz') res.end(tgz);
+      else if (ready && req.url === '/internal/jobs/by-ticket/12/design')
+        res.end(JSON.stringify({ rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } }));
+      else if (ready && req.url === `/internal/jobs/by-ticket/12/attachments/${blob}`) res.end('creator input');
+      else {
+        res.statusCode = 503;
+        res.end();
+      }
+    });
+    const { dir, secretFile } = await runHook({ OGM_INTERNAL_URL: base }, true);
+    expect(existsSync(join(dir, '.gm/context/bundle.json'))).toBe(false);
+    ready = true;
+    const hook = (parse(renderDaemonFiles().hooks) as { before_run: string }).before_run;
+    const child = spawn('bash', ['-c', hook], {
+      cwd: dir,
+      env: {
+        PATH: HOOK_PATH,
+        OGM_INTERNAL_URL: base,
+        OGM_HOOK_SECRET_FILE: secretFile,
+        AIUR_HOOK_TICKET_IDENTIFIER: '12',
+      },
+    });
+    expect(await new Promise<number | null>((resolve) => child.on('close', resolve))).toBe(0);
+    expect(readFileSync(join(dir, '.agents/skills/gm-prototype/SKILL.md'), 'utf8')).toBe('prototype\n');
+    expect(readFileSync(join(dir, `.gm/inbox/attachments/${blob}-notes.md`), 'utf8')).toBe('creator input');
+    expect(existsSync(join(dir, '.gm/context/design.json'))).toBe(true);
   });
 
   // Acceptance (#222): the creator's files are in the workspace before the worker starts, and a bundle entry that

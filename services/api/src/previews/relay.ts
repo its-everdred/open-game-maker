@@ -16,7 +16,7 @@ import { hookPreviewToken } from '../internal/bundle.js';
 import { createPreview } from './store.js';
 import { submitRelayedReview } from '../review-rounds/relay.js';
 import { reviewDaemonForGame } from '../review-rounds/daemon.js';
-import { readTrack } from '../review-rounds/tracks.js';
+import { readTrack, reviewCheckout } from '../review-rounds/tracks.js';
 import { phaseOwner } from '../review-rounds/owners.js';
 import { submitRound } from '../review-rounds/store.js';
 import { withArtifactMutation } from '../builds/artifact-lock.js';
@@ -157,7 +157,12 @@ async function processRequest(
         if (!submission.success || !Array.isArray(attachments)) throw new Error('invalid_request');
         const daemon = reviewDaemonForGame(deps.db, game.id);
         if (!daemon || !game.githubPath) throw new Error('invalid_request');
-        const track = await readTrack(daemon.checkoutPath, game.githubPath, data.sha, submission.data.track);
+        const track = await readTrack(
+          await reviewCheckout(daemon.checkoutPath, submission.data.ticket, daemon.repo),
+          game.githubPath,
+          data.sha,
+          submission.data.track,
+        );
         if (
           track.category !== submission.data.category ||
           !track.phases.some((phase) => phase.id === submission.data.phase) ||
@@ -177,8 +182,12 @@ async function processRequest(
           const item = submission.data.media[index];
           if (
             !item ||
-            (item.kind !== 'still' && item.kind !== 'clip') ||
-            !(item.kind === 'clip' ? mime === 'video/mp4' : mime === 'image/png' || mime === 'image/jpeg')
+            (item.kind !== 'still' && item.kind !== 'clip' && item.kind !== 'audio') ||
+            !(item.kind === 'clip'
+              ? mime === 'video/mp4'
+              : item.kind === 'audio'
+                ? ['audio/wav', 'audio/mpeg', 'audio/ogg', 'audio/mp4'].includes(mime)
+                : mime === 'image/png' || mime === 'image/jpeg')
           )
             throw new Error('invalid_request');
           const file = await openWithin(join(dir, `${filename.slice(0, -5)}.${index}.media`), dir, constants.O_RDONLY);
@@ -203,7 +212,8 @@ async function processRequest(
         if (staged.length === 0) {
           round = await submitRelayedReview(deps, data.slug, `${game.githubOwner}/${game.githubRepo}`, data.submission);
         } else {
-          if (submission.data.category === 'gameplay') throw new Error('invalid_request');
+          if (submission.data.category === 'gameplay' && submission.data.phase !== 'mock')
+            throw new Error('invalid_request');
           round = await withArtifactMutation(async () => {
             const overlay = {
               ...deps.blobStore,
@@ -237,10 +247,11 @@ async function processRequest(
               data.slug,
               `${game.githubOwner}/${game.githubRepo}`,
               data.submission,
-              async (_deps, gameId, value) => {
+              new Set(staged.filter((item) => item.mime.startsWith('audio/')).map((item) => item.hash)),
+              async (_deps, gameId, value, effort, audioVerified) => {
                 try {
                   deps.db.transaction((tx) => {
-                    throw new Rollback(submitRound(tx, gameId, value));
+                    throw new Rollback(submitRound(tx, gameId, value, effort, audioVerified));
                   });
                 } catch (error) {
                   if (error instanceof Rollback) return error.result;
@@ -255,7 +266,9 @@ async function processRequest(
               data.slug,
               `${game.githubOwner}/${game.githubRepo}`,
               data.submission,
-              async (_deps, gameId, value) => submitRound(deps.db, gameId, value),
+              new Set(staged.filter((item) => item.mime.startsWith('audio/')).map((item) => item.hash)),
+              async (_deps, gameId, value, effort, audioVerified) =>
+                submitRound(deps.db, gameId, value, effort, audioVerified),
             );
           });
         }

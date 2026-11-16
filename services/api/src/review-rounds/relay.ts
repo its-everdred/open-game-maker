@@ -10,10 +10,13 @@ export async function submitRelayedReview(
   slug: string,
   repo: string,
   submission: unknown,
+  authorizedAudio?: ReadonlySet<string>,
   submitReview?: (
     deps: AppDeps,
     gameId: string,
     submission: ReviewSubmission,
+    effort: NonNullable<import('./store.js').NewReviewRound['effort']>,
+    audioVerified: boolean,
   ) => Promise<{ id: string; round: number }>,
 ): Promise<{ id: string; round: number }> {
   const app = new Hono<ApiBindings>();
@@ -23,7 +26,12 @@ export async function submitRelayedReview(
   });
   app.route(
     '/internal',
-    buildRoutes({ daemonForSecret: async () => null, gameForSecret: async () => ({ slug, repo }), submitReview }),
+    buildRoutes({
+      daemonForSecret: async () => null,
+      gameForSecret: async () => ({ slug, repo }),
+      authorizedAudio,
+      submitReview,
+    }),
   );
   const response = await app.request(`/internal/games/${encodeURIComponent(slug)}/review-rounds`, {
     method: 'POST',

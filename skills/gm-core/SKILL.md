@@ -75,8 +75,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 ## `gm` cheat sheet
 
 - `gm assets search|facets|info` finds and inspects candidate cards.
-- `gm assets sheet` makes the labelled lineup; `gm assets use|vendor|register|variant|list|unused|why` records choices
-  and derivatives; record an asset with `gm assets use` as soon as the code names it (the build fails on an unlisted id).
+- `gm assets sheet` makes the labelled lineup; `gm assets use|vendor|register|variant|list|unused|why` records choices and derivatives; record an asset with `gm assets use` as soon as the code names it (the build fails on an unlisted id).
 - `gm-map-inspiration` owns agent-only map choice; `gm maps search|info` supplies layout facts and graphs.
 - `gm check`, `gm test`, and `gm run` are the definition-of-done gates.
 - `gm shot` captures evidence; `gm perf` checks frame and resource budgets.
@@ -110,6 +109,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-image-mock | Any visual design review: step 1 is generated mocks of the player screen in the kit, before dioramas. |
 | gm-scope-options | Turning a vague brief into distinct creator-facing options. |
 | gm-new-game-design | Scoping a new game from the New Game flow with the player. |
+| gm-prototype | Follow the current rung of a creator request carrying a `phase:*` label; see [gm-prototype](../gm-prototype/SKILL.md). |
 | gm-new-game-plan | Executor: turning a new-game spec into a prototype ladder of staged tickets and a Build Order. |
 | gm-editor-tuning | Exposing safe creator-tunable values. |
 | gm-repair | Repairing a failed build or verification gate. |

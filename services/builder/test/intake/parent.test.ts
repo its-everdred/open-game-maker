@@ -123,6 +123,7 @@ function harness(kind: 'new_game' | 'feature' = 'new_game') {
   let issueNumber = 0;
   const created: { title: string; body: string; labels: string[] }[] = [];
   const issues: IssuesClient = {
+    hasPrototypeSkill: vi.fn().mockResolvedValue(true),
     ensureLabel: vi.fn(async (_repo, name) => {
       calls.push(`ensure:${name}`);
     }),
@@ -187,7 +188,8 @@ function harness(kind: 'new_game' | 'feature' = 'new_game') {
     fleet,
     issues,
     aiurForGame: async () => aiur,
-    shippedSkills: ['gm-core', 'gm-verify'],
+    shippedSkills: ['gm-core', 'gm-verify', 'gm-prototype'],
+    coreRepo: 'example/core',
     failJob,
     completeJob,
     now: () => NOW,
@@ -379,6 +381,8 @@ describe('New Game parent issue', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:lantern-bay:todo',
+      'ensure:phase:mock',
+      'ensure:model:low',
       'create:1',
       'cap:1:9.000001',
       'label:1:lantern-bay:todo',

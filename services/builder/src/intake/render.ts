@@ -22,6 +22,15 @@ export function renderIssue(input: RenderIssueInput): {
 } {
   validateStructuredFields(input.plan, input.ticket);
   const sections = [input.plan.summary.trim(), scopeSection(input.plan), acceptanceSection(input.ticket)];
+  sections.push(
+    [
+      '## Creator review track',
+      'Before posting the mock, commit a unique track at `games/<game>/review/tracks/<track>.json` on this ticket branch.',
+      'Use the current issue number as the first phase ticket; use art for screens, sound for audio, and gameplay for mechanics.',
+      'and define ordered `mock`, `prototype`, `build`, and `polish` phases with a template for each.',
+      'Push the branch, then submit each round with `gm review post` against the commit containing that track.',
+    ].join('\n'),
+  );
   if (input.blockedBy.length > 0) sections.push(input.blockedBy.map((number) => `Blocked by #${number}`).join('\n'));
   sections.push(skillsSection(input.ticket, input.shippedSkills));
   const unsigned = sections.join('\n\n');
@@ -30,7 +39,7 @@ export function renderIssue(input: RenderIssueInput): {
     title: input.plan.title.trim().slice(0, 120),
     body: `${unsigned}\n\n<!-- gm-job:${input.jobId} gm-ticket:${input.ticket.key} gm-sig:${sig} -->`,
     sig,
-    labels: [`complexity:${input.complexity}`, `feature:gm-${input.jobId}`],
+    labels: [`complexity:${input.complexity}`, `feature:gm-${input.jobId}`, 'phase:mock', 'model:low'],
   };
 }
 

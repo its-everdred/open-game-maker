@@ -171,6 +171,11 @@ it('allows host closure only after an owned phase is approved', async () => {
       source: 'preview',
       at: '2026-01-01T01:00:00Z',
     });
+    expect(await (await request()).json()).toEqual({ allowed: false });
+    deps.db
+      .insert(schema.reviewDispatchIntents)
+      .values({ roundId: 'r', ticket: '42', state: 'consumed', createdAt: '2026-01-01' })
+      .run();
     expect(await (await request()).json()).toEqual({ allowed: true });
     writeFileSync(
       join(root, 'games/castle-game/review/tracks/sound.json'),

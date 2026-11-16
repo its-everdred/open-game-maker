@@ -8,6 +8,7 @@ import { GAME, seedDesignGame } from '../design-decisions/fixtures.js';
 import { makeDeps } from '../helpers.js';
 
 vi.mock('../../src/review-rounds/tracks.js', () => ({
+  reviewCheckout: async (root: string) => root,
   listTracks: async (_checkout: string, _path: string, sha?: string) => [
     { id: 'art', category: 'art', phases: [{ id: 'concept', ticket: '42', template: 'art' }] },
     ...(sha?.startsWith('a')
@@ -52,7 +53,16 @@ it('does not close a shared ticket until every committed first phase is approved
     });
     answerRound(deps.db, GAME, id, { verdict: 'approved', notes: null, source: 'command', at: '2026-01-01T01:00:00Z' });
   };
-  const issues = { ensureFollowup: vi.fn(), close: vi.fn(), cancel: vi.fn(), merged: vi.fn(), integrated: vi.fn() };
+  const issues = {
+    legacyStarted: vi.fn(),
+    integrated: vi.fn(),
+    setFidelity: vi.fn(),
+    ensureFollowup: vi.fn(),
+    close: vi.fn(),
+    cancel: vi.fn(),
+    merged: vi.fn(),
+    integrated: vi.fn(),
+  };
   const client = { issue: async () => ({ status: 'idle', idle: { state: 'in-progress' } }) } as unknown as AiurClient;
   const sync = createReviewSync({ db: deps.db, issues, clientForGame: async () => client, log: () => {} });
   add('art-round', 'art', 'concept', 'art');

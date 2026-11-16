@@ -56,6 +56,26 @@ export function createIntake(deps: IntakeDeps) {
     const gameSlug = found.game.slug;
     if (!gameSlug) return failPreflight(found.job, ['game slug is missing']);
 
+    if (found.job.kind === 'feature') {
+      if (!deps.shippedSkills.includes('gm-prototype')) {
+        await notify({
+          code: 'preflight_failed',
+          jobId,
+          reasons: ['deployed skill pack does not contain gm-prototype'],
+        });
+        return { deferred: 'aiur' };
+      }
+      try {
+        if (!(await deps.issues.hasPrototypeSkill(repo, deps.coreRepo))) {
+          await notify({ code: 'preflight_failed', jobId, reasons: ['game core does not yet contain gm-prototype'] });
+          return { deferred: 'github' };
+        }
+      } catch (error) {
+        await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
+        return { deferred: 'github' };
+      }
+    }
+
     const fleetResult = await deps.fleet.ensureDaemon({ slug: gameSlug, repo }, fleetKind(found.job.kind));
     if (fleetResult.status === 'waiting_capacity') return { deferred: 'capacity' };
     if (fleetResult.status === 'stopped') return failPreflight(found.job, fleetResult.reasons);
@@ -81,6 +101,10 @@ export function createIntake(deps: IntakeDeps) {
     try {
       await deps.issues.ensureLabel(repo, `feature:gm-${jobId}`, '0e8a16', 'OGM job');
       await deps.issues.ensureLabel(repo, `${gameSlug}:todo`, '6f42c1', 'ready to be worked');
+      if (found.job.kind === 'feature') {
+        await deps.issues.ensureLabel(repo, 'phase:mock', 'bfd4f2', 'creator review mock phase');
+        await deps.issues.ensureLabel(repo, 'model:low', 'ededed', 'low reasoning effort');
+      }
     } catch (error) {
       await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
       return { deferred: 'github' };
