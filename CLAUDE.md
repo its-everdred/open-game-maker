@@ -57,7 +57,7 @@ use. Work here the way those agents will work: dogfood the skills.
   output of a renamed source in `dist/` and the API imports every route file there, so `executor/prune-stale-dist.sh` now runs before each restart.
   A game daemon the app reads needs `events.export.enabled: true` in its `.aiur/config` (restart to apply; without it the feed token route is 404).
   Every audit: `aiur-main commands --filter open` (never through `| head`; check its count against `status` DECISIONS open N: a truncated list hid six Commands on paused #366 for 12 h, 2026-11-14); a worker's "Needs you" question idles its ticket until Kevin answers, and the
-  CLI refuses an Executor answer, so relay Kevin's standing words with `operator-relay-answer <id> --expected-version 1 --option
+  CLI refuses an Executor answer, so first give Kevin each open Command as a pick page with its media within the hour (`executor/pick-page.sh <out> <key> <title> 'a|Label|img[,img]'…`, then publish with the Artifact tool and `db`; #803 sat 23 h unseen, 2026-11-16), and relay Kevin's standing words with `operator-relay-answer <id> --expected-version 1 --option
   <id> --quote "<his words>" --relayed-by nuc-ogm-executor --idempotency-key <k>` (three QA-path workers sat 40–75 min on 2026-11-02).
   When the host is saturated (load > ~80, PSI > 90, RPCs time out), lower `max_concurrent_agents` in `.aiur/config` (hot-reload)
   or `set max-agents` (retry.sh; it may time out); then check `status` AGENTS shows the new ceiling: on 2026-11-14 (pin 17ca2db8b) a config edit 10→4 never applied ("configured cap 10") and only `set max-agents` took; restore it when load drops.
