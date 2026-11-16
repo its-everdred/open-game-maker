@@ -4,6 +4,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -17,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson, resolveContainedPath } from '../../context.js';
 import { rejectSymlinkDirectories, runChild } from '../capture/shell.js';
+import { findPlayAreaConfig } from '../../play-area-config.js';
 
 const sizes = ['390x844', '844x390', '820x1180', '1180x820'];
 
@@ -53,13 +55,30 @@ export const command: GmCommand = {
     edit: { type: 'boolean', default: false, help: 'capture the editor' },
     mp4: { type: 'boolean', default: false, help: 'record an MP4 per viewport (requires ffmpeg)' },
     timeout: { type: 'number', default: 600, help: 'total timeout in seconds' },
+    'min-fill': { type: 'string', help: 'minimum board height fraction' },
+    'max-offset': { type: 'string', help: 'maximum horizontal offset fraction' },
   },
   async run(ctx, args, flags) {
     if (args.length || typeof flags.dist !== 'string' || typeof flags.out !== 'string')
       throw new UsageError('dist and out paths are required', 'gm help look shell');
     const timeout = flags.timeout as number;
     if (!Number.isFinite(timeout) || timeout <= 0) throw new UsageError('invalid timeout', 'gm help look shell');
-    const taps = typeof flags.tap === 'string' ? flags.tap.split('>').map((text) => text.trim()) : [];
+    const config = findPlayAreaConfig(resolve(ctx.cwd, flags.dist));
+    const minFill = flags['min-fill'] ?? (config === false ? undefined : config.minFill);
+    const maxOffset = flags['max-offset'] ?? (config === false ? undefined : config.maxOffset);
+    const limits = {
+      ...(minFill === undefined ? {} : { minFill: Number(minFill) }),
+      ...(maxOffset === undefined ? {} : { maxOffset: Number(maxOffset) }),
+      skip: config === false,
+    };
+    if (
+      [limits.minFill, limits.maxOffset].some(
+        (value) => value !== undefined && (!Number.isFinite(value) || value < 0 || value > 1),
+      )
+    )
+      throw new UsageError('invalid play-area limits', 'gm help look shell');
+    const tap = flags.tap ?? (config === false ? undefined : config.tap);
+    const taps = typeof tap === 'string' ? tap.split('>').map((text) => text.trim()) : [];
     if (taps.some((text) => !text)) throw new UsageError('empty tap target', 'gm help look shell');
     const dist = resolve(ctx.cwd, flags.dist);
     const out = outputPath(resolve(ctx.cwd, flags.out));
@@ -141,6 +160,8 @@ export const command: GmCommand = {
             flags.edit ? '1' : '0',
             flags.mp4 ? '1' : '0',
             software ? '1' : '0',
+            '',
+            JSON.stringify(limits),
           ],
           localTemp ? { ...ctx.env, TMPDIR: temp } : (ctx.env ?? {}),
           remainingMs,
@@ -165,6 +186,17 @@ export const command: GmCommand = {
         );
         return result;
       }
+      const measurements = JSON.parse(readFileSync(resolve(temp, 'play-area.json'), 'utf8')) as {
+        viewport: string;
+        fill: number;
+        offset: number;
+        ok: boolean;
+      }[];
+      if (
+        !limits.skip &&
+        (measurements.length !== sizes.length || measurements.some((item, index) => item.viewport !== sizes[index]))
+      )
+        throw new CommandError('shell capture did not measure every viewport');
       stage = 'publishing stills';
       const prefixes = ['play', 'menu', ...(taps.length ? ['ingame'] : []), ...(flags.edit ? ['edit'] : [])];
       const names = sizes.flatMap((size) => [
@@ -219,9 +251,15 @@ export const command: GmCommand = {
       } finally {
         if (!preserveBackup) rmSync(publish, { recursive: true, force: true });
       }
-      if (ctx.json) printJson(ctx, { out: relative(ctx.cwd, out) || '.', files: names });
-      else ctx.out('App-shell captures complete (mocked sign-in; not production or Safari).');
-      return EXIT.ok;
+      if (ctx.json) printJson(ctx, { out: relative(ctx.cwd, out) || '.', files: names, playArea: measurements });
+      else {
+        ctx.out('App-shell captures complete (mocked sign-in; not production or Safari).');
+        for (const item of measurements)
+          ctx.out(
+            `board fill ${item.fill.toFixed(2)} at ${item.viewport}, offset ${item.offset.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
+          );
+      }
+      return measurements.every((item) => item.ok) ? EXIT.ok : EXIT.failed;
     } catch (error) {
       if (abort.signal.aborted) return 130;
       if (Date.now() >= deadline) {

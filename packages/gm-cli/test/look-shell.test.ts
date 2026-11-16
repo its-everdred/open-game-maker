@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { gm, tempDir } from './helpers.js';
@@ -11,12 +12,21 @@ const capture = vi.hoisted(() => ({
   timeout: false,
   screenshotTimeout: false,
   softwareTimeout: false,
+  smallBoard: false,
 }));
 vi.mock('../src/commands/capture/shell.js', async (original) => {
   const actual = await original<typeof import('../src/commands/capture/shell.js')>();
   return {
     ...actual,
-    runChild: async (_cwd: string, args: string[]) => {
+    runChild: async (cwd: string, args: string[]) => {
+      if (args[0] === 'run') {
+        try {
+          execFileSync('pnpm', args, { cwd, stdio: 'ignore' });
+          return 0;
+        } catch {
+          return 1;
+        }
+      }
       capture.calls.push(args);
       if (capture.timeout) return 3;
       if (capture.screenshotTimeout && (args[6] === '0' || capture.softwareTimeout)) return 42;
@@ -27,12 +37,96 @@ vi.mock('../src/commands/capture/shell.js', async (original) => {
           writeFileSync(join(out, `${prefix}-${size}.png`), prefix);
         writeFileSync(join(out, `motion-${size}.mp4`), 'video');
       }
+      writeFileSync(
+        join(out, 'play-area.json'),
+        JSON.stringify(
+          ['390x844', '844x390', '820x1180', '1180x820'].map((viewport) => ({
+            viewport,
+            fill: capture.smallBoard && viewport === '1180x820' ? 0.61 : 0.95,
+            offset: 0,
+            ok: !(capture.smallBoard && viewport === '1180x820'),
+          })),
+        ),
+      );
       return 0;
     },
   };
 });
 
 describe('gm look shell', () => {
+  it('uses game play-area configuration with explicit flags taking precedence', async () => {
+    const root = tempDir();
+    mkdirSync(join(root, 'build/web/design'), { recursive: true });
+    writeFileSync(join(root, 'build/web/index.html'), 'game');
+    writeFileSync(join(root, 'build/web/design/design.json'), '{}');
+    writeFileSync(
+      join(root, 'gm.manifest.json'),
+      JSON.stringify({ playArea: { tap: 'Play>Start', minFill: 0.8, maxOffset: 0.1 } }),
+    );
+    try {
+      const result = await gm(['look', 'shell', '--dist', 'build/web', '--out', 'shots', '--min-fill', '0.7'], {
+        cwd: root,
+        env: { XDG_RUNTIME_DIR: root },
+      });
+      expect(result.code).toBe(0);
+      expect(capture.calls.at(-1)?.[3]).toBe('["Play","Start"]');
+      expect(JSON.parse(capture.calls.at(-1)![8]!)).toEqual({ minFill: 0.7, maxOffset: 0.1, skip: false });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it('fails and names the viewport when the board is too small', async () => {
+    const root = tempDir();
+    mkdirSync(join(root, 'dist/design'), { recursive: true });
+    writeFileSync(join(root, 'dist/index.html'), 'game');
+    writeFileSync(join(root, 'dist/design/design.json'), '{}');
+    capture.smallBoard = true;
+    try {
+      const result = await gm(['look', 'shell', '--dist', 'dist', '--out', 'shots'], {
+        cwd: root,
+        env: { XDG_RUNTIME_DIR: root },
+      });
+      expect(result.code).toBe(1);
+      expect(result.out.join('\n')).toContain('board fill 0.61 at 1180x820');
+    } finally {
+      capture.smallBoard = false;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails gm check for a small board and names its viewport', async () => {
+    const root = tempDir();
+    mkdirSync(join(root, 'dist/design'), { recursive: true });
+    writeFileSync(join(root, 'dist/index.html'), 'game');
+    writeFileSync(join(root, 'dist/design/design.json'), '{}');
+    writeFileSync(join(root, 'gm.manifest.json'), '{}');
+    cpSync(join(root, 'dist'), join(root, 'source'), { recursive: true });
+    writeFileSync(join(root, 'build.cjs'), "require('node:fs').cpSync('source', 'dist', { recursive: true })");
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { build: 'node build.cjs' } }));
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    git('add', 'gm.manifest.json');
+    git('commit', '-qm', 'fixture');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    capture.smallBoard = true;
+    try {
+      const result = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
+      expect(result.code).toBe(1);
+      expect(result.err.join('\n')).toContain('board fill 0.61 at 1180x820');
+      writeFileSync(join(root, 'build.cjs'), '// no output');
+      const stale = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
+      expect(stale.code).toBe(1);
+      expect(stale.err.join('\n')).toContain('game build is missing index.html');
+      expect(readFileSync(join(root, 'dist/index.html'), 'utf8')).toBe('game');
+      writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { build: 'gm build' } }));
+      const recursive = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
+      expect(recursive.err.join('\n')).toContain('nonrecursive game build script');
+    } finally {
+      capture.smallBoard = false;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it('uses the workspace for scratch when the system temporary directory is unavailable', () => {
     const root = tempDir();
     const scratch = captureScratch(root, join(root, 'missing'));

@@ -42,6 +42,8 @@ async function main(): Promise<void> {
     scenes: [Boot, Level],
     test: build === 'test',
   });
+  wrapper.game.canvas.setAttribute('data-gm-play-area', '');
+  wrapper.game.canvas.setAttribute('data-gm-play-area-aspect', String(640 / 480));
   runtime.attachInput({
     canvas: wrapper.game.canvas,
     mapping: defaultInputMapping(game.manifest.view),
