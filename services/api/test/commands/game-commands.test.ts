@@ -655,6 +655,29 @@ describe('a registered game’s own Commands', () => {
     ]);
   });
 
+  it('guards the review episode active after an in-flight answer', async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const answer = vi.fn(async () => pending);
+    const { app, deps } = await appWithAiur([decision()], answer);
+    let episode = '100@2026-01-01T00:00:00Z';
+    deps.registry.reviewEpisode = async () => episode;
+    const request = app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+    });
+    await vi.waitFor(() => expect(answer).toHaveBeenCalled());
+    episode = '101@2026-01-01T00:01:00Z';
+    finish();
+    expect((await request).status).toBe(200);
+    expect(deps.db.select().from(schema.reviewAnswerGuards).all()).toEqual([
+      expect.objectContaining({ source: ids.game, ticket: '478', episode }),
+    ]);
+  });
+
   it('retains the owning job when a creator answers its review', async () => {
     const { app, deps, answerAsCreator } = await appWithAiur([decision()]);
     job(deps, ids.job, ids.game, AT);
