@@ -15,10 +15,22 @@ export function reviewAnswerPending(db: Db, source: string, ticket: string): boo
   );
 }
 export function observeReviewState(db: Db, source: string, ticket: string, isReview: boolean): void {
-  if (!isReview)
-    db.delete(schema.reviewAnswerGuards)
+  if (isReview) {
+    db.update(schema.reviewAnswerGuards)
+      .set({ observedReview: true })
       .where(and(eq(schema.reviewAnswerGuards.source, source), eq(schema.reviewAnswerGuards.ticket, ticket)))
       .run();
+  } else {
+    db.delete(schema.reviewAnswerGuards)
+      .where(
+        and(
+          eq(schema.reviewAnswerGuards.source, source),
+          eq(schema.reviewAnswerGuards.ticket, ticket),
+          eq(schema.reviewAnswerGuards.observedReview, true),
+        ),
+      )
+      .run();
+  }
 }
 export function retainReviewTickets(db: Db, source: string, tickets: ReadonlySet<string>): void {
   const pending = db
@@ -26,5 +38,5 @@ export function retainReviewTickets(db: Db, source: string, tickets: ReadonlySet
     .from(schema.reviewAnswerGuards)
     .where(eq(schema.reviewAnswerGuards.source, source))
     .all();
-  for (const { ticket } of pending) if (!tickets.has(ticket)) observeReviewState(db, source, ticket, false);
+  for (const { ticket } of pending) observeReviewState(db, source, ticket, tickets.has(ticket));
 }

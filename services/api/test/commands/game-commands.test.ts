@@ -1,10 +1,12 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
-import { CREATOR_AUDIENCE_MARKER, type OptionPlayable } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, decisionKeyMarker, type OptionPlayable } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../../src/app/errors.js';
 import { insertChatRow } from '../../src/build-chat/store.js';
+import { postRound, getRound } from '../../src/review-rounds/store.js';
+import { syncCommandVerdicts } from '../../src/review-rounds/command-verdicts.js';
 import { listReviews } from '../../src/reviews/store.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
@@ -598,6 +600,56 @@ describe('a registered game’s own Commands', () => {
         notes: 'Both read too sharp; round is closer.',
       }),
     ]);
+  });
+
+  it('records a keyed round change request with its notes', async () => {
+    const item = decision({
+      options: [
+        { id: 'round', label: 'Round' },
+        { id: 'needs_work', label: 'Needs work' },
+      ],
+      context: {
+        short_summary: 'Blobs look',
+        long_context_markdown: `${CREATOR_AUDIENCE_MARKER}\n${decisionKeyMarker('round-id')}`,
+      },
+    });
+    const { app, deps, answerAsCreator } = await appWithAiur([item]);
+    postRound(deps.db, {
+      id: 'round-id',
+      gameId: ids.game,
+      track: 'art',
+      phase: 'concept',
+      category: 'art',
+      round: 1,
+      ticket: '478',
+      sha: 'a'.repeat(40),
+      media: '[]',
+      postedAt: AT,
+    });
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        option_id: 'round',
+        version: 2,
+        change_request: true,
+        review: { likes: [], dislikes: [{ option_id: 'round' }], notes: 'Softer edges' },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const sent = answerAsCreator.mock.calls[0]![1] as { response: string };
+    expect(JSON.parse(sent.response)).toMatchObject({
+      answers: [{ option_id: 'needs_work', verdict: 'like' }],
+      notes: 'Softer edges',
+    });
+    item.answer = { custom_response: sent.response, actor: { kind: 'operator', id: ids.user } };
+    await syncCommandVerdicts(
+      deps.db,
+      deps.aiurClientForGame,
+      () => AT,
+      () => {},
+    );
+    expect(getRound(deps.db, ids.game, 'round-id')).toMatchObject({ verdict: 'needs_work', notes: 'Softer edges' });
   });
 
   it('retains the owning job when a creator answers its review', async () => {

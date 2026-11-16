@@ -12,6 +12,8 @@ it('persists a guard until the tracker observes the ticket leave review', () => 
   markReviewAnswered(db, 'core', '12');
   markReviewAnswered(db, 'game', '12');
   expect(reviewAnswerPending(db, 'core', '12')).toBe(true);
+  retainReviewTickets(db, 'core', new Set());
+  expect(reviewAnswerPending(db, 'core', '12')).toBe(true);
   retainReviewTickets(db, 'core', new Set(['12']));
   expect(reviewAnswerPending(db, 'core', '12')).toBe(true);
   observeReviewState(db, 'core', '12', false);

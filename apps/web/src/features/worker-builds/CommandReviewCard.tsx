@@ -40,6 +40,7 @@ export function CommandReviewCard({
         json: {
           option_id: optionId,
           version: command.version,
+          ...(change ? { change_request: true } : {}),
           ...(change
             ? { review: { likes: [], dislikes: [{ option_id: optionId }], notes: note.trim() } }
             : { review: { likes: [optionId], dislikes: [] } }),

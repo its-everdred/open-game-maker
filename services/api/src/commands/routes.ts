@@ -2,7 +2,7 @@ import { AiurHttpError } from '@ogm/aiur-client';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { CommandAnswerBody, type GameCommandsPage } from '@ogm/contracts';
+import { CommandAnswerBody, decisionKeyFromMarker, type GameCommandsPage } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
@@ -18,6 +18,7 @@ import { isForCreator } from '../job-commands/correlate.js';
 import { listCreatorCommands, listGameCommands, shownOneByOne } from './list.js';
 import { gameTicketFilter } from './scope.js';
 import { markReviewAnswered } from '../review-rounds/answer-guard.js';
+import { getRound } from '../review-rounds/store.js';
 
 export const prefix = '/api/v1';
 
@@ -28,6 +29,7 @@ export const prefix = '/api/v1';
 const AnswerCommandBody = CommandAnswerBody.extend({
   // The version the player saw. Aiur refuses an answer to a newer version, so a stale inbox shows its conflict.
   version: z.number().int().positive(),
+  change_request: z.boolean().optional(),
 });
 
 export default new Hono<ApiBindings>()
@@ -109,7 +111,21 @@ export default new Hono<ApiBindings>()
       const problem = reviewProblem(command.options, review);
       if (problem !== null) throw new HttpError(400, 'command_review_invalid', problem);
     }
-    const fields = review === undefined ? undefined : reviewDecisionFields(command.options, review, body.option_id);
+    const key = decisionKeyFromMarker(decision.context?.long_context_markdown);
+    const round = key ? getRound(deps.db, game.id, key) : null;
+    const keyedChange =
+      body.change_request &&
+      review &&
+      review.likes.length === 0 &&
+      review.dislikes.length > 0 &&
+      review.notes?.trim() &&
+      round &&
+      round.ticket === canonical.ticket &&
+      !round.verdict &&
+      canonical.options.some((option) => option.id === 'needs_work');
+    const decisionReview = keyedChange ? { likes: ['needs_work'], dislikes: [], notes: review.notes } : review;
+    const fields =
+      decisionReview === undefined ? undefined : reviewDecisionFields(command.options, decisionReview, body.option_id);
     const singlePick =
       review !== undefined &&
       review.likes.length === 1 &&
@@ -144,7 +160,7 @@ export default new Hono<ApiBindings>()
       });
       throw new HttpError(502, 'aiur_answer_failed');
     }
-    markReviewAnswered(deps.db, game.id, canonical.ticket);
+    if (review !== undefined) markReviewAnswered(deps.db, game.id, canonical.ticket);
     if (
       review !== undefined &&
       !tryRecordReview(deps.db, { gameId: game.id, command, optionId: body.option_id, review }, deps.log)

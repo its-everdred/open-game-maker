@@ -212,6 +212,7 @@ describe('worker progress route', () => {
     markReviewAnswered(deps.db, game, '12');
     expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(409);
     expect(message).not.toHaveBeenCalled();
+    observeReviewState(deps.db, game, '12', true);
     observeReviewState(deps.db, game, '12', false);
     expect((await app.request(missing, { method: 'POST', headers: asUser(outsider) })).status).toBeGreaterThanOrEqual(
       400,

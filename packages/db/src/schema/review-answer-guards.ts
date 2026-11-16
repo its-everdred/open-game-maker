@@ -1,4 +1,4 @@
-import { primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 // A verdict suppresses a missing-review request until the tracker observes the ticket leave review.
 export const reviewAnswerGuards = sqliteTable(
@@ -6,6 +6,7 @@ export const reviewAnswerGuards = sqliteTable(
   {
     source: text('source').notNull(),
     ticket: text('ticket').notNull(),
+    observedReview: integer('observed_review', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [primaryKey({ columns: [table.source, table.ticket] })],
 );

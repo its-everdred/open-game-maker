@@ -23,7 +23,7 @@ export type DecisionAnswerNote = {
 };
 
 export function answerNote(decision: Decision): DecisionAnswerNote {
-  const optionId = answeredOption(decision) ?? null;
+  let optionId = answeredOption(decision) ?? null;
   const raw = (decision.active_answer ?? decision.answer)?.custom_response ?? null;
   let response: unknown = raw;
   if (raw !== null) {
@@ -32,6 +32,26 @@ export function answerNote(decision: Decision): DecisionAnswerNote {
     } catch {
       response = raw;
     }
+  }
+  if (
+    !optionId &&
+    response &&
+    typeof response === 'object' &&
+    'answers' in response &&
+    Array.isArray(response.answers)
+  ) {
+    const answers: unknown[] = response.answers;
+    const likes = answers.filter(
+      (item): item is { option_id: string; verdict: 'like' } =>
+        !!item &&
+        typeof item === 'object' &&
+        'option_id' in item &&
+        typeof item.option_id === 'string' &&
+        'verdict' in item &&
+        item.verdict === 'like' &&
+        decision.options.some((option) => option.id === item.option_id),
+    );
+    if (likes.length === 1 && answers.length === 1) optionId = likes[0].option_id;
   }
   return {
     decision_id: decision.decision_id,

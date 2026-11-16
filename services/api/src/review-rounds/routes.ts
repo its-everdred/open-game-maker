@@ -91,13 +91,16 @@ export default new Hono<ApiBindings>()
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
     if (!round || round.category === 'gameplay') throw new HttpError(404, 'review_round_not_found');
-    const ok = answerRound(deps.db, game.id, round.id, {
-      verdict: answer.verdict,
-      notes: answer.note ?? null,
-      source: 'command',
-      at: new Date().toISOString(),
+    const ok = deps.db.transaction((tx) => {
+      const answered = answerRound(tx, game.id, round.id, {
+        verdict: answer.verdict,
+        notes: answer.note ?? null,
+        source: 'command',
+        at: new Date().toISOString(),
+      });
+      if (answered) markReviewAnswered(tx, game.id, round.ticket);
+      return answered;
     });
     if (!ok) throw new HttpError(409, 'review_round_answered');
-    markReviewAnswered(deps.db, game.id, round.ticket);
     return c.json({ status: 'answered' });
   });
