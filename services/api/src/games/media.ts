@@ -13,7 +13,9 @@ const exists = async (path: string) =>
 
 const MAX_LEGACY_MANIFEST_BYTES = 1024 * 1024;
 
-async function manifestMedia(directory: string): Promise<{ logo?: string; genres?: string[] }> {
+async function manifestMedia(
+  directory: string,
+): Promise<{ logo?: string; genres?: string[]; loading?: { portrait: string; landscape: string } }> {
   try {
     const file = await open(join(directory, '.ogm-display.json'), 'r').catch(() =>
       open(join(directory, 'manifest.json'), 'r'),
@@ -38,10 +40,18 @@ async function manifestMedia(directory: string): Promise<{ logo?: string; genres
     const manifest = JSON.parse(bytes.toString('utf8')) as {
       logo?: unknown;
       genres?: unknown;
+      loading?: unknown;
     };
     const logo = manifest.logo;
     const genres = manifest.genres;
+    const loading = manifest.loading as Record<string, unknown> | null | undefined;
+    const validLoading = async (path: unknown): Promise<boolean> =>
+      typeof path === 'string' && /^media\/[a-zA-Z0-9_-]+\.png$/u.test(path) && (await exists(join(directory, path)));
+    const portrait = loading?.portrait;
+    const landscape = loading?.landscape;
+    const loadingValid = (await validLoading(portrait)) && (await validLoading(landscape));
     return {
+      ...(loadingValid ? { loading: { portrait: portrait as string, landscape: landscape as string } } : {}),
       ...(typeof logo === 'string' &&
       /^media\/[a-zA-Z0-9_-]+\.(png|webp|svg)$/u.test(logo) &&
       (await exists(join(directory, logo)))
@@ -71,6 +81,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
       string,
       {
         logoUrl?: string;
+        loadingUrls?: { portrait: string; landscape: string };
         choices?: { genre: string[] };
         coverUrl?: string;
         trailerUrl?: string;
@@ -104,6 +115,14 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               ...(manifest.logo
                 ? {
                     logoUrl: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
+                  }
+                : {}),
+              ...(manifest.loading
+                ? {
+                    loadingUrls: {
+                      portrait: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.portrait}`,
+                      landscape: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.landscape}`,
+                    },
                   }
                 : {}),
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),

@@ -113,6 +113,42 @@ describe('boot', () => {
     expect(runtime.hooks.ready).toBe(true);
   });
 
+  it('signals the first frame only when the game reports it ready', async () => {
+    const { runtime } = await start();
+    expect(bridge.send).not.toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+    runtime.hooks.ready = false;
+    runtime.hooks.ready = true;
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+    runtime.dispose();
+  });
+
+  it('waits for asynchronous setup instead of using the automatic paint fallback', async () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const animation = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    const stopLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop').mockImplementation(() => undefined);
+    try {
+      const { module } = createCounterGame();
+      const pending = boot(module, { hostOrigin: 'https://app.test' });
+      await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+      bridge.onMessage!(hello());
+      const runtime = await pending;
+      runtime.hooks.ready = false;
+      expect(callbacks).toHaveLength(1);
+      callbacks[0]!(0);
+      callbacks[1]!(16);
+      expect(bridge.send).not.toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+      runtime.hooks.ready = true;
+      expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+      runtime.dispose();
+    } finally {
+      animation.mockRestore();
+      stopLoop.mockRestore();
+    }
+  });
+
   // The host judges stored slots against the schema the running build reports, so ready carries the instance's own.
   it('reports the mounted instance save schema and only a migration it actually implements', async () => {
     const { module } = await start({ migrate: false });

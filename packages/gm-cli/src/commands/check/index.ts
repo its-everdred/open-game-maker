@@ -7,6 +7,7 @@ import { EXIT, UsageError, type GmCommand, type GmContext } from '../../command.
 import { command as assetsCommand } from './assets.js';
 import { command as lookCommand } from '../look/check.js';
 import { gameDir } from '../../outbox.js';
+import { checkLoading } from '../../loading-check.js';
 
 export function printGate(ctx: GmContext, result: GateResult): number {
   if (ctx.json) ctx.out(JSON.stringify(result));
@@ -46,6 +47,7 @@ export const command: GmCommand = {
     );
     let lookCode: number = EXIT.ok;
     let lookReport: unknown;
+    let loadingErrors: string[] = [];
     let game = ctx.cwd;
     try {
       game = gameDir(ctx.cwd);
@@ -53,6 +55,8 @@ export const command: GmCommand = {
       // The static gate also works outside a game repository.
     }
     if (existsSync(join(game, 'gm.manifest.json'))) {
+      loadingErrors = await checkLoading(game);
+      if (!ctx.json) loadingErrors.forEach(ctx.err);
       const lookOut: string[] = [];
       lookCode = await lookCommand.run({ ...ctx, json: true, fields: null, out: (line) => lookOut.push(line) }, [], {
         changed: true,
@@ -74,7 +78,12 @@ export const command: GmCommand = {
     const gateCode =
       ctx.json && lookReport !== undefined
         ? (ctx.out(
-            JSON.stringify({ ...gate, ok: gate.ok && assetCode === EXIT.ok && lookCode === EXIT.ok, look: lookReport }),
+            JSON.stringify({
+              ...gate,
+              ok: gate.ok && assetCode === EXIT.ok && lookCode === EXIT.ok && loadingErrors.length === 0,
+              look: lookReport,
+              loadingErrors,
+            }),
           ),
           gate.ok ? EXIT.ok : EXIT.failed)
         : printGate(ctx, gate);
@@ -82,6 +91,8 @@ export const command: GmCommand = {
       out.forEach(ctx.out);
       err.forEach(ctx.err);
     }
-    return gateCode === EXIT.ok && assetCode === EXIT.ok && lookCode === EXIT.ok ? EXIT.ok : EXIT.failed;
+    return gateCode === EXIT.ok && assetCode === EXIT.ok && lookCode === EXIT.ok && loadingErrors.length === 0
+      ? EXIT.ok
+      : EXIT.failed;
   },
 };

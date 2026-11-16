@@ -22,6 +22,7 @@ export type GameSummary = {
   updatedAt?: string;
   lastPlayedAt?: string | null;
   logoUrl?: string | null;
+  loadingUrls?: { portrait: string; landscape: string };
   coverUrl?: string | null;
   trailerUrl?: string | null;
   portraitTrailerUrl?: string | null;

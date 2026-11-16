@@ -2748,6 +2748,24 @@
                       "type": "string",
                       "pattern": "^media\\/[a-zA-Z0-9_-]+\\.(png|webp|svg)$"
                     },
+                    "loading": {
+                      "type": "object",
+                      "properties": {
+                        "portrait": {
+                          "type": "string",
+                          "pattern": "^media\\/[a-zA-Z0-9_-]+\\.png$"
+                        },
+                        "landscape": {
+                          "type": "string",
+                          "pattern": "^media\\/[a-zA-Z0-9_-]+\\.png$"
+                        }
+                      },
+                      "required": [
+                        "portrait",
+                        "landscape"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "hostOrigin": {
                       "type": "string",
                       "format": "uri",
@@ -3284,6 +3302,9 @@
                     "minItems": 2,
                     "maxItems": 2
                   }
+                },
+                "firstFrameSignal": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -3291,6 +3312,41 @@
                 "manifest",
                 "marks"
               ],
+              "additionalProperties": {}
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
+              "const": "load.frame"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {},
               "additionalProperties": {}
             },
             "replyTo": {

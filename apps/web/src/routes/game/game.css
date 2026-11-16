@@ -313,6 +313,15 @@
   opacity: 0;
 }
 
+.game-loading-art,
+.game-loading-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .game-loading-cover {
   position: absolute;
   inset: -24px;
@@ -348,15 +357,22 @@
 .game-loading-glass {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: var(--surface-deep);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5vh 24px 10vh;
+  background: color-mix(in srgb, var(--surface-deep) 35%, transparent);
+}
+
+.game-loading-logo {
+  width: min(70%, 360px);
+  height: 20%;
+  object-fit: contain;
 }
 
 .game-loading-progress {
+  margin-top: auto;
   width: min(320px, calc(100% - 24px));
   height: 12px;
   overflow: hidden;

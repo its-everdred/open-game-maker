@@ -118,3 +118,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | vendor/phaser | Working in Phaser; load only the capability needed. |
 | vendor/threejs | Working in Three.js; load only the capability needed. |
 | vendor/gamedev | Needing a focused game-development reference; `.claude/skills/gm-core/references/roles.md` lists each role's picks. |
+
+## Loading artwork
+
+Games may declare `loading.portrait` and `loading.landscape` in `gm.manifest.json` as PNG paths under `media/`. Supply art-only 9:16 portrait (at least 1440×2560) and 16:9 landscape (at least 2560×1440) sources in `public/media/`. Keep the subject in the centre 70%, the top 25% calm for the shell logo, and the bottom 20% calm for the progress bar. Run `gm check` to validate the files. For asynchronous startup, set `runtime.hooks.ready = false` before starting work and `true` only after the first frame is rendered.

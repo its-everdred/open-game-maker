@@ -204,9 +204,11 @@ describe('createGameFrame', () => {
 
     receive(progress);
     receive(done);
+    receive({ v: 1, id: 'game-load-3', t: 'load.frame', payload: {} });
 
     expect(onLoad).toHaveBeenNthCalledWith(1, { t: 'load.progress', payload: progress.payload });
     expect(onLoad).toHaveBeenNthCalledWith(2, { t: 'load.done', payload: done.payload });
+    expect(onLoad).toHaveBeenNthCalledWith(3, { t: 'load.frame', payload: {} });
     frame.dispose();
   });
 

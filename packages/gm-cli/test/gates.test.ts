@@ -154,6 +154,18 @@ describe('gm check', () => {
     expect(text.err.join('\n')).toContain('shots/a/t2.png');
   }, 60_000);
 
+  it('fails the complete check when declared loading images are missing', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    writeFileSync(
+      join(root, 'gm.manifest.json'),
+      JSON.stringify({ loading: { portrait: 'media/p.png', landscape: 'media/l.png' } }),
+    );
+    const result = await gm(['check', '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.out[0]!).loadingErrors).toHaveLength(2);
+  }, 60_000);
+
   it('prints failures only as file:line diagnostics and exits one', async () => {
     const result = await gm(['check', 'static']);
 
