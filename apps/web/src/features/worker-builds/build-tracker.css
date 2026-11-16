@@ -167,3 +167,44 @@
   position: absolute;
   inset: 0;
 }
+.worker-review-item {
+  display: block;
+  width: 100%;
+  margin: 10px 0;
+  padding: 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 700 14px var(--display);
+  text-align: left;
+}
+.build-review-dialog {
+  border: 1.5px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  background: color-mix(in srgb, var(--glass-edge) 14%, var(--glass-fill));
+  backdrop-filter: blur(24px);
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    0 16px 40px -18px var(--shadow-color-strong);
+}
+.worker-review-item,
+.worker-review-option {
+  border: 1.5px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  background: color-mix(in srgb, var(--glass-edge) 14%, var(--glass-fill));
+  box-shadow: inset 0 1px 0 var(--glass-shine);
+}
+.worker-review-option {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--r);
+}
+.worker-review-option .review-deck-media {
+  position: static;
+  max-height: 55vh;
+  height: auto;
+  pointer-events: auto;
+}
+.worker-review-option audio {
+  width: 100%;
+}

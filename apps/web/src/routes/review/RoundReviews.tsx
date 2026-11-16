@@ -77,19 +77,20 @@ export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round
       <div className="review-deck-actions">
         <button
           type="button"
-          disabled={answer.isPending || Boolean(round.buildId)}
+          disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
           onClick={() => answer.mutate('approved')}
         >
           Looks right
         </button>
         <button
           type="button"
-          disabled={answer.isPending || Boolean(round.buildId)}
+          disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
           onClick={() => answer.mutate('needs_work')}
         >
           Needs work
         </button>
       </div>
+      {answer.isSuccess && <p role="status">Saved</p>}
       {answer.isError ? <p role="alert">The review may not have sent. Tap the same verdict to retry.</p> : null}
     </section>
   );

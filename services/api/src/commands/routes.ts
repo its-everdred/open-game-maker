@@ -12,6 +12,9 @@ import { authorizedGame } from '../games/authorize.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { tryRecordReview } from '../reviews/store.js';
 import { toGameCommand } from './aiur.js';
+import coreRoutes, { hasMissingDeclaredMedia } from './core.js';
+import { findCommand, parseCommand } from '../build-chat/store.js';
+import { isForCreator } from '../job-commands/correlate.js';
 import { listCreatorCommands, listGameCommands, shownOneByOne } from './list.js';
 
 export const prefix = '/api/v1';
@@ -26,6 +29,7 @@ const AnswerCommandBody = CommandAnswerBody.extend({
 });
 
 export default new Hono<ApiBindings>()
+  .route('/', coreRoutes)
   .get('/games/:gameId/commands', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     // A product question waits for a voice session (#612); the game's inbox shows the decisions only.
@@ -37,8 +41,39 @@ export default new Hono<ApiBindings>()
   // The menu's decision inbox: the caller's player-facing Commands across every game they may edit.
   .get('/me/commands', async (c) => {
     const principal = requirePrincipal(c, ['user']);
-    const page: CreatorCommandsPage = await listCreatorCommands(c.get('deps'), principal);
+    const page: CreatorCommandsPage = await listCreatorCommands(
+      c.get('deps'),
+      principal,
+      c.req.query('includeQuestions') === '1',
+    );
     return c.json(page);
+  })
+  .post('/games/:gameId/commands/:decisionId/missing-media', async (c) => {
+    const game = authorizedGame(c, 'game.edit');
+    if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
+    const deps = c.get('deps');
+    const command = (await listGameCommands(deps, game)).find((item) => item.decision_id === c.req.param('decisionId'));
+    if (!command || !command.ticket) throw new HttpError(404, 'command_not_found');
+    if (command.options.every((option) => option.media || option.audio || option.playable))
+      throw new HttpError(409, 'media_present');
+    const client = await deps.aiurClientForGame(game.id);
+    const decision = await client.decision(command.decision_id);
+    // A declared attachment may still be copying to the blob store. Do not report it as absent.
+    const stored = command.job_id ? findCommand(deps.sqlite, command.job_id, command.command_id) : null;
+    const original = stored ? parseCommand(stored) : null;
+    const missing = command.options.filter((option) => !option.media && !option.audio && !option.playable);
+    const undeclared = missing.filter(
+      (option) => !original?.options.some((item) => item.id === option.id && (item.media_id || item.playable)),
+    );
+    if (!undeclared.length || !hasMissingDeclaredMedia(decision, { ...command, options: undeclared }))
+      throw new HttpError(409, 'media_unavailable');
+    const receipt = await client.message(
+      command.ticket,
+      'This creator review is missing media. Please add media for every option and resend it.',
+      `review-media:${command.decision_id}:${command.version}`,
+    );
+    if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
+    return c.json({ status: 'asked' });
   })
   // A Command with no job: the player answered one the game's own aiur instance holds. Aiur's canonical Decision API
   // validates the option and the version, so an answer from here lands exactly as one from the aiur dashboard would.
@@ -56,8 +91,20 @@ export default new Hono<ApiBindings>()
     // card the Command does not have, and its ticket scopes the creator's answer grant. A registered game's Command has
     // no job, so its review is recorded with no job id.
     const review = body.review;
-    const command = toGameCommand(await client.decision(decisionId));
-    if (command === null || command.ticket === null) throw new HttpError(404, 'command_not_found');
+    const decision = await client.decision(decisionId);
+    const canonical = isForCreator(decision) ? toGameCommand(decision) : null;
+    if (canonical === null || canonical.ticket === null) throw new HttpError(404, 'command_not_found');
+    if (!canonical.options.some((option) => option.id === body.option_id))
+      throw new HttpError(400, 'command_option_invalid');
+    // Retain the owning job in the ledger; aiur's decision remains authoritative for the options.
+    const owned = review
+      ? (await listGameCommands(deps, game)).find(
+          (item) => item.decision_id === decisionId && item.ticket === canonical.ticket,
+        )
+      : undefined;
+    const command = owned?.job_id
+      ? { ...canonical, job_id: owned.job_id, command_id: owned.command_id, title: owned.title }
+      : canonical;
     if (review !== undefined) {
       const problem = reviewProblem(command.options, review);
       if (problem !== null) throw new HttpError(400, 'command_review_invalid', problem);
@@ -67,7 +114,7 @@ export default new Hono<ApiBindings>()
       // The creator's own answer (#631): aiur refuses the supervisor's `decide` on a decision only a human may take.
       // A review's answer is its like/dislike map; aiur takes one of an option or a response, never both.
       await client.answerAsCreator(decisionId, {
-        ticket: command.ticket,
+        ticket: canonical.ticket,
         principal: requirePrincipal(c, ['user']).userId,
         expected_version: body.version,
         idempotency_key: `${decisionId}:${body.version}`,

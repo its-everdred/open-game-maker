@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { serve } from '@hono/node-server';
 
 import { FsBlobStore } from '@ogm/blob-store';
+import { createAiurClient } from '@ogm/aiur-client';
 import { createDbDaemonStore, createFleet, createIntake, createIssuesClient, startFeedConsumers } from '@ogm/builder';
 import { parseRepositoryName } from '@ogm/config';
 import { migrate, openDb } from '@ogm/db';
@@ -119,6 +120,13 @@ const deps: AppDeps = {
 };
 deps.registry.chatJobs = createChatJobDirectory(db);
 deps.registry.aiurClientFor = daemonDirectory.clientForSlug;
+if (env.AIUR_API_URL && env.AIUR_API_TOKEN) {
+  deps.registry.coreAiurClient = createAiurClient({
+    baseUrl: env.AIUR_API_URL,
+    token: env.AIUR_API_TOKEN,
+    supervisorToken: env.AIUR_API_TOKEN,
+  });
+}
 deps.registry.workerWorkpad = createWorkpadReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.workerTitle = createTicketTitleReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.trackerTickets = createTrackerReader(env.OGM_INTAKE_GITHUB_TOKEN);

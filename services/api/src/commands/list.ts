@@ -117,7 +117,11 @@ export async function listProductQuestions(deps: AppDeps, game: GameRow): Promis
 // The menu's decision inbox: every game the caller may edit, in priority order. A Command that blocks its build comes
 // first, then the one that has waited longest. Product questions are not listed one by one: a game with at least the
 // threshold of them queued gets one voice-session entry instead (never pushed or opened on its own, #596).
-export async function listCreatorCommands(deps: AppDeps, principal: UserPrincipal): Promise<CreatorCommandsPage> {
+export async function listCreatorCommands(
+  deps: AppDeps,
+  principal: UserPrincipal,
+  includeQuestions = false,
+): Promise<CreatorCommandsPage> {
   const actor = actorFromPrincipal(principal);
   const games = listGames(deps.db, principal.familyId, principal.userId).filter(
     (game) =>
@@ -150,7 +154,7 @@ export async function listCreatorCommands(deps: AppDeps, principal: UserPrincipa
         const count = perGame[index]!.filter((command) => command.text_only === true).length;
         return count >= threshold ? [{ game_id: game.id, game_title: game.title.slice(0, 200), count }] : [];
       });
-  const commands = shownOneByOne(deps, perGame.flat()).sort(
+  const commands = (includeQuestions ? perGame.flat() : shownOneByOne(deps, perGame.flat())).sort(
     (left, right) => Number(right.blocking) - Number(left.blocking) || left.opened_at.localeCompare(right.opened_at),
   );
   return { commands, question_sessions: questionSessions };

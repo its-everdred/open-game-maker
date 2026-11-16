@@ -1,6 +1,7 @@
 import { schema } from '@ogm/db';
 import type { AiurClient } from '@ogm/aiur-client';
 import { HttpError } from '../../src/app/errors.js';
+import { postRound } from '../../src/review-rounds/store.js';
 import { describe, expect, it, vi } from 'vitest';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
@@ -189,6 +190,62 @@ describe('worker progress route', () => {
     }));
     const newWorker = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
     expect((await newWorker.json()).workers.map((worker: { ticket: string }) => worker.ticket)).toEqual(['13', '12']);
+    const message = vi.fn().mockResolvedValue({ request_id: 'r' });
+    const decisions = vi.fn().mockResolvedValue([]);
+    deps.aiurClientForGame = async () => ({ decisions, message }) as unknown as AiurClient;
+    tracker.mockImplementation(async () => ({
+      stale: false,
+      tickets: [
+        {
+          ticket: '12',
+          title: 'Forest backdrop',
+          outcome: 'Closed',
+          closedAt: null,
+          updatedAt: at,
+          url: 'https://github.com/owner/shared/issues/12',
+          labels: ['game:test-game', 'agent:human-review'],
+        },
+      ],
+    }));
+    const missing = `/api/v1/games/${game}/tickets/12/missing-review`;
+    expect((await app.request(missing, { method: 'POST', headers: asUser(outsider) })).status).toBeGreaterThanOrEqual(
+      400,
+    );
+    expect(message).not.toHaveBeenCalled();
+    expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(200);
+    expect(message).toHaveBeenCalledWith('12', expect.stringContaining('no review media'), `review-target:12:${at}`);
+    decisions.mockRejectedValueOnce(new Error('daemon unavailable'));
+    expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBeGreaterThanOrEqual(500);
+    expect(message).toHaveBeenCalledOnce();
+    postRound(deps.db, {
+      id: 'round',
+      gameId: game,
+      track: 'art',
+      phase: 'concept',
+      category: 'art',
+      round: 1,
+      ticket: '12',
+      sha: 'a'.repeat(40),
+      media: '[]',
+      postedAt: at,
+    });
+    expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(409);
+    expect(message).toHaveBeenCalledOnce();
+    // Restore the tracker snapshot for the unavailable-daemon check below.
+    tracker.mockImplementation(async () => ({
+      stale: false,
+      tickets: [
+        {
+          ticket: '12',
+          title: 'Forest backdrop',
+          outcome: 'Closed',
+          closedAt: null,
+          updatedAt: '2026-11-01T00:00:00Z',
+          url: 'https://github.com/owner/shared/issues/12',
+          labels: ['game:test-game', 'agent:ci-wait'],
+        },
+      ],
+    }));
     deps.aiurClientForGame = async () => {
       throw new HttpError(409, 'daemon_not_found');
     };

@@ -58,6 +58,30 @@ export default new Hono<ApiBindings>()
     );
     return c.json({ rounds: result });
   })
+  .post('/games/:gameId/review-rounds/:id/missing-media', async (c) => {
+    const game = authorizedGame(c, 'game.edit');
+    if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
+    const deps = c.get('deps');
+    const round = getRound(deps.db, game.id, c.req.param('id'));
+    if (!round || round.verdict !== null) throw new HttpError(404, 'review_round_not_found');
+    const media = JSON.parse(round.media) as Media[];
+    if (
+      media.some(
+        (item) =>
+          (['still', 'clip'].includes(item.kind) && /^sha256:[0-9a-f]{64}$/u.test(item.ref)) ||
+          (item.kind === 'build' && item.ref !== ''),
+      )
+    )
+      throw new HttpError(409, 'media_present');
+    const client = await deps.aiurClientForGame(game.id);
+    const receipt = await client.message(
+      round.ticket,
+      'This creator review is missing media. Please add the media and resend it.',
+      `review-media:${round.id}`,
+    );
+    if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
+    return c.json({ status: 'asked' });
+  })
   .post('/games/:gameId/review-rounds/:id/answer', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');

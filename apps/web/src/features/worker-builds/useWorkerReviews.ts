@@ -4,9 +4,11 @@ import type { Preview } from '../../routes/review/PreviewReviews';
 import type { Round } from '../../routes/review/RoundReviews';
 
 export type WorkerReview =
-  { kind: 'round'; gameId: string; round: Round } | { kind: 'preview'; gameId: string; preview: Preview; round: Round };
+  | { kind: 'round'; gameId: string; gameTitle?: string; round: Round }
+  | { kind: 'preview'; gameId: string; gameTitle?: string; preview: Preview; round: Round }
+  | { kind: 'standalone-preview'; gameId: string; gameTitle?: string; preview: Preview };
 
-type Game = { id: string; slug?: string | null };
+type Game = { id: string; title?: string; slug?: string | null };
 
 // Gameplay rounds are represented by their playable preview; the rounds endpoint excludes them.
 export function useWorkerReviews(games: readonly Game[], creatorId?: string) {
@@ -41,9 +43,22 @@ export function useWorkerReviews(games: readonly Game[], creatorId?: string) {
             (item) => item.ticket === round.ticket && item.buildId === round.buildId,
           );
           return preview
-            ? { kind: 'preview', gameId: game.id, preview, round }
-            : { kind: 'round', gameId: game.id, round };
+            ? { kind: 'preview', gameId: game.id, ...(game.title ? { gameTitle: game.title } : {}), preview, round }
+            : { kind: 'round', gameId: game.id, ...(game.title ? { gameTitle: game.title } : {}), round };
         }),
+      ...(!queries[index * 2]?.isPending ? (previews?.previews ?? []) : [])
+        .filter(
+          (preview) =>
+            !(rounds?.rounds ?? []).some(
+              (round) => round.ticket === preview.ticket && round.buildId === preview.buildId,
+            ),
+        )
+        .map((preview): WorkerReview => ({
+          kind: 'standalone-preview',
+          gameId: game.id,
+          ...(game.title ? { gameTitle: game.title } : {}),
+          preview,
+        })),
     ];
   });
   return { reviews, error: queries.some((query) => query.isError), loading: queries.some((query) => query.isLoading) };

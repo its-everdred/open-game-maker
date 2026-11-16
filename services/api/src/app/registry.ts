@@ -80,6 +80,7 @@ export interface Registry {
   ticketJobResolver: TicketJobResolver | null;
   chatJobs: ChatJobDirectory | null;
   aiurClientFor: AiurClientResolver | null;
+  coreAiurClient: import('@ogm/aiur-client').AiurClient | null;
   workerWorkpad: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   workerTitle: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   trackerTickets:
@@ -116,6 +117,7 @@ export function createRegistry(): Registry {
     ticketJobResolver: null,
     chatJobs: null,
     aiurClientFor: null,
+    coreAiurClient: null,
     workerWorkpad: null,
     workerTitle: null,
     trackerTickets: null,

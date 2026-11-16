@@ -122,6 +122,8 @@ vi.mock('../features/build-chat/Chat', () => ({
 }));
 vi.mock('../features/commands-inbox/commands', () => ({
   answerCommand: vi.fn(async () => undefined),
+  useCoreReviewCommands: () => ({ commands: [], targets: [], error: false, loading: false }),
+  useCreatorReviewCommands: (creatorId: string | undefined) => (creatorId ? state.decisions : []),
   useCreatorCommands: (creatorId: string | undefined) => ({
     commands: creatorId ? state.decisions : [],
     sessions: creatorId ? state.sessions : [],
@@ -640,8 +642,8 @@ describe('StudioMenu', () => {
     state.decisions = [decision('d1')];
     const view = renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
-    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
-    expect(screen.getByText('Which d1?')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Blobs · Topic d1' }));
+    expect(screen.getByRole('alert')).toBeVisible();
     state.session = { data: { user: { id: 'user-2' } } };
     state.decisions = [decision('d2')];
     view.rerender(
@@ -649,7 +651,7 @@ describe('StudioMenu', () => {
         <TestStudioMenu />
       </MemoryRouter>,
     );
-    expect(screen.queryByText('Which d1?')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   // On a shared device, a decision one creator opened must not stay on screen, answerable, for the next account.

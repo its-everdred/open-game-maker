@@ -110,6 +110,32 @@ describe('review round previews', () => {
     });
   });
 
+  it('asks the worker for missing round media and refuses when media exists', async () => {
+    const { deps, app, message } = setup();
+    postRound(deps.db, {
+      id: 'missing-round',
+      gameId: ids.game,
+      track: 'art',
+      phase: 'concept',
+      category: 'art',
+      round: 1,
+      ticket: '12',
+      sha: SHA,
+      media: '[]',
+      postedAt: '2026-11-14T00:00:00Z',
+    });
+    const path = `/api/v1/games/${ids.game}/review-rounds/missing-round/missing-media`;
+    expect((await app.request(path, { method: 'POST', headers: asUser(ids.user) })).status).toBe(200);
+    expect(message).toHaveBeenCalledWith('12', expect.stringContaining('missing media'), 'review-media:missing-round');
+    deps.db
+      .update(schema.reviewRounds)
+      .set({ media: JSON.stringify([{ kind: 'still', ref: `sha256:${'a'.repeat(64)}` }]) })
+      .where(eq(schema.reviewRounds.id, 'missing-round'))
+      .run();
+    expect((await app.request(path, { method: 'POST', headers: asUser(ids.user) })).status).toBe(409);
+    expect(message).toHaveBeenCalledOnce();
+  });
+
   it('shows an art round and records the owner verdict exactly once', async () => {
     const { deps, app } = setup();
     enableTracks(deps);

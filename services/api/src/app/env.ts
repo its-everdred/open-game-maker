@@ -8,6 +8,8 @@ const hostTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
 export const apiEnvSpec = {
   OGM_API_PORT: { kind: 'port' },
+  AIUR_API_URL: { kind: 'url', required: false },
+  AIUR_API_TOKEN: { kind: 'secret', required: false },
   OGM_ANALYTICS_RETENTION_DAYS: { kind: 'int', default: '90' },
   OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: { kind: 'int', default: '5000000' },
   OGM_RESET_ZONE_DEFAULT: { kind: 'string', default: hostTimeZone },
@@ -88,6 +90,12 @@ export function loadApiEnv(source?: Record<string, string | undefined>) {
   }
   if (env.OGM_INTAKE_SWEEP_SECONDS <= 0) {
     throw new ConfigError('api', [], [{ name: 'OGM_INTAKE_SWEEP_SECONDS', reason: 'must be a positive integer' }]);
+  }
+  if (
+    env.AIUR_API_URL !== undefined &&
+    !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(env.AIUR_API_URL).hostname)
+  ) {
+    throw new ConfigError('api', [], [{ name: 'AIUR_API_URL', reason: 'must be a loopback URL' }]);
   }
   const voiceUrl = env.OGM_VOICE_HOST_INTERNAL_URL;
   if (voiceUrl !== undefined && !['127.0.0.1', 'localhost'].includes(new URL(voiceUrl).hostname)) {

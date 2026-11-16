@@ -110,6 +110,8 @@ describe('the product-question queue', () => {
 
     const menu = await read(deps, '/me/commands');
     expect(menu.commands.map(({ decision_id }) => decision_id)).toEqual(['d_look']);
+    const review = await read(deps, '/me/commands?includeQuestions=1');
+    expect(review.commands).toHaveLength(10);
     // Castle has four: below the threshold, so nothing is offered for it yet.
     expect(menu.question_sessions).toEqual([{ game_id: ids.blobs, game_title: 'Blobs', count: 5 }]);
     const inbox = await read(deps, `/games/${ids.blobs}/commands`);

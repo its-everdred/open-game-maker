@@ -75,6 +75,21 @@ against the job's Command and calls aiur's canonical Decision API with the Comma
 from the inbox, from the job conversation modal and from an inline Command card are the same operation. A `409`
 means another writer answered first and the returned status is the winner's.
 
+## Builds review inbox
+
+The Builds badge and Needs Review entry open a list of the creator's game Commands, core Commands, and unanswered review rounds.
+Core Commands are labeled Core and are visible only to the instance owner. The API connects to the local core daemon
+using `AIUR_API_URL` and `AIUR_API_TOKEN` from its environment; the core source is unavailable when either is unset.
+A Command card sends a pick or change note through `POST /api/v1/games/:gameId/commands/:decisionId/answer`
+with the displayed version. Aiur records the creator's answer and the review ledger records its notes.
+
+When a review lacks media, the inbox does not offer a verdict. It requests media from the owning ticket with an
+idempotent message and shows whether that request was confirmed. A human-review ticket without a matching Command or
+round also appears as a missing-review item. The API checks the ticket still belongs to the game and has no open
+review before requesting media. Its endpoints are `POST /games/:gameId/commands/:decisionId/missing-media`,
+`POST /games/:gameId/review-rounds/:id/missing-media`, and `POST /games/:gameId/tickets/:ticket/missing-review`
+under `/api/v1`; they require the game owner and reject a request when the review is already present.
+
 ## Track review rounds
 
 The Review view shows open art and sound rounds posted with `gm review post`, using their stored stills or capture clips.

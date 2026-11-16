@@ -585,6 +585,26 @@ describe('a registered game’s own Commands', () => {
     ]);
   });
 
+  it('retains the owning job when a creator answers its review', async () => {
+    const { app, deps } = await appWithAiur([decision()]);
+    job(deps, ids.job, ids.game, AT);
+    deps.db.update(schema.jobs).set({ aiurIssueNumber: 478 }).run();
+    command(deps, ids.job, ULID, {
+      decision_id: 'd_aiur_1',
+      options: [
+        { id: 'round', label: 'Round blobs' },
+        { id: 'square', label: 'Square blobs' },
+      ],
+    });
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+    });
+    expect(response.status).toBe(200);
+    expect(listReviews(deps.db, ids.game)).toEqual([expect.objectContaining({ job_id: ids.job, command_id: ULID })]);
+  });
+
   it('refuses a review whose cards are not the Command’s and answers nothing', async () => {
     const { app, answerAsCreator } = await appWithAiur([decision()]);
 
@@ -618,6 +638,21 @@ describe('a registered game’s own Commands', () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: 'command_not_found' });
     expect(answerAsCreator).not.toHaveBeenCalled();
+  });
+
+  it('does not answer an Executor decision or an option outside the Command', async () => {
+    const technical = await appWithAiur([decision({ context: {} })]);
+    const request = (app: typeof technical.app, option_id: string) =>
+      app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+        method: 'POST',
+        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+        body: JSON.stringify({ option_id, version: 2 }),
+      });
+    expect((await request(technical.app, 'round')).status).toBe(404);
+    expect(technical.answerAsCreator).not.toHaveBeenCalled();
+    const creator = await appWithAiur([decision()]);
+    expect((await request(creator.app, 'unknown')).status).toBe(400);
+    expect(creator.answerAsCreator).not.toHaveBeenCalled();
   });
 
   it('reports another writer’s answer as a conflict', async () => {
@@ -654,4 +689,143 @@ describe('a registered game’s own Commands', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: 'daemon_not_found' });
   });
+});
+
+it('asks the owning worker once by stable message id when a command has no media', async () => {
+  const { app, deps } = await appWithAiur([decision()]);
+  const message = vi.fn().mockResolvedValue({ request_id: 'r' });
+  deps.aiurClientForGame = async () =>
+    ({ decisions: async () => [decision()], decision: async () => decision(), message }) as unknown as AiurClient;
+  const path = `/api/v1/games/${ids.game}/commands/d_aiur_1/missing-media`;
+  expect((await app.request(path, { method: 'POST', headers: asUser(ids.outsider) })).status).toBeGreaterThanOrEqual(
+    400,
+  );
+  expect(message).not.toHaveBeenCalled();
+  expect((await app.request(path, { method: 'POST', headers: asUser(ids.user) })).status).toBe(200);
+  expect(message).toHaveBeenCalledWith('478', expect.stringContaining('missing media'), 'review-media:d_aiur_1:2');
+});
+
+it('lists and answers core Commands only for the instance owner', async () => {
+  const { app, deps } = await appWithAiur([]);
+  deps.config.instanceOwnerId = ids.user;
+  const coreDecision = decision({
+    audience: 'creator',
+    context: { short_summary: 'Blobs look' },
+    options: [
+      {
+        id: 'round',
+        label: 'Round blobs',
+        media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/a.png' } }],
+      },
+      {
+        id: 'square',
+        label: 'Square blobs',
+        media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/b.png' } }],
+      },
+    ],
+  });
+  const answerAsCreator = vi.fn().mockResolvedValue(undefined);
+  const message = vi.fn().mockResolvedValue({ request_id: 'r' });
+  deps.registry.coreAiurClient = {
+    decisions: vi.fn().mockResolvedValue([coreDecision]),
+    decision: vi.fn().mockResolvedValue(coreDecision),
+    state: vi.fn().mockResolvedValue({
+      running: [],
+      retrying: [],
+      idle: [{ issue_identifier: '479', state: 'agent:human-review', title: 'Review core build' }],
+    }),
+    issue: vi.fn().mockResolvedValue({ status: 'in-progress' }),
+    answerAsCreator,
+    message,
+  } as unknown as AiurClient;
+  expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.outsider) })).status).toBe(403);
+  const page = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
+  expect(await page.json()).toMatchObject({
+    targets: [{ source: 'core', ticket: '479', title: 'Review core build' }],
+    commands: [
+      {
+        source: 'core',
+        decision_id: 'd_aiur_1',
+        options: [{ media: { url: 'https://example.test/a.png' } }, { media: { url: 'https://example.test/b.png' } }],
+      },
+    ],
+  });
+  const path = '/api/v1/core/commands/d_aiur_1/answer';
+  const request = () =>
+    app.request(path, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'square', version: 2, review: { likes: ['square'], dislikes: [] } }),
+    });
+  expect((await request()).status).toBe(200);
+  expect(answerAsCreator).toHaveBeenCalledWith(
+    'd_aiur_1',
+    expect.objectContaining({ ticket: '478', principal: ids.user, expected_version: 2, idempotency_key: 'd_aiur_1:2' }),
+  );
+  expect(
+    (await app.request('/api/v1/core/commands/d_aiur_1/missing-media', { method: 'POST', headers: asUser(ids.user) }))
+      .status,
+  ).toBe(409);
+  expect(message).not.toHaveBeenCalled();
+  expect(
+    (await app.request('/api/v1/core/tickets/479/missing-review', { method: 'POST', headers: asUser(ids.user) }))
+      .status,
+  ).toBe(200);
+  expect(message).toHaveBeenCalledWith('479', expect.stringContaining('no review media'), 'core-review-target:479');
+  expect(await (await app.request('/api/v1/core/tickets/478/state', { headers: asUser(ids.user) })).json()).toEqual({
+    state: 'in-progress',
+  });
+  deps.registry.coreAiurClient = null;
+  expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).status).toBe(503);
+});
+
+it('does not report a declared attachment as absent while its copy is pending', async () => {
+  const { app, deps } = await appWithAiur([]);
+  const withMedia = decision({
+    options: [
+      {
+        id: 'round',
+        label: 'Round blobs',
+        media: [{ kind: 'image', locator: { kind: 'attachment', attachment_id: 'a' } }],
+      },
+      {
+        id: 'square',
+        label: 'Square blobs',
+        media: [{ kind: 'image', locator: { kind: 'attachment', attachment_id: 'b' } }],
+      },
+    ],
+  });
+  const message = vi.fn().mockResolvedValue({ request_id: 'r' });
+  const { aiurMediaTiming } = await import('../../src/commands/aiur-media.js');
+  const original = aiurMediaTiming.inboxWaitMs;
+  aiurMediaTiming.inboxWaitMs = 1;
+  deps.aiurClientForGame = async () =>
+    ({
+      decisions: async () => [withMedia],
+      decision: async () => withMedia,
+      baseUrl: 'http://127.0.0.1:1',
+      decisionMedia: () => new Promise(() => {}),
+      message,
+    }) as unknown as AiurClient;
+  try {
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/missing-media`, {
+      method: 'POST',
+      headers: asUser(ids.user),
+    });
+    expect(response.status).toBe(409);
+    expect(message).not.toHaveBeenCalled();
+  } finally {
+    aiurMediaTiming.inboxWaitMs = original;
+  }
+});
+
+it('does not expose a core daemon error or its connection details', async () => {
+  const { app, deps } = await appWithAiur([]);
+  deps.config.instanceOwnerId = ids.user;
+  deps.registry.coreAiurClient = {
+    decisions: vi.fn().mockRejectedValue(new Error('private-core-value')),
+  } as unknown as AiurClient;
+  const response = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
+  expect(response.status).toBe(502);
+  expect(await response.text()).not.toContain('private-core-value');
 });
