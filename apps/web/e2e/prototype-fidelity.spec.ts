@@ -109,7 +109,10 @@ for (const scenario of scenarios) {
 
       try {
         await page.setViewportSize(viewport);
-        await page.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
+        await page.route('**/api/v1/me/commands**', (route) => route.fulfill({ json: { commands: [], sessions: [] } }));
+        await page.route('**/api/v1/me/core-commands', (route) =>
+          route.fulfill({ json: { commands: [], targets: [] } }),
+        );
         await page.route('**/api/v1/notifications?*', (route) => route.fulfill({ json: [] }));
         const masks = await test.step('prepare app and prototype', () => scenario.prepare(page, reference));
         if (scenario.name === 'editor') {
@@ -313,7 +316,8 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
   await Promise.all([neutralizeAppAssets(app), neutralizeReferenceAssets(reference)]);
   await installAuthRoutes(app, { signedIn: true });
   await installGameApi(app);
-  await app.route('**/api/v1/me/commands', (route) => route.fulfill({ json: { commands: [] } }));
+  await app.route('**/api/v1/me/commands**', (route) => route.fulfill({ json: { commands: [], sessions: [] } }));
+  await app.route('**/api/v1/me/core-commands', (route) => route.fulfill({ json: { commands: [], targets: [] } }));
   await app.route('**/api/v1/me', (route) => route.fulfill({ json: { platformRole: 'none' } }));
   await app.route('**/api/v1/energy', (route) =>
     route.fulfill({

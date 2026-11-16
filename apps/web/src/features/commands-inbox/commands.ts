@@ -60,6 +60,7 @@ export function useCreatorReviewCommands(creatorId: string | undefined) {
   return {
     commands: creatorId ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS,
     error: query.isError || query.data?.unavailable === true,
+    loading: query.isLoading,
   };
 }
 

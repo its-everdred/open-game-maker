@@ -85,7 +85,7 @@ export function StudioMenu() {
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
   const ownedGames = isShowcase ? [] : builds.games.filter((item) => item.ownerId === creatorId);
-  const { workers, feeds, error: workerError } = useWorkers(ownedGames, undefined, creatorId);
+  const { workers, feeds, error: workerError, loading: workersLoading } = useWorkers(ownedGames, undefined, creatorId);
   const reviewData = useWorkerReviews(ownedGames, creatorId);
   const reviews = reviewData.reviews;
   const past = usePastTickets(ownedGames, creatorId);
@@ -99,7 +99,15 @@ export function StudioMenu() {
       ? finished.filter(({ ticket }) => ticket.startsWith(gameId + ':'))
       : finished;
   useEffect(() => {
-    if (!creatorId || reviewData.loading) return;
+    if (
+      !creatorId ||
+      builds.isLoading ||
+      workersLoading ||
+      reviewData.loading ||
+      gameReview.loading ||
+      coreReview.loading
+    )
+      return;
     const keys = new Set([
       ...reviews.map(
         (review) =>
@@ -113,7 +121,18 @@ export function StudioMenu() {
     if (previous?.creator === creatorId && [...keys].some((key) => !previous.keys.has(key))) setReviewNotice(true);
     if (previous?.creator !== creatorId) setReviewNotice(false);
     seenReviews.current = { creator: creatorId, keys };
-  }, [coreReview.targets, creatorId, reviewCommands, reviewData.loading, reviews, workers]);
+  }, [
+    builds.isLoading,
+    coreReview.loading,
+    coreReview.targets,
+    creatorId,
+    gameReview.loading,
+    reviewCommands,
+    reviewData.loading,
+    reviews,
+    workers,
+    workersLoading,
+  ]);
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
@@ -531,7 +550,7 @@ export function StudioMenu() {
           onDismiss={dismissFinished}
         />
       )}
-      {reviewNotice && (
+      {reviewNotice && !open && (
         <button
           type="button"
           className="worker-tracker-toast worker-tracker-game-toast"

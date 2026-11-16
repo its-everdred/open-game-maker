@@ -48,6 +48,7 @@ export function useWorkers(games: readonly Game[], currentGameId?: string, creat
   return {
     workers,
     feeds,
+    loading: queries.some((query) => query.isLoading),
     error: queries.some((query) => query.isError || query.data?.daemonUnavailable || query.data?.trackerStale),
   };
 }
