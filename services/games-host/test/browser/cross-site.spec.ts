@@ -164,15 +164,67 @@ test.describe('games origin browser boundary', () => {
       canvas.style.left = '0';
       canvas.getContext('2d')!.fillRect(0, 0, 0, 8);
     });
-    await gameFrame.evaluate(
-      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-    );
-    expect(await page.evaluate(() => Reflect.get(window, '__drawFrameOrigin'))).toBeUndefined();
-    await gameFrame.evaluate(() => document.querySelector('canvas')!.getContext('2d')!.fillRect(0, 0, 8, 8));
+    // The earlier real draw becomes visible when the canvas moves into view.
     await expect.poll(() => page.evaluate(() => Reflect.get(window, '__drawFrameOrigin'))).toBe(gamesOrigin);
     expect(await gameFrame.evaluate(() => CanvasRenderingContext2D.prototype.fillRect.toString())).toContain(
       '[native code]',
     );
+  });
+
+  test('detects a path-only frame but ignores an empty path', async ({ page }) => {
+    await page.goto(allowedParent.origin);
+    const gameFrame = await waitForGameFrame(page, gamesOrigin);
+    await expect(gameFrame.locator('#ready')).toHaveText('ready');
+    await page.evaluate(() =>
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__pathFrameOrigin', event.origin);
+      }),
+    );
+    await gameFrame.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 8;
+      canvas.height = 8;
+      document.body.append(canvas);
+      const context = canvas.getContext('2d')!;
+      context.beginPath();
+      context.moveTo(0, 0);
+      context.lineTo(0, 0);
+      context.stroke();
+      context.beginPath();
+      context.fill();
+    });
+    await gameFrame.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+    expect(await page.evaluate(() => Reflect.get(window, '__pathFrameOrigin'))).toBeUndefined();
+    await gameFrame.evaluate(() => {
+      const context = document.querySelector('canvas')!.getContext('2d')!;
+      context.beginPath();
+      context.rect(0, 0, 8, 8);
+      context.fill();
+    });
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, '__pathFrameOrigin'))).toBe(gamesOrigin);
+  });
+
+  test('detects copied SVG paths drawn before canvas attachment', async ({ page }) => {
+    await page.goto(allowedParent.origin);
+    const gameFrame = await waitForGameFrame(page, gamesOrigin);
+    await expect(gameFrame.locator('#ready')).toHaveText('ready');
+    await page.evaluate(() => window.addEventListener('message', (event) => {
+      if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__attachedFrameOrigin', event.origin);
+    }));
+    await gameFrame.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 8;
+      canvas.height = 8;
+      const path = new Path2D('M0 0 H8 V8 H0 Z');
+      const copy = new Path2D(path);
+      const composed = new Path2D();
+      composed.addPath(copy);
+      canvas.getContext('2d')!.fill(composed);
+      document.body.append(canvas);
+    });
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, '__attachedFrameOrigin'))).toBe(gamesOrigin);
   });
 
   test('detects putImageData even when global alpha is zero', async ({ page }) => {
