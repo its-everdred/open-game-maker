@@ -157,10 +157,16 @@ describe('gm check', () => {
   it('fails the complete check when declared loading images are missing', async () => {
     state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
     const root = tempDir();
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
     writeFileSync(
       join(root, 'gm.manifest.json'),
       JSON.stringify({ loading: { portrait: 'media/p.png', landscape: 'media/l.png' } }),
     );
+    git('add', '-A');
+    git('commit', '-qm', 'fixture');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     const result = await gm(['check', '--json'], { cwd: root });
     expect(result.code).toBe(1);
     expect(JSON.parse(result.out[0]!).loadingErrors).toHaveLength(2);
