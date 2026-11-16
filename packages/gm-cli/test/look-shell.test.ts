@@ -13,6 +13,7 @@ const capture = vi.hoisted(() => ({
   screenshotTimeout: false,
   softwareTimeout: false,
   smallBoard: false,
+  undeclared: false,
 }));
 vi.mock('../src/commands/capture/shell.js', async (original) => {
   const actual = await original<typeof import('../src/commands/capture/shell.js')>();
@@ -42,9 +43,13 @@ vi.mock('../src/commands/capture/shell.js', async (original) => {
         JSON.stringify(
           ['390x844', '844x390', '820x1180', '1180x820'].map((viewport) => ({
             viewport,
-            fill: capture.smallBoard && viewport === '1180x820' ? 0.61 : 0.95,
-            offset: 0,
-            ok: !(capture.smallBoard && viewport === '1180x820'),
+            ...(capture.undeclared
+              ? { ok: false, error: 'not declared' }
+              : {
+                  fill: capture.smallBoard && viewport === '1180x820' ? 0.61 : 0.95,
+                  offset: 0,
+                  ok: !(capture.smallBoard && viewport === '1180x820'),
+                }),
           })),
         ),
       );
@@ -75,7 +80,7 @@ describe('gm look shell', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
-  it('fails and names the viewport when the board is too small', async () => {
+  it('reports a small board without failing the capture', async () => {
     const root = tempDir();
     mkdirSync(join(root, 'dist/design'), { recursive: true });
     writeFileSync(join(root, 'dist/index.html'), 'game');
@@ -86,10 +91,12 @@ describe('gm look shell', () => {
         cwd: root,
         env: { XDG_RUNTIME_DIR: root },
       });
-      expect(result.code).toBe(1);
+      expect(result.code).toBe(0);
       expect(result.out.join('\n')).toContain('board fill 0.61 at 1180x820');
     } finally {
       capture.smallBoard = false;
+      capture.undeclared = false;
+      capture.screenshotTimeout = false;
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -114,6 +121,19 @@ describe('gm look shell', () => {
       const result = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
       expect(result.code).toBe(1);
       expect(result.err.join('\n')).toContain('board fill 0.61 at 1180x820');
+      capture.undeclared = true;
+      const missing = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
+      expect(missing.code).toBe(1);
+      expect(missing.err.join('\n')).toContain('play area: not declared');
+      capture.undeclared = false;
+      capture.smallBoard = false;
+      capture.screenshotTimeout = true;
+      const retry = await gm(['check', '--json', '--fields', 'ok'], {
+        cwd: root,
+        env: { ...process.env, XDG_RUNTIME_DIR: root },
+      });
+      expect(JSON.parse(retry.out.join('\n')).playArea.ok).toBe(true);
+      capture.screenshotTimeout = false;
       writeFileSync(join(root, 'build.cjs'), '// no output');
       const stale = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
       expect(stale.code).toBe(1);
@@ -124,6 +144,8 @@ describe('gm look shell', () => {
       expect(recursive.err.join('\n')).toContain('nonrecursive game build script');
     } finally {
       capture.smallBoard = false;
+      capture.undeclared = false;
+      capture.screenshotTimeout = false;
       rmSync(root, { recursive: true, force: true });
     }
   });

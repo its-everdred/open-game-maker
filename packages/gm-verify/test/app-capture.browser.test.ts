@@ -100,7 +100,7 @@ it('fails instead of publishing stills when the game never connects', async () =
   }
 }, 70_000);
 
-it('rejects a board hidden by an ancestor', async () => {
+it('reports a board hidden by an ancestor without stopping capture', async () => {
   const root = mkdtempSync(join(tmpdir(), 'gm-app-capture-hidden-'));
   const game = join(root, 'game');
   try {
@@ -116,23 +116,56 @@ it('rejects a board hidden by an ancestor', async () => {
         .replace('Bridge fixture</div>', '<div style="opacity:0"><div data-gm-play-area>Board</div></div></div>')
         .replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
     );
-    await expect(
-      exec(
-        process.execPath,
-        [
-          runner,
-          game,
-          join(root, 'shots'),
-          '[]',
-          '0',
-          '0',
-          process.env.GM_VERIFY_SOFTWARE_GL === '1' ? '1' : '0',
-          '--test-fast',
-        ],
-        { timeout: 90_000 },
-      ),
-    ).rejects.toThrow('play area is hidden');
+    await exec(
+      process.execPath,
+      [
+        runner,
+        game,
+        join(root, 'shots'),
+        '[]',
+        '0',
+        '0',
+        process.env.GM_VERIFY_SOFTWARE_GL === '1' ? '1' : '0',
+        '--test-fast',
+      ],
+      { timeout: 90_000 },
+    );
+    expect(readFileSync(join(root, 'shots/play-area.json'), 'utf8')).toContain('play area is hidden');
+    expect(existsSync(join(root, 'shots/menu-390x844.png'))).toBe(true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }, 100_000);
+
+it('captures every still when no play area is declared', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-app-capture-undeclared-'));
+  const game = join(root, 'game');
+  const out = join(root, 'shots');
+  try {
+    cpSync(fixture, game, { recursive: true });
+    const html = join(game, 'index.html');
+    const source = readFileSync(html, 'utf8');
+    const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+    if (!script) throw new Error('fixture script missing');
+    writeFileSync(join(game, 'fixture.js'), script);
+    writeFileSync(
+      html,
+      source.replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
+    );
+    await exec(
+      process.execPath,
+      [runner, game, out, '[]', '0', '0', process.env.GM_VERIFY_SOFTWARE_GL === '1' ? '1' : '0', '--test-all-fast'],
+      { timeout: 240_000 },
+    );
+    for (const size of ['390x844', '844x390', '820x1180', '1180x820']) {
+      for (const screen of ['play', 'menu']) expect(existsSync(join(out, `${screen}-${size}.png`))).toBe(true);
+    }
+    expect(JSON.parse(readFileSync(join(out, 'play-area.json'), 'utf8'))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ viewport: '390x844', ok: false, error: expect.stringContaining('not declared') }),
+      ]),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 250_000);

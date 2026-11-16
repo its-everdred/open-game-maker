@@ -188,9 +188,10 @@ export const command: GmCommand = {
       }
       const measurements = JSON.parse(readFileSync(resolve(temp, 'play-area.json'), 'utf8')) as {
         viewport: string;
-        fill: number;
-        offset: number;
+        fill?: number;
+        offset?: number;
         ok: boolean;
+        error?: string;
       }[];
       if (
         !limits.skip &&
@@ -256,10 +257,12 @@ export const command: GmCommand = {
         ctx.out('App-shell captures complete (mocked sign-in; not production or Safari).');
         for (const item of measurements)
           ctx.out(
-            `board fill ${item.fill.toFixed(2)} at ${item.viewport}, offset ${item.offset.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
+            item.error
+              ? `play area: ${item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport}: fail`
+              : `board fill ${item.fill!.toFixed(2)} at ${item.viewport}, offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
           );
       }
-      return measurements.every((item) => item.ok) ? EXIT.ok : EXIT.failed;
+      return EXIT.ok;
     } catch (error) {
       if (abort.signal.aborted) return 130;
       if (Date.now() >= deadline) {

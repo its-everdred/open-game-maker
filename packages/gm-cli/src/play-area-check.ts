@@ -66,8 +66,16 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
       if (!preserveBackup) rmSync(backup, { recursive: true, force: true });
     }
     scratch = mkdtempSync(join(tmpdir(), 'gm-play-area-check-'));
+    const reportOutput: string[] = [];
     const code = await shell.run(
-      { ...ctx, cwd: game, json: false, out: (line) => output.push(line), err: (line) => output.push(line) },
+      {
+        ...ctx,
+        cwd: game,
+        json: true,
+        fields: null,
+        out: (line) => reportOutput.push(line),
+        err: (line) => output.push(line),
+      },
       [],
       {
         dist: 'dist',
@@ -78,7 +86,21 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
         'max-offset': options.maxOffset,
       },
     );
-    return { ok: code === 0, output };
+    if (code !== 0) return { ok: false, output };
+    const report = JSON.parse(reportOutput.join('\n')) as {
+      playArea: { viewport: string; ok: boolean; fill?: number; offset?: number; error?: string }[];
+    };
+    return {
+      ok: report.playArea.every((item) => item.ok),
+      output: [
+        ...output,
+        ...report.playArea.map((item) =>
+          item.error
+            ? `play area: ${item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport}: fail`
+            : `board fill ${item.fill!.toFixed(2)} at ${item.viewport}, offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
+        ),
+      ],
+    };
   } catch (error) {
     output.push(error instanceof Error ? error.message : String(error));
     return { ok: false, output };
