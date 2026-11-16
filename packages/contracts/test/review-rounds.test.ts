@@ -47,4 +47,9 @@ describe('review submissions', () => {
       }).success,
     ).toBe(false);
   });
+  it('accepts supported explicit phase efforts and rejects unknown efforts', () => {
+    const track = { id: 'art', category: 'art', phases: [{ id: 'mock', template: 'mock', effort: 'xhigh' }] };
+    expect(ReviewTrack.safeParse(track).success).toBe(true);
+    expect(ReviewTrack.safeParse({ ...track, phases: [{ ...track.phases[0], effort: 'ultra' }] }).success).toBe(false);
+  });
 });

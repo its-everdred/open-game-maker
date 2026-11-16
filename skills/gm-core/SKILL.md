@@ -45,6 +45,8 @@ creator's choice; a choice shown with stand-ins is not a choice.
 
 ## Build loop
 
+For a creator request carrying a `phase:*` label, load [gm-fidelity-ladder](../gm-fidelity-ladder/SKILL.md) and follow its current rung.
+
 **Ask, don't assume.** At any stage (a prototype, a failed review, a spec gap), before deciding anything a player would
 notice, ask with `gm decide`: a 2-5 word `--topic`, as many options as needed, each showing the thing itself (`--media`
 or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic; `design/decisions.json` refuses

@@ -15,6 +15,7 @@ export const ReviewTrack = z
             id: Key,
             ticket: Ticket.optional(),
             template: z.string().min(1),
+            effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
           })
           .strict(),
       )

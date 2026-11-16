@@ -1,5 +1,7 @@
 # Prototype ladder
 
+For creator-request ticket phases and effort, also follow [gm-fidelity-ladder](../../gm-fidelity-ladder/SKILL.md).
+
 Every new game is prototyped in five stages, in this order, with a creator review at the end of each one. Each stage
 turns the previous stage's approved output into something closer to the real game: pictures and sounds, then a
 diorama built from the kit, then rendered gameplay clips, then playable slices, then tuned variants.
