@@ -6,6 +6,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 
 import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
+import sharp from 'sharp';
 
 import { finishRun, publishStaged, sweepBuilds } from '../../src/builds/publish.js';
 import { getDesignRuntime } from '../../src/design/routes.js';
@@ -111,7 +112,26 @@ describe('publishing a merged build', () => {
     const { buildId } = (await response.json()) as { buildId: string };
     expect(
       JSON.parse(readFileSync(join(deps.config.gamesRoot, ids.game, buildId, '.ogm-display.json'), 'utf8')),
-    ).toEqual({ logo: 'media/logo.png', genres: ['puzzle'] });
+    ).toEqual({ logo: 'media/logo.png', genres: ['puzzle'], images: {} });
+  });
+
+  it('generates display variants before publishing a build', async () => {
+    const { deps, app } = world();
+    completeRun(deps);
+    const dir = builtFiles();
+    mkdirSync(join(dir, 'media'), { recursive: true });
+    await sharp({ create: { width: 640, height: 360, channels: 3, background: '#f00' } })
+      .png()
+      .toFile(join(dir, 'media/thumbnail.png'));
+    const response = await upload(app, archiveOf(dir));
+    expect(response.status).toBe(201);
+    const { buildId } = (await response.json()) as { buildId: string };
+    const build = join(deps.config.gamesRoot, ids.game, buildId);
+    const display = JSON.parse(readFileSync(join(build, '.ogm-display.json'), 'utf8'));
+    const image = display.images['media/thumbnail.png'];
+    expect(image.sources.avif.map((item: { width: number }) => item.width)).toEqual([320, 640]);
+    expect(existsSync(join(build, image.sources.avif[0].path))).toBe(true);
+    expect(existsSync(join(build, '.complete'))).toBe(true);
   });
 
   it('fails the job when the build has no generated credits document', async () => {

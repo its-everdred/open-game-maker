@@ -1,3 +1,4 @@
+import { DisplayImage } from './DisplayImage';
 import { useEffect, useRef } from 'react';
 
 import { CommandsInbox } from '../../features/commands-inbox/CommandsInbox';
@@ -85,7 +86,14 @@ export function Spotlight({ game, branches, job, onPlay, onEdit, onClose, shared
           ) : (
             <Cover game={game} />
           )}
-          {game.logoUrl && <img className="game-logo" src={game.logoUrl} alt="" />}
+          {game.logoUrl && (
+            <DisplayImage
+              className="game-logo"
+              src={game.logoUrl}
+              image={game.logoImage}
+              sizes="(max-width: 600px) 55vw, 320px"
+            />
+          )}
         </span>
       </div>
     </section>

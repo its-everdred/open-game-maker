@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { preloadDisplayImage } from './DisplayImage';
 import { Cover } from './Cover';
 import { GameTrailer } from './GameTrailer';
 import type { GameSummary } from './types';
@@ -16,6 +17,10 @@ export function GameCell({
   tile: ReactNode;
   spotlight: ReactNode;
 }) {
+  if (selected) {
+    preloadDisplayImage(game.coverImage, game.coverUrl, '(max-width: 600px) 85vw, (max-width: 1000px) 50vw, 640px');
+    preloadDisplayImage(game.logoImage, game.logoUrl, '(max-width: 600px) 55vw, 320px');
+  }
   const cell = useRef<HTMLDivElement>(null);
   const lastSpotlight = useRef<ReactNode>(null);
   const [exiting, setExiting] = useState(false);

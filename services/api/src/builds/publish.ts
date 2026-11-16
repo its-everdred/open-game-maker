@@ -22,6 +22,7 @@ import { registerBuild, updateBuild } from '../releases/service.js';
 import { withArtifactMutation } from './artifact-lock.js';
 import { BuildCacheError, completeBuildCache } from './cache-plan.js';
 import { untarGz } from './untar.js';
+import { makeDisplayImages } from './display-images.js';
 
 // Jobs whose merged PR must become a playable build before the job is done; a scope job ships no build.
 export const BUILD_KINDS = ['new_game', 'feature', 'repair'] as const;
@@ -105,6 +106,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
     const integrations = await scanBuild(files);
     if (integrations.credentials.length > 0) throw new PublishFailure('provider_credential');
     if (integrations.paid.length > 0 && !paidApisDuringGameplay(deps.db)) throw new PublishFailure('paid_integration');
+    const images = await makeDisplayImages(files, manifest.data.logo);
     const saveSchemaVersion = (manifest.data as Record<string, unknown>).saveSchemaVersion;
     const achievements = await readFile(join(files, 'achievements.json')).catch(() => Buffer.alloc(0));
     const published = await withArtifactMutation(async () => {
@@ -139,6 +141,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
         JSON.stringify({
           logo: manifest.data.logo,
           genres: manifest.data.genres,
+          images,
         }),
       );
       await markComplete(buildTarget);
