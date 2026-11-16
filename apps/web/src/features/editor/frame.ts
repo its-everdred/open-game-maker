@@ -32,6 +32,7 @@ export type GameFrameState = {
   manifest?: GameManifest;
   error?: string;
   errorCode?: string;
+  firstFrame?: boolean;
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
 };
 
@@ -97,6 +98,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   let loadObserved = false;
   let loadTerminal = false;
   let loadStallTimer: ReturnType<typeof setTimeout> | undefined;
+  let firstFrameTimer: ReturnType<typeof setTimeout> | undefined;
+  let expectsFirstFrame = false;
   let lastLoadProgress: GameLoadProgress | undefined;
   const mountedAt = performance.now();
   type PlacementRequest = {
@@ -121,6 +124,20 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     if (loadStallTimer !== undefined) clearTimeout(loadStallTimer);
     loadStallTimer = undefined;
   };
+  const clearFirstFrameTimer = () => {
+    if (firstFrameTimer !== undefined) clearTimeout(firstFrameTimer);
+    firstFrameTimer = undefined;
+  };
+  const armFirstFrameTimer = () => {
+    clearFirstFrameTimer();
+    if (!expectsFirstFrame || current.firstFrame || disposed) return;
+    firstFrameTimer = setTimeout(() => {
+      if (disposed || current.firstFrame || current.bridgeState === 'error') return;
+      clearLoadStall();
+      current = { ...current, bridgeState: 'error', error: 'first-frame-stalled', errorCode: 'first-frame-stalled' };
+      publish();
+    }, 20_000);
+  };
   const stallLoad = () => {
     if (disposed || loadTerminal || lastLoadProgress === undefined) return;
     loadTerminal = true;
@@ -134,19 +151,33 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     });
   };
   const handleLoad = (event: GameLoadEvent) => {
-    if (disposed || loadTerminal) return;
+    if (disposed || current.bridgeState === 'error') return;
+    if (event.t === 'load.frame') {
+      clearFirstFrameTimer();
+      current = { ...current, firstFrame: true };
+      publish();
+      return;
+    }
+    if (loadTerminal) return;
     if (event.t === 'load.done') {
       loadObserved = true;
+      clearFirstFrameTimer();
       loadTerminal = true;
       clearLoadStall();
       const load = current.load ?? { phase: 'ready' as const, loaded: 0, total: 0, done: false };
-      current = { ...current, load: { ...load, done: true } };
+      current = {
+        ...current,
+        firstFrame: current.firstFrame,
+        load: { ...load, done: true },
+      };
+      armFirstFrameTimer();
       publish();
       options.onLoadDone?.(event.payload);
       return;
     }
     if (event.payload.phase === 'stream') return;
     loadObserved = true;
+    clearFirstFrameTimer();
     lastLoadProgress = event.payload;
     clearLoadStall();
     loadStallTimer = setTimeout(stallLoad, 20_000);
@@ -191,12 +222,15 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       readyTimeoutMs: 10_000,
       onReady: (manifest, marks) => {
         if (current.bridgeState === 'error') return;
+        // The games host forwards the existing game-ready event for legacy builds; new SDKs also send load.frame.
+        expectsFirstFrame = true;
         current = {
           ...current,
           bridgeState: 'ready',
           manifest,
           load: loadObserved ? current.load : { phase: 'ready', loaded: 0, total: 0, done: true },
         };
+        armFirstFrameTimer();
         frame.send('design.apply', { rev: options.design.rev, doc: options.design.doc, patches: [] });
         emitRoomMessage('ready', { protocol: SDK_PROTOCOL, manifest, marks });
         publish();
@@ -216,6 +250,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
           return;
         }
         clearLoadStall();
+        clearFirstFrameTimer();
         current = { ...current, bridgeState: 'error', error: failure.message, errorCode: failure.code };
         publish();
       },
@@ -324,6 +359,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       if (disposed) return;
       disposed = true;
       clearLoadStall();
+      clearFirstFrameTimer();
       saveLoadErrors.clear();
       window.removeEventListener('message', observeOrigin);
       stopPlacement();

@@ -174,9 +174,38 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       runtime.addCleanup(installGlobals(hooks, build));
     }
 
+    let frameSignaled = false;
+    const frameReady = () => {
+      if (frameSignaled) return;
+      frameSignaled = true;
+      send('load.frame', {});
+    };
+    if (typeof window !== 'undefined') {
+      const observedFrame = () => {
+        if (hooks.ready) frameReady();
+      };
+      window.addEventListener('gm-frame-ready', frameReady, { once: true });
+      window.addEventListener('ogm-observed-frame', observedFrame);
+      runtime.addCleanup(() => {
+        window.removeEventListener('gm-frame-ready', frameReady);
+        window.removeEventListener('ogm-observed-frame', observedFrame);
+      });
+    }
     marks.push(['frame0', markNow()]);
     hooks.ready = true;
-    send('ready', { protocol: SDK_PROTOCOL, manifest: readyManifest(module.manifest, instance), marks });
+    send('ready', {
+      protocol: SDK_PROTOCOL,
+      manifest: readyManifest(module.manifest, instance),
+      marks,
+      firstFrameSignal: true,
+    });
+    // A game may draw during mount. Check only after its startup continuation can mark itself unready.
+    if (!options.headless && typeof requestAnimationFrame === 'function') {
+      const paintFrame = requestAnimationFrame(() => {
+        if (hooks.ready && Reflect.get(window, '__ogmObservedFrame') === true) frameReady();
+      });
+      runtime.addCleanup(() => cancelAnimationFrame(paintFrame));
+    }
     for (const envelope of queued.splice(0)) dispatchRuntime(envelope);
     const trailerCapture =
       build === 'test' &&

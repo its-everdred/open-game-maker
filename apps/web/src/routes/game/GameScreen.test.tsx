@@ -114,8 +114,7 @@ function GameMenuProbe() {
   );
 }
 
-function renderGame(entry = '/g/game') {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderGame(entry = '/g/game', client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[entry]}>
@@ -302,7 +301,7 @@ describe('GameScreen', () => {
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
     expect(container.querySelector('.game-screen.is-playing')).toBeVisible();
     expect(container.querySelector('.play-bar')).not.toBeInTheDocument();
-    expect(screen.queryByText('Goblin Cellar')).not.toBeInTheDocument();
+    expect(screen.getByText('Goblin Cellar').closest('.game-loading-cover')).toBeInTheDocument();
     expect(screen.queryByText('Draft')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Games' })).not.toBeInTheDocument();
 
@@ -418,7 +417,44 @@ describe('GameScreen', () => {
     expect(host.controller.dispose).toHaveBeenCalled();
   });
 
-  it('does not start the load layer before a build is available', async () => {
+  it('keeps the loading layer if game metadata fails while the build starts', async () => {
+    editorApi.getGame.mockRejectedValue(new Error('offline'));
+    renderGame();
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+  });
+
+  it('keeps the current game visible when a background design refresh fails', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderGame('/g/game', client);
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    editorApi.getDesignSnapshot.mockRejectedValueOnce(new Error('offline'));
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['design', 'game'] });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(client.getQueryState(['design', 'game', 'main'])?.status).toBe('error');
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    expect(host.controller.dispose).not.toHaveBeenCalled();
+  });
+
+  it('offers retry when the design request fails', async () => {
+    editorApi.getDesignSnapshot.mockRejectedValueOnce(new Error('offline'));
+    renderGame();
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(screen.queryByRole('progressbar', { name: 'Loading' })).not.toBeInTheDocument();
+    fireEvent.click(retry);
+    await waitFor(() => expect(editorApi.getDesignSnapshot).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows loading while game metadata is pending', async () => {
+    editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
+    renderGame();
+    expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+  });
+
+  it('shows the loading layer while the build is being discovered', async () => {
     editorApi.getDesignSnapshot.mockImplementation(() => new Promise(() => undefined));
 
     renderGame();
@@ -427,7 +463,7 @@ describe('GameScreen', () => {
       await new Promise((resolve) => setTimeout(resolve, 180));
     });
 
-    expect(screen.queryByRole('progressbar', { name: 'Loading' })).not.toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
     expect(host.mountGameFrame).not.toHaveBeenCalled();
   });
 

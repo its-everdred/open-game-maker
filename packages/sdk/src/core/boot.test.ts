@@ -105,12 +105,90 @@ describe('boot', () => {
         payload: expect.objectContaining({
           manifest: expect.objectContaining({ ...module.manifest, saveSchema: 1, migratesFrom: 0 }),
           marks: expect.any(Array),
+          firstFrameSignal: true,
         }),
       }),
     );
     expect(runtime.hooks.marks[0]?.[0]).toBe('start');
     expect(runtime.hooks.marks.at(-1)?.[0]).toBe('frame0');
     expect(runtime.hooks.ready).toBe(true);
+    runtime.dispose();
+  });
+
+  it('signals the first frame only when the game reports it ready', async () => {
+    const { runtime } = await start();
+    expect(bridge.send).not.toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+    runtime.hooks.ready = false;
+    runtime.hooks.ready = true;
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+    runtime.dispose();
+  });
+
+  it('does not signal on animation timing alone and signals an observed draw once', async () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const animation = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    const stopLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop').mockImplementation(() => undefined);
+    try {
+      const { module } = createCounterGame();
+      const pending = boot(module, { hostOrigin: 'https://app.test' });
+      await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+      bridge.onMessage!(hello());
+      const runtime = await pending;
+      callbacks[0]!(0);
+      expect(bridge.send).not.toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+      window.dispatchEvent(new Event('ogm-observed-frame'));
+      window.dispatchEvent(new Event('ogm-observed-frame'));
+      expect(bridge.send.mock.calls.filter(([message]) => message.t === 'load.frame')).toHaveLength(1);
+      runtime.dispose();
+      window.dispatchEvent(new Event('ogm-observed-frame'));
+      expect(bridge.send.mock.calls.filter(([message]) => message.t === 'load.frame')).toHaveLength(1);
+    } finally {
+      animation.mockRestore();
+      stopLoop.mockRestore();
+    }
+  });
+
+  it('keeps an observed draw hidden until asynchronous setup signals readiness', async () => {
+    const synchronous = await start();
+    window.dispatchEvent(new Event('ogm-observed-frame'));
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+    synchronous.runtime.dispose();
+    bridge.send.mockClear();
+    bridge.onMessage = undefined;
+    const { runtime } = await start();
+    runtime.hooks.ready = false;
+    window.dispatchEvent(new Event('ogm-observed-frame'));
+    expect(bridge.send).not.toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+    runtime.hooks.ready = true;
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+    runtime.dispose();
+  });
+
+  it('detects a frame drawn during mount after the startup continuation', async () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const animation = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    const stopLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop').mockImplementation(() => undefined);
+    Reflect.set(window, '__ogmObservedFrame', true);
+    try {
+      const { module } = createCounterGame();
+      const pending = boot(module, { hostOrigin: 'https://app.test' });
+      await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+      bridge.onMessage!(hello());
+      const runtime = await pending;
+      callbacks[0]!(0);
+      expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'load.frame' }));
+      runtime.dispose();
+    } finally {
+      Reflect.deleteProperty(window, '__ogmObservedFrame');
+      animation.mockRestore();
+      stopLoop.mockRestore();
+    }
   });
 
   // The host judges stored slots against the schema the running build reports, so ready carries the instance's own.

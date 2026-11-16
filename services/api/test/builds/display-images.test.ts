@@ -31,3 +31,19 @@ it('publishes sized and content-addressed images in all three formats', async ()
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it('generates variants for both declared loading images', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'display-loading-'));
+  try {
+    await mkdir(join(root, 'media'));
+    for (const name of ['portrait.png', 'landscape.png'])
+      await sharp({ create: { width: 320, height: 180, channels: 3, background: '#00f' } })
+        .png()
+        .toFile(join(root, 'media', name));
+    const images = await makeDisplayImages(root, undefined, ['media/portrait.png', 'media/landscape.png']);
+    for (const name of ['portrait.png', 'landscape.png'])
+      expect(images[`media/${name}`]?.sources.avif[0]?.width).toBe(320);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

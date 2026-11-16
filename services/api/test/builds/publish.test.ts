@@ -105,14 +105,25 @@ describe('publishing a merged build', () => {
     const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>;
     writeFileSync(
       join(dir, 'manifest.json'),
-      JSON.stringify({ ...manifest, logo: 'media/logo.png', genres: ['puzzle'], padding: 'x'.repeat(1024 * 1024) }),
+      JSON.stringify({
+        ...manifest,
+        logo: 'media/logo.png',
+        genres: ['puzzle'],
+        loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
+        padding: 'x'.repeat(1024 * 1024),
+      }),
     );
     const response = await upload(app, archiveOf(dir));
     expect(response.status).toBe(201);
     const { buildId } = (await response.json()) as { buildId: string };
     expect(
       JSON.parse(readFileSync(join(deps.config.gamesRoot, ids.game, buildId, '.ogm-display.json'), 'utf8')),
-    ).toEqual({ logo: 'media/logo.png', genres: ['puzzle'], images: {} });
+    ).toEqual({
+      logo: 'media/logo.png',
+      genres: ['puzzle'],
+      loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
+      images: {},
+    });
   });
 
   it('generates display variants before publishing a build', async () => {
@@ -123,6 +134,15 @@ describe('publishing a merged build', () => {
     await sharp({ create: { width: 640, height: 360, channels: 3, background: '#f00' } })
       .png()
       .toFile(join(dir, 'media/thumbnail.png'));
+    for (const name of ['p.png', 'l.png'])
+      await sharp({ create: { width: 320, height: 180, channels: 3, background: '#0f0' } })
+        .png()
+        .toFile(join(dir, 'media', name));
+    const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>;
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ ...manifest, loading: { portrait: 'media/p.png', landscape: 'media/l.png' } }),
+    );
     const response = await upload(app, archiveOf(dir));
     expect(response.status).toBe(201);
     const { buildId } = (await response.json()) as { buildId: string };
@@ -130,6 +150,8 @@ describe('publishing a merged build', () => {
     const display = JSON.parse(readFileSync(join(build, '.ogm-display.json'), 'utf8'));
     const image = display.images['media/thumbnail.png'];
     expect(image.sources.avif.map((item: { width: number }) => item.width)).toEqual([320, 640]);
+    expect(display.images['media/p.png'].sources.webp[0].width).toBe(320);
+    expect(display.images['media/l.png'].sources.avif[0].width).toBe(320);
     expect(existsSync(join(build, image.sources.avif[0].path))).toBe(true);
     expect(existsSync(join(build, '.complete'))).toBe(true);
   });
