@@ -81,6 +81,10 @@ export function createIntake(deps: IntakeDeps) {
     try {
       await deps.issues.ensureLabel(repo, `feature:gm-${jobId}`, '0e8a16', 'OGM job');
       await deps.issues.ensureLabel(repo, `${gameSlug}:todo`, '6f42c1', 'ready to be worked');
+      if (found.job.kind === 'feature') {
+        await deps.issues.ensureLabel(repo, 'phase:mock', 'bfd4f2', 'creator review mock phase');
+        await deps.issues.ensureLabel(repo, 'model:low', 'ededed', 'low reasoning effort');
+      }
     } catch (error) {
       await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
       return { deferred: 'github' };

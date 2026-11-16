@@ -30,7 +30,7 @@ export function renderIssue(input: RenderIssueInput): {
     title: input.plan.title.trim().slice(0, 120),
     body: `${unsigned}\n\n<!-- gm-job:${input.jobId} gm-ticket:${input.ticket.key} gm-sig:${sig} -->`,
     sig,
-    labels: [`complexity:${input.complexity}`, `feature:gm-${input.jobId}`],
+    labels: [`complexity:${input.complexity}`, `feature:gm-${input.jobId}`, 'phase:mock', 'model:low'],
   };
 }
 

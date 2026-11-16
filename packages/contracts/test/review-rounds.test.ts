@@ -35,6 +35,25 @@ describe('review submissions', () => {
       false,
     );
   });
+  it('accepts audio and stills for mock rounds while keeping later rung requirements', () => {
+    expect(
+      ReviewSubmission.safeParse({
+        ...base,
+        phase: 'mock',
+        category: 'sound',
+        media: [{ kind: 'audio', ref: 'cue.wav' }],
+      }).success,
+    ).toBe(true);
+    const mock = {
+      ...base,
+      phase: 'mock',
+      category: 'gameplay',
+      media: [{ kind: 'still', ref: 'mock.png' }],
+      question: 'Which?',
+    };
+    expect(ReviewSubmission.safeParse(mock).success).toBe(true);
+    expect(ReviewSubmission.safeParse({ ...mock, phase: 'build' }).success).toBe(false);
+  });
   it('rejects ambiguous track phases', () => {
     expect(
       ReviewTrack.safeParse({
@@ -51,5 +70,11 @@ describe('review submissions', () => {
     const track = { id: 'art', category: 'art', phases: [{ id: 'mock', template: 'mock', effort: 'xhigh' }] };
     expect(ReviewTrack.safeParse(track).success).toBe(true);
     expect(ReviewTrack.safeParse({ ...track, phases: [{ ...track.phases[0], effort: 'ultra' }] }).success).toBe(false);
+  });
+  it('permits skipped fidelity rungs but rejects reordering', () => {
+    const phase = (id: string) => ({ id, template: id });
+    const track = { id: 'art', category: 'art', phases: [phase('mock'), phase('build')] };
+    expect(ReviewTrack.safeParse(track).success).toBe(true);
+    expect(ReviewTrack.safeParse({ ...track, phases: [...track.phases].reverse() }).success).toBe(false);
   });
 });

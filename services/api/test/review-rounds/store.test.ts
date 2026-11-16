@@ -24,6 +24,14 @@ function setup() {
 }
 
 describe('review round posting', () => {
+  it('treats approval with a note as changes on the current fidelity rung', () => {
+    const { deps, round } = setup();
+    postRound(deps.db, { ...round, id: 'mock', phase: 'mock' });
+    const answer = { verdict: 'approved' as const, notes: 'Add stars', source: 'preview' as const, at: '2026-11-14' };
+    expect(answerRound(deps.db, GAME, 'mock', answer)).toBe(true);
+    expect(answerRound(deps.db, GAME, 'mock', answer)).toBe(true);
+    expect(getRound(deps.db, GAME, 'mock')).toMatchObject({ verdict: 'needs_work', notes: 'Add stars' });
+  });
   it('does not attach one preview build to two rounds', () => {
     const { deps } = setup();
     const input = {
@@ -53,8 +61,10 @@ describe('review round posting', () => {
       sha: 'a'.repeat(40),
       media: [{ kind: 'clip' as const, ref: 'clip.mp4', hasAudio: true }],
     };
-    const first = submitRound(deps.db, GAME, submission);
-    expect(submitRound(deps.db, GAME, submission)).toEqual(first);
+    const first = submitRound(deps.db, GAME, submission, 'low');
+    expect(first.effort).toBe('low');
+    expect(submitRound(deps.db, GAME, submission, 'low')).toEqual(first);
+    expect(() => submitRound(deps.db, GAME, submission, 'xhigh')).toThrow('review_submission_conflict');
     expect(() => submitRound(deps.db, GAME, { ...submission, ticket: '43' })).toThrow('review_submission_conflict');
     const next = { ...submission, id: 'd9428888-122b-4b0e-b1c8-9f7900000002' };
     expect(() => submitRound(deps.db, GAME, next)).toThrow('review_phase_not_ready');

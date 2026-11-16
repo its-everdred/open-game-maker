@@ -11,9 +11,24 @@ const LIMIT = 64 * 1024 * 1024;
 
 // Validate the stored capture itself; a worker's `hasAudio` flag is not proof of an audio stream.
 export async function isCaptureWithAudio(store: BlobStore, ref: string): Promise<boolean> {
+  return probeAudio(store, ref, true);
+}
+
+export async function isReviewAudio(store: BlobStore, ref: string): Promise<boolean> {
+  return probeAudio(store, ref, false);
+}
+
+async function probeAudio(store: BlobStore, ref: string, capture: boolean): Promise<boolean> {
   if (!/^sha256:[0-9a-f]{64}$/u.test(ref)) return false;
   const blob = await store.open(ref as BlobHash);
-  if (!blob || blob.ref.mime !== 'video/mp4' || blob.ref.bytes > LIMIT) return false;
+  if (
+    !blob ||
+    blob.ref.bytes > LIMIT ||
+    (capture
+      ? blob.ref.mime !== 'video/mp4'
+      : !['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/mp4'].includes(blob.ref.mime))
+  )
+    return false;
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of blob.stream) {
@@ -36,8 +51,9 @@ export async function isCaptureWithAudio(store: BlobStore, ref: string): Promise
       format?: { format_name?: string };
     };
     return (
-      (info.format?.format_name ?? '').split(',').includes('mp4') &&
-      !!info.streams?.some((stream) => stream.codec_type === 'video') &&
+      (!capture ||
+        ((info.format?.format_name ?? '').split(',').includes('mp4') &&
+          !!info.streams?.some((stream) => stream.codec_type === 'video'))) &&
       !!info.streams?.some((stream) => stream.codec_type === 'audio')
     );
   } catch {

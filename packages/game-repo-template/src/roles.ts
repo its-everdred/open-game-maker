@@ -48,5 +48,6 @@ export function skillsConfig(roles: Role[], games: GameSkills[] = []): SkillsCon
   for (const game of [...games].sort((a, b) => a.slug.localeCompare(b.slug)))
     byLabel[`game:${game.slug}`] = gameLabelSkills(game);
   for (const role of roles) byLabel[role.label] = [...role.skills];
+  for (const phase of ['mock', 'prototype', 'build', 'polish']) byLabel[`phase:${phase}`] = ['gm-prototype'];
   return { preload_max_bytes: PRELOAD_MAX_BYTES, by_label: byLabel };
 }

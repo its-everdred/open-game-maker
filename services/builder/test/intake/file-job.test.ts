@@ -294,6 +294,8 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:phase:mock',
+      'ensure:model:low',
       'create:1',
       'create:2',
       'cap:1:9.000001',
@@ -309,6 +311,8 @@ describe('fileJob', () => {
       aiurSpendCapMicroUsd: 9_000_001,
     });
     expect(input.db.select().from(schema.jobTickets).all()).toHaveLength(2);
+    for (const [, issue] of input.issues.create.mock.calls)
+      expect(issue.labels).toEqual(expect.arrayContaining(['phase:mock', 'model:low']));
 
     await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'state:filed' });
     expect(input.issues.create).toHaveBeenCalledTimes(2);
@@ -328,6 +332,8 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:phase:mock',
+      'ensure:model:low',
       'cap:7:9.000001',
       'label:7:castle-run:todo',
       'nudge:7',
@@ -352,6 +358,8 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:phase:mock',
+      'ensure:model:low',
       'cap:12:9.000001',
       'label:12:castle-run:todo',
       'nudge:12',

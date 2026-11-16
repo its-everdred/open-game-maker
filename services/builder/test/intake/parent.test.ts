@@ -379,6 +379,8 @@ describe('New Game parent issue', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:lantern-bay:todo',
+      'ensure:phase:mock',
+      'ensure:model:low',
       'create:1',
       'cap:1:9.000001',
       'label:1:lantern-bay:todo',

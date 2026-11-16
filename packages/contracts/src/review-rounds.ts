@@ -3,6 +3,17 @@ import { z } from 'zod';
 const Key = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u);
 const Ticket = z.string().regex(/^[1-9]\d{0,15}$/u);
 
+export const FidelityPhase = z.enum(['mock', 'prototype', 'build', 'polish']);
+export const ReviewEffort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
+export const fidelityEffort = { mock: 'low', prototype: 'medium', build: 'xhigh', polish: 'high' } as const;
+export function phaseEffort(phase: { id: string; effort?: z.infer<typeof ReviewEffort> }, index: number) {
+  const parsed = FidelityPhase.safeParse(phase.id);
+  return (
+    phase.effort ??
+    (parsed.success ? fidelityEffort[parsed.data] : ((['low', 'medium', 'xhigh', 'high'] as const)[index] ?? 'high'))
+  );
+}
+
 // Definitions live with a game; runtime round state belongs to the API database.
 export const ReviewTrack = z
   .object({
@@ -15,7 +26,7 @@ export const ReviewTrack = z
             id: Key,
             ticket: Ticket.optional(),
             template: z.string().min(1),
-            effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+            effort: ReviewEffort.optional(),
           })
           .strict(),
       )
@@ -25,6 +36,10 @@ export const ReviewTrack = z
   .superRefine((track, ctx) => {
     if (new Set(track.phases.map((phase) => phase.id)).size !== track.phases.length)
       ctx.addIssue({ code: 'custom', message: 'phase ids must be unique', path: ['phases'] });
+    const order = FidelityPhase.options;
+    const known = track.phases.map((phase) => order.indexOf(phase.id as (typeof order)[number])).filter((i) => i >= 0);
+    if (known.some((value, i) => i > 0 && value <= known[i - 1]!))
+      ctx.addIssue({ code: 'custom', message: 'fidelity phases must be ordered', path: ['phases'] });
   });
 export type ReviewTrack = z.infer<typeof ReviewTrack>;
 
@@ -51,10 +66,27 @@ export const ReviewSubmission = z
   .superRefine((round, ctx) => {
     if (round.category === 'art' && !round.media.some((media) => media.kind === 'still' || media.kind === 'clip'))
       ctx.addIssue({ code: 'custom', message: 'art requires a still or capture clip', path: ['media'] });
-    if (round.category === 'sound' && !round.media.some((media) => media.kind === 'clip' && media.hasAudio))
-      ctx.addIssue({ code: 'custom', message: 'sound requires a capture clip with audio', path: ['media'] });
+    if (
+      round.category === 'sound' &&
+      !round.media.some(
+        (media) => (round.phase === 'mock' && media.kind === 'audio') || (media.kind === 'clip' && media.hasAudio),
+      )
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          round.phase === 'mock'
+            ? 'sound mock requires audio or a capture clip'
+            : 'sound requires a capture clip with audio',
+        path: ['media'],
+      });
     if (round.category === 'gameplay') {
-      if (!round.media.some((media) => media.kind === 'build'))
+      if (
+        !round.media.some(
+          (media) =>
+            media.kind === 'build' || (round.phase === 'mock' && (media.kind === 'still' || media.kind === 'clip')),
+        )
+      )
         ctx.addIssue({ code: 'custom', message: 'gameplay requires a preview build', path: ['media'] });
       if (!round.question)
         ctx.addIssue({ code: 'custom', message: 'gameplay requires a design question', path: ['question'] });

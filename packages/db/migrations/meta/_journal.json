@@ -288,6 +288,13 @@
       "when": 1794805132338,
       "tag": "20261116045852_review_answer_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1794834661695,
+      "tag": "20261116131101_review_effort",
+      "breakpoints": true
     }
   ]
 }

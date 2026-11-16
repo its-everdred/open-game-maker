@@ -27,10 +27,18 @@ export function answerRound(
   id: string,
   answer: { verdict: Verdict; notes: string | null; source: VerdictSource; at: string },
 ): boolean {
+  const current = getRound(db, gameId, id);
+  const verdict =
+    answer.verdict === 'approved' &&
+    answer.notes?.trim() &&
+    current &&
+    ['mock', 'prototype', 'build', 'polish'].includes(current.phase)
+      ? 'needs_work'
+      : answer.verdict;
   const changed = db
     .update(schema.reviewRounds)
     .set({
-      verdict: answer.verdict,
+      verdict,
       notes: answer.notes,
       verdictSource: answer.source,
       verdictAt: answer.at,
@@ -43,7 +51,7 @@ export function answerRound(
   const existing = getRound(db, gameId, id);
   return (
     existing !== undefined &&
-    existing.verdict === answer.verdict &&
+    existing.verdict === verdict &&
     existing.notes === answer.notes &&
     existing.verdictSource === answer.source
   );
@@ -66,7 +74,12 @@ export function consumeRound(db: Db, gameId: string, id: string, run: string, at
 }
 
 // Allocate the sequence and insert under one SQLite transaction.
-export function submitRound(db: Db, gameId: string, submission: ReviewSubmission): ReviewRound {
+export function submitRound(
+  db: Db,
+  gameId: string,
+  submission: ReviewSubmission,
+  effort?: NewReviewRound['effort'],
+): ReviewRound {
   return db.transaction((tx) => {
     const existing = tx.select().from(schema.reviewRounds).where(eq(schema.reviewRounds.id, submission.id)).get();
     if (existing) {
@@ -74,6 +87,7 @@ export function submitRound(db: Db, gameId: string, submission: ReviewSubmission
         existing.gameId === gameId &&
         existing.track === submission.track &&
         existing.phase === submission.phase &&
+        (effort === undefined || existing.effort === effort) &&
         existing.category === submission.category &&
         existing.ticket === submission.ticket &&
         existing.sha === submission.sha &&
@@ -119,6 +133,7 @@ export function submitRound(db: Db, gameId: string, submission: ReviewSubmission
       gameId,
       track: submission.track,
       phase: submission.phase,
+      effort: effort ?? null,
       category: submission.category,
       round: (latest?.round ?? 0) + 1,
       ticket: submission.ticket,

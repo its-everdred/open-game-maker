@@ -42,9 +42,14 @@ it('dispatches a needs-work verdict once and records the worker session after it
           }
         : { status: 'idle', running: null, queue: { depth: 0 } },
   } as unknown as AiurClient;
+  const setFidelity = vi.fn();
   const sync = createReviewSync({
     db: deps.db,
-    issues: { ensureFollowup: vi.fn(), close: vi.fn(), cancel: vi.fn(), merged: vi.fn(), integrated: vi.fn() },
+    issues: {
+      setFidelity,
+      close: vi.fn(),
+      cancel: vi.fn(),
+    },
     clientForGame: async () => client,
     log: () => {},
     now: () => Date.parse('2026-01-01T01:01:00Z'),
@@ -52,6 +57,7 @@ it('dispatches a needs-work verdict once and records the worker session after it
   await sync();
   await sync();
   expect(rework).toHaveBeenCalledOnce();
+  expect(setFidelity).not.toHaveBeenCalled();
   expect(message).toBe('<!-- gm-review-verdict:round -->\n  Fix it\nexactly.  \n<!-- gm-review-end -->');
   expect(getRound(deps.db, GAME, 'round')?.consumedByRun).toBe('run-1');
 });

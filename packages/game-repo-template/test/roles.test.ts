@@ -44,6 +44,10 @@ describe('ticket roles', () => {
       'game:bare': ['gm-core'],
       'game:castle': ['gm-core', 'gm-set-kaykit'],
       'role:qa': ['gm-core', 'gm-qa'],
+      'phase:mock': ['gm-prototype'],
+      'phase:prototype': ['gm-prototype'],
+      'phase:build': ['gm-prototype'],
+      'phase:polish': ['gm-prototype'],
     });
     expect(config.preload_max_bytes).toBe(49152);
   });

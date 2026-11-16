@@ -94,9 +94,10 @@ under `/api/v1`; they require the game owner and reject a request when the revie
 
 ## Track review rounds
 
-The Review view shows open art and sound rounds posted with `gm review post`, using their stored stills or capture clips.
+The Review view shows open art and sound rounds posted with `gm review post`, using their stored stills, capture clips, or mock audio. Gameplay mocks may use a still or clip; later gameplay rounds use a playable preview.
 The game owner can answer Looks right or Needs work with a note; the answer is recorded against that round. Gameplay
 rounds appear as playable previews and include their design question.
+For fidelity phases, a Looks right answer with a note stays on the current phase so the note can be addressed before advancing.
 An unanswered round gets one recorded notification after 24 hours. Waiting never records an answer.
 
 ## Preview reviews

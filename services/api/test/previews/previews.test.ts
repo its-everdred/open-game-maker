@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import previewRoutes from '../../src/previews/routes.js';
 import roundRoutes from '../../src/review-rounds/routes.js';
 import { previewDirectory } from '../../src/previews/store.js';
-import { postRound } from '../../src/review-rounds/store.js';
+import { getRound, postRound } from '../../src/review-rounds/store.js';
 import { scanPreviewRelay } from '../../src/previews/relay.js';
 import { previewTicketVerifier } from '../../src/previews/ticket.js';
 import { daemonRowForGame } from '../../src/jobs/daemons.js';
@@ -37,8 +37,10 @@ function setup() {
       gameForSecret: async (secret) => (secret === SECRET ? { repo: REPO, slug: 'castle-game' } : null),
       trackFor: async (_checkout, _path, _sha, id) => ({
         id,
-        category: id === 'sound' ? 'sound' : id === 'game' ? 'gameplay' : 'art',
-        phases: [{ id: id === 'sound' ? 'cue' : 'concept', ticket: '12', template: 'next' }],
+        category: id === 'sound' ? 'sound' : id === 'game' || id === 'mock-game' ? 'gameplay' : 'art',
+        phases: [
+          { id: id === 'mock-game' ? 'mock' : id === 'sound' ? 'cue' : 'concept', ticket: '12', template: 'next' },
+        ],
       }),
     }),
   );
@@ -163,6 +165,7 @@ describe('review round previews', () => {
       }),
     });
     expect(posted.status).toBe(201);
+    expect(getRound(deps.db, ids.game, id)?.effort).toBe('low');
     const list = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
       headers: asUser(ids.user),
     });
@@ -185,6 +188,41 @@ describe('review round previews', () => {
         await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, { headers: asUser(ids.user) })
       ).json(),
     ).toEqual({ rounds: [] });
+  });
+
+  it('accepts and lists a gameplay mock without a preview build', async () => {
+    const { deps, app } = setup();
+    enableTracks(deps);
+    const image = await deps.blobStore.put(
+      readFileSync(new URL('../build-chat/fixtures/tiny.png', import.meta.url)),
+      'image/png',
+    );
+    const id = 'd9428888-122b-4b0e-b1c8-9f7900000011';
+    const response = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        track: 'mock-game',
+        phase: 'mock',
+        category: 'gameplay',
+        ticket: '12',
+        sha: SHA,
+        question: 'Which?',
+        media: [{ kind: 'still', ref: image.hash }],
+      }),
+    });
+    expect(response.status).toBe(201);
+    const list = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
+      headers: asUser(ids.user),
+    });
+    expect(await list.json()).toMatchObject({ rounds: [{ id, media: [{ kind: 'still', url: expect.any(String) }] }] });
+    const answer = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/${id}/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ verdict: 'needs_work', note: 'Make it faster' }),
+    });
+    expect(answer.status).toBe(200);
   });
 
   it('refuses a round from a ticket that does not own the phase', async () => {

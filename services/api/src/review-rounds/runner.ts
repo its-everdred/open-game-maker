@@ -82,9 +82,8 @@ export function createReviewSync(deps: {
               round,
               track,
               repo: `${game.githubOwner}/${game.githubRepo}`,
-              slug: game.slug,
               issues: deps.issues,
-              client,
+              delivery: aiurReworkDelivery(client, round.id, round.verdictAt!),
               now: () => new Date(now()).toISOString(),
             });
         }

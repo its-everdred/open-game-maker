@@ -16,8 +16,10 @@ export async function dispatchRework(
   round: ReviewRound,
   delivery: ReworkDelivery,
   now: () => string,
+  approvedReason?: string,
 ): Promise<'pending' | 'consumed'> {
-  if (round.verdict !== 'needs_work') throw new Error('not_a_rework_verdict');
+  if (round.verdict !== 'needs_work' && !(round.verdict === 'approved' && approvedReason))
+    throw new Error('not_a_rework_verdict');
   db.insert(schema.reviewDispatchIntents)
     .values({ roundId: round.id, ticket: round.ticket, state: 'dispatching', createdAt: now() })
     .onConflictDoNothing()
@@ -33,7 +35,7 @@ export async function dispatchRework(
   // A confirmed dispatch is checkpointed so the receipt's 24-hour expiry cannot queue it again.
   if (intent.state === 'dispatching') {
     try {
-      await delivery.rework(round.ticket, `${marker}\n${round.notes ?? ''}\n<!-- gm-review-end -->`);
+      await delivery.rework(round.ticket, `${marker}\n${approvedReason ?? round.notes ?? ''}\n<!-- gm-review-end -->`);
     } catch (error) {
       // A queued marker alone does not prove the state transition succeeded; a consuming turn does.
       if (!(await delivery.findMarker(round.ticket, marker))?.runId) throw error;

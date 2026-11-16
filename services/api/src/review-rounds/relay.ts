@@ -14,6 +14,7 @@ export async function submitRelayedReview(
     deps: AppDeps,
     gameId: string,
     submission: ReviewSubmission,
+    effort: NonNullable<import('./store.js').NewReviewRound['effort']>,
   ) => Promise<{ id: string; round: number }>,
 ): Promise<{ id: string; round: number }> {
   const app = new Hono<ApiBindings>();

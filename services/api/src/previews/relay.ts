@@ -177,8 +177,12 @@ async function processRequest(
           const item = submission.data.media[index];
           if (
             !item ||
-            (item.kind !== 'still' && item.kind !== 'clip') ||
-            !(item.kind === 'clip' ? mime === 'video/mp4' : mime === 'image/png' || mime === 'image/jpeg')
+            (item.kind !== 'still' && item.kind !== 'clip' && item.kind !== 'audio') ||
+            !(item.kind === 'clip'
+              ? mime === 'video/mp4'
+              : item.kind === 'audio'
+                ? ['audio/wav', 'audio/mpeg', 'audio/ogg', 'audio/mp4'].includes(mime)
+                : mime === 'image/png' || mime === 'image/jpeg')
           )
             throw new Error('invalid_request');
           const file = await openWithin(join(dir, `${filename.slice(0, -5)}.${index}.media`), dir, constants.O_RDONLY);
@@ -203,7 +207,8 @@ async function processRequest(
         if (staged.length === 0) {
           round = await submitRelayedReview(deps, data.slug, `${game.githubOwner}/${game.githubRepo}`, data.submission);
         } else {
-          if (submission.data.category === 'gameplay') throw new Error('invalid_request');
+          if (submission.data.category === 'gameplay' && submission.data.phase !== 'mock')
+            throw new Error('invalid_request');
           round = await withArtifactMutation(async () => {
             const overlay = {
               ...deps.blobStore,
@@ -237,10 +242,10 @@ async function processRequest(
               data.slug,
               `${game.githubOwner}/${game.githubRepo}`,
               data.submission,
-              async (_deps, gameId, value) => {
+              async (_deps, gameId, value, effort) => {
                 try {
                   deps.db.transaction((tx) => {
-                    throw new Rollback(submitRound(tx, gameId, value));
+                    throw new Rollback(submitRound(tx, gameId, value, effort));
                   });
                 } catch (error) {
                   if (error instanceof Rollback) return error.result;
@@ -255,7 +260,7 @@ async function processRequest(
               data.slug,
               `${game.githubOwner}/${game.githubRepo}`,
               data.submission,
-              async (_deps, gameId, value) => submitRound(deps.db, gameId, value),
+              async (_deps, gameId, value, effort) => submitRound(deps.db, gameId, value, effort),
             );
           });
         }

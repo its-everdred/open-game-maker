@@ -13,6 +13,7 @@ export const reviewRounds = sqliteTable(
       .references(() => games.id, { onDelete: 'cascade' }),
     track: text('track').notNull(),
     phase: text('phase').notNull(),
+    effort: text('effort', { enum: ['low', 'medium', 'high', 'xhigh', 'max'] }),
     category: text('category', { enum: ['art', 'gameplay', 'sound'] }).notNull(),
     round: integer('round').notNull(),
     ticket: text('ticket').notNull(),

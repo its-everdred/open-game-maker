@@ -141,10 +141,15 @@ export async function createPreview(
 }
 
 // Serialize posting against preview replacement and recheck the exact current build under the same lock.
-export async function submitReviewRound(deps: AppDeps, gameId: string, submission: ReviewSubmission) {
+export async function submitReviewRound(
+  deps: AppDeps,
+  gameId: string,
+  submission: ReviewSubmission,
+  effort?: import('../review-rounds/store.js').NewReviewRound['effort'],
+) {
   return withArtifactMutation(async () => {
-    if (getRound(deps.db, gameId, submission.id)) return submitRound(deps.db, gameId, submission);
-    if (submission.category === 'gameplay') {
+    if (getRound(deps.db, gameId, submission.id)) return submitRound(deps.db, gameId, submission, effort);
+    if (submission.category === 'gameplay' && submission.media.some((item) => item.kind === 'build')) {
       const preview = await readPreview(join(root(deps, gameId), `${submission.ticket}.json`));
       if (
         !preview ||
@@ -154,7 +159,7 @@ export async function submitReviewRound(deps: AppDeps, gameId: string, submissio
       )
         throw new Error('preview_not_found');
     }
-    return submitRound(deps.db, gameId, submission);
+    return submitRound(deps.db, gameId, submission, effort);
   });
 }
 
