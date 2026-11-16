@@ -1,9 +1,9 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { FidelityPhase, phaseEffort, type ReviewTrack } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
 import type { ReviewRound } from './store.js';
-import { assignPhaseOwner, phaseOwner } from './owners.js';
-import { reviewAllowsClose } from './close-gate.js';
+import { assignPhaseOwner, phaseOwner, otherPhaseInProgress } from './owners.js';
+import { reviewAllowsClose, reviewApprovalsSettled } from './close-gate.js';
 import { dispatchRework, type ReworkDelivery } from './rework.js';
 import type { ReviewIssues } from './issues.js';
 
@@ -12,7 +12,7 @@ export async function advanceApproval(input: {
   round: ReviewRound;
   track: ReviewTrack;
   repo: string;
-  issues: Pick<ReviewIssues, 'setFidelity' | 'close'>;
+  issues: Pick<ReviewIssues, 'setFidelity' | 'close' | 'cancel'>;
   delivery: ReworkDelivery;
   now: () => string;
 }): Promise<void> {
@@ -34,10 +34,75 @@ export async function advanceApproval(input: {
   if (intent?.state === 'consumed') return;
   const next = track.phases[index + 1];
   if (next) {
+    // One ticket has one pair of fidelity labels. Finish any already-started phase before switching them again.
+    if (otherPhaseInProgress(db, round)) return;
     const phase = FidelityPhase.safeParse(next.id);
-    const rung = phase.success ? phase.data : FidelityPhase.options[index + 1];
+    const rung = phase.success ? phase.data : (FidelityPhase.options[index + 1] ?? 'polish');
     if (!rung) throw new Error('review_phase_rung_unknown');
     const effort = phaseEffort(next, index + 1);
+    const previous = db
+      .select()
+      .from(schema.reviewPhaseOwners)
+      .where(
+        and(
+          eq(schema.reviewPhaseOwners.gameId, round.gameId),
+          eq(schema.reviewPhaseOwners.track, round.track),
+          eq(schema.reviewPhaseOwners.phase, next.id),
+        ),
+      )
+      .get();
+    if (
+      previous &&
+      previous.ticket !== round.ticket &&
+      previous.sourceRoundId === round.id &&
+      (intent?.state === 'dispatching' || intent?.state === 'delivered') &&
+      intent.runId === previous.ticket
+    ) {
+      // The old reconciler already enqueued this successor. Preserve it rather than duplicate its work.
+      const owners = db
+        .select()
+        .from(schema.reviewPhaseOwners)
+        .where(eq(schema.reviewPhaseOwners.gameId, round.gameId))
+        .all()
+        .map((owner) => ({ ...owner, status: '' }));
+      const rounds = db.select().from(schema.reviewRounds).where(eq(schema.reviewRounds.gameId, round.gameId)).all();
+      db.update(schema.reviewDispatchIntents)
+        .set({ state: 'delivered' })
+        .where(eq(schema.reviewDispatchIntents.roundId, round.id))
+        .run();
+      const intents = db
+        .select()
+        .from(schema.reviewDispatchIntents)
+        .where(eq(schema.reviewDispatchIntents.ticket, round.ticket))
+        .all();
+      if (!reviewApprovalsSettled(round.ticket, rounds, intents, round.id)) return;
+      if (reviewAllowsClose(round.ticket, round.gameId, owners, rounds)) await issues.close(repo, round.ticket);
+      db.update(schema.reviewDispatchIntents)
+        .set({ state: 'consumed' })
+        .where(eq(schema.reviewDispatchIntents.roundId, round.id))
+        .run();
+      return;
+    }
+    if (
+      previous &&
+      previous.ticket !== round.ticket &&
+      previous.sourceRoundId === round.id &&
+      intent?.state === 'dispatching' &&
+      !intent.runId
+    ) {
+      await issues.cancel(repo, previous.ticket);
+      db.update(schema.reviewPhaseOwners)
+        .set({ ticket: round.ticket })
+        .where(
+          and(
+            eq(schema.reviewPhaseOwners.gameId, round.gameId),
+            eq(schema.reviewPhaseOwners.track, round.track),
+            eq(schema.reviewPhaseOwners.phase, next.id),
+            eq(schema.reviewPhaseOwners.ticket, previous.ticket),
+          ),
+        )
+        .run();
+    }
     assignPhaseOwner(db, {
       gameId: round.gameId,
       track: round.track,
@@ -63,6 +128,16 @@ export async function advanceApproval(input: {
     .all()
     .map((owner) => ({ ...owner, status: '' }));
   const rounds = db.select().from(schema.reviewRounds).where(eq(schema.reviewRounds.gameId, round.gameId)).all();
+  db.insert(schema.reviewDispatchIntents)
+    .values({ roundId: round.id, ticket: round.ticket, state: 'delivered', createdAt: now() })
+    .onConflictDoNothing()
+    .run();
+  const intents = db
+    .select()
+    .from(schema.reviewDispatchIntents)
+    .where(eq(schema.reviewDispatchIntents.ticket, round.ticket))
+    .all();
+  if (!reviewApprovalsSettled(round.ticket, rounds, intents, round.id)) return;
   if (reviewAllowsClose(round.ticket, round.gameId, owners, rounds)) await issues.close(repo, round.ticket);
   db.insert(schema.reviewDispatchIntents)
     .values({ roundId: round.id, ticket: round.ticket, state: 'consumed', createdAt: now() })

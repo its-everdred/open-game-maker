@@ -98,13 +98,14 @@ function seed(db: Db, twoTickets = false, kind: 'feature' | 'scope' = 'feature')
 
 type Harness = ReturnType<typeof harness>;
 
-function harness(twoTickets = false, kind: 'feature' | 'scope' = 'feature') {
+function harness(twoTickets = false, kind: 'feature' | 'scope' = 'feature', prototypeShipped = true) {
   const { sqlite, db } = openDb(':memory:');
   migrate({ sqlite });
   seed(db, twoTickets, kind);
   const calls: string[] = [];
   let issueNumber = 0;
   const issues: IssuesClient = {
+    hasPrototypeSkill: vi.fn().mockResolvedValue(true),
     ensureLabel: vi.fn(async (_repo, name) => {
       calls.push(`ensure:${name}`);
     }),
@@ -171,7 +172,8 @@ function harness(twoTickets = false, kind: 'feature' | 'scope' = 'feature') {
     fleet,
     issues,
     aiurForGame: async () => aiur,
-    shippedSkills: ['gm-core', 'gm-verify'],
+    shippedSkills: ['gm-core', 'gm-verify', ...(prototypeShipped ? ['gm-prototype'] : [])],
+    coreRepo: 'example/core',
     failJob,
     completeJob,
     now: () => NOW,
@@ -187,6 +189,20 @@ function close(input: Harness) {
 }
 
 describe('fileJob', () => {
+  it('waits when the deployed skill pack has not been updated', async () => {
+    const input = harness(false, 'feature', false);
+    expect(await input.intake.fileJob('j_1')).toEqual({ deferred: 'aiur' });
+    expect(input.issues.create).not.toHaveBeenCalled();
+    close(input);
+  });
+  it('waits for the target game core to include gm-prototype before filing', async () => {
+    const input = harness();
+    vi.mocked(input.issues.hasPrototypeSkill).mockResolvedValue(false);
+    expect(await input.intake.fileJob('j_1')).toEqual({ deferred: 'github' });
+    expect(input.issues.create).not.toHaveBeenCalled();
+    expect(input.fleet.ensureDaemon).not.toHaveBeenCalled();
+    close(input);
+  });
   it('defers repair filing until triage is ready, then files only the redacted triage ticket', async () => {
     const input = harness();
     input.db.update(schema.jobs).set({ kind: 'repair' }).where(eq(schema.jobs.id, 'j_1')).run();

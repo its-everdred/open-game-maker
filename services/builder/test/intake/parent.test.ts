@@ -123,6 +123,7 @@ function harness(kind: 'new_game' | 'feature' = 'new_game') {
   let issueNumber = 0;
   const created: { title: string; body: string; labels: string[] }[] = [];
   const issues: IssuesClient = {
+    hasPrototypeSkill: vi.fn().mockResolvedValue(true),
     ensureLabel: vi.fn(async (_repo, name) => {
       calls.push(`ensure:${name}`);
     }),
@@ -187,7 +188,8 @@ function harness(kind: 'new_game' | 'feature' = 'new_game') {
     fleet,
     issues,
     aiurForGame: async () => aiur,
-    shippedSkills: ['gm-core', 'gm-verify'],
+    shippedSkills: ['gm-core', 'gm-verify', 'gm-prototype'],
+    coreRepo: 'example/core',
     failJob,
     completeJob,
     now: () => NOW,

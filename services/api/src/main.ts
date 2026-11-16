@@ -165,6 +165,7 @@ const intake = createIntake({
     return running.client;
   },
   shippedSkills: skillPack().discovery.map(({ name }) => name),
+  coreRepo: env.OGM_CORE_BUMP_CORE_REPO || undefined,
   failJob: (jobId) => void markTerminal(lifecycleDeps, jobId, 'failed'),
   // A New Game request's parent issue hands the Build Order to the Executor, so the request job ends at filing.
   completeJob: (jobId) => void markTerminal(lifecycleDeps, jobId, 'done'),

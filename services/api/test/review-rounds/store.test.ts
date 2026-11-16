@@ -32,6 +32,21 @@ describe('review round posting', () => {
     expect(answerRound(deps.db, GAME, 'mock', answer)).toBe(true);
     expect(getRound(deps.db, GAME, 'mock')).toMatchObject({ verdict: 'needs_work', notes: 'Add stars' });
   });
+  it('accepts an identical retry of an approval recorded before upgrade', () => {
+    const { deps, round } = setup();
+    postRound(deps.db, {
+      ...round,
+      id: 'legacy',
+      phase: 'mock',
+      verdict: 'approved',
+      notes: 'Good',
+      verdictSource: 'preview',
+      verdictAt: '2026-11-14',
+    });
+    expect(
+      answerRound(deps.db, GAME, 'legacy', { verdict: 'approved', notes: 'Good', source: 'preview', at: '2026-11-14' }),
+    ).toBe(true);
+  });
   it('does not attach one preview build to two rounds', () => {
     const { deps } = setup();
     const input = {
@@ -48,6 +63,21 @@ describe('review round posting', () => {
     expect(() => submitRound(deps.db, GAME, { ...input, id: 'd9428888-122b-4b0e-b1c8-9f7900000002' })).toThrow(
       'review_build_already_used',
     );
+  });
+
+  it('backfills effort when retrying a legacy submission', () => {
+    const { deps } = setup();
+    const submission = {
+      id: 'd9428888-122b-4b0e-b1c8-9f7900000009',
+      track: 'art',
+      phase: 'mock',
+      category: 'art' as const,
+      ticket: '42',
+      sha: 'a'.repeat(40),
+      media: [{ kind: 'still' as const, ref: 'mock' }],
+    };
+    expect(submitRound(deps.db, GAME, submission).effort).toBeNull();
+    expect(submitRound(deps.db, GAME, submission, 'low').effort).toBe('low');
   });
 
   it('reuses an identical submission id and refuses conflicting retries', () => {

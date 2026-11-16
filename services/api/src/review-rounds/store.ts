@@ -51,7 +51,7 @@ export function answerRound(
   const existing = getRound(db, gameId, id);
   return (
     existing !== undefined &&
-    existing.verdict === verdict &&
+    (existing.verdict === verdict || existing.verdict === answer.verdict) &&
     existing.notes === answer.notes &&
     existing.verdictSource === answer.source
   );
@@ -79,6 +79,7 @@ export function submitRound(
   gameId: string,
   submission: ReviewSubmission,
   effort?: NewReviewRound['effort'],
+  audioVerified = false,
 ): ReviewRound {
   return db.transaction((tx) => {
     const existing = tx.select().from(schema.reviewRounds).where(eq(schema.reviewRounds.id, submission.id)).get();
@@ -87,7 +88,7 @@ export function submitRound(
         existing.gameId === gameId &&
         existing.track === submission.track &&
         existing.phase === submission.phase &&
-        (effort === undefined || existing.effort === effort) &&
+        (effort === undefined || existing.effort === null || existing.effort === effort) &&
         existing.category === submission.category &&
         existing.ticket === submission.ticket &&
         existing.sha === submission.sha &&
@@ -95,6 +96,11 @@ export function submitRound(
         existing.question === (submission.question ?? null) &&
         existing.media === JSON.stringify(submission.media);
       if (!matches) throw new Error('review_submission_conflict');
+      if ((existing.effort === null && effort) || (audioVerified && !existing.audioVerified)) {
+        const updated = { effort: existing.effort ?? effort ?? null, audioVerified: existing.audioVerified || audioVerified };
+        tx.update(schema.reviewRounds).set(updated).where(eq(schema.reviewRounds.id, existing.id)).run();
+        return { ...existing, ...updated };
+      }
       return existing;
     }
     for (const media of submission.media) {
@@ -134,6 +140,7 @@ export function submitRound(
       track: submission.track,
       phase: submission.phase,
       effort: effort ?? null,
+      audioVerified,
       category: submission.category,
       round: (latest?.round ?? 0) + 1,
       ticket: submission.ticket,

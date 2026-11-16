@@ -46,7 +46,12 @@ export default new Hono<ApiBindings>()
         const media = JSON.parse(round.media) as Media[];
         const items = await Promise.all(
           media
-            .filter((item) => ['still', 'clip', 'audio'].includes(item.kind) && /^sha256:[0-9a-f]{64}$/u.test(item.ref))
+            .filter(
+              (item) =>
+                (['still', 'clip'].includes(item.kind) ||
+                  (item.kind === 'audio' && round.audioVerified && round.category === 'sound' && round.phase === 'mock')) &&
+                /^sha256:[0-9a-f]{64}$/u.test(item.ref),
+            )
             .map(async (item) => ({
               kind: item.kind,
               url: (await deps.blobStore.signedGet(item.ref as BlobHash, new Date(Date.now() + 3600000))).url,
@@ -75,7 +80,7 @@ export default new Hono<ApiBindings>()
     if (
       media.some(
         (item) =>
-          (['still', 'clip', 'audio'].includes(item.kind) && /^sha256:[0-9a-f]{64}$/u.test(item.ref)) ||
+          ((['still', 'clip'].includes(item.kind) || (item.kind === 'audio' && round.audioVerified)) && /^sha256:[0-9a-f]{64}$/u.test(item.ref)) ||
           (item.kind === 'build' && item.ref !== ''),
       )
     )

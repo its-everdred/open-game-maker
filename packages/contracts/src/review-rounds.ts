@@ -37,8 +37,12 @@ export const ReviewTrack = z
     if (new Set(track.phases.map((phase) => phase.id)).size !== track.phases.length)
       ctx.addIssue({ code: 'custom', message: 'phase ids must be unique', path: ['phases'] });
     const order = FidelityPhase.options;
-    const known = track.phases.map((phase) => order.indexOf(phase.id as (typeof order)[number])).filter((i) => i >= 0);
-    if (known.some((value, i) => i > 0 && value <= known[i - 1]!))
+    const rungs = track.phases.map((phase, index) => {
+      const named = order.indexOf(phase.id as (typeof order)[number]);
+      return named < 0 ? index : named;
+    });
+    const legacy = track.phases.every((phase) => !order.includes(phase.id as (typeof order)[number]));
+    if (!legacy && rungs.some((value, i) => value >= order.length || (i > 0 && value <= rungs[i - 1]!)))
       ctx.addIssue({ code: 'custom', message: 'fidelity phases must be ordered', path: ['phases'] });
   });
 export type ReviewTrack = z.infer<typeof ReviewTrack>;

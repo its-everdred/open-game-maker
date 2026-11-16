@@ -86,6 +86,13 @@ function enableTracks(deps: ReturnType<typeof setup>['deps']) {
 }
 
 describe('review round previews', () => {
+  it('does not expose unverified audio attached to a legacy sound round', async () => {
+    const { deps, app } = setup();
+    postRound(deps.db, { id: 'legacy-audio', gameId: ids.game, track: 'sound', phase: 'mock', category: 'sound',
+      round: 1, ticket: '12', sha: SHA, media: JSON.stringify([{ kind: 'audio', ref: `sha256:${'a'.repeat(64)}` }]), postedAt: '2026-01-01' });
+    const response = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, { headers: asUser(ids.user) });
+    expect(await response.json()).toMatchObject({ rounds: [{ id: 'legacy-audio', media: [] }] });
+  });
   it('includes open gameplay rounds only when requested, with their playable build reference', async () => {
     const { deps, app } = setup();
     postRound(deps.db, {
@@ -243,6 +250,32 @@ describe('review round previews', () => {
     });
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({ error: { code: 'track_owner_mismatch' } });
+  });
+
+  it('rejects extra audio references attached to an art round', async () => {
+    const { deps, app } = setup();
+    enableTracks(deps);
+    const image = await deps.blobStore.put(
+      readFileSync(new URL('../build-chat/fixtures/tiny.png', import.meta.url)),
+      'image/png',
+    );
+    const response = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'd9428888-122b-4b0e-b1c8-9f7900000012',
+        track: 'art',
+        phase: 'concept',
+        category: 'art',
+        ticket: '12',
+        sha: SHA,
+        media: [
+          { kind: 'still', ref: image.hash },
+          { kind: 'audio', ref: image.hash },
+        ],
+      }),
+    });
+    expect(response.status).toBe(422);
   });
   it('does not let a gameplay track evade preview requirements by claiming another category', async () => {
     const { app, deps } = setup();

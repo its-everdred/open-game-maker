@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,10 +8,13 @@ import { eq } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 import { expect, it } from 'vitest';
 import { scanPreviewRelay } from '../../src/previews/relay.js';
+import roundRoutes from '../../src/review-rounds/routes.js';
+import { asUser } from '../helpers.js';
 import { ids, REPO, world } from '../builds/fixtures.js';
 
 it('accepts only the granted ticket for a worker review submission', async () => {
-  const { deps } = world();
+  const { deps, app } = world();
+  app.route('/api/v1', roundRoutes);
   const home = mkdtempSync(join(tmpdir(), 'review-relay-'));
   try {
     const workspace = join(home, 'workspace');
@@ -25,6 +28,10 @@ it('accepts only the granted ticket for a worker review submission', async () =>
     writeFileSync(
       join(workspace, 'games/castle-game/review/tracks/art.json'),
       JSON.stringify({ id: 'art', category: 'art', phases: [{ id: 'concept', ticket: '12', template: 'art' }] }),
+    );
+    writeFileSync(
+      join(workspace, 'games/castle-game/review/tracks/sound.json'),
+      JSON.stringify({ id: 'sound', category: 'sound', phases: [{ id: 'mock', ticket: '12', template: 'sound' }] }),
     );
     git('add', 'games');
     git('commit', '-qm', 'track');
@@ -139,6 +146,70 @@ it('accepts only the granted ticket for a worker review submission', async () =>
       state: 'failed',
     });
     expect(await deps.blobStore.head(alteredRef)).toBeNull();
+    if (spawnSync('/usr/bin/ffprobe', ['-version'], { stdio: 'ignore' }).status === 0) {
+      const wav = Buffer.alloc(44 + 320);
+      wav.write('RIFF');
+      wav.writeUInt32LE(wav.length - 8, 4);
+      wav.write('WAVEfmt ', 8);
+      wav.writeUInt32LE(16, 16);
+      wav.writeUInt16LE(1, 20);
+      wav.writeUInt16LE(1, 22);
+      wav.writeUInt32LE(8000, 24);
+      wav.writeUInt32LE(16000, 28);
+      wav.writeUInt16LE(2, 32);
+      wav.writeUInt16LE(16, 34);
+      wav.write('data', 36);
+      wav.writeUInt32LE(320, 40);
+      const hash = `sha256:${createHash('sha256').update(wav).digest('hex')}`;
+      const id = randomUUID();
+      writeFileSync(join(dir, `${id}.0.media`), wav);
+      writeFileSync(
+        join(dir, `${id}.json`),
+        JSON.stringify({
+          state: 'pending',
+          kind: 'review',
+          token,
+          ticket: '12',
+          slug: 'castle-game',
+          sha,
+          branch: 'main',
+          submission: {
+            id: randomUUID(),
+            track: 'sound',
+            phase: 'mock',
+            category: 'sound',
+            ticket: '12',
+            sha,
+            media: [{ kind: 'audio', ref: hash }],
+          },
+          attachments: [{ index: 0, mime: 'audio/wav' }],
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${id}.response`), 'utf8'))).toMatchObject({ state: 'done' });
+      expect(await deps.blobStore.head(hash as `sha256:${string}`)).toMatchObject({ mime: 'audio/wav' });
+      expect(deps.db.select().from(schema.reviewRounds).all()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            track: 'sound',
+            phase: 'mock',
+            effort: 'low',
+            media: JSON.stringify([{ kind: 'audio', ref: hash }]),
+          }),
+        ]),
+      );
+      const response = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
+        headers: asUser(ids.user),
+      });
+      expect(await response.json()).toMatchObject({
+        rounds: expect.arrayContaining([
+          expect.objectContaining({
+            category: 'sound',
+            media: [expect.objectContaining({ kind: 'audio', url: expect.any(String) })],
+          }),
+        ]),
+      });
+    }
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

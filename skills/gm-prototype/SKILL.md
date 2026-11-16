@@ -8,7 +8,7 @@ description: Use on every creator-request ticket (a screen, art, sound, gameplay
 A creator request climbs rungs of rising fidelity on **one ticket**. Each rung ends in the creator's review. A
 "needs changes" verdict is another round on the same rung. Approval moves the ticket up a rung, and the system
 raises your reasoning effort. Lessons and evidence: `references/lessons.md`. Rung media rules:
-`gm-new-game-plan/references/prototype-ladder.md`.
+`../gm-new-game-plan/references/prototype-ladder.md`.
 
 | Rung (label) | Effort | Deliver | Never |
 |---|---|---|---|

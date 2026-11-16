@@ -76,5 +76,9 @@ describe('review submissions', () => {
     const track = { id: 'art', category: 'art', phases: [phase('mock'), phase('build')] };
     expect(ReviewTrack.safeParse(track).success).toBe(true);
     expect(ReviewTrack.safeParse({ ...track, phases: [...track.phases].reverse() }).success).toBe(false);
+    expect(ReviewTrack.safeParse({ ...track, phases: [phase('build'), phase('custom')] }).success).toBe(false);
+    expect(
+      ReviewTrack.safeParse({ ...track, phases: ['one', 'two', 'three', 'four', 'five'].map(phase) }).success,
+    ).toBe(true);
   });
 });

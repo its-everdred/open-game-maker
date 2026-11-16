@@ -1,1 +1,0 @@
-ALTER TABLE `review_rounds` ADD `effort` text;

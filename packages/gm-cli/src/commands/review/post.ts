@@ -70,6 +70,8 @@ export const command: GmCommand = {
       ctx.out(await submitReviewRelay(root, slug, scoped.token, parsed.data, attachments));
       return EXIT.ok;
     }
+    if (parsed.data.media.some((media) => media.kind === 'audio'))
+      throw new CommandError('mock audio requires a ticket-scoped preview credential');
     if (!ctx.blobApi)
       throw new UsageError('no daemon upload configuration', 'run inside a configured worker workspace');
     for (const attachment of attachments) {

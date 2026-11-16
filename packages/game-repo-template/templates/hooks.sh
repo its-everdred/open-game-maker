@@ -25,7 +25,8 @@ after_create: |
     fi
     want="$(node -p "require('./.gm/context/bundle.json').skillPackVersion")"
     have="$(node -p "require('./skills.lock').pack" 2>/dev/null || echo none)"
-    if [ "$want" != "$have" ]; then
+    kind="$(node -p "require('./.gm/context/bundle.json').kind || ''")"
+    if [ "$want" != "$have" ] || { [ "$kind" = feature ] && [ ! -f .claude/skills/gm-prototype/SKILL.md ]; }; then
       url="$(node -p "require('./.gm/context/bundle.json').skillPackUrl")"
       if curl -fsS --max-time 60 -H "Authorization: Bearer ${secret}" "$url" -o .gm/context/skills.tgz; then
         rm -rf .claude/skills/gm-*

@@ -11,6 +11,7 @@ export type GitHubRequest = (route: string, parameters: Record<string, unknown>)
 export type FoundIssue = { number: number; url: string; labels: string[] };
 
 export interface IssuesClient {
+  hasPrototypeSkill(repo: string, coreRepo?: string): Promise<boolean>;
   create(
     repo: string,
     issue: { title: string; body: string; labels: string[] },
@@ -80,6 +81,46 @@ export function createIssuesClient(deps: IssuesClientDeps): IssuesClient {
   }
 
   return {
+    async hasPrototypeSkill(repo, coreRepo) {
+      const game = splitRepo(repo);
+      try {
+        const manifest = record(
+          (
+            await call('GET /repos/{owner}/{repo}/contents/{path}', {
+              owner: game.owner,
+              repo: game.name,
+              path: 'vendor/core.json',
+            })
+          ).data,
+        );
+        if (manifest.encoding !== 'base64' || typeof manifest.content !== 'string') return false;
+        const core = record(record(JSON.parse(Buffer.from(manifest.content, 'base64').toString('utf8'))).core);
+        if (typeof core.sha !== 'string' || !/^[a-f0-9]{40}$/u.test(core.sha)) return false;
+        let canonical = coreRepo;
+        if (!canonical && typeof core.source === 'string') {
+          const url = new URL(core.source);
+          if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password || url.search || url.hash) return false;
+          canonical = url.pathname.replace(/^\//u, '').replace(/\.git$/u, '');
+        }
+        if (!canonical) return false;
+        const parts = splitRepo(canonical);
+        const skill = record(
+          (
+            await call('GET /repos/{owner}/{repo}/contents/{path}', {
+              owner: parts.owner,
+              repo: parts.name,
+              path: 'skills/gm-prototype/SKILL.md',
+              ref: core.sha,
+            })
+          ).data,
+        );
+        return skill.type === 'file';
+      } catch (error) {
+        if (error instanceof GitHubIssuesError && error.status === 404) return false;
+        if (error instanceof SyntaxError || error instanceof TypeError) return false;
+        throw error;
+      }
+    },
     async create(repo, issue) {
       const { owner, name } = splitRepo(repo);
       const result = await call('POST /repos/{owner}/{repo}/issues', { owner, repo: name, ...issue });

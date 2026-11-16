@@ -17,7 +17,7 @@ import { createPreview, listEditorPreviews, submitReviewRound } from '../preview
 import { getRound } from '../review-rounds/store.js';
 import { isCaptureWithAudio, isReviewAudio } from '../review-rounds/audio.js';
 import { isReviewStill } from '../review-rounds/still.js';
-import { readTrack } from '../review-rounds/tracks.js';
+import { readTrack, reviewCheckout } from '../review-rounds/tracks.js';
 import { phaseOwner } from '../review-rounds/owners.js';
 import { reviewDaemonForGame } from '../review-rounds/daemon.js';
 import { BuildCacheError } from './cache-plan.js';
@@ -33,11 +33,13 @@ export function buildRoutes(opts: {
   daemonForSecret: HookDaemonResolver;
   gameForSecret?: HookGameResolver;
   trackFor?: (checkout: string, gamePath: string, sha: string, track: string) => Promise<ReviewTrack>;
+  authorizedAudio?: ReadonlySet<string>;
   submitReview?: (
     deps: import('../app/types.js').AppDeps,
     gameId: string,
     submission: ReviewSubmissionType,
     effort: NonNullable<import('../review-rounds/store.js').NewReviewRound['effort']>,
+    audioVerified: boolean,
   ) => Promise<{ id: string; round: number }>;
 }) {
   // Who is uploading for which job: a response refuses the upload before any body is read.
@@ -162,7 +164,9 @@ export function buildRoutes(opts: {
       let track: ReviewTrack;
       try {
         track = await (opts.trackFor ?? readTrack)(
-          daemonRow.checkoutPath,
+          opts.trackFor
+            ? daemonRow.checkoutPath
+            : await reviewCheckout(daemonRow.checkoutPath, parsed.data.ticket, daemonRow.repo),
           game.githubPath,
           parsed.data.sha,
           parsed.data.track,
@@ -176,6 +180,19 @@ export function buildRoutes(opts: {
         phaseOwner(deps.db, game.id, track, parsed.data.phase) !== parsed.data.ticket
       )
         return c.json({ error: { code: 'track_owner_mismatch' } }, 422);
+      const audioItems = parsed.data.media.filter((media) => media.kind === 'audio');
+      if (audioItems.length && (parsed.data.category !== 'sound' || parsed.data.phase !== 'mock'))
+        return c.json({ error: { code: 'review_media_invalid' } }, 422);
+      for (const audio of audioItems) {
+        const existing = getRound(deps.db, game.id, parsed.data.id);
+        if (
+          !opts.authorizedAudio?.has(audio.ref) &&
+          !(existing?.audioVerified && existing.media === JSON.stringify(parsed.data.media))
+        )
+          return c.json({ error: { code: 'review_media_invalid' } }, 422);
+        if (!(await isReviewAudio(deps.blobStore, audio.ref)))
+          return c.json({ error: { code: 'review_media_invalid' } }, 422);
+      }
       if (
         (parsed.data.category === 'art' || (parsed.data.category === 'gameplay' && parsed.data.phase === 'mock')) &&
         !getRound(deps.db, game.id, parsed.data.id)
@@ -194,19 +211,11 @@ export function buildRoutes(opts: {
       }
       if (parsed.data.category === 'sound' && !getRound(deps.db, game.id, parsed.data.id)) {
         const clips = parsed.data.media.filter((media) => media.kind === 'clip' && media.hasAudio);
-        let valid = false;
+        let valid = audioItems.length > 0;
         for (const clip of clips) {
           if (await isCaptureWithAudio(deps.blobStore, clip.ref)) {
             valid = true;
             break;
-          }
-        }
-        if (!valid && parsed.data.phase === 'mock') {
-          for (const audio of parsed.data.media.filter((media) => media.kind === 'audio')) {
-            if (await isReviewAudio(deps.blobStore, audio.ref)) {
-              valid = true;
-              break;
-            }
           }
         }
         if (!valid) return c.json({ error: { code: 'sound_capture_required' } }, 422);
@@ -233,7 +242,7 @@ export function buildRoutes(opts: {
       try {
         const index = track.phases.findIndex((phase) => phase.id === parsed.data.phase);
         const effort = phaseEffort(track.phases[index]!, index);
-        const round = await (opts.submitReview ?? submitReviewRound)(deps, game.id, parsed.data, effort);
+        const round = await (opts.submitReview ?? submitReviewRound)(deps, game.id, parsed.data, effort, audioItems.length > 0);
         return c.json({ id: round.id, round: round.round }, 201);
       } catch (error) {
         if (error instanceof Error && error.message === 'preview_not_found')

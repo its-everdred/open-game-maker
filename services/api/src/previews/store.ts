@@ -146,9 +146,10 @@ export async function submitReviewRound(
   gameId: string,
   submission: ReviewSubmission,
   effort?: import('../review-rounds/store.js').NewReviewRound['effort'],
+  audioVerified = false,
 ) {
   return withArtifactMutation(async () => {
-    if (getRound(deps.db, gameId, submission.id)) return submitRound(deps.db, gameId, submission, effort);
+    if (getRound(deps.db, gameId, submission.id)) return submitRound(deps.db, gameId, submission, effort, audioVerified);
     if (submission.category === 'gameplay' && submission.media.some((item) => item.kind === 'build')) {
       const preview = await readPreview(join(root(deps, gameId), `${submission.ticket}.json`));
       if (
@@ -159,7 +160,7 @@ export async function submitReviewRound(
       )
         throw new Error('preview_not_found');
     }
-    return submitRound(deps.db, gameId, submission, effort);
+    return submitRound(deps.db, gameId, submission, effort, audioVerified);
   });
 }
 
