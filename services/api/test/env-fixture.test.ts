@@ -8,3 +8,14 @@ describe('makeApiEnv', () => {
     expect(() => loadApiEnv(makeApiEnv())).not.toThrow();
   });
 });
+
+it('accepts only a loopback core daemon URL and leaves missing core settings unset', () => {
+  expect(loadApiEnv(makeApiEnv()).AIUR_API_URL).toBeUndefined();
+  expect(
+    loadApiEnv(makeApiEnv({ AIUR_API_URL: 'http://127.0.0.1:4999', AIUR_API_TOKEN: 'test-token-0123456789' }))
+      .AIUR_API_URL,
+  ).toBe('http://127.0.0.1:4999');
+  expect(() =>
+    loadApiEnv(makeApiEnv({ AIUR_API_URL: 'https://example.test', AIUR_API_TOKEN: 'test-token-0123456789' })),
+  ).toThrow(/AIUR_API_URL/);
+});

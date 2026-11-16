@@ -23,8 +23,9 @@ export function commandMarker(decision: Decision): string | null {
 // Whether the creator sees this Command (#595). Only player-facing questions reach the creator's inbox, menu count and
 // review deck: a decision Game Maker marked for the creator, or one opened through `gm command request`. Any other decision
 // (an engineering or operations question an agent raised with plain `aiur command request`) stays with the Executor.
-// Aiur has no audience field yet, so a decision without the marker is treated as the Executor's.
+// Native creator audience and legacy creator markers identify these decisions; other decisions stay with the Executor.
 export function isForCreator(decision: Decision): boolean {
+  if (decision.audience === 'creator') return true;
   if (commandMarker(decision) !== null) return true;
   return [decision.context?.long_context_markdown, decision.context?.short_summary, decision.question].some(
     (source) => typeof source === 'string' && source.includes(CREATOR_AUDIENCE_MARKER),

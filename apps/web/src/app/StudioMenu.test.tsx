@@ -83,9 +83,16 @@ const state = vi.hoisted(() => ({
   },
   session: { data: null as { user: { id: string } } | null },
   decisions: [] as TestDecision[],
+  reviewLoading: false,
   sessions: [] as Array<{ game_id: string; game_title: string; count: number }>,
   energy: { data: undefined as EnergyView | undefined },
-  workers: [] as Array<{ ticket: string; title: string; percent: number | null; etaSeconds: number | null }>,
+  workers: [] as Array<{
+    ticket: string;
+    title: string;
+    percent: number | null;
+    etaSeconds: number | null;
+    state?: string;
+  }>,
 }));
 
 const sound = vi.hoisted(() => ({
@@ -122,6 +129,12 @@ vi.mock('../features/build-chat/Chat', () => ({
 }));
 vi.mock('../features/commands-inbox/commands', () => ({
   answerCommand: vi.fn(async () => undefined),
+  useCoreReviewCommands: () => ({ commands: [], targets: [], error: false, loading: false }),
+  useCreatorReviewCommands: (creatorId: string | undefined) => ({
+    commands: creatorId ? state.decisions : [],
+    error: false,
+    loading: state.reviewLoading,
+  }),
   useCreatorCommands: (creatorId: string | undefined) => ({
     commands: creatorId ? state.decisions : [],
     sessions: creatorId ? state.sessions : [],
@@ -214,6 +227,7 @@ afterEach(() => {
   state.jobs = { jobs: [], active: [], games: [] };
   state.session = { data: null };
   state.decisions = [];
+  state.reviewLoading = false;
   state.sessions = [];
   state.energy = { data: undefined };
   state.workers = [];
@@ -635,13 +649,50 @@ describe('StudioMenu', () => {
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
+  it('does not announce existing reviews when the initial command feed loads', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.reviewLoading = true;
+    const view = renderMenu('/games');
+    state.decisions = [decision('d1')];
+    state.reviewLoading = false;
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
+    state.decisions = [decision('d1'), decision('d2')];
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'New review ready' })).toBeVisible();
+  });
+
+  it('announces a game ticket newly waiting for review', async () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.workers = [{ ticket: 'game:42', title: 'New build', percent: 50, etaSeconds: null, state: 'in-progress' }];
+    const view = renderMenu('/games');
+    state.workers = [{ ticket: 'game:42', title: 'New build', percent: null, etaSeconds: null, state: 'human-review' }];
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('button', { name: 'New review ready' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
+  });
+
   it('closes a Builds review when the signed-in creator changes', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.decisions = [decision('d1')];
     const view = renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
-    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
-    expect(screen.getByText('Which d1?')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Blobs · Topic d1' }));
+    expect(screen.getByRole('alert')).toBeVisible();
     state.session = { data: { user: { id: 'user-2' } } };
     state.decisions = [decision('d2')];
     view.rerender(
@@ -649,7 +700,7 @@ describe('StudioMenu', () => {
         <TestStudioMenu />
       </MemoryRouter>,
     );
-    expect(screen.queryByText('Which d1?')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   // On a shared device, a decision one creator opened must not stay on screen, answerable, for the next account.

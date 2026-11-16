@@ -358,6 +358,7 @@ export function createAiurClient(
     },
     async decision(id) {
       const { body } = await fetchResponse('GET', `/api/v1/decisions/${encodeURIComponent(id)}`, {
+        signal: AbortSignal.timeout(15000),
         supervisor: true,
         write: true,
       });
@@ -379,8 +380,10 @@ export function createAiurClient(
     // The creator answers through aiur's Commands host API: the supervisor credential mints a one-minute grant for the
     // Command's ticket, and the answer goes out under that grant, so aiur records it as the creator's own.
     async answerAsCreator(id, { ticket, principal, option, response, ...answer }) {
+      const signal = AbortSignal.timeout(15000);
       const { body } = await fetchResponse('POST', '/api/v1/commands/scope', {
         body: { principal, tickets: [ticket], expires_in: 60 },
+        signal,
         write: true,
         supervisor: true,
       });
@@ -393,6 +396,7 @@ export function createAiurClient(
         },
         write: true,
         bearer: token,
+        signal,
       });
     },
     async decisionMedia(id, attachmentId, signal) {

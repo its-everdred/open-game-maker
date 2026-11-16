@@ -80,6 +80,7 @@ export interface Registry {
   ticketJobResolver: TicketJobResolver | null;
   chatJobs: ChatJobDirectory | null;
   aiurClientFor: AiurClientResolver | null;
+  coreAiurClient: import('@ogm/aiur-client').AiurClient | null;
   workerWorkpad: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   workerTitle: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   trackerTickets:
@@ -87,6 +88,9 @@ export interface Registry {
         repo: { owner: string; name: string },
         state: 'open' | 'closed',
       ) => Promise<{ tickets: import('../worker-progress/tracker.js').TrackerTicket[]; stale: boolean }>)
+    | null;
+  reviewEpisode:
+    | ((repo: { owner: string; name: string }, ticket: string, labels: readonly string[]) => Promise<string | null>)
     | null;
   trackerTicket:
     | ((
@@ -116,10 +120,12 @@ export function createRegistry(): Registry {
     ticketJobResolver: null,
     chatJobs: null,
     aiurClientFor: null,
+    coreAiurClient: null,
     workerWorkpad: null,
     workerTitle: null,
     trackerTickets: null,
     trackerTicket: null,
+    reviewEpisode: null,
     ticketConversation: null,
     issueStateWriter: null,
   };

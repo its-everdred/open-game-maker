@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
-import type { CreatorCommand, Job } from '@ogm/contracts';
+import type { Job } from '@ogm/contracts';
+import { commandSource, type ReviewCommand, type ReviewTarget } from './review-command';
 import { Icon } from '../../components/Icon';
 import { MenuRing } from '../../components/MenuCircle';
 import { Dialog } from '../../components/Dialog';
@@ -31,7 +32,8 @@ export function combinedPercent(workers: readonly WorkerBuild[]): number | null 
 type PanelProps = {
   workers: WorkerBuild[];
   reviews?: readonly WorkerReview[];
-  commands?: readonly CreatorCommand[];
+  commands?: readonly ReviewCommand[];
+  coreTargets?: readonly ReviewTarget[];
   past?: readonly PastTicket[];
   historyError?: boolean;
   historyLoading?: boolean;
@@ -45,6 +47,7 @@ export function BuildTracker({
   finished = [],
   reviews = [],
   commands = [],
+  coreTargets = [],
   past = [],
   historyError,
   historyLoading,
@@ -58,12 +61,14 @@ export function BuildTracker({
   onDismiss?(): void;
 }) {
   const [open, setOpen] = useState(false);
+  const [openReview, setOpenReview] = useState(false);
   const id = useId();
   if (
     !workers.length &&
     !finished.length &&
     !reviews.length &&
     !commands.length &&
+    !coreTargets.length &&
     !past.length &&
     !historyError &&
     !historyLoading &&
@@ -71,10 +76,12 @@ export function BuildTracker({
     !reviewError
   )
     return null;
+  const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
+  const pending = reviews.length + commands.length + targets.length;
   const count = workers.length
     ? `${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running`
-    : reviews.length + commands.length
-      ? `${reviews.length + commands.length} builds to review`
+    : pending
+      ? `${pending} builds to review`
       : 'Completed builds';
   return (
     <div className="worker-tracker">
@@ -82,17 +89,18 @@ export function BuildTracker({
         type="button"
         className="worker-tracker-button"
         aria-label={count}
-        aria-expanded={open}
+        aria-expanded={open || openReview}
         aria-controls={id}
         onClick={() => {
           onDismiss?.();
-          setOpen(!open);
+          if (pending > 0) setOpenReview(true);
+          else setOpen(!open);
         }}
       >
         <MenuRing percent={workers.length ? (combinedPercent(workers) ?? undefined) : undefined} />
         <Icon name="build" />
         <span className="worker-tracker-count" aria-hidden="true">
-          {workers.length || '✓'}
+          {pending || workers.length || '✓'}
         </span>
       </button>
       {finished.length > 0 && (
@@ -100,11 +108,22 @@ export function BuildTracker({
           {finished.at(-1)!.title} is ready
         </span>
       )}
+      {openReview && (
+        <ReviewInbox
+          workers={workers}
+          reviews={reviews}
+          commands={commands}
+          error={reviewError}
+          targets={targets}
+          onClose={() => setOpenReview(false)}
+        />
+      )}
       {open && (
         <BuildPanel
           workers={workers}
           reviews={reviews}
           commands={commands}
+          coreTargets={coreTargets}
           past={past}
           historyError={historyError}
           creatorId={creatorId}
@@ -123,6 +142,7 @@ export function BuildPanel({
   workers,
   reviews = [],
   commands = [],
+  coreTargets = [],
   past = [],
   historyError,
   historyLoading,
@@ -134,7 +154,8 @@ export function BuildPanel({
 }: PanelProps & { id: string }) {
   const [modal, setModal] = useState<'review' | 'completed'>();
   const [conversation, setConversation] = useState<PastTicket>();
-  const reviewCount = reviews.length + commands.length;
+  const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
+  const reviewCount = reviews.length + commands.length + targets.length;
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
       <h2>Builds</h2>
@@ -180,7 +201,16 @@ export function BuildPanel({
           </button>
         </li>
       </ul>
-      {modal === 'review' && <ReviewInbox reviews={reviews} commands={commands} onClose={() => setModal(undefined)} />}
+      {modal === 'review' && (
+        <ReviewInbox
+          workers={workers}
+          reviews={reviews}
+          commands={commands}
+          error={reviewError}
+          targets={targets}
+          onClose={() => setModal(undefined)}
+        />
+      )}
       {modal === 'completed' && (
         <Dialog
           title="Completed"
@@ -237,6 +267,30 @@ export function BuildPanel({
       )}
     </section>
   );
+}
+
+export function missingReviewTargets(
+  workers: readonly WorkerBuild[],
+  reviews: readonly WorkerReview[],
+  commands: readonly ReviewCommand[],
+) {
+  return workers.flatMap((worker) => {
+    if (worker.state !== 'human-review') return [];
+    const separator = worker.ticket.lastIndexOf(':');
+    if (separator < 0) return [];
+    const gameId = worker.ticket.slice(0, separator);
+    const ticket = worker.ticket.slice(separator + 1);
+    if (
+      reviews.some(
+        (review) =>
+          review.gameId === gameId &&
+          (review.kind === 'standalone-preview' ? review.preview.ticket : review.round.ticket) === ticket,
+      ) ||
+      commands.some((command) => commandSource(command) === gameId && command.ticket === ticket)
+    )
+      return [];
+    return [{ gameId, ticket, title: worker.title }];
+  });
 }
 
 function waitingLabel(state?: string): string | undefined {

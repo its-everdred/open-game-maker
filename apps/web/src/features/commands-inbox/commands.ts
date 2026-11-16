@@ -5,6 +5,7 @@ import type { CommandReview, CreatorCommandsPage, GameCommand, GameCommandsPage 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
 import { answerJobCommand } from '../build-chat/commands';
+import type { CoreReviewCommand, ReviewTarget } from '../worker-builds/review-command';
 
 // The game's open aiur Commands (M3). Polling matches the build list: a Command opened by a running agent shows up
 // without a reload.
@@ -44,6 +45,41 @@ export function useCreatorCommands(creatorId: string | undefined) {
     commands: enabled ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS,
     // Games whose queued product questions offer a quick voice chat (ticket 612): one entry each, never opened on its own.
     sessions: enabled ? (query.data?.question_sessions ?? NO_SESSIONS) : NO_SESSIONS,
+  };
+}
+
+// The review screen includes every creator Command, including questions queued for voice.
+export function useCreatorReviewCommands(creatorId: string | undefined) {
+  const query = useQuery({
+    queryKey: [...creatorCommandsQueryKey, creatorId, 'review'],
+    enabled: Boolean(creatorId),
+    queryFn: () => api<CreatorCommandsPage & { unavailable?: boolean }>('/me/commands?includeQuestions=1'),
+    refetchInterval: POLL_MS,
+    retry: false,
+  });
+  return {
+    commands: creatorId ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS,
+    error: query.isError || query.data?.unavailable === true,
+    loading: query.isLoading,
+  };
+}
+
+export function useCoreReviewCommands(creatorId: string | undefined) {
+  const query = useQuery({
+    queryKey: [...creatorCommandsQueryKey, creatorId, 'core'],
+    enabled: Boolean(creatorId),
+    queryFn: () =>
+      api<{ commands: CoreReviewCommand[]; targets: ReviewTarget[]; targetsUnavailable?: boolean }>(
+        '/me/core-commands',
+      ),
+    refetchInterval: POLL_MS,
+    retry: false,
+  });
+  return {
+    commands: creatorId ? (query.data?.commands ?? []) : [],
+    targets: creatorId ? (query.data?.targets ?? []) : [],
+    error: query.isError || query.data?.targetsUnavailable === true,
+    loading: query.isLoading,
   };
 }
 

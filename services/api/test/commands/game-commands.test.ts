@@ -1,10 +1,12 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
-import { CREATOR_AUDIENCE_MARKER, type OptionPlayable } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, decisionKeyMarker, type OptionPlayable } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../../src/app/errors.js';
 import { insertChatRow } from '../../src/build-chat/store.js';
+import { postRound, getRound } from '../../src/review-rounds/store.js';
+import { syncCommandVerdicts } from '../../src/review-rounds/command-verdicts.js';
 import { listReviews } from '../../src/reviews/store.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
@@ -42,6 +44,9 @@ function seed() {
         familyId: ids.family,
         ownerId: ids.user,
         title: `Game ${id.slice(-1)}`,
+        slug: `game-${id.slice(-1)}`,
+        githubOwner: 'fixture',
+        githubRepo: `game-${id.slice(-1)}`,
         visibility: 'private',
         repoVisibility: 'private',
         createdAt: AT,
@@ -401,6 +406,18 @@ const decision = (overrides: Partial<Decision> = {}): Decision => ({
 
 async function appWithAiur(decisions: Decision[], answerAsCreator = vi.fn(async () => undefined)) {
   const deps = seed();
+  deps.registry.trackerTickets = async (repo) => ({
+    stale: false,
+    tickets: decisions.map((item) => ({
+      ticket: item.ticket.identifier,
+      title: 'Ticket',
+      labels: [`game:${repo.name}`],
+      closedAt: null,
+      updatedAt: AT,
+      outcome: 'Closed',
+      url: 'https://example.test/issue',
+    })),
+  });
   deps.aiurClientForGame = async () =>
     ({
       decisions: async () => decisions,
@@ -585,6 +602,198 @@ describe('a registered game’s own Commands', () => {
     ]);
   });
 
+  it('records a keyed round change request with its notes', async () => {
+    const item = decision({
+      options: [
+        { id: 'round', label: 'Round' },
+        { id: 'needs_work', label: 'Needs work' },
+      ],
+      context: {
+        short_summary: 'Blobs look',
+        long_context_markdown: `${CREATOR_AUDIENCE_MARKER}\n${decisionKeyMarker('round-id')}`,
+      },
+    });
+    const { app, deps, answerAsCreator } = await appWithAiur([item]);
+    postRound(deps.db, {
+      id: 'round-id',
+      gameId: ids.game,
+      track: 'art',
+      phase: 'concept',
+      category: 'art',
+      round: 1,
+      ticket: '478',
+      sha: 'a'.repeat(40),
+      media: '[]',
+      postedAt: AT,
+    });
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        option_id: 'round',
+        version: 2,
+        change_request: true,
+        review: { likes: [], dislikes: [{ option_id: 'round' }], notes: 'Softer edges' },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const sent = answerAsCreator.mock.calls[0]![1] as { response: string };
+    expect(JSON.parse(sent.response)).toMatchObject({
+      answers: [{ option_id: 'needs_work', verdict: 'like' }],
+      notes: 'Softer edges',
+    });
+    item.answer = { custom_response: sent.response, actor: { kind: 'operator', id: ids.user } };
+    await syncCommandVerdicts(
+      deps.db,
+      deps.aiurClientForGame,
+      () => AT,
+      () => {},
+    );
+    expect(getRound(deps.db, ids.game, 'round-id')).toMatchObject({ verdict: 'needs_work', notes: 'Softer edges' });
+    expect(listReviews(deps.db, ids.game)).toEqual([
+      expect.objectContaining({ option_id: 'needs_work', notes: 'Softer edges' }),
+    ]);
+  });
+
+  it('retries a ledger failure with the same idempotency key after Aiur accepted', async () => {
+    const item = decision();
+    const { app, deps, answerAsCreator } = await appWithAiur([item]);
+    deps.sqlite.exec(
+      `CREATE TRIGGER reject_review BEFORE INSERT ON command_reviews BEGIN SELECT RAISE(FAIL, 'unavailable'); END`,
+    );
+    const request = () =>
+      app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+        method: 'POST',
+        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+        body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+      });
+    expect((await request()).status).toBe(503);
+    item.answer = { option_id: 'round' };
+    deps.sqlite.exec('DROP TRIGGER reject_review');
+    expect((await request()).status).toBe(200);
+    expect(answerAsCreator).toHaveBeenCalledTimes(2);
+    expect(answerAsCreator.mock.calls.map((call) => (call[1] as { idempotency_key: string }).idempotency_key)).toEqual([
+      'd_aiur_1:2',
+      'd_aiur_1:2',
+    ]);
+    expect(listReviews(deps.db, ids.game)).toHaveLength(1);
+  });
+
+  it('recovers the ledger from an accepted answer after its response is lost', async () => {
+    const item = decision();
+    const answer = vi.fn(async () => {
+      item.answer = { option_id: 'round', actor: { kind: 'operator', id: ids.user } };
+      throw new Error('response lost');
+    });
+    const { app, deps } = await appWithAiur([item], answer);
+    deps.registry.trackerTickets = async () => ({
+      stale: false,
+      tickets: [
+        {
+          ticket: '478',
+          title: 'Ticket',
+          labels: ['game:game-1', 'agent:human-review'],
+          closedAt: null,
+          updatedAt: AT,
+          outcome: 'Closed',
+          url: 'https://example.test/issue',
+        },
+      ],
+    });
+    deps.registry.reviewEpisode = async () => '100@2026-01-01T00:00:00Z';
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+    });
+    expect(response.status).toBe(502);
+    expect(listReviews(deps.db, ids.game)).toHaveLength(0);
+    const missing = await app.request(`/api/v1/games/${ids.game}/tickets/478/missing-review`, {
+      method: 'POST',
+      headers: asUser(ids.user),
+    });
+    expect(missing.status).toBe(409);
+    expect(listReviews(deps.db, ids.game)).toEqual([
+      expect.objectContaining({ decision_id: 'd_aiur_1', option_id: 'round' }),
+    ]);
+  });
+
+  it('installs the guard before waiting for tracker history', async () => {
+    let finish!: (episode: string) => void;
+    const pending = new Promise<string>((resolve) => {
+      finish = resolve;
+    });
+    const { app, deps } = await appWithAiur([decision()]);
+    const read = vi.fn(async () => pending);
+    deps.registry.reviewEpisode = read;
+    const request = app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+    });
+    await vi.waitFor(() => expect(read).toHaveBeenCalled());
+    expect(deps.db.select().from(schema.reviewAnswerGuards).all()).toEqual([
+      expect.objectContaining({
+        source: ids.game,
+        ticket: expect.stringMatching(/^478\/pending@/),
+        episode: expect.stringContaining('"principal"'),
+      }),
+    ]);
+    finish('101@2026-01-01T00:01:00Z');
+    expect((await request).status).toBe(200);
+  });
+
+  it('guards the review episode active after an in-flight answer', async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const answer = vi.fn(async () => pending);
+    const { app, deps } = await appWithAiur([decision()], answer);
+    let episode = '100@2026-01-01T00:00:00Z';
+    deps.registry.reviewEpisode = async () => episode;
+    const request = app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+    });
+    await vi.waitFor(() => expect(answer).toHaveBeenCalled());
+    expect(deps.db.select().from(schema.reviewAnswerGuards).all()).toEqual([
+      expect.objectContaining({
+        source: ids.game,
+        ticket: expect.stringMatching(/^478\/pending@/),
+        episode: expect.stringContaining('"principal"'),
+      }),
+    ]);
+    episode = '101@2026-01-01T00:01:00Z';
+    finish();
+    expect((await request).status).toBe(200);
+    expect(deps.db.select().from(schema.reviewAnswerGuards).all()).toEqual([
+      expect.objectContaining({ source: ids.game, ticket: '478', episode }),
+    ]);
+  });
+
+  it('retains the owning job when a creator answers its review', async () => {
+    const { app, deps, answerAsCreator } = await appWithAiur([decision()]);
+    job(deps, ids.job, ids.game, AT);
+    deps.db.update(schema.jobs).set({ aiurIssueNumber: 478 }).run();
+    command(deps, ids.job, ULID, {
+      decision_id: 'd_aiur_1',
+      options: [
+        { id: 'round', label: 'Round blobs' },
+        { id: 'square', label: 'Square blobs' },
+      ],
+    });
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'round', version: 2, review: { likes: ['round'], dislikes: [] } }),
+    });
+    expect(response.status).toBe(200);
+    expect(answerAsCreator).toHaveBeenCalledWith('d_aiur_1', expect.objectContaining({ option: 'round' }));
+    expect(listReviews(deps.db, ids.game)).toEqual([expect.objectContaining({ job_id: ids.job, command_id: ULID })]);
+  });
+
   it('refuses a review whose cards are not the Command’s and answers nothing', async () => {
     const { app, answerAsCreator } = await appWithAiur([decision()]);
 
@@ -618,6 +827,21 @@ describe('a registered game’s own Commands', () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: 'command_not_found' });
     expect(answerAsCreator).not.toHaveBeenCalled();
+  });
+
+  it('does not answer an Executor decision or an option outside the Command', async () => {
+    const technical = await appWithAiur([decision({ context: {} })]);
+    const request = (app: typeof technical.app, option_id: string) =>
+      app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+        method: 'POST',
+        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+        body: JSON.stringify({ option_id, version: 2 }),
+      });
+    expect((await request(technical.app, 'round')).status).toBe(404);
+    expect(technical.answerAsCreator).not.toHaveBeenCalled();
+    const creator = await appWithAiur([decision()]);
+    expect((await request(creator.app, 'unknown')).status).toBe(400);
+    expect(creator.answerAsCreator).not.toHaveBeenCalled();
   });
 
   it('reports another writer’s answer as a conflict', async () => {
@@ -654,4 +878,266 @@ describe('a registered game’s own Commands', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: 'daemon_not_found' });
   });
+});
+
+it('asks the owning worker once by stable message id when a command has no media', async () => {
+  const { app, deps } = await appWithAiur([decision()]);
+  const message = vi.fn().mockResolvedValue({ request_id: 'r' });
+  deps.aiurClientForGame = async () =>
+    ({ decisions: async () => [decision()], decision: async () => decision(), message }) as unknown as AiurClient;
+  const path = `/api/v1/games/${ids.game}/commands/d_aiur_1/missing-media`;
+  expect((await app.request(path, { method: 'POST', headers: asUser(ids.outsider) })).status).toBeGreaterThanOrEqual(
+    400,
+  );
+  expect(message).not.toHaveBeenCalled();
+  expect((await app.request(path, { method: 'POST', headers: asUser(ids.user) })).status).toBe(200);
+  expect(message).toHaveBeenCalledWith(
+    '478',
+    expect.stringContaining('missing media'),
+    'review-media:d_aiur_1:2',
+    expect.any(AbortSignal),
+  );
+});
+
+it('lists and answers core Commands only for the instance owner', async () => {
+  const { app, deps } = await appWithAiur([]);
+  deps.registry.coreAiurClient = {} as AiurClient;
+  expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).status).toBe(403);
+  deps.config.instanceOwnerId = ids.user;
+  deps.config.coreRepo = { owner: 'fixture', name: 'core' };
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '479',
+        title: 'Review core build',
+        labels: ['agent:human-review'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
+  const coreDecision = decision({
+    audience: 'creator',
+    context: { short_summary: 'Blobs look' },
+    options: [
+      {
+        id: 'round',
+        label: 'Round blobs',
+        media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/a.png' } }],
+      },
+      {
+        id: 'square',
+        label: 'Square blobs',
+        media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/b.png' } }],
+      },
+    ],
+  });
+  const answerAsCreator = vi.fn().mockResolvedValue(undefined);
+  const message = vi.fn().mockResolvedValue({ request_id: 'r' });
+  deps.registry.coreAiurClient = {
+    decisions: vi.fn().mockResolvedValue([coreDecision]),
+    decision: vi.fn().mockResolvedValue(coreDecision),
+    state: vi.fn().mockResolvedValue({
+      running: [],
+      retrying: [],
+      idle: [{ issue_identifier: '479', state: 'agent:human-review', title: 'Review core build' }],
+    }),
+    issue: vi.fn().mockResolvedValue({ status: 'in-progress' }),
+    answerAsCreator,
+    message,
+  } as unknown as AiurClient;
+  expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.outsider) })).status).toBe(403);
+  const page = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
+  expect(await page.json()).toMatchObject({
+    targets: [{ source: 'core', ticket: '479', title: 'Review core build' }],
+    commands: [
+      {
+        source: 'core',
+        decision_id: 'd_aiur_1',
+        options: [{ media: { url: 'https://example.test/a.png' } }, { media: { url: 'https://example.test/b.png' } }],
+      },
+    ],
+  });
+  deps.registry.reviewEpisode = async () => '100@2026-01-01T00:00:00Z';
+  const originalTracker = deps.registry.trackerTickets!;
+  deps.registry.trackerTickets = async () => ({ stale: true, tickets: [] });
+  const partial = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
+  expect(partial).toMatchObject({ targetsUnavailable: true, commands: [{ decision_id: 'd_aiur_1' }] });
+  expect(
+    (await app.request('/api/v1/core/tickets/479/missing-review', { method: 'POST', headers: asUser(ids.user) }))
+      .status,
+  ).toBe(503);
+  deps.registry.trackerTickets = originalTracker;
+  const path = '/api/v1/core/commands/d_aiur_1/answer';
+  const request = () =>
+    app.request(path, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ option_id: 'square', version: 2, review: { likes: ['square'], dislikes: [] } }),
+    });
+  expect((await request()).status).toBe(200);
+  const changed = await app.request(path, {
+    method: 'POST',
+    headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+    body: JSON.stringify({
+      option_id: 'square',
+      version: 2,
+      change_request: true,
+      review: { likes: [], dislikes: [{ option_id: 'square' }], notes: 'Softer' },
+    }),
+  });
+  expect(changed.status).toBe(200);
+  expect(answerAsCreator).toHaveBeenCalledWith(
+    'd_aiur_1',
+    expect.objectContaining({ response: expect.stringContaining('Softer') }),
+  );
+  expect(answerAsCreator).toHaveBeenCalledWith(
+    'd_aiur_1',
+    expect.objectContaining({
+      ticket: '478',
+      principal: ids.user,
+      expected_version: 2,
+      idempotency_key: 'd_aiur_1:2',
+      option: 'square',
+    }),
+  );
+  expect(
+    (await app.request('/api/v1/core/commands/d_aiur_1/missing-media', { method: 'POST', headers: asUser(ids.user) }))
+      .status,
+  ).toBe(409);
+  expect(message).not.toHaveBeenCalled();
+  expect(
+    (await app.request('/api/v1/core/tickets/479/missing-review', { method: 'POST', headers: asUser(ids.user) }))
+      .status,
+  ).toBe(200);
+  expect(message).toHaveBeenCalledWith(
+    '479',
+    expect.stringContaining('no review media'),
+    'core-review-target:479:100',
+    expect.any(AbortSignal),
+  );
+  expect(await (await app.request('/api/v1/core/tickets/478/state', { headers: asUser(ids.user) })).json()).toEqual({
+    state: 'in-progress',
+  });
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '478',
+        title: 'Review',
+        labels: ['agent:human-review'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
+  const pending = await app.request('/api/v1/core/tickets/478/missing-review', {
+    method: 'POST',
+    headers: asUser(ids.user),
+  });
+  expect(pending.status).toBe(409);
+  deps.registry.coreAiurClient = null;
+  expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).status).toBe(503);
+});
+
+it('does not report a declared attachment as absent while its copy is pending', async () => {
+  const { app, deps } = await appWithAiur([]);
+  const withMedia = decision({
+    options: [
+      {
+        id: 'round',
+        label: 'Round blobs',
+        media: [{ kind: 'image', locator: { kind: 'attachment', attachment_id: 'a' } }],
+      },
+      {
+        id: 'square',
+        label: 'Square blobs',
+        media: [{ kind: 'image', locator: { kind: 'attachment', attachment_id: 'b' } }],
+      },
+    ],
+  });
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '478',
+        title: 'Ticket',
+        labels: ['game:game-1'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
+  const message = vi.fn().mockResolvedValue({ request_id: 'r' });
+  const { aiurMediaTiming } = await import('../../src/commands/aiur-media.js');
+  const original = aiurMediaTiming.inboxWaitMs;
+  aiurMediaTiming.inboxWaitMs = 1;
+  deps.aiurClientForGame = async () =>
+    ({
+      decisions: async () => [withMedia],
+      decision: async () => withMedia,
+      baseUrl: 'http://127.0.0.1:1',
+      decisionMedia: () => new Promise(() => {}),
+      message,
+    }) as unknown as AiurClient;
+  try {
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/missing-media`, {
+      method: 'POST',
+      headers: asUser(ids.user),
+    });
+    expect(response.status).toBe(409);
+    expect(message).not.toHaveBeenCalled();
+  } finally {
+    aiurMediaTiming.inboxWaitMs = original;
+  }
+});
+
+it('does not expose a core daemon error or its connection details', async () => {
+  const { app, deps } = await appWithAiur([]);
+  deps.config.instanceOwnerId = ids.user;
+  deps.registry.coreAiurClient = {
+    decisions: vi.fn().mockRejectedValue(new Error('private-core-value')),
+  } as unknown as AiurClient;
+  const response = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
+  expect(response.status).toBe(502);
+  expect(await response.text()).not.toContain('private-core-value');
+});
+
+it('does not list or answer another game’s decision on a shared daemon', async () => {
+  const { app, deps, answerAsCreator } = await appWithAiur([decision()]);
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '478',
+        title: 'Other game',
+        labels: ['game:game-2'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
+  const listed = await app.request(`/api/v1/games/${ids.game}/commands`, { headers: asUser(ids.user) });
+  expect(await listed.json()).toMatchObject({ commands: [] });
+  const missing = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/missing-media`, {
+    method: 'POST',
+    headers: asUser(ids.user),
+  });
+  expect(missing.status).toBe(404);
+  const answer = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+    method: 'POST',
+    headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+    body: JSON.stringify({ option_id: 'round', version: 2 }),
+  });
+  expect(answer.status).toBe(404);
+  expect(answerAsCreator).not.toHaveBeenCalled();
 });

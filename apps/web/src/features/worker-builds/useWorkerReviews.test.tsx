@@ -39,6 +39,7 @@ describe('worker reviews', () => {
           preview: { ticket: '13', buildId: 'b' },
           round: { id: 'g', ticket: '13', question: null, media: [], category: 'gameplay', buildId: 'b' },
         },
+        { kind: 'standalone-preview', gameId: 'game', preview: { ticket: '99', buildId: 'unbacked' } },
       ]),
     );
     unmount();

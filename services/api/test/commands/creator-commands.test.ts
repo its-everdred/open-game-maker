@@ -48,7 +48,18 @@ function seed() {
   ] as const) {
     deps.db
       .insert(schema.games)
-      .values({ id, familyId, ownerId, title, visibility: 'private', repoVisibility: 'private', createdAt: AT })
+      .values({
+        id,
+        familyId,
+        ownerId,
+        title,
+        slug: title.toLowerCase(),
+        githubOwner: 'fixture',
+        githubRepo: title.toLowerCase(),
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: AT,
+      })
       .run();
   }
   installUsers(
@@ -65,6 +76,20 @@ function seed() {
       email: `${userId}@example.test`,
     })),
   );
+  deps.registry.trackerTickets = async (repo) => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '12',
+        title: 'Ticket',
+        labels: [`game:${repo.name}`],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
   return deps;
 }
 
@@ -166,6 +191,7 @@ describe('the creator’s decision inbox', () => {
       const body = (await (await pending).json()) as { commands: Array<{ decision_id: string }> };
 
       expect(body.commands.map((command) => command.decision_id)).toEqual(['d_castle']);
+      expect(body).toMatchObject({ unavailable: true });
       expect(deps.lines).toContainEqual(
         expect.objectContaining({ event: 'game_commands_unavailable', gameId: ids.blobs }),
       );

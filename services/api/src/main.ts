@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { serve } from '@hono/node-server';
 
 import { FsBlobStore } from '@ogm/blob-store';
+import { createAiurClient } from '@ogm/aiur-client';
 import { createDbDaemonStore, createFleet, createIntake, createIssuesClient, startFeedConsumers } from '@ogm/builder';
 import { parseRepositoryName } from '@ogm/config';
 import { migrate, openDb } from '@ogm/db';
@@ -40,6 +41,7 @@ import { createWaitTickets } from './decision-waits/tickets.js';
 import { createTicketTitleReader, createWorkpadReader } from './worker-progress/workpad.js';
 import { createTrackerReader } from './worker-progress/tracker.js';
 import { createTicketLookup } from './worker-progress/lookup.js';
+import { createReviewEpisodeReader } from './worker-progress/review-episode.js';
 import { createTicketConversationReader } from './worker-progress/conversation.js';
 import { startBriefingPush } from './voice/briefing-push.js';
 import { questionSession } from './voice/question-session.js';
@@ -84,6 +86,7 @@ const deps: AppDeps = {
     commitServiceToken: env.OGM_COMMIT_SERVICE_TOKEN,
     gameTemplateRef: env.OGM_GAME_TEMPLATE_REF,
     instanceRepo: parseRepositoryName(env.OGM_INSTANCE_REPO),
+    coreRepo: env.OGM_CORE_BUMP_CORE_REPO ? parseRepositoryName(env.OGM_CORE_BUMP_CORE_REPO) : undefined,
     instanceOwnerId: env.OGM_INSTANCE_OWNER_ID,
     gamesRoot: env.OGM_GAMES_ROOT ?? join(env.OGM_DATA_DIR, '..', 'games'),
     vapidKeyFile: env.OGM_VAPID_KEY_FILE,
@@ -119,10 +122,18 @@ const deps: AppDeps = {
 };
 deps.registry.chatJobs = createChatJobDirectory(db);
 deps.registry.aiurClientFor = daemonDirectory.clientForSlug;
+if (env.AIUR_API_URL && env.AIUR_API_TOKEN) {
+  deps.registry.coreAiurClient = createAiurClient({
+    baseUrl: env.AIUR_API_URL,
+    token: env.AIUR_API_TOKEN,
+    supervisorToken: env.AIUR_API_TOKEN,
+  });
+}
 deps.registry.workerWorkpad = createWorkpadReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.workerTitle = createTicketTitleReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.trackerTickets = createTrackerReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.trackerTicket = createTicketLookup(env.OGM_INTAKE_GITHUB_TOKEN);
+deps.registry.reviewEpisode = createReviewEpisodeReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.ticketConversation = createTicketConversationReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.issueStateWriter = issues;
 startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));

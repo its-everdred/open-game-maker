@@ -316,7 +316,8 @@ async function installGamesMenuApi(page: Page, decisions: ReturnType<typeof blob
   const answered: Array<{ decision: string; option: string }> = [];
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/api/v1/me/commands') return json(route, { commands: open });
+    if (url.pathname === '/api/v1/me/commands') return json(route, { commands: open, sessions: [] });
+    if (url.pathname === '/api/v1/me/core-commands') return json(route, { commands: [], targets: [] });
     const answer = /^\/api\/v1\/games\/[^/]+\/commands\/([^/]+)\/answer$/.exec(url.pathname);
     if (answer && route.request().method() === 'POST') {
       const { option_id: option } = route.request().postDataJSON() as { option_id: string };

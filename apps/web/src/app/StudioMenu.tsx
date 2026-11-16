@@ -25,7 +25,11 @@ import { openConversation } from '../features/build-chat/conversation';
 import { resetReviewDrafts } from '../features/commands-inbox/drafts';
 import { isTerminal, setJobPaused, useMyJobs } from '../features/build-chat/jobs';
 import { DecisionDeck } from '../features/commands-inbox/DecisionDeck';
-import { useCreatorCommands } from '../features/commands-inbox/commands';
+import {
+  useCoreReviewCommands,
+  useCreatorCommands,
+  useCreatorReviewCommands,
+} from '../features/commands-inbox/commands';
 import { QuestionSession } from '../features/commands-inbox/QuestionSession';
 import { signOut } from '../lib/api/auth';
 import { useSession } from '../lib/api/session';
@@ -34,7 +38,12 @@ import { useAdminMe } from '../routes/admin/api';
 import { requireAdmin } from '../routes/admin/guard';
 import { useGameMenu, type GameMenuAction } from './GameMenu';
 import { VolumeCircle } from './VolumeCircle';
-import { BuildPanel, BuildTracker, combinedPercent } from '../features/worker-builds/BuildTracker';
+import {
+  BuildPanel,
+  BuildTracker,
+  combinedPercent,
+  missingReviewTargets,
+} from '../features/worker-builds/BuildTracker';
 import { useWorkers } from '../features/worker-builds/useWorkers';
 import { useWorkerReviews } from '../features/worker-builds/useWorkerReviews';
 import { useWorkerFinishes } from '../features/worker-builds/useWorkerFinishes';
@@ -61,6 +70,8 @@ export function StudioMenu() {
   const sound = useSyncExternalStore(onChange, status);
   const [volume, setLocalVolume] = useState(getVolume);
   const [announcement, setAnnouncement] = useState('');
+  const [reviewNotice, setReviewNotice] = useState(false);
+  const seenReviews = useRef<{ creator: string | undefined; keys: Set<string> } | undefined>(undefined);
   const [buildClock, setBuildClock] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
   const [sheet, setSheet] = useState<Sheet>();
@@ -74,23 +85,60 @@ export function StudioMenu() {
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
   const ownedGames = isShowcase ? [] : builds.games.filter((item) => item.ownerId === creatorId);
-  const { workers, feeds, error: workerError } = useWorkers(ownedGames, gameId, creatorId);
+  const { workers, feeds, error: workerError, loading: workersLoading } = useWorkers(ownedGames, undefined, creatorId);
   const reviewData = useWorkerReviews(ownedGames, creatorId);
   const reviews = reviewData.reviews;
   const past = usePastTickets(ownedGames, creatorId);
-  const reviewCommands = decisions.commands;
+  const gameReview = useCreatorReviewCommands(creatorId);
+  const coreReview = useCoreReviewCommands(creatorId);
+  const reviewCommands = [...gameReview.commands, ...coreReview.commands];
   const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, creatorId);
   const visibleFinished = isShowcase
     ? []
     : gameId
       ? finished.filter(({ ticket }) => ticket.startsWith(gameId + ':'))
       : finished;
+  useEffect(() => {
+    if (
+      !creatorId ||
+      builds.isLoading ||
+      workersLoading ||
+      reviewData.loading ||
+      gameReview.loading ||
+      coreReview.loading
+    )
+      return;
+    const keys = new Set([
+      ...reviews.map(
+        (review) =>
+          `${review.gameId}:${review.kind === 'standalone-preview' ? review.preview.buildId : review.round.id}`,
+      ),
+      ...coreReview.targets.map((target) => `core:${target.ticket}`),
+      ...missingReviewTargets(workers, reviews, reviewCommands).map((target) => `${target.gameId}:${target.ticket}`),
+      ...reviewCommands.map((command) => `${'source' in command ? 'core' : command.game_id}:${command.decision_id}`),
+    ]);
+    const previous = seenReviews.current;
+    if (previous?.creator === creatorId && [...keys].some((key) => !previous.keys.has(key))) setReviewNotice(true);
+    if (previous?.creator !== creatorId) setReviewNotice(false);
+    seenReviews.current = { creator: creatorId, keys };
+  }, [
+    builds.isLoading,
+    coreReview.loading,
+    coreReview.targets,
+    creatorId,
+    gameReview.loading,
+    reviewCommands,
+    reviewData.loading,
+    reviews,
+    workers,
+    workersLoading,
+  ]);
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
   const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
   // The badge counts every open player-facing decision across the creator's games, and each game's quick voice chat
-  // as one entry (#612); red when a decision blocks its build.
+  // as one entry; red when a decision blocks its build.
   const openDecisions = decisions.commands.length + decisions.sessions.length;
   const blocked = decisions.commands.some((command) => command.blocking);
 
@@ -229,9 +277,12 @@ export function StudioMenu() {
     (workers.length > 0 ||
       reviews.length > 0 ||
       reviewCommands.length > 0 ||
+      coreReview.targets.length > 0 ||
       past.tickets.length > 0 ||
       workerError ||
       reviewData.error ||
+      gameReview.error ||
+      coreReview.error ||
       past.error)
   ) {
     circles.push(
@@ -352,7 +403,7 @@ export function StudioMenu() {
     sheetContent = (
       <ul id="studio-menu-decisions" className="studio-menu-decisions" aria-label="Decisions">
         {decisions.commands.map((command) => (
-          <li key={`${command.game_id}:${command.decision_id}`}>
+          <li key={`${'source' in command ? 'core' : command.game_id}:${command.decision_id}`}>
             <button
               className="studio-menu-job"
               data-action-needed="true"
@@ -397,9 +448,12 @@ export function StudioMenu() {
     (workers.length > 0 ||
       reviews.length > 0 ||
       reviewCommands.length > 0 ||
+      coreReview.targets.length > 0 ||
       past.tickets.length > 0 ||
       workerError ||
       reviewData.error ||
+      gameReview.error ||
+      coreReview.error ||
       past.error)
   ) {
     sheetContent = (
@@ -409,10 +463,11 @@ export function StudioMenu() {
         workers={workers}
         reviews={reviews}
         commands={reviewCommands}
+        coreTargets={coreReview.targets}
         past={past.tickets}
         historyError={past.error}
         workerError={workerError}
-        reviewError={reviewData.error}
+        reviewError={reviewData.error || gameReview.error || coreReview.error}
         historyLoading={past.loading}
         jobs={builds.jobs}
         id="studio-menu-builds"
@@ -484,15 +539,29 @@ export function StudioMenu() {
           workers={workers}
           reviews={reviews}
           commands={reviewCommands}
+          coreTargets={coreReview.targets}
           past={past.tickets}
           historyError={past.error}
           workerError={workerError}
-          reviewError={reviewData.error}
+          reviewError={reviewData.error || gameReview.error || coreReview.error}
           historyLoading={past.loading}
           jobs={builds.jobs}
           finished={visibleFinished}
           onDismiss={dismissFinished}
         />
+      )}
+      {reviewNotice && !open && (
+        <button
+          type="button"
+          className="worker-tracker-toast worker-tracker-game-toast"
+          onClick={() => {
+            setReviewNotice(false);
+            setOpen(true);
+            setSheet('builds');
+          }}
+        >
+          New review ready
+        </button>
       )}
       {isGameView && visibleFinished.length > 0 && (
         <span className="worker-tracker-toast worker-tracker-game-toast" role="status">

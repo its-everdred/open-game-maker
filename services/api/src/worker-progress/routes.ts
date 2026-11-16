@@ -1,7 +1,22 @@
 import { Hono } from 'hono';
+import { and, eq, isNull } from 'drizzle-orm';
+import { schema } from '@ogm/db';
+import { listGameCommands } from '../commands/list.js';
+import { toGameCommand } from '../commands/aiur.js';
+import { isForCreator } from '../job-commands/correlate.js';
+import {
+  readReviewEpisode,
+  reconcileReviewEpisode,
+  reconcilePendingCommands,
+  reconcilePendingPreviews,
+  retainReviewTickets,
+  reviewAnswerPending,
+} from '../review-rounds/answer-guard.js';
+import { listEditorPreviews, listPreviewHistory, listPreviews } from '../previews/store.js';
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
 import { authorizedGame } from '../games/authorize.js';
+import { requirePrincipal } from '../app/principal.js';
 import { listWorkers } from './list.js';
 import { recentCompletions } from './completions.js';
 import { belongsToGame, ticketScope } from './scope.js';
@@ -19,6 +34,21 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   const tickets = snapshot.tickets.filter(
     (ticket) => (!snapshot.stale || scope.owned.has(ticket.ticket)) && belongsToGame(ticket, scope),
   );
+  if (!snapshot.stale)
+    retainReviewTickets(
+      deps.db,
+      game.id,
+      new Set(
+        tickets
+          .filter((ticket) =>
+            ticket.labels.some(
+              (label) =>
+                label === 'agent:human-review' || [...scope.slugs].some((slug) => label === `${slug}:human-review`),
+            ),
+          )
+          .map((ticket) => ticket.ticket),
+      ),
+    );
   const allowed = new Map(tickets.map((ticket) => [ticket.ticket, ticket]));
   const observed = new Set(snapshot.tickets.map((ticket) => ticket.ticket));
   let daemonUnavailable = false;
@@ -78,6 +108,83 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
     trackerStale: snapshot.stale,
     ...history,
   });
+});
+
+routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
+  const game = authorizedGame(c, 'game.edit');
+  if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
+  const deps = c.get('deps');
+  const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
+  if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
+  const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
+  const snapshot = await deps.registry.trackerTickets(repo, 'open');
+  if (snapshot.stale) throw new HttpError(503, 'ticket_scope_unavailable');
+  const ticket = snapshot.tickets.find((item) => item.ticket === c.req.param('ticket') && belongsToGame(item, scope));
+  if (
+    !ticket ||
+    !ticket.labels.some(
+      (label) => label === 'agent:human-review' || [...scope.slugs].some((slug) => label === `${slug}:human-review`),
+    )
+  )
+    throw new HttpError(404, 'review_ticket_not_found');
+  const episode = await readReviewEpisode(deps.registry.reviewEpisode, repo, ticket.ticket, [
+    'agent:human-review',
+    ...[...scope.slugs].map((slug) => `${slug}:human-review`),
+  ]);
+  if (episode === undefined) throw new HttpError(503, 'review_episode_unavailable');
+  if (episode === null) throw new HttpError(404, 'review_ticket_not_found');
+  const client = await deps.aiurClientForGame(game.id);
+  await reconcilePendingCommands(deps.db, game.id, ticket.ticket, episode, client, deps.log);
+  const previews = [...(await listEditorPreviews(deps, game.id)), ...(await listPreviewHistory(deps, game.id))];
+  reconcilePendingPreviews(
+    deps.db,
+    game.id,
+    ticket.ticket,
+    episode,
+    new Set(
+      previews
+        .filter((preview) => preview.ticket === ticket.ticket && preview.answered)
+        .map((preview) => preview.buildId),
+    ),
+  );
+  await reconcileReviewEpisode(deps.db, game.id, ticket.ticket, episode);
+  if (reviewAnswerPending(deps.db, game.id, ticket.ticket)) throw new HttpError(409, 'review_answer_pending');
+  const round = deps.db
+    .select({ id: schema.reviewRounds.id })
+    .from(schema.reviewRounds)
+    .where(
+      and(
+        eq(schema.reviewRounds.gameId, game.id),
+        eq(schema.reviewRounds.ticket, ticket.ticket),
+        isNull(schema.reviewRounds.verdict),
+      ),
+    )
+    .get();
+  // Do not report a missing review when the daemon cannot confirm its decision feed.
+  const decisions = await client.decisions({}, AbortSignal.timeout(5000));
+  if (
+    round ||
+    decisions.some(
+      (decision) =>
+        decision.ticket.identifier === ticket.ticket &&
+        isForCreator(decision) &&
+        toGameCommand(decision) !== null &&
+        ['open', 'deferred', 'pending'].includes(decision.decision_status) &&
+        !decision.answer &&
+        !decision.active_answer,
+    ) ||
+    (await listGameCommands(deps, game)).some((command) => command.ticket === ticket.ticket) ||
+    (await listPreviews(deps, game.id)).some((preview) => preview.ticket === ticket.ticket)
+  )
+    throw new HttpError(409, 'review_present');
+  const receipt = await client.message(
+    ticket.ticket,
+    'This ticket needs a creator review, but no review media was posted. Please post a review with media.',
+    `review-target:${ticket.ticket}:${episode.split('@')[0]}`,
+    AbortSignal.timeout(15000),
+  );
+  if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
+  return c.json({ status: 'asked' });
 });
 
 routes.get('/games/:gameId/tickets/completed', async (c) => {

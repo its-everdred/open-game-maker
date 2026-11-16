@@ -44,6 +44,9 @@ function seed() {
         familyId: ids.family,
         ownerId: ids.user,
         title,
+        slug: title.toLowerCase(),
+        githubOwner: 'fixture',
+        githubRepo: title.toLowerCase(),
         visibility: 'private',
         repoVisibility: 'private',
         createdAt: AT,
@@ -60,6 +63,20 @@ function seed() {
       email: 'creator@example.test',
     },
   ]);
+  deps.registry.trackerTickets = async (repo) => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '12',
+        title: 'Ticket',
+        labels: [`game:${repo.name}`],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue',
+      },
+    ],
+  });
   return deps;
 }
 
@@ -110,6 +127,8 @@ describe('the product-question queue', () => {
 
     const menu = await read(deps, '/me/commands');
     expect(menu.commands.map(({ decision_id }) => decision_id)).toEqual(['d_look']);
+    const review = await read(deps, '/me/commands?includeQuestions=1');
+    expect(review.commands).toHaveLength(10);
     // Castle has four: below the threshold, so nothing is offered for it yet.
     expect(menu.question_sessions).toEqual([{ game_id: ids.blobs, game_title: 'Blobs', count: 5 }]);
     const inbox = await read(deps, `/games/${ids.blobs}/commands`);

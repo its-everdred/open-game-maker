@@ -20,13 +20,32 @@ it('answers a ledger round with a note and advances to the next review', async (
         commands={[]}
         onClose={() => {}}
         reviews={[
-          { kind: 'round', gameId: 'g', round: { id: 'a', ticket: '12', question: 'First?', media: [] } },
-          { kind: 'round', gameId: 'g', round: { id: 'b', ticket: '13', question: 'Second?', media: [] } },
+          {
+            kind: 'round',
+            gameId: 'g',
+            round: {
+              id: 'a',
+              ticket: '12',
+              question: 'First?',
+              media: [{ kind: 'still' as const, url: '/first.png' }],
+            },
+          },
+          {
+            kind: 'round',
+            gameId: 'g',
+            round: {
+              id: 'b',
+              ticket: '13',
+              question: 'Second?',
+              media: [{ kind: 'still' as const, url: '/second.png' }],
+            },
+          },
         ]}
       />
     </QueryClientProvider>,
   );
-  expect(screen.getByText('First?')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Second?' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'First?' }));
   expect(screen.queryByText('Second?')).toBeNull();
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'More contrast' } });
   fireEvent.click(screen.getByRole('button', { name: 'Needs work' }));
@@ -36,25 +55,28 @@ it('answers a ledger round with a note and advances to the next review', async (
       json: { verdict: 'needs_work', note: 'More contrast' },
     }),
   );
-  await screen.findByText('Second?');
+  await screen.findByText('Saved');
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.getByRole('button', { name: 'Second?' })).toBeVisible();
 });
 
 it('keeps an open review while polling replaces the list', () => {
   const first = {
     kind: 'round' as const,
     gameId: 'g',
-    round: { id: 'a', ticket: '12', question: 'First?', media: [] },
+    round: { id: 'a', ticket: '12', question: 'First?', media: [{ kind: 'still' as const, url: '/first.png' }] },
   };
   const second = {
     kind: 'round' as const,
     gameId: 'g',
-    round: { id: 'b', ticket: '13', question: 'Second?', media: [] },
+    round: { id: 'b', ticket: '13', question: 'Second?', media: [{ kind: 'still' as const, url: '/second.png' }] },
   };
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ReviewInbox commands={[]} onClose={() => {}} reviews={[first, second]} />
     </QueryClientProvider>,
   );
+  fireEvent.click(screen.getByRole('button', { name: 'First?' }));
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Keep this' } });
   view.rerender(
     <QueryClientProvider client={queryClient}>
@@ -83,6 +105,7 @@ it('allows playing clips attached to a playable review', () => {
       />
     </QueryClientProvider>,
   );
+  fireEvent.click(screen.getByRole('button', { name: 'Ticket 12' }));
   const video = document.querySelector('video');
   expect(video).toHaveAttribute('controls');
   expect(video).toHaveStyle({ pointerEvents: 'auto' });
@@ -96,6 +119,7 @@ it('recovers an unavailable playable when its preview arrives', async () => {
       <ReviewInbox commands={[]} onClose={() => {}} reviews={[{ kind: 'round', gameId: 'g', round }]} />
     </QueryClientProvider>,
   );
+  fireEvent.click(screen.getByRole('button', { name: 'Try it?' }));
   expect(screen.getByText('The playable review is unavailable. Try again later.')).toBeVisible();
   view.rerender(
     <QueryClientProvider client={queryClient}>
@@ -114,4 +138,135 @@ it('recovers an unavailable playable when its preview arrives', async () => {
     </QueryClientProvider>,
   );
   await waitFor(() => expect(screen.queryByText('The playable review is unavailable. Try again later.')).toBeNull());
+});
+
+it('asks the worker and does not offer a verdict for a round without media', async () => {
+  api.mockResolvedValue({ status: 'asked' });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox
+        commands={[]}
+        onClose={() => {}}
+        reviews={[{ kind: 'round', gameId: 'g', round: { id: 'a', ticket: '12', question: 'Review?', media: [] } }]}
+      />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/games/g/review-rounds/a/missing-media', { method: 'POST' }));
+  expect(await screen.findByText('No media; asked the agent.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Review?' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('No media');
+  expect(screen.queryByRole('button', { name: 'Looks right' })).toBeNull();
+});
+
+it('lists a review-stage ticket without an artifact and asks its worker for media', async () => {
+  api.mockResolvedValue({ status: 'asked' });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox
+        commands={[]}
+        reviews={[]}
+        targets={[{ gameId: 'g', ticket: '42', title: 'Review build' }]}
+        onClose={() => {}}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole('button', { name: 'Review build' })).toBeVisible();
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/games/g/tickets/42/missing-review', { method: 'POST' }));
+  expect(await screen.findByText('No media; asked the agent.')).toBeVisible();
+});
+
+it('lists core Commands alongside game reviews', () => {
+  const core = {
+    source: 'core' as const,
+    job_id: null,
+    ticket: '45',
+    title: 'Core question',
+    command_id: 'c',
+    decision_id: 'd',
+    version: 1,
+    question: 'Which?',
+    blocking: true,
+    opened_at: '2026-01-01T00:00:00Z',
+    options: [
+      { id: 'a', label: 'A', media: { url: '/a.png', width: 10, height: 10 } },
+      { id: 'b', label: 'B', media: { url: '/b.png', width: 10, height: 10 } },
+    ],
+  };
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[core]} reviews={[]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Core · Core question' }));
+  expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeVisible();
+});
+
+it('keeps a command open while an answer is sending', async () => {
+  let finish!: (value: unknown) => void;
+  api.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const command = {
+    game_id: 'g',
+    game_title: 'Game',
+    job_id: null,
+    ticket: '45',
+    title: 'Question',
+    command_id: 'c',
+    decision_id: 'd',
+    version: 1,
+    question: 'Which?',
+    blocking: true,
+    opened_at: '2026-01-01T00:00:00Z',
+    options: [
+      { id: 'a', label: 'A', media: { url: '/a.png', width: 10, height: 10 } },
+      { id: 'b', label: 'B', media: { url: '/b.png', width: 10, height: 10 } },
+    ],
+  };
+  const close = vi.fn();
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[command]} reviews={[]} onClose={close} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Game · Question' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Pick A: A' }));
+  expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  expect(close).not.toHaveBeenCalled();
+  finish({ status: 'answered' });
+  await screen.findByText(/Saved/);
+});
+
+it('does not report a just-answered ticket as missing while its state catches up', async () => {
+  api.mockResolvedValue({ status: 'answered' });
+  const round = {
+    kind: 'round' as const,
+    gameId: 'g',
+    round: { id: 'a', ticket: '12', question: 'Review?', media: [{ kind: 'still' as const, url: '/a.png' }] },
+  };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} reviews={[round]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Review?' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Looks right' }));
+  await screen.findByText('Saved');
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox
+        commands={[]}
+        reviews={[]}
+        targets={[{ gameId: 'g', ticket: '12', title: 'Review again' }]}
+        onClose={() => {}}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.queryByRole('button', { name: 'Review again' })).toBeNull();
+  expect(api).not.toHaveBeenCalledWith('/games/g/tickets/12/missing-review', expect.anything());
 });

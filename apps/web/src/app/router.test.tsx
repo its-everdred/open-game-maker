@@ -47,6 +47,8 @@ vi.mock('../features/worker-builds/usePastTickets', () => ({
 vi.mock('../features/commands-inbox/commands', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/commands-inbox/commands')>()),
   useCreatorCommands: () => ({ commands: [], sessions: [] }),
+  useCreatorReviewCommands: () => ({ commands: [], error: false }),
+  useCoreReviewCommands: () => ({ commands: [], targets: [], error: false, loading: false }),
 }));
 
 vi.mock('../routes/admin/api', () => ({

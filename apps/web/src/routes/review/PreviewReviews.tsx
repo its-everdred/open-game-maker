@@ -120,19 +120,20 @@ export function PreviewCard({
       <div className="review-deck-actions">
         <button
           type="button"
-          disabled={answer.isPending || (pending !== null && pending[1] !== 'looks right')}
+          disabled={answer.isPending || answer.isSuccess || (pending !== null && pending[1] !== 'looks right')}
           onClick={() => answer.mutate('looks right')}
         >
           Looks right
         </button>
         <button
           type="button"
-          disabled={answer.isPending || (pending !== null && pending[1] !== 'needs work')}
+          disabled={answer.isPending || answer.isSuccess || (pending !== null && pending[1] !== 'needs work')}
           onClick={() => answer.mutate('needs work')}
         >
           Needs work
         </button>
       </div>
+      {answer.isSuccess && <p role="status">Saved</p>}
       {answer.isError || pending ? (
         <p role="alert">The review may not have sent. Tap the same verdict to retry.</p>
       ) : null}

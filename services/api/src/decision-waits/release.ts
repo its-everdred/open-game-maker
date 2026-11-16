@@ -23,7 +23,7 @@ export type DecisionAnswerNote = {
 };
 
 export function answerNote(decision: Decision): DecisionAnswerNote {
-  const optionId = answeredOption(decision) ?? null;
+  let optionId = answeredOption(decision) ?? null;
   const raw = (decision.active_answer ?? decision.answer)?.custom_response ?? null;
   let response: unknown = raw;
   if (raw !== null) {
@@ -32,6 +32,26 @@ export function answerNote(decision: Decision): DecisionAnswerNote {
     } catch {
       response = raw;
     }
+  }
+  if (
+    !optionId &&
+    response &&
+    typeof response === 'object' &&
+    'answers' in response &&
+    Array.isArray(response.answers)
+  ) {
+    const answers: unknown[] = response.answers;
+    const likes = answers.filter(
+      (item): item is { option_id: string; verdict: 'like' } =>
+        !!item &&
+        typeof item === 'object' &&
+        'option_id' in item &&
+        typeof item.option_id === 'string' &&
+        'verdict' in item &&
+        item.verdict === 'like' &&
+        decision.options.some((option) => option.id === item.option_id),
+    );
+    if (likes.length === 1 && answers.length === 1) optionId = likes[0].option_id;
   }
   return {
     decision_id: decision.decision_id,
@@ -73,7 +93,7 @@ export function keysOf(decision: Decision): string[] {
 
 const PAUSED = /:paused(?:-|$)/;
 
-export type Outcome = 'queued' | 'closed' | 'waiting';
+export type Outcome = 'queued' | 'closed' | 'waiting' | 'needs-choice';
 
 async function releaseTicket(
   client: AiurClient,
@@ -90,6 +110,8 @@ async function releaseTicket(
     .at(-1)?.when;
   // A retry after a failure part-way must not write the answer twice.
   const written = text.includes(ANSWER_MARKER(note.decision_id));
+  // A written change request is not a choice. Keep option-gated work waiting until a choice is made.
+  if (when !== undefined && note.option_id === null) return 'needs-choice';
   if (when !== undefined && when !== note.option_id) {
     if (!written) await tickets.comment(repo, ticket.number, notPickedComment(note, when));
     if (ticket.open) await tickets.setOpen(repo, ticket.number, false);
@@ -130,6 +152,7 @@ export async function releaseKey(
   for (const ticket of waiting) {
     if (!ticket.labels.includes(`game:${slug}`)) continue;
     const outcome = await releaseTicket(client, tickets, repo, key, ticket, note);
+    if (outcome === 'needs-choice') continue;
     await tickets.removeLabel(repo, ticket.number, key);
     released.push({ key, ticket: ticket.number, outcome });
   }

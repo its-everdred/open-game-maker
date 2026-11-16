@@ -4,8 +4,7 @@ import type { StoredCommand } from '../build-chat/store.js';
 import { isForCreator } from '../job-commands/correlate.js';
 
 // Kevin (2026-11-08): the creator sees player-facing decisions only. Engineering and operations Commands go to the
-// Executor and never reach a creator view (the menu count, the decision list, the review deck, a game's inbox). Aiur
-// has no audience field yet, so a decision counts as the creator's only when `isForCreator` finds the creator marker
+// Executor and never reach a creator view (the menu count, the decision list, the review deck, a game's inbox). A decision counts as the creator's when `isForCreator` finds the native creator audience or the creator marker
 // (`gm decide` writes it) or a gm command marker; a decision without either is hidden from creator views.
 export function creatorAudience(decision: Decision): 'creator' | undefined {
   return isForCreator(decision) ? 'creator' : undefined;
