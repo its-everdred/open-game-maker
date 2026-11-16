@@ -144,7 +144,7 @@ export default new Hono<ApiBindings>()
       });
       throw new HttpError(502, 'aiur_answer_failed');
     }
-    markReviewAnswered(game.id, canonical.ticket);
+    markReviewAnswered(deps.db, game.id, canonical.ticket);
     if (
       review !== undefined &&
       !tryRecordReview(deps.db, { gameId: game.id, command, optionId: body.option_id, review }, deps.log)

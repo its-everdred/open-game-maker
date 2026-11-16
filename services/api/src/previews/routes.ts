@@ -69,6 +69,6 @@ export default new Hono<ApiBindings>()
     const message = `Preview review of ${buildId}: ${verdict}.${note ? `\n${note}` : ''}`;
     const answered = await answerPreview(c.get('deps'), game.id, ticket, buildId, message, verdict, note);
     if (!answered) throw new HttpError(409, 'preview_changed');
-    markReviewAnswered(game.id, ticket);
+    markReviewAnswered(c.get('deps').db, game.id, ticket);
     return c.json({ status: 'answered' });
   });

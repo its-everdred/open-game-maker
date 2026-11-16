@@ -209,10 +209,10 @@ describe('worker progress route', () => {
       ],
     }));
     const missing = `/api/v1/games/${game}/tickets/12/missing-review`;
-    markReviewAnswered(game, '12');
+    markReviewAnswered(deps.db, game, '12');
     expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(409);
     expect(message).not.toHaveBeenCalled();
-    observeReviewState(game, '12', false);
+    observeReviewState(deps.db, game, '12', false);
     expect((await app.request(missing, { method: 'POST', headers: asUser(outsider) })).status).toBeGreaterThanOrEqual(
       400,
     );

@@ -4,7 +4,7 @@ import { schema } from '@ogm/db';
 import { listGameCommands } from '../commands/list.js';
 import { toGameCommand } from '../commands/aiur.js';
 import { isForCreator } from '../job-commands/correlate.js';
-import { observeReviewState, retainReviewTickets, reviewAnswerPending } from '../review-rounds/answer-guard.js';
+import { retainReviewTickets, reviewAnswerPending } from '../review-rounds/answer-guard.js';
 import { listPreviews } from '../previews/store.js';
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
@@ -29,6 +29,7 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   );
   if (!snapshot.stale)
     retainReviewTickets(
+      deps.db,
       game.id,
       new Set(
         tickets
@@ -41,16 +42,6 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
           .map((ticket) => ticket.ticket),
       ),
     );
-  if (!snapshot.stale)
-    for (const ticket of tickets)
-      observeReviewState(
-        game.id,
-        ticket.ticket,
-        ticket.labels.some(
-          (label) =>
-            label === 'agent:human-review' || [...scope.slugs].some((slug) => label === `${slug}:human-review`),
-        ),
-      );
   const allowed = new Map(tickets.map((ticket) => [ticket.ticket, ticket]));
   const observed = new Set(snapshot.tickets.map((ticket) => ticket.ticket));
   let daemonUnavailable = false;
@@ -129,7 +120,7 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
     )
   )
     throw new HttpError(404, 'review_ticket_not_found');
-  if (reviewAnswerPending(game.id, ticket.ticket)) throw new HttpError(409, 'review_answer_pending');
+  if (reviewAnswerPending(deps.db, game.id, ticket.ticket)) throw new HttpError(409, 'review_answer_pending');
   const round = deps.db
     .select({ id: schema.reviewRounds.id })
     .from(schema.reviewRounds)

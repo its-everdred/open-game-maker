@@ -115,7 +115,7 @@ export default new Hono<ApiBindings>()
       if (error instanceof AiurHttpError && error.status === 409) throw new HttpError(409, 'command_answer_conflict');
       throw new HttpError(502, 'core_daemon_unavailable');
     }
-    markReviewAnswered('core', command.ticket);
+    markReviewAnswered(c.get('deps').db, 'core', command.ticket);
     return c.json({ status: 'answered' });
   })
   .post('/core/tickets/:ticket/missing-review', async (c) => {
@@ -123,7 +123,7 @@ export default new Hono<ApiBindings>()
     const ticket = c.req.param('ticket');
     if (!/^[1-9]\d{0,18}$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
     const workers = await reviewWorkers(c.get('deps'));
-    if (reviewAnswerPending('core', ticket)) throw new HttpError(409, 'review_answer_pending');
+    if (reviewAnswerPending(c.get('deps').db, 'core', ticket)) throw new HttpError(409, 'review_answer_pending');
     if (!workers.some((worker) => worker.ticket === ticket && worker.state === 'human-review'))
       throw new HttpError(404, 'review_ticket_not_found');
     const decisions = await coreCall(() => client.decisions({ ticket }, AbortSignal.timeout(5000)));
@@ -171,13 +171,12 @@ async function reviewWorkers(
   }
   if (snapshot.stale) throw new HttpError(503, 'core_tracker_unavailable');
   retainReviewTickets(
+    deps.db,
     'core',
     new Set(
       snapshot.tickets.filter((ticket) => ticket.labels.includes('agent:human-review')).map((ticket) => ticket.ticket),
     ),
   );
-  for (const ticket of snapshot.tickets)
-    observeReviewState('core', ticket.ticket, ticket.labels.includes('agent:human-review'));
   return snapshot.tickets
     .filter((ticket) => ticket.labels.includes('agent:human-review'))
     .map((ticket) => ({ ticket: ticket.ticket, title: ticket.title, state: 'human-review' }));

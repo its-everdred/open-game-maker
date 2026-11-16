@@ -98,6 +98,6 @@ export default new Hono<ApiBindings>()
       at: new Date().toISOString(),
     });
     if (!ok) throw new HttpError(409, 'review_round_answered');
-    markReviewAnswered(game.id, round.ticket);
+    markReviewAnswered(deps.db, game.id, round.ticket);
     return c.json({ status: 'answered' });
   });
