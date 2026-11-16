@@ -1,6 +1,8 @@
 import type { AiurClient, CreatorAnswer, Decision } from '@ogm/aiur-client';
 import { BriefingPush, CREATOR_AUDIENCE_MARKER, CREATOR_TEXT_ONLY_MARKER } from '@ogm/contracts';
 import { describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { schema } from '@ogm/db';
 
 import { recordDesignDecision } from '../../src/design-decisions/store.js';
 import { buildBriefing, type VoiceTarget } from '../../src/voice/briefing-push.js';
@@ -39,6 +41,25 @@ const decision = (id: string, markdown: string, createdAt: string): Decision => 
 // The question list reads the build chat, which the app sets up.
 async function fixture() {
   const deps = worked();
+  deps.db
+    .update(schema.games)
+    .set({ slug: 'cave-run', githubOwner: 'fixture', githubRepo: 'games' })
+    .where(eq(schema.games.id, ids.game))
+    .run();
+  deps.registry.trackerTickets = async () => ({
+    stale: false,
+    tickets: [
+      {
+        ticket: '31',
+        title: 'Questions',
+        labels: ['game:cave-run'],
+        closedAt: null,
+        updatedAt: null,
+        outcome: 'Closed',
+        url: 'https://example.test/issue/31',
+      },
+    ],
+  });
   await makeApp(deps);
   const answers: Array<{ id: string; answer: CreatorAnswer }> = [];
   const answerAsCreator = vi.fn(async (id: string, answer: CreatorAnswer) => {
