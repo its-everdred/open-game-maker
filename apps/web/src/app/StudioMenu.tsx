@@ -392,16 +392,7 @@ export function StudioMenu() {
         ))}
       </ul>
     );
-  } else if (
-    sheet === 'builds' &&
-    (workers.length > 0 ||
-      reviews.length > 0 ||
-      reviewCommands.length > 0 ||
-      past.tickets.length > 0 ||
-      workerError ||
-      reviewData.error ||
-      past.error)
-  ) {
+  } else if (sheet === 'builds') {
     sheetContent = (
       <BuildPanel
         key={creatorId ?? 'signed-out'}

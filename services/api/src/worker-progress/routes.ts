@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { and, eq, inArray } from 'drizzle-orm';
+import { schema } from '@ogm/db';
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
 import { authorizedGame } from '../games/authorize.js';
@@ -12,28 +14,44 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   const deps = c.get('deps');
   const history = game.slug ? recentCompletions(deps.db, game.slug) : { cursor: 0, completed: [] };
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
-  if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
+  const activeJob = deps.db
+    .select({ id: schema.jobs.id })
+    .from(schema.jobs)
+    .where(and(eq(schema.jobs.gameId, game.id), inArray(schema.jobs.state, ['admitted', 'filed', 'running'])))
+    .get();
+  if (!game.githubOwner && !game.githubRepo)
+    return c.json({ workers: [], daemonUnavailable: Boolean(activeJob), trackerStale: false, ...history });
+  if (!repo || !game.slug) throw new HttpError(503, 'ticket_scope_unavailable');
+  if (!deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
   // Fail closed if the tracker is unavailable: a shared daemon may contain another game's tickets.
   const snapshot = await deps.registry.trackerTickets(repo, 'open');
-  const tickets = snapshot.tickets.filter(
-    (ticket) => (!snapshot.stale || scope.owned.has(ticket.ticket)) && belongsToGame(ticket, scope),
-  );
-  const allowed = new Map(tickets.map((ticket) => [ticket.ticket, ticket]));
+  const tickets = snapshot.tickets.filter((ticket) => belongsToGame(ticket, scope));
+  const allowed = new Map((snapshot.stale ? [] : tickets).map((ticket) => [ticket.ticket, ticket]));
   const observed = new Set(snapshot.tickets.map((ticket) => ticket.ticket));
   let daemonUnavailable = false;
   const workers = await deps
     .aiurClientForGame(game.id)
     .then((client) => listWorkers(client))
-    .catch(() => {
-      daemonUnavailable = true;
+    .catch((error: unknown) => {
+      const noDaemon = error instanceof HttpError && error.code === 'daemon_not_found';
+      const trackerHasActive = tickets.some((ticket) =>
+        ticket.labels.some(
+          (label) => label === 'agent:in-progress' || [...scope.slugs].some((slug) => label === `${slug}:in-progress`),
+        ),
+      );
+      daemonUnavailable = !noDaemon || Boolean(activeJob) || trackerHasActive;
       return [];
     });
-  const unobserved = workers.filter((worker) => !observed.has(worker.ticket) && !scope.owned.has(worker.ticket));
+  // Revalidate every stale snapshot entry: an owned ticket may have closed since the last successful scan.
+  const lookupIds = new Set([
+    ...(snapshot.stale ? tickets.map((ticket) => ticket.ticket) : []),
+    ...workers.filter((worker) => !observed.has(worker.ticket)).map((worker) => worker.ticket),
+  ]);
   let lookupUnavailable = false;
   if (deps.registry.trackerTicket) {
     const results = await Promise.allSettled(
-      unobserved.map((worker) => deps.registry.trackerTicket!(repo, worker.ticket)),
+      [...lookupIds].map((ticket) => deps.registry.trackerTicket!(repo, ticket)),
     );
     for (const result of results) {
       if (result.status === 'rejected') {
@@ -42,15 +60,13 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
       }
       if (result.value && belongsToGame(result.value, scope)) allowed.set(result.value.ticket, result.value);
     }
-  } else if (unobserved.length) lookupUnavailable = true;
+  } else if (lookupIds.size) lookupUnavailable = true;
   const byTicket = new Map(
     workers
-      .filter(
-        (worker) => allowed.has(worker.ticket) || (!observed.has(worker.ticket) && scope.owned.has(worker.ticket)),
-      )
+      .filter((worker) => allowed.has(worker.ticket))
       .map((worker) => [worker.ticket, { ...worker, title: allowed.get(worker.ticket)?.title ?? worker.title }]),
   );
-  for (const item of tickets) {
+  for (const item of allowed.values()) {
     const states = item.labels
       .filter((label) => label.startsWith('agent:') || [...scope.slugs].some((slug) => label.startsWith(`${slug}:`)))
       .map((label) => label.replace(/^[^:]+:/, ''))

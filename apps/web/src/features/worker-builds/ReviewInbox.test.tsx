@@ -115,3 +115,53 @@ it('recovers an unavailable playable when its preview arrives', async () => {
   );
   await waitFor(() => expect(screen.queryByText('The playable review is unavailable. Try again later.')).toBeNull());
 });
+
+it('retains only a command whose deck has opened', async () => {
+  const command = {
+    game_id: 'g',
+    game_title: 'Game',
+    job_id: null,
+    ticket: '12',
+    title: 'Colours',
+    command_id: 'c',
+    decision_id: 'd',
+    version: 1,
+    question: 'Which colour?',
+    options: [
+      { id: 'one', label: 'Blue' },
+      { id: 'two', label: 'Red' },
+    ],
+    blocking: false,
+    opened_at: '2026-01-01T00:00:00Z',
+  };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox reviews={[]} commands={[command]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole('dialog', { name: 'Colours' })).toBeVisible();
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox reviews={[]} commands={[]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole('dialog', { name: 'Colours' })).toBeVisible();
+  cleanup();
+  api.mockResolvedValue({ status: 'answered' });
+  const reviews = [
+    { kind: 'round' as const, gameId: 'g', round: { id: 'a', ticket: '12', question: 'First?', media: [] } },
+  ];
+  const nextView = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox reviews={reviews} commands={[command]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  nextView.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox reviews={reviews} commands={[]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Needs work' }));
+  await screen.findByText('All reviews answered.');
+  expect(screen.queryByText('Which colour?')).toBeNull();
+});

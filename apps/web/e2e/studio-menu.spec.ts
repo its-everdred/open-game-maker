@@ -134,6 +134,41 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
   await expect(page.getByText('Moon gate is ready')).toHaveCount(0);
 });
 
+test('opens build progress and grouped reviews on phone', async ({ page }, testInfo) => {
+  testInfo.setTimeout(90_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await stubBrandArt(page);
+  await installGamesMenuApi(page, [
+    { ...decision(1, 'Colours', 'Which colours?', ['Bright', 'Pastel']), game_id: gameId, ticket: '212' },
+  ]);
+  await page.route('**/api/v1/games/*/review-rounds?*', (route) => json(route, { rounds: [] }));
+  await page.route('**/api/v1/games/*/previews', (route) => json(route, { previews: [] }));
+  await page.route('**/api/v1/games/*/workers', (route) =>
+    json(route, {
+      workers: [
+        { ticket: '211', title: 'Moon gate', percent: 40, etaSeconds: null },
+        { ticket: '212', title: 'Colours', percent: null, etaSeconds: null, state: 'human-review' },
+      ],
+    }),
+  );
+  await page.goto('/all');
+  await page.getByRole('button', { name: '2 builds running' }).click();
+  const group = page.getByRole('button', { name: 'Needs review · 1' });
+  await expect(group).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('button', { name: /Colours/ })).toHaveCount(0);
+  await group.click();
+  await expect(group).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('progressbar', { name: 'Colours progress' })).toHaveText('Needs review');
+  await page.getByRole('button', { name: /Colours/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Colours' })).toBeVisible();
+  await page.getByRole('dialog', { name: 'Colours' }).getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: /Moon gate/ }).click();
+  const detail = page.getByRole('dialog', { name: 'Moon gate' });
+  await expect(detail).toContainText('40%');
+  await detail.getByRole('button', { name: 'Conversation' }).click();
+  await expect(page.getByRole('dialog', { name: 'Add the moon gate' })).toBeVisible();
+});
+
 test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
   testInfo.setTimeout(90_000);
   await installAuthRoutes(page);

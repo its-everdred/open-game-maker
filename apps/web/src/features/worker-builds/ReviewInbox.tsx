@@ -19,6 +19,10 @@ export function ReviewInbox({
 }) {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
   const [current, setCurrent] = useState<WorkerReview | undefined>(reviews[0]);
+  const [openedCommand, setOpenedCommand] = useState(() => (reviews.length ? undefined : commands[0]));
+  useEffect(() => {
+    if (!current && commands[0]) setOpenedCommand((opened) => opened ?? commands[0]);
+  }, [current, commands]);
   useEffect(() => {
     if (current?.kind !== 'round' || !current.round.buildId) return;
     const recovered = reviews.find(
@@ -27,7 +31,8 @@ export function ReviewInbox({
     if (recovered) setCurrent(recovered);
   }, [current, reviews]);
   if (!current) {
-    if (commands[0]) return <DecisionDeck commands={commands} first={commands[0]} onClose={onClose} />;
+    const first = commands[0] ?? openedCommand;
+    if (first) return <DecisionDeck commands={commands} first={first} onClose={onClose} />;
     return (
       <Dialog
         title="Needs Review"
