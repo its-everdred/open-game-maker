@@ -28,6 +28,9 @@ export type GameMetadata = {
   visibility: 'listed' | 'private';
   repoVisibility: 'public' | 'private';
   allowAiGeneratedAssets: boolean;
+  logoUrl?: string;
+  coverUrl?: string;
+  loadingUrls?: { portrait: string; landscape: string };
 };
 
 export type DesignSnapshot = { rev: number; buildId: string; doc: DesignDoc };

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useMatch, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import type { CreateJobRequest, Entity, ReapplyReport } from '@ogm/contracts/browser';
@@ -138,6 +138,7 @@ export function GameScreen() {
   const inspectedJobRef = useRef<string | undefined>(undefined);
   const activeSnapshot = adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
   const noBuild = activeSnapshot?.buildId === NO_BUILD_ID;
+  useLayoutEffect(() => setFrameState(initialFrameState), [gameId, branch, activeSnapshot?.buildId, frameAttempt]);
   const previews = useQuery({
     queryKey: ['editor-previews', gameId],
     queryFn: () => getEditorPreviews(gameId),
@@ -674,8 +675,13 @@ export function GameScreen() {
             transport={() => ({ rttMs: room.snapshot?.rttMs })}
           />
         ) : null}
-        {game.data !== undefined && activeSnapshot !== undefined && frameState.bridgeState !== 'error' ? (
-          <LoadingLayer key={`${activeSnapshot.buildId}-${frameAttempt}`} game={game.data} load={frameState.load} />
+        {!game.isError && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
+          <LoadingLayer
+            key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
+            game={game.data ?? { familyId: '', title: '' }}
+            load={frameState.load}
+            firstFrame={frameState.firstFrame}
+          />
         ) : null}
         {mode === 'edit' &&
         frameRef.current !== undefined &&

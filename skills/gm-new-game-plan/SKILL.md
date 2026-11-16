@@ -57,14 +57,15 @@ voices (expressive, never monotone). The picks are laid on the stage 3 clips, sy
 stage 4 slices. Options come from the resource packs first (`gm assets search`); generation (voices) is samples only
 until the creator picks.
 
-## Always a thumbnail and a trailer
+## Always a thumbnail, loading image and trailer
 
-Every game plan files two media tickets in the Build Order and records their native GitHub blocked-by edges:
+Every game plan files three media tickets in the Build Order and records their native GitHub blocked-by edges:
 
 - **Thumbnail** (`role:visual`): composed scene key art showing the game's characters and world in a memorable moment, with the approved logo. Never use a gameplay screenshot; gameplay belongs in the trailer. Block it on the logo and graphics/look tickets.
+- **Loading image** (`role:visual`): supply art-only `public/media/loading-portrait.png` (at least 1440×2560, 9:16) and `public/media/loading-landscape.png` (at least 2560×1440, 16:9), declared as `loading.portrait` and `loading.landscape` in `gm.manifest.json` with paths relative to `public/`. Keep the subject within the centre 70%; leave the top 25% calm for the shell logo and bottom 20% calm for its progress bar. Block it on the graphics/look tickets.
 - **Trailer** (`role:visual`, `role:audio`): 15–30 seconds of real gameplay, with the game's own music and sound effects, in portrait and landscape cuts. Block it on the gameplay tickets.
 
-A ticket changing art direction, logo, board or scene look, or core gameplay files the appropriate thumbnail or trailer refresh; the Executor's merge step may file it instead. Keep both current with the published game. Follow `references/game-media.md` for capture and delivery.
+A ticket changing art direction, logo, board or scene look, or core gameplay files the appropriate thumbnail, loading image or trailer refresh; the Executor's merge step may file it instead. Keep all three current with the published game. Follow `references/game-media.md` for capture and delivery.
 
 ## Evidence and review states
 

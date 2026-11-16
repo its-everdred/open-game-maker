@@ -105,14 +105,25 @@ describe('publishing a merged build', () => {
     const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>;
     writeFileSync(
       join(dir, 'manifest.json'),
-      JSON.stringify({ ...manifest, logo: 'media/logo.png', genres: ['puzzle'], padding: 'x'.repeat(1024 * 1024) }),
+      JSON.stringify({
+        ...manifest,
+        logo: 'media/logo.png',
+        genres: ['puzzle'],
+        loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
+        padding: 'x'.repeat(1024 * 1024),
+      }),
     );
     const response = await upload(app, archiveOf(dir));
     expect(response.status).toBe(201);
     const { buildId } = (await response.json()) as { buildId: string };
     expect(
       JSON.parse(readFileSync(join(deps.config.gamesRoot, ids.game, buildId, '.ogm-display.json'), 'utf8')),
-    ).toEqual({ logo: 'media/logo.png', genres: ['puzzle'], images: {} });
+    ).toEqual({
+      logo: 'media/logo.png',
+      genres: ['puzzle'],
+      loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
+      images: {},
+    });
   });
 
   it('generates display variants before publishing a build', async () => {

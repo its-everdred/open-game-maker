@@ -100,7 +100,7 @@ const routes = new Hono<ApiBindings>()
       })),
     });
   })
-  .get('/games/:id', (c) => {
+  .get('/games/:id', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     const game = findGameForFamily(c.get('deps').db, c.req.param('id'), principal.familyId);
     requireAuthorization(
@@ -111,7 +111,8 @@ const routes = new Hono<ApiBindings>()
         granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
       }),
     );
-    return c.json(gameResponse(game));
+    const media = await gameMedia(c.get('deps'), [game.id]);
+    return c.json({ ...gameResponse(game), ...media.get(game.id) });
   })
   // Every shareable `/play/<ref>` link lands here: the current slug, a slug the game has outgrown, or its id.
   .get('/games/resolve/:ref', (c) => {

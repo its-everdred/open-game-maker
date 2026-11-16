@@ -296,6 +296,34 @@ describe('game frame adapter', () => {
     expect(onLoadStalled).toHaveBeenCalledWith(expect.objectContaining({ fetchedBytes: 40, cachedBytes: 10 }));
   });
 
+  it('keeps first-frame readiness separate from asset completion', () => {
+    let frameOptions: GameFrameOptions | undefined;
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 0, doc: {} as DesignDoc },
+      create: (options) => {
+        frameOptions = options;
+        return {
+          bridge: { dropped: 0 },
+          on: vi.fn(() => vi.fn()),
+          setMode: vi.fn(),
+          setSettings: vi.fn(),
+          send: vi.fn(),
+          dispose: vi.fn(),
+        };
+      },
+    });
+    frameOptions?.onReady?.(manifest, [], true);
+    expect(controller.state().firstFrame).not.toBe(true);
+    frameOptions?.onLoad?.({ t: 'load.frame', payload: {} });
+    expect(controller.state().firstFrame).toBe(true);
+    controller.dispose();
+  });
+
   it('marks load.done terminal and cancels the stall timer', async () => {
     vi.useFakeTimers();
     let frameOptions: GameFrameOptions | undefined;

@@ -174,9 +174,34 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       runtime.addCleanup(installGlobals(hooks, build));
     }
 
+    let frameSignaled = false;
+    const frameReady = () => {
+      if (frameSignaled) return;
+      frameSignaled = true;
+      send('load.frame', {});
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('gm-frame-ready', frameReady, { once: true });
+      runtime.addCleanup(() => window.removeEventListener('gm-frame-ready', frameReady));
+    }
     marks.push(['frame0', markNow()]);
     hooks.ready = true;
-    send('ready', { protocol: SDK_PROTOCOL, manifest: readyManifest(module.manifest, instance), marks });
+    send('ready', {
+      protocol: SDK_PROTOCOL,
+      manifest: readyManifest(module.manifest, instance),
+      marks,
+      firstFrameSignal: true,
+    });
+    // Games that use asynchronous setup set hooks.ready false before yielding. Games without an explicit
+    // readiness phase can be revealed after the browser has had a chance to paint their initial content.
+    if (!options.headless && typeof requestAnimationFrame === 'function') {
+      let paintFrame = requestAnimationFrame(() => {
+        paintFrame = requestAnimationFrame(() => {
+          if (hooks.ready) frameReady();
+        });
+      });
+      runtime.addCleanup(() => cancelAnimationFrame(paintFrame));
+    }
     for (const envelope of queued.splice(0)) dispatchRuntime(envelope);
     const trailerCapture =
       build === 'test' &&

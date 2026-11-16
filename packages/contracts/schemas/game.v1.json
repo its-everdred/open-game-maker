@@ -30,6 +30,24 @@
       "type": "string",
       "pattern": "^media\\/[a-zA-Z0-9_-]+\\.(png|webp|svg)$"
     },
+    "loading": {
+      "type": "object",
+      "properties": {
+        "portrait": {
+          "type": "string",
+          "pattern": "^media\\/[a-zA-Z0-9_-]+\\.png$"
+        },
+        "landscape": {
+          "type": "string",
+          "pattern": "^media\\/[a-zA-Z0-9_-]+\\.png$"
+        }
+      },
+      "required": [
+        "portrait",
+        "landscape"
+      ],
+      "additionalProperties": {}
+    },
     "hostOrigin": {
       "type": "string",
       "format": "uri",

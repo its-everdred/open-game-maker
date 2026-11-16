@@ -18,7 +18,8 @@ type AudioRelayPayload = Extract<GameToHost, { t: 'audio.relay' }>['payload'];
 
 export type GameLoadEvent =
   | Pick<Extract<GameToHost, { t: 'load.progress' }>, 't' | 'payload'>
-  | Pick<Extract<GameToHost, { t: 'load.done' }>, 't' | 'payload'>;
+  | Pick<Extract<GameToHost, { t: 'load.done' }>, 't' | 'payload'>
+  | Pick<Extract<GameToHost, { t: 'load.frame' }>, 't' | 'payload'>;
 
 export interface GameFrameOptions {
   container: HTMLElement;
@@ -37,7 +38,7 @@ export interface GameFrameOptions {
   capabilities: string[];
   inputMapping?: Partial<RigInputMapping>;
   role: () => Role;
-  onReady?: (manifest: GameManifest, marks: [string, number][]) => void;
+  onReady?: (manifest: GameManifest, marks: [string, number][], firstFrameSignal?: boolean) => void;
   onSaveWrite?: (payload: { saveSchemaVersion: number; data: unknown }) => void;
   onEvent?: (kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown) => void;
   onLoad?: (event: GameLoadEvent) => void;
@@ -163,17 +164,18 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   const haptics = new HapticsController();
   const settings = new SettingsController((value) => bridge.send('settings', value));
 
-  bridge.on('ready', ({ manifest, marks }) => {
+  bridge.on('ready', ({ manifest, marks, firstFrameSignal }) => {
     gamepads.setMapping(options.inputMapping?.gamepad, manifest.inputs.actions);
     overlay.setInputs(manifest.inputs, options.inputMapping?.touch ?? 'tap');
     viewport.sendNow();
     settings.resend();
-    options.onReady?.(manifest, marks);
+    options.onReady?.(manifest, marks, firstFrameSignal);
   });
   bridge.on('haptics.pulse', ({ pattern }) => haptics.pulse(pattern));
   bridge.on('save.write', (payload) => options.onSaveWrite?.(payload));
   bridge.on('event', ({ kind, payload }) => options.onEvent?.(kind, payload));
   bridge.on('load.progress', (payload) => options.onLoad?.({ t: 'load.progress', payload }));
+  bridge.on('load.frame', (payload) => options.onLoad?.({ t: 'load.frame', payload }));
   bridge.on('load.done', (payload) => options.onLoad?.({ t: 'load.done', payload }));
   bridge.on('audio.relay', (payload) => options.onAudioRelay?.(payload));
   bridge.on('input.rawKey', ({ code, down }) => {

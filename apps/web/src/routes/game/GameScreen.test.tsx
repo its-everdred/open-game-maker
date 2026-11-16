@@ -302,7 +302,7 @@ describe('GameScreen', () => {
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
     expect(container.querySelector('.game-screen.is-playing')).toBeVisible();
     expect(container.querySelector('.play-bar')).not.toBeInTheDocument();
-    expect(screen.queryByText('Goblin Cellar')).not.toBeInTheDocument();
+    expect(screen.getByText('Goblin Cellar').closest('.game-loading-cover')).toBeInTheDocument();
     expect(screen.queryByText('Draft')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Games' })).not.toBeInTheDocument();
 
@@ -418,7 +418,13 @@ describe('GameScreen', () => {
     expect(host.controller.dispose).toHaveBeenCalled();
   });
 
-  it('does not start the load layer before a build is available', async () => {
+  it('shows loading while game metadata is pending', async () => {
+    editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
+    renderGame();
+    expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+  });
+
+  it('shows the loading layer while the build is being discovered', async () => {
     editorApi.getDesignSnapshot.mockImplementation(() => new Promise(() => undefined));
 
     renderGame();
@@ -427,7 +433,7 @@ describe('GameScreen', () => {
       await new Promise((resolve) => setTimeout(resolve, 180));
     });
 
-    expect(screen.queryByRole('progressbar', { name: 'Loading' })).not.toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
     expect(host.mountGameFrame).not.toHaveBeenCalled();
   });
 

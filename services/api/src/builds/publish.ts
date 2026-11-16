@@ -140,6 +140,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
         join(buildTarget, '.ogm-display.json'),
         JSON.stringify({
           logo: manifest.data.logo,
+          loading: manifest.data.loading,
           genres: manifest.data.genres,
           images,
         }),

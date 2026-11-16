@@ -111,6 +111,13 @@ export const gameManifestSchema = z.looseObject({
     .string()
     .regex(/^media\/[a-zA-Z0-9_-]+\.(png|webp|svg)$/u)
     .optional(),
+  /** Build-relative source images used while this game loads. */
+  loading: z
+    .looseObject({
+      portrait: z.string().regex(/^media\/[a-zA-Z0-9_-]+\.png$/u),
+      landscape: z.string().regex(/^media\/[a-zA-Z0-9_-]+\.png$/u),
+    })
+    .optional(),
   /** Optional build-time pin for the one HTTP(S) host origin allowed to frame this game. */
   hostOrigin: z
     .string()

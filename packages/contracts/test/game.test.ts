@@ -17,6 +17,16 @@ const control = {
 };
 
 describe('game contract', () => {
+  it('validates both optional loading image paths', () => {
+    const loading = { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' };
+    expect(gameManifestSchema.safeParse({ ...manifest(), loading }).success).toBe(true);
+    expect(gameJson({ ...manifest(), loading })).toBe(true);
+    for (const invalid of [{ portrait: loading.portrait }, { ...loading, landscape: '../escape.png' }]) {
+      expect(gameManifestSchema.safeParse({ ...manifest(), loading: invalid }).success).toBe(false);
+      expect(gameJson({ ...manifest(), loading: invalid })).toBe(false);
+    }
+  });
+
   it('limits genre names and count', () => {
     expect(gameManifestSchema.safeParse({ ...manifest(), genres: ['puzzle'] }).success).toBe(true);
     expect(gameManifestSchema.safeParse({ ...manifest(), genres: ['x'.repeat(33)] }).success).toBe(false);
