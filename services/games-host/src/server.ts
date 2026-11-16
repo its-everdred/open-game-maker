@@ -93,7 +93,7 @@ export function createApp(options: GamesHostOptions): Hono {
     }
 
     const relativePath = relative(directory, file).split(sep).join('/');
-    const observeFrame = new URL(context.req.url).searchParams.get('frameObserver') === '1';
+    const observeFrame = new URL(context.req.url).searchParams.get('frameObserver') === '2';
     if ((isPreview || observeFrame) && relativePath === 'index.html') {
       let html = await readFile(file, 'utf8');
       if (isPreview) html = bootstrapPreviewHtml(html);

@@ -51,7 +51,7 @@ describe('createGameFrame', () => {
     expect(frame.iframe.getAttribute('allow')).toBe('autoplay; fullscreen; gamepad');
     expect(frame.iframe.getAttribute('referrerpolicy')).toBe('origin');
     expect(frame.iframe.src).toBe(
-      'https://games.test/g/game%20one/build%2Fone/index.html?build=draft&protocol=1&frameObserver=1',
+      'https://games.test/g/game%20one/build%2Fone/index.html?build=draft&protocol=1&frameObserver=2',
     );
     frame.dispose();
   });
@@ -80,7 +80,7 @@ describe('createGameFrame', () => {
       speed: 'slow',
       build: 'draft',
       protocol: '1',
-      frameObserver: '1',
+      frameObserver: '2',
     });
     frame.dispose();
   });
@@ -169,6 +169,7 @@ describe('createGameFrame', () => {
 
   it('accepts first-frame signals only from its own games-origin iframe', () => {
     const onLoad = vi.fn();
+    const on = vi.spyOn(HostBridge.prototype, 'on');
     const container = document.createElement('div');
     document.body.append(container);
     const frame = createGameFrame({
@@ -184,7 +185,10 @@ describe('createGameFrame', () => {
       role: () => 'owner',
       onLoad,
     });
-    const data = { type: 'ogm.frame.ready.v1' };
+    const onReady = on.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
+    on.mockRestore();
+    onReady({ manifest: { inputs: { actions: {} } }, marks: [] });
+    const data = { type: 'ogm.frame.ready.v2' };
     window.dispatchEvent(
       new MessageEvent('message', { data, origin: 'https://evil.test', source: frame.iframe.contentWindow }),
     );
@@ -202,8 +206,81 @@ describe('createGameFrame', () => {
     expect(onLoad).not.toHaveBeenCalled();
   });
 
+  it('ignores observed canvas draws when the SDK promises its own frame signal', () => {
+    const legacyLoad = vi.fn();
+    const legacyOn = vi.spyOn(HostBridge.prototype, 'on');
+    const legacyContainer = document.createElement('div');
+    document.body.append(legacyContainer);
+    const legacy = createGameFrame({
+      container: legacyContainer,
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g',
+      buildId: 'b',
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+      onLoad: legacyLoad,
+    });
+    const legacyReady = legacyOn.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
+    legacyOn.mockRestore();
+    legacyReady({ manifest: { inputs: { actions: {} } }, marks: [] });
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'ogm.frame.ready.v2' },
+        origin: 'https://games.test',
+        source: legacy.iframe.contentWindow,
+      }),
+    );
+    expect(legacyLoad).toHaveBeenCalledWith({ t: 'load.frame', payload: {} });
+    legacy.dispose();
+    const onLoad = vi.fn();
+    const on = vi.spyOn(HostBridge.prototype, 'on');
+    const container = document.createElement('div');
+    document.body.append(container);
+    const frame = createGameFrame({
+      container,
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g',
+      buildId: 'b',
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+      onLoad,
+    });
+    const onReady = on.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
+    on.mockRestore();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'ogm.frame.ready.v2' },
+        origin: 'https://games.test',
+        source: frame.iframe.contentWindow,
+      }),
+    );
+    onReady({ manifest: { inputs: { actions: {} } }, marks: [], firstFrameSignal: true });
+    expect(onLoad).not.toHaveBeenCalled();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'ogm.frame.ready.v2' },
+        origin: 'https://games.test',
+        source: frame.iframe.contentWindow,
+      }),
+    );
+    expect(onLoad).not.toHaveBeenCalled();
+    const receive = (frame.bridge as unknown as { receive(message: unknown): void }).receive.bind(frame.bridge);
+    receive({ v: 1, id: 'real-frame', t: 'load.frame', payload: {} });
+    expect(onLoad).toHaveBeenCalledWith({ t: 'load.frame', payload: {} });
+    frame.dispose();
+  });
+
   it('accepts opaque preview readiness only from its own frame', () => {
     const onLoad = vi.fn();
+    const on = vi.spyOn(HostBridge.prototype, 'on');
     const container = document.createElement('div');
     document.body.append(container);
     const frame = createGameFrame({
@@ -220,7 +297,10 @@ describe('createGameFrame', () => {
       role: () => 'owner',
       onLoad,
     });
-    const data = { type: 'ogm.frame.ready.v1' };
+    const onReady = on.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
+    on.mockRestore();
+    onReady({ manifest: { inputs: { actions: {} } }, marks: [] });
+    const data = { type: 'ogm.frame.ready.v2' };
     window.dispatchEvent(new MessageEvent('message', { data, origin: 'null', source: window }));
     expect(onLoad).not.toHaveBeenCalled();
     window.dispatchEvent(new MessageEvent('message', { data, origin: 'null', source: frame.iframe.contentWindow }));

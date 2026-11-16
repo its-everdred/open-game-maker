@@ -120,22 +120,117 @@ test.describe('games origin browser boundary', () => {
     await expect(gameFrame.locator('#ready')).toHaveText('ready');
     await page.evaluate(() => {
       window.addEventListener('message', (event) => {
-        if (event.data?.type === 'ogm.frame.ready.v1') Reflect.set(window, '__frameOrigin', event.origin);
+        if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__frameOrigin', event.origin);
       });
     });
     await gameFrame.evaluate(() => window.dispatchEvent(new Event('gm-frame-ready')));
     await expect.poll(() => page.evaluate(() => Reflect.get(window, '__frameOrigin'))).toBe(gamesOrigin);
   });
 
+  test('recognizes the first visible legacy canvas draw without a ready event', async ({ page }) => {
+    await page.goto(allowedParent.origin);
+    const gameFrame = await waitForGameFrame(page, gamesOrigin);
+    await expect(gameFrame.locator('#ready')).toHaveText('ready');
+    await page.evaluate(() => {
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__drawFrameOrigin', event.origin);
+      });
+    });
+    await gameFrame.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 8;
+      canvas.height = 8;
+      canvas.style.opacity = '0';
+      document.body.append(canvas);
+      canvas.getContext('2d')!.fillRect(0, 0, 8, 8);
+    });
+    await gameFrame.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+    expect(await page.evaluate(() => Reflect.get(window, '__drawFrameOrigin'))).toBeUndefined();
+    await gameFrame.evaluate(() => {
+      const canvas = document.querySelector('canvas')!;
+      canvas.style.opacity = '1';
+      canvas.style.position = 'fixed';
+      canvas.style.left = '-100px';
+      canvas.getContext('2d')!.fillRect(0, 0, 8, 8);
+    });
+    await gameFrame.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+    expect(await page.evaluate(() => Reflect.get(window, '__drawFrameOrigin'))).toBeUndefined();
+    await gameFrame.evaluate(() => {
+      const canvas = document.querySelector('canvas')!;
+      canvas.style.left = '0';
+      canvas.getContext('2d')!.fillRect(0, 0, 8, 8);
+    });
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, '__drawFrameOrigin'))).toBe(gamesOrigin);
+    expect(await gameFrame.evaluate(() => CanvasRenderingContext2D.prototype.fillRect.toString())).toContain(
+      '[native code]',
+    );
+  });
+
+  for (const context of ['webgl', 'webgl2'] as const)
+    test(`ignores ${context} offscreen passes before the visible canvas draw`, async ({ page }) => {
+      await page.goto(allowedParent.origin);
+      const gameFrame = await waitForGameFrame(page, gamesOrigin);
+      await expect(gameFrame.locator('#ready')).toHaveText('ready');
+      await page.evaluate(() =>
+        window.addEventListener('message', (event) => {
+          if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__webglFrameOrigin', event.origin);
+        }),
+      );
+      await gameFrame.evaluate((kind) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 8;
+        canvas.height = 8;
+        document.body.append(canvas);
+        const gl = canvas.getContext(kind)!;
+        const vertex = gl.createShader(gl.VERTEX_SHADER)!;
+        gl.shaderSource(
+          vertex,
+          'attribute vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); gl_PointSize = 1.0; }',
+        );
+        gl.compileShader(vertex);
+        const fragment = gl.createShader(gl.FRAGMENT_SHADER)!;
+        gl.shaderSource(fragment, 'precision mediump float; void main() { gl_FragColor = vec4(1.0); }');
+        gl.compileShader(fragment);
+        const program = gl.createProgram()!;
+        gl.attachShader(program, vertex);
+        gl.attachShader(program, fragment);
+        gl.linkProgram(program);
+        gl.useProgram(program);
+        const buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0]), gl.STATIC_DRAW);
+        const position = gl.getAttribLocation(program, 'position');
+        gl.enableVertexAttribArray(position);
+        gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+        Reflect.set(window, '__testGl', gl);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+        gl.drawArrays(gl.POINTS, 0, 1);
+      }, context);
+      await gameFrame.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+      );
+      expect(await page.evaluate(() => Reflect.get(window, '__webglFrameOrigin'))).toBeUndefined();
+      await gameFrame.evaluate(() => {
+        const gl = Reflect.get(window, '__testGl') as WebGLRenderingContext;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.drawArrays(gl.POINTS, 0, 1);
+      });
+      await expect.poll(() => page.evaluate(() => Reflect.get(window, '__webglFrameOrigin'))).toBe(gamesOrigin);
+    });
+
   test('forwards the observer event from an opaque preview', async ({ page }) => {
     await page.goto(allowedParent.origin);
     await page.evaluate((origin) => {
       window.addEventListener('message', (event) => {
-        if (event.data?.type === 'ogm.frame.ready.v1') Reflect.set(window, '__previewFrameOrigin', event.origin);
+        if (event.data?.type === 'ogm.frame.ready.v2') Reflect.set(window, '__previewFrameOrigin', event.origin);
       });
       const frame = document.createElement('iframe');
       frame.sandbox.add('allow-scripts', 'allow-pointer-lock');
-      frame.src = `${origin}/p/demo/pv-11111111-1111-1111-1111-111111111111/index.html?frameObserver=1`;
+      frame.src = `${origin}/p/demo/pv-11111111-1111-1111-1111-111111111111/index.html?frameObserver=2`;
       document.body.append(frame);
     }, gamesOrigin);
     await expect.poll(() => page.frames().some((frame) => frame.url().includes('/p/demo/'))).toBe(true);
@@ -157,7 +252,7 @@ test.describe('games origin browser boundary', () => {
 });
 
 function parentHtml(gamesOrigin: string, outsideOrigin: string): string {
-  const source = `${gamesOrigin}/g/demo/b1/index.html?frameObserver=1&outside=${encodeURIComponent(`${outsideOrigin}/x`)}`;
+  const source = `${gamesOrigin}/g/demo/b1/index.html?frameObserver=2&outside=${encodeURIComponent(`${outsideOrigin}/x`)}`;
   return `<!doctype html>
 <html lang="en">
   <body>

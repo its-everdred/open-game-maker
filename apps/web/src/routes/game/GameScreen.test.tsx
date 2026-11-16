@@ -425,6 +425,15 @@ describe('GameScreen', () => {
     expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
   });
 
+  it('offers retry when the design request fails', async () => {
+    editorApi.getDesignSnapshot.mockRejectedValueOnce(new Error('offline'));
+    renderGame();
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(screen.queryByRole('progressbar', { name: 'Loading' })).not.toBeInTheDocument();
+    fireEvent.click(retry);
+    await waitFor(() => expect(editorApi.getDesignSnapshot).toHaveBeenCalledTimes(2));
+  });
+
   it('shows loading while game metadata is pending', async () => {
     editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
     renderGame();

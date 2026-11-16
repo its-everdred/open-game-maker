@@ -105,6 +105,7 @@ describe('boot', () => {
         payload: expect.objectContaining({
           manifest: expect.objectContaining({ ...module.manifest, saveSchema: 1, migratesFrom: 0 }),
           marks: expect.any(Array),
+          firstFrameSignal: true,
         }),
       }),
     );

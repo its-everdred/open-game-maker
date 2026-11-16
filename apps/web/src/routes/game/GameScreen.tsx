@@ -679,7 +679,7 @@ export function GameScreen() {
             transport={() => ({ rttMs: room.snapshot?.rttMs })}
           />
         ) : null}
-        {(!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
+        {!design.isError && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
           <LoadingLayer
             key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
             game={game.data ?? { familyId: '', title: '' }}
@@ -859,12 +859,13 @@ export function GameScreen() {
           onCanvasChange={setCanvasOptions}
         />
       ) : null}
-      {frameState.bridgeState === 'error' ? (
+      {frameState.bridgeState === 'error' || design.isError ? (
         <div className="screen-error" role="alert">
           <button
             className="tap-primary"
             type="button"
             onClick={() => {
+              if (design.isError) void design.refetch();
               if (activeSnapshot?.buildId === NO_BUILD_ID) void scenerySource.refetch();
               setFrameAttempt((attempt) => attempt + 1);
             }}

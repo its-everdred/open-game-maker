@@ -242,6 +242,7 @@ export const gameToHostSchema = z
         protocol: z.number().int().min(1),
         manifest: gameManifestSchema,
         marks: z.array(z.tuple([z.string(), z.number()])),
+        firstFrameSignal: z.boolean().optional(),
       }),
     ),
     envelope('load.frame', z.looseObject({})),
