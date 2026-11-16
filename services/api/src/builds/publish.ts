@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { creditsDocumentSchema, DesignDocSchema, gameManifestSchema } from '@ogm/contracts';
@@ -34,6 +34,8 @@ const SWITCH_ATTEMPTS = 3;
 const stagingRoot = (deps: AppDeps) => join(deps.config.gamesRoot, '.staging');
 const stagedDir = (deps: AppDeps, jobId: string) => join(stagingRoot(deps), jobId);
 const completedRoot = (deps: AppDeps) => join(deps.config.gamesRoot, '.completed');
+const displayQueue = (deps: AppDeps) => join(deps.config.gamesRoot, '.display-pending');
+const displayMarker = (deps: AppDeps, buildId: string) => join(displayQueue(deps), buildId);
 
 function jobRow(deps: AppDeps, jobId: string) {
   return deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
@@ -106,11 +108,6 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
     const integrations = await scanBuild(files);
     if (integrations.credentials.length > 0) throw new PublishFailure('provider_credential');
     if (integrations.paid.length > 0 && !paidApisDuringGameplay(deps.db)) throw new PublishFailure('paid_integration');
-    const images = await makeDisplayImages(
-      files,
-      manifest.data.logo,
-      manifest.data.loading ? [manifest.data.loading.portrait, manifest.data.loading.landscape] : [],
-    );
     const saveSchemaVersion = (manifest.data as Record<string, unknown>).saveSchemaVersion;
     const achievements = await readFile(join(files, 'achievements.json')).catch(() => Buffer.alloc(0));
     const published = await withArtifactMutation(async () => {
@@ -146,14 +143,18 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
           logo: manifest.data.logo,
           loading: manifest.data.loading,
           genres: manifest.data.genres,
-          images,
+          pending: true,
         }),
       );
+      await mkdir(displayQueue(deps), { recursive: true });
+      await writeFile(displayMarker(deps, build.id), JSON.stringify({ gameId: job.gameId, buildId: build.id }));
       await markComplete(buildTarget);
       const switchTx = await switchToBuild(deps, design, job.gameId, branch.id, build.id);
       switched = true;
       return { branchId: branch.id, buildId: build.id, switchTx };
     });
+    const displayTarget = buildDir(deps.config.gamesRoot, job.gameId, published.buildId);
+    scheduleDisplayImages(deps, displayTarget, displayMarker(deps, published.buildId), manifest.data);
     design.stream.publish(published.branchId, published.switchTx.transaction);
     await updateBuild(deps, release, published.buildId, 'tested');
 
@@ -169,6 +170,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
       return { state: 'done', buildId };
     }
     if (target) await rm(target, { recursive: true, force: true }).catch(() => undefined);
+    if (buildId) await rm(displayMarker(deps, buildId), { force: true }).catch(() => undefined);
     if (buildId) await updateBuild(deps, release, buildId, 'failed').catch(() => undefined);
     settle(deps, jobId, 'failed');
     deps.log({ event: 'build_publish_failed', jobId, gameId: job.gameId, reason });
@@ -176,6 +178,81 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
   } finally {
     await rm(stagedDir(deps, jobId), { recursive: true, force: true });
     publishing.delete(jobId);
+  }
+}
+
+type DisplayManifest = { logo?: string; loading?: { portrait: string; landscape: string }; genres?: string[] };
+const deriving = new Set<string>();
+
+function scheduleDisplayImages(
+  deps: AppDeps,
+  target: string,
+  marker: string,
+  manifest: DisplayManifest,
+  attempted = new Set<string>(),
+): void {
+  // Limit expensive encoders to one build at a time; the sweep picks up the remainder.
+  if (deriving.size > 0) return;
+  deriving.add(target);
+  void writeDisplayImages(target, manifest)
+    .then(() => rm(marker, { force: true }))
+    .catch((error: unknown) => deps.log({ event: 'build_display_images_failed', reason: errorName(error) }))
+    .finally(() => {
+      deriving.delete(target);
+      attempted.add(marker);
+      void retryDisplayImages(deps, attempted).catch((error: unknown) =>
+        deps.log({ event: 'build_display_images_failed', reason: errorName(error) }),
+      );
+    });
+}
+
+// Only pending markers are revisited after a restart or encoder failure.
+async function retryDisplayImages(deps: AppDeps, attempted = new Set<string>()): Promise<void> {
+  const entries = await readdir(displayQueue(deps), { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (deriving.size > 0) break;
+    if (!entry.isFile()) continue;
+    const marker = join(displayQueue(deps), entry.name);
+    if (attempted.has(marker)) continue;
+    const pending = await readJson(marker);
+    if (!pending || typeof pending !== 'object' || !('gameId' in pending) || !('buildId' in pending)) continue;
+    if (typeof pending.gameId !== 'string' || pending.buildId !== entry.name) continue;
+    let target: string;
+    try {
+      target = buildDir(deps.config.gamesRoot, pending.gameId, entry.name);
+    } catch {
+      continue;
+    }
+    if (
+      !(await access(join(target, '.complete')).then(
+        () => true,
+        () => false,
+      ))
+    )
+      continue;
+    const metadata = await readJson(join(target, '.ogm-display.json'));
+    if (metadata && typeof metadata === 'object' && 'pending' in metadata && metadata.pending === true)
+      scheduleDisplayImages(deps, target, marker, metadata as DisplayManifest, attempted);
+    else if (metadata && typeof metadata === 'object' && 'images' in metadata) await rm(marker, { force: true });
+  }
+}
+
+// Publish the metadata atomically only after every referenced variant exists. Until then readers use originals.
+async function writeDisplayImages(target: string, manifest: DisplayManifest): Promise<void> {
+  const images = await makeDisplayImages(
+    target,
+    manifest.logo,
+    manifest.loading ? [manifest.loading.portrait, manifest.loading.landscape] : [],
+  );
+  const temporary = join(target, `.ogm-display-${randomUUID()}.tmp`);
+  try {
+    await writeFile(
+      temporary,
+      JSON.stringify({ logo: manifest.logo, loading: manifest.loading, genres: manifest.genres, images }),
+    );
+    await rename(temporary, join(target, '.ogm-display.json'));
+  } finally {
+    await rm(temporary, { force: true });
   }
 }
 
@@ -211,6 +288,7 @@ export function finishRun(deps: AppDeps, jobId: string, state: 'done' | 'failed'
 // ended some other way. The grace starts when the sweep first sees the completed run (a marker file), because the
 // projection row's `updated_at` keeps moving with every poll.
 export async function sweepBuilds(deps: AppDeps, graceMs: number, now = new Date()): Promise<void> {
+  await retryDisplayImages(deps);
   const completed = deps.db
     .select({ jobId: schema.jobs.id, gameId: schema.jobs.gameId, state: schema.jobs.state })
     .from(schema.jobs)

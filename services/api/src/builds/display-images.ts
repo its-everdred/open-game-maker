@@ -12,7 +12,7 @@ export type DisplayImage = {
   sources: Record<Format, { width: number; path: string }[]>;
 };
 
-/** Build display media once, before the build is marked complete. */
+/** Build content-addressed display media for a published build. */
 export async function makeDisplayImages(
   root: string,
   logo?: string,

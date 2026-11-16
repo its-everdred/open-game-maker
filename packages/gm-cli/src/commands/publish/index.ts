@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -31,6 +32,9 @@ const OUTPUT_BYTES = 64 * 1024 * 1024;
 const FROM_REPO = ['manifest.json', 'design/design.json', 'achievements.json'];
 
 type Facts = { gameId: string; slug: string; repoPath: string; checkout: string };
+
+class RequestUncertain extends CommandError {}
+class RequestTimeout extends RequestUncertain {}
 
 /** `NAME=value` lines of one env file, read without sourcing it (the files also hold secrets). */
 export function readEnvFile(file: string): Record<string, string> {
@@ -104,12 +108,15 @@ export async function request(url: string, init: RequestInit): Promise<{ status:
     } catch (error) {
       const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
       if (attempt === 1 && !timedOut) continue;
-      throw new CommandError(`no answer from ${url}: ${reason(error)}`);
+      if (timedOut) throw new RequestTimeout(`no answer from ${url}: ${reason(error)}`);
+      throw new RequestUncertain(`no answer from ${url}: ${reason(error)}`);
     }
     try {
       return { status: response.status, body: await response.text() };
     } catch (error) {
-      throw new CommandError(`the answer from ${url} broke off (HTTP ${response.status}): ${reason(error)}`);
+      if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError'))
+        throw new RequestTimeout(`the answer from ${url} timed out (HTTP ${response.status}): ${reason(error)}`);
+      throw new RequestUncertain(`the answer from ${url} broke off (HTTP ${response.status}): ${reason(error)}`);
     }
   }
 }
@@ -136,7 +143,12 @@ async function readFacts(api: string, token: string, slug: string): Promise<Fact
   const repoPath = answer.game?.repo?.path ?? '';
   if (!gameId) throw new CommandError(`the API's answer for "${slug}" carried no game id`);
   if (!repoPath) throw new UsageError(`game "${slug}" has no repository folder registered`, 'register the game first');
-  return { gameId, slug: answer.game?.slug || slug, repoPath, checkout: answer.daemon?.checkoutPath ?? '' };
+  return {
+    gameId,
+    slug: answer.game?.slug || slug,
+    repoPath,
+    checkout: answer.daemon?.checkoutPath ?? '',
+  };
 }
 
 export const command: GmCommand = {
@@ -280,12 +292,51 @@ export const command: GmCommand = {
       const tar = exec('tar', ['--format=ustar', '-czf', archive, '-C', stage, '.'], workRoot);
       if (!tar.ok) throw new CommandError(`cannot archive the build: ${tail(tar.err, 3)}`);
 
-      const upload = await request(`${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/builds`, {
-        method: 'POST',
-        headers: { 'x-ogm-internal': token, 'x-gm-sha': commit, 'content-type': 'application/gzip' },
-        body: readFileSync(archive),
-        signal: AbortSignal.timeout(300_000),
-      });
+      const requestId = `j_${randomUUID()}`;
+      const uploadUrl = `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/builds`;
+      const recover = async () => {
+        // The request id identifies this exact publish, including a retry after a lost connection.
+        const deadline = Date.now() + 90_000;
+        do {
+          const check = await request(`${uploadUrl}/${requestId}`, {
+            headers: { 'x-ogm-internal': token },
+            signal: AbortSignal.timeout(20_000),
+          }).catch(() => null);
+          if (check?.status === 200) {
+            try {
+              const result = JSON.parse(check.body) as { state?: string; buildId?: string | null };
+              if (result.state === 'done' && result.buildId)
+                return { status: 201, body: JSON.stringify({ buildId: result.buildId, jobId: requestId }) };
+              if (!result.state || result.state === 'failed' || result.state === 'cancelled') return null;
+            } catch {
+              return null;
+            }
+          } else if (check?.status !== 404) return null;
+          if (Date.now() >= deadline) break;
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+        } while (Date.now() < deadline);
+        return null;
+      };
+      let upload: { status: number; body: string };
+      try {
+        upload = await request(uploadUrl, {
+          method: 'POST',
+          headers: {
+            'x-ogm-internal': token,
+            'x-gm-sha': commit,
+            'x-gm-request-id': requestId,
+            'content-type': 'application/gzip',
+          },
+          body: readFileSync(archive),
+          signal: AbortSignal.timeout(300_000),
+        });
+      } catch (error) {
+        if (!(error instanceof RequestUncertain)) throw error;
+        const recovered = await recover();
+        if (!recovered) throw error;
+        upload = recovered;
+      }
+      if (upload.status >= 500) upload = (await recover()) ?? upload;
       let answer: Record<string, unknown> = {};
       try {
         answer = JSON.parse(upload.body) as Record<string, unknown>;
