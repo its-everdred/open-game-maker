@@ -28,8 +28,6 @@ export type GameMetadata = {
   visibility: 'listed' | 'private';
   repoVisibility: 'public' | 'private';
   allowAiGeneratedAssets: boolean;
-  mediaBuildId?: string;
-  hasLoadingPlan?: boolean;
   logoUrl?: string;
   coverUrl?: string;
   loadingUrls?: { portrait: string; landscape: string };

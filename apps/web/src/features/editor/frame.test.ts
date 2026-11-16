@@ -72,7 +72,7 @@ describe('game frame adapter', () => {
       bridgeState: 'ready',
       manifest,
       dropped: 3,
-      load: { phase: 'ready', done: false },
+      load: { phase: 'ready', done: true },
     });
     expect(states.at(-1)).toEqual({ bridgeState: 'ready', dropped: 3 });
 
@@ -274,7 +274,7 @@ describe('game frame adapter', () => {
     });
 
     frameOptions?.onReady?.(manifest, []);
-    expect(controller.state().load).toMatchObject({ done: false });
+    expect(controller.state().load).toMatchObject({ done: true });
 
     frameOptions?.onLoad?.({
       t: 'load.progress',
@@ -304,7 +304,6 @@ describe('game frame adapter', () => {
       gamesOrigin: 'http://127.0.0.1:10001',
       gameId: 'game',
       buildId: 'build',
-      legacyWaitForLoad: true,
       mode: 'play',
       design: { rev: 0, doc: {} as DesignDoc },
       create: (options) => {
@@ -329,7 +328,10 @@ describe('game frame adapter', () => {
       t: 'load.done',
       payload: { ms: 1, fetchedBytes: 4, cachedBytes: 0, fetchedFiles: 1, cachedFiles: 0, persisted: false },
     });
-    expect(controller.state()).toMatchObject({ firstFrame: true, load: { done: true } });
+    expect(controller.state()).toMatchObject({ load: { done: true } });
+    expect(controller.state().firstFrame).not.toBe(true);
+    opts?.onLoad?.({ t: 'load.frame', payload: {} });
+    expect(controller.state().firstFrame).toBe(true);
     controller.dispose();
   });
 
@@ -355,7 +357,7 @@ describe('game frame adapter', () => {
         };
       },
     });
-    opts?.onReady?.(manifest, [], true);
+    opts?.onReady?.(manifest, []);
     if (complete)
       opts?.onLoad?.({
         t: 'load.done',
@@ -387,7 +389,7 @@ describe('game frame adapter', () => {
         };
       },
     });
-    frameOptions?.onReady?.(manifest, [], true);
+    frameOptions?.onReady?.(manifest, []);
     expect(controller.state().firstFrame).not.toBe(true);
     frameOptions?.onLoad?.({ t: 'load.frame', payload: {} });
     expect(controller.state().firstFrame).toBe(true);

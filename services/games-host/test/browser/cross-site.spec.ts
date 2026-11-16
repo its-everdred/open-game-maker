@@ -1,6 +1,6 @@
 import { serve, type ServerType } from '@hono/node-server';
 import { expect, test } from '@playwright/test';
-import { cp, mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -26,6 +26,22 @@ test.describe('games origin browser boundary', () => {
     await mkdir(dirname(build), { recursive: true });
     await cp(fixture, build, { recursive: true });
     await markComplete(build);
+    const previewId = 'preview-11111111-1111-1111-1111-111111111111';
+    const previewDir = join(root, '.previews', 'demo');
+    const previewBuild = join(previewDir, '.builds', previewId);
+    await mkdir(dirname(previewBuild), { recursive: true });
+    await cp(fixture, previewBuild, { recursive: true });
+    await markComplete(previewBuild);
+    await writeFile(
+      join(previewDir, '12.json'),
+      JSON.stringify({
+        gameId: 'demo',
+        buildId: previewId,
+        accessId: 'pv-11111111-1111-1111-1111-111111111111',
+        accessExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+        answered: false,
+      }),
+    );
 
     outsideHits = 0;
     outsideServer = await startTestServer((_request, response) => {
@@ -98,6 +114,37 @@ test.describe('games origin browser boundary', () => {
     expect(outsideHits).toBe(0);
   });
 
+  test('forwards an existing game first-frame event across the origin boundary', async ({ page }) => {
+    await page.goto(allowedParent.origin);
+    const gameFrame = await waitForGameFrame(page, gamesOrigin);
+    await expect(gameFrame.locator('#ready')).toHaveText('ready');
+    await page.evaluate(() => {
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'ogm.frame.ready.v1') Reflect.set(window, '__frameOrigin', event.origin);
+      });
+    });
+    await gameFrame.evaluate(() => window.dispatchEvent(new Event('gm-frame-ready')));
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, '__frameOrigin'))).toBe(gamesOrigin);
+  });
+
+  test('forwards the observer event from an opaque preview', async ({ page }) => {
+    await page.goto(allowedParent.origin);
+    await page.evaluate((origin) => {
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'ogm.frame.ready.v1') Reflect.set(window, '__previewFrameOrigin', event.origin);
+      });
+      const frame = document.createElement('iframe');
+      frame.sandbox.add('allow-scripts', 'allow-pointer-lock');
+      frame.src = `${origin}/p/demo/pv-11111111-1111-1111-1111-111111111111/index.html?frameObserver=1`;
+      document.body.append(frame);
+    }, gamesOrigin);
+    await expect.poll(() => page.frames().some((frame) => frame.url().includes('/p/demo/'))).toBe(true);
+    const preview = page.frames().find((frame) => frame.url().includes('/p/demo/'))!;
+    await preview.waitForLoadState('load');
+    await preview.evaluate(() => window.dispatchEvent(new Event('gm-frame-ready')));
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, '__previewFrameOrigin'))).toBe('null');
+  });
+
   test('blocks a parent outside frame-ancestors', async ({ page }) => {
     const consoleMessages: string[] = [];
     page.on('console', (message) => consoleMessages.push(message.text()));
@@ -110,7 +157,7 @@ test.describe('games origin browser boundary', () => {
 });
 
 function parentHtml(gamesOrigin: string, outsideOrigin: string): string {
-  const source = `${gamesOrigin}/g/demo/b1/index.html?outside=${encodeURIComponent(`${outsideOrigin}/x`)}`;
+  const source = `${gamesOrigin}/g/demo/b1/index.html?frameObserver=1&outside=${encodeURIComponent(`${outsideOrigin}/x`)}`;
   return `<!doctype html>
 <html lang="en">
   <body>

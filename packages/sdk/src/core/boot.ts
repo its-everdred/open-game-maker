@@ -190,7 +190,6 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       protocol: SDK_PROTOCOL,
       manifest: readyManifest(module.manifest, instance),
       marks,
-      firstFrameSignal: true,
     });
     // Games that use asynchronous setup set hooks.ready false before yielding. Games without an explicit
     // readiness phase can be revealed after the browser has had a chance to paint their initial content.

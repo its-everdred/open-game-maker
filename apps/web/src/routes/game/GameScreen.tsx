@@ -405,7 +405,6 @@ export function GameScreen() {
               gamesOrigin,
               gameId,
               buildId: activePreview?.accessId ?? snapshot.buildId,
-              legacyWaitForLoad: game.data?.mediaBuildId === snapshot.buildId && game.data?.hasLoadingPlan === true,
               ...(activePreview ? { preview: true } : {}),
               mode,
               design: activePreview ? previewDesign.data! : snapshot,
@@ -431,8 +430,6 @@ export function GameScreen() {
   }, [
     activeSnapshot,
     game.isPending,
-    game.data?.mediaBuildId,
-    game.data?.hasLoadingPlan,
     branch,
     build,
     frameAttempt,
@@ -682,7 +679,7 @@ export function GameScreen() {
             transport={() => ({ rttMs: room.snapshot?.rttMs })}
           />
         ) : null}
-        {!game.isError && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
+        {(!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
           <LoadingLayer
             key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
             game={game.data ?? { familyId: '', title: '' }}

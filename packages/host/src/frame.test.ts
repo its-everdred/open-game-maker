@@ -50,7 +50,9 @@ describe('createGameFrame', () => {
     expect(frame.iframe.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin allow-pointer-lock');
     expect(frame.iframe.getAttribute('allow')).toBe('autoplay; fullscreen; gamepad');
     expect(frame.iframe.getAttribute('referrerpolicy')).toBe('origin');
-    expect(frame.iframe.src).toBe('https://games.test/g/game%20one/build%2Fone/index.html?build=draft&protocol=1');
+    expect(frame.iframe.src).toBe(
+      'https://games.test/g/game%20one/build%2Fone/index.html?build=draft&protocol=1&frameObserver=1',
+    );
     frame.dispose();
   });
 
@@ -78,6 +80,7 @@ describe('createGameFrame', () => {
       speed: 'slow',
       build: 'draft',
       protocol: '1',
+      frameObserver: '1',
     });
     frame.dispose();
   });
@@ -161,6 +164,67 @@ describe('createGameFrame', () => {
 
     expect(setPadMode).not.toHaveBeenCalled();
     expect(setOverlayEnabled).not.toHaveBeenCalled();
+    frame.dispose();
+  });
+
+  it('accepts first-frame signals only from its own games-origin iframe', () => {
+    const onLoad = vi.fn();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const frame = createGameFrame({
+      container,
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g',
+      buildId: 'b',
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+      onLoad,
+    });
+    const data = { type: 'ogm.frame.ready.v1' };
+    window.dispatchEvent(
+      new MessageEvent('message', { data, origin: 'https://evil.test', source: frame.iframe.contentWindow }),
+    );
+    window.dispatchEvent(new MessageEvent('message', { data, origin: 'https://games.test', source: window }));
+    expect(onLoad).not.toHaveBeenCalled();
+    window.dispatchEvent(
+      new MessageEvent('message', { data, origin: 'https://games.test', source: frame.iframe.contentWindow }),
+    );
+    expect(onLoad).toHaveBeenCalledWith({ t: 'load.frame', payload: {} });
+    frame.dispose();
+    onLoad.mockClear();
+    window.dispatchEvent(
+      new MessageEvent('message', { data, origin: 'https://games.test', source: frame.iframe.contentWindow }),
+    );
+    expect(onLoad).not.toHaveBeenCalled();
+  });
+
+  it('accepts opaque preview readiness only from its own frame', () => {
+    const onLoad = vi.fn();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const frame = createGameFrame({
+      container,
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g',
+      buildId: 'p',
+      preview: true,
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+      onLoad,
+    });
+    const data = { type: 'ogm.frame.ready.v1' };
+    window.dispatchEvent(new MessageEvent('message', { data, origin: 'null', source: window }));
+    expect(onLoad).not.toHaveBeenCalled();
+    window.dispatchEvent(new MessageEvent('message', { data, origin: 'null', source: frame.iframe.contentWindow }));
+    expect(onLoad).toHaveBeenCalledWith({ t: 'load.frame', payload: {} });
     frame.dispose();
   });
 

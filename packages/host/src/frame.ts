@@ -38,7 +38,7 @@ export interface GameFrameOptions {
   capabilities: string[];
   inputMapping?: Partial<RigInputMapping>;
   role: () => Role;
-  onReady?: (manifest: GameManifest, marks: [string, number][], firstFrameSignal?: boolean) => void;
+  onReady?: (manifest: GameManifest, marks: [string, number][]) => void;
   onSaveWrite?: (payload: { saveSchemaVersion: number; data: unknown }) => void;
   onEvent?: (kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown) => void;
   onLoad?: (event: GameLoadEvent) => void;
@@ -104,15 +104,29 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   for (const [key, value] of Object.entries(options.params ?? {})) source.searchParams.set(key, value);
   source.searchParams.set('build', options.build);
   source.searchParams.set('protocol', String(SDK_PROTOCOL));
+  source.searchParams.set('frameObserver', '1');
   iframe.src = source.href;
   const layer = document.createElement('div');
   wrapper.append(iframe, layer);
   options.container.append(wrapper);
 
+  const observeFirstFrame = (event: MessageEvent) => {
+    if (
+      !iframe.contentWindow ||
+      event.source !== iframe.contentWindow ||
+      event.origin !== (options.preview ? 'null' : gamesOrigin.origin)
+    )
+      return;
+    if (typeof event.data !== 'object' || event.data === null || event.data.type !== 'ogm.frame.ready.v1') return;
+    options.onLoad?.({ t: 'load.frame', payload: {} });
+  };
+  window.addEventListener('message', observeFirstFrame);
+
   let disposed = false;
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    window.removeEventListener('message', observeFirstFrame);
     gamepads.stop();
     overlay.dispose();
     viewport.dispose();
@@ -164,12 +178,12 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   const haptics = new HapticsController();
   const settings = new SettingsController((value) => bridge.send('settings', value));
 
-  bridge.on('ready', ({ manifest, marks, firstFrameSignal }) => {
+  bridge.on('ready', ({ manifest, marks }) => {
     gamepads.setMapping(options.inputMapping?.gamepad, manifest.inputs.actions);
     overlay.setInputs(manifest.inputs, options.inputMapping?.touch ?? 'tap');
     viewport.sendNow();
     settings.resend();
-    options.onReady?.(manifest, marks, firstFrameSignal);
+    options.onReady?.(manifest, marks);
   });
   bridge.on('haptics.pulse', ({ pattern }) => haptics.pulse(pattern));
   bridge.on('save.write', (payload) => options.onSaveWrite?.(payload));

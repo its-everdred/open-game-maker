@@ -75,8 +75,6 @@ export type MountGameFrameOptions = {
   gameId: string;
   buildId: string;
   preview?: boolean;
-  /** Legacy builds with a cache plan report load.done after preparing it. */
-  legacyWaitForLoad?: boolean;
   mode: 'play' | 'edit';
   design: { rev: number; doc: DesignDoc };
   build?: 'draft' | 'test' | 'published';
@@ -101,9 +99,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   let loadTerminal = false;
   let loadStallTimer: ReturnType<typeof setTimeout> | undefined;
   let firstFrameTimer: ReturnType<typeof setTimeout> | undefined;
-  let legacyTimer: ReturnType<typeof setTimeout> | undefined;
   let expectsFirstFrame = false;
-  let waitsForLegacyLoad = false;
   let lastLoadProgress: GameLoadProgress | undefined;
   const mountedAt = performance.now();
   type PlacementRequest = {
@@ -132,13 +128,9 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     if (firstFrameTimer !== undefined) clearTimeout(firstFrameTimer);
     firstFrameTimer = undefined;
   };
-  const clearLegacyTimer = () => {
-    if (legacyTimer !== undefined) clearTimeout(legacyTimer);
-    legacyTimer = undefined;
-  };
   const armFirstFrameTimer = () => {
     clearFirstFrameTimer();
-    if ((!expectsFirstFrame && !waitsForLegacyLoad) || current.firstFrame || disposed) return;
+    if (!expectsFirstFrame || current.firstFrame || disposed) return;
     firstFrameTimer = setTimeout(() => {
       if (disposed || current.firstFrame || current.bridgeState === 'error') return;
       clearLoadStall();
@@ -162,7 +154,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     if (disposed || current.bridgeState === 'error') return;
     if (event.t === 'load.frame') {
       clearFirstFrameTimer();
-      clearLegacyTimer();
       current = { ...current, firstFrame: true };
       publish();
       return;
@@ -170,15 +161,13 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     if (loadTerminal) return;
     if (event.t === 'load.done') {
       loadObserved = true;
-      clearLegacyTimer();
-      waitsForLegacyLoad = false;
       clearFirstFrameTimer();
       loadTerminal = true;
       clearLoadStall();
       const load = current.load ?? { phase: 'ready' as const, loaded: 0, total: 0, done: false };
       current = {
         ...current,
-        firstFrame: expectsFirstFrame ? current.firstFrame : true,
+        firstFrame: current.firstFrame,
         load: { ...load, done: true },
       };
       armFirstFrameTimer();
@@ -188,7 +177,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     }
     if (event.payload.phase === 'stream') return;
     loadObserved = true;
-    clearLegacyTimer();
     clearFirstFrameTimer();
     lastLoadProgress = event.payload;
     clearLoadStall();
@@ -232,30 +220,17 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       capabilities: [],
       role: () => 'owner',
       readyTimeoutMs: 10_000,
-      onReady: (manifest, marks, firstFrameSignal) => {
+      onReady: (manifest, marks) => {
         if (current.bridgeState === 'error') return;
-        expectsFirstFrame = firstFrameSignal === true;
-        waitsForLegacyLoad = !expectsFirstFrame && options.legacyWaitForLoad === true && !loadTerminal;
+        // The games host forwards the existing game-ready event for legacy builds; new SDKs also send load.frame.
+        expectsFirstFrame = true;
         current = {
           ...current,
           bridgeState: 'ready',
           manifest,
-          load: loadObserved ? current.load : { phase: 'ready', loaded: 0, total: 0, done: false },
+          load: loadObserved ? current.load : { phase: 'ready', loaded: 0, total: 0, done: true },
         };
-        if (expectsFirstFrame) {
-          // Games without an asset plan still complete when they signal their first frame.
-          if (!loadObserved) current = { ...current, load: { ...current.load!, done: true } };
-          armFirstFrameTimer();
-        } else if (waitsForLegacyLoad) {
-          armFirstFrameTimer();
-        } else if (!loadObserved) {
-          // Legacy builds lack a frame signal. Give their asset loader time to report before falling back.
-          legacyTimer = setTimeout(() => {
-            if (disposed || loadObserved || current.bridgeState === 'error') return;
-            current = { ...current, firstFrame: true, load: { phase: 'ready', loaded: 0, total: 0, done: true } };
-            publish();
-          }, 1_500);
-        }
+        armFirstFrameTimer();
         frame.send('design.apply', { rev: options.design.rev, doc: options.design.doc, patches: [] });
         emitRoomMessage('ready', { protocol: SDK_PROTOCOL, manifest, marks });
         publish();
@@ -276,7 +251,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
         }
         clearLoadStall();
         clearFirstFrameTimer();
-        clearLegacyTimer();
         current = { ...current, bridgeState: 'error', error: failure.message, errorCode: failure.code };
         publish();
       },
@@ -386,7 +360,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       disposed = true;
       clearLoadStall();
       clearFirstFrameTimer();
-      clearLegacyTimer();
       saveLoadErrors.clear();
       window.removeEventListener('message', observeOrigin);
       stopPlacement();

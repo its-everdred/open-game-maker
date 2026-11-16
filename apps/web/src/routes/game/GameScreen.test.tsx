@@ -418,6 +418,13 @@ describe('GameScreen', () => {
     expect(host.controller.dispose).toHaveBeenCalled();
   });
 
+  it('keeps the loading layer if game metadata fails while the build starts', async () => {
+    editorApi.getGame.mockRejectedValue(new Error('offline'));
+    renderGame();
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+  });
+
   it('shows loading while game metadata is pending', async () => {
     editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
     renderGame();

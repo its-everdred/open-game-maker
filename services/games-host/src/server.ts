@@ -7,6 +7,7 @@ import { constants as zlib, createBrotliCompress, createGzip } from 'node:zlib';
 import { Hono, type Context, type Handler, type MiddlewareHandler } from 'hono';
 
 import { gameHeaders, healthHeaders } from './headers.js';
+import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-observer.js';
 import { BadBlobName, BadId, blobPath, buildDir, isComplete, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
 import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
@@ -82,6 +83,8 @@ export function createApp(options: GamesHostOptions): Hono {
 
     const urlPath = new URL(context.req.url).pathname.split('/').slice(4).join('/');
     const isPreview = new URL(context.req.url).pathname.startsWith('/p/');
+    if (urlPath === FRAME_OBSERVER_FILE)
+      return context.body(FRAME_OBSERVER, 200, { 'content-type': 'text/javascript; charset=utf-8' });
     if (isPreview && urlPath === PREVIEW_BOOTSTRAP_FILE)
       return context.body(PREVIEW_BOOTSTRAP, 200, { 'content-type': 'text/javascript; charset=utf-8' });
     const file = await resolveFile(directory, urlPath);
@@ -90,8 +93,11 @@ export function createApp(options: GamesHostOptions): Hono {
     }
 
     const relativePath = relative(directory, file).split(sep).join('/');
-    if (isPreview && relativePath === 'index.html') {
-      const html = bootstrapPreviewHtml(await readFile(file, 'utf8'));
+    const observeFrame = new URL(context.req.url).searchParams.get('frameObserver') === '1';
+    if ((isPreview || observeFrame) && relativePath === 'index.html') {
+      let html = await readFile(file, 'utf8');
+      if (isPreview) html = bootstrapPreviewHtml(html);
+      if (observeFrame) html = observeFrameHtml(html);
       context.header('content-type', 'text/html; charset=utf-8');
       return context.req.method === 'HEAD' ? context.body(null, 200) : context.body(html, 200);
     }
