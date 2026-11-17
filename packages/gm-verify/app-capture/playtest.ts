@@ -124,11 +124,16 @@ async function playOne(mode: Plan['modes'][number], width: number, height: numbe
     try {
       await page.waitForTimeout(plan.fast ? 500 : 3_000);
       const game = page.frameLocator('.game-frame iframe');
-      for (const [index, text] of mode.taps.entries()) {
-        const target = game.getByText(text, { exact: true }).first();
-        // The first target waits out the game's own loading screen, which a loaded host stretches past a minute.
-        if (index === 0) await target.waitFor({ state: 'visible', timeout: LOAD_MS });
-        await target.tap({ timeout: 45_000 });
+      // The shell's loading layer covers the game, and takes taps, until the game reports its first frame.
+      await page
+        .waitForFunction(() => document.querySelector('.game-loading-layer:not(.is-done)') === null, null, {
+          timeout: LOAD_MS,
+        })
+        .catch(() => {
+          throw new Error(`the game was still loading after ${LOAD_MS / 1000} s`);
+        });
+      for (const text of mode.taps) {
+        await game.getByText(text, { exact: true }).first().tap({ timeout: 45_000 });
         await page.waitForTimeout(plan.fast ? 300 : 1_200);
       }
       await page.waitForTimeout(plan.fast ? 300 : 2_000);

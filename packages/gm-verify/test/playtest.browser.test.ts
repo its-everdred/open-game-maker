@@ -51,7 +51,12 @@ async function playFixture(via: 'dist' | 'url') {
     const source = readFileSync(html, 'utf8');
     const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
     if (!script) throw new Error('bridge fixture script missing');
-    writeFileSync(join(game, 'fixture.js'), `${script}\n${modes}`);
+    const ready =
+      "send('ready', { protocol: 1, manifest, marks: [['fixture-ready', performance.now()]] }, message.id);";
+    if (!script.includes(ready)) throw new Error('bridge fixture ready message changed');
+    // The shell keeps its loading layer over a game until it reports a first frame and the end of loading.
+    const loaded = `${ready} send('load.frame', {}); send('load.done', { ms: 0, fetchedBytes: 0, cachedBytes: 0, fetchedFiles: 0, cachedFiles: 0, persisted: null });`;
+    writeFileSync(join(game, 'fixture.js'), `${script.replace(ready, loaded)}\n${modes}`);
     writeFileSync(
       html,
       source
