@@ -28,8 +28,8 @@ export type ReviewE2eConfig = {
 
 export type ViewportResult = { viewport: string; ok: boolean; failure?: string; stills: string[] };
 
-const NOTE = 'QA note';
-const PICK_NOTE = 'QA pick';
+export const NOTE = 'QA note';
+export const PICK_NOTE = 'QA pick';
 const MEDIA_DIR = new URL('../qa/review-e2e/', import.meta.url);
 
 // A regression a deploy could ship: the round's note box is gone, so "Needs changes" can no longer carry a note.
@@ -48,13 +48,13 @@ async function internal(config: ReviewE2eConfig, path: string, init: RequestInit
   return body;
 }
 
-type Report = {
+export type Report = {
   round: { verdict: string | null; notes: string | null; dispatch: string | null };
   received: { kind: string; option?: string; response?: string; reason?: string }[];
 };
 
 // The verdicts reached aiur: the round's rework carries the note, and the Command's answer picks B with its note.
-function reached(report: Report): string | null {
+export function reached(report: Report): string | null {
   if (report.round.verdict !== 'needs_work' || report.round.notes !== NOTE) return 'the round verdict was not stored';
   const rework = report.received.find((item) => item.kind === 'rework');
   if (!rework?.reason?.includes(NOTE)) return 'the round verdict did not reach aiur';
