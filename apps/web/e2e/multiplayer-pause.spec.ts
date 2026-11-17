@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 
 import { expect, test, type Page } from '@playwright/test';
+import { build } from 'esbuild';
 
 import { connect, joinOptions, newRoom, startHarness } from '../../../services/rooms/test/helpers';
 import { installAuthRoutes } from './fixtures/auth-routes';
@@ -101,22 +101,15 @@ test('a room pause freezes both game frames until the shared countdown ends', as
 test('two SDK clients stop and resume on the same per-seat tick', async ({ browser, baseURL }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'one two-client run covers the shared room behavior');
   test.setTimeout(180_000);
-  const output = testInfo.outputPath('per-seat-game.js');
-  execFileSync(
-    'pnpm',
-    [
-      'exec',
-      'esbuild',
-      'e2e/fixtures/per-seat-game.ts',
-      '--bundle',
-      '--format=esm',
-      '--platform=browser',
-      '--define:__GM_BUILD__="test"',
-      `--outfile=${output}`,
-    ],
-    { cwd: fileURLToPath(new URL('..', import.meta.url)) },
-  );
-  const bundle = await readFile(output);
+  const result = await build({
+    entryPoints: [fileURLToPath(new URL('./fixtures/per-seat-game.ts', import.meta.url))],
+    bundle: true,
+    format: 'esm',
+    platform: 'browser',
+    define: { __GM_BUILD__: '"test"' },
+    write: false,
+  });
+  const bundle = Buffer.from(result.outputFiles[0]!.contents);
   const port = await availablePort();
   const harness = await startHarness({}, port);
   const room = await newRoom(harness.testServer, {
