@@ -294,7 +294,13 @@ export async function measureImageDistortion(
             Number(generated.opacity) === 0
           )
             continue;
-          if (generated.position === 'static' && generated.transform === 'none') {
+          if (
+            generated.position === 'static' &&
+            generated.transform === 'none' &&
+            generated.translate === 'none' &&
+            generated.rotate === 'none' &&
+            generated.scale === 'none'
+          ) {
             const width = parseFloat(generated.width) || 0;
             const height = parseFloat(generated.height) || 0;
             if (

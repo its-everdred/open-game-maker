@@ -292,9 +292,29 @@ export function trackShadowRoots(): void {
     if (drawnWidth === 0 || drawnHeight === 0 || (args.length === 8 && (args[2] === 0 || args[3] === 0))) return;
     if (
       this.globalAlpha === 0 &&
-      ['source-over', 'destination-over', 'destination-out', 'source-atop', 'lighter', 'xor'].includes(
-        this.globalCompositeOperation,
-      )
+      [
+        'source-over',
+        'destination-over',
+        'destination-out',
+        'source-atop',
+        'lighter',
+        'xor',
+        'multiply',
+        'screen',
+        'overlay',
+        'darken',
+        'lighten',
+        'color-dodge',
+        'color-burn',
+        'hard-light',
+        'soft-light',
+        'difference',
+        'exclusion',
+        'hue',
+        'saturation',
+        'color',
+        'luminosity',
+      ].includes(this.globalCompositeOperation)
     )
       return;
     if (visibleCanvas(this.canvas)) version++;

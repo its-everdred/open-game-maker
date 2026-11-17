@@ -53,18 +53,22 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
     );
     await page.evaluate((src) => {
       const style = document.createElement('style');
-      style.textContent = `#clipped-pseudo::before, #clipped-static::before { content:''; display:block; width:90px; height:30px; background:url("${src}") 0 0 / 100% 100% } #clipped-pseudo::before { position:absolute; left:0; top:0 }`;
+      style.textContent = `#clipped-pseudo::before, #clipped-static::before, #translated::before { content:''; display:block; width:90px; height:30px; background:url("${src}") 0 0 / 100% 100% } #clipped-pseudo::before { position:absolute; left:0; top:0 } #translated::before { translate: 500px 0 }`;
       document.head.append(style);
       const wrapper = document.createElement('div');
       wrapper.style.cssText = 'width:10px;height:10px;overflow:hidden;position:relative';
       wrapper.innerHTML =
         '<div id="clipped-pseudo" style="position:absolute;left:100px;width:30px;height:30px"></div><div id="clipped-static" style="position:absolute;left:200px;width:30px;height:30px"></div>';
       document.body.append(wrapper);
+      const translated = document.createElement('div');
+      translated.id = 'translated';
+      translated.style.cssText = 'position:fixed;left:-500px;top:0;width:30px;height:30px';
+      document.body.append(translated);
     }, png);
     await page.locator('#visible').evaluate((image: HTMLImageElement) => image.decode());
     const findings = await measureImageDistortion(page.mainFrame(), '390x844', 'play', true);
     expect(findings.map((item) => item.element)).toEqual(
-      expect.arrayContaining(['#visible', '#anchor::before', '#fixed']),
+      expect.arrayContaining(['#visible', '#anchor::before', '#fixed', '#translated::before']),
     );
     expect(findings.map((item) => item.element)).not.toContain('#covered');
     expect(findings.map((item) => item.element)).not.toContain('#offscreen::before');
@@ -529,6 +533,8 @@ it('tracks DOM mutations that can invalidate a capture measurement', async () =>
       context.globalAlpha = 0;
       context.drawImage(source, 0, 0, 30, 30);
       context.globalCompositeOperation = 'destination-over';
+      context.drawImage(source, 0, 0, 30, 30);
+      context.globalCompositeOperation = 'multiply';
       context.drawImage(source, 0, 0, 30, 30);
       return [before, version()];
     });
