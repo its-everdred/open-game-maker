@@ -1,16 +1,21 @@
 # Game thumbnail and trailer
 
-Capture the current game, including its title, character selection, representative play, a clear and a combo. Give the game a JSON scenario list with 15–30 seconds in total. Each entry starts a fresh game; `scenario` names a game-provided scenario, `seconds` sets its duration, and `inputs` happen at the listed seconds. Use logical actions with `phase: "down"` or `"up"`, or `click` with a Playwright selector for an HTML control. Use `surface: "page"` when menus or HUD live outside the canvas; otherwise the default canvas capture is faster.
+A trailer is a montage of real gameplay snippets, each 2–5 seconds, totaling 15–30 seconds. Start the trailer ticket by listing every variety in the game's design doc and flow diagram: modes, piece sets or characters, signature animations (clears, combos, specials), and multiplayer or versus. Script one or more snippets per variety; show menus only briefly. Use the game's own music and sound effects, make portrait and landscape cuts, and ensure no frames are stretched or covered. The trailer plays in the app when the game is selected: keep both `trailer-*.mp4` cuts and a poster frame in the published media.
+
+For example, a Blobs-like game's varieties list might be: blobs, blocks, both together, clear and combo animations, and multiplayer. This illustrative 20-second script covers each with a four-second entry. Replace scenario names with ones the game actually provides.
+
+Give the game a JSON scenario list. Each entry starts a fresh game; `scenario` names a game-provided scenario, `seconds` sets its duration, and `inputs` happen at the listed seconds. Use logical actions with `phase: "down"` or `"up"`, or `click` with a Playwright selector for an HTML control. Use `surface: "page"` when menus or HUD live outside the canvas; otherwise the default canvas capture is faster.
 
 ```json
 [
-  { "seconds": 5, "surface": "page", "inputs": [
-    { "t": 1, "click": "[data-action=play]" }
-  ] },
-  { "scenario": "combo", "seconds": 10, "surface": "page", "inputs": [
+  { "scenario": "blobs", "seconds": 4 },
+  { "scenario": "blocks", "seconds": 4 },
+  { "scenario": "mixed", "seconds": 4 },
+  { "scenario": "clear-combo", "seconds": 4, "inputs": [
     { "t": 1, "action": "softDrop", "phase": "down" },
-    { "t": 3, "action": "softDrop", "phase": "up" }
-  ] }
+    { "t": 2, "action": "softDrop", "phase": "up" }
+  ] },
+  { "scenario": "multiplayer", "seconds": 4 }
 ]
 ```
 
