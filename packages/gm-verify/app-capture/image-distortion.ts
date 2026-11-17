@@ -304,6 +304,23 @@ export async function measureImageDistortion(
               rect.top - height >= innerHeight
             )
               continue;
+            let left = rect.left - width,
+              right = rect.right + width;
+            let top = rect.top - height,
+              bottom = rect.bottom + height;
+            for (let parent = parentOf(element); parent; parent = parentOf(parent)) {
+              const parentStyle = getComputedStyle(parent);
+              const bounds = parent.getBoundingClientRect();
+              if (['hidden', 'clip', 'auto', 'scroll'].includes(parentStyle.overflowX)) {
+                left = Math.max(left, bounds.left);
+                right = Math.min(right, bounds.right);
+              }
+              if (['hidden', 'clip', 'auto', 'scroll'].includes(parentStyle.overflowY)) {
+                top = Math.max(top, bounds.top);
+                bottom = Math.min(bottom, bounds.bottom);
+              }
+            }
+            if (left >= right || top >= bottom) continue;
           }
           if (
             generated.position === 'absolute' &&

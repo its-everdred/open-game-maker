@@ -53,11 +53,12 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
     );
     await page.evaluate((src) => {
       const style = document.createElement('style');
-      style.textContent = `#clipped-pseudo::before { content:''; position:absolute; left:0; top:0; width:90px; height:30px; background:url("${src}") 0 0 / 100% 100% }`;
+      style.textContent = `#clipped-pseudo::before, #clipped-static::before { content:''; display:block; width:90px; height:30px; background:url("${src}") 0 0 / 100% 100% } #clipped-pseudo::before { position:absolute; left:0; top:0 }`;
       document.head.append(style);
       const wrapper = document.createElement('div');
       wrapper.style.cssText = 'width:10px;height:10px;overflow:hidden;position:relative';
-      wrapper.innerHTML = '<div id="clipped-pseudo" style="position:absolute;left:100px;width:30px;height:30px"></div>';
+      wrapper.innerHTML =
+        '<div id="clipped-pseudo" style="position:absolute;left:100px;width:30px;height:30px"></div><div id="clipped-static" style="position:absolute;left:200px;width:30px;height:30px"></div>';
       document.body.append(wrapper);
     }, png);
     await page.locator('#visible').evaluate((image: HTMLImageElement) => image.decode());
@@ -68,6 +69,7 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
     expect(findings.map((item) => item.element)).not.toContain('#covered');
     expect(findings.map((item) => item.element)).not.toContain('#offscreen::before');
     expect(findings.map((item) => item.element)).not.toContain('#clipped-pseudo::before');
+    expect(findings.map((item) => item.element)).not.toContain('#clipped-static::before');
     expect(findings.map((item) => item.element)).not.toContain('#badge');
     expect(findings.map((item) => item.element)).not.toContain('canvas');
   } finally {
@@ -525,6 +527,8 @@ it('tracks DOM mutations that can invalidate a capture measurement', async () =>
       const before = version();
       context.drawImage(source, 0, 0, 0, 30);
       context.globalAlpha = 0;
+      context.drawImage(source, 0, 0, 30, 30);
+      context.globalCompositeOperation = 'destination-over';
       context.drawImage(source, 0, 0, 30, 30);
       return [before, version()];
     });

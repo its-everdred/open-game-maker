@@ -290,7 +290,13 @@ export function trackShadowRoots(): void {
     const drawnWidth = args.length === 8 ? args[6]! : args.length === 4 ? args[2]! : sourceWidth;
     const drawnHeight = args.length === 8 ? args[7]! : args.length === 4 ? args[3]! : sourceHeight;
     if (drawnWidth === 0 || drawnHeight === 0 || (args.length === 8 && (args[2] === 0 || args[3] === 0))) return;
-    if (this.globalAlpha === 0 && this.globalCompositeOperation === 'source-over') return;
+    if (
+      this.globalAlpha === 0 &&
+      ['source-over', 'destination-over', 'destination-out', 'source-atop', 'lighter', 'xor'].includes(
+        this.globalCompositeOperation,
+      )
+    )
+      return;
     if (visibleCanvas(this.canvas)) version++;
     if (this.globalCompositeOperation === 'copy') {
       const entries = canvasDraws.get(this.canvas);
