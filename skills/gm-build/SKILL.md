@@ -26,3 +26,7 @@ Wait for the operator to add it to the seeded store and lockfile; do not substit
 
 `ERR_PNPM_NO_OFFLINE_META` or a missing tarball means the seeded store lacks the exact locked package. Report the
 package and version from the error and ask for the store to be reseeded. Retrying with network access is not a fix.
+
+## Worker design environment
+
+Set `IMPECCABLE_BIN=$HOME/.impeccable/bin/0.1.25/impeccable` and `DO_NOT_TRACK=1` in the worker environment. The vendored launcher never downloads; if the binary is unavailable, follow its degraded guidance and continue. When the pinned engine version changes, the Executor provisions the matching engine on the host.

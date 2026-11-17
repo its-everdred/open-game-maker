@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,9 +13,10 @@ const SETS = {
   'sprite-forge': 'MIT',
   'video-to-game': 'MIT',
   'frontend-design': 'Apache-2.0',
+  impeccable: 'Apache-2.0',
 } as const;
 /** Tool sets ship the scripts their gm wrappers run; the engine sets stay text only. */
-const TOOL_SETS = ['sprite-forge', 'video-to-game'];
+const TOOL_SETS = ['sprite-forge', 'video-to-game', 'impeccable'];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -26,7 +28,7 @@ function walk(dir: string): string[] {
 const all = walk(vendor);
 const rel = (file: string) => relative(vendor, file);
 /** The vendored skill files: every markdown file inside a skill directory. */
-const skillFiles = all.filter((f) => f.endsWith('.md') && rel(f).split('/').length > 2);
+const skillFiles = all.filter((f) => f.endsWith('.md') && rel(f).split('/').length > 2 && (!rel(f).startsWith('impeccable/') || f.endsWith('/SKILL.md')));
 const read = (path: string) => readFileSync(join(vendor, path), 'utf8');
 
 function frontMatter(file: string): Record<string, string> {
@@ -50,7 +52,7 @@ describe('vendored skill sets', () => {
   it('holds the expected skills per set', () => {
     const count = (set: string) =>
       skillFiles.filter((f) => rel(f).startsWith(`${set}/`) && f.endsWith('/SKILL.md')).length;
-    expect(Object.keys(SETS).map(count)).toEqual([28, 11, 17, 5, 0, 1]);
+    expect(Object.keys(SETS).map(count)).toEqual([28, 11, 17, 5, 0, 1, 1]);
     expect(existsSync(join(vendor, 'threejs/threejs-react-three-fiber'))).toBe(false);
   });
 
@@ -83,6 +85,8 @@ describe('vendored skill sets', () => {
     expect(read('sprite-forge/LICENSE')).toContain('Copyright (c) 2026 0x0funky');
     expect(read('video-to-game/LICENSE')).toContain('Copyright (c) 2026 Lovis Odin');
     expect(read('frontend-design/LICENSE.txt')).toContain('Apache License');
+    expect(read('impeccable/LICENSE')).toContain('Apache License');
+    expect(read('impeccable/NOTICE')).toContain('pbakaus/impeccable');
   });
 
   it('pins each set to a full commit in skills.lock', () => {
@@ -92,6 +96,7 @@ describe('vendored skill sets', () => {
       'anthropics/claude-plugins-official',
       'gamedev-skills/awesome-gamedev-agent-skills',
       'lovisdotio/video-to-game',
+      'pbakaus/impeccable',
       'phaserjs/phaser',
     ]);
     for (const set of Object.values(lock.sets)) {
@@ -102,12 +107,27 @@ describe('vendored skill sets', () => {
   });
 });
 
+describe('impeccable worker launcher', () => {
+  it('fails without a preinstalled engine and refuses live mode', () => {
+    const launcher = join(vendor, 'impeccable/impeccable/scripts/impeccable');
+    const env = { IMPECCABLE_BIN: '/nonexistent/impeccable' };
+    const missing = spawnSync('sh', [launcher, 'context'], { env, encoding: 'utf8' });
+    expect(missing.status).toBe(127);
+    expect(missing.stderr).toContain('preinstalled IMPECCABLE_BIN unavailable');
+    for (const command of ['live', 'live-server', 'generate']) {
+      const result = spawnSync('sh', [launcher, command], { env: { IMPECCABLE_BIN: '/bin/true' }, encoding: 'utf8' });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('not available to workers');
+    }
+  });
+});
+
 describe('vendored text runs nothing', () => {
   it('holds no scripts outside the tool sets and no executables anywhere', () => {
     const inToolSet = (f: string) => TOOL_SETS.includes(rel(f).split('/')[0]);
     const runnable = all.filter((f) => !inToolSet(f) && /\.(sh|py|js|mjs|cjs|ts)$/.test(f));
     expect(runnable.map(rel)).toEqual([]);
-    expect(all.filter((f) => (statSync(f).mode & 0o111) !== 0).map(rel)).toEqual([]);
+    expect(all.filter((f) => !rel(f).startsWith('impeccable/') && (statSync(f).mode & 0o111) !== 0).map(rel)).toEqual([]);
   });
 
   // Kevin's policy: no fal, no provider keys. Upstream video-to-game generates every asset with fal; only its local

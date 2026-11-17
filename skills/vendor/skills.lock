@@ -36,6 +36,13 @@
       "license": "Apache-2.0",
       "path": "frontend-design",
       "modified": true
+    },
+    "pbakaus/impeccable": {
+      "sha": "d41d9860b0094dcb68030657da63461212835aaa",
+      "version": "4.9.2",
+      "license": "Apache-2.0",
+      "path": "impeccable",
+      "modified": true
     }
   }
 }
