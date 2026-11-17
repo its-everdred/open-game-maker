@@ -164,10 +164,16 @@ test('two SDK clients stop and resume on the same per-seat tick', async ({ brows
     await starter.leave(true);
     await expect.poll(async () => (await sdkState(peer!))?.tick ?? 0, { timeout: 15_000 }).toBeGreaterThan(2);
     await owner!.getByRole('button', { name: 'Menu' }).click({ force: true });
-    await expect.poll(async () => (await sdkState(owner!))?.paused, { timeout: 15_000 }).toBe(true);
-    await expect.poll(async () => (await sdkState(peer!))?.paused, { timeout: 15_000 }).toBe(true);
-    const [a, b] = await Promise.all([sdkState(owner!), sdkState(peer!)]);
-    expect(a?.tick).toBe(b?.tick);
+    // The menu freezes each clock at once; the room's prepared boundary then runs both to one shared tick.
+    await expect
+      .poll(
+        async () => {
+          const [a, b] = await Promise.all([sdkState(owner!), sdkState(peer!)]);
+          return a?.paused === true && b?.paused === true && a.tick === b.tick ? a.tick : undefined;
+        },
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(2);
     await peer!.getByRole('button', { name: 'Resume' }).click();
     await expect.poll(async () => (await sdkState(peer!))?.paused, { timeout: 15_000 }).toBe(false);
     await expect.poll(async () => (await sdkState(owner!))?.paused, { timeout: 15_000 }).toBe(false);
