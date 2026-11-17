@@ -169,7 +169,12 @@ describe('QA review fixtures (#859)', () => {
       body: JSON.stringify({ run: 'run-1', media: MEDIA }),
     });
     expect(seeded.status).toBe(201);
-    const { gameId, roundId, decisionId } = (await seeded.json()) as Record<string, string>;
+    const { gameId, roundId, decisionId, options } = (await seeded.json()) as {
+      gameId: string;
+      roundId: string;
+      decisionId: string;
+      options: number;
+    };
     expect(gameId).toBe(body.gameId);
 
     // The deck's two sources show the round with its three media and the Command with A-C.
@@ -184,6 +189,8 @@ describe('QA review fixtures (#859)', () => {
     };
     const command = commands.commands.find((item) => item.decision_id === decisionId)!;
     expect(command.options.map((option) => option.id)).toEqual(['a', 'b', 'c']);
+    // The E2E counts the options on screen against this, so a deck that drops one fails it (#863).
+    expect(options).toBe(command.options.length);
     expect(command.options.every((option) => option.media ?? option.audio)).toBe(true);
 
     // The creator asks for changes on the round and picks B on the Command.

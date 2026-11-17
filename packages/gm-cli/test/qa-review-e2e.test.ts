@@ -6,6 +6,13 @@ import { NOTE, PICK_NOTE, reached, reviewE2e, type Report } from '../src/qa-revi
 import { reviewOptionImageReady, reviewRoundMediaReady } from '../src/qa-review-media.js';
 import { gm, tempDir } from './helpers.js';
 
+vi.mock('../src/qa-review-checks.js', () => ({
+  settleMedia: async () => {},
+  mediaFailures: async () => [],
+  swipeDeckFailures: async () => [],
+  optionFailures: async () => [],
+}));
+
 afterEach(() => vi.unstubAllGlobals());
 
 it('rejects broken images and unloaded video or audio in the production readiness gate', () => {
@@ -44,7 +51,7 @@ it.each(['image', 'video', 'audio', 'option'] as const)(
     });
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response('{}', { status: 200 })),
+      vi.fn(async () => new Response('{"options":3}', { status: 200 })),
     );
     const element = {
       click: async () => {},
@@ -95,6 +102,7 @@ it.each(['image', 'video', 'audio', 'option'] as const)(
       cookie: { name: 'session', value: 'test' },
       out: tempDir(),
       injectRegression: false,
+      breakMedia: false,
       stamp: 'test',
     });
     const step = broken === 'option' ? 'pick B on the Command with a note' : 'load the round image, video and audio';

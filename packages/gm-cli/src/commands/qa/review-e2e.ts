@@ -27,6 +27,7 @@ export const command: GmCommand = {
     api: { type: 'string', help: 'the API the host reaches (default: http://127.0.0.1:<OGM_API_PORT>)' },
     out: { type: 'string', help: 'stills folder (default: assets-local/review/app/qa-e2e/<sha>)' },
     'inject-regression': { type: 'boolean', help: 'test only: hide the round note box, which the run must catch' },
+    'break-media': { type: 'boolean', help: 'test only: the review picture answers 404, which the run must catch' },
   },
   async run(ctx, args, flags) {
     if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help qa review-e2e');
@@ -67,6 +68,7 @@ export const command: GmCommand = {
           cookie: { name: qa.OGM_QA_SESSION_COOKIE_NAME!, value: qa.OGM_QA_SESSION_COOKIE! },
           out,
           injectRegression: flags['inject-regression'] === true,
+          breakMedia: flags['break-media'] === true,
           stamp: `${sha
             .slice(0, 12)
             .toLowerCase()

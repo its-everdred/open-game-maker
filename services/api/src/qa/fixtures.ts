@@ -85,7 +85,12 @@ export async function seedReviewFixtures(deps: AppDeps, run: string, media: QaMe
   updateQaState(deps.db, (next) => {
     next.decisions = [...next.decisions.filter((d) => d.decision_id !== decision.decision_id), decision];
   });
-  return { gameId: state.gameId, roundId: roundId(run), decisionId: decision.decision_id };
+  return {
+    gameId: state.gameId,
+    roundId: roundId(run),
+    decisionId: decision.decision_id,
+    options: decision.options.length,
+  };
 }
 
 // What the app did with the run's two verdicts: the round's stored verdict and its dispatch, and what reached the QA
