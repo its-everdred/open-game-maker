@@ -330,11 +330,25 @@ export async function measureImageDistortion(
             const y = rect.top + ((parseFloat(style.borderTopWidth) || 0) + parseFloat(generated.top)) * transform.d;
             const width = parseFloat(generated.width) * transform.a;
             const height = parseFloat(generated.height) * transform.d;
-            if (
-              [x, y, width, height].every(Number.isFinite) &&
-              (x + width <= 0 || y + height <= 0 || x >= innerWidth || y >= innerHeight)
-            )
-              continue;
+            if ([x, y, width, height].every(Number.isFinite)) {
+              let left = Math.max(0, x),
+                top = Math.max(0, y);
+              let right = Math.min(innerWidth, x + width),
+                bottom = Math.min(innerHeight, y + height);
+              for (let parent: HTMLElement | null = element; parent; parent = parentOf(parent)) {
+                const parentStyle = getComputedStyle(parent);
+                const bounds = parent.getBoundingClientRect();
+                if (['hidden', 'clip', 'auto', 'scroll'].includes(parentStyle.overflowX)) {
+                  left = Math.max(left, bounds.left);
+                  right = Math.min(right, bounds.right);
+                }
+                if (['hidden', 'clip', 'auto', 'scroll'].includes(parentStyle.overflowY)) {
+                  top = Math.max(top, bounds.top);
+                  bottom = Math.min(bottom, bounds.bottom);
+                }
+              }
+              if (left >= right || top >= bottom) continue;
+            }
           }
           const files = urls(generated.backgroundImage).filter(raster);
           const intrinsic = splitLayers(generated.backgroundSize).every((size) => {

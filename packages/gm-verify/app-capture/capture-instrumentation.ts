@@ -365,6 +365,7 @@ export function trackShadowRoots(): void {
       c: matrix.c,
       d: matrix.d,
       unverifiedClip: unknownClips.has(this),
+      unverifiedComposite: !['source-over', 'copy'].includes(this.globalCompositeOperation),
     };
     let entries = canvasDraws.get(this.canvas);
     if (!entries) {
@@ -382,6 +383,7 @@ export function trackShadowRoots(): void {
       matrix.c,
       matrix.d,
       draw.unverifiedClip,
+      draw.unverifiedComposite,
     ]);
     if (entries.size >= 10_000 && !entries.has(key)) {
       entries.set('__overflow__', { ...draw, sourceWidth: 0, sourceHeight: 0 });

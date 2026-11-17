@@ -51,6 +51,15 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
     await page.setContent(
       `<style>#anchor::before, #offscreen::before { content:''; display:block; width:90px; height:30px; background:url("${png}") 0 0 / 100% 100%; } #offscreen::before { position:absolute; right:0; bottom:0; }</style><div style="visibility:hidden"><img id="visible" src="${png}" style="visibility:visible;width:90px;height:30px"></div><div style="width:1px;height:1px;overflow:hidden"><canvas width="90" height="30" style="position:relative;left:100px"></canvas></div><canvas width="10" height="10"></canvas><div id="anchor" style="width:1px;height:1px"></div><div id="offscreen" style="position:fixed;left:0;top:0;width:30px;height:30px;transform:translateX(-500px) scale(.9)"></div><div id="fixed" style="width:100px;height:100px;background:url('${png}') 0 0 / 100% 100% fixed"></div><span id="badge" style="background:url('${png}') 0 0 / 20px 20px">long enough badge</span><img id="covered" src="${png}" style="position:fixed;left:10px;top:500px;width:90px;height:30px"><div style="position:fixed;left:0;top:490px;width:120px;height:50px;background:rgb(0,0,0)"></div>`,
     );
+    await page.evaluate((src) => {
+      const style = document.createElement('style');
+      style.textContent = `#clipped-pseudo::before { content:''; position:absolute; left:0; top:0; width:90px; height:30px; background:url("${src}") 0 0 / 100% 100% }`;
+      document.head.append(style);
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'width:10px;height:10px;overflow:hidden;position:relative';
+      wrapper.innerHTML = '<div id="clipped-pseudo" style="position:absolute;left:100px;width:30px;height:30px"></div>';
+      document.body.append(wrapper);
+    }, png);
     await page.locator('#visible').evaluate((image: HTMLImageElement) => image.decode());
     const findings = await measureImageDistortion(page.mainFrame(), '390x844', 'play', true);
     expect(findings.map((item) => item.element)).toEqual(
@@ -58,6 +67,7 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
     );
     expect(findings.map((item) => item.element)).not.toContain('#covered');
     expect(findings.map((item) => item.element)).not.toContain('#offscreen::before');
+    expect(findings.map((item) => item.element)).not.toContain('#clipped-pseudo::before');
     expect(findings.map((item) => item.element)).not.toContain('#badge');
     expect(findings.map((item) => item.element)).not.toContain('canvas');
   } finally {
@@ -236,6 +246,19 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
     });
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
       expect.objectContaining({ error: 'canvas clip cannot be measured reliably' }),
+    );
+    await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
+      canvas.width = canvas.width;
+      const ctx = canvas.getContext('2d')!;
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      ctx.globalCompositeOperation = 'source-in';
+      ctx.drawImage(source, 0, 0, 30, 30);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
+      expect.objectContaining({ error: 'canvas composite cannot be measured reliably' }),
     );
     await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
