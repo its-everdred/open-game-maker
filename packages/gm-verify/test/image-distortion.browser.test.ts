@@ -3,10 +3,12 @@ import { expect, it } from 'vitest';
 import { measureImageDistortion } from '../app-capture/image-distortion.js';
 import { frameCovered, frameTransform } from '../app-capture/frame-geometry.js';
 import { trackShadowRoots } from '../app-capture/capture-instrumentation.js';
-import { SOFTWARE_ARGS } from '../src/browser.js';
+import { GPU_ARGS, SOFTWARE_ARGS } from '../src/browser.js';
+
+const browserArgs = process.env.GM_VERIFY_SOFTWARE_GL === '1' ? SOFTWARE_ARGS : GPU_ARGS;
 
 it('reports stretched raster images and sprites, but accepts 9-slice and hidden images', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     const png = await page.evaluate(() => {
@@ -38,7 +40,7 @@ it('reports stretched raster images and sprites, but accepts 9-slice and hidden 
 });
 
 it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo anchors', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     const png = await page.evaluate(() => {
@@ -47,7 +49,7 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
       return canvas.toDataURL();
     });
     await page.setContent(
-      `<style>#anchor::before { content:''; display:block; width:90px; height:30px; background:url("${png}") 0 0 / 100% 100%; }</style><div style="visibility:hidden"><img id="visible" src="${png}" style="visibility:visible;width:90px;height:30px"></div><div style="width:1px;height:1px;overflow:hidden"><canvas width="90" height="30" style="position:relative;left:100px"></canvas></div><canvas width="10" height="10"></canvas><div id="anchor" style="width:1px;height:1px"></div><div id="fixed" style="width:100px;height:100px;background:url('${png}') 0 0 / 100% 100% fixed"></div><span id="badge" style="background:url('${png}') 0 0 / 20px 20px">long enough badge</span><img id="covered" src="${png}" style="position:fixed;left:10px;top:500px;width:90px;height:30px"><div style="position:fixed;left:0;top:490px;width:120px;height:50px;background:rgb(0,0,0)"></div>`,
+      `<style>#anchor::before, #offscreen::before { content:''; display:block; width:90px; height:30px; background:url("${png}") 0 0 / 100% 100%; }</style><div style="visibility:hidden"><img id="visible" src="${png}" style="visibility:visible;width:90px;height:30px"></div><div style="width:1px;height:1px;overflow:hidden"><canvas width="90" height="30" style="position:relative;left:100px"></canvas></div><canvas width="10" height="10"></canvas><div id="anchor" style="width:1px;height:1px"></div><div id="offscreen" style="position:fixed;left:-500px;top:0;width:30px;height:30px"></div><div id="fixed" style="width:100px;height:100px;background:url('${png}') 0 0 / 100% 100% fixed"></div><span id="badge" style="background:url('${png}') 0 0 / 20px 20px">long enough badge</span><img id="covered" src="${png}" style="position:fixed;left:10px;top:500px;width:90px;height:30px"><div style="position:fixed;left:0;top:490px;width:120px;height:50px;background:rgb(0,0,0)"></div>`,
     );
     await page.locator('#visible').evaluate((image: HTMLImageElement) => image.decode());
     const findings = await measureImageDistortion(page.mainFrame(), '390x844', 'play', true);
@@ -55,6 +57,7 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
       expect.arrayContaining(['#visible', '#anchor::before', '#fixed']),
     );
     expect(findings.map((item) => item.element)).not.toContain('#covered');
+    expect(findings.map((item) => item.element)).not.toContain('#offscreen::before');
     expect(findings.map((item) => item.element)).not.toContain('#badge');
     expect(findings.map((item) => item.element)).not.toContain('canvas');
   } finally {
@@ -63,7 +66,7 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
 });
 
 it('composes standalone rotation with the embedding iframe transform', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
     const png = await page.evaluate(() => {
@@ -94,7 +97,7 @@ it('composes standalone rotation with the embedding iframe transform', async () 
 });
 
 it('detects an unreported dynamic canvas draw even when the SDK attests an empty frame', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await page.evaluate(trackShadowRoots);
@@ -115,7 +118,7 @@ it('detects an unreported dynamic canvas draw even when the SDK attests an empty
 });
 
 it('ignores invisible canvas draws and forgets draws after a restored clip and clear', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage();
     await page.evaluate(trackShadowRoots);
@@ -141,8 +144,11 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
       ctx.clip();
       ctx.drawImage(source, 0, 0, 30, 30);
       ctx.restore();
-      ctx.clearRect(0, 0, 90, 90);
     });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
+      expect.objectContaining({ element: '#ui', natural: 3, drawn: 1 }),
+    );
+    await page.locator('#ui').evaluate((canvas: HTMLCanvasElement) => canvas.getContext('2d')!.clearRect(0, 0, 90, 90));
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
     await page.evaluate(() => {
       const source = document.createElement('canvas');
@@ -150,6 +156,12 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
       source.height = 30;
       const ctx = document.querySelector<HTMLCanvasElement>('#ui')!.getContext('2d')!;
       ctx.drawImage(source, 0, 0, 30, 30);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
+      expect.objectContaining({ element: '#ui', natural: 3, drawn: 1 }),
+    );
+    await page.evaluate(() => {
+      const ctx = document.querySelector<HTMLCanvasElement>('#ui')!.getContext('2d')!;
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, 90, 90);
     });
@@ -160,7 +172,7 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
 });
 
 it('does not accept an empty UI report for a WebGL canvas', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await page.evaluate(trackShadowRoots);
@@ -234,7 +246,7 @@ it('does not accept an empty UI report for a WebGL canvas', async () => {
 });
 
 it('reports canvas patterns and transferred canvases as unverified', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage();
     await page.evaluate(trackShadowRoots);
@@ -259,7 +271,7 @@ it('reports canvas patterns and transferred canvases as unverified', async () =>
 });
 
 it('tracks DOM mutations that can invalidate a capture measurement', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage();
     await page.evaluate(trackShadowRoots);
@@ -285,7 +297,7 @@ it('tracks DOM mutations that can invalidate a capture measurement', async () =>
 });
 
 it('inspects shadow roots, pseudo-elements and stylesheet-resistant size probes', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await page.evaluate(trackShadowRoots);
@@ -317,7 +329,7 @@ it('inspects shadow roots, pseudo-elements and stylesheet-resistant size probes'
 });
 
 it('detects calculated sizes and transforms and reports unsupported image sets', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
     const png = await page.evaluate(() => {
@@ -345,7 +357,7 @@ it('detects calculated sizes and transforms and reports unsupported image sets',
 });
 
 it('accepts exactly two percent but reports a larger change', async () => {
-  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
   try {
     const page = await browser.newPage();
     const png = await page.evaluate(() => {

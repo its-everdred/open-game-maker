@@ -194,6 +194,17 @@ export function scanImageStretch(root: string): GateCheck[] {
         property = node.left.name.text;
         value = node.right;
       } else if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === 'setProperty' &&
+        ts.isPropertyAccessExpression(node.expression.expression) &&
+        node.expression.expression.name.text === 'style' &&
+        node.arguments[0] &&
+        ts.isStringLiteralLike(node.arguments[0])
+      ) {
+        property = node.arguments[0].text.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+        value = node.arguments[1];
+      } else if (
         ts.isPropertyAssignment(node) &&
         ts.isObjectLiteralExpression(node.parent) &&
         ((ts.isJsxExpression(node.parent.parent) &&
@@ -204,10 +215,17 @@ export function scanImageStretch(root: string): GateCheck[] {
         property = node.name.getText(source).replace(/^["']|["']$/g, '');
         value = node.initializer;
       }
-      if (value && ts.isStringLiteralLike(value)) {
-        if (property === 'objectFit' && value.text === 'fill')
+      const literals = (expression: ts.Expression): string[] =>
+        ts.isStringLiteralLike(expression)
+          ? [expression.text]
+          : ts.isConditionalExpression(expression)
+            ? [...literals(expression.whenTrue), ...literals(expression.whenFalse)]
+            : [];
+      if (value) {
+        const options = literals(value);
+        if (property === 'objectFit' && options.includes('fill'))
           report(file, text, node.getStart(source), 'image may be stretched by objectFit');
-        if (property === 'backgroundSize' && twoLengths.test(value.text))
+        if (property === 'backgroundSize' && options.some((option) => twoLengths.test(option)))
           report(file, text, node.getStart(source), 'background may be stretched by backgroundSize');
       }
       if (

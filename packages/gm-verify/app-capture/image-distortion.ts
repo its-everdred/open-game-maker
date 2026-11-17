@@ -294,6 +294,17 @@ export async function measureImageDistortion(
             Number(generated.opacity) === 0
           )
             continue;
+          if (generated.position === 'static' && generated.transform === 'none') {
+            const width = parseFloat(generated.width) || 0;
+            const height = parseFloat(generated.height) || 0;
+            if (
+              rect.right + width <= 0 ||
+              rect.bottom + height <= 0 ||
+              rect.left - width >= innerWidth ||
+              rect.top - height >= innerHeight
+            )
+              continue;
+          }
           const files = urls(generated.backgroundImage).filter(raster);
           const intrinsic = splitLayers(generated.backgroundSize).every((size) => {
             const parts = splitSize(size.trim());

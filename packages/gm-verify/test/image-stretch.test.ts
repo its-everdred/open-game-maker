@@ -82,6 +82,19 @@ it('recognizes stylesheet fits, style properties and variable-backed backgrounds
   }
 });
 
+it('detects literal stretch in setProperty and conditional inline styles', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-stretch-dynamic-'));
+  try {
+    writeFileSync(
+      join(root, 'view.tsx'),
+      "element.style.setProperty('object-fit', 'fill');\nconst x = <img style={{ objectFit: selected ? 'contain' : 'fill' }} />;",
+    );
+    expect(runL0(root, { checks: ['image-stretch'] }).checks.map((item) => item.line)).toEqual([1, 2]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it('ignores prototypes and does not borrow unrelated or conditional stylesheet rules', () => {
   const root = mkdtempSync(join(tmpdir(), 'gm-stretch-scope-'));
   try {
