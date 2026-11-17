@@ -104,6 +104,13 @@ it('ignores prototypes and does not borrow unrelated or conditional stylesheet r
       '<!-- <link href="./other.css"> --><img class="hero" width="90" height="30">',
     );
     expect(runL0(root, { checks: ['image-stretch'] }).checks.map((item) => item.file)).toEqual(['page.html']);
+    for (const link of [
+      '<link rel="stylesheet" href="./other.css" disabled>',
+      '<link rel="preload" as="style" href="./other.css">',
+    ]) {
+      writeFileSync(join(root, 'page.html'), `${link}<img class="hero" width="90" height="30">`);
+      expect(runL0(root, { checks: ['image-stretch'] }).checks.map((item) => item.file)).toEqual(['page.html']);
+    }
     writeFileSync(
       join(root, 'page.html'),
       '<link href="./other.css" media="(min-width:1000px)"><img class="hero" width="90" height="30">',

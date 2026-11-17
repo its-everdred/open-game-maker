@@ -75,10 +75,13 @@ it('composes standalone rotation with the embedding iframe transform', async () 
       '<iframe style="width:300px;height:300px;transform:scale(2,1);transform-origin:top left"></iframe>',
     );
     const frame = page.frames()[1]!;
-    await frame.setContent(`<img id="rotated" src="${png}" style="width:100px;height:200px;rotate:90deg">`);
+    await frame.setContent(
+      `<img id="rotated" src="${png}" style="width:100px;height:200px;rotate:90deg"><img id="small" src="${png}" style="width:20px;height:10px">`,
+    );
     await frame.locator('#rotated').evaluate((image: HTMLImageElement) => image.decode());
     const findings = await measureImageDistortion(frame, '800x600', 'play', false, await frameTransform(frame));
     expect(findings).toContainEqual(expect.objectContaining({ element: '#rotated' }));
+    expect(findings).toContainEqual(expect.objectContaining({ element: '#small' }));
     await page.evaluate(() => {
       const overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;background:#000';
@@ -111,6 +114,51 @@ it('detects an unreported dynamic canvas draw even when the SDK attests an empty
   }
 });
 
+it('ignores invisible canvas draws and forgets draws after a restored clip and clear', async () => {
+  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  try {
+    const page = await browser.newPage();
+    await page.evaluate(trackShadowRoots);
+    await page.setContent('<canvas id="ui" width="90" height="90"></canvas>');
+    await page.evaluate(() => {
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      const ctx = document.querySelector<HTMLCanvasElement>('#ui')!.getContext('2d')!;
+      ctx.drawImage(source, -100, -100, 30, 30);
+      ctx.globalAlpha = 0;
+      ctx.drawImage(source, 0, 0, 30, 30);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
+    await page.evaluate(() => {
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      const ctx = document.querySelector<HTMLCanvasElement>('#ui')!.getContext('2d')!;
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.rect(0, 0, 30, 30);
+      ctx.clip();
+      ctx.drawImage(source, 0, 0, 30, 30);
+      ctx.restore();
+      ctx.clearRect(0, 0, 90, 90);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
+    await page.evaluate(() => {
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      const ctx = document.querySelector<HTMLCanvasElement>('#ui')!.getContext('2d')!;
+      ctx.drawImage(source, 0, 0, 30, 30);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, 90, 90);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
+  } finally {
+    await browser.close();
+  }
+});
+
 it('does not accept an empty UI report for a WebGL canvas', async () => {
   const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
   try {
@@ -124,13 +172,31 @@ it('does not accept an empty UI report for a WebGL canvas', async () => {
       return !!gl;
     });
     expect(available).toBe(true);
+    await page.evaluate(() => (window as unknown as { __gmBeginUiFrame: () => void }).__gmBeginUiFrame());
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play', true)).toContainEqual(
       expect.objectContaining({ error: expect.stringContaining('WebGL UI coverage') }),
     );
     await page.evaluate(() => {
       (window as unknown as { __gm: unknown }).__gm = {
         imageDraws: () => [
-          { id: 'only-one', file: 'a.png', source: { width: 30, height: 30 }, drawn: { width: 30, height: 30 } },
+          { id: 'unrelated', file: 'a.png', source: { width: 30, height: 30 }, drawn: { width: 30, height: 30 } },
+        ],
+        imageDrawsReady: () => true,
+      };
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play', true)).toContainEqual(
+      expect.objectContaining({ error: expect.stringContaining('WebGL UI coverage') }),
+    );
+    await page.evaluate(() => {
+      (window as unknown as { __gm: unknown }).__gm = {
+        imageDraws: () => [
+          {
+            id: 'only-one',
+            canvasId: 'webgl',
+            file: 'a.png',
+            source: { width: 30, height: 30 },
+            drawn: { width: 30, height: 30 },
+          },
         ],
         imageDrawsReady: () => true,
       };
@@ -141,7 +207,13 @@ it('does not accept an empty UI report for a WebGL canvas', async () => {
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       (window as unknown as { __gm: unknown }).__gm = {
         imageDraws: () => [
-          { id: 'only-one', file: 'a.png', source: { width: 30, height: 30 }, drawn: { width: 30, height: 30 } },
+          {
+            id: 'only-one',
+            canvasId: 'webgl',
+            file: 'a.png',
+            source: { width: 30, height: 30 },
+            drawn: { width: 30, height: 30 },
+          },
         ],
         imageDrawsReady: () => true,
       };
@@ -161,6 +233,31 @@ it('does not accept an empty UI report for a WebGL canvas', async () => {
   }
 });
 
+it('reports canvas patterns and transferred canvases as unverified', async () => {
+  const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
+  try {
+    const page = await browser.newPage();
+    await page.evaluate(trackShadowRoots);
+    await page.setContent(
+      '<canvas id="pattern" width="90" height="90"></canvas><canvas id="worker" width="90" height="90"></canvas>',
+    );
+    await page.evaluate(() => {
+      const image = document.createElement('canvas');
+      image.width = 90;
+      image.height = 30;
+      const ctx = document.querySelector<HTMLCanvasElement>('#pattern')!.getContext('2d')!;
+      ctx.fillStyle = ctx.createPattern(image, 'repeat')!;
+      ctx.fillRect(0, 0, 90, 90);
+      document.querySelector<HTMLCanvasElement>('#worker')!.transferControlToOffscreen();
+    });
+    const findings = await measureImageDistortion(page.mainFrame(), '390x844', 'play');
+    expect(findings).toContainEqual(expect.objectContaining({ error: 'canvas pattern rendering cannot be verified' }));
+    expect(findings).toContainEqual(expect.objectContaining({ error: 'worker canvas rendering cannot be verified' }));
+  } finally {
+    await browser.close();
+  }
+});
+
 it('tracks DOM mutations that can invalidate a capture measurement', async () => {
   const browser = await chromium.launch({ headless: true, args: SOFTWARE_ARGS });
   try {
@@ -173,6 +270,15 @@ it('tracks DOM mutations that can invalidate a capture measurement', async () =>
       return [before, version()];
     });
     expect(versions[1]).toBeGreaterThan(versions[0]!);
+    const stylesheetVersions = await page.evaluate(() => {
+      const style = document.createElement('style');
+      document.head.append(style);
+      const version = (window as unknown as { __gmCaptureVersion: () => number }).__gmCaptureVersion;
+      const before = version();
+      style.sheet!.insertRule('body { transform: scale(2, 1) }');
+      return [before, version()];
+    });
+    expect(stylesheetVersions[1]).toBeGreaterThan(stylesheetVersions[0]!);
   } finally {
     await browser.close();
   }

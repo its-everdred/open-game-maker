@@ -2,6 +2,8 @@
 export type ImageDraw = {
   id: string;
   file: string;
+  /** DOM id of the WebGL UI canvas, when the sprite is rendered with WebGL. */
+  canvasId?: string;
   source: { width: number; height: number };
   drawn: { width: number; height: number };
 };
@@ -28,11 +30,7 @@ export function resetImageDraws(): void {
 }
 
 export function imageDrawsReady(): boolean {
-  const now =
-    typeof window === 'undefined'
-      ? performance.now()
-      : ((window as unknown as { __gmCapturePausedAt?: number }).__gmCapturePausedAt ?? performance.now());
-  return lastFrame !== undefined && now - lastFrame < 1_000;
+  return lastFrame !== undefined;
 }
 
 export function reportImageDraw(draw: ImageDraw): void {

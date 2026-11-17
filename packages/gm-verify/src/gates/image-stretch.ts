@@ -90,6 +90,10 @@ export function scanImageStretch(root: string): GateCheck[] {
         const start = content.lastIndexOf('<link', match.index);
         const end = content.indexOf('>', start);
         if (start >= 0 && end >= match.index) {
+          const link = content.slice(start, end + 1);
+          const rel = /\brel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(link);
+          if (!rel || !(rel[1] ?? rel[2] ?? rel[3] ?? '').toLowerCase().split(/\s+/).includes('stylesheet')) continue;
+          if (/\sdisabled(?:\s|=|\/?>)/i.test(link)) continue;
           const media = /\bmedia\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(content.slice(start, end + 1));
           if (media && (media[1] ?? media[2] ?? media[3] ?? '').trim().toLowerCase() !== 'all') continue;
         }

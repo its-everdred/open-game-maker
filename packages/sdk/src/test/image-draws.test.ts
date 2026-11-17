@@ -17,7 +17,7 @@ it('reports only the current UI frame and returns a snapshot', () => {
   expect(imageDraws()).toEqual([]);
 });
 
-it('does not attest a missing or stale frame', () => {
+it('retains a static frame until reset', () => {
   const clock = vi.spyOn(performance, 'now').mockReturnValue(100);
   try {
     resetImageDraws();
@@ -25,7 +25,7 @@ it('does not attest a missing or stale frame', () => {
     beginImageDraws();
     expect(imageDrawsReady()).toBe(true);
     clock.mockReturnValue(1_100);
-    expect(imageDrawsReady()).toBe(false);
+    expect(imageDrawsReady()).toBe(true);
   } finally {
     clock.mockRestore();
     resetImageDraws();

@@ -41,6 +41,19 @@ export function trackShadowRoots(): void {
     if (records.some(relevant)) version++;
   });
   observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  for (const name of ['insertRule', 'deleteRule', 'replaceSync'] as const) {
+    const original = CSSStyleSheet.prototype[name];
+    if (typeof original !== 'function') continue;
+    Object.defineProperty(CSSStyleSheet.prototype, name, {
+      configurable: true,
+      writable: true,
+      value: function (this: CSSStyleSheet, ...args: unknown[]) {
+        const result = Reflect.apply(original, this, args);
+        version++;
+        return result;
+      },
+    });
+  }
   type Draw = {
     canvas: HTMLCanvasElement;
     file: string;
@@ -54,9 +67,24 @@ export function trackShadowRoots(): void {
     d: number;
   };
   const canvasDraws = new Map<HTMLCanvasElement, Map<string, Draw>>();
+  const patternedCanvases = new Set<HTMLCanvasElement>();
   const webglCanvases = new Set<HTMLCanvasElement>();
+  const transferredCanvases = new Set<HTMLCanvasElement>();
+  const transfer = HTMLCanvasElement.prototype.transferControlToOffscreen;
+  if (transfer)
+    HTMLCanvasElement.prototype.transferControlToOffscreen = function () {
+      const result = transfer.call(this);
+      transferredCanvases.add(this);
+      return result;
+    };
   const webglDraws = new Map<HTMLCanvasElement, { count: number; unsupported: boolean }>();
   const webglExtensions = new Set<HTMLCanvasElement>();
+  const visibleCanvas = (canvas: HTMLCanvasElement) => {
+    if (!canvas.isConnected) return false;
+    const rect = canvas.getBoundingClientRect();
+    const style = getComputedStyle(canvas);
+    return style.display !== 'none' && style.visibility === 'visible' && rect.width > 0 && rect.height > 0;
+  };
   const originalContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...args: unknown[]) {
     const context = Reflect.apply(originalContext, this, [kind, ...args]);
@@ -85,6 +113,17 @@ export function trackShadowRoots(): void {
         ...descriptor,
         value: function (this: unknown, ...args: unknown[]) {
           const result = Reflect.apply(original, this, args);
+          if (name === 'clear') {
+            const gl = this as WebGLRenderingContext | WebGL2RenderingContext;
+            if (
+              gl.canvas instanceof HTMLCanvasElement &&
+              (Number(args[0]) & gl.COLOR_BUFFER_BIT) !== 0 &&
+              gl.getParameter(gl.FRAMEBUFFER_BINDING) === null &&
+              !gl.isEnabled(gl.SCISSOR_TEST) &&
+              (gl.getParameter(gl.COLOR_WRITEMASK) as boolean[]).every(Boolean)
+            )
+              webglDraws.delete(gl.canvas);
+          }
           if (name.startsWith('draw') || name === 'blitFramebuffer') {
             const gl = this as WebGLRenderingContext | WebGL2RenderingContext;
             const canvas = gl.canvas;
@@ -105,7 +144,8 @@ export function trackShadowRoots(): void {
               webglDraws.set(canvas, entry);
             }
           }
-          version++;
+          const canvas = (this as WebGLRenderingContext).canvas;
+          if (canvas instanceof HTMLCanvasElement && visibleCanvas(canvas)) version++;
           return result;
         },
       });
@@ -135,7 +175,7 @@ export function trackShadowRoots(): void {
     ...args: number[]
   ) {
     Reflect.apply(originalDraw, this, [image, ...args]);
-    version++;
+    if (visibleCanvas(this.canvas)) version++;
     const source = image as CanvasImageSource & {
       naturalWidth?: number;
       naturalHeight?: number;
@@ -148,11 +188,32 @@ export function trackShadowRoots(): void {
     };
     const naturalWidth = source.naturalWidth ?? source.videoWidth ?? source.width ?? 0;
     const naturalHeight = source.naturalHeight ?? source.videoHeight ?? source.height ?? 0;
-    const sourceWidth = args.length === 8 ? args[2]! : naturalWidth;
+    const sourceWidth =
+      typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas
+        ? 0
+        : args.length === 8
+          ? args[2]!
+          : naturalWidth;
     const sourceHeight = args.length === 8 ? args[3]! : naturalHeight;
     const drawnWidth = args.length === 8 ? args[6]! : args.length === 4 ? args[2]! : sourceWidth;
     const drawnHeight = args.length === 8 ? args[7]! : args.length === 4 ? args[3]! : sourceHeight;
     const matrix = this.getTransform();
+    const x = args.length === 8 ? args[4]! : args[0]!;
+    const y = args.length === 8 ? args[5]! : args[1]!;
+    const corners = [
+      new DOMPoint(x, y),
+      new DOMPoint(x + drawnWidth, y),
+      new DOMPoint(x, y + drawnHeight),
+      new DOMPoint(x + drawnWidth, y + drawnHeight),
+    ].map((point) => point.matrixTransform(matrix));
+    if (
+      this.globalAlpha === 0 ||
+      corners.every((point) => point.x <= 0) ||
+      corners.every((point) => point.y <= 0) ||
+      corners.every((point) => point.x >= this.canvas.width) ||
+      corners.every((point) => point.y >= this.canvas.height)
+    )
+      return;
     const file = source.currentSrc || source.src || 'canvas source';
     const draw = {
       canvas: this.canvas,
@@ -188,6 +249,23 @@ export function trackShadowRoots(): void {
   } as typeof CanvasRenderingContext2D.prototype.drawImage;
   const originalClear = CanvasRenderingContext2D.prototype.clearRect;
   const clippedContexts = new WeakSet<CanvasRenderingContext2D>();
+  const clipStack = new WeakMap<CanvasRenderingContext2D, boolean[]>();
+  const originalSave = CanvasRenderingContext2D.prototype.save;
+  const originalRestore = CanvasRenderingContext2D.prototype.restore;
+  CanvasRenderingContext2D.prototype.save = function () {
+    const stack = clipStack.get(this) ?? [];
+    stack.push(clippedContexts.has(this));
+    clipStack.set(this, stack);
+    originalSave.call(this);
+  };
+  CanvasRenderingContext2D.prototype.restore = function () {
+    const stack = clipStack.get(this);
+    if (stack?.length) {
+      if (stack.pop()) clippedContexts.add(this);
+      else clippedContexts.delete(this);
+    }
+    originalRestore.call(this);
+  };
   const originalClip = CanvasRenderingContext2D.prototype.clip;
   CanvasRenderingContext2D.prototype.clip = function (this: CanvasRenderingContext2D, ...args: unknown[]) {
     Reflect.apply(originalClip, this, args);
@@ -202,11 +280,50 @@ export function trackShadowRoots(): void {
       y <= 0 &&
       width >= this.canvas.width &&
       height >= this.canvas.height
-    )
+    ) {
       canvasDraws.delete(this.canvas);
+      patternedCanvases.delete(this.canvas);
+    }
     originalClear.call(this, x, y, width, height);
-    version++;
+    if (visibleCanvas(this.canvas)) version++;
   };
+  const originalFill = CanvasRenderingContext2D.prototype.fillRect;
+  CanvasRenderingContext2D.prototype.fillRect = function (x, y, width, height) {
+    const style = this.fillStyle;
+    if (
+      !clippedContexts.has(this) &&
+      this.getTransform().isIdentity &&
+      this.globalAlpha === 1 &&
+      (this.globalCompositeOperation === 'source-over' || this.globalCompositeOperation === 'copy') &&
+      typeof style === 'string' &&
+      (/^#[0-9a-f]{6}$/i.test(style) || /^rgb\(/i.test(style)) &&
+      x <= 0 &&
+      y <= 0 &&
+      width >= this.canvas.width &&
+      height >= this.canvas.height
+    ) {
+      canvasDraws.delete(this.canvas);
+      patternedCanvases.delete(this.canvas);
+    }
+    if (style instanceof CanvasPattern) patternedCanvases.add(this.canvas);
+    originalFill.call(this, x, y, width, height);
+    if (visibleCanvas(this.canvas)) version++;
+  };
+  for (const name of ['fill', 'stroke', 'strokeRect', 'fillText', 'strokeText', 'putImageData', 'reset'] as const) {
+    const original = CanvasRenderingContext2D.prototype[name];
+    if (typeof original !== 'function') continue;
+    Object.defineProperty(CanvasRenderingContext2D.prototype, name, {
+      configurable: true,
+      writable: true,
+      value: function (this: CanvasRenderingContext2D, ...args: unknown[]) {
+        const result = Reflect.apply(original, this, args);
+        const style = name.startsWith('stroke') ? this.strokeStyle : this.fillStyle;
+        if (style instanceof CanvasPattern) patternedCanvases.add(this.canvas);
+        if (visibleCanvas(this.canvas)) version++;
+        return result;
+      },
+    });
+  }
   for (const key of ['width', 'height'] as const) {
     const descriptor = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, key);
     if (descriptor?.set && descriptor.configurable)
@@ -214,8 +331,9 @@ export function trackShadowRoots(): void {
         ...descriptor,
         set(value: number) {
           canvasDraws.delete(this as HTMLCanvasElement);
+          patternedCanvases.delete(this as HTMLCanvasElement);
           descriptor.set!.call(this, value);
-          version++;
+          if (visibleCanvas(this as HTMLCanvasElement)) version++;
         },
       });
   }
@@ -224,7 +342,9 @@ export function trackShadowRoots(): void {
     __gmCaptureVersion: () => number;
     __gmIgnoreCaptureProbe: (node: Node) => void;
     __gmCanvasDraws: () => Draw[];
+    __gmPatternedCanvases: () => HTMLCanvasElement[];
     __gmWebglCanvases: () => HTMLCanvasElement[];
+    __gmTransferredCanvases: () => HTMLCanvasElement[];
     __gmWebglDraws: () => { canvas: HTMLCanvasElement; count: number; unsupported: boolean }[];
     __gmBeginUiFrame: () => void;
     __gmCapturePause: () => void;
@@ -238,13 +358,15 @@ export function trackShadowRoots(): void {
     return [...canvasDraws.values()].flatMap((entries) => [...entries.values()]);
   };
   debug.__gmWebglCanvases = () => [...webglCanvases].filter((canvas) => canvas.isConnected);
+  debug.__gmPatternedCanvases = () => [...patternedCanvases].filter((canvas) => canvas.isConnected);
+  debug.__gmTransferredCanvases = () => [...transferredCanvases].filter((canvas) => canvas.isConnected);
   debug.__gmWebglDraws = () =>
     [...webglCanvases].map((canvas) => ({
       canvas,
       count: webglDraws.get(canvas)?.count ?? 0,
       unsupported: webglDraws.get(canvas)?.unsupported === true || webglExtensions.has(canvas),
     }));
-  debug.__gmBeginUiFrame = () => webglDraws.clear();
+  debug.__gmBeginUiFrame = () => {};
   let animations: Animation[] = [];
   debug.__gmCapturePause = () => {
     paused = true;

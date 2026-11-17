@@ -241,7 +241,11 @@ export async function measureImageDistortion(
           visible.left < visible.right &&
           visible.top < visible.bottom &&
           !obscured;
-        if (hostVisible && Math.max(rect.width, rect.height) >= 24) visibleElements.add(element);
+        const displayedSize = Math.max(
+          Math.abs(outer.a) * rect.width + Math.abs(outer.c) * rect.height,
+          Math.abs(outer.b) * rect.width + Math.abs(outer.d) * rect.height,
+        );
+        if (hostVisible && displayedSize >= 24) visibleElements.add(element);
         let transform = new DOMMatrix();
         let unmeasurableTransform = outer.unmeasurable === true;
         for (let node: HTMLElement | null = element; node; node = parentOf(node)) {
@@ -357,7 +361,7 @@ export async function measureImageDistortion(
             });
           }
         }
-        if (!hostVisible || Math.max(rect.width, rect.height) < 24) continue;
+        if (!hostVisible || displayedSize < 24) continue;
         const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
         const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
         const borderX = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
@@ -487,6 +491,7 @@ export async function measureImageDistortion(
             imageDraws?: () => {
               id: string;
               file: string;
+              canvasId?: string;
               source: { width: number; height: number };
               drawn: { width: number; height: number };
             }[];
@@ -570,6 +575,27 @@ export async function measureImageDistortion(
         results.push({ element: 'canvas', file: '', natural: 0, drawn: 0, error: 'invalid SDK sprite report' });
       const webgl =
         (window as unknown as { __gmWebglCanvases?: () => HTMLCanvasElement[] }).__gmWebglCanvases?.() ?? [];
+      const patterned =
+        (window as unknown as { __gmPatternedCanvases?: () => HTMLCanvasElement[] }).__gmPatternedCanvases?.() ?? [];
+      if (patterned.some((canvas) => visibleElements.has(canvas) && canvas.dataset.gmWorldCanvas !== 'true'))
+        results.push({
+          element: 'canvas',
+          file: '',
+          natural: 0,
+          drawn: 0,
+          error: 'canvas pattern rendering cannot be verified',
+        });
+      const transferred =
+        (window as unknown as { __gmTransferredCanvases?: () => HTMLCanvasElement[] }).__gmTransferredCanvases?.() ??
+        [];
+      if (transferred.some((canvas) => visibleElements.has(canvas) && canvas.dataset.gmWorldCanvas !== 'true'))
+        results.push({
+          element: 'canvas',
+          file: '',
+          natural: 0,
+          drawn: 0,
+          error: 'worker canvas rendering cannot be verified',
+        });
       const uiWebgl = webgl.filter((canvas) => visibleElements.has(canvas) && canvas.dataset.gmWorldCanvas !== 'true');
       const stats = (
         window as unknown as {
@@ -582,7 +608,12 @@ export async function measureImageDistortion(
         (!stats ||
           uiStats.some((entry) => entry.unsupported) ||
           !Array.isArray(reported) ||
-          uiStats.reduce((sum, entry) => sum + entry.count, 0) !== reported.length)
+          uiStats.some(
+            (entry) =>
+              !entry.canvas.id ||
+              document.getElementById(entry.canvas.id) !== entry.canvas ||
+              reported.filter((sprite) => sprite?.canvasId === entry.canvas.id).length !== entry.count,
+          ))
       )
         results.push({
           element: 'canvas',
@@ -637,7 +668,10 @@ export async function measureImageDistortion(
           continue;
         }
         if (
-          Math.max(sprite.drawn.width, sprite.drawn.height) >= 24 &&
+          Math.max(
+            Math.abs(outer.a) * sprite.drawn.width + Math.abs(outer.c) * sprite.drawn.height,
+            Math.abs(outer.b) * sprite.drawn.width + Math.abs(outer.d) * sprite.drawn.height,
+          ) >= 24 &&
           Number.isFinite(natural) &&
           natural > 0 &&
           Number.isFinite(drawn) &&
