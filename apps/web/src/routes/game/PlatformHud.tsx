@@ -297,7 +297,7 @@ export function PlatformHud({
   return (
     <div className="platform-hud">
       {visible ? (
-        <div className="platform-pause-shade">
+        <div className="platform-pause-shade" data-gm-overlay-allowed>
           <div
             className="platform-pause-dialog"
             data-studio-menu-boundary

@@ -14,7 +14,15 @@ it('fails gm check for a real small board and identifies its viewport', async ()
     const source = readFileSync(html, 'utf8');
     const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
     if (!script) throw new Error('fixture script missing');
-    writeFileSync(join(root, 'dist/fixture.js'), script);
+    const ready =
+      "send('ready', { protocol: 1, manifest, marks: [['fixture-ready', performance.now()]] }, message.id);";
+    writeFileSync(
+      join(root, 'dist/fixture.js'),
+      script.replace(
+        ready,
+        `${ready} send('load.frame', {}); send('load.done', { ms: 0, fetchedBytes: 0, cachedBytes: 0, fetchedFiles: 0, cachedFiles: 0, persisted: null });`,
+      ),
+    );
     writeFileSync(
       html,
       source
