@@ -1,0 +1,75 @@
+# Layers: aiur, OGM, OGS
+
+Three products, each with its own repo, config and owner. Put every change in the lowest layer that serves all its users:
+
+- **aiur:** for any agent-fleet project.
+- **OGM:** for any game.
+- **OGS:** for one game or pack.
+
+The Executor's host glue sits beside them and is temporary by design.
+
+The hourly meta pass keeps this file current (CLAUDE.md, "Build at the right layer"). Last reviewed 2026-11-17.
+
+## Where does it go?
+
+1. Would a non-game project using aiur want it? Then it's **aiur**. Examples: ticket lifecycle, Commands, dispatch, per-turn effort, worker sandbox, skill mapping, review/"Needs you" UI, CI failure → rework.
+2. Would a second game want it? Then it's **OGM core**. Examples: SDK, `gm` CLI and its gates, the app (tiles, selected-game view, Review screen), publish, `gm-*` skills, multiplayer pause, the trailer and thumbnail rules.
+3. Only this game or pack? Then it's **OGS**. Examples: Blobs layout, its art, its trailer, its cast's quotes.
+4. A host script or Executor habit? Then it's a stopgap. Note the layer it belongs in, and file it there (the "Open moves" list below).
+
+Fix the cause at its layer, and work around it at a lower layer only with an owner ticket. Examples from 2026-11-17:
+- **aiur:** a reworked ticket ignored its blocked-by. Fixed in aiur's runner, not by pausing by hand.
+- **OGM:** a gate that broke Blobs capture was fixed in `gm look`. Blobs then added its own marker.
+
+## aiur: the agent fleet
+
+| Context | Where |
+|---|---|
+| Code | `aiur-team/aiur`, checkout `~/github/aiur`. Changed only by the **aiur session** (tmux `claude-aiur-fixes`). Reach it with `executor/tell-aiur.sh "<bug + evidence + fix wanted>"`; replies land in the listener file. |
+| What runs here | Release at `~/.aiur/ogm-release`, built from the commit in `executor/.aiur-pin`, run through `~/.local/bin/aiur-main`. Swap per `executor/aiur-release-swap.md`: check the stamp, never during og-local-ci, use `--keep-agents`. |
+| Daemons | OGM core `e110d74831` (127.0.0.1:4010) and Open-Games `940a3884be`. Kevin's NUC daemon `5c1b32aea9` is never touched. |
+| It owns | Tickets and `agent:*` labels; Commands (creator decisions, `require_option_media`, supersede); dispatch, AIMD and caps; native blocked-by; per-turn effort from `model:<effort>` labels; rework on CI failure; skill injection from `skills.by_label` / `by_lane`; the worker sandbox; the dashboard "Needs you" UI. |
+| Worker model and env | `~/.aiur/accounts/codex/gamebuilder/config.toml`: model, default effort, `[shell_environment_policy.set]` (impeccable no-tracking env). |
+| Not here | Anything game-specific. Project rules live in each repo's `.aiur/` files (below), which aiur reads but the project owns. |
+
+## OGM: Open Game Maker core
+
+| Context | Where |
+|---|---|
+| Repo | `its-everdred/open-game-maker`. This checkout, `~/games/open-game-maker-2000`, holds research, docs and CLAUDE.md on branch `research`. `~/ogm-stack` is main, and it's what runs. |
+| What it holds | `apps/web` (the app: home grid, selected-game view, Review screen); `services/` (api, games-host, rooms, commit); `packages/` (sdk, `gm-cli`: look/check/trailer/publish/preview gates, contracts, aiur-client); `skills/` (`gm-*`, `gm-prototype`, `vendor/` third-party such as frontend-design and impeccable); the game repo template. |
+| Worker config | `.aiur/config` (`skills.by_lane`, `by_label` with `phase:*` → gm-prototype), `.aiur/prompt.md` (worker rules for core: gate changes run against the live Blobs dist), `.aiur/hooks`. |
+| CI, merge, deploy | Hosted Actions with a required check; the Executor merges on green with `gh pr merge --merge`. `executor/auto-update.sh` moves `~/ogm-stack` to main, restarts services, and deploys web at most once an hour. |
+| Tickets | its-everdred/open-game-maker issues. File with `executor/file-ticket.sh ~/games/open-game-maker-2000 …`. |
+| Skills reach workers | Core workers read `skills/` from their repo clone. OGS workers get a copy of `~/ogm-stack/skills` (`executor/materialize-workspace.sh`). A new skill reaches OGS only after auto-update moves the stack. |
+
+## OGS: Open Games Weaver
+
+Assumed: the `open-games` repo plus the hosted site.
+
+| Context | Where |
+|---|---|
+| Repo | `its-everdred/open-games`, checkout `~/games/open-games` (auto-update leaves it on `executor/core-bump`; never publish from it by hand). Worker workspaces: `~/.aiur/w/its-everdred/open-games/<ticket>`. |
+| What it holds | `games/<slug>/` (Blobs: `src/`, `design/` targets and flow, `review/` tracks, `public/media/` thumbnail, loading and trailer art), and `vendor/core` (the pinned core, bumped by auto-update). |
+| Worker config | `~/games/open-games/.aiur/{config,prompt.md,hooks}` (local, untracked). `by_label` maps `role:*`, `game:blobs`, `phase:*`. `prompt.md` holds Blobs rules: board never covered, compare before shipping, review stays on the ticket. |
+| CI, merge, publish | Hosted Actions are off. `executor/host-steps.sh` og-merges ready PRs with local CI, and holds visual PRs until all four in-game stills of the head exist. `og-publish.sh` publishes to `https://weaver.makeopen.games/play/<slug>`. |
+| Stills and review | host-steps takes app-shell stills (`assets-local/review/blobs/<n>-auto/<head>/`) for workpad asks. Kevin reviews on artifact pick pages and the combined queue (until core #843). His verdicts reach workers through `operator-relay-answer` plus rework. |
+| Tickets | its-everdred/open-games issues, labelled `game:blobs`, `role:*`, `phase:*`, `model:*`. Creator requests file at `phase:mock model:low`. |
+
+## Executor host glue (temporary)
+
+This directory: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/` (scripts) and `executor/handoff.md` (state). Run them from there.
+
+- **Loops:** `host-steps.sh` (merge, publish, stills, audits, follow-up triage), `auto-update.sh` (stack, web deploy, aiur pin), `command-listener.sh` (wakes the Executor).
+- **Helpers:** `file-ticket.sh`, `pick-page.sh`, `tell-aiur.sh`, `og-merge.sh`, `og-publish.sh`.
+- **Kevin's personal skills** (not workers' unless vendored): `its-everdred/skills`, where `external-skills.json` installs into `~/.agents/skills`.
+
+**Open moves** (host glue that belongs in a layer; from `docs/meta/layer-audit-2026-11-11.md` and later):
+
+| Glue | Belongs in |
+|---|---|
+| command-listener | aiur Executor wake on new Commands |
+| release pin, build and swap | `aiur upgrade --pin` |
+| fresh-thread, retry | aiur |
+| host-steps stills, merge gate and audit loop | aiur (generic host steps) plus core (`gm` capture) |
+| pick pages and the review queue | core #843 (app) and aiur (dashboard review) |

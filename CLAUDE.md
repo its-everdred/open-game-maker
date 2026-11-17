@@ -26,7 +26,7 @@ use. Work here the way those agents will work: dogfood the skills.
   - **This core repo:** anything reusable across games, such as gm CLI, gm-* skills, capture, the asset pipeline and game CI.
   - **Open-Games:** one game or one pack only.
 
-  Generic rules never live only in a game's `.aiur/prompt.md`. Move misplaced work at once. Audit: `docs/meta/layer-audit-2026-11-11.md`.
+  Generic rules never live only in a game's `.aiur/prompt.md`. Move misplaced work at once. **The map of what lives at each layer (repos, daemons, configs, skills paths, CI/deploy, tickets, open moves) is `docs/layers.md`: read it before placing work. Every hourly meta pass checks this hour's changes against it and updates it in the same pass** (new config, script, gate or skill path, or a move done), noting "layers: updated|current" in the log.
 - **aiur for this repo:** run it with `aiur-main` (`~/.local/bin/aiur-main`: the aiur checkout's own CLI launcher on a copied
   release at `~/.aiur/ogm-release`, built from `~/github/aiur` main), from this checkout, never `scripts/aiurdev` (it targets
   the aiur checkout's own daemon) and never the npm `aiur` (a different fork). Kevin's NUC daemon for aiur-team/aiur runs on
