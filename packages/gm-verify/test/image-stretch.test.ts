@@ -1,0 +1,47 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, it } from 'vitest';
+import { runL0 } from '../src/gates/l0-static.js';
+
+it('reports explicit stretch and respects a reasoned exception', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-stretch-'));
+  try {
+    writeFileSync(
+      join(root, 'view.tsx'),
+      [
+        'const x = <img width="90" height="30" src="button.png" />;',
+        'ctx.drawImage(img, 0, 0, 90, 30, 0, 0, 30, 30);',
+        '/* gm-allow-stretch: intentional texture */',
+        'ctx.drawImage(img, 0, 0, 90, 30, 0, 0, 30, 30);',
+        'ctx.drawImage(img, 0, 0, 90, 30, 0, 0, 30, 30); /* gm-allow-stretch: intentional texture */',
+      ].join('\n'),
+    );
+    writeFileSync(
+      join(root, 'view.css'),
+      [
+        '.stretched { background-image: url("button.png"); background-size: 100% 100%; }',
+        '.shorthand { background: var(--button) center / 100% 100% no-repeat; }',
+        '.fixed { background-image: url("button.png"); background-size: 100px 50px; }',
+        'img { object-fit: fill; }',
+        '.slice { border-image: url("button.png") 10 fill / 10px stretch; }',
+        '/* object-fit: fill; */',
+      ].join('\n'),
+    );
+    const result = runL0(root, { checks: ['image-stretch'] });
+    expect(result.ok).toBe(false);
+    expect(result.checks.map((item) => [item.file, item.line])).toEqual(
+      expect.arrayContaining([
+        ['view.css', 1],
+        ['view.css', 2],
+        ['view.css', 3],
+        ['view.css', 4],
+        ['view.tsx', 1],
+        ['view.tsx', 2],
+      ]),
+    );
+    expect(result.checks).toHaveLength(6);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -12,6 +12,10 @@
       "types": "./dist/test/index.d.ts",
       "import": "./dist/test/index.js"
     },
+    "./debug": {
+      "types": "./dist/test/image-draws.d.ts",
+      "import": "./dist/debug.js"
+    },
     "./core": {
       "types": "./dist/core/index.d.ts",
       "import": "./dist/core/index.js"

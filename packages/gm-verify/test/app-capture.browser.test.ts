@@ -38,7 +38,7 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
       source
         .replace(
           'Bridge fixture</div>',
-          '<button data-gm-play-area>Waiting</button><img src="café scene.png" alt=""> </div>',
+          '<button data-gm-play-area>Waiting</button><img id="stretched" src="café scene.png" alt="" style="width:90px;height:30px"> </div>',
         )
         .replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
     );
@@ -69,6 +69,13 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
       }
     }
     expect(externalRequests).toBe(0);
+    const distortions = JSON.parse(readFileSync(join(out, 'image-distortion.json'), 'utf8')) as {
+      element: string;
+      viewport: string;
+      screen: string;
+    }[];
+    for (const viewport of ['390x844', '844x390', '820x1180', '1180x820'])
+      expect(distortions).toContainEqual(expect.objectContaining({ element: '#stretched', viewport, screen: 'play' }));
     expect(JSON.parse(readFileSync(join(out, 'play-area.json'), 'utf8'))).toMatchObject(
       ['390x844', '844x390', '820x1180', '1180x820'].map((viewport) => ({ viewport, ok: false })),
     );

@@ -14,6 +14,7 @@ import { encodeMp4 } from '../src/qa/media';
 
 import { captureStill, ScreenshotTimeout } from './still';
 import { fixedAspectMinimumFill, matchesPlayAreaAspect, measurePlayArea } from '../src/play-area';
+import { measureImageDistortion, type ImageDistortion } from './image-distortion';
 
 const [dist, out, tapsJson, editArg, videoArg, softwareArg, testFastArg, limitsJson] = process.argv.slice(2);
 if (!dist || !out || !tapsJson) throw new Error('missing capture arguments');
@@ -36,6 +37,7 @@ const limits = limitsJson
 const measurements: (
   { viewport: string; fill: number; offset: number; ok: boolean } | { viewport: string; ok: false; error: string }
 )[] = [];
+const distortions: ImageDistortion[] = [];
 try {
   mkdirSync(out, { recursive: true });
   const viewports = [
@@ -106,6 +108,16 @@ try {
           if (errors.length) throw new Error(errors.join('\n'));
         };
         check();
+        const measureImages = async (screen: string) => {
+          const frame = page.frames().find((item) => item.url().includes(`/${build}/index.html`));
+          if (!frame) throw new Error(`game frame missing at ${size}`);
+          for (const capturedFrame of page.frames()) {
+            if (capturedFrame !== page.mainFrame() && !(await (await capturedFrame.frameElement()).isVisible()))
+              continue;
+            distortions.push(...(await measureImageDistortion(capturedFrame, size, screen)));
+          }
+        };
+        await measureImages('play');
         await captureStill(page, resolve(out, `play-${size}.png`), `play at ${size}`, screenshotTimeout);
         console.error(`shell capture: play still captured at ${size}`);
         const game = page.frameLocator('.game-frame iframe');
@@ -116,6 +128,7 @@ try {
         if (taps.length) {
           await page.waitForTimeout(fast ? 500 : 9_000);
           check();
+          await measureImages('ingame');
           await captureStill(page, resolve(out, `ingame-${size}.png`), `ingame at ${size}`, screenshotTimeout);
         }
         if (!limits?.skip) {
@@ -196,6 +209,7 @@ try {
         await menu.tap();
         await page.waitForTimeout(1_500);
         check();
+        await measureImages('menu');
         await captureStill(page, resolve(out, `menu-${size}.png`), `menu at ${size}`, screenshotTimeout);
         if (editArg === '1') {
           await page.getByRole('button', { name: 'Edit', exact: true }).tap();
@@ -211,6 +225,7 @@ try {
           );
           await page.waitForTimeout(1_500);
           check();
+          await measureImages('edit');
           await captureStill(page, resolve(out, `edit-${size}.png`), `edit at ${size}`, screenshotTimeout);
         }
         const video = page.video();
@@ -224,6 +239,7 @@ try {
     }
   }
   writeFileSync(resolve(out, 'play-area.json'), JSON.stringify(measurements));
+  writeFileSync(resolve(out, 'image-distortion.json'), JSON.stringify(distortions));
 } catch (error) {
   if (!(error instanceof ScreenshotTimeout)) throw error;
   console.error(error.message);

@@ -1,5 +1,13 @@
 # Game SDK
 
+## UI sprite measurements
+
+In draft builds, canvas and WebGL UI renderers can report visible sprites to the shell's distortion gate with
+`@gm/sdk/debug`. Call `beginImageDraws()` at the beginning of each UI frame, then call
+`reportImageDraw({ id, file, source: { width, height }, drawn: { width, height } })` for each sprite. Source dimensions
+describe its sampled rectangle; drawn dimensions are CSS pixels. The capture reads the latest frame through
+`window.__gm.imageDraws()`. Do not report world textures, and omit the instrumentation from published builds.
+
 ## Shared player settings
 
 The host owns the settings menu. Subscribe with `host.settings.onChange` and pass the received settings to

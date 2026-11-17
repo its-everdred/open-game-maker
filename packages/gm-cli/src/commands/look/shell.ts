@@ -193,6 +193,14 @@ export const command: GmCommand = {
         ok: boolean;
         error?: string;
       }[];
+      const distortions = JSON.parse(readFileSync(resolve(temp, 'image-distortion.json'), 'utf8')) as {
+        element: string;
+        file: string;
+        natural: number;
+        drawn: number;
+        viewport: string;
+        screen: string;
+      }[];
       if (
         !limits.skip &&
         (measurements.length !== sizes.length || measurements.some((item, index) => item.viewport !== sizes[index]))
@@ -252,7 +260,8 @@ export const command: GmCommand = {
       } finally {
         if (!preserveBackup) rmSync(publish, { recursive: true, force: true });
       }
-      if (ctx.json) printJson(ctx, { out: relative(ctx.cwd, out) || '.', files: names, playArea: measurements });
+      if (ctx.json)
+        printJson(ctx, { out: relative(ctx.cwd, out) || '.', files: names, playArea: measurements, distortions });
       else {
         ctx.out('App-shell captures complete (mocked sign-in; not production or Safari).');
         for (const item of measurements)
@@ -260,6 +269,10 @@ export const command: GmCommand = {
             item.error
               ? `play area: ${item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport}: fail`
               : `board fill ${item.fill!.toFixed(2)} at ${item.viewport}, offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
+          );
+        for (const item of distortions)
+          ctx.out(
+            `image distortion: ${item.element} ${item.file} natural ${item.natural.toFixed(3)} drawn ${item.drawn.toFixed(3)} at ${item.viewport} (${item.screen}): fail`,
           );
       }
       return EXIT.ok;

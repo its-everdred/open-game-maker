@@ -14,6 +14,7 @@ const capture = vi.hoisted(() => ({
   softwareTimeout: false,
   smallBoard: false,
   undeclared: false,
+  distortion: false,
 }));
 vi.mock('../src/commands/capture/shell.js', async (original) => {
   const actual = await original<typeof import('../src/commands/capture/shell.js')>();
@@ -51,6 +52,23 @@ vi.mock('../src/commands/capture/shell.js', async (original) => {
                   ok: !(capture.smallBoard && viewport === '1180x820'),
                 }),
           })),
+        ),
+      );
+      writeFileSync(
+        join(out, 'image-distortion.json'),
+        JSON.stringify(
+          capture.distortion
+            ? [
+                {
+                  element: '#button',
+                  file: 'button.png',
+                  natural: 3,
+                  drawn: 1,
+                  viewport: '390x844',
+                  screen: 'play',
+                },
+              ]
+            : [],
         ),
       );
       return 0;
@@ -95,6 +113,7 @@ describe('gm look shell', () => {
       expect(result.out.join('\n')).toContain('board fill 0.61 at 1180x820');
     } finally {
       capture.smallBoard = false;
+      capture.distortion = false;
       capture.undeclared = false;
       capture.screenshotTimeout = false;
       rmSync(root, { recursive: true, force: true });
@@ -121,12 +140,19 @@ describe('gm look shell', () => {
       const result = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
       expect(result.code).toBe(1);
       expect(result.err.join('\n')).toContain('board fill 0.61 at 1180x820');
+      capture.smallBoard = false;
+      capture.distortion = true;
+      const stretched = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
+      expect(stretched.code).toBe(1);
+      expect(stretched.err.join('\n')).toContain('image distortion: #button button.png');
+      capture.distortion = false;
       capture.undeclared = true;
       const missing = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
       expect(missing.code).toBe(1);
       expect(missing.err.join('\n')).toContain('play area: not declared');
       capture.undeclared = false;
       capture.smallBoard = false;
+      capture.distortion = false;
       capture.screenshotTimeout = true;
       const retry = await gm(['check', '--json', '--fields', 'ok'], {
         cwd: root,
@@ -144,11 +170,12 @@ describe('gm look shell', () => {
       expect(recursive.err.join('\n')).toContain('nonrecursive game build script');
     } finally {
       capture.smallBoard = false;
+      capture.distortion = false;
       capture.undeclared = false;
       capture.screenshotTimeout = false;
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
   it('uses the workspace for scratch when the system temporary directory is unavailable', () => {
     const root = tempDir();
     const scratch = captureScratch(root, join(root, 'missing'));

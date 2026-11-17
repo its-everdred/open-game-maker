@@ -14,7 +14,6 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
   const lock = join(game, '.gm-play-area-lock');
   try {
     const options = readPlayAreaConfig(game);
-    if (options === false) return { ok: true, output: ['play-area check disabled for a game without a play area'] };
     try {
       mkdirSync(lock);
       locked = true;
@@ -80,24 +79,36 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
       {
         dist: 'dist',
         out: scratch,
-        tap: options.tap,
+        tap: options === false ? undefined : options.tap,
         timeout: 600,
-        'min-fill': options.minFill,
-        'max-offset': options.maxOffset,
+        'min-fill': options === false ? undefined : options.minFill,
+        'max-offset': options === false ? undefined : options.maxOffset,
       },
     );
     if (code !== 0) return { ok: false, output };
     const report = JSON.parse(reportOutput.join('\n')) as {
       playArea: { viewport: string; ok: boolean; fill?: number; offset?: number; error?: string }[];
+      distortions: {
+        element: string;
+        file: string;
+        natural: number;
+        drawn: number;
+        viewport: string;
+        screen: string;
+      }[];
     };
     return {
-      ok: report.playArea.every((item) => item.ok),
+      ok: report.playArea.every((item) => item.ok) && report.distortions.length === 0,
       output: [
         ...output,
         ...report.playArea.map((item) =>
           item.error
             ? `play area: ${item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport}: fail`
             : `board fill ${item.fill!.toFixed(2)} at ${item.viewport}, offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
+        ),
+        ...report.distortions.map(
+          (item) =>
+            `image distortion: ${item.element} ${item.file} natural ${item.natural.toFixed(3)} drawn ${item.drawn.toFixed(3)} at ${item.viewport} (${item.screen}): fail`,
         ),
       ],
     };

@@ -9,6 +9,7 @@ await build({
   entryPoints: {
     index: 'src/index.ts',
     achievements: 'src/achievements.ts',
+    debug: 'src/test/image-draws.ts',
     analytics: 'src/analytics.ts',
     'assets/index': 'src/assets/index.ts',
     'audio/index': 'src/audio/index.ts',

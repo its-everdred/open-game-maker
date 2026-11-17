@@ -5,6 +5,10 @@ description: Load at the start of any visual design review (a new game's look, a
 
 # Image mocks: review step 1
 
+Follow the image sizing rule in `gm-ui-hud`: never scale images non-uniformly; use 9-slice or separate pieces for
+resizable art, and generate a separately named asset at the exact slot aspect ratio for a new shape. State its pixel
+size in the prompt and mark it AI-generated as usual. Include the distortion gate's output in the verify checklist.
+
 A creator judges a look fastest from a picture of the game screen. Before building dioramas or wiring real assets,
 show **image mocks**: generated stills of the actual play screen, steered by the kit (asset set) the game uses. Real
 assets come in step 2, built toward the mock the creator picked.

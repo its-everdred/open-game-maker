@@ -7,8 +7,9 @@ import ts from 'typescript';
 
 import type { GateCheck, GateResult } from './index.js';
 import { scanRepo } from './no-wall-clock.js';
+import { scanImageStretch } from './image-stretch.js';
 
-export type L0CheckId = 'typecheck' | 'no-wall-clock-in-sim' | 'hook-present';
+export type L0CheckId = 'typecheck' | 'no-wall-clock-in-sim' | 'hook-present' | 'image-stretch';
 export type RunL0Options = { checks?: L0CheckId[] };
 
 const require = createRequire(import.meta.url);
@@ -135,7 +136,9 @@ export function checkHookPresence(root: string): GateCheck {
 
 export function runL0(root: string, options: RunL0Options = {}): GateResult {
   const started = performance.now();
-  const selected = new Set<L0CheckId>(options.checks ?? ['typecheck', 'no-wall-clock-in-sim', 'hook-present']);
+  const selected = new Set<L0CheckId>(
+    options.checks ?? ['typecheck', 'no-wall-clock-in-sim', 'hook-present', 'image-stretch'],
+  );
   const checks: GateCheck[] = [];
   if (selected.has('typecheck')) checks.push(...typecheck(root));
   if (selected.has('no-wall-clock-in-sim')) {
@@ -161,6 +164,18 @@ export function runL0(root: string, options: RunL0Options = {}): GateResult {
     }
   }
   if (selected.has('hook-present')) checks.push(checkHookPresence(root));
+  if (selected.has('image-stretch')) {
+    try {
+      const findings = scanImageStretch(root);
+      checks.push(...(findings.length ? findings : [{ id: 'image-stretch' as const, ok: true }]));
+    } catch (error) {
+      checks.push({
+        id: 'image-stretch',
+        ok: false,
+        detail: `unable to scan images: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
   return {
     gate: 'L0',
     ok: checks.every((check) => check.ok),
