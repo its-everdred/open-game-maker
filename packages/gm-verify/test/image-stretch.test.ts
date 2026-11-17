@@ -113,6 +113,20 @@ it('accepts a CSS module class that supplies object-fit', () => {
   }
 });
 
+it('checks raster backgrounds across stylesheets linked by the same page', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-stretch-linked-'));
+  try {
+    writeFileSync(join(root, 'index.html'), '<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="b.css">');
+    writeFileSync(join(root, 'a.css'), '.tile { background: red; background-size: 100% 100%; }');
+    writeFileSync(join(root, 'b.css'), '.tile { background-image: url(button.png); }');
+    expect(runL0(root, { checks: ['image-stretch'] }).checks).toContainEqual(
+      expect.objectContaining({ file: 'a.css', ok: false }),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it('ignores prototypes and does not borrow unrelated or conditional stylesheet rules', () => {
   const root = mkdtempSync(join(tmpdir(), 'gm-stretch-scope-'));
   try {

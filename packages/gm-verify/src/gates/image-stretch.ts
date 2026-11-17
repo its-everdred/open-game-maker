@@ -78,7 +78,7 @@ export function scanImageStretch(root: string): GateCheck[] {
   for (const [index, file] of files.entries()) {
     const entry = { name: file };
     const text = texts[index]!;
-    const related = new Set<string>();
+    let related = new Set<string>();
     const collectStyles = (path: string) => {
       if (related.has(path)) return;
       related.add(path);
@@ -106,6 +106,15 @@ export function scanImageStretch(root: string): GateCheck[] {
       }
     };
     collectStyles(resolve(file));
+    if (file.endsWith('.css')) {
+      const own = related;
+      for (const document of files.filter((path) => /\.(?:html|[cm]?[jt]sx?)$/.test(path))) {
+        related = new Set<string>();
+        collectStyles(resolve(document));
+        if (related.has(resolve(file))) for (const path of related) own.add(path);
+      }
+      related = own;
+    }
     const css = [...related].map((path) => maskComments(path, byPath.get(path) ?? '')).join('\n}\n');
     const rasterSelectors = new Set<string>();
     for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {

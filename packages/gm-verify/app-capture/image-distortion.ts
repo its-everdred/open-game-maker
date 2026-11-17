@@ -308,7 +308,10 @@ export async function measureImageDistortion(
           if (
             generated.position === 'absolute' &&
             style.position !== 'static' &&
-            transform.isIdentity &&
+            transform.a === 1 &&
+            transform.b === 0 &&
+            transform.c === 0 &&
+            transform.d === 1 &&
             generated.transform === 'none' &&
             generated.translate === 'none' &&
             generated.rotate === 'none' &&

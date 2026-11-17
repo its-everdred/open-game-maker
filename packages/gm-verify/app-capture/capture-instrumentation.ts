@@ -73,6 +73,7 @@ export function trackShadowRoots(): void {
   const contexts2d = new WeakMap<HTMLCanvasElement, CanvasRenderingContext2D>();
   const pathBounds = new WeakMap<CanvasRenderingContext2D, Bounds>();
   const rectangularPaths = new WeakSet<CanvasRenderingContext2D>();
+  const uncertainPaths = new WeakSet<CanvasRenderingContext2D>();
   const boundsStack = new WeakMap<CanvasRenderingContext2D, (Bounds | undefined)[]>();
   const patternedCanvases = new Set<HTMLCanvasElement>();
   const gradients = new WeakMap<CanvasGradient, { hasStop: boolean; opaque: boolean }>();
@@ -113,6 +114,7 @@ export function trackShadowRoots(): void {
     };
   const webglDraws = new Map<HTMLCanvasElement, { count: number; unsupported: boolean }>();
   const webglExtensions = new Set<HTMLCanvasElement>();
+  const wrappedExtensions = new WeakSet<object>();
   const visibleCanvas = (canvas: HTMLCanvasElement) => {
     if (!canvas.isConnected) return false;
     const rect = canvas.getBoundingClientRect();
@@ -201,9 +203,12 @@ export function trackShadowRoots(): void {
           if (
             result &&
             /^(ANGLE_instanced_arrays|WEBGL_multi_draw)$/i.test(String(args[0])) &&
-            this.canvas instanceof HTMLCanvasElement
+            this.canvas instanceof HTMLCanvasElement &&
+            !wrappedExtensions.has(result as object)
           ) {
+            wrappedExtensions.add(result as object);
             const canvas = this.canvas;
+            const gl = this;
             for (const key of [
               'drawArraysInstancedANGLE',
               'drawElementsInstancedANGLE',
@@ -215,7 +220,21 @@ export function trackShadowRoots(): void {
               const originalMethod = (result as Record<string, unknown>)[key];
               if (typeof originalMethod !== 'function') continue;
               (result as Record<string, unknown>)[key] = function (...callArgs: unknown[]) {
-                webglExtensions.add(canvas);
+                if (key.endsWith('ANGLE')) {
+                  const mode = Number(callArgs[0]);
+                  const count = Number(callArgs[key.startsWith('drawArrays') ? 2 : 1]);
+                  const instances = Number(callArgs[key.startsWith('drawArrays') ? 3 : 4]);
+                  const quads =
+                    mode === gl.TRIANGLES && count > 0 && count % 6 === 0
+                      ? count / 6
+                      : (mode === gl.TRIANGLE_STRIP || mode === gl.TRIANGLE_FAN) && count === 4
+                        ? 1
+                        : 0;
+                  const entry = webglDraws.get(canvas) ?? { count: 0, unsupported: false };
+                  entry.count += quads * instances;
+                  entry.unsupported ||= quads === 0 || !Number.isFinite(instances) || instances < 1;
+                  webglDraws.set(canvas, entry);
+                } else webglExtensions.add(canvas);
                 if (visibleCanvas(canvas)) version++;
                 return Reflect.apply(originalMethod, result, callArgs);
               };
@@ -355,6 +374,7 @@ export function trackShadowRoots(): void {
   const originalBeginPath = CanvasRenderingContext2D.prototype.beginPath;
   CanvasRenderingContext2D.prototype.beginPath = function () {
     rectangularPaths.add(this);
+    uncertainPaths.delete(this);
     pathBounds.delete(this);
     originalBeginPath.call(this);
   };
@@ -362,6 +382,7 @@ export function trackShadowRoots(): void {
   CanvasRenderingContext2D.prototype.rect = function (x, y, width, height) {
     if (rectangularPaths.has(this)) {
       const matrix = this.getTransform();
+      if (pathBounds.has(this) || matrix.b !== 0 || matrix.c !== 0) uncertainPaths.add(this);
       const points = [
         new DOMPoint(x, y),
         new DOMPoint(x + width, y),
@@ -404,7 +425,7 @@ export function trackShadowRoots(): void {
     clippedContexts.add(this);
     const path =
       typeof args[0] === 'object' ? undefined : rectangularPaths.has(this) ? pathBounds.get(this) : undefined;
-    if (!path) unknownClips.add(this);
+    if (!path || uncertainPaths.has(this)) unknownClips.add(this);
     if (path) {
       const old = clipBounds.get(this);
       clipBounds.set(
@@ -479,6 +500,7 @@ export function trackShadowRoots(): void {
           boundsStack.delete(this);
           pathBounds.delete(this);
           rectangularPaths.delete(this);
+          uncertainPaths.delete(this);
         }
         const style = name.startsWith('stroke') ? this.strokeStyle : this.fillStyle;
         if (style instanceof CanvasPattern) patternedCanvases.add(this.canvas);
@@ -505,6 +527,7 @@ export function trackShadowRoots(): void {
             boundsStack.delete(context);
             pathBounds.delete(context);
             rectangularPaths.delete(context);
+            uncertainPaths.delete(context);
           }
           descriptor.set!.call(this, value);
           if (visibleCanvas(this as HTMLCanvasElement)) version++;
