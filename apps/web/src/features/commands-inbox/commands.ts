@@ -64,15 +64,15 @@ export function useCreatorReviewCommands(creatorId: string | undefined) {
   };
 }
 
+type CorePage = { commands: CoreReviewCommand[]; targets: ReviewTarget[]; targetsUnavailable?: boolean };
+
 export function useCoreReviewCommands(creatorId: string | undefined) {
   const query = useQuery({
     queryKey: [...creatorCommandsQueryKey, creatorId, 'core'],
     enabled: Boolean(creatorId),
     // Only the instance owner has core Commands; anyone else is refused, which is an empty list, not a failed load.
     queryFn: () =>
-      api<{ commands: CoreReviewCommand[]; targets: ReviewTarget[]; targetsUnavailable?: boolean }>(
-        '/me/core-commands',
-      ).catch((error: unknown) => {
+      api<CorePage>('/me/core-commands').catch((error: unknown): CorePage => {
         if (error instanceof ApiError && error.status === 403) return { commands: [], targets: [] };
         throw error;
       }),
