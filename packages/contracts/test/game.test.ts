@@ -79,7 +79,10 @@ describe('game contract', () => {
     for (const bad of [
       [],
       [{ id: 'a', label: 'A', tap: 'Play>>Go' }],
-      [{ id: 'a', label: 'A', tap: 'Play' }, { id: 'a', label: 'B', tap: 'Go' }],
+      [
+        { id: 'a', label: 'A', tap: 'Play' },
+        { id: 'a', label: 'B', tap: 'Go' },
+      ],
       [{ id: 'Bad id', label: 'A', tap: 'Play' }],
     ]) {
       expect(gameManifestSchema.safeParse({ ...manifest(), modes: bad }).success).toBe(false);
