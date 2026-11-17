@@ -364,8 +364,9 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box, to prove a broken
    deck fails the run.
 3. After a web deploy, auto-update calls `ops/bin/ogm-qa-review-hook <have> <want> --attention <file>`. It runs both
-   steps when the deploy changed `apps/web/src/**review**` or `services/api/src/{review-rounds,commands,previews,qa}/`
-   and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
+   steps when the deploy changed the review deck (`apps/web/src/**review**`,
+   `apps/web/src/features/{worker-builds,commands-inbox}/`, `apps/web/src/app/StudioMenu*`) or the review API
+   (`services/api/src/{review-rounds,commands,previews,qa,worker-progress}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
    `~/.local/state/ogm/qa/review-e2e/<sha>.log`.
 
 The host routes behind it, `/internal/qa/session` and `/internal/qa/review-fixtures[/<run>]`, take only the internal

@@ -74,4 +74,29 @@ assert_eq 1 "$(wc -l < "$attention")" 'one attention line'
 assert_grep "qa-review-e2e failed on $short (exit 1): $OGM_QA_ROOT/review-e2e/$short.log" "$attention"
 assert_grep 'exit=1 qa-review-e2e' "$OGM_QA_ROOT/review-e2e/$short.log"
 
+# Every part of the deck triggers the run, not only files named review.
+for path in apps/web/src/features/worker-builds/SwipeVerdict.tsx apps/web/src/features/commands-inbox/commands.ts \
+  apps/web/src/app/StudioMenu.tsx services/api/src/commands/routes.ts services/api/src/previews/routes.ts \
+  services/api/src/qa/routes.ts services/api/src/worker-progress/routes.ts; do
+  from=$(git -C "$stack" rev-parse HEAD)
+  to=$(commit "$path")
+  : > "$scratch/calls"
+  OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" > /dev/null
+  assert_grep 'qa review-e2e' "$scratch/calls"
+done
+
+# The session cannot be minted: no E2E, exit 1, and the Executor is woken.
+from=$(git -C "$stack" rev-parse HEAD)
+to=$(commit apps/web/src/routes/review/RoundMedia.tsx)
+printf '#!/usr/bin/env bash\necho session >> "$OGM_TEST_CALLS"\nexit 1\n' > "$scratch/session"
+: > "$scratch/calls"
+: > "$attention"
+set +e
+OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a failed session exits 1'
+assert_eq session "$(cat "$scratch/calls")" 'no E2E without a session'
+assert_eq 1 "$(wc -l < "$attention")" 'a failed session wakes the Executor'
+
 echo 'qa-review-hook: ok'

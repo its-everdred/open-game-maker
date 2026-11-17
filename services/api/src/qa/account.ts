@@ -42,25 +42,30 @@ export async function ensureQaAccount(
   db.insert(schema.allowedUsers)
     .values({ email, role: 'maker', addedBy: 'qa', addedAt: new Date().toISOString() })
     .run();
-  const ctx = await auth.$context;
-  const user = await ctx.internalAdapter.createUser({ email, name: 'QA', emailVerified: true }, { method: 'admin' });
-  const family = createFamily(db, { userId: user.id, name: 'QA' });
-  const game = createGameRow(db, {
-    familyId: family.id,
-    ownerId: user.id,
-    title: 'QA Review',
-    repoVisibility: 'private',
-  });
-  const state: QaState = {
-    userId: user.id,
-    email,
-    familyId: family.id,
-    gameId: game.id,
-    decisions: [],
-    received: [],
-  };
-  writeQaState(db, state);
-  return state;
+  // A step that fails takes the earlier ones with it, so the next run starts clean instead of finding the address
+  // taken. Deleting the user removes its sessions; deleting the family removes its membership.
+  let userId: string | undefined;
+  let familyId: string | undefined;
+  try {
+    const ctx = await auth.$context;
+    userId = (await ctx.internalAdapter.createUser({ email, name: 'QA', emailVerified: true }, { method: 'admin' })).id;
+    familyId = createFamily(db, { userId, name: 'QA' }).id;
+    const game = createGameRow(db, { familyId, ownerId: userId, title: 'QA Review', repoVisibility: 'private' });
+    const state: QaState = { userId, email, familyId, gameId: game.id, decisions: [], received: [] };
+    writeQaState(db, state);
+    return state;
+  } catch (error) {
+    db.transaction((tx) => {
+      if (familyId) {
+        tx.delete(schema.games).where(eq(schema.games.familyId, familyId)).run();
+        tx.delete(schema.familyMembers).where(eq(schema.familyMembers.familyId, familyId)).run();
+        tx.delete(schema.families).where(eq(schema.families.id, familyId)).run();
+      }
+      if (userId) tx.delete(schema.user).where(eq(schema.user.id, userId)).run();
+      tx.delete(schema.allowedUsers).where(eq(schema.allowedUsers.email, email)).run();
+    });
+    throw error;
+  }
 }
 
 // A Better Auth session for the QA user and its cookie, signed the way Better Auth signs it, so a headless browser can

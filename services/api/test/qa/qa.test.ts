@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AiurClient } from '@ogm/aiur-client';
 import { schema } from '@ogm/db';
 
 import { createReviewSync } from '../../src/review-rounds/runner.js';
 import { createQaAiurClient, withQaAiur } from '../../src/qa/aiur.js';
 import { readQaState } from '../../src/qa/state.js';
+import { authContextFor } from '../../src/auth/routes.js';
 import { INTERNAL_TOKEN, makeApp, makeDeps } from '../helpers.js';
 
 const QA_EMAIL = 'qa@example.test';
@@ -13,7 +14,13 @@ type QaSession = { userId: string; gameId: string; cookie: { name: string; value
 const MEDIA = { still: b64('qa-still'), clip: b64('qa-clip'), audio: b64('qa-audio') };
 
 // The QA game reaches its recording boundary; any other game would reach a real daemon, which a test has none of.
-async function qaApp() {
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+async function qaApp(maintainer?: string) {
+  if (maintainer) vi.stubEnv('OGM_MAINTAINER_EMAILS', maintainer);
   const deps = makeDeps();
   const qa = createQaAiurClient(deps.db, () => deps.blobStore);
   const real = async (): Promise<AiurClient> => {
@@ -47,6 +54,23 @@ describe('QA creator account (#859)', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: QA_EMAIL }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  // The fixture routes write and delete rows in the prod database; a user session or no credential never reaches them.
+  it.each([
+    ['POST', '/internal/qa/review-fixtures'],
+    ['GET', '/internal/qa/review-fixtures/run-1'],
+    ['DELETE', '/internal/qa/review-fixtures/run-1'],
+    ['DELETE', '/internal/qa/review-fixtures'],
+  ])('refuses %s %s without the internal token', async (method, path) => {
+    const { app, internal } = await qaApp();
+    const { body } = await session(internal);
+    const response = await app.request(path, {
+      method,
+      headers: { 'content-type': 'application/json', cookie: `${body.cookie.name}=${body.cookie.value}` },
+      ...(method === 'POST' ? { body: JSON.stringify({ run: 'run-1', media: MEDIA }) } : {}),
     });
     expect(response.status).toBe(401);
   });
@@ -89,9 +113,47 @@ describe('QA creator account (#859)', () => {
     expect((await session(internal, 'kevin@example.test')).response.status).toBe(409);
     expect(readQaState(deps.db)).toBeNull();
 
+    // A maintainer's address is refused even after an admin took it off the allow list.
+    const maintained = await qaApp('qa-owner@example.test');
+    maintained.deps.db.delete(schema.allowedUsers).run();
+    expect((await session(maintained.internal, 'qa-owner@example.test')).response.status).toBe(409);
+
     // One QA account per host: a second address is refused once the first exists.
     expect((await session(internal)).response.status).toBe(200);
     expect((await session(internal, 'other-qa@example.test')).response.status).toBe(409);
+  });
+});
+
+// The QA address's allow-list and user rows; the test env seeds other addresses of its own.
+function qaRows(deps: ReturnType<typeof makeDeps>) {
+  const count = (rows: { email: string }[]) => rows.filter((row) => row.email === QA_EMAIL).length;
+  return {
+    allowed: count(deps.db.select().from(schema.allowedUsers).all()),
+    users: count(deps.db.select().from(schema.user).all()),
+  };
+}
+
+describe('QA account setup that fails midway', () => {
+  it('leaves nothing behind, so the next run creates the account', async () => {
+    const { deps, internal } = await qaApp();
+    const ctx = await authContextFor(deps)!.auth.$context;
+    vi.spyOn(ctx.internalAdapter, 'createUser').mockRejectedValueOnce(new Error('user store down'));
+    expect((await session(internal)).response.status).toBe(500);
+    expect(qaRows(deps)).toEqual({ allowed: 0, users: 0 });
+    expect(readQaState(deps.db)).toBeNull();
+    expect((await session(internal)).response.status).toBe(200);
+  });
+
+  it('removes a user and family it already made', async () => {
+    const { deps, internal } = await qaApp();
+    deps.sqlite.exec(
+      "CREATE TRIGGER qa_game_fails BEFORE INSERT ON games BEGIN SELECT RAISE(ABORT, 'game store down'); END",
+    );
+    expect((await session(internal)).response.status).toBe(500);
+    expect(qaRows(deps)).toEqual({ allowed: 0, users: 0 });
+    expect(deps.db.select().from(schema.families).all()).toEqual([]);
+    deps.sqlite.exec('DROP TRIGGER qa_game_fails');
+    expect((await session(internal)).response.status).toBe(200);
   });
 });
 
