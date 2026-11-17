@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { expect, test } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
@@ -179,4 +181,89 @@ test('orders the library after playing two games', async ({ page }) => {
         .evaluateAll((nodes) => nodes.slice(0, 2).map((node) => node.getAttribute('data-game-id'))),
     )
     .toEqual(['g_a', 'g_b']);
+});
+
+test('keeps tile badges and share controls in the bottom band', async ({ page }) => {
+  const fixture = JSON.parse(readFileSync(new URL('./fixtures/games.json', import.meta.url), 'utf8')) as {
+    games: Array<Record<string, unknown>>;
+    jobs: Array<Record<string, unknown>>;
+  };
+  fixture.games.push({ ...fixture.games[2], id: 'g_empty', title: 'Empty game' });
+  fixture.games.push({ ...fixture.games[2], id: 'g_featured', slug: 'restorebound', title: 'RestoreBound' });
+  fixture.jobs.push({ ...fixture.jobs[0], id: 'j_featured', gameId: 'g_featured' });
+  await page.route('**/api/v1/jobs?state=active', (route) => route.fulfill({ json: { jobs: fixture.jobs } }));
+  fixture.games[0]!.logoUrl = 'https://example.test/cover.png';
+  fixture.games[2]!.choices = { genre: ['adventure', 'rpg'], vibe: ['cozy', 'creepy'] };
+  await page.setViewportSize({ width: 667, height: 375 });
+  await page.route('**/api/v1/games', (route) => route.fulfill({ json: { games: fixture.games } }));
+  await page.goto('/all?test');
+  await expect(page.locator('.game-new-badge').first()).toBeVisible();
+  await expect(page.locator('.game-copy').first()).toBeVisible();
+  await expect(page.locator('.game-logo')).toBeVisible();
+  await expect(page.locator('[data-game-id="g_featured"] .game-building-chip')).toBeVisible();
+  for (const size of [
+    { width: 667, height: 375 },
+    { width: 1440, height: 900 },
+    { width: 1180, height: 820 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(size);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const firstTile = (await page.locator('[role="gridcell"]').first().boundingBox())!;
+    await page.evaluate((distance) => window.scrollTo(0, distance), firstTile.height * 0.18);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const failures: string[] = [];
+            const overlaps = (a: DOMRect, b: DOMRect) =>
+              a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+            const fixed = Array.from(document.querySelectorAll('.studio-logo, .studio-menu-button'))
+              .map((element) => element.getBoundingClientRect())
+              .filter((rect) => rect.width && rect.height);
+            for (const control of document.querySelectorAll('.game-new-badge, .game-building-chip, .game-copy')) {
+              const cell = control.closest('[role="gridcell"]')!;
+              const box = control.getBoundingClientRect();
+              const tile = cell.getBoundingClientRect();
+              const name = `${cell.getAttribute('data-game-id')} ${control.className}`;
+              const threshold = control.matches('.showcase-tile .game-new-badge') ? 0.45 : 0.6;
+              if (box.top < tile.top + tile.height * threshold || box.bottom > tile.bottom)
+                failures.push(`${name}: outside bottom band`);
+              if (fixed.some((rect) => overlaps(rect, box))) failures.push(`${name}: covered by navigation`);
+              for (const other of cell.querySelectorAll('.game-new-badge, .game-building-chip, .game-copy')) {
+                if (other !== control && overlaps(other.getBoundingClientRect(), box))
+                  failures.push(`${name}: overlaps another control`);
+              }
+              const meta = cell.querySelector('.game-tile-meta')?.getBoundingClientRect();
+              const logo = cell.querySelector('.game-logo')?.getBoundingClientRect();
+              const job = cell.querySelector('.game-building-chip');
+              if (meta && !logo && !job && (meta.top >= box.bottom || meta.bottom <= box.top))
+                failures.push(`${name}: not aligned with metadata`);
+              for (const item of cell.querySelectorAll(
+                '.game-tile-meta strong, .game-tile-meta .game-tag-icons .icon, .showcase-rating',
+              )) {
+                const rect = item.getBoundingClientRect();
+                if (overlaps(rect, box))
+                  failures.push(
+                    `${name}: overlaps metadata ${JSON.stringify({ box: box.toJSON(), rect: rect.toJSON(), tile: tile.toJSON() })}`,
+                  );
+                if (rect.left < tile.left || rect.right > tile.right) failures.push(`${name}: metadata clipped`);
+                if (rect.top < tile.top + tile.height * 0.18) failures.push(`${name}: metadata in navigation zone`);
+              }
+              if (logo && overlaps(logo, box))
+                failures.push(
+                  `${name}: control overlaps logo ${JSON.stringify({ box: box.toJSON(), logo: logo.toJSON(), tile: tile.toJSON() })}`,
+                );
+              if (logo && meta && overlaps(logo, meta))
+                failures.push(
+                  `${name}: metadata overlaps logo ${JSON.stringify({ meta: meta.toJSON(), logo: logo.toJSON(), tile: tile.toJSON() })}`,
+                );
+            }
+            return failures;
+          }),
+        { message: JSON.stringify(size), timeout: 5000 },
+      )
+      .toEqual([]);
+  }
 });

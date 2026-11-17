@@ -267,7 +267,7 @@
 .game-copy {
   position: absolute;
   z-index: 4;
-  top: 16px;
+  bottom: 10px;
   right: 16px;
   display: grid;
   width: 36px;
@@ -296,11 +296,6 @@
 .game-copy .icon {
   width: 18px;
   height: 18px;
-}
-
-/* The building chip sits below the copy control so both stay legible on one tile. */
-.games-grid [role='gridcell'] .game-building-chip {
-  top: 60px;
 }
 
 .games-grid [role='gridcell'].is-selected {
@@ -413,14 +408,18 @@
 .game-new-badge {
   position: absolute;
   z-index: 3;
-  top: 16px;
+  bottom: 12px;
   padding: 4px 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .game-building-chip {
-  right: 16px;
+  right: 60px;
+  max-width: calc(100% - 160px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .game-new-badge {
@@ -430,15 +429,89 @@
 .game-tile-meta {
   position: absolute;
   z-index: 3;
-  right: 24px;
-  bottom: 16px;
+  right: 60px;
+  bottom: 12px;
   left: 24px;
   display: flex;
   align-items: end;
   justify-content: space-between;
   gap: 8px;
-  transform: translateY(28px);
   transition: transform 0.5s var(--games-ease);
+}
+
+/* Badges share the lower row with the title and icons. */
+.game-cover:has(.game-new-badge) .game-tile-meta {
+  left: 76px;
+  display: grid;
+  gap: 12px;
+}
+.game-cover:has(.game-new-badge) .game-tile-meta strong {
+  margin-left: -52px;
+}
+.game-cover:has(.game-new-badge):not(:has(.game-tag-icons)) .game-tile-meta strong {
+  margin-left: 0;
+}
+.showcase-tile:has(.game-new-badge) .game-tile-meta {
+  right: 16px;
+  left: 24px;
+  gap: 4px;
+}
+.showcase-tile .game-new-badge {
+  right: 16px;
+  bottom: 40px;
+  left: auto;
+}
+.showcase-tile:has(.game-new-badge) .game-tile-meta strong {
+  max-width: calc(100% - 104px);
+  margin-left: 0;
+}
+
+/* A build chip needs a row of its own; lift the metadata and leave the logo clear. */
+.game-cover:has(.game-building-chip) .game-tile-meta {
+  right: 24px;
+  bottom: 52px;
+  left: 24px;
+}
+.game-cover:has(.game-building-chip) .game-tile-meta strong {
+  margin-left: 0;
+}
+.showcase-tile:has(.game-building-chip) .game-new-badge {
+  right: auto;
+  bottom: 12px;
+  left: 16px;
+}
+.showcase-tile:has(.game-building-chip) .game-building-chip {
+  right: 16px;
+  max-width: calc(100% - 150px);
+}
+.showcase-tile:has(.game-building-chip) .game-tile-meta strong {
+  max-width: 100%;
+}
+.game-cover:has(.game-logo):has(.game-building-chip) .game-logo {
+  top: 40%;
+  max-height: 30%;
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .showcase-tile:has(.game-building-chip) .game-tile-meta {
+    bottom: 48px;
+  }
+  .showcase-tile:has(.game-building-chip) .game-tile-meta strong {
+    font-size: 16px;
+  }
+  .showcase-tile:has(.game-building-chip) .game-tag-icons > span {
+    width: 24px;
+    height: 24px;
+  }
+  .game-tile:not(.showcase-tile) .game-tag-icons .icon {
+    width: 18px;
+    height: 18px;
+    padding: 3px;
+  }
+  .game-cover:has(.game-logo):has(.game-building-chip) .game-logo {
+    top: 24%;
+    max-height: 20%;
+  }
 }
 
 .game-tile-meta strong {
