@@ -46,6 +46,7 @@ import { createReviewEpisodeReader } from './worker-progress/review-episode.js';
 import { createTicketConversationReader } from './worker-progress/conversation.js';
 import { startBriefingPush } from './voice/briefing-push.js';
 import { questionSession } from './voice/question-session.js';
+import { createQaAiurClient, withQaAiur } from './qa/aiur.js';
 
 const log = (line: LogLine) => console.log(JSON.stringify({ service: 'api', ...line }));
 
@@ -68,6 +69,8 @@ const fleet = createFleet({
   readTokenStatus: (daemon, missing) => recordDaemonReadTokenStatus(deps, daemon, missing),
 });
 const daemonDirectory = createDaemonDirectory(db, fleet);
+// The QA game (#859) answers to a recording aiur boundary instead of a daemon.
+const qaAiur = createQaAiurClient(db, () => deps.blobStore);
 const issues = createIssuesClient({ token: env.OGM_INTAKE_GITHUB_TOKEN });
 
 const deps: AppDeps = {
@@ -116,7 +119,7 @@ const deps: AppDeps = {
   }),
   events: createAppEvents(log),
   registry: createRegistry(),
-  aiurClientForGame: daemonDirectory.clientForGame,
+  aiurClientForGame: withQaAiur(db, qaAiur, daemonDirectory.clientForGame),
   version: readGitVersion(),
   startedAtMs: Date.now(),
   log,
@@ -201,7 +204,7 @@ const decisionWaits = createDecisionWaitPoller({
     db,
     sqlite,
     publishReminder: (notification) => getNotifyRuntime(deps).deliverStored(notification),
-    clientForGame: reviewClientForGame(db, fleet),
+    clientForGame: withQaAiur(db, qaAiur, reviewClientForGame(db, fleet)),
     issues: createReviewIssues(env.OGM_INTAKE_GITHUB_TOKEN),
     log,
   }),

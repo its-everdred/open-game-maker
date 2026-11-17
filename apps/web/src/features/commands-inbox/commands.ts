@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { CommandReview, CreatorCommandsPage, GameCommand, GameCommandsPage } from '@ogm/contracts';
 
 import { queryClient } from '../../app/query';
-import { api } from '../../lib/api/client';
+import { api, ApiError } from '../../lib/api/client';
 import { answerJobCommand } from '../build-chat/commands';
 import type { CoreReviewCommand, ReviewTarget } from '../worker-builds/review-command';
 
@@ -64,14 +64,18 @@ export function useCreatorReviewCommands(creatorId: string | undefined) {
   };
 }
 
+type CorePage = { commands: CoreReviewCommand[]; targets: ReviewTarget[]; targetsUnavailable?: boolean };
+
 export function useCoreReviewCommands(creatorId: string | undefined) {
   const query = useQuery({
     queryKey: [...creatorCommandsQueryKey, creatorId, 'core'],
     enabled: Boolean(creatorId),
+    // Only the instance owner has core Commands; anyone else is refused, which is an empty list, not a failed load.
     queryFn: () =>
-      api<{ commands: CoreReviewCommand[]; targets: ReviewTarget[]; targetsUnavailable?: boolean }>(
-        '/me/core-commands',
-      ),
+      api<CorePage>('/me/core-commands').catch((error: unknown): CorePage => {
+        if (error instanceof ApiError && error.status === 403) return { commands: [], targets: [] };
+        throw error;
+      }),
     refetchInterval: POLL_MS,
     retry: false,
   });

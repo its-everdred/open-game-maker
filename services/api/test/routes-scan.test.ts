@@ -129,6 +129,7 @@ export default new Hono().get('/seen', (c) => c.text(seen));
       '/',
       '/internal/operator',
       '/api/v1',
+      '/internal/qa',
       '/',
       '/api/v1/reports',
       '/api/v1',

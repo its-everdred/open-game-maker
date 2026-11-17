@@ -346,6 +346,32 @@ Sessions last 7 days: run it again when a capture shows Sign in. `--origin http:
 stack instead of `OGM_APP_ORIGIN`; `--out` writes elsewhere. Exit codes: 0 saved, 1 sign-in failed, 64 bad usage, 65 no
 address, origin or database.
 
+## Check the review deck on prod
+
+`gm qa review-e2e` completes a review round and a three-option Command in the deployed app as the QA creator, so a
+review change is checked without anyone's sign-in. The QA creator is its own account: a maker in a family of its own
+that owns one private game (`QA Review`), never a person's account, and unlike the family member `ogm-qa-signin`
+signs in. The QA game has no repository and no aiur instance: its rounds and Commands are seeded on the host, and what
+the app sends to aiur for it is recorded on the host instead of starting an agent.
+
+1. `ops/bin/ogm-qa-session` creates the QA account the first time (`qa@<app host>` unless `--email` names another
+   address no one signs in with) and mints a 7-day session into `~/.config/ogm/env/qa.env` (mode 600). It prints the
+   account, the game and the key names it wrote, never the cookie.
+2. `gm qa review-e2e --sha <deployed sha>`, at 390×844, 844×390, 820×1180 and 1180×820: seeds a round (picture, clip,
+   sound) and a Command (A picture, B clip, C sound), swipes the round right, undoes, swipes it left with a note, picks
+   B with a note, and checks that both verdicts reached the QA game's aiur boundary and that the deck showed no error.
+   It deletes its fixtures, saves four stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
+   `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box, to prove a broken
+   deck fails the run.
+3. After a web deploy, auto-update calls `ops/bin/ogm-qa-review-hook <have> <want> --attention <file>`. It runs both
+   steps when the deploy changed the review deck (`apps/web/src/**review**`,
+   `apps/web/src/features/{worker-builds,commands-inbox}/`, `apps/web/src/app/StudioMenu*`) or the review API
+   (`services/api/src/{review-rounds,commands,previews,qa,worker-progress}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
+   `~/.local/state/ogm/qa/review-e2e/<sha>.log`.
+
+The host routes behind it, `/internal/qa/session` and `/internal/qa/review-fixtures[/<run>]`, take only the internal
+token in `x-ogm-internal`.
+
 ## Prove the instance monorepo flow
 
 Every game in an instance lives in the one repository named by `OGM_INSTANCE_REPO`: `games/<slug>/` per game and
