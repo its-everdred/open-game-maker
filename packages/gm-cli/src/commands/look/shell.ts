@@ -69,7 +69,7 @@ export const command: GmCommand = {
     const limits = {
       ...(minFill === undefined ? {} : { minFill: Number(minFill) }),
       ...(maxOffset === undefined ? {} : { maxOffset: Number(maxOffset) }),
-      skip: config === false,
+      skip: config === false || config.disabled === true,
     };
     if (
       [limits.minFill, limits.maxOffset].some(

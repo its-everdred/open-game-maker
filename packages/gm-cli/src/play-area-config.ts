@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-export type PlayAreaConfig = false | { tap?: string; minFill?: number; maxOffset?: number };
+export type PlayAreaConfig = false | { tap?: string; minFill?: number; maxOffset?: number; disabled?: boolean };
 
 /** Template games may have no source manifest; their SDK dependency identifies them. */
 export function hasPlayAreaCheck(game: string): boolean {
@@ -55,6 +55,7 @@ export function readPlayAreaConfig(game: string): PlayAreaConfig {
     typeof options !== 'object' ||
     options === null ||
     Array.isArray(options) ||
+    (options.disabled !== undefined && typeof options.disabled !== 'boolean') ||
     (options.tap !== undefined && typeof options.tap !== 'string') ||
     (options.minFill !== undefined &&
       (typeof options.minFill !== 'number' ||

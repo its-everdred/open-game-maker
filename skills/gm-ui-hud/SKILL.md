@@ -30,7 +30,8 @@ output in the verify checklist.
 For canvas or WebGL UI sprites, use the draft-only `@gm/sdk/debug` image-draw helpers: call `beginImageDraws()` at the
 start of each UI frame and `reportImageDraw({ id, file, source: { width, height }, drawn: { width, height } })` for
 each visible sprite. Draw dimensions are CSS pixels. The capture reads `window.__gm.imageDraws()`; world textures do
-not need reports. Keep this instrumentation out of published builds.
+not need reports. Call `beginImageDraws()` even on frames with no UI sprites so the gate can distinguish an empty frame
+from missing instrumentation. Keep this instrumentation out of published builds.
 
 Read the `Viewport` from `HostApi.viewport.current()` on the `host` that `mount` receives, and follow
 `HostApi.viewport.onChange`; it carries size, `dpr`, orientation, and `safe` insets. Keep every HUD element inside the

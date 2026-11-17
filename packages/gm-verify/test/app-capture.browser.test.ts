@@ -32,9 +32,10 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
     if (!script) throw new Error('bridge fixture script missing');
     const sdk = await build({
       stdin: {
-        contents: `import { installGlobals } from './globals.ts'; import { reportImageDraw } from './image-draws.ts';
+        contents: `import { installGlobals } from './globals.ts'; import { beginImageDraws, reportImageDraw } from './image-draws.ts';
           installGlobals({ ready: true, marks: [], advanceTime() {}, renderAt() {}, renderGameToText() {} }, 'draft');
-          reportImageDraw({ id: 'sdk-sprite', file: 'sprite.png', source: { width: 90, height: 30 }, drawn: { width: 30, height: 30 } });`,
+          setInterval(() => { beginImageDraws();
+            reportImageDraw({ id: 'sdk-sprite', file: 'sprite.png', source: { width: 90, height: 30 }, drawn: { width: 30, height: 30 } }); }, 100);`,
         resolveDir: fileURLToPath(new URL('../../sdk/src/test/', import.meta.url)),
         loader: 'ts',
       },

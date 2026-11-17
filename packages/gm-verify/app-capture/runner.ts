@@ -14,7 +14,7 @@ import { encodeMp4 } from '../src/qa/media';
 
 import { captureStill, ScreenshotTimeout } from './still';
 import { fixedAspectMinimumFill, matchesPlayAreaAspect, measurePlayArea } from '../src/play-area';
-import { measureImageDistortion, type ImageDistortion } from './image-distortion';
+import { measureImageDistortion, trackShadowRoots, type ImageDistortion } from './image-distortion';
 
 const [dist, out, tapsJson, editArg, videoArg, softwareArg, testFastArg, limitsJson] = process.argv.slice(2);
 if (!dist || !out || !tapsJson) throw new Error('missing capture arguments');
@@ -64,6 +64,7 @@ try {
         ...(videoArg === '1' ? { recordVideo: { dir: out, size: { width, height } } } : {}),
       });
       try {
+        await context.addInitScript(trackShadowRoots);
         const page = await context.newPage();
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
@@ -112,8 +113,19 @@ try {
           const frame = page.frames().find((item) => item.url().includes(`/${build}/index.html`));
           if (!frame) throw new Error(`game frame missing at ${size}`);
           for (const capturedFrame of page.frames()) {
-            if (capturedFrame !== page.mainFrame() && !(await (await capturedFrame.frameElement()).isVisible()))
-              continue;
+            if (capturedFrame !== page.mainFrame()) {
+              const owner = await capturedFrame.frameElement();
+              const bounds = await owner.boundingBox();
+              if (
+                !(await owner.isVisible()) ||
+                !bounds ||
+                bounds.x + bounds.width <= 0 ||
+                bounds.y + bounds.height <= 0 ||
+                bounds.x >= width ||
+                bounds.y >= height
+              )
+                continue;
+            }
             distortions.push(...(await measureImageDistortion(capturedFrame, size, screen, capturedFrame === frame)));
           }
         };
@@ -122,7 +134,10 @@ try {
         console.error(`shell capture: play still captured at ${size}`);
         const game = page.frameLocator('.game-frame iframe');
         for (const text of taps) {
-          await game.getByText(text, { exact: true }).first().tap({ timeout: 45_000 });
+          const target = game.getByText(text, { exact: true }).first();
+          await target.waitFor({ state: 'visible', timeout: 45_000 });
+          await measureImages(`before ${text}`);
+          await target.tap({ timeout: 45_000 });
           await page.waitForTimeout(1_200);
           await measureImages(`after ${text}`);
         }

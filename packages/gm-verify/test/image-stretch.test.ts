@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -49,14 +49,17 @@ it('reports explicit stretch and respects a reasoned exception', () => {
 it('recognizes stylesheet fits, style properties and variable-backed backgrounds', () => {
   const root = mkdtempSync(join(tmpdir(), 'gm-stretch-styles-'));
   try {
-    writeFileSync(join(root, 'page.html'), '<img class="safe" width="90" height="30">');
+    writeFileSync(
+      join(root, 'page.html'),
+      '<link rel="stylesheet" href="./page.css"><img class="safe" width="90" height="30"><!-- object-fit: fill -->',
+    );
     writeFileSync(
       join(root, 'page.css'),
       '.safe { object-fit: contain; }\n.card { background: var(--art) center / 200% 100%; }\n.split { background-image: url(button.png); }\n.split { background-size: 60px 30px; }',
     );
     writeFileSync(
       join(root, 'view.tsx'),
-      "element.style.objectFit = 'fill';\nconst node = <div style={{ backgroundSize: '90px 30px' }} />;",
+      "element.style.objectFit = 'fill';\nconst node = <div style={{ backgroundSize: '90px 30px' }} />;\n// object-fit: fill is forbidden",
     );
     const result = runL0(root, { checks: ['image-stretch'] });
     expect(result.checks.map((item) => [item.file, item.line])).toEqual(
@@ -68,6 +71,27 @@ it('recognizes stylesheet fits, style properties and variable-backed backgrounds
       ]),
     );
     expect(result.checks).toHaveLength(4);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it('ignores prototypes and does not borrow unrelated or conditional stylesheet rules', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-stretch-scope-'));
+  try {
+    writeFileSync(join(root, 'page.html'), '<img class="hero" width="90" height="30">');
+    writeFileSync(join(root, 'other.css'), '.hero { object-fit: contain; }');
+    mkdirSync(join(root, 'prototypes'));
+    writeFileSync(join(root, 'prototypes/old.css'), '.old { object-fit: fill; }');
+    let result = runL0(root, { checks: ['image-stretch'] });
+    expect(result.checks.map((item) => item.file)).toEqual(['page.html']);
+    writeFileSync(
+      join(root, 'page.html'),
+      '<link rel="stylesheet" href="./other.css"><img class="hero" width="90" height="30">',
+    );
+    writeFileSync(join(root, 'other.css'), '@media (min-width: 1000px) { .hero { object-fit: contain; } }');
+    result = runL0(root, { checks: ['image-stretch'] });
+    expect(result.checks.map((item) => item.file)).toEqual(['page.html']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

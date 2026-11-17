@@ -16,6 +16,16 @@ export function verifyBuildArgs(build: string, verify?: string): string[] {
       : ['run', 'build'];
 }
 
+function restoreBuild(dist: string, backup: string, oldDist: string, hadDist: boolean): void {
+  try {
+    rmSync(dist, { recursive: true, force: true });
+    if (hadDist) renameSync(oldDist, dist);
+  } catch {
+    throw new Error(`could not restore previous build; recover it from ${oldDist}`);
+  }
+  rmSync(backup, { recursive: true, force: true });
+}
+
 /** Run a fresh shell capture so a previous passing capture cannot mask a layout regression. */
 export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok: boolean; output: string[] }> {
   const output: string[] = [];
@@ -52,7 +62,6 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
     const oldDist = join(backup, 'dist');
     const hadDist = existsSync(dist);
     if (hadDist) renameSync(dist, oldDist);
-    let preserveBackup = false;
     try {
       const abort = new AbortController();
       const stop = () => abort.abort();
@@ -68,67 +77,58 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
       if (build !== 0) throw new Error(`game build failed before play-area check (exit ${build})`);
       if (!existsSync(join(dist, 'index.html')) || !existsSync(join(dist, 'design/design.json')))
         throw new Error('game build is missing index.html or design/design.json');
-    } catch (error) {
-      try {
-        rmSync(dist, { recursive: true, force: true });
-        if (hadDist) renameSync(oldDist, dist);
-      } catch {
-        preserveBackup = true;
-        throw new Error(`could not restore previous build; recover it from ${oldDist}`);
-      }
-      throw error;
+      scratch = mkdtempSync(join(tmpdir(), 'gm-play-area-check-'));
+      const reportOutput: string[] = [];
+      const code = await shell.run(
+        {
+          ...ctx,
+          cwd: game,
+          json: true,
+          fields: null,
+          out: (line) => reportOutput.push(line),
+          err: (line) => output.push(line),
+        },
+        [],
+        {
+          dist: 'dist',
+          out: scratch,
+          tap: options === false ? undefined : options.tap,
+          timeout: 600,
+          'min-fill': options === false ? undefined : options.minFill,
+          'max-offset': options === false ? undefined : options.maxOffset,
+        },
+      );
+      if (code !== 0) return { ok: false, output };
+      const report = JSON.parse(reportOutput.join('\n')) as {
+        playArea: { viewport: string; ok: boolean; fill?: number; offset?: number; error?: string }[];
+        distortions: {
+          element: string;
+          file: string;
+          natural: number;
+          drawn: number;
+          viewport: string;
+          screen: string;
+          error?: string;
+        }[];
+      };
+      return {
+        ok: report.playArea.every((item) => item.ok) && report.distortions.length === 0,
+        output: [
+          ...output,
+          ...report.playArea.map((item) =>
+            item.error
+              ? `play area: ${item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport}: fail`
+              : `board fill ${item.fill!.toFixed(2)} at ${item.viewport}, offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
+          ),
+          ...report.distortions.map(
+            (item) =>
+              `image distortion: ${item.element} ${item.file} ${item.error ?? `natural ${item.natural.toFixed(3)} drawn ${item.drawn.toFixed(3)}`} at ${item.viewport} (${item.screen}): fail`,
+          ),
+        ],
+      };
     } finally {
-      if (!preserveBackup) rmSync(backup, { recursive: true, force: true });
+      restoreBuild(dist, backup, oldDist, hadDist);
     }
-    scratch = mkdtempSync(join(tmpdir(), 'gm-play-area-check-'));
-    const reportOutput: string[] = [];
-    const code = await shell.run(
-      {
-        ...ctx,
-        cwd: game,
-        json: true,
-        fields: null,
-        out: (line) => reportOutput.push(line),
-        err: (line) => output.push(line),
-      },
-      [],
-      {
-        dist: 'dist',
-        out: scratch,
-        tap: options === false ? undefined : options.tap,
-        timeout: 600,
-        'min-fill': options === false ? undefined : options.minFill,
-        'max-offset': options === false ? undefined : options.maxOffset,
-      },
-    );
-    if (code !== 0) return { ok: false, output };
-    const report = JSON.parse(reportOutput.join('\n')) as {
-      playArea: { viewport: string; ok: boolean; fill?: number; offset?: number; error?: string }[];
-      distortions: {
-        element: string;
-        file: string;
-        natural: number;
-        drawn: number;
-        viewport: string;
-        screen: string;
-        error?: string;
-      }[];
-    };
-    return {
-      ok: report.playArea.every((item) => item.ok) && report.distortions.length === 0,
-      output: [
-        ...output,
-        ...report.playArea.map((item) =>
-          item.error
-            ? `play area: ${item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport}: fail`
-            : `board fill ${item.fill!.toFixed(2)} at ${item.viewport}, offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
-        ),
-        ...report.distortions.map(
-          (item) =>
-            `image distortion: ${item.element} ${item.file} ${item.error ?? `natural ${item.natural.toFixed(3)} drawn ${item.drawn.toFixed(3)}`} at ${item.viewport} (${item.screen}): fail`,
-        ),
-      ],
-    };
   } catch (error) {
     output.push(error instanceof Error ? error.message : String(error));
     return { ok: false, output };

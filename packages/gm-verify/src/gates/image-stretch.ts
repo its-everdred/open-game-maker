@@ -1,7 +1,37 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import type { GateCheck } from './index.js';
+
+function conditionalAt(text: string, end: number): boolean {
+  const stack: boolean[] = [];
+  let boundary = 0;
+  for (let i = 0; i < end; i++) {
+    if (text[i] === '{') {
+      stack.push(/(?:^|;)\s*@(media|supports|container)\b/i.test(text.slice(boundary, i)));
+      boundary = i + 1;
+    } else if (text[i] === '}') {
+      stack.pop();
+      boundary = i + 1;
+    }
+  }
+  return stack.some(Boolean);
+}
+
+function maskComments(file: string, text: string): string {
+  const masked = text
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '))
+    .replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '))
+    .split('');
+  if (/\.[cm]?[jt]sx?$/.test(file)) {
+    const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.JSX, text);
+    for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+      if (token === ts.SyntaxKind.SingleLineCommentTrivia)
+        for (let i = scanner.getTokenPos(); i < scanner.getTextPos(); i++) masked[i] = ' ';
+    }
+  }
+  return masked.join('');
+}
 
 /** Conservative source checks; the capture gate measures the actual rendered result. */
 export function scanImageStretch(root: string): GateCheck[] {
@@ -24,7 +54,8 @@ export function scanImageStretch(root: string): GateCheck[] {
   const files: string[] = [];
   const scan = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name.startsWith('.') || ['node_modules', 'dist'].includes(entry.name)) continue;
+      if (entry.name.startsWith('.') || ['node_modules', 'dist', 'prototypes', 'coverage'].includes(entry.name))
+        continue;
       const file = join(dir, entry.name);
       if (entry.isDirectory()) {
         scan(file);
@@ -37,16 +68,29 @@ export function scanImageStretch(root: string): GateCheck[] {
   };
   scan(root);
   const texts = files.map((file) => readFileSync(file, 'utf8'));
-  const css = texts.join('\n').replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '));
-  const rasterSelectors = new Set<string>();
-  for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    if (/\bbackground(?:-image)?\s*:[^;]*(?:url\([^)]*\.(?:png|jpe?g|webp|gif|avif)|var\()/i.test(rule[2]!))
-      for (const selector of rule[1]!.split(',')) rasterSelectors.add(selector.trim());
-  }
+  const byPath = new Map(files.map((file, index) => [resolve(file), texts[index]!]));
   for (const [index, file] of files.entries()) {
     const entry = { name: file };
     const text = texts[index]!;
-    const code = text.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '));
+    const related = new Set<string>();
+    const collectStyles = (path: string) => {
+      if (related.has(path)) return;
+      related.add(path);
+      const content = byPath.get(path);
+      if (!content) return;
+      for (const match of content.matchAll(
+        /(?:href\s*=\s*|(?:from\s+|import\s*)?)["'](?![a-z]+:|\/\/)([^"'?#]+\.css)["']/gi,
+      ))
+        collectStyles(match[1]!.startsWith('/') ? resolve(root, `.${match[1]!}`) : resolve(dirname(path), match[1]!));
+    };
+    collectStyles(resolve(file));
+    const css = [...related].map((path) => maskComments(path, byPath.get(path) ?? '')).join('\n}\n');
+    const rasterSelectors = new Set<string>();
+    for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (/\bbackground(?:-image)?\s*:[^;]*(?:url\([^)]*\.(?:png|jpe?g|webp|gif|avif)|var\()/i.test(rule[2]!))
+        for (const selector of rule[1]!.split(',')) rasterSelectors.add(selector.trim());
+    }
+    const code = maskComments(file, text);
     for (const match of code.matchAll(/\bobject-fit\s*:\s*fill\b/gi))
       report(file, text, match.index, 'image may be stretched by CSS');
     for (const match of code.matchAll(/\bbackground-size\s*:\s*100%\s+100%(?![\w.-])/gi))
@@ -86,19 +130,16 @@ export function scanImageStretch(root: string): GateCheck[] {
       const classes = /\bclass(?:Name)?=["']([^"']+)["']/.exec(match[0])?.[1]?.split(/\s+/) ?? [];
       const id = /\bid=["']([^"']+)["']/.exec(match[0])?.[1];
       const selectors = ['img', ...classes.map((name) => `.${name}`), ...(id ? [`#${id}`] : [])];
-      const styled = [
-        ...css.matchAll(/([^{}]+)\{[^{}]*object-fit\s*:\s*(?:contain|cover|none|scale-down)[^{}]*\}/gi),
-      ].some((rule) =>
-        rule[1]!.split(',').some((part) => {
-          const target =
-            part
-              .trim()
-              .split(/[\s>+~]+/)
-              .at(-1) ?? '';
-          const components = target.match(/(?:^[a-z][\w-]*|[.#][\w-]+)/gi) ?? [];
-          return components.length > 0 && components.every((component) => selectors.includes(component));
-        }),
-      );
+      const styled = [...css.matchAll(/([^{}]+)\{[^{}]*object-fit\s*:\s*(?:contain|cover|none|scale-down)[^{}]*\}/gi)]
+        .filter((rule) => !conditionalAt(css, rule.index))
+        .some((rule) =>
+          rule[1]!.split(',').some((part) => {
+            const target = part.trim();
+            if (/[\s>+~:[]/.test(target)) return false;
+            const components = target.match(/(?:^[a-z][\w-]*|[.#][\w-]+)/gi) ?? [];
+            return components.length > 0 && components.every((component) => selectors.includes(component));
+          }),
+        );
       if (/\bwidth\s*=/.test(match[0]) && /\bheight\s*=/.test(match[0]) && !/object[-Ff]it/.test(match[0]) && !styled)
         report(file, text, match.index, 'image has width and height without object-fit');
     }

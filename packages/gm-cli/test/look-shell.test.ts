@@ -104,6 +104,25 @@ describe('gm look shell', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('keeps the tap journey when board measurement is disabled', async () => {
+    const root = tempDir();
+    mkdirSync(join(root, 'dist/design'), { recursive: true });
+    writeFileSync(join(root, 'dist/index.html'), 'game');
+    writeFileSync(join(root, 'dist/design/design.json'), '{}');
+    writeFileSync(join(root, 'gm.manifest.json'), JSON.stringify({ playArea: { disabled: true, tap: 'Play>Start' } }));
+    try {
+      const result = await gm(['look', 'shell', '--dist', 'dist', '--out', 'shots'], {
+        cwd: root,
+        env: { XDG_RUNTIME_DIR: root },
+      });
+      expect(result.code).toBe(0);
+      expect(capture.calls.at(-1)?.[3]).toBe('["Play","Start"]');
+      expect(JSON.parse(capture.calls.at(-1)![8]!)).toMatchObject({ skip: true });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it('reports a small board without failing the capture', async () => {
     const root = tempDir();
     mkdirSync(join(root, 'dist/design'), { recursive: true });
@@ -133,7 +152,10 @@ describe('gm look shell', () => {
     writeFileSync(join(root, 'dist/design/design.json'), '{}');
     writeFileSync(join(root, 'gm.manifest.json'), '{}');
     cpSync(join(root, 'dist'), join(root, 'source'), { recursive: true });
-    writeFileSync(join(root, 'build.cjs'), "require('node:fs').cpSync('source', 'dist', { recursive: true })");
+    writeFileSync(
+      join(root, 'build.cjs'),
+      "const fs = require('node:fs'); fs.cpSync('source', 'dist', { recursive: true }); fs.writeFileSync('dist/index.html', 'draft');",
+    );
     writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { build: 'node build.cjs' } }));
     const git = (...args: string[]) =>
       execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
@@ -146,6 +168,7 @@ describe('gm look shell', () => {
       const result = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });
       expect(result.code).toBe(1);
       expect(result.err.join('\n')).toContain('board fill 0.61 at 1180x820');
+      expect(readFileSync(join(root, 'dist/index.html'), 'utf8')).toBe('game');
       capture.smallBoard = false;
       capture.distortion = true;
       const stretched = await gm(['check'], { cwd: root, env: { ...process.env, XDG_RUNTIME_DIR: root } });

@@ -1,5 +1,5 @@
-import { expect, it } from 'vitest';
-import { beginImageDraws, imageDraws, reportImageDraw } from './image-draws.js';
+import { expect, it, vi } from 'vitest';
+import { beginImageDraws, imageDraws, imageDrawsReady, reportImageDraw, resetImageDraws } from './image-draws.js';
 
 it('reports only the current UI frame and returns a snapshot', () => {
   beginImageDraws();
@@ -15,4 +15,19 @@ it('reports only the current UI frame and returns a snapshot', () => {
   expect(imageDraws()[0]!.drawn.width).toBe(30);
   beginImageDraws();
   expect(imageDraws()).toEqual([]);
+});
+
+it('does not attest a missing or stale frame', () => {
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(100);
+  try {
+    resetImageDraws();
+    expect(imageDrawsReady()).toBe(false);
+    beginImageDraws();
+    expect(imageDrawsReady()).toBe(true);
+    clock.mockReturnValue(1_100);
+    expect(imageDrawsReady()).toBe(false);
+  } finally {
+    clock.mockRestore();
+    resetImageDraws();
+  }
 });
