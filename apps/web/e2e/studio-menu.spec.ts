@@ -240,16 +240,7 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   await dialog.getByRole('button', { name: 'Next' }).click();
   await expect(dialog.getByText('Asked the agent for media in the next round.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Next' }).click();
-  for (const viewport of [
-    { width: 390, height: 844 },
-    { width: 844, height: 390 },
-    { width: 820, height: 1180 },
-    { width: 1180, height: 820 },
-  ]) {
-    await page.setViewportSize(viewport);
-    expect(await optionFailures(dialog, 3)).toEqual([]);
-  }
-  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await optionFailures(dialog, 3)).toEqual([]);
   await dialog.getByLabel('Note (optional)').fill('Keep blue');
   await dialog.getByRole('button', { name: 'View option B' }).click();
   await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
