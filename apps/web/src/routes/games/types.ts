@@ -38,6 +38,8 @@ export type GameSummary = {
   publishedReleaseId?: string | null;
   tagline?: string;
   tags?: string[];
+  /** Play-data stats; a stat the game has no data for is absent. */
+  stats?: { plays?: number; version?: string };
   choices?: { genre?: string[]; vibe?: string[] };
 };
 

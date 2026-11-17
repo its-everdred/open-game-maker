@@ -20,6 +20,7 @@ import {
   provisionGame,
 } from './games.js';
 import { gameMedia } from './media.js';
+import { gameStats } from './stats.js';
 import { assignSlug, findGameBySlugOrId } from './slug.js';
 import { CommitServiceRepoProvisioner } from './repo-provisioner.js';
 
@@ -92,10 +93,12 @@ const routes = new Hono<ApiBindings>()
       c.get('deps'),
       games.map((game) => game.id),
     );
+    const stats = gameStats(db, games);
     return c.json({
       games: games.map((game) => ({
         ...gameResponse(game),
         ...media.get(game.id),
+        stats: stats.get(game.id),
         lastPlayedAt: playedAt.get(game.id) ?? null,
       })),
     });
@@ -112,7 +115,8 @@ const routes = new Hono<ApiBindings>()
       }),
     );
     const media = await gameMedia(c.get('deps'), [game.id]);
-    return c.json({ ...gameResponse(game), ...media.get(game.id) });
+    const stats = gameStats(c.get('deps').db, [game]);
+    return c.json({ ...gameResponse(game), ...media.get(game.id), stats: stats.get(game.id) });
   })
   // Every shareable `/play/<ref>` link lands here: the current slug, a slug the game has outgrown, or its id.
   .get('/games/resolve/:ref', (c) => {

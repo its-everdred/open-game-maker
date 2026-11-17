@@ -17,6 +17,8 @@ const MAX_LEGACY_MANIFEST_BYTES = 1024 * 1024;
 async function manifestMedia(directory: string): Promise<{
   logo?: string;
   genres?: string[];
+  description?: string;
+  tags?: string[];
   images?: Record<string, DisplayImage>;
   loading?: { portrait: string; landscape: string };
 }> {
@@ -44,11 +46,17 @@ async function manifestMedia(directory: string): Promise<{
     const manifest = JSON.parse(bytes.toString('utf8')) as {
       logo?: unknown;
       genres?: unknown;
+      description?: unknown;
+      tags?: unknown;
       images?: Record<string, DisplayImage>;
       loading?: unknown;
     };
     const logo = manifest.logo;
-    const genres = manifest.genres;
+    const { genres, description, tags } = manifest;
+    const names = (value: unknown, max: number): value is string[] =>
+      Array.isArray(value) &&
+      value.length <= max &&
+      value.every((name) => typeof name === 'string' && name.length > 0 && name.length <= 32);
     const loading = manifest.loading as Record<string, unknown> | null | undefined;
     const validLoading = async (path: unknown): Promise<boolean> =>
       typeof path === 'string' && /^media\/[a-zA-Z0-9_-]+\.png$/u.test(path) && (await exists(join(directory, path)));
@@ -63,11 +71,11 @@ async function manifestMedia(directory: string): Promise<{
         ? { logo }
         : {}),
       ...(manifest.images && typeof manifest.images === 'object' ? { images: manifest.images } : {}),
-      ...(Array.isArray(genres) &&
-      genres.length <= 4 &&
-      genres.every((g) => typeof g === 'string' && g.length > 0 && g.length <= 32)
-        ? { genres: genres as string[] }
+      ...(names(genres, 4) ? { genres } : {}),
+      ...(typeof description === 'string' && description.length > 0 && description.length <= 160
+        ? { description }
         : {}),
+      ...(names(tags, 8) ? { tags } : {}),
     };
   } catch {
     return {};
@@ -90,6 +98,8 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
         loadingUrls?: { portrait: string; landscape: string };
         loadingImages?: { portrait: DisplayImage; landscape: DisplayImage };
         choices?: { genre: string[] };
+        tagline?: string;
+        tags?: string[];
         coverUrl?: string;
         trailerUrl?: string;
         portraitTrailerUrl?: string;
@@ -183,6 +193,8 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                 ? { loadingImages: { portrait: loadingPortrait, landscape: loadingLandscape } }
                 : {}),
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
+              ...(manifest.description ? { tagline: manifest.description } : {}),
+              ...(manifest.tags ? { tags: manifest.tags } : {}),
               ...(cover ? { coverUrl: `${base}/thumbnail.png` } : {}),
               ...(landscape ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
               ...(portrait ? { portraitTrailerUrl: `${base}/trailer-portrait.mp4` } : {}),

@@ -109,6 +109,8 @@ describe('publishing a merged build', () => {
         ...manifest,
         logo: 'media/logo.png',
         genres: ['puzzle'],
+        description: 'Match colour blobs and drop blocks in a forest duel.',
+        tags: ['Versus', 'Cozy'],
         loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
         padding: 'x'.repeat(1024 * 1024),
       }),
@@ -121,6 +123,8 @@ describe('publishing a merged build', () => {
     ).toMatchObject({
       logo: 'media/logo.png',
       genres: ['puzzle'],
+      description: 'Match colour blobs and drop blocks in a forest duel.',
+      tags: ['Versus', 'Cozy'],
       loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
     });
   });
@@ -140,7 +144,12 @@ describe('publishing a merged build', () => {
     const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>;
     writeFileSync(
       join(dir, 'manifest.json'),
-      JSON.stringify({ ...manifest, loading: { portrait: 'media/p.png', landscape: 'media/l.png' } }),
+      JSON.stringify({
+        ...manifest,
+        description: 'A forest duel.',
+        tags: ['Versus'],
+        loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
+      }),
     );
     const response = await upload(app, archiveOf(dir));
     expect(response.status).toBe(201);
@@ -154,6 +163,8 @@ describe('publishing a merged build', () => {
       },
       { timeout: 30_000 },
     );
+    // The rewrite that adds variants must keep the detail view's text.
+    expect(display).toMatchObject({ description: 'A forest duel.', tags: ['Versus'] });
     const image = display.images['media/thumbnail.png'];
     expect(image.sources.avif.map((item: { width: number }) => item.width)).toEqual([320, 640]);
     expect(display.images['media/p.png'].sources.webp[0].width).toBe(320);
