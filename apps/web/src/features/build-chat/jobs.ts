@@ -67,7 +67,7 @@ export async function setJobPaused(jobId: string, paused: boolean): Promise<void
 }
 
 export function refreshJobsForNotification(
-  kind: 'build.done' | 'job.started' | 'intake.report' | 'review.reminder',
+  kind: 'build.done' | 'job.started' | 'intake.report' | 'review.reminder' | 'review.ready',
 ): void {
   if (kind === 'build.done' || kind === 'job.started') {
     void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });

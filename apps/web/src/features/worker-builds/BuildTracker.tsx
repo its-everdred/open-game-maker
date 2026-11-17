@@ -38,6 +38,7 @@ type PanelProps = {
   historyError?: boolean;
   historyLoading?: boolean;
   reviewError?: boolean;
+  reviewLoading?: boolean;
   workerError?: boolean;
   creatorId?: string;
   jobs?: readonly Job[];
@@ -52,6 +53,7 @@ export function BuildTracker({
   historyError,
   historyLoading,
   reviewError,
+  reviewLoading,
   workerError,
   creatorId,
   jobs = [],
@@ -73,7 +75,8 @@ export function BuildTracker({
     !historyError &&
     !historyLoading &&
     !workerError &&
-    !reviewError
+    !reviewError &&
+    !openReview
   )
     return null;
   const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
@@ -114,6 +117,7 @@ export function BuildTracker({
           reviews={reviews}
           commands={commands}
           error={reviewError}
+          incomplete={reviewLoading || workerError}
           targets={targets}
           onClose={() => setOpenReview(false)}
         />
@@ -129,6 +133,7 @@ export function BuildTracker({
           creatorId={creatorId}
           workerError={workerError}
           reviewError={reviewError}
+          reviewLoading={reviewLoading}
           historyLoading={historyLoading}
           jobs={jobs}
           id={id}
@@ -147,6 +152,7 @@ export function BuildPanel({
   historyError,
   historyLoading,
   reviewError,
+  reviewLoading,
   workerError,
   creatorId,
   jobs = [],
@@ -207,6 +213,7 @@ export function BuildPanel({
           reviews={reviews}
           commands={commands}
           error={reviewError}
+          incomplete={reviewLoading || workerError}
           targets={targets}
           onClose={() => setModal(undefined)}
         />

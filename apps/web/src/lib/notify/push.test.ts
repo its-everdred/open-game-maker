@@ -140,6 +140,44 @@ describe('useNotificationFeed', () => {
     unmount();
   });
 
+  it('shows a new-review batch from the stream and notifies subscribers', () => {
+    const listener = vi.fn();
+    const unsubscribe = notify.subscribeNotification(listener);
+    const { unmount } = renderHook(() => notify.useNotificationFeed());
+    const source = FakeEventSource.instances.at(-1)!;
+    source.dispatchEvent(
+      new MessageEvent('review.ready', {
+        data: JSON.stringify({ title: 'Reviews are ready', body: 'New items are waiting for your review.' }),
+      }),
+    );
+    expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual([
+      'Reviews are ready — New items are waiting for your review.',
+    ]);
+    expect(listener).toHaveBeenCalledWith('review.ready', expect.any(MessageEvent));
+    unsubscribe();
+    unmount();
+  });
+
+  it('replays an unread new-review batch after reconnect and marks it read', async () => {
+    respond({
+      '/api/v1/notifications?unread=1&kind=review.ready&limit=100': () =>
+        json([{ id: 'n-ready', kind: 'review.ready', title: 'Reviews are ready', body: 'New items are waiting.' }]),
+      '/api/v1/notifications/n-ready/read': () => new Response(null, { status: 204 }),
+    });
+    const { unmount } = renderHook(() => notify.useNotificationFeed());
+    const source = FakeEventSource.instances.at(-1)!;
+    source.onopen?.();
+    await waitFor(() =>
+      expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual([
+        'Reviews are ready — New items are waiting.',
+      ]),
+    );
+    expect(
+      calls.some((call) => call.url === '/api/v1/notifications/n-ready/read' && call.init?.method === 'POST'),
+    ).toBe(true);
+    unmount();
+  });
+
   it('shows an unread review reminder after reconnecting and marks it read', async () => {
     respond({
       '/api/v1/notifications?unread=1&kind=review.reminder&limit=100': () =>

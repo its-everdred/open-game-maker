@@ -34,6 +34,7 @@ import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
 import { createReviewSync } from './review-rounds/runner.js';
 import { recordReconcileHeartbeat } from './review-rounds/heartbeat.js';
+import { createReadyReviewNotifier, startReadyReviewNotifier } from './review-rounds/ready-notifications.js';
 import { reviewClientForGame } from './review-rounds/daemon.js';
 import { getNotifyRuntime } from './notify/routes.js';
 import { createReviewIssues } from './review-rounds/issues.js';
@@ -242,6 +243,13 @@ const feed = startFeedConsumers({
 
 const app = createApp(deps);
 for (const { prefix, file } of (await scanRoutes(app, { deps })).mounted) log({ event: 'mounted', prefix, file });
+const reviewNotifications = startReadyReviewNotifier(
+  createReadyReviewNotifier(deps, {
+    deliver: (notification) => getNotifyRuntime(deps).deliverStored(notification, { retryFailures: true }),
+  }),
+  Math.max(30_000, env.OGM_COMMAND_POLL_MS),
+  log,
+);
 // Give the first scheduled pass one interval to start before the independent monitor checks it.
 recordReconcileHeartbeat(db, Date.now());
 decisionWaits.start(env.OGM_COMMAND_POLL_MS);
@@ -255,7 +263,10 @@ process.once('SIGTERM', () => {
   stopEstimateRefinement();
   stopBuildSweep();
   decisionWaits.stop();
+  reviewNotifications.stop();
   stopBriefingPush();
   usageReconciler.stop();
-  void Promise.all([feed.stop(), usageReconciler.idle()]).finally(() => server.close(() => sqlite.close()));
+  void Promise.all([feed.stop(), usageReconciler.idle(), reviewNotifications.idle()]).finally(() =>
+    server.close(() => sqlite.close()),
+  );
 });

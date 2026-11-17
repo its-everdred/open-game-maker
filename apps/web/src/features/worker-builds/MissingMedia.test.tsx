@@ -12,7 +12,7 @@ it('offers retry when the request fails and confirms a successful retry', async 
   api.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ status: 'asked' });
   render(<MissingMedia path="/review" />);
   fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
-  expect(await screen.findByText('No media; asked the agent.')).toBeVisible();
+  expect(await screen.findByText('Asked the agent for media in the next round.')).toBeVisible();
 });
 it('reports a changed review without claiming the agent was asked', async () => {
   api.mockRejectedValue(new ApiError(409, {}));

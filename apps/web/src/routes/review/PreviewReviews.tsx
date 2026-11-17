@@ -7,6 +7,9 @@ import type { DesignDoc } from '@ogm/contracts/browser';
 import { queryClient } from '../../app/query';
 import { mountGameFrame } from '../../features/editor/frame';
 import { api } from '../../lib/api/client';
+import { SwipeVerdict } from '../../features/worker-builds/SwipeVerdict';
+import { RoundMedia } from './RoundMedia';
+import type { Round } from './RoundReviews';
 
 export type Preview = {
   ticket: string;
@@ -52,10 +55,18 @@ export function PreviewCard({
   gameId,
   preview,
   onAnswered,
+  swipe = false,
+  onPendingChange,
+  media = [],
+  roundId,
 }: {
   gameId: string;
   preview: Preview;
   onAnswered?(): void;
+  swipe?: boolean;
+  onPendingChange?(pending: boolean): void;
+  media?: readonly Round['media'][number][];
+  roundId?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [note, setNote] = useState('');
@@ -63,6 +74,7 @@ export function PreviewCard({
     preview.pendingMessage ?? '',
   );
   const actualNote = pending ? (pending[2] ?? '') : note;
+  const swipeControls = swipe && !pending;
   const [frameError, setFrameError] = useState(false);
   const path = `/games/${encodeURIComponent(gameId)}/previews/${encodeURIComponent(preview.ticket)}`;
   const design = useQuery({
@@ -72,16 +84,26 @@ export function PreviewCard({
     retry: false,
   });
   const answer = useMutation({
-    mutationFn: (verdict: 'looks right' | 'needs work') =>
+    mutationFn: ({ verdict, answerNote }: { verdict: 'looks right' | 'needs work'; answerNote: string }) =>
       api(`${path}/answer`, {
         method: 'POST',
-        json: { buildId: preview.buildId, verdict, ...(actualNote.trim() ? { note: actualNote } : {}) },
+        json: { buildId: preview.buildId, verdict, ...(answerNote.trim() ? { note: answerNote } : {}) },
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: key(gameId) });
       onAnswered?.();
     },
     onError: () => queryClient.invalidateQueries({ queryKey: key(gameId) }),
+  });
+  const delivery = useQuery({
+    queryKey: ['review-round-status', gameId, roundId],
+    enabled: answer.isSuccess && Boolean(roundId),
+    queryFn: () =>
+      api<{ status: 'open' | 'pending' | 'sent'; nextPhase?: { phase: string; ticket: string }; newRound?: boolean }>(
+        `/games/${encodeURIComponent(gameId)}/review-rounds/${encodeURIComponent(roundId!)}/status`,
+      ),
+    refetchInterval: 5000,
+    retry: false,
   });
   useEffect(() => {
     if (!container.current || !design.data) return;
@@ -96,44 +118,76 @@ export function PreviewCard({
       onState: (state) => setFrameError(state.bridgeState === 'error'),
     });
     return () => frame.dispose();
-  }, [design.data, gameId, preview.accessId]);
+  }, [design.data, gameId, preview.accessId, swipeControls]);
+  const content = (
+    <>
+      <RoundMedia
+        media={media}
+        playable={
+          <div className="review-deck-playable">
+            <div className="review-deck-playable-frame" ref={container} />
+            {frameError || design.isError ? <p role="status">The game did not load.</p> : null}
+          </div>
+        }
+      />
+      {preview.question ? <p>{preview.question}</p> : null}
+    </>
+  );
   return (
     <section
       id={`preview-${preview.buildId}`}
       className="review-deck"
       aria-label={`Preview for ticket ${preview.ticket}`}
     >
-      <div className="review-deck-playable">
-        <div className="review-deck-playable-frame" ref={container} />
-        {frameError || design.isError ? <p role="status">The game did not load.</p> : null}
-      </div>
-      {preview.question ? <p>{preview.question}</p> : null}
-      <label>
-        Note (optional)
-        <textarea
-          value={actualNote}
-          readOnly={pending !== null}
-          maxLength={3900}
-          onChange={(event) => setNote(event.target.value)}
-        />
-      </label>
-      <div className="review-deck-actions">
-        <button
-          type="button"
-          disabled={answer.isPending || answer.isSuccess || (pending !== null && pending[1] !== 'looks right')}
-          onClick={() => answer.mutate('looks right')}
+      {swipeControls ? (
+        <SwipeVerdict
+          disabled={answer.isPending || answer.isSuccess}
+          onPendingChange={onPendingChange}
+          onSend={async (verdict, answerNote) => {
+            await answer.mutateAsync({ verdict: verdict === 'approved' ? 'looks right' : 'needs work', answerNote });
+          }}
         >
-          Looks right
-        </button>
-        <button
-          type="button"
-          disabled={answer.isPending || answer.isSuccess || (pending !== null && pending[1] !== 'needs work')}
-          onClick={() => answer.mutate('needs work')}
-        >
-          Needs work
-        </button>
-      </div>
-      {answer.isSuccess && <p role="status">Saved</p>}
+          {content}
+        </SwipeVerdict>
+      ) : (
+        <>
+          {content}
+          <label>
+            Note (optional)
+            <textarea
+              value={actualNote}
+              readOnly={pending !== null}
+              maxLength={3900}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+          <div className="review-deck-actions">
+            <button
+              type="button"
+              disabled={answer.isPending || answer.isSuccess || (pending !== null && pending[1] !== 'looks right')}
+              onClick={() => answer.mutate({ verdict: 'looks right', answerNote: actualNote })}
+            >
+              Looks right
+            </button>
+            <button
+              type="button"
+              disabled={answer.isPending || answer.isSuccess || (pending !== null && pending[1] !== 'needs work')}
+              onClick={() => answer.mutate({ verdict: 'needs work', answerNote: actualNote })}
+            >
+              Needs work
+            </button>
+          </div>
+        </>
+      )}
+      {answer.isSuccess && (
+        <p role="status">
+          Saved · {!roundId || delivery.data?.status === 'sent' ? 'sent to agent' : 'sending to agent'}
+          {delivery.data?.newRound ? ' · New round ready' : ''}
+          {delivery.data?.nextPhase
+            ? ` · Next phase: ${delivery.data.nextPhase.phase} (ticket ${delivery.data.nextPhase.ticket})`
+            : ''}
+        </p>
+      )}
       {answer.isError || pending ? (
         <p role="alert">The review may not have sent. Tap the same verdict to retry.</p>
       ) : null}

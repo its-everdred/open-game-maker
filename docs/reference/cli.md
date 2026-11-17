@@ -61,9 +61,11 @@ or `sound`), owning `ticket`, commit `sha`, optional `prNumber`, and `media` arr
 committed game directory at `review/tracks/<track>.json`, with the track `id`, `category`, and an ordered `phases` array.
 Each phase has an `id` and literal `template`; the first can specify its existing `ticket`. The API records the owner
 of later phases when approval creates their tickets. Gameplay submissions need
-a `build` reference from `gm preview` and a `question`. Sound submissions need a `clip` reference to a stored MP4
-containing video and audio, with `hasAudio: true`; an audio file alone is rejected. Art stills and clips use stored
+a `build` reference from `gm preview` and a `question`. Sound submissions after mock need a `clip` reference to a
+stored MP4 containing video and audio, with `hasAudio: true`; sound mocks can also use an audio file. Art stills and clips use stored
 blob hashes as `ref`; media entries use `kind` and `ref`.
+To compare against a concept, include one still with `role: "target"` alongside the submitted work. The review shows
+the target and work side by side.
 
 ## Verify a game
 

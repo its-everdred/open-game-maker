@@ -105,6 +105,7 @@ export async function gameCommandsFromAiur(
   jobTickets: ReadonlySet<string>,
   sign: MediaSigner,
   onUnavailable?: () => void,
+  linkedDecisions: ReadonlyMap<string, { version: number; ticket: string | null }> = new Map(),
 ): Promise<GameCommand[]> {
   let client: AiurClient;
   let decisions: Decision[];
@@ -122,14 +123,16 @@ export async function gameCommandsFromAiur(
     deps.log({ event: 'game_commands_unavailable', gameId: game.id, error: (error as Error).name });
     return [];
   }
-  // A job's Command is already in its build chat, so the game's own read leaves those to the job. An engineering or
-  // operations decision goes to the Executor, never to the creator. A Command the inbox would drop anyway is dropped
-  // before its media is copied.
+  // A job's Command stays in build chat; an exact ticket, id and version match may supply its Aiur media.
+  // Other engineering or operations decisions stay with the Executor. Drop unusable Commands before copying media.
+  const linked = (decision: Decision) =>
+    linkedDecisions.get(decision.decision_id)?.version === decision.version &&
+    linkedDecisions.get(decision.decision_id)?.ticket === decision.ticket.identifier;
   const candidates = decisions.filter(
     (decision) =>
-      !jobTickets.has(decision.ticket.identifier) &&
+      (!jobTickets.has(decision.ticket.identifier) || linked(decision)) &&
       isOpen(decision) &&
-      isForCreator(decision) &&
+      (isForCreator(decision) || linked(decision)) &&
       toGameCommand(decision) !== null,
   );
   if (!candidates.length) return [];
@@ -142,10 +145,10 @@ export async function gameCommandsFromAiur(
   }
   const open = candidates.filter(
     (decision) =>
-      !jobTickets.has(decision.ticket.identifier) &&
+      (!jobTickets.has(decision.ticket.identifier) || linked(decision)) &&
       allowed(decision.ticket.identifier) &&
       isOpen(decision) &&
-      isForCreator(decision) &&
+      (isForCreator(decision) || linked(decision)) &&
       toGameCommand(decision) !== null,
   );
   const commands = await Promise.all(

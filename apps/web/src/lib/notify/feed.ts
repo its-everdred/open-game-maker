@@ -6,7 +6,7 @@ import { pushToast } from './slice';
 // One SSE connection for the whole app, shared by every screen that shows the feed. EventSource reconnects by itself
 // after a dropped connection; a stream that never opens (OGM-016 not merged, signed out) gets at most five open
 // attempts (four retries) with backoff and is then left closed.
-const EVENTS = ['build.done', 'job.started', 'intake.report', 'review.reminder'] as const;
+const EVENTS = ['build.done', 'job.started', 'intake.report', 'review.reminder', 'review.ready'] as const;
 type NotificationKind = (typeof EVENTS)[number];
 type NotificationListener = (kind: NotificationKind, event: MessageEvent<string>) => void;
 const MAX_FAILED_OPENS = 5;
@@ -18,7 +18,7 @@ let failedOpens = 0;
 const listeners = new Map<NotificationListener, number>();
 const seenReminders = new Set<string>();
 
-function showReminder(message: MessageEvent<string>): void {
+function showReview(message: MessageEvent<string>, kind: 'review.reminder' | 'review.ready'): void {
   let id: unknown;
   try {
     id = (JSON.parse(message.data) as { id?: unknown }).id;
@@ -33,7 +33,7 @@ function showReminder(message: MessageEvent<string>): void {
     );
   }
   pushToast(toastText(message));
-  for (const listener of listeners.keys()) listener('review.reminder', message);
+  for (const listener of listeners.keys()) listener(kind, message);
 }
 
 export function subscribeNotification(listener: NotificationListener): () => void {
@@ -61,22 +61,23 @@ function open(): void {
   const es = (source = sse('/notifications/stream'));
   es.onopen = () => {
     failedOpens = 0;
-    void api<Array<{ id: string; kind: string; title: string; body: string }>>(
-      '/notifications?unread=1&kind=review.reminder&limit=100',
-    )
-      .then((items) => {
-        if (source !== es) return;
-        for (const item of items)
-          if (item.kind === 'review.reminder')
-            showReminder(new MessageEvent('review.reminder', { data: JSON.stringify(item) }));
-      })
-      .catch(() => {});
+    for (const kind of ['review.reminder', 'review.ready'] as const) {
+      void api<Array<{ id: string; kind: string; title: string; body: string }>>(
+        `/notifications?unread=1&kind=${kind}&limit=100`,
+      )
+        .then((items) => {
+          if (source !== es) return;
+          for (const item of items)
+            if (item.kind === kind) showReview(new MessageEvent(kind, { data: JSON.stringify(item) }), kind);
+        })
+        .catch(() => {});
+    }
   };
   for (const name of EVENTS) {
     es.addEventListener(name, (event) => {
       const message = event as MessageEvent<string>;
-      if (name === 'review.reminder') {
-        showReminder(message);
+      if (name === 'review.reminder' || name === 'review.ready') {
+        showReview(message, name);
         return;
       }
       pushToast(toastText(message));

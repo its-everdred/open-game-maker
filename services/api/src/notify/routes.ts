@@ -20,7 +20,7 @@ type NotifyRuntime = {
   publicKey: string;
   stream: StreamHub;
   deliver: (trigger: z.output<typeof NotificationTrigger>) => Promise<{ delivered: number }>;
-  deliverStored: (notification: Notification) => Promise<void>;
+  deliverStored: (notification: Notification, options?: { retryFailures?: boolean }) => Promise<void>;
 };
 
 const runtimes = new WeakMap<AppDeps, NotifyRuntime>();
@@ -47,8 +47,8 @@ export function setup(deps: AppDeps): void {
     publicKey: vapid.publicKey,
     stream,
     deliver: deliverTrigger,
-    deliverStored: (notification) =>
-      deliverStored({ sqlite: deps.sqlite, stream, push: webpush, log: deps.log }, notification),
+    deliverStored: (notification, options) =>
+      deliverStored({ sqlite: deps.sqlite, stream, push: webpush, log: deps.log }, notification, options),
   });
   deps.events.on('notify', (trigger) => {
     void deliverTrigger(trigger).catch((error: unknown) => {

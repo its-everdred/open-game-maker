@@ -17,7 +17,8 @@
         "job.started",
         "scope.agreed",
         "intake.report",
-        "review.reminder"
+        "review.reminder",
+        "review.ready"
       ]
     },
     "title": {

@@ -443,19 +443,7 @@ export function StudioMenu() {
         ))}
       </ul>
     );
-  } else if (
-    sheet === 'builds' &&
-    (workers.length > 0 ||
-      reviews.length > 0 ||
-      reviewCommands.length > 0 ||
-      coreReview.targets.length > 0 ||
-      past.tickets.length > 0 ||
-      workerError ||
-      reviewData.error ||
-      gameReview.error ||
-      coreReview.error ||
-      past.error)
-  ) {
+  } else if (sheet === 'builds') {
     sheetContent = (
       <BuildPanel
         key={creatorId ?? 'signed-out'}
@@ -468,6 +456,7 @@ export function StudioMenu() {
         historyError={past.error}
         workerError={workerError}
         reviewError={reviewData.error || gameReview.error || coreReview.error}
+        reviewLoading={workersLoading || reviewData.loading || gameReview.loading || coreReview.loading}
         historyLoading={past.loading}
         jobs={builds.jobs}
         id="studio-menu-builds"
@@ -544,6 +533,7 @@ export function StudioMenu() {
           historyError={past.error}
           workerError={workerError}
           reviewError={reviewData.error || gameReview.error || coreReview.error}
+          reviewLoading={workersLoading || reviewData.loading || gameReview.loading || coreReview.loading}
           historyLoading={past.loading}
           jobs={builds.jobs}
           finished={visibleFinished}

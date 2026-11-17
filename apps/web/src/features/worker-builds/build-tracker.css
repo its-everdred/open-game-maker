@@ -167,6 +167,13 @@
   position: absolute;
   inset: 0;
 }
+.build-review-dialog .review-deck-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 8px 0;
+  background: var(--paper);
+}
 .worker-review-item {
   display: block;
   width: 100%;
@@ -193,6 +200,37 @@
   background: color-mix(in srgb, var(--glass-edge) 14%, var(--glass-fill));
   box-shadow: inset 0 1px 0 var(--glass-shine);
 }
+.worker-review-options {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+.worker-review-swipe {
+  touch-action: pan-y pinch-zoom;
+  transform-origin: 50% 90%;
+  transition: transform 0.25s ease-out;
+}
+.worker-review-swipe[data-dragging] {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .worker-review-swipe {
+    transition: none;
+  }
+}
+.review-deck-reason-backdrop.worker-review-sheet-backdrop,
+.review-deck-fullscreen-backdrop.worker-review-sheet-backdrop {
+  z-index: 90;
+}
+.review-deck-fullscreen-media {
+  touch-action: pinch-zoom;
+}
+.worker-review-options .worker-review-option {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
 .worker-review-option {
   display: grid;
   gap: 10px;
@@ -204,6 +242,11 @@
   max-height: 55vh;
   height: auto;
   pointer-events: auto;
+}
+.worker-review-image {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 .worker-review-option audio {
   width: 100%;

@@ -8,6 +8,7 @@ export const NotificationKind = z.enum([
   'scope.agreed',
   'intake.report',
   'review.reminder',
+  'review.ready',
 ]);
 export const Notification = z.object({
   id: Id,
