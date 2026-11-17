@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test';
 import { Buffer } from 'node:buffer';
 import { readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installNewRoutes } from './fixtures/new-routes';
@@ -81,18 +82,29 @@ const energyView = {
 
 test.use({ serviceWorkers: 'block' });
 
-test('reviews a queue with swipe, undo, notes and an option pick', async ({ page }) => {
-  test.setTimeout(90_000);
+test('reviews a queue with swipe, undo, notes and an option pick', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
   await installAuthRoutes(page, { signedIn: true });
   await stubBrandArt(page);
   await installGamesMenuApi(page);
   let roundAnswer: unknown;
   let choiceAnswer: unknown;
   let asked = 0;
-  const options = ['A', 'B', 'C'].map((label) => ({
+  const fixtures = resolve(import.meta.dirname, '../../../packages/gm-cli/qa/review-e2e');
+  const mediaFiles = [
+    { file: 'still.png', mime: 'image/png', kind: 'image' },
+    { file: 'clip.mp4', mime: 'video/mp4', kind: 'video' },
+    { file: 'sound.mp3', mime: 'audio/mpeg', kind: 'audio' },
+  ];
+  for (const { file, mime } of mediaFiles) {
+    await page.route(`**/qa-media/${file}`, (route) =>
+      route.fulfill({ path: resolve(fixtures, file), contentType: mime }),
+    );
+  }
+  const options = ['A', 'B', 'C'].map((label, index) => ({
     id: label.toLowerCase(),
     label,
-    media: { url: '/art/logo.webp', width: 100, height: 100 },
+    media: { url: `/qa-media/${mediaFiles[index]!.file}`, kind: mediaFiles[index]!.kind, width: 100, height: 100 },
   }));
   await page.route(/\/api\/v1\/me\/commands(?:\?.*)?$/, (route) =>
     json(route, {
@@ -123,10 +135,10 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
           ticket: '41',
           question: 'Review?',
           media: [
-            { kind: 'still', url: '/art/logo.webp', role: 'target' },
-            { kind: 'still', url: '/art/logo.webp' },
-            { kind: 'clip', url: '/clip.mp4' },
-            { kind: 'audio', url: '/clip.mp3' },
+            { kind: 'still', url: '/qa-media/still.png', role: 'target' },
+            { kind: 'still', url: '/qa-media/still.png' },
+            { kind: 'clip', url: '/qa-media/clip.mp4' },
+            { kind: 'audio', url: '/qa-media/sound.mp3' },
           ],
         },
         { id: 'r2', ticket: '42', question: 'Missing?', media: [] },
@@ -167,16 +179,52 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog.locator('video')).toHaveAttribute('loop');
   await expect(dialog.locator('audio')).toHaveCount(1);
+  await expect
+    .poll(() => dialog.locator('img[alt="Review"]').evaluate((image) => (image as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => dialog.locator('audio').evaluate((audio) => audio.duration)).toBeGreaterThan(1);
+  const roundStill = testInfo.outputPath('review-round.png');
+  await page.screenshot({ path: roundStill });
+  await testInfo.attach('review-round', { path: roundStill, contentType: 'image/png' });
   await expect.poll(() => asked).toBe(1);
   const media = dialog.locator('.review-deck-playable').first();
-  const swipe = async (right: boolean) => {
-    await media.scrollIntoViewIfNeeded();
-    const box = (await media.boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + (right ? 110 : -110), box.y + box.height / 2, { steps: 5 });
-    await page.mouse.up();
+  const touch = await page.context().newCDPSession(page);
+  const scroller = dialog.locator('.worker-review-swipe');
+  const startBox = (await media.boundingBox())!;
+  const startX = startBox.x + startBox.width / 2;
+  const startY = startBox.y + startBox.height * 0.8;
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y: startY }] });
+  for (let step = 1; step <= 5; step++) {
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: startX, y: startY - 25 * step }],
+    });
+    await page.waitForTimeout(20);
+  }
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await scroller.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  const swipe = async (right: boolean, target = media) => {
+    await target.scrollIntoViewIfNeeded();
+    const box = (await target.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let step = 1; step <= 5; step++) {
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: x + (right ? 22 : -22) * step, y }],
+      });
+    }
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   };
+  await swipe(true, dialog.locator('video'));
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await scroller.evaluate((element) => { element.scrollTop = 0; });
   await swipe(true);
   await page.getByRole('button', { name: 'Undo' }).click();
   expect(roundAnswer).toBeUndefined();
@@ -189,6 +237,14 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   await expect(dialog.getByText('Asked the agent for media in the next round.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Next' }).click();
   await dialog.getByLabel('Note (optional)').fill('Keep blue');
+  await dialog.getByRole('button', { name: 'View option B' }).click();
+  await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
+  await dialog.getByRole('button', { name: 'View option C' }).click();
+  await expect.poll(() => dialog.locator('audio').evaluate((audio) => audio.duration)).toBeGreaterThan(1);
+  const optionStill = testInfo.outputPath('review-option-c.png');
+  await page.screenshot({ path: optionStill });
+  await testInfo.attach('review-option-c', { path: optionStill, contentType: 'image/png' });
+  await dialog.getByRole('button', { name: 'View option B' }).click();
   await dialog.getByRole('button', { name: 'Pick B: B' }).click();
   await expect.poll(() => choiceAnswer).toMatchObject({ option_id: 'b', review: { notes: 'Keep blue' } });
 });

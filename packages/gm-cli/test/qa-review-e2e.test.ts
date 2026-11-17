@@ -1,9 +1,35 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NOTE, PICK_NOTE, reached, type Report } from '../src/qa-review-e2e.js';
+import { reviewOptionImageReady, reviewRoundMediaReady } from '../src/qa-review-media.js';
 import { gm, tempDir } from './helpers.js';
+
+afterEach(() => vi.unstubAllGlobals());
+
+it('rejects broken images and unloaded video or audio in the production readiness gate', () => {
+  const image = { naturalWidth: 100 };
+  const video = { readyState: 2 };
+  const audio = { duration: 2 };
+  const deck = { querySelector: (kind: string) => ({ img: image, video, audio })[kind as 'img' | 'video' | 'audio'] };
+  vi.stubGlobal('document', {
+    querySelector: (selector: string) => (selector === '.build-review-dialog' ? deck : image),
+  });
+  expect(reviewRoundMediaReady()).toBe(true);
+  expect(reviewOptionImageReady()).toBe(true);
+  image.naturalWidth = 0;
+  expect(reviewRoundMediaReady()).toBe(false);
+  expect(reviewOptionImageReady()).toBe(false);
+  image.naturalWidth = 100;
+  video.readyState = 1;
+  expect(reviewRoundMediaReady()).toBe(false);
+  video.readyState = 2;
+  audio.duration = 0;
+  expect(reviewRoundMediaReady()).toBe(false);
+  audio.duration = 0.5;
+  expect(reviewRoundMediaReady()).toBe(false);
+});
 
 function host(qa: string) {
   const home = tempDir();

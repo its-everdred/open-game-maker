@@ -16,6 +16,8 @@ import type { WorkerReview } from './useWorkerReviews';
 import type { WorkerBuild } from './BuildTracker';
 import '../build-chat/conversation-modal.css';
 import '../commands-inbox/review-deck.css';
+import '../commands-inbox/review-glass.css';
+import './review-inbox.css';
 import '../commands-inbox/decision-deck.css';
 
 export function ReviewInbox({
@@ -96,10 +98,10 @@ export function ReviewInbox({
     if (!activeKey && queue.length) show(queue[0]);
   });
   const queueControls = (
-    <div>
+    <div className="worker-review-queue">
       <p aria-live="polite">{queue.length} left</p>
       {(queue.length > 1 || (activeKey && !queue.some((entry) => entry.key === activeKey))) && (
-        <button type="button" disabled={sending} onClick={next}>
+        <button type="button" className="worker-review-next" disabled={sending} onClick={next}>
           Next
         </button>
       )}

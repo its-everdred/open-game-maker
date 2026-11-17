@@ -4,12 +4,12 @@ import { GameCommand, type CreatorCommandsPage, type Principal } from '@ogm/cont
 
 import { actorFromPrincipal } from '../accounts/families.js';
 import type { AppDeps } from '../app/types.js';
-import { getChatRuntime } from '../build-chat/routes.js';
 import { getChatRow, listCommands, parseCommand, toMessage, type MediaSigner } from '../build-chat/store.js';
 import { hasGameGrant, listGames, type GameRow } from '../games/games.js';
 import { listJobs } from '../jobs/repo.js';
 import { reviewNumbers } from '../reviews/numbers.js';
 import { gameCommandsFromAiur } from './aiur.js';
+import { reviewMediaUrl } from '../blobs/review-url.js';
 import { isCreatorCommand } from './audience.js';
 
 type UserPrincipal = Extract<Principal, { kind: 'user' }>;
@@ -27,7 +27,7 @@ export async function listGameCommands(
   game: GameRow,
   onUnavailable?: () => void,
 ): Promise<GameCommand[]> {
-  const { sign } = getChatRuntime(deps);
+  const sign: MediaSigner = (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash);
   const commands: GameCommand[] = [];
   const jobs = listJobs(deps.db, game.id);
   const jobTickets = new Set(
