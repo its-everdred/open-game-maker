@@ -23,12 +23,14 @@ export interface ShellOptions {
   deviceScaleFactor: number;
   /** Record the page into this directory. */
   videoDir?: string;
+  /** Also collect the game frame's console errors, from its first script on. */
+  gameConsole?: boolean;
 }
 
 export interface OpenShell {
   context: BrowserContext;
   page: Page;
-  /** Page errors and missing game files, in order. */
+  /** Page errors, missing game files and (with `gameConsole`) game console errors, in order. */
   errors: string[];
 }
 
@@ -48,6 +50,11 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
+    if (options.gameConsole)
+      page.on('console', (message) => {
+        if (message.type() === 'error' && message.location().url.includes(`/${buildId}/`))
+          errors.push(`console: ${message.text().slice(0, 200)}`);
+      });
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page, options.design, options.title);
     // The real web build expects this games origin; intercept it without opening a listener.

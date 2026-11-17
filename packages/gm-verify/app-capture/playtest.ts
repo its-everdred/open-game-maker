@@ -19,7 +19,7 @@ import {
   type PlaytestRun,
 } from '../src/qa/playtest';
 
-import { buildId, gameFrame, openShell } from './open-shell';
+import { gameFrame, openShell } from './open-shell';
 import { inspectPlayArea } from './play-area-dom';
 import { inspectPlaytest } from './playtest-dom';
 import { captureStill, ScreenshotTimeout } from './still';
@@ -30,12 +30,15 @@ type Plan = {
   seconds: number;
   seed: number;
   keys: BotKey[];
+  /** False for a game whose manifest sets `playArea: false`: it has no board to count or overlap. */
+  board: boolean;
   software: boolean;
   /** Test fixtures only: one size and short waits. */
   fast?: boolean;
 };
 
 const MOVE_MS = 250;
+const LOAD_MS = 180_000;
 
 const [out, planJson] = process.argv.slice(2);
 if (!out || !planJson) throw new Error('missing playtest arguments');
@@ -83,12 +86,13 @@ const firstLine = (error: unknown) => (error instanceof Error ? error.message : 
 
 async function sample(frame: Frame) {
   let playArea: string | undefined;
-  try {
-    await frame.evaluate(inspectPlayArea, null);
-  } catch (error) {
-    playArea = firstLine(error).replace(/^.*?Error: /, '');
-  }
-  return judgeSample({ ...(await frame.evaluate(inspectPlaytest)), ...(playArea ? { playArea } : {}) });
+  if (plan.board)
+    try {
+      await frame.evaluate(inspectPlayArea, null);
+    } catch (error) {
+      playArea = firstLine(error).replace(/^.*?Error: /, '');
+    }
+  return judgeSample({ ...(await frame.evaluate(inspectPlaytest)), ...(playArea ? { playArea } : {}) }, plan);
 }
 
 async function playOne(mode: Plan['modes'][number], width: number, height: number, record: boolean) {
@@ -112,18 +116,19 @@ async function playOne(mode: Plan['modes'][number], width: number, height: numbe
       width,
       height,
       deviceScaleFactor: 1,
+      gameConsole: true,
       ...(record ? { videoDir } : {}),
     });
     const { context, page, errors } = shell;
-    page.on('console', (message) => {
-      if (message.type() === 'error' && message.location().url.includes(`/${buildId}/`))
-        errors.push(`console: ${message.text().slice(0, 200)}`);
-    });
+    const recording = page.video();
     try {
       await page.waitForTimeout(plan.fast ? 500 : 3_000);
       const game = page.frameLocator('.game-frame iframe');
-      for (const text of mode.taps) {
-        await game.getByText(text, { exact: true }).first().tap({ timeout: 45_000 });
+      for (const [index, text] of mode.taps.entries()) {
+        const target = game.getByText(text, { exact: true }).first();
+        // The first target waits out the game's own loading screen, which a loaded host stretches past a minute.
+        if (index === 0) await target.waitFor({ state: 'visible', timeout: LOAD_MS });
+        await target.tap({ timeout: 45_000 });
         await page.waitForTimeout(plan.fast ? 300 : 1_200);
       }
       await page.waitForTimeout(plan.fast ? 300 : 2_000);
@@ -146,7 +151,6 @@ async function playOne(mode: Plan['modes'][number], width: number, height: numbe
       }
       run.still = `${mode.id}/${size}.png`;
       await captureStill(page, resolve(out, run.still), `${mode.id} at ${size}`, screenshotTimeout);
-      video = await page.video()?.path();
     } catch (error) {
       if (!run.still) {
         run.still = `${mode.id}/${size}-failed.png`;
@@ -161,6 +165,7 @@ async function playOne(mode: Plan['modes'][number], width: number, height: numbe
     } finally {
       addOnce(run.failures, errors);
       await context.close();
+      video = await recording?.path();
     }
   } catch (error) {
     if (error instanceof ScreenshotTimeout) throw error;
@@ -171,10 +176,13 @@ async function playOne(mode: Plan['modes'][number], width: number, height: numbe
   if (record) {
     if (!video) run.unchecked.push('clip: no recording');
     else if (!ffmpeg) run.unchecked.push('clip: ffmpeg missing');
-    else {
-      run.clip = `${mode.id}/clip.mp4`;
-      encodeMp4(video, resolve(out, run.clip), 0);
-    }
+    else
+      try {
+        encodeMp4(video, resolve(out, `${mode.id}/clip.mp4`), 0);
+        run.clip = `${mode.id}/clip.mp4`;
+      } catch (error) {
+        run.unchecked.push(`clip: ${firstLine(error)}`);
+      }
     rmSync(videoDir, { recursive: true, force: true });
   }
 }

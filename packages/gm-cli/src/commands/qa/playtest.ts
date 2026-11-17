@@ -76,7 +76,19 @@ export const command: GmCommand = {
       const play = (software: boolean) =>
         runChild(
           ctx.cwd,
-          [runner, out, JSON.stringify({ game: source, modes: plan.modes, seconds, seed, keys: plan.keys, software })],
+          [
+            runner,
+            out,
+            JSON.stringify({
+              game: source,
+              modes: plan.modes,
+              seconds,
+              seed,
+              keys: plan.keys,
+              board: plan.board,
+              software,
+            }),
+          ],
           ctx.env ?? {},
           Math.max(1, deadline - Date.now()),
           abort.signal,

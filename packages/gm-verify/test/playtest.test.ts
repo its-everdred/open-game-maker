@@ -94,6 +94,14 @@ describe('playtest verdict', () => {
     expect(judgeSample({ ...clean, invariants: 'absent' }).failures).toEqual([]);
   });
 
+  /* A game with `playArea: false` has no board; failing it for "no board" would block every such game. */
+  it('skips the board checks for a game without a play area and says so', () => {
+    expect(judgeSample({ ...clean, boards: 0, playArea: 'overlap: SCORE' }, { board: false })).toEqual({
+      failures: [],
+      unchecked: ['board: the game has no play area (playArea: false)'],
+    });
+  });
+
   it('keeps one line per defect seen across many samples', () => {
     const lines: string[] = [];
     addOnce(lines, ['a', 'b']);

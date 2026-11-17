@@ -76,13 +76,17 @@ export type PlaytestSample = {
   playArea?: string;
 };
 
-/** Turns one in-play sample into failure and unchecked lines. */
-export function judgeSample(sample: PlaytestSample): { failures: string[]; unchecked: string[] } {
+/** Turns one in-play sample into failure and unchecked lines; a game without a board skips the board checks. */
+export function judgeSample(
+  sample: PlaytestSample,
+  options: { board: boolean } = { board: true },
+): { failures: string[]; unchecked: string[] } {
   const failures: string[] = [];
   const unchecked: string[] = [];
-  if (sample.boards !== 1)
+  if (!options.board) unchecked.push('board: the game has no play area (playArea: false)');
+  else if (sample.boards !== 1)
     failures.push(sample.boards === 0 ? 'no board on screen' : `${sample.boards} boards on screen, expected one`);
-  if (sample.playArea) failures.push(`board: ${sample.playArea}`);
+  if (options.board && sample.playArea) failures.push(`board: ${sample.playArea}`);
   if (sample.selectable.length)
     failures.push(`long press selects text: ${sample.selectable.map((text) => JSON.stringify(text)).join(', ')}`);
   if (!sample.callout) failures.push('no -webkit-touch-callout:none on the page');

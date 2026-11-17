@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 
 import type { PlaytestRun } from '../src/qa/playtest.js';
+import { serveStatic } from '../src/server.js';
 
 const exec = promisify(execFile);
 const fixture = fileURLToPath(new URL('../../../apps/web/e2e/fixtures/bridge-game/', import.meta.url));
@@ -38,11 +39,12 @@ document.getElementById('bad').onclick = () => {
 };
 `;
 
-it('fails only the broken mode, naming each defect, and leaves a still per mode', async () => {
+async function playFixture(via: 'dist' | 'url') {
   expect(existsSync(runner)).toBe(true);
   const root = mkdtempSync(join(tmpdir(), 'gm-playtest-test-'));
   const game = join(root, 'game');
   const out = join(root, 'shots');
+  let server: { url: string; close(): Promise<void> } | undefined;
   try {
     cpSync(fixture, game, { recursive: true });
     const html = join(game, 'index.html');
@@ -59,8 +61,9 @@ it('fails only the broken mode, naming each defect, and leaves a still per mode'
         )
         .replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
     );
+    if (via === 'url') server = await serveStatic(game);
     const plan = {
-      game: { dist: game },
+      game: server ? { url: server.url } : { dist: game },
       modes: [
         { id: 'good', taps: ['Good'] },
         { id: 'bad', taps: ['Bad'] },
@@ -69,26 +72,43 @@ it('fails only the broken mode, naming each defect, and leaves a still per mode'
       seed: 1,
       keys: [{ key: 'Space', action: 'hardDrop', drop: true }],
       software: process.env.GM_VERIFY_SOFTWARE_GL === '1',
+      board: true,
       fast: true,
     };
     await exec(process.execPath, [runner, out, JSON.stringify(plan)], { timeout: 200_000 });
     const runs = JSON.parse(readFileSync(join(out, 'playtest.json'), 'utf8')) as PlaytestRun[];
-    expect(runs.map((run) => [run.mode, run.viewport])).toEqual([
-      ['good', '390x844'],
-      ['bad', '390x844'],
-    ]);
-    expect(runs[0]!.failures).toEqual([]);
-    expect(runs[0]!.unchecked.filter((line) => !line.startsWith('clip:'))).toEqual([]);
-    const bad = runs[1]!.failures.join('\n');
-    expect(bad).toContain('2 boards on screen, expected one');
-    expect(bad).toContain('board: overlap');
-    expect(bad).toContain('long press selects text: "SCORE"');
-    expect(bad).toContain('no -webkit-touch-callout:none on the page');
-    expect(bad).toContain('game state: exactly one board');
-    expect(bad).toContain('game state: every piece has a colour');
-    expect(bad).toContain('console: board drawn twice');
-    for (const run of runs) expect(existsSync(join(out, run.still!))).toBe(true);
+    return { runs, stills: runs.map((run) => Boolean(run.still) && existsSync(join(out, run.still!))) };
   } finally {
+    await server?.close();
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+function expectVerdicts(runs: PlaytestRun[]) {
+  expect(runs.map((run) => [run.mode, run.viewport])).toEqual([
+    ['good', '390x844'],
+    ['bad', '390x844'],
+  ]);
+  expect(runs[0]!.failures).toEqual([]);
+  expect(runs[0]!.unchecked.filter((line) => !line.startsWith('clip:'))).toEqual([]);
+  const bad = runs[1]!.failures.join('\n');
+  expect(bad).toContain('2 boards on screen, expected one');
+  expect(bad).toContain('board: overlap');
+  expect(bad).toContain('long press selects text: "SCORE"');
+  expect(bad).toContain('no -webkit-touch-callout:none on the page');
+  expect(bad).toContain('game state: exactly one board');
+  expect(bad).toContain('game state: every piece has a colour');
+  expect(bad).toContain('console: board drawn twice');
+}
+
+it('fails only the broken mode, naming each defect, and leaves a still per mode', async () => {
+  const { runs, stills } = await playFixture('dist');
+  expectVerdicts(runs);
+  expect(stills).toEqual([true, true]);
+}, 220_000);
+
+/* The post-publish run plays the hosted build (ogm-qa passes --url), not a local dist. */
+it('plays a hosted build through --url with the same verdicts', async () => {
+  const { runs } = await playFixture('url');
+  expectVerdicts(runs);
 }, 220_000);

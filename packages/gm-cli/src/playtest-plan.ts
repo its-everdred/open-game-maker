@@ -20,7 +20,7 @@ const sourceManifestSchema = z.looseObject({
 export function readPlaytestPlan(
   game: string,
   choice: { all: boolean; mode?: string },
-): { modes: PlaytestMode[]; keys: BotKey[]; notes: string[] } {
+): { modes: PlaytestMode[]; keys: BotKey[]; board: boolean; notes: string[] } {
   const path = join(game, 'gm.manifest.json');
   if (!existsSync(path)) throw new Error(`no gm.manifest.json in ${game}`);
   const parsed = sourceManifestSchema.safeParse(JSON.parse(readFileSync(path, 'utf8')));
@@ -41,5 +41,5 @@ export function readPlaytestPlan(
   } else if (!choice.all) modes = modes.slice(0, 1);
   const keys = botKeys(manifest.controlBindings);
   if (!keys.length) notes.push('no controlBindings: the bot taps the board instead of pressing keys');
-  return { modes, keys, notes };
+  return { modes, keys, board: manifest.playArea !== false, notes };
 }
