@@ -274,7 +274,7 @@ export class PerSeatMode {
       this.start(payload as NetStart);
       return;
     }
-    if (type === 'net.start.cancel') {
+    if (type === 'net.start.cancel' || type === 'net.epoch.end') {
       this.gate.cancel();
       this.started = false;
       this.syncDiagnostics();

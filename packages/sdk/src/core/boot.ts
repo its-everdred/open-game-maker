@@ -381,6 +381,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
         case 'net.primary':
         case 'net.start':
         case 'net.start.cancel':
+        case 'net.epoch.end':
         case 'net.clock':
         case 'net.state':
         case 'net.inputs':
@@ -397,7 +398,8 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
               (item) => item.scope === envelope.payload.scope && item.seat === envelope.payload.seat,
             );
             if (pending < 0) deferredRecoveries.push(envelope.payload);
-            else if (deferredRecoveries[pending]!.tick <= envelope.payload.tick) deferredRecoveries[pending] = envelope.payload;
+            else if (deferredRecoveries[pending]!.tick <= envelope.payload.tick)
+              deferredRecoveries[pending] = envelope.payload;
           } else active.handleNet(envelope.t, envelope.payload);
           return;
         case 'net.tick':

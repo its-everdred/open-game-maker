@@ -94,6 +94,7 @@ export function attachBridgeForwarding(options: BridgeForwardingOptions): Bridge
   const removeNetMessages = client.subscribeNet?.((message) => {
     switch (message.t) {
       case 'net.start.cancel':
+      case 'net.epoch.end':
       case 'net.primary':
       case 'net.pause':
       case 'net.pause.prepare':

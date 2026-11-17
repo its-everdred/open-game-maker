@@ -118,6 +118,7 @@ export interface NetController {
 const V2_INBOUND = new Set([
   'net.start',
   'net.start.cancel',
+  'net.epoch.end',
   'net.seats',
   'net.inputs',
   'net.state',
@@ -148,7 +149,6 @@ export function createNetController(options: NetControllerOptions): NetControlle
   const seatListeners = new Set<(seats: readonly NetSeat[]) => void>();
   const startListeners = new Set<(start: NetStart) => void>();
   const eventBuffer = new Map<number, unknown>();
-  const seatEventSequences = new Map<number, number>();
   const warned = new Set<string>();
   const diagnostics: NetDiagnostics = {
     ...zeroDiagnostics(mode),
@@ -296,7 +296,7 @@ export function createNetController(options: NetControllerOptions): NetControlle
         if (perSeat) {
           if (perSeat.spectator) return;
           options.send('net.event', {
-            epoch: perSeat.currentEpoch || 'lobby',
+            epoch: perSeat.isStarted ? perSeat.currentEpoch : 'lobby',
             id: `${perSeat.localSeat}-${seq}`,
             seq,
             from: perSeat.localSeat,
@@ -342,13 +342,12 @@ export function createNetController(options: NetControllerOptions): NetControlle
         peer.receiveSnapshot(payload as WireSnapshot);
       } else if (type === 'net.event') {
         if (perSeat && typeof payload === 'object' && payload !== null && 'from' in payload) {
-          const event = payload as { from: number; seq: number; data: string };
-          if (event.seq <= (seatEventSequences.get(event.from) ?? 0)) return;
+          /* The room relays over one ordered socket and never replays, and a reloaded seat restarts at 1. */
+          const event = payload as { from: number; data: string };
           try {
             const bytes = decodeBase64(event.data);
             assertByteLength(bytes, NET_LIMITS.eventBytes, 'event');
             const decoded = unpackJson(bytes);
-            seatEventSequences.set(event.from, event.seq);
             emitEvent(decoded);
             options.recordEvent('net.event', decoded);
           } catch {

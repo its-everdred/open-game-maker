@@ -1,6 +1,7 @@
 import type { ActionFrame, GameManifest, MultiplayerHooksV2 } from '@ogm/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
+import { encodeBase64, packJson } from '../codec.js';
 import { createNetController } from '../index.js';
 import { ModeMismatchError, resolveAuthorityMode } from '../mode.js';
 import { createFixtureGame } from '../test/fixture-game.js';
@@ -164,6 +165,36 @@ describe('per-seat authority mode', () => {
     loopback.advance(2);
     expect(received).toHaveBeenCalledWith({ seat: 1 });
     expect(received).toHaveBeenCalledWith({ seat: 2 });
+  });
+
+  it('stamps events as lobby events once the room ends the epoch', () => {
+    const { loopback } = match(2);
+    loopback.start();
+    const seat = loopback.seat(1);
+    seat.controller.handleMessage('net.epoch.end', { epoch: seat.net.epoch, tick: seat.net.tick });
+    seat.net.sendEvent({ rematch: true });
+    loopback.advance(2);
+    const sent = loopback.messages().filter((message) => message.type === 'net.event' && message.sender === 1);
+    /* The room drops an event stamped with an epoch that is no longer running; between rounds it is a lobby event. */
+    expect(sent.at(-1)?.payload).toMatchObject({ epoch: 'lobby' });
+  });
+
+  it('delivers events from a seat whose reloaded SDK restarted its sequence', () => {
+    const { loopback } = match(2);
+    loopback.start();
+    const received = vi.fn();
+    loopback.seat(0).net.onEvent(received);
+    const event = (seq: number, value: unknown) => ({
+      epoch: loopback.seat(0).net.epoch,
+      id: `1-${seq}`,
+      seq,
+      from: 1,
+      target: 'all',
+      data: encodeBase64(packJson(value, 1024, 'event')),
+    });
+    loopback.seat(0).controller.handleMessage('net.event', event(5, { before: true }));
+    loopback.seat(0).controller.handleMessage('net.event', event(1, { afterReload: true }));
+    expect(received).toHaveBeenCalledWith({ afterReload: true });
   });
 });
 

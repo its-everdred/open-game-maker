@@ -84,6 +84,12 @@ describe('bridge forwarding', () => {
     expect(client.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'net.inputs', epoch: 'epoch-1' }));
   });
 
+  it('tells the game when the room ends the epoch', () => {
+    attachBridgeForwarding({ bridge, client, store });
+    client.emitNet({ t: 'net.epoch.end', epoch: 'epoch-1', tick: 9 });
+    expect(payloads(bridge, 'net.epoch.end')).toContainEqual({ epoch: 'epoch-1', tick: 9 });
+  });
+
   it('relays per-seat game events in both directions', () => {
     const forwarding = attachBridgeForwarding({ bridge, client, store });
     const event = { epoch: 'lobby', id: '1-1', seq: 1, from: 1, target: 'all' as const, data: 'e30=' };

@@ -207,6 +207,10 @@ export const hostToGameSchema = z
         reason: z.enum(['seat-offline', 'not-ready']).optional(),
       }),
     ),
+    envelope(
+      'net.epoch.end',
+      z.looseObject({ epoch: z.string().min(1).max(64), tick: z.number().int().nonnegative() }),
+    ),
     envelope('net.tick', z.looseObject({ tick: z.number().int().min(0), serverMs: z.number() })),
     envelope(
       'net.clock',
