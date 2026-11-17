@@ -98,7 +98,7 @@ export function BuildTracker({
         }}
       >
         <MenuRing percent={workers.length ? (combinedPercent(workers) ?? undefined) : undefined} />
-        <Icon name="build" />
+        <Icon name="hammer" />
         <span className="worker-tracker-count" aria-hidden="true">
           {pending || workers.length || '✓'}
         </span>

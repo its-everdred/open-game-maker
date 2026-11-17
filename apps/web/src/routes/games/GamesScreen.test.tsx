@@ -260,12 +260,14 @@ describe('GamesScreen', () => {
     const order = [...container.querySelectorAll('[data-game-id]')].map((item) => item.getAttribute('data-game-id'));
     fireEvent.click(tile);
     const spotlight = await screen.findByRole('region', { name: /Goblin Cellar spotlight/ });
+    expect(screen.queryByRole('button', { name: 'New game' })).not.toBeInTheDocument();
     expect(spotlight.closest('[data-game-id]')).toHaveAttribute('data-game-id', id);
     expect(spotlight.querySelector('.games-spotlight-media .game-cover-image')).toBe(cover);
     expect([...container.querySelectorAll('[data-game-id]')].map((item) => item.getAttribute('data-game-id'))).toEqual(
       order,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Close game' }));
+    expect(screen.getByRole('button', { name: 'New game' })).toBeVisible();
     expect(await screen.findByRole('button', { name: /^Goblin Cellar:/ })).toBeVisible();
     expect(container.querySelector('[data-game-id="g_2"] .game-cover-image')).toBe(cover);
   });

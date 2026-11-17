@@ -182,6 +182,16 @@ describe('music fallback', () => {
 });
 
 describe('mute and volume', () => {
+  it('notifies listeners when the volume changes without a mute change', async () => {
+    const { sound } = await loadSound();
+    const listener = vi.fn();
+    const unsubscribe = sound.onChange(listener);
+    sound.setVolume(0.25);
+    expect(listener).toHaveBeenCalled();
+    expect(sound.getVolume()).toBe(0.25);
+    unsubscribe();
+  });
+
   it('persists mute and unmutes when the volume is raised from silence', async () => {
     const { sound } = await loadSound();
 

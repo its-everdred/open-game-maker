@@ -268,7 +268,7 @@ export function StudioMenu() {
         onClick={() => toggleSheet('jobs')}
       >
         <MenuRing percent={buildsPercent} />
-        <Icon name="build" />
+        <Icon name="hammer" />
       </button>,
     );
   }
@@ -297,7 +297,7 @@ export function StudioMenu() {
         onClick={() => toggleSheet('builds')}
       >
         <MenuRing percent={combinedPercent(workers) ?? undefined} />
-        <Icon name="build" />
+        <Icon name="hammer" />
         <span className="studio-menu-badge" aria-hidden="true">
           {workers.length}
         </span>

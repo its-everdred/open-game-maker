@@ -18,7 +18,7 @@
   align-items: center;
   gap: 40px;
   min-height: 0;
-  padding: 84px max(12px, var(--safe-r)) 56px max(48px, var(--safe-l));
+  padding: 84px max(12px, var(--safe-r)) 56px max(96px, calc(var(--safe-l) + 80px));
   overflow: hidden;
 }
 
@@ -159,17 +159,17 @@
   position: absolute;
   z-index: 3;
   top: 88px;
-  right: max(24px, var(--safe-r));
+  left: max(16px, var(--safe-l));
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 64px;
+  height: 64px;
   padding: 0;
   place-items: center;
   border-radius: 50%;
   border-color: var(--border);
   background: var(--action-secondary);
   color: var(--games-hi);
-  font-size: 1rem;
+  font-size: 2rem;
   transition: transform 0.3s var(--games-ease);
 }
 

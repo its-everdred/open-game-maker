@@ -291,7 +291,10 @@ describe('StudioMenu', () => {
   it('shows live worker progress in the builds control', () => {
     state.workers = [{ ticket: '12', title: 'Forest backdrop', percent: 50, etaSeconds: 10 }];
     renderMenu('/games');
-    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    const builds = screen.getByRole('button', { name: '1 build running' });
+    expect(builds.querySelector('.icon')?.innerHTML).toContain('M245.66,129');
+    expect(builds.querySelector('.worker-tracker-count')).toHaveTextContent('1');
+    fireEvent.click(builds);
     expect(screen.getByText('Forest backdrop')).toBeVisible();
     expect(screen.getByText('50%')).toBeVisible();
     expect(screen.queryByText(/left/)).toBeNull();

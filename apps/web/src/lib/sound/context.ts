@@ -69,7 +69,10 @@ export function setVolume(v: number): void {
   volume = Math.max(0, Math.min(1, v));
   writeStored(VOLUME_KEY, String(volume));
   if (muted && volume > 0) setMuted(false);
-  else ramp(master, muted ? 0 : volume, 0.05);
+  else {
+    ramp(master, muted ? 0 : volume, 0.05);
+    notify();
+  }
 }
 
 for (const ev of ['pointerup', 'touchend', 'keydown', 'click']) {
