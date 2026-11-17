@@ -1,4 +1,4 @@
-import { Component, type KeyboardEventHandler, type ReactNode, type RefObject } from 'react';
+import { Component, type CSSProperties, type KeyboardEventHandler, type ReactNode, type RefObject } from 'react';
 
 type Props = {
   children: ReactNode;
@@ -23,6 +23,7 @@ export class TransitionGrid extends Component<Props> {
       <div
         ref={this.props.gridRef}
         className="games-grid"
+        style={{ '--game-count': Math.max(1, this.props.order.length - 1) } as CSSProperties}
         role="grid"
         aria-label="Your games"
         onKeyDown={this.props.onKeyDown}

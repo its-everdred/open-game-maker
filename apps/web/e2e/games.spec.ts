@@ -88,19 +88,24 @@ test('browses three real game tiles with the keyboard', async ({ page }) => {
   await expect(tiles).toHaveCount(15);
 });
 
-test('keeps spotlight actions and the fixed New game control touch sized on a phone', async ({ page }, testInfo) => {
+test('keeps spotlight actions and close control touch sized on a phone', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'phone', 'phone layout assertion');
   await page.goto('/all?test&spotlight=g_2');
 
   const play = page.getByRole('button', { name: 'Play Goblin Cellar' });
   const edit = page.getByRole('button', { name: 'Edit Goblin Cellar' });
   const create = page.getByRole('button', { name: 'New game' });
+  const close = page.getByRole('button', { name: 'Close game' });
   await expect(play).toBeEnabled();
+  await expect(create).toHaveCount(0);
 
-  for (const target of [play, edit, create]) {
+  for (const target of [play, edit, close]) {
     const box = (await target.boundingBox())!;
     expect(box.height).toBeGreaterThanOrEqual(64);
   }
+
+  await close.click();
+  await expect(create).toBeVisible();
 
   const plus = create.locator('.plus');
   const icon = plus.locator('svg');
@@ -133,10 +138,6 @@ test('keeps spotlight actions and the fixed New game control touch sized on a ph
   expect(plusStyle).toEqual({ backgroundColor: 'rgba(0, 0, 0, 0)', color: buttonStyle.color });
 
   await expect(create.getByText('New game', { exact: true })).toHaveCount(0);
-
-  const spotlight = (await page.locator('.games-spotlight').boundingBox())!;
-  const viewport = page.viewportSize()!;
-  expect(spotlight.height).toBeLessThanOrEqual(viewport.height);
 });
 
 test('orders the library after playing two games', async ({ page }) => {

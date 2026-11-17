@@ -90,7 +90,6 @@
 
   .games-close {
     top: 76px;
-    right: 16px;
   }
 
   .games-new {
@@ -135,21 +134,29 @@
   }
 }
 
-@media (orientation: landscape) and (max-height: 540px) {
-  /* The spotlight fills the screen above the New game band; its decisions scroll inside the copy column, so the row
-     never outgrows the screen and pushes the cover off it. */
+@media (orientation: landscape) and (max-width: 1200px) {
+  .games-grid:has(.is-selected) {
+    grid-template-columns: repeat(var(--game-count), minmax(180px, 1fr));
+    overflow-x: auto;
+  }
+
+  .games-grid:has(.is-selected) > .is-selected {
+    order: -1;
+  }
+
   .games-spotlight {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
     grid-template-rows: minmax(0, 1fr);
-    height: calc(100svh - 64px - var(--safe-b));
+    width: 100vw;
+    height: 70svh;
     padding: 12px max(12px, var(--safe-r)) 8px max(16px, var(--safe-l));
     gap: 16px;
   }
 
   .games-spotlight-media {
     order: 0;
-    width: min(100%, calc((100svh - 84px - var(--safe-b)) * 16 / 9));
-    max-height: calc(100svh - 84px - var(--safe-b));
+    width: min(100%, calc((70svh - 20px) * 16 / 9));
+    max-height: calc(70svh - 20px);
     justify-self: end;
   }
 
@@ -157,7 +164,8 @@
     max-height: 100%;
     align-content: start;
     gap: 6px;
-    padding-top: 34px;
+    padding-top: 76px;
+    padding-left: 72px;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -179,14 +187,7 @@
   }
 
   .games-close {
-    top: 10px;
-    right: 10px;
-    width: 34px;
-    height: 34px;
-  }
-
-  .games-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    top: calc(var(--safe-t) + 76px);
   }
 
   .games-new {

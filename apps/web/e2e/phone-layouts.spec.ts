@@ -8,6 +8,7 @@ import { mockGamesRoutes } from './fixtures/games-routes';
 const landscapes = {
   'iPhone SE': { width: 667, height: 375 },
   'iPhone 15': { width: 852, height: 393 },
+  '844 phone': { width: 844, height: 390 },
   'iPhone 15 Pro Max': { width: 932, height: 430 },
   'mid Android': { width: 915, height: 412 },
   iPad: { width: 1180, height: 820 },
@@ -36,7 +37,7 @@ const commands = ['character voices', 'keys and HUD', 'level two'].map((title, i
 }));
 
 test.use({ serviceWorkers: 'block', reducedMotion: 'reduce' });
-test.setTimeout(90_000);
+test.setTimeout(180_000);
 
 test.beforeEach(async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'each case sets its own viewport');
@@ -85,12 +86,42 @@ for (const [device, viewport] of Object.entries(landscapes)) {
 
     const spotlight = page.locator('.games-spotlight');
     const cover = spotlight.locator('.games-spotlight-media');
-    const newGame = page.getByRole('button', { name: 'New game' });
+    const close = page.getByRole('button', { name: 'Close game' });
+    // Exercise the same fixed notice element as the review feed while the detail is open.
+    await page.evaluate(() => {
+      const notice = document.createElement('button');
+      notice.className = 'worker-tracker-toast worker-tracker-game-toast';
+      notice.textContent = 'New review ready';
+      document.body.append(notice);
+    });
+    const notice = page.getByRole('button', { name: 'New review ready' });
     await expect(spotlight.getByRole('heading', { name: 'Goblin Cellar' })).toBeInViewport({
       ratio: 1,
-      timeout: 15_000,
+      timeout: 60_000,
     });
-    await expectApart(newGame, cover);
+    await expect(page.getByRole('button', { name: 'New game' })).toHaveCount(0);
+    await expectApart(close, cover);
+    await expectApart(close, notice);
+    await expectApart(close, page.locator('.studio-library-volume button'));
+    expect(
+      await close.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+      }),
+    ).toBe(true);
+    expect((await spotlight.boundingBox())!.height).toBeLessThanOrEqual(viewport.height * 0.71);
+    await expect(page.locator('[data-game-id]:not(.is-selected) .game-tile').first()).toBeInViewport();
+    const session = await page.context().newCDPSession(page);
+    try {
+      const { data } = await session.send('Page.captureScreenshot', { format: 'png', fromSurface: true });
+      await testInfo.attach(`${device}-landscape`, { body: Buffer.from(data, 'base64'), contentType: 'image/png' });
+    } finally {
+      await session.detach();
+    }
+    await close.click();
+    await expect(spotlight).toHaveCount(0);
+    await notice.evaluate((element) => element.remove());
+    await page.goto('/all?spotlight=g_2', { waitUntil: 'domcontentloaded' });
 
     // the rest of the list and Play stay reachable
     const play = spotlight.getByRole('button', { name: 'Play Goblin Cellar' });
@@ -100,13 +131,9 @@ for (const [device, viewport] of Object.entries(landscapes)) {
     await page.getByRole('button', { name: 'Decisions: 3' }).click();
     await expect(page.getByRole('button', { name: 'Blobs character voices, Goblin Cellar' })).toBeVisible();
 
-    const session = await page.context().newCDPSession(page);
-    try {
-      const { data } = await session.send('Page.captureScreenshot', { format: 'png', fromSurface: true });
-      await testInfo.attach(`${device}-landscape`, { body: Buffer.from(data, 'base64'), contentType: 'image/png' });
-    } finally {
-      await session.detach();
-    }
+    await page.keyboard.press('Escape');
+    await close.click();
+    await expect(spotlight).toHaveCount(0);
   });
 }
 

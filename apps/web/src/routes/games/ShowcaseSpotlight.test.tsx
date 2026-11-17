@@ -1,10 +1,17 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mergeShowcase } from './showcase';
 import { GameTrailer } from './GameTrailer';
 import { ShowcaseSpotlight } from './ShowcaseSpotlight';
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+});
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('showcase detail', () => {
   it('uses a logo in place of the title', () => {
@@ -53,13 +60,14 @@ describe('showcase detail', () => {
     expect(screen.getByLabelText(`${game.title} trailer`)).toHaveAttribute('poster', '/large.webp');
   });
 
-  it('keeps trailer controls and a transparent poster when no cover image exists', () => {
+  it('loops the trailer with a transparent poster when no cover image exists', () => {
     const game = { ...mergeShowcase([])[0]!, coverUrl: null, trailerUrl: '/landscape.mp4' };
     render(<GameTrailer game={game} transparentPoster />);
     const video = screen.getByLabelText(`${game.title} trailer`);
-    expect(video).toHaveAttribute('controls');
+    expect(video).toHaveAttribute('loop');
+    expect(video).not.toHaveAttribute('controls');
     expect(video.getAttribute('poster')).toMatch(/^data:image\/svg\+xml,/);
-    expect(video).toHaveAttribute('preload', 'none');
+    expect(video).toHaveAttribute('preload', 'auto');
   });
 
   it('shows the prototype tags and stats and opens the selected action', () => {

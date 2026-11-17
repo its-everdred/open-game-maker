@@ -64,11 +64,11 @@ export function GameCell({
     return () => window.clearTimeout(timer);
   }, [selected, exiting]);
   useEffect(() => {
-    if (!game.trailerUrl) return;
+    if (!game.trailerUrl && !game.portraitTrailerUrl) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const timer = window.setTimeout(() => setShowTrailer(selected), reduced ? 0 : 300);
     return () => window.clearTimeout(timer);
-  }, [game.trailerUrl, selected]);
+  }, [game.trailerUrl, game.portraitTrailerUrl, selected]);
   return (
     <div ref={cell} role="gridcell" data-game-id={game.id} className={selected ? 'is-selected' : undefined}>
       <div className="game-cell-tile" aria-hidden={selected || undefined} inert={selected}>
@@ -86,7 +86,7 @@ export function GameCell({
       {createPortal(
         <>
           <Cover game={game} hero={selected} />
-          {game.trailerUrl && showTrailer && (
+          {(game.trailerUrl || game.portraitTrailerUrl) && selected && showTrailer && (
             <span className={`game-trailer-layer${selected ? '' : ' is-closing'}`}>
               <GameTrailer game={game} transparentPoster />
             </span>

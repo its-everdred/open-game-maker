@@ -133,7 +133,7 @@ export function ShowcaseSpotlight({
         <span className="game-cover">
           {sharedCover ? (
             <span data-cover-slot />
-          ) : game.trailerUrl ? (
+          ) : game.trailerUrl || game.portraitTrailerUrl ? (
             <GameTrailer game={game} />
           ) : (
             <Cover game={game} hero />
