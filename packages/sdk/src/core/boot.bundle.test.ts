@@ -49,7 +49,9 @@ async function templateJs(kind: 'draft' | 'published'): Promise<string> {
 // C8: a published game must not ship the debug adapter at all, not just skip installing it.
 describe('boot bundle', () => {
   it('keeps the debug adapter in a draft template build', async () => {
-    expect(await templateJs('draft')).toContain('render_game_to_text');
+    const draft = await templateJs('draft');
+    expect(draft).toContain('render_game_to_text');
+    expect(draft).toContain('imageDraws');
   }, 60_000);
 
   it('leaves the debug adapter out of a published template build', async () => {
@@ -57,5 +59,6 @@ describe('boot bundle', () => {
 
     expect(published).not.toContain('render_game_to_text');
     expect(published).not.toMatch(/\b__gm\b/);
+    expect(published).not.toContain('imageDraws');
   }, 60_000);
 });

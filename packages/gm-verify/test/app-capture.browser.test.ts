@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { build } from 'esbuild';
 import { expect, it } from 'vitest';
 
 const exec = promisify(execFile);
@@ -29,9 +30,22 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
     const source = readFileSync(html, 'utf8');
     const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
     if (!script) throw new Error('bridge fixture script missing');
+    const sdk = await build({
+      stdin: {
+        contents: `import { installGlobals } from './globals.ts'; import { reportImageDraw } from './image-draws.ts';
+          installGlobals({ ready: true, marks: [], advanceTime() {}, renderAt() {}, renderGameToText() {} }, 'draft');
+          reportImageDraw({ id: 'sdk-sprite', file: 'sprite.png', source: { width: 90, height: 30 }, drawn: { width: 30, height: 30 } });`,
+        resolveDir: fileURLToPath(new URL('../../sdk/src/test/', import.meta.url)),
+        loader: 'ts',
+      },
+      bundle: true,
+      write: false,
+      platform: 'browser',
+      format: 'iife',
+    });
     writeFileSync(
       join(game, 'fixture.js'),
-      `fetch('http://127.0.0.1:${port}/').then(() => { document.querySelector('button').textContent = 'LEAKED'; }, () => { document.querySelector('button').textContent = 'Start'; });\n${script}`,
+      `${sdk.outputFiles[0]!.text}\nfetch('http://127.0.0.1:${port}/').then(() => { document.querySelector('button').textContent = 'LEAKED'; }, () => { document.querySelector('button').textContent = 'Start'; });\n${script}`,
     );
     writeFileSync(
       html,
@@ -76,6 +90,8 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
     }[];
     for (const viewport of ['390x844', '844x390', '820x1180', '1180x820'])
       expect(distortions).toContainEqual(expect.objectContaining({ element: '#stretched', viewport, screen: 'play' }));
+    expect(distortions).toContainEqual(expect.objectContaining({ element: '#stretched', screen: 'after Start' }));
+    expect(distortions).toContainEqual(expect.objectContaining({ element: 'sdk-sprite', screen: 'play' }));
     expect(JSON.parse(readFileSync(join(out, 'play-area.json'), 'utf8'))).toMatchObject(
       ['390x844', '844x390', '820x1180', '1180x820'].map((viewport) => ({ viewport, ok: false })),
     );

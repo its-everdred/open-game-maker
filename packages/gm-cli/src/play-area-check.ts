@@ -6,6 +6,16 @@ import { command as shell } from './commands/look/shell.js';
 import { readPlayAreaConfig } from './play-area-config.js';
 import { rejectSymlinkDirectories, runChild } from './commands/capture/shell.js';
 
+export function verifyBuildArgs(build: string, verify?: string): string[] {
+  if (verify !== undefined && (!verify || /\bgm\s+build\b/u.test(verify)))
+    throw new Error('build:verify must be a nonrecursive game build script');
+  return verify !== undefined
+    ? ['run', 'build:verify']
+    : /\bvite\s+build\b/.test(build)
+      ? ['run', 'build', '--mode', 'draft']
+      : ['run', 'build'];
+}
+
 /** Run a fresh shell capture so a previous passing capture cannot mask a layout regression. */
 export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok: boolean; output: string[] }> {
   const output: string[] = [];
@@ -25,10 +35,16 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
         );
       throw error;
     }
-    const pkg = JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')) as { scripts?: { build?: unknown } };
+    const pkg = JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')) as {
+      scripts?: { build?: unknown; 'build:verify'?: unknown };
+    };
     const script = pkg.scripts?.build;
     if (typeof script !== 'string' || !script || /\bgm\s+build\b/u.test(script))
       throw new Error('play-area check needs a nonrecursive game build script in package.json');
+    const verifyScript = pkg.scripts?.['build:verify'];
+    if (verifyScript !== undefined && typeof verifyScript !== 'string')
+      throw new Error('build:verify must be a nonrecursive game build script');
+    const buildArgs = verifyBuildArgs(script, verifyScript);
     // A no-op or partial build must not reuse any older passing files.
     rejectSymlinkDirectories(join(game, 'dist', 'design'));
     const dist = join(game, 'dist');
@@ -44,7 +60,7 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
       process.once('SIGTERM', stop);
       let build: number;
       try {
-        build = await runChild(game, ['run', 'build'], ctx.env ?? {}, 600_000, abort.signal, 'pnpm', true);
+        build = await runChild(game, buildArgs, ctx.env ?? {}, 600_000, abort.signal, 'pnpm', true);
       } finally {
         process.removeListener('SIGINT', stop);
         process.removeListener('SIGTERM', stop);
@@ -95,6 +111,7 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
         drawn: number;
         viewport: string;
         screen: string;
+        error?: string;
       }[];
     };
     return {
@@ -108,7 +125,7 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
         ),
         ...report.distortions.map(
           (item) =>
-            `image distortion: ${item.element} ${item.file} natural ${item.natural.toFixed(3)} drawn ${item.drawn.toFixed(3)} at ${item.viewport} (${item.screen}): fail`,
+            `image distortion: ${item.element} ${item.file} ${item.error ?? `natural ${item.natural.toFixed(3)} drawn ${item.drawn.toFixed(3)}`} at ${item.viewport} (${item.screen}): fail`,
         ),
       ],
     };

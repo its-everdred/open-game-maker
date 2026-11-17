@@ -200,6 +200,7 @@ export const command: GmCommand = {
         drawn: number;
         viewport: string;
         screen: string;
+        error?: string;
       }[];
       if (
         !limits.skip &&
@@ -272,7 +273,7 @@ export const command: GmCommand = {
           );
         for (const item of distortions)
           ctx.out(
-            `image distortion: ${item.element} ${item.file} natural ${item.natural.toFixed(3)} drawn ${item.drawn.toFixed(3)} at ${item.viewport} (${item.screen}): fail`,
+            `image distortion: ${item.element} ${item.file} ${item.error ?? `natural ${item.natural.toFixed(3)} drawn ${item.drawn.toFixed(3)}`} at ${item.viewport} (${item.screen}): fail`,
           );
       }
       return EXIT.ok;

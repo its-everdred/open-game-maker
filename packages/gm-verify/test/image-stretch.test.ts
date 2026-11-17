@@ -45,3 +45,30 @@ it('reports explicit stretch and respects a reasoned exception', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it('recognizes stylesheet fits, style properties and variable-backed backgrounds', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-stretch-styles-'));
+  try {
+    writeFileSync(join(root, 'page.html'), '<img class="safe" width="90" height="30">');
+    writeFileSync(
+      join(root, 'page.css'),
+      '.safe { object-fit: contain; }\n.card { background: var(--art) center / 200% 100%; }\n.split { background-image: url(button.png); }\n.split { background-size: 60px 30px; }',
+    );
+    writeFileSync(
+      join(root, 'view.tsx'),
+      "element.style.objectFit = 'fill';\nconst node = <div style={{ backgroundSize: '90px 30px' }} />;",
+    );
+    const result = runL0(root, { checks: ['image-stretch'] });
+    expect(result.checks.map((item) => [item.file, item.line])).toEqual(
+      expect.arrayContaining([
+        ['page.css', 2],
+        ['page.css', 4],
+        ['view.tsx', 1],
+        ['view.tsx', 2],
+      ]),
+    );
+    expect(result.checks).toHaveLength(4);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

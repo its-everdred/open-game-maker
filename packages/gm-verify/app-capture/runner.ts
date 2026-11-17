@@ -114,7 +114,7 @@ try {
           for (const capturedFrame of page.frames()) {
             if (capturedFrame !== page.mainFrame() && !(await (await capturedFrame.frameElement()).isVisible()))
               continue;
-            distortions.push(...(await measureImageDistortion(capturedFrame, size, screen)));
+            distortions.push(...(await measureImageDistortion(capturedFrame, size, screen, capturedFrame === frame)));
           }
         };
         await measureImages('play');
@@ -124,6 +124,7 @@ try {
         for (const text of taps) {
           await game.getByText(text, { exact: true }).first().tap({ timeout: 45_000 });
           await page.waitForTimeout(1_200);
+          await measureImages(`after ${text}`);
         }
         if (taps.length) {
           await page.waitForTimeout(fast ? 500 : 9_000);

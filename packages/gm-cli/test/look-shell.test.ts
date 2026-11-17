@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { gm, tempDir } from './helpers.js';
 import { run } from '../src/cli.js';
 import { captureScratch } from '../src/commands/look/shell.js';
+import { verifyBuildArgs } from '../src/play-area-check.js';
 
 const capture = vi.hoisted(() => ({
   calls: [] as string[][],
@@ -77,6 +78,11 @@ vi.mock('../src/commands/capture/shell.js', async (original) => {
 });
 
 describe('gm look shell', () => {
+  it('builds instrumented Vite games or uses their verification script', () => {
+    expect(verifyBuildArgs('tsc --noEmit && vite build --mode published')).toEqual(['run', 'build', '--mode', 'draft']);
+    expect(verifyBuildArgs('custom build', 'custom draft')).toEqual(['run', 'build:verify']);
+    expect(() => verifyBuildArgs('custom build', 'gm build')).toThrow('nonrecursive');
+  });
   it('uses game play-area configuration with explicit flags taking precedence', async () => {
     const root = tempDir();
     mkdirSync(join(root, 'build/web/design'), { recursive: true });

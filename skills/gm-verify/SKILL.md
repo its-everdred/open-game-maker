@@ -44,6 +44,7 @@ creator to judge differences the scorer can judge. Follow the look broker's cons
 ## Binary visual checklist
 
 - Read the image distortion output from `gm look shell` and `gm check` at every captured viewport; fix every reported stretch.
+- For canvas or WebGL UI, run an instrumented draft build. `gm check` uses `build:verify` when provided and requests draft mode for Vite builds; other build scripts must produce a draft that exposes SDK sprite reports. An unavailable report is a failing gate line, not a completed check.
 
 Copy this into the PR and answer every line from the sheet:
 
