@@ -132,6 +132,8 @@ async function playOne(mode: Plan['modes'][number], width: number, height: numbe
         .catch(() => {
           throw new Error(`the game was still loading after ${LOAD_MS / 1000} s`);
         });
+      if (await page.getByRole('button', { name: 'Try again', exact: true }).isVisible())
+        throw new Error('the shell gave up loading the game (its load stalled)');
       for (const text of mode.taps) {
         await game.getByText(text, { exact: true }).first().tap({ timeout: 45_000 });
         await page.waitForTimeout(plan.fast ? 300 : 1_200);
