@@ -20,12 +20,16 @@ import { requirePrincipal } from '../app/principal.js';
 import { listWorkers } from './list.js';
 import { recentCompletions } from './completions.js';
 import { belongsToGame, ticketScope } from './scope.js';
+import { isQaGame } from '../qa/state.js';
 
 export const prefix = '/api/v1';
 const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) => {
   const game = authorizedGame(c, 'game.edit');
   const deps = c.get('deps');
   const history = game.slug ? recentCompletions(deps.db, game.slug) : { cursor: 0, completed: [] };
+  // The QA game (#859) has no repository and no workers.
+  if (isQaGame(deps.db, game.id))
+    return c.json({ workers: [], daemonUnavailable: false, trackerStale: false, ...history });
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
   if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
@@ -190,6 +194,7 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
 routes.get('/games/:gameId/tickets/completed', async (c) => {
   const game = authorizedGame(c, 'game.edit');
   const deps = c.get('deps');
+  if (isQaGame(deps.db, game.id)) return c.json({ tickets: [], stale: false });
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
   if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_history_unavailable');
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);

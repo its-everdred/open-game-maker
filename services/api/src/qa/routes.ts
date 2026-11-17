@@ -63,6 +63,11 @@ export default new Hono<ApiBindings>()
     requireOperator(c);
     return c.json(reviewFixtureReport(c.get('deps'), run(c)));
   })
+  .delete('/review-fixtures', (c) => {
+    requireOperator(c);
+    deleteReviewFixtures(c.get('deps'));
+    return c.json({ status: 'deleted' });
+  })
   .delete('/review-fixtures/:run', (c) => {
     requireOperator(c);
     deleteReviewFixtures(c.get('deps'), run(c));

@@ -55,6 +55,7 @@ email=${email:-$(env_value "$out" OGM_QA_EMAIL)}
 if [[ -z $email ]]; then
   host=${origin#*://}
   host=${host%%/*}
+  host=${host%%:*}
   [[ -n $host ]] || fail "no QA address: pass --email or set OGM_APP_ORIGIN in $env_dir/api.env" 65
   email=qa@$host
 fi

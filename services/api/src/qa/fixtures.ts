@@ -113,14 +113,20 @@ export function reviewFixtureReport(deps: AppDeps, run: string) {
   };
 }
 
-// Removes everything a run left: its round (the dispatch intent goes with it), its Command and what reached the
-// boundary for both, and the QA game's review drafts, ledger rows, answer guards and the QA user's notifications. Blobs are content-addressed and
-// the next run stores the same bytes, so they stay.
-export function deleteReviewFixtures(deps: AppDeps, run: string) {
+// Removes everything a run left (or, with no run, every run's, so a run that died midway cannot leave a card ahead
+// of the next run's): its round (the dispatch intent goes with it), its Command and what reached the boundary for
+// both, and the QA game's review drafts, ledger rows, answer guards and the QA user's notifications. Blobs are
+// content-addressed and the next run stores the same bytes, so they stay.
+export function deleteReviewFixtures(deps: AppDeps, run?: string) {
   const state = requireQa(deps);
+  const ours = (round: string) => run === undefined || round === roundId(run);
   deps.db.transaction((tx) => {
     tx.delete(schema.reviewRounds)
-      .where(and(eq(schema.reviewRounds.gameId, state.gameId), eq(schema.reviewRounds.id, roundId(run))))
+      .where(
+        run === undefined
+          ? eq(schema.reviewRounds.gameId, state.gameId)
+          : and(eq(schema.reviewRounds.gameId, state.gameId), eq(schema.reviewRounds.id, roundId(run))),
+      )
       .run();
     tx.delete(schema.reviewDrafts).where(eq(schema.reviewDrafts.gameId, state.gameId)).run();
     tx.delete(schema.commandReviews).where(eq(schema.commandReviews.gameId, state.gameId)).run();
@@ -130,11 +136,11 @@ export function deleteReviewFixtures(deps: AppDeps, run: string) {
     tx.delete(schema.notifications).where(eq(schema.notifications.userId, state.userId)).run();
   });
   updateQaState(deps.db, (next) => {
-    next.decisions = next.decisions.filter((d) => d.decision_id !== decisionId(run));
+    next.decisions = next.decisions.filter((d) => run !== undefined && d.decision_id !== decisionId(run));
     next.received = next.received.filter(
       (item) =>
-        !(item.kind === 'rework' && item.key === `review-round:${roundId(run)}`) &&
-        !(item.kind === 'answer' && item.decisionId === decisionId(run)),
+        !(item.kind === 'rework' && ours(item.key.replace(/^review-round:/u, ''))) &&
+        !(item.kind === 'answer' && (run === undefined || item.decisionId === decisionId(run))),
     );
   });
 }

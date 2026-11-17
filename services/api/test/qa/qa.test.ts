@@ -166,6 +166,33 @@ describe('QA review fixtures (#859)', () => {
     expect((await internal('/internal/qa/review-fixtures/run-1')).status).toBe(404);
   });
 
+  it('clears every run, so a run that died midway leaves nothing ahead of the next', async () => {
+    const { app, internal } = await qaApp();
+    const { body } = await session(internal);
+    const cookie = { cookie: `${body.cookie.name}=${body.cookie.value}` };
+    for (const run of ['run-1', 'run-2'])
+      await internal('/internal/qa/review-fixtures', { method: 'POST', body: JSON.stringify({ run, media: MEDIA }) });
+    expect((await internal('/internal/qa/review-fixtures', { method: 'DELETE' })).status).toBe(200);
+    const rounds = (await (
+      await app.request(`/api/v1/games/${body.gameId}/review-rounds`, { headers: cookie })
+    ).json()) as { rounds: unknown[] };
+    const commands = (await (await app.request('/api/v1/me/commands', { headers: cookie })).json()) as {
+      commands: unknown[];
+    };
+    expect([rounds.rounds, commands.commands]).toEqual([[], []]);
+  });
+
+  it("keeps the deck's worker and ticket reads empty, not failed, for the repository-less QA game", async () => {
+    const { app, internal } = await qaApp();
+    const { body } = await session(internal);
+    const cookie = { cookie: `${body.cookie.name}=${body.cookie.value}` };
+    const workers = await app.request(`/api/v1/games/${body.gameId}/workers`, { headers: cookie });
+    expect(workers.status).toBe(200);
+    expect(await workers.json()).toMatchObject({ workers: [], daemonUnavailable: false });
+    const completed = await app.request(`/api/v1/games/${body.gameId}/tickets/completed`, { headers: cookie });
+    expect(await completed.json()).toEqual({ tickets: [], stale: false });
+  });
+
   it('refuses fixtures before the QA account exists', async () => {
     const { internal } = await qaApp();
     const seeded = await internal('/internal/qa/review-fixtures', {
