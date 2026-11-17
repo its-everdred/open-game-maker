@@ -87,9 +87,10 @@ it('detects literal stretch in setProperty and conditional inline styles', () =>
   try {
     writeFileSync(
       join(root, 'view.tsx'),
-      "element.style.setProperty('object-fit', 'fill');\nconst x = <img style={{ objectFit: selected ? 'contain' : 'fill' }} />;",
+      "element.style.setProperty('object-fit', 'fill');\nconst x = <img style={{ objectFit: selected ? 'contain' : 'fill' }} />;\nctx.drawImage(img, 0, 0, 90, 30, 0, 0, -30, 30);",
     );
-    expect(runL0(root, { checks: ['image-stretch'] }).checks.map((item) => item.line)).toEqual([1, 2]);
+    writeFileSync(join(root, 'gradient.css'), '.background { background: linear-gradient(red, blue) / 100% 100%; }');
+    expect(runL0(root, { checks: ['image-stretch'] }).checks.map((item) => item.line)).toEqual([1, 2, 3]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

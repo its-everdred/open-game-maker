@@ -115,10 +115,26 @@ export function scanImageStretch(root: string): GateCheck[] {
     const code = maskComments(file, text);
     for (const match of code.matchAll(/\bobject-fit\s*:\s*fill\b/gi))
       report(file, text, match.index, 'image may be stretched by CSS');
+    const gradientOnly = (index: number): boolean => {
+      const start = code.lastIndexOf('{', index);
+      const end = code.indexOf('}', index);
+      if (start < 0 || end < 0) return false;
+      const declarations = code.slice(start + 1, end);
+      const selectorStart = Math.max(code.lastIndexOf('}', start), code.lastIndexOf('{', start - 1)) + 1;
+      const selectors = code
+        .slice(selectorStart, start)
+        .split(',')
+        .map((selector) => selector.trim());
+      return (
+        /(?:linear|radial|conic)-gradient\(/i.test(declarations) &&
+        !rasterSource.test(declarations) &&
+        !selectors.some((selector) => rasterSelectors.has(selector))
+      );
+    };
     for (const match of code.matchAll(/\bbackground-size\s*:\s*100%\s+100%(?![\w.-])/gi))
-      report(file, text, match.index, 'background may be stretched by CSS');
+      if (!gradientOnly(match.index)) report(file, text, match.index, 'background may be stretched by CSS');
     for (const match of code.matchAll(/\bbackground\s*:[^;{}]*\/\s*100%\s+100%(?![\w.-])/gi))
-      report(file, text, match.index, 'background may be stretched by CSS');
+      if (!gradientOnly(match.index)) report(file, text, match.index, 'background may be stretched by CSS');
     for (const block of code.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       if (
         !rasterSource.test(block[2]!) &&
@@ -236,7 +252,17 @@ export function scanImageStretch(root: string): GateCheck[] {
       ) {
         const values = [3, 4, 7, 8]
           .map((i) => node.arguments[i])
-          .map((arg) => (arg && ts.isNumericLiteral(arg) ? Number(arg.text) : NaN));
+          .map((arg) => {
+            if (arg && ts.isNumericLiteral(arg)) return Number(arg.text);
+            if (
+              arg &&
+              ts.isPrefixUnaryExpression(arg) &&
+              ts.isNumericLiteral(arg.operand) &&
+              (arg.operator === ts.SyntaxKind.MinusToken || arg.operator === ts.SyntaxKind.PlusToken)
+            )
+              return Math.abs(Number(arg.operand.text));
+            return NaN;
+          });
         const [sw, sh, dw, dh] = values as [number, number, number, number];
         if (sw > 0 && sh > 0 && dw > 0 && dh > 0 && Math.abs(dw / dh / (sw / sh) - 1) > 0.02 + 1e-9)
           report(file, text, node.getStart(source), 'drawImage source and destination ratios differ');

@@ -11,8 +11,8 @@ verified as having no sprites to report. Do not report world textures, and omit 
 Mark a WebGL canvas that contains only game-world rendering with `data-gm-world-canvas="true"`; never use this marker on
 a canvas that contains UI. Canvas 2D `drawImage` calls are also inspected by the capture, including unreported draws.
 For WebGL UI, use a separate canvas from the world, give it a unique DOM id, and include that id as `canvasId` in each
-report. Draw each sprite as one non-instanced quad after `beginImageDraws()`. The capture checks each canvas's draw count
-against its reports and reports unsupported batches explicitly.
+report. Draw sprites as quads after `beginImageDraws()`. The capture compares each canvas's quad count against its
+reports and reports unsupported geometry explicitly.
 
 ## Shared player settings
 

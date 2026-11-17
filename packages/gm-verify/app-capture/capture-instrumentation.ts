@@ -67,7 +67,39 @@ export function trackShadowRoots(): void {
     d: number;
   };
   const canvasDraws = new Map<HTMLCanvasElement, Map<string, Draw>>();
+  type Bounds = { left: number; top: number; right: number; bottom: number };
+  const clipBounds = new WeakMap<CanvasRenderingContext2D, Bounds>();
+  const pathBounds = new WeakMap<CanvasRenderingContext2D, Bounds>();
+  const rectangularPaths = new WeakSet<CanvasRenderingContext2D>();
+  const boundsStack = new WeakMap<CanvasRenderingContext2D, (Bounds | undefined)[]>();
   const patternedCanvases = new Set<HTMLCanvasElement>();
+  const gradients = new WeakMap<CanvasGradient, { hasStop: boolean; opaque: boolean }>();
+  for (const name of ['createLinearGradient', 'createRadialGradient', 'createConicGradient'] as const) {
+    const original = CanvasRenderingContext2D.prototype[name];
+    if (typeof original !== 'function') continue;
+    Object.defineProperty(CanvasRenderingContext2D.prototype, name, {
+      configurable: true,
+      writable: true,
+      value: function (this: CanvasRenderingContext2D, ...args: unknown[]) {
+        const gradient = Reflect.apply(original, this, args) as CanvasGradient;
+        gradients.set(gradient, { hasStop: false, opaque: true });
+        return gradient;
+      },
+    });
+  }
+  const originalColorStop = CanvasGradient.prototype.addColorStop;
+  CanvasGradient.prototype.addColorStop = function (offset, color) {
+    originalColorStop.call(this, offset, color);
+    const state = gradients.get(this);
+    if (!state) return;
+    const probe = document.createElement('canvas');
+    probe.width = probe.height = 1;
+    const context = probe.getContext('2d')!;
+    context.fillStyle = color;
+    context.fillRect(0, 0, 1, 1);
+    state.hasStop = true;
+    state.opaque &&= context.getImageData(0, 0, 1, 1).data[3] === 255;
+  };
   const webglCanvases = new Set<HTMLCanvasElement>();
   const transferredCanvases = new Set<HTMLCanvasElement>();
   const transfer = HTMLCanvasElement.prototype.transferControlToOffscreen;
@@ -132,15 +164,19 @@ export function trackShadowRoots(): void {
               const mode = Number(args[0]);
               const count = Number(args[name.startsWith('drawArrays') ? 2 : 1]);
               const instances = name.endsWith('Instanced') ? Number(args[name.startsWith('drawArrays') ? 3 : 4]) : 1;
-              entry.count++;
+              const quads =
+                mode === gl.TRIANGLES && count > 0 && count % 6 === 0
+                  ? count / 6
+                  : (mode === gl.TRIANGLE_STRIP || mode === gl.TRIANGLE_FAN) && count === 4
+                    ? 1
+                    : 0;
+              entry.count += quads * instances;
               entry.unsupported ||=
                 name === 'drawRangeElements' ||
                 name === 'blitFramebuffer' ||
-                instances !== 1 ||
-                !(
-                  (mode === gl.TRIANGLES && count === 6) ||
-                  ((mode === gl.TRIANGLE_STRIP || mode === gl.TRIANGLE_FAN) && count === 4)
-                );
+                quads === 0 ||
+                !Number.isFinite(instances) ||
+                instances < 1;
               webglDraws.set(canvas, entry);
             }
           }
@@ -206,8 +242,14 @@ export function trackShadowRoots(): void {
       new DOMPoint(x, y + drawnHeight),
       new DOMPoint(x + drawnWidth, y + drawnHeight),
     ].map((point) => point.matrixTransform(matrix));
+    const clip = clipBounds.get(this);
     if (
       this.globalAlpha === 0 ||
+      (clip &&
+        (corners.every((point) => point.x <= clip.left) ||
+          corners.every((point) => point.x >= clip.right) ||
+          corners.every((point) => point.y <= clip.top) ||
+          corners.every((point) => point.y >= clip.bottom))) ||
       corners.every((point) => point.x <= 0) ||
       corners.every((point) => point.y <= 0) ||
       corners.every((point) => point.x >= this.canvas.width) ||
@@ -256,6 +298,9 @@ export function trackShadowRoots(): void {
     const stack = clipStack.get(this) ?? [];
     stack.push(clippedContexts.has(this));
     clipStack.set(this, stack);
+    const bounds = boundsStack.get(this) ?? [];
+    bounds.push(clipBounds.get(this));
+    boundsStack.set(this, bounds);
     originalSave.call(this);
   };
   CanvasRenderingContext2D.prototype.restore = function () {
@@ -264,12 +309,81 @@ export function trackShadowRoots(): void {
       if (stack.pop()) clippedContexts.add(this);
       else clippedContexts.delete(this);
     }
+    const bounds = boundsStack.get(this);
+    if (bounds?.length) {
+      const previous = bounds.pop();
+      if (previous) clipBounds.set(this, previous);
+      else clipBounds.delete(this);
+    }
     originalRestore.call(this);
   };
   const originalClip = CanvasRenderingContext2D.prototype.clip;
+  const originalBeginPath = CanvasRenderingContext2D.prototype.beginPath;
+  CanvasRenderingContext2D.prototype.beginPath = function () {
+    rectangularPaths.add(this);
+    pathBounds.delete(this);
+    originalBeginPath.call(this);
+  };
+  const originalRect = CanvasRenderingContext2D.prototype.rect;
+  CanvasRenderingContext2D.prototype.rect = function (x, y, width, height) {
+    if (rectangularPaths.has(this)) {
+      const matrix = this.getTransform();
+      const points = [
+        new DOMPoint(x, y),
+        new DOMPoint(x + width, y),
+        new DOMPoint(x, y + height),
+        new DOMPoint(x + width, y + height),
+      ].map((point) => point.matrixTransform(matrix));
+      const old = pathBounds.get(this);
+      pathBounds.set(this, {
+        left: Math.min(old?.left ?? Infinity, ...points.map((point) => point.x)),
+        top: Math.min(old?.top ?? Infinity, ...points.map((point) => point.y)),
+        right: Math.max(old?.right ?? -Infinity, ...points.map((point) => point.x)),
+        bottom: Math.max(old?.bottom ?? -Infinity, ...points.map((point) => point.y)),
+      });
+    }
+    originalRect.call(this, x, y, width, height);
+  };
+  for (const name of [
+    'moveTo',
+    'lineTo',
+    'arc',
+    'arcTo',
+    'ellipse',
+    'bezierCurveTo',
+    'quadraticCurveTo',
+    'roundRect',
+  ] as const) {
+    const original = CanvasRenderingContext2D.prototype[name];
+    if (typeof original !== 'function') continue;
+    Object.defineProperty(CanvasRenderingContext2D.prototype, name, {
+      configurable: true,
+      writable: true,
+      value: function (this: CanvasRenderingContext2D, ...args: unknown[]) {
+        rectangularPaths.delete(this);
+        return Reflect.apply(original, this, args);
+      },
+    });
+  }
   CanvasRenderingContext2D.prototype.clip = function (this: CanvasRenderingContext2D, ...args: unknown[]) {
     Reflect.apply(originalClip, this, args);
     clippedContexts.add(this);
+    const path =
+      typeof args[0] === 'object' ? undefined : rectangularPaths.has(this) ? pathBounds.get(this) : undefined;
+    if (path) {
+      const old = clipBounds.get(this);
+      clipBounds.set(
+        this,
+        old
+          ? {
+              left: Math.max(old.left, path.left),
+              top: Math.max(old.top, path.top),
+              right: Math.min(old.right, path.right),
+              bottom: Math.min(old.bottom, path.bottom),
+            }
+          : path,
+      );
+    }
   } as typeof CanvasRenderingContext2D.prototype.clip;
   CanvasRenderingContext2D.prototype.clearRect = function (x, y, width, height) {
     const matrix = this.getTransform();
@@ -295,8 +409,10 @@ export function trackShadowRoots(): void {
       this.getTransform().isIdentity &&
       this.globalAlpha === 1 &&
       (this.globalCompositeOperation === 'source-over' || this.globalCompositeOperation === 'copy') &&
-      typeof style === 'string' &&
-      (/^#[0-9a-f]{6}$/i.test(style) || /^rgb\(/i.test(style)) &&
+      ((typeof style === 'string' && (/^#[0-9a-f]{6}$/i.test(style) || /^rgb\(/i.test(style))) ||
+        (style instanceof CanvasGradient &&
+          gradients.get(style)?.hasStop === true &&
+          gradients.get(style)?.opaque === true)) &&
       x <= 0 &&
       y <= 0 &&
       width >= this.canvas.width &&
@@ -317,6 +433,16 @@ export function trackShadowRoots(): void {
       writable: true,
       value: function (this: CanvasRenderingContext2D, ...args: unknown[]) {
         const result = Reflect.apply(original, this, args);
+        if (name === 'reset') {
+          canvasDraws.delete(this.canvas);
+          patternedCanvases.delete(this.canvas);
+          clippedContexts.delete(this);
+          clipStack.delete(this);
+          clipBounds.delete(this);
+          boundsStack.delete(this);
+          pathBounds.delete(this);
+          rectangularPaths.delete(this);
+        }
         const style = name.startsWith('stroke') ? this.strokeStyle : this.fillStyle;
         if (style instanceof CanvasPattern) patternedCanvases.add(this.canvas);
         if (visibleCanvas(this.canvas)) version++;

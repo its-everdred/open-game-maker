@@ -32,7 +32,7 @@ start of each UI frame and `reportImageDraw({ id, file, source: { width, height 
 each visible sprite. Draw dimensions are CSS pixels. The capture reads `window.__gm.imageDraws()`; world textures do
 not need reports. Call `beginImageDraws()` even on frames with no UI sprites so the gate can distinguish an empty frame
 from missing instrumentation. For WebGL UI, use a separate canvas with a unique DOM id, include that id as `canvasId`
-in each report, and draw each sprite as a non-instanced quad; mark world-only canvases with
+in each report, and draw sprites as quads; mark world-only canvases with
 `data-gm-world-canvas="true"`. Keep this instrumentation out of published builds.
 
 Read the `Viewport` from `HostApi.viewport.current()` on the `host` that `mount` receives, and follow

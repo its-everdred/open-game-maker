@@ -305,6 +305,30 @@ export async function measureImageDistortion(
             )
               continue;
           }
+          if (
+            generated.position === 'absolute' &&
+            style.position !== 'static' &&
+            transform.isIdentity &&
+            generated.transform === 'none' &&
+            generated.translate === 'none' &&
+            generated.rotate === 'none' &&
+            generated.scale === 'none' &&
+            generated.left !== 'auto' &&
+            generated.top !== 'auto' &&
+            [generated.marginLeft, generated.marginTop, generated.marginRight, generated.marginBottom].every(
+              (value) => parseFloat(value) === 0,
+            )
+          ) {
+            const x = rect.left + (parseFloat(style.borderLeftWidth) || 0) + parseFloat(generated.left);
+            const y = rect.top + (parseFloat(style.borderTopWidth) || 0) + parseFloat(generated.top);
+            const width = parseFloat(generated.width);
+            const height = parseFloat(generated.height);
+            if (
+              [x, y, width, height].every(Number.isFinite) &&
+              (x + width <= 0 || y + height <= 0 || x >= innerWidth || y >= innerHeight)
+            )
+              continue;
+          }
           const files = urls(generated.backgroundImage).filter(raster);
           const intrinsic = splitLayers(generated.backgroundSize).every((size) => {
             const parts = splitSize(size.trim());

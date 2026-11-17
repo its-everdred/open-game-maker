@@ -49,7 +49,7 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
       return canvas.toDataURL();
     });
     await page.setContent(
-      `<style>#anchor::before, #offscreen::before { content:''; display:block; width:90px; height:30px; background:url("${png}") 0 0 / 100% 100%; }</style><div style="visibility:hidden"><img id="visible" src="${png}" style="visibility:visible;width:90px;height:30px"></div><div style="width:1px;height:1px;overflow:hidden"><canvas width="90" height="30" style="position:relative;left:100px"></canvas></div><canvas width="10" height="10"></canvas><div id="anchor" style="width:1px;height:1px"></div><div id="offscreen" style="position:fixed;left:-500px;top:0;width:30px;height:30px"></div><div id="fixed" style="width:100px;height:100px;background:url('${png}') 0 0 / 100% 100% fixed"></div><span id="badge" style="background:url('${png}') 0 0 / 20px 20px">long enough badge</span><img id="covered" src="${png}" style="position:fixed;left:10px;top:500px;width:90px;height:30px"><div style="position:fixed;left:0;top:490px;width:120px;height:50px;background:rgb(0,0,0)"></div>`,
+      `<style>#anchor::before, #offscreen::before { content:''; display:block; width:90px; height:30px; background:url("${png}") 0 0 / 100% 100%; } #offscreen::before { position:absolute; left:0; top:0; }</style><div style="visibility:hidden"><img id="visible" src="${png}" style="visibility:visible;width:90px;height:30px"></div><div style="width:1px;height:1px;overflow:hidden"><canvas width="90" height="30" style="position:relative;left:100px"></canvas></div><canvas width="10" height="10"></canvas><div id="anchor" style="width:1px;height:1px"></div><div id="offscreen" style="position:fixed;left:-500px;top:0;width:30px;height:30px"></div><div id="fixed" style="width:100px;height:100px;background:url('${png}') 0 0 / 100% 100% fixed"></div><span id="badge" style="background:url('${png}') 0 0 / 20px 20px">long enough badge</span><img id="covered" src="${png}" style="position:fixed;left:10px;top:500px;width:90px;height:30px"><div style="position:fixed;left:0;top:490px;width:120px;height:50px;background:rgb(0,0,0)"></div>`,
     );
     await page.locator('#visible').evaluate((image: HTMLImageElement) => image.decode());
     const findings = await measureImageDistortion(page.mainFrame(), '390x844', 'play', true);
@@ -131,6 +131,13 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
       ctx.drawImage(source, -100, -100, 30, 30);
       ctx.globalAlpha = 0;
       ctx.drawImage(source, 0, 0, 30, 30);
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(60, 60, 10, 10);
+      ctx.clip();
+      ctx.drawImage(source, 0, 0, 30, 30);
+      ctx.restore();
     });
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
     await page.evaluate(() => {
@@ -163,6 +170,19 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
     await page.evaluate(() => {
       const ctx = document.querySelector<HTMLCanvasElement>('#ui')!.getContext('2d')!;
       ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, 90, 90);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
+    await page.evaluate(() => {
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      const ctx = document.querySelector<HTMLCanvasElement>('#ui')!.getContext('2d')!;
+      ctx.drawImage(source, 0, 0, 30, 30);
+      const gradient = ctx.createLinearGradient(0, 0, 90, 0);
+      gradient.addColorStop(0, '#000');
+      gradient.addColorStop(1, '#fff');
+      ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, 90, 90);
     });
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
@@ -233,6 +253,23 @@ it('does not accept an empty UI report for a WebGL canvas', async () => {
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play', true)).toContainEqual(
       expect.objectContaining({ error: expect.stringContaining('WebGL UI coverage') }),
     );
+    await page.evaluate(() => {
+      const gl = document.querySelector<HTMLCanvasElement>('#webgl')!.getContext('webgl')!;
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 12);
+      (window as unknown as { __gm: unknown }).__gm = {
+        imageDraws: () =>
+          ['a', 'b'].map((id) => ({
+            id,
+            canvasId: 'webgl',
+            file: 'a.png',
+            source: { width: 30, height: 30 },
+            drawn: { width: 30, height: 30 },
+          })),
+        imageDrawsReady: () => true,
+      };
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play', true)).toEqual([]);
     await page.locator('#webgl').evaluate((canvas: HTMLCanvasElement) => {
       canvas.dataset.gmWorldCanvas = 'true';
     });
