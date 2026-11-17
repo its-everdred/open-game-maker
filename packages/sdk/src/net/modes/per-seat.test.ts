@@ -130,6 +130,41 @@ describe('per-seat authority mode', () => {
     expect(frame?.playerIndex).toBe(1);
     expect(frame?.tick).toBe(tick);
   });
+
+  it('preserves the running tick when the same epoch is announced on reconnect', () => {
+    const { loopback } = match();
+    loopback.start();
+    loopback.advance(30);
+    const seat = loopback.seat(0);
+    const tick = seat.net.tick;
+    const onStart = vi.fn();
+    seat.net.onStart(onStart);
+    seat.controller.handleMessage('net.start', {
+      epoch: seat.net.epoch,
+      mode: 'per-seat',
+      seed: 1,
+      startAt: 999_999,
+      primarySeat: 0,
+      seats: seat.net.seats,
+    });
+    expect(seat.net.tick).toBe(tick);
+    expect(onStart).not.toHaveBeenCalled();
+    expect(seat.net.started).toBe(true);
+    loopback.advance(1);
+    expect(seat.net.tick).toBe(tick + 1);
+  });
+
+  it('delivers events from different seats independently', () => {
+    const { loopback } = match(3);
+    loopback.start();
+    const received = vi.fn();
+    loopback.seat(0).net.onEvent(received);
+    loopback.seat(1).net.sendEvent({ seat: 1 });
+    loopback.seat(2).net.sendEvent({ seat: 2 });
+    loopback.advance(2);
+    expect(received).toHaveBeenCalledWith({ seat: 1 });
+    expect(received).toHaveBeenCalledWith({ seat: 2 });
+  });
 });
 
 describe('authority mode selection', () => {
@@ -151,6 +186,24 @@ describe('authority mode selection', () => {
       now: () => 0,
     });
   }
+
+  it('uses the room-assigned local seat before an epoch starts', () => {
+    const net = controller(perSeatManifest, createFixtureGame([0, 1]));
+    net.handleMessage('net.players', {
+      local: 1,
+      players: [
+        { playerIndex: 0, name: 'A', connected: true },
+        { playerIndex: 1, name: 'B', connected: true },
+      ],
+    });
+    expect(net.net.localSeat).toBe(1);
+  });
+
+  it('uses the room clock sample for per-seat time', () => {
+    const net = controller(perSeatManifest, createFixtureGame([0, 1]));
+    net.handleMessage('net.clock', { clientMs: 1000, serverMs: 1110, rttMs: 20 });
+    expect(net.net.now().offsetMs).toBe(100);
+  });
 
   it('refuses a per-seat manifest whose hooks are missing the three v2 calls', () => {
     const game = createFixtureGame([0, 1]);

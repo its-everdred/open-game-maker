@@ -1,17 +1,21 @@
 import {
   gameToHostSchema,
   LIMITS,
-  type ClientMessage,
+  type RoomClientMessage,
   type Envelope,
   type ServerMessage,
+  type NetServerMessage,
+  type NetSeat,
+  RoomClientMessageSchema,
 } from '@ogm/contracts/browser';
 
 import type { DesignBridge, WatcherSync } from './watcher-sync';
 import type { RoomStore, RoomStoreApi } from './room-store';
 
 export type ForwardingRoomClient = {
-  send(message: ClientMessage): void;
+  send(message: RoomClientMessage): void;
   subscribe(listener: (message: ServerMessage) => void): () => void;
+  subscribeNet?(listener: (message: NetServerMessage) => void): () => void;
 };
 
 export type BridgeForwardingOptions = {
@@ -62,6 +66,13 @@ export function attachBridgeForwarding(options: BridgeForwardingOptions): Bridge
   const removeMessages = client.subscribe((message) => {
     const role = store.getState().role;
     switch (message.t) {
+      case 'pong':
+        sendBridge('net.clock', {
+          clientMs: message.c,
+          serverMs: message.s,
+          rttMs: Math.max(0, Date.now() - message.c),
+        });
+        return;
       case 'input': {
         if (role !== 'host') return;
         const { seq, tick, axes, buttons, playerIndex } = message.f;
@@ -75,6 +86,43 @@ export function attachBridgeForwarding(options: BridgeForwardingOptions): Bridge
         return;
       case 'event':
         if (role === 'peer') sendBridge('net.event', { seq: message.seq, data: bytesToBase64(message.data) });
+        return;
+      default:
+        return;
+    }
+  });
+  const removeNetMessages = client.subscribeNet?.((message) => {
+    switch (message.t) {
+      case 'net.start.cancel':
+      case 'net.primary':
+      case 'net.pause':
+      case 'net.pause.prepare':
+      case 'net.pause.probe':
+      case 'net.resume':
+      case 'net.inputs':
+      case 'net.state':
+      case 'net.checksum':
+      case 'net.recovery':
+      case 'net.recovery.request': {
+        const { t, ...payload } = message;
+        sendBridge(t, payload);
+        return;
+      }
+      case 'net.event': {
+        const { t, ...payload } = message;
+        sendBridge(t, payload);
+        return;
+      }
+      case 'net.start': {
+        const { t, ...payload } = message;
+        sendBridge(t, { ...payload, seats: message.seats.map(publicSeat) });
+        return;
+      }
+      case 'net.seats':
+        sendBridge('net.seats', { epoch: message.epoch, seats: message.seats.map(publicSeat) });
+        return;
+      case 'net.tick':
+        sendBridge('net.tick', { ...message, serverMs: message.serverTime });
         return;
       default:
         return;
@@ -96,6 +144,25 @@ export function attachBridgeForwarding(options: BridgeForwardingOptions): Bridge
       if (!parsed.success) return;
       const message = parsed.data;
       const role = store.getState().role;
+      if (message.t === 'net.ready') {
+        client.send({ t: 'net.ready', ready: message.payload.ready });
+        return;
+      }
+      if (
+        message.t === 'net.inputs' ||
+        message.t === 'net.state' ||
+        message.t === 'net.checksum' ||
+        message.t === 'net.recovery.request' ||
+        message.t === 'net.recovery' ||
+        message.t === 'net.start.request' ||
+        message.t === 'net.pause.ack' ||
+        message.t === 'net.pause.late' ||
+        message.t === 'net.pause.position'
+      ) {
+        const candidate = RoomClientMessageSchema.safeParse({ t: message.t, ...message.payload });
+        if (candidate.success) client.send(candidate.data);
+        return;
+      }
       switch (message.t) {
         case 'ready': {
           const draft = store.getState().draft;
@@ -121,6 +188,11 @@ export function attachBridgeForwarding(options: BridgeForwardingOptions): Bridge
           });
           return;
         case 'net.event':
+          if ('epoch' in message.payload) {
+            const candidate = RoomClientMessageSchema.safeParse({ t: message.t, ...message.payload });
+            if (candidate.success) client.send(candidate.data);
+            return;
+          }
           if (role !== 'host') return;
           client.send({ t: 'event', seq: message.payload.seq, data: base64ToBytes(message.payload.data) });
           return;
@@ -130,9 +202,14 @@ export function attachBridgeForwarding(options: BridgeForwardingOptions): Bridge
     },
     detach() {
       removeMessages();
+      removeNetMessages?.();
       removeStore();
     },
   };
+}
+
+function publicSeat(seat: NetSeat): NetSeat {
+  return { ...seat, userId: seat.userId === '' ? '' : `seat-${seat.seat}` };
 }
 
 export function bytesToBase64(data: Uint8Array): string {

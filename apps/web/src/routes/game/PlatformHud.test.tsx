@@ -45,6 +45,30 @@ afterEach(() => {
 });
 
 describe('PlatformHud', () => {
+  it('shows the pauser and holds the game during the resume countdown', () => {
+    const test = frameHarness();
+    const view = render(
+      <MemoryRouter>
+        <PlatformHud
+          build="draft"
+          frame={test.frame}
+          gameId="game"
+          open
+          paused
+          pauseName="Sam"
+          resumeAt={Date.now() + 3000}
+          saveContext={saveContext}
+          saves={false}
+          onResume={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Paused by Sam')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeDisabled();
+    expect(test.frame.pause).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(test.frame.resume).toHaveBeenCalledOnce();
+  });
   it('shows settings during live room play and persists game switches', async () => {
     localStorage.clear();
     const test = frameHarness();

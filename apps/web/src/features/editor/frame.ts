@@ -281,9 +281,23 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     frame.send('editor.validatePlacement', { prefab: request.prefab, pose: request.pose });
   };
   stopPlacement = frame.on('editor.placement', finishPlacement);
-  const stopRoomMessages = (['net.input', 'net.snapshot', 'net.event'] as const).map((type) =>
-    frame.on(type, (payload) => emitRoomMessage(type, payload)),
-  );
+  const stopRoomMessages = (
+    [
+      'net.input',
+      'net.snapshot',
+      'net.event',
+      'net.inputs',
+      'net.state',
+      'net.checksum',
+      'net.recovery.request',
+      'net.recovery',
+      'net.ready',
+      'net.start.request',
+      'net.pause.ack',
+      'net.pause.late',
+      'net.pause.position',
+    ] as const
+  ).map((type) => frame.on(type, (payload) => emitRoomMessage(type, payload)));
 
   return {
     state: snapshot,

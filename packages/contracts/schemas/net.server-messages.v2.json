@@ -399,6 +399,17 @@
               "rulesetHash": {
                 "type": "string",
                 "maxLength": 64
+              },
+              "matchPausedBy": {
+                "type": "string"
+              },
+              "matchPauseName": {
+                "type": "string"
+              },
+              "matchResumeAt": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -616,8 +627,7 @@
             "const": "net.seats"
           },
           "epoch": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           },
           "seats": {
             "maxItems": 8,
@@ -701,8 +711,7 @@
             ]
           },
           "epoch": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           },
           "seat": {
             "type": "integer",
@@ -753,6 +762,48 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "net.pause.prepare"
+          },
+          "epoch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tick": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "t",
+          "epoch",
+          "tick"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "net.pause.probe"
+          },
+          "epoch": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "t",
+          "epoch"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "net.resume"
           },
           "epoch": {
@@ -768,6 +819,11 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [
@@ -775,6 +831,62 @@
           "epoch",
           "tick",
           "startAt"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "match.pause"
+          },
+          "by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "t",
+          "by",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "match.resume"
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "t",
+          "at"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "match.resumed"
+          }
+        },
+        "required": [
+          "t"
         ],
         "additionalProperties": false
       },
@@ -1017,6 +1129,44 @@
           "scope",
           "tick",
           "sum",
+          "t"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "epoch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "shared",
+              "seat",
+              "events"
+            ]
+          },
+          "tick": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "seat": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "t": {
+            "type": "string",
+            "const": "net.recovery.request"
+          }
+        },
+        "required": [
+          "epoch",
+          "scope",
+          "tick",
           "t"
         ],
         "additionalProperties": false

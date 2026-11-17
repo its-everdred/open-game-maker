@@ -50,6 +50,9 @@ type PlatformHudProps = {
   open?: boolean;
   /** The global game menu pauses solo play while it is open; room play remains live. */
   paused: boolean;
+  pauseName?: string;
+  resumeAt?: number;
+  serverOffsetMs?: number;
   saveContext: SaveContext;
   saves: boolean;
   /** The running build's save schema; absent when the build did not report one. */
@@ -132,6 +135,9 @@ export function PlatformHud({
   gameOptions,
   open,
   paused,
+  pauseName,
+  resumeAt,
+  serverOffsetMs = 0,
   saveContext,
   saves,
   saveSchema,
@@ -156,6 +162,13 @@ export function PlatformHud({
   );
   const [credits, setCredits] = useState<CreditsDocument>();
   const [creditsFailed, setCreditsFailed] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!resumeAt) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(timer);
+  }, [resumeAt]);
   const resumeRef = useRef<HTMLButtonElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const slotsRef = useRef(slots);
@@ -359,7 +372,11 @@ export function PlatformHud({
             ) : (
               <>
                 <h2>{paused ? 'Paused' : 'Game menu'}</h2>
-                <button ref={resumeRef} className="tap-primary" type="button" onClick={resume}>
+                {pauseName ? <p>Paused by {pauseName}</p> : null}
+                {resumeAt ? (
+                  <p aria-live="polite">{Math.max(1, Math.ceil((resumeAt - (now + serverOffsetMs)) / 1000))}</p>
+                ) : null}
+                <button ref={resumeRef} className="tap-primary" type="button" onClick={resume} disabled={!!resumeAt}>
                   Resume
                 </button>
                 {savesAvailable && slots !== undefined ? (

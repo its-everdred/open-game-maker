@@ -409,6 +409,104 @@
           "seat"
         ],
         "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "match.pause.request"
+          }
+        },
+        "required": [
+          "t"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "match.resume.request"
+          }
+        },
+        "required": [
+          "t"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "net.pause.ack"
+          },
+          "epoch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tick": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "t",
+          "epoch",
+          "tick"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "net.pause.late"
+          },
+          "epoch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tick": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "t",
+          "epoch",
+          "tick"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "net.pause.position"
+          },
+          "epoch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tick": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "t",
+          "epoch",
+          "tick"
+        ],
+        "additionalProperties": false
       }
     ]
   },

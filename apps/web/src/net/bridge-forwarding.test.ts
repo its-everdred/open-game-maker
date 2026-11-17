@@ -1,4 +1,4 @@
-import type { Envelope, RoomState, ServerMessage } from '@ogm/contracts';
+import type { Envelope, NetServerMessage, RoomState, ServerMessage } from '@ogm/contracts';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { attachBridgeForwarding, bytesToBase64 } from './bridge-forwarding';
@@ -46,6 +46,51 @@ describe('bridge forwarding', () => {
     bridge = { send: vi.fn<(envelope: Envelope<string, unknown>) => void>() };
     store = createRoomStore();
     store.getState().welcome({ userId: 'owner-1', playerIndex: 0, sessionId: 'session-1' }, state());
+  });
+
+  it('forwards protocol 2 pause and tick messages and relays game inputs', () => {
+    const forwarding = attachBridgeForwarding({ bridge, client, store });
+    client.emitNet({ t: 'net.pause', epoch: 'epoch-1', tick: 42, startAt: 1000 });
+    client.emitNet({
+      t: 'net.seats',
+      epoch: 'epoch-1',
+      spectators: ['account-2'],
+      seats: [
+        {
+          seat: 0,
+          userId: 'account-secret',
+          name: 'A',
+          team: 0,
+          connected: true,
+          ready: true,
+          forfeited: false,
+          spectator: false,
+        },
+      ],
+    });
+    client.emitNet({ t: 'net.tick', epoch: 'epoch-1', tick: 42, serverTime: 1700 });
+    expect(payloads(bridge, 'net.pause')).toEqual([{ epoch: 'epoch-1', tick: 42, startAt: 1000 }]);
+    expect(JSON.stringify(payloads(bridge, 'net.seats'))).not.toContain('account-secret');
+    expect(JSON.stringify(payloads(bridge, 'net.seats'))).not.toContain('account-2');
+    expect(payloads(bridge, 'net.tick')).toEqual([expect.objectContaining({ tick: 42, serverMs: 1700 })]);
+    forwarding.handleGameMessage(
+      envelope('net.inputs', {
+        epoch: 'epoch-1',
+        seat: 0,
+        firstTick: 42,
+        frames: [{ seq: 1, tick: 42, axes: [], buttons: 0 }],
+      }),
+    );
+    expect(client.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'net.inputs', epoch: 'epoch-1' }));
+  });
+
+  it('relays per-seat game events in both directions', () => {
+    const forwarding = attachBridgeForwarding({ bridge, client, store });
+    const event = { epoch: 'lobby', id: '1-1', seq: 1, from: 1, target: 'all' as const, data: 'e30=' };
+    forwarding.handleGameMessage(envelope('net.event', event));
+    expect(client.send).toHaveBeenCalledWith({ t: 'net.event', ...event });
+    client.emitNet({ t: 'net.event', ...event });
+    expect(payloads(bridge, 'net.event')).toContainEqual(event);
   });
 
   it('forwards role, phase, players, and role-gated room traffic to the game', () => {
@@ -175,6 +220,7 @@ function payloads(bridge: { send: Mock<(envelope: Envelope<string, unknown>) => 
 class FakeClient {
   send = vi.fn();
   private readonly listeners = new Set<(message: ServerMessage) => void>();
+  private readonly netListeners = new Set<(message: NetServerMessage) => void>();
 
   subscribe(listener: (message: ServerMessage) => void): () => void {
     this.listeners.add(listener);
@@ -183,5 +229,14 @@ class FakeClient {
 
   emit(message: ServerMessage): void {
     this.listeners.forEach((listener) => listener(message));
+  }
+
+  subscribeNet(listener: (message: NetServerMessage) => void): () => void {
+    this.netListeners.add(listener);
+    return () => this.netListeners.delete(listener);
+  }
+
+  emitNet(message: NetServerMessage): void {
+    this.netListeners.forEach((listener) => listener(message));
   }
 }

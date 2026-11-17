@@ -33,6 +33,21 @@ it('reports room creation failures and restores the control', async () => {
   expect(screen.getByRole('button', { name: 'Invite' })).toBeEnabled();
 });
 
+it('creates a per-seat room when the game declares per-seat authority', async () => {
+  mockedApi.mockResolvedValueOnce({ roomId: 'room-1', grant: 'grant', pin: {}, roomsUrl: 'ws://rooms.test' });
+  mockedApi.mockResolvedValueOnce({ url: 'https://maker.test/join/one' });
+  render(<InviteButton branchId="main" buildId="build" gameId="game" authorityMode="per-seat" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+  await waitFor(() =>
+    expect(mockedApi).toHaveBeenCalledWith(
+      '/games/game/rooms',
+      expect.objectContaining({
+        json: expect.objectContaining({ mode: 'per-seat' }),
+      }),
+    ),
+  );
+});
+
 it('reports share failures after creating the invite', async () => {
   mockedApi
     .mockResolvedValueOnce({

@@ -90,4 +90,10 @@ describe('routing', () => {
     ).toEqual(['s3']);
     expect(route({ t: 'net.signal', epoch, to: 3, data: 'AQ==' } as NetClientMessage, 0).sessions).toEqual(['s3']);
   });
+
+  it('delivers addressed state and recovery only to the intended seat', () => {
+    expect(route({ t: 'net.state', epoch, seat: 0, seq: 1, tick: 5, to: 1, data: 'AQ==' }).sessions).toEqual(['s1']);
+    expect(route({ t: 'net.recovery', epoch, scope: 'seat', tick: 5, to: 2 }).sessions).toEqual(['s2']);
+    expect(route({ t: 'net.state', epoch, seat: 0, seq: 1, tick: 5, to: 7, data: 'AQ==' }).drop).toBe('SEAT_OUT_OF_RANGE');
+  });
 });
