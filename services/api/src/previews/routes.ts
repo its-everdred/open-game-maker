@@ -16,7 +16,14 @@ import {
   discardReviewAnswer,
   readReviewEpisode,
 } from '../review-rounds/answer-guard.js';
-import { answerPreview, listEditorPreviews, listPreviewHistory, listPreviews, previewDirectory } from './store.js';
+import {
+  answerPreview,
+  currentPreview,
+  listEditorPreviews,
+  listPreviewHistory,
+  listPreviews,
+  previewDirectory,
+} from './store.js';
 
 export const prefix = '/api/v1';
 
@@ -40,12 +47,7 @@ export default new Hono<ApiBindings>()
   .get('/games/:gameId/previews', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     const deps = c.get('deps');
-    const previews = (await listPreviews(deps, game.id)).filter((preview) => {
-      const round = roundForBuild(deps.db, game.id, preview.ticket, preview.buildId);
-      return (
-        !round || (round.verdict === null && latestRoundForTicket(deps.db, game.id, preview.ticket)?.id === round.id)
-      );
-    });
+    const previews = (await listPreviews(deps, game.id)).filter((preview) => currentPreview(deps, preview));
     const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
     const named = await Promise.all(
       previews.map(async (preview) => {

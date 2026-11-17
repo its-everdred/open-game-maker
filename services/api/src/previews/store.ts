@@ -26,6 +26,14 @@ export type Preview = {
   pendingMessage?: string;
 };
 
+/** A newer review round supersedes an older standalone preview of the same ticket. */
+export function currentPreview(deps: AppDeps, preview: Preview): boolean {
+  const latest = latestRoundForTicket(deps.db, preview.gameId, preview.ticket);
+  const round = roundForBuild(deps.db, preview.gameId, preview.ticket, preview.buildId);
+  if (round) return round.verdict === null && latest?.id === round.id;
+  return !latest || Date.parse(latest.postedAt) < Date.parse(preview.createdAt);
+}
+
 const ticketPattern = /^[1-9]\d{0,15}$/u;
 const root = (deps: AppDeps, gameId: string) => join(deps.config.gamesRoot, '.previews', gameId);
 const ACCESS_TTL = 60 * 60 * 1000;
@@ -253,6 +261,7 @@ export async function answerPreview(
     const file = join(root(deps, gameId), `${ticket}.json`);
     const preview = await readPreview(file);
     if (!preview || preview.answered || preview.buildId !== buildId) return false;
+    if (!currentPreview(deps, preview)) return false;
     if (preview.pendingMessage !== undefined && preview.pendingMessage !== message) return false;
     const round = roundForBuild(deps.db, gameId, ticket, buildId);
     if (round) {

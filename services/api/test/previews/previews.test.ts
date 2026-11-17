@@ -201,6 +201,30 @@ describe('review round previews', () => {
     expect(getRound(deps.db, ids.game, 'old-preview')?.verdict).toBeNull();
     expect(message).not.toHaveBeenCalled();
   });
+  it('hides and rejects a standalone preview when a newer round exists', async () => {
+    const { deps, upload, list, answer, message } = setup();
+    await upload();
+    const preview = ((await (await list()).json()) as { previews: { buildId: string; createdAt: string }[] })
+      .previews[0]!;
+    postRound(deps.db, {
+      gameId: ids.game,
+      round: 1,
+      ticket: '12',
+      sha: SHA,
+      postedAt: new Date(Date.parse(preview.createdAt) + 1000).toISOString(),
+      id: 'new-art',
+      track: 'art',
+      phase: 'build',
+      category: 'art',
+      media: '[]',
+    });
+    expect(((await (await list()).json()) as { previews: unknown[] }).previews).toEqual([]);
+    expect((await answer(preview.buildId)).status).toBe(409);
+    expect(await answerPreview(deps, ids.game, '12', preview.buildId, 'old review', 'looks right', undefined)).toBe(
+      false,
+    );
+    expect(message).not.toHaveBeenCalled();
+  });
   it('lists only the latest round per ticket, even when the latest has already been answered', async () => {
     const { deps, app } = setup();
     const row = {

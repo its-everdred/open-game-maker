@@ -68,7 +68,7 @@ it('answers a ledger round with a note and advances to the next review', async (
   expect(screen.getByText('1 left')).toBeVisible();
 }, 10000);
 
-it('keeps an open review while polling replaces the list', () => {
+it('keeps an open review while an incomplete poll replaces the list', () => {
   const first = {
     kind: 'round' as const,
     gameId: 'g',
@@ -88,11 +88,18 @@ it('keeps an open review while polling replaces the list', () => {
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Keep this' } });
   view.rerender(
     <QueryClientProvider client={queryClient}>
-      <ReviewInbox commands={[]} onClose={() => {}} reviews={[second]} />
+      <ReviewInbox commands={[]} onClose={() => {}} reviews={[second]} incomplete />
     </QueryClientProvider>,
   );
   expect(screen.getByText('First?')).toBeVisible();
   expect(screen.getByLabelText('Note (optional)')).toHaveValue('Keep this');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} onClose={() => {}} reviews={[second]} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('Second?')).toBeVisible();
 });
 
 it('replaces a superseded round for the same ticket while the queue is open', () => {
@@ -118,6 +125,26 @@ it('replaces a superseded round for the same ticket while the queue is open', ()
   );
   expect(screen.getByText('New?')).toBeVisible();
   expect(screen.queryByText('Old?')).toBeNull();
+});
+
+it('refreshes media on the open round when polling supplies it', async () => {
+  api.mockResolvedValue({ status: 'asked' });
+  const round = { id: 'a', ticket: '12', question: 'Review?', media: [] };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} reviews={[{ kind: 'round', gameId: 'g', round }]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox
+        commands={[]}
+        reviews={[{ kind: 'round', gameId: 'g', round: { ...round, media: [{ kind: 'still', url: '/new.png' }] } }]}
+        onClose={() => {}}
+      />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole('button', { name: 'Looks good' })).toBeVisible();
 });
 
 it('allows playing clips attached to a playable review', () => {
@@ -224,7 +251,8 @@ it('asks the worker and does not offer a verdict for a round without media', asy
   );
   await waitFor(() => expect(api).toHaveBeenCalledWith('/games/g/review-rounds/a/missing-media', { method: 'POST' }));
   expect(await screen.findByText('Asked the agent for media in the next round.')).toBeVisible();
-  expect(screen.queryByRole('button', { name: 'Looks right' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Looks good' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Needs changes' })).toBeNull();
 });
 
 it('asks for missing media on later cards without waiting for the creator to open them', async () => {
@@ -292,6 +320,37 @@ it('lists core Commands alongside game reviews', () => {
     </QueryClientProvider>,
   );
   expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeVisible();
+});
+
+it('refreshes the version and options of the open command', () => {
+  const command = {
+    source: 'core' as const,
+    job_id: null,
+    ticket: '45',
+    title: 'Question',
+    command_id: 'c',
+    decision_id: 'd',
+    version: 1,
+    question: 'Which?',
+    blocking: true,
+    opened_at: '2026-01-01T00:00:00Z',
+    options: [{ id: 'a', label: 'Old', media: { url: '/a.png', width: 10, height: 10 } }],
+  };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[command]} reviews={[]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox
+        commands={[{ ...command, version: 2, options: [{ ...command.options[0]!, label: 'New' }] }]}
+        reviews={[]}
+        onClose={() => {}}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole('button', { name: 'Pick A: New' })).toBeVisible();
 });
 
 it('keeps a command open while an answer is sending', async () => {

@@ -25,6 +25,7 @@ export function ReviewInbox({
   targets = [],
   workers = [],
   error = false,
+  incomplete = false,
 }: {
   reviews: readonly WorkerReview[];
   commands: readonly ReviewCommand[];
@@ -32,6 +33,7 @@ export function ReviewInbox({
   targets?: readonly ReviewTarget[];
   workers?: readonly WorkerBuild[];
   error?: boolean;
+  incomplete?: boolean;
 }) {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
   const [answeredTickets, setAnsweredTickets] = useState<ReadonlySet<string>>(() => new Set());
@@ -40,16 +42,14 @@ export function ReviewInbox({
   const [sending, setSending] = useState(false);
   const [target, setTarget] = useState<(typeof targets)[number] | undefined>();
   const pendingReviews = reviews.filter((review) => !answered.has(keyOf(review)));
-  const pendingCommands = commands.filter(
-    (item) => !answered.has(`command:${commandSource(item)}:${item.decision_id}`),
-  );
+  const pendingCommands = commands.filter((item) => !answered.has(commandKey(item)));
   const pendingTargets = targets.filter((item) => !answeredTickets.has(`${targetSource(item)}:${item.ticket}`));
   const queue = [
     ...pendingReviews.map((item) => ({ kind: 'review' as const, item, key: keyOf(item) })),
     ...pendingCommands.map((item) => ({
       kind: 'command' as const,
       item,
-      key: `command:${commandSource(item)}:${item.decision_id}`,
+      key: commandKey(item),
     })),
     ...pendingTargets.map((item) => ({
       kind: 'target' as const,
@@ -79,7 +79,7 @@ export function ReviewInbox({
   const activeKey = current
     ? keyOf(current)
     : command
-      ? `command:${commandSource(command)}:${command.decision_id}`
+      ? commandKey(command)
       : target
         ? `target:${targetSource(target)}:${target.ticket}`
         : undefined;
@@ -106,23 +106,36 @@ export function ReviewInbox({
     </div>
   );
   useEffect(() => {
-    if (current?.kind !== 'round' || !current.round.buildId) return;
-    const recovered = reviews.find(
-      (review) => review.kind === 'preview' && review.gameId === current.gameId && review.round.id === current.round.id,
-    );
-    if (recovered) setCurrent(recovered);
-  }, [current, reviews]);
-  useEffect(() => {
-    if (!current || answered.has(keyOf(current))) return;
-    if (reviews.some((review) => keyOf(review) === keyOf(current))) return;
-    const ticket = current.kind === 'standalone-preview' ? current.preview.ticket : current.round.ticket;
-    const replacement = reviews.find(
-      (review) =>
-        review.gameId === current.gameId &&
-        (review.kind === 'standalone-preview' ? review.preview.ticket : review.round.ticket) === ticket,
-    );
-    if (replacement) setCurrent(replacement);
-  }, [answered, current, reviews]);
+    if (incomplete || error || sending) return;
+    if (current && !answered.has(keyOf(current))) {
+      const ticket = current.kind === 'standalone-preview' ? current.preview.ticket : current.round.ticket;
+      const replacement = reviews.find(
+        (review) =>
+          review.gameId === current.gameId &&
+          (review.kind === 'standalone-preview' ? review.preview.ticket : review.round.ticket) === ticket,
+      );
+      if (!replacement) show(queue[0]);
+      else if (
+        replacement.kind !== current.kind ||
+        (replacement.kind !== 'standalone-preview' &&
+          current.kind !== 'standalone-preview' &&
+          replacement.round !== current.round) ||
+        (replacement.kind !== 'round' && current.kind !== 'round' && replacement.preview !== current.preview)
+      )
+        setCurrent(replacement);
+    } else if (command && !answered.has(commandKey(command))) {
+      const replacement = commands.find(
+        (item) => commandSource(item) === commandSource(command) && item.decision_id === command.decision_id,
+      );
+      if (!replacement) show(queue[0]);
+      else if (replacement !== command) setCommand(replacement);
+    } else if (
+      target &&
+      !targets.some((item) => targetSource(item) === targetSource(target) && item.ticket === target.ticket)
+    ) {
+      show(queue[0]);
+    }
+  });
   if (target) {
     return (
       <Dialog
@@ -174,7 +187,7 @@ export function ReviewInbox({
               workers.find((worker) => worker.ticket === `${commandSource(command)}:${command.ticket}`)?.state
             }
             onAnswered={() => {
-              setAnswered((seen) => new Set(seen).add(`command:${commandSource(command)}:${command.decision_id}`));
+              setAnswered((seen) => new Set(seen).add(commandKey(command)));
               if (command.ticket)
                 setAnsweredTickets((seen) => new Set(seen).add(`${commandSource(command)}:${command.ticket}`));
             }}
@@ -274,4 +287,8 @@ export function ReviewInbox({
 
 function keyOf(review: WorkerReview): string {
   return `${review.gameId}:${review.kind}:${review.kind === 'round' ? review.round.id : review.preview.buildId}`;
+}
+
+function commandKey(command: ReviewCommand): string {
+  return `command:${commandSource(command)}:${command.decision_id}:${command.version}`;
 }

@@ -691,7 +691,6 @@ describe('StudioMenu', () => {
     state.decisions = [decision('d1')];
     const view = renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Blobs · Topic d1' }));
     expect(screen.getByRole('alert')).toBeVisible();
     state.session = { data: { user: { id: 'user-2' } } };
     state.decisions = [decision('d2')];
