@@ -1,10 +1,10 @@
-import type { ClientMessage } from '@ogm/contracts';
+import type { RoomClientMessage } from '@ogm/contracts';
 
 import type { RoomStore, RoomStoreApi } from '../../net/room-store';
 
 type RoomClientLike = {
   store: RoomStoreApi;
-  send(message: ClientMessage): void;
+  send(message: RoomClientMessage): void;
   leave(consented?: boolean): Promise<void>;
 };
 
@@ -26,13 +26,15 @@ export type RoomSessionSnapshot = Pick<
   | 'maxPlayers'
   | 'ended'
   | 'rttMs'
+  | 'matchPause'
+  | 'serverOffsetMs'
 >;
 
 export type RoomSession = {
   readonly roomId: string;
   snapshot(): RoomSessionSnapshot;
   subscribe(listener: () => void): () => void;
-  send(message: ClientMessage): void;
+  send(message: RoomClientMessage): void;
   leave(): Promise<void>;
 };
 
@@ -64,6 +66,8 @@ export function roomSnapshot(store: RoomStore): RoomSessionSnapshot {
     maxPlayers,
     ended,
     rttMs,
+    matchPause,
+    serverOffsetMs,
   } = store;
   return {
     status,
@@ -82,5 +86,7 @@ export function roomSnapshot(store: RoomStore): RoomSessionSnapshot {
     maxPlayers,
     ended,
     rttMs,
+    matchPause,
+    serverOffsetMs,
   };
 }

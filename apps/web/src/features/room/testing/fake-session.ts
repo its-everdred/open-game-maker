@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from '@ogm/contracts';
+import type { RoomClientMessage, ServerMessage } from '@ogm/contracts';
 
 import { createRoomStore } from '../../../net/room-store';
 import { fromRoomClient, type RoomSession, type RoomSessionSnapshot } from '../session';
@@ -6,12 +6,12 @@ import { fromRoomClient, type RoomSession, type RoomSessionSnapshot } from '../s
 export type FakeRoomSession = RoomSession & {
   emit(message: ServerMessage): void;
   setState(state: Partial<RoomSessionSnapshot>): void;
-  sent(): ClientMessage[];
+  sent(): RoomClientMessage[];
 };
 
 export function fakeSession(roomId = 'fake-room'): FakeRoomSession {
   const store = createRoomStore();
-  const messages: ClientMessage[] = [];
+  const messages: RoomClientMessage[] = [];
   const session = fromRoomClient(roomId, {
     store,
     send: (message) => messages.push(message),

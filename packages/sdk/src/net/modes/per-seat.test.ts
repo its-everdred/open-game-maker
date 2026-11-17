@@ -1,6 +1,7 @@
 import type { ActionFrame, GameManifest, MultiplayerHooksV2 } from '@ogm/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
+import { encodeBase64, packJson } from '../codec.js';
 import { createNetController } from '../index.js';
 import { ModeMismatchError, resolveAuthorityMode } from '../mode.js';
 import { createFixtureGame } from '../test/fixture-game.js';
@@ -130,6 +131,71 @@ describe('per-seat authority mode', () => {
     expect(frame?.playerIndex).toBe(1);
     expect(frame?.tick).toBe(tick);
   });
+
+  it('preserves the running tick when the same epoch is announced on reconnect', () => {
+    const { loopback } = match();
+    loopback.start();
+    loopback.advance(30);
+    const seat = loopback.seat(0);
+    const tick = seat.net.tick;
+    const onStart = vi.fn();
+    seat.net.onStart(onStart);
+    seat.controller.handleMessage('net.start', {
+      epoch: seat.net.epoch,
+      mode: 'per-seat',
+      seed: 1,
+      startAt: 999_999,
+      primarySeat: 0,
+      seats: seat.net.seats,
+    });
+    expect(seat.net.tick).toBe(tick);
+    expect(onStart).not.toHaveBeenCalled();
+    expect(seat.net.started).toBe(true);
+    loopback.advance(1);
+    expect(seat.net.tick).toBe(tick + 1);
+  });
+
+  it('delivers events from different seats independently', () => {
+    const { loopback } = match(3);
+    loopback.start();
+    const received = vi.fn();
+    loopback.seat(0).net.onEvent(received);
+    loopback.seat(1).net.sendEvent({ seat: 1 });
+    loopback.seat(2).net.sendEvent({ seat: 2 });
+    loopback.advance(2);
+    expect(received).toHaveBeenCalledWith({ seat: 1 });
+    expect(received).toHaveBeenCalledWith({ seat: 2 });
+  });
+
+  it('stamps events as lobby events once the room ends the epoch', () => {
+    const { loopback } = match(2);
+    loopback.start();
+    const seat = loopback.seat(1);
+    seat.controller.handleMessage('net.epoch.end', { epoch: seat.net.epoch, tick: seat.net.tick });
+    seat.net.sendEvent({ rematch: true });
+    loopback.advance(2);
+    const sent = loopback.messages().filter((message) => message.type === 'net.event' && message.sender === 1);
+    /* The room drops an event stamped with an epoch that is no longer running; between rounds it is a lobby event. */
+    expect(sent.at(-1)?.payload).toMatchObject({ epoch: 'lobby' });
+  });
+
+  it('delivers events from a seat whose reloaded SDK restarted its sequence', () => {
+    const { loopback } = match(2);
+    loopback.start();
+    const received = vi.fn();
+    loopback.seat(0).net.onEvent(received);
+    const event = (seq: number, value: unknown) => ({
+      epoch: loopback.seat(0).net.epoch,
+      id: `1-${seq}`,
+      seq,
+      from: 1,
+      target: 'all',
+      data: encodeBase64(packJson(value, 1024, 'event')),
+    });
+    loopback.seat(0).controller.handleMessage('net.event', event(5, { before: true }));
+    loopback.seat(0).controller.handleMessage('net.event', event(1, { afterReload: true }));
+    expect(received).toHaveBeenCalledWith({ afterReload: true });
+  });
 });
 
 describe('authority mode selection', () => {
@@ -151,6 +217,24 @@ describe('authority mode selection', () => {
       now: () => 0,
     });
   }
+
+  it('uses the room-assigned local seat before an epoch starts', () => {
+    const net = controller(perSeatManifest, createFixtureGame([0, 1]));
+    net.handleMessage('net.players', {
+      local: 1,
+      players: [
+        { playerIndex: 0, name: 'A', connected: true },
+        { playerIndex: 1, name: 'B', connected: true },
+      ],
+    });
+    expect(net.net.localSeat).toBe(1);
+  });
+
+  it('uses the room clock sample for per-seat time', () => {
+    const net = controller(perSeatManifest, createFixtureGame([0, 1]));
+    net.handleMessage('net.clock', { clientMs: 1000, serverMs: 1110, rttMs: 20 });
+    expect(net.net.now().offsetMs).toBe(100);
+  });
 
   it('refuses a per-seat manifest whose hooks are missing the three v2 calls', () => {
     const game = createFixtureGame([0, 1]);

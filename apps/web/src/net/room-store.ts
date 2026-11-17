@@ -1,5 +1,4 @@
 import type {
-  ClientMessage,
   DesignTx,
   JoinRejection,
   Membership,
@@ -8,6 +7,7 @@ import type {
   RoomPin,
   RoomState,
   ServerMessage,
+  RoomClientMessage,
 } from '@ogm/contracts/browser';
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
 
@@ -18,7 +18,7 @@ export type RoomIdentity = Extract<ServerMessage, { t: 'welcome' }>['you'];
 export type RoomEndedReason = Extract<ServerMessage, { t: 'ended' }>['reason'] | 'abandoned';
 
 export type RoomController = {
-  send(message: ClientMessage): void;
+  send(message: RoomClientMessage): void;
 };
 
 export type RoomStore = {
@@ -38,6 +38,8 @@ export type RoomStore = {
   maxPlayers?: number;
   ended?: RoomEndedReason;
   rttMs?: number;
+  matchPause?: { by: string; name: string; resumeAt: number };
+  serverOffsetMs?: number;
   bind(controller: RoomController): void;
   connection(status: RoomStatus): void;
   reject(rejection: JoinRejection): void;

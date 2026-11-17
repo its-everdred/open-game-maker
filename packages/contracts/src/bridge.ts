@@ -5,6 +5,7 @@ import { gameManifestSchema, poseSchema, targetRefSchema } from './game.js';
 import { actionFrameSchema, insetsSchema, MAX_PLAYERS } from './input.js';
 import {
   authorityModeSchema,
+  netEventPayloadSchema,
   netChecksumPayloadSchema,
   netInputsPayloadSchema,
   netRecoveryPayloadSchema,
@@ -181,7 +182,7 @@ export const hostToGameSchema = z
     ),
     /** Peers only. */
     envelope('net.snapshot', netSnapshot),
-    envelope('net.event', netEvent),
+    envelope('net.event', z.union([netEventPayloadSchema, netEvent])),
     /*
      * Netcode v2 (N2 adds the names so both sides type-check; `bridge-forwarding.ts` keeps its v1 cases and drops
      * these until N3 wires room routing).
@@ -199,14 +200,31 @@ export const hostToGameSchema = z
       }),
     ),
     envelope('net.start', netStartSchema),
-    envelope('net.start.cancel', z.looseObject({ epoch: z.string().min(1).max(64) })),
+    envelope(
+      'net.start.cancel',
+      z.looseObject({
+        epoch: z.string().min(1).max(64).optional(),
+        reason: z.enum(['seat-offline', 'not-ready']).optional(),
+      }),
+    ),
+    envelope(
+      'net.epoch.end',
+      z.looseObject({ epoch: z.string().min(1).max(64), tick: z.number().int().nonnegative() }),
+    ),
     envelope('net.tick', z.looseObject({ tick: z.number().int().min(0), serverMs: z.number() })),
+    envelope(
+      'net.clock',
+      z.looseObject({ clientMs: z.number(), serverMs: z.number(), rttMs: z.number().nonnegative() }),
+    ),
     envelope('net.pause', empty),
+    envelope('net.pause.prepare', z.looseObject({ epoch: z.string().min(1), tick: z.number().int().nonnegative() })),
+    envelope('net.pause.probe', z.looseObject({ epoch: z.string().min(1) })),
     envelope('net.resume', empty),
     envelope('net.state', netStatePayloadSchema),
     envelope('net.inputs', netInputsPayloadSchema),
     envelope('net.checksum', netChecksumPayloadSchema),
     envelope('net.recovery', netRecoveryPayloadSchema),
+    envelope('net.recovery.request', netRecoveryRequestPayloadSchema),
     envelope('net.seat', netSeatSchema),
     envelope('net.transport', z.looseObject({ transport: z.enum(['ws-relay', 'webrtc-mesh', 'webrtc-star']) })),
     envelope('phase', z.looseObject({ phase: phaseSchema })),
@@ -302,14 +320,18 @@ export const gameToHostSchema = z
     envelope('net.input', z.looseObject({ f: inputFrameSchema })),
     /** Host: the authoritative snapshot. */
     envelope('net.snapshot', netSnapshot),
-    envelope('net.event', netEvent),
+    envelope('net.event', z.union([netEventPayloadSchema, netEvent])),
     /* Netcode v2 (see above). */
     envelope('net.inputs', netInputsPayloadSchema),
     envelope('net.state', netStatePayloadSchema),
     envelope('net.checksum', netChecksumPayloadSchema),
     envelope('net.recovery.request', netRecoveryRequestPayloadSchema),
+    envelope('net.recovery', netRecoveryPayloadSchema),
     envelope('net.ready', z.looseObject({ ready: z.boolean(), seat: z.number().int().min(0).optional() })),
     envelope('net.start.request', empty),
+    envelope('net.pause.ack', z.looseObject({ epoch: z.string().min(1), tick: z.number().int().nonnegative() })),
+    envelope('net.pause.late', z.looseObject({ epoch: z.string().min(1), tick: z.number().int().nonnegative() })),
+    envelope('net.pause.position', z.looseObject({ epoch: z.string().min(1), tick: z.number().int().nonnegative() })),
     envelope('net.signal', z.looseObject({ data: z.string().max(Math.ceil(4096 / 3) * 4) })),
     envelope(
       'test.result',

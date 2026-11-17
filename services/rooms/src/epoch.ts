@@ -5,8 +5,8 @@ import { LIMITS_V2, SIM_TICK_HZ } from '@ogm/contracts';
 /*
  * The epoch and the tick the room can publish without simulating (#497 §3.3, D-N3-4).
  *
- * One arithmetic fact: `tick = floor((pausedAt || now - startAt) * SIM_TICK_HZ / 1000)`. A pause records
- * `pausedAt`, a resume shifts `startAt` by the paused duration, so the derived tick freezes and continues
+ * The tick is derived from the earlier of now and a scheduled `pausedAt`, less `startAt`. A resume shifts
+ * `startAt` by the paused duration, so the derived tick freezes and continues
  * with no counter to reconcile. Nothing here runs a clock forward or steps a simulation.
  */
 
@@ -24,7 +24,7 @@ export function mintEpoch(input: { now: number; primarySeat: number; leadMs?: nu
 }
 
 export function tickAt(clock: EpochClock, now: number): number {
-  const elapsed = (clock.pausedAt === 0 ? now : clock.pausedAt) - clock.startAt;
+  const elapsed = (clock.pausedAt === 0 ? now : Math.min(now, clock.pausedAt)) - clock.startAt;
   return Math.max(0, Math.floor((elapsed * SIM_TICK_HZ) / 1_000));
 }
 

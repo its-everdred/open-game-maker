@@ -338,6 +338,23 @@ export function GameScreen() {
   );
   const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
+  const pauseRequested = useRef(false);
+  const wasMatchPaused = useRef(false);
+  useEffect(() => {
+    const paused = room.snapshot?.matchPause !== undefined;
+    if (wasMatchPaused.current && !paused) setMenuOpen(false);
+    wasMatchPaused.current = paused;
+  }, [room.snapshot?.matchPause, setMenuOpen]);
+  useEffect(() => {
+    if (!menuOpen) {
+      pauseRequested.current = false;
+      return;
+    }
+    if (!pauseRequested.current && roomId !== undefined && room.session && room.snapshot?.status === 'connected') {
+      room.session.send({ t: 'match.pause.request' });
+      pauseRequested.current = true;
+    }
+  }, [menuOpen, room.session, room.snapshot?.status, roomId]);
   const reportGameLoad = useCallback(
     (measurement: GameLoadMeasurement, result: 'ok' | 'fail') => {
       void postAnalyticsEvent(gameLoadActivity(gameId, measurement, result)).catch(() => undefined);
@@ -543,13 +560,25 @@ export function GameScreen() {
       branchId: branch,
       buildId: activeSnapshot?.buildId,
       mode,
+      authorityMode: frameState.manifest?.net?.authority,
       onNavigate: closeMenu,
       onRoomCreated: activateRoom,
       onRoomLeave: leaveRoom,
       roomSession: room.session,
       roomSnapshot: room.snapshot,
     }),
-    [activeSnapshot?.buildId, activateRoom, branch, closeMenu, gameId, leaveRoom, mode, room.session, room.snapshot],
+    [
+      activeSnapshot?.buildId,
+      activateRoom,
+      branch,
+      closeMenu,
+      frameState.manifest?.net?.authority,
+      gameId,
+      leaveRoom,
+      mode,
+      room.session,
+      room.snapshot,
+    ],
   );
   const preference = useMutation({
     mutationFn: (allow: boolean) =>
@@ -743,14 +772,20 @@ export function GameScreen() {
             controlBindings={frameState.manifest.controlBindings}
             controlReservedKeys={frameState.manifest.controlReservedKeys}
             gameOptions={frameState.manifest.gameOptions}
-            open={menuOpen}
-            paused={menuOpen && roomId === undefined}
+            open={menuOpen || room.snapshot?.matchPause !== undefined}
+            paused={roomId === undefined ? menuOpen : room.snapshot?.matchPause !== undefined}
+            pauseName={room.snapshot?.matchPause?.name}
+            resumeAt={room.snapshot?.matchPause?.resumeAt}
+            serverOffsetMs={room.snapshot?.serverOffsetMs}
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
             saves={frameState.manifest.saves}
             saveSchema={frameState.manifest.saveSchema}
             migratesFrom={frameState.manifest.migratesFrom}
             onLeave={() => void leaveRoom()}
-            onResume={() => setMenuOpen(false)}
+            onResume={() => {
+              if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });
+              setMenuOpen(false);
+            }}
           />
         ) : null}
         <GameExtras placement="hud" {...extraProps} />

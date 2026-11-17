@@ -158,6 +158,7 @@ describe('game frame adapter', () => {
     });
     frameOptions?.onReady?.(manifest, [['boot', 1]]);
     listeners.get('net.input')?.({ f: { seq: 2, tick: 3, axes: [], buttons: 0 } } as never);
+    listeners.get('net.pause.ack')?.({ epoch: 'epoch', tick: 6 } as never);
 
     expect(frame.send).toHaveBeenCalledWith('net.role', { role: 'peer' });
     expect(roomMessages).toHaveBeenCalledWith(
@@ -169,6 +170,9 @@ describe('game frame adapter', () => {
       t: 'net.input',
       payload: { f: { seq: 2, tick: 3, axes: [], buttons: 0 } },
     });
+    expect(roomMessages).toHaveBeenCalledWith(
+      expect.objectContaining({ t: 'net.pause.ack', payload: { epoch: 'epoch', tick: 6 } }),
+    );
   });
 
   it('surfaces the host readiness timeout as a retryable error state', () => {

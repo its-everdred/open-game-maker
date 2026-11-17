@@ -1,4 +1,4 @@
-import type { DesignTx, JoinOptions, RoomState, ServerMessage } from '@ogm/contracts';
+import type { DesignTx, JoinOptions, RoomState } from '@ogm/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RoomClient, type ClientTransport, type RoomTransport } from './room-client';
@@ -58,6 +58,7 @@ describe('RoomClient', () => {
       buildId: 'build-1',
       protocol: 2,
     });
+    expect(room.send).toHaveBeenCalledWith('ping', { c: expect.any(Number) });
     expect(store.getState()).toMatchObject({
       status: 'connected',
       role: 'host',
@@ -65,6 +66,42 @@ describe('RoomClient', () => {
       you: { userId: 'owner-1', playerIndex: 0, sessionId: 'session-1' },
     });
     expect(client.received()).toHaveLength(1);
+  });
+
+  it('sends match controls and restores the pause from room state', async () => {
+    const room = new FakeRoom();
+    const store = createRoomStore();
+    const client = new RoomClient({ roomsUrl: 'ws://rooms.test', store, clientFactory: () => new FakeClient(room) });
+    await client.join({ roomId: 'room-1', grant: 'secret-grant', pin, expiresAt: Date.now() + 120_000 });
+    client.send({ t: 'match.pause.request' });
+    expect(room.send).toHaveBeenCalledWith('match.pause.request', {});
+    room.emit('match.pause', { by: 'owner-1', name: 'Kevin' });
+    expect(store.getState().matchPause).toEqual({ by: 'owner-1', name: 'Kevin', resumeAt: 0 });
+    const resumeAt = Date.now() + 3000;
+    room.emit('match.resume', { at: resumeAt });
+    expect(store.getState().matchPause?.resumeAt).toBe(resumeAt);
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(store.getState().matchPause).toBeDefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.getState().matchPause).toBeUndefined();
+    room.onStateChange.emit({
+      ...state,
+      protocol: 2,
+      seats: [],
+      spectators: [],
+      epoch: '',
+      startAt: 0,
+      pausedAt: 0,
+      primarySeat: 0,
+      seed: 0,
+      rulesetHash: '',
+      matchPausedBy: 'owner-1',
+      matchPauseName: 'Kevin',
+      matchResumeAt: 0,
+    });
+    expect(store.getState().matchPause).toEqual({ by: 'owner-1', name: 'Kevin', resumeAt: 0 });
+    room.emit('match.resumed', {});
+    expect(store.getState().matchPause).toBeUndefined();
   });
 
   it.each([
@@ -252,7 +289,7 @@ class FakeRoom implements RoomTransport {
     return () => this.messageHandlers.delete(listener);
   }
 
-  emit(type: ServerMessage['t'], payload: Omit<ServerMessage, 't'>): void {
+  emit(type: string, payload: unknown): void {
     this.messageHandlers.forEach((listener) => listener(type, payload));
   }
 

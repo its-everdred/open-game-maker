@@ -87,6 +87,11 @@ export class InputMerger {
     this.addTransient(frame.playerIndex, frame.source, frame.actions);
   }
 
+  discardTransient(): void {
+    this.transient.clear();
+    this.held.clear();
+  }
+
   setLocalPlayerIndex(playerIndex: number): void {
     if (!this.validPlayer(playerIndex)) throw new RangeError('localPlayerIndex is outside the local player count');
     if (playerIndex === this.localPlayerIndex) return;

@@ -380,4 +380,10 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     kind: 'path',
     doc: '~/.local/state/ogm/core-bump (scratch clones)',
   },
+  {
+    name: 'OGM_ROOMS_SEAT_RECONNECT_SEC',
+    unit: 'rooms',
+    kind: 'int',
+    doc: 'seat rejoin window in seconds (default 30)',
+  },
 ];

@@ -8,6 +8,8 @@ The OGM-002 systemd unit starts it with:
 ExecStart=node services/rooms/dist/main.js
 ```
 
+Set `OGM_ROOMS_SEAT_RECONNECT_SEC` in the rooms environment to change the per-seat reconnect window; it defaults to 30 seconds and accepts 1–3600 seconds.
+
 It reads `OGM_ROOMS_PORT`, `OGM_WS_TOKEN_SECRET`, `OGM_ROOMS_INTERNAL_SECRET`, `OGM_API_INTERNAL_URL`, and `OGM_GAMES_ORIGIN` through `@ogm/config`. The process binds only `127.0.0.1`; real values belong in `~/.config/ogm/env/rooms.env` with mode `0600`.
 
 The pinned multiplayer packages are `colyseus@0.18.10`, `@colyseus/core@0.18.24`, `@colyseus/ws-transport@0.18.4`, `@colyseus/schema@5.0.43`, `@colyseus/testing@0.18.6`, and `@colyseus/sdk@0.18.9`.
@@ -32,6 +34,10 @@ One process serves both protocols; each room runs exactly one, stored in `state.
 | Editing | `design.tx`, `presence`, `draft.*`, `kick`, `phase` | identical, unchanged |
 
 A room's protocol is chosen at create (`POST /internal/rooms`, `POST /api/v1/games/:gameId/rooms`) and never changes. A join whose `protocol` differs is rejected with `PROTOCOL_MISMATCH`; reload to join.
+
+In protocol 2, a seated player may pause a playing match. The pauser may resume it; when exactly two non-forfeited seats are occupied, either player may resume. The room refuses a resume while an occupied seat is disconnected and announces a three-second countdown before continuing. The existing configurable seat rejoin window applies while paused; once the pauser has forfeited, any seated player may resume, and the room starts the countdown itself once no seat is awaiting reconnection. Spectators cannot pause or resume.
+
+For per-seat authority, the room first probes every seat for its simulation tick, then announces a future boundary tick and waits for every connected player to acknowledge it before starting the countdown. A client that has already passed it cannot safely rewind; it is disconnected and the rejoin window and forfeit policy apply, as they do for a client that has not acknowledged the boundary within that window. A player who joins during a prepared pause starts short of the boundary and runs up to it, so a reload neither restarts the epoch nor counts as late. A seat that does not answer the probe within two seconds runs an SDK built before the boundary protocol: the match then pauses at the room's current tick for every seat (`net.pause`) and resumes with `net.resume`, as those builds expect.
 
 ## Seats and teams
 

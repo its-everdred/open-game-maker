@@ -129,6 +129,9 @@ export const GameRoomState = schema(
     startAt: t.number().default(0),
     /** `0` = running; otherwise the server ms the match paused at. */
     pausedAt: t.number().default(0),
+    matchPausedBy: t.string().default(''),
+    matchPauseName: t.string().default(''),
+    matchResumeAt: t.number().default(0),
     primarySeat: t.uint8().default(0),
     seed: t.uint32().default(0),
     /** Opaque client-computed pin; `''` disables the join comparison. */

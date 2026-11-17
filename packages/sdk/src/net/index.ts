@@ -118,6 +118,7 @@ export interface NetController {
 const V2_INBOUND = new Set([
   'net.start',
   'net.start.cancel',
+  'net.epoch.end',
   'net.seats',
   'net.inputs',
   'net.state',
@@ -125,6 +126,7 @@ const V2_INBOUND = new Set([
   'net.recovery',
   'net.recovery.request',
   'net.tick',
+  'net.clock',
 ]);
 
 export function createNetController(options: NetControllerOptions): NetController {
@@ -290,7 +292,18 @@ export function createNetController(options: NetControllerOptions): NetControlle
           options.recordEvent('net.event', decoded);
           return;
         }
-        options.send('net.event', { seq: ++outgoingEventSequence, data });
+        const seq = ++outgoingEventSequence;
+        if (perSeat) {
+          if (perSeat.spectator) return;
+          options.send('net.event', {
+            epoch: perSeat.isStarted ? perSeat.currentEpoch : 'lobby',
+            id: `${perSeat.localSeat}-${seq}`,
+            seq,
+            from: perSeat.localSeat,
+            target: 'all',
+            data,
+          });
+        } else options.send('net.event', { seq, data });
       } catch (error) {
         if (error instanceof NetPayloadTooLargeError) oversized('event', error);
         else throw error;
@@ -317,6 +330,7 @@ export function createNetController(options: NetControllerOptions): NetControlle
       }
       if (type === 'net.players') {
         const message = payload as { local: number; players: NetPlayer[] };
+        perSeat?.setLocalSeat(message.local);
         roles.updatePlayers(message.local, message.players);
       } else if (type === 'net.role') {
         const role = (payload as { role: NetRole }).role;
@@ -327,7 +341,19 @@ export function createNetController(options: NetControllerOptions): NetControlle
       } else if (type === 'net.snapshot') {
         peer.receiveSnapshot(payload as WireSnapshot);
       } else if (type === 'net.event') {
-        receiveEvent(payload as { seq: number; data: string });
+        if (perSeat && typeof payload === 'object' && payload !== null && 'from' in payload) {
+          /* The room relays over one ordered socket and never replays, and a reloaded seat restarts at 1. */
+          const event = payload as { from: number; data: string };
+          try {
+            const bytes = decodeBase64(event.data);
+            assertByteLength(bytes, NET_LIMITS.eventBytes, 'event');
+            const decoded = unpackJson(bytes);
+            emitEvent(decoded);
+            options.recordEvent('net.event', decoded);
+          } catch {
+            diagnostics.dropped += 1;
+          }
+        } else receiveEvent(payload as { seq: number; data: string });
       }
     },
     handleLocalFrames: (frames) => {

@@ -173,6 +173,9 @@ export const RoomStateV2Schema = RoomStateSchema.extend({
   primarySeat: seatIndex,
   seed: uint32,
   rulesetHash: z.string().max(64),
+  matchPausedBy: z.string().optional(),
+  matchPauseName: z.string().optional(),
+  matchResumeAt: nonNegativeInt.optional(),
 }).strict();
 export type RoomStateV2 = z.infer<typeof RoomStateV2Schema>;
 
@@ -191,6 +194,11 @@ export const NetClientMessageSchema = z.discriminatedUnion('t', [
   z.strictObject({ t: z.literal('net.start.request'), force: z.boolean().optional() }),
   z.strictObject({ t: z.literal('net.end.request'), epoch: epochId }),
   z.strictObject({ t: z.literal('net.seat.request'), seat: seatIndex }),
+  z.strictObject({ t: z.literal('match.pause.request') }),
+  z.strictObject({ t: z.literal('match.resume.request') }),
+  z.strictObject({ t: z.literal('net.pause.ack'), epoch: epochId, tick }),
+  z.strictObject({ t: z.literal('net.pause.late'), epoch: epochId, tick }),
+  z.strictObject({ t: z.literal('net.pause.position'), epoch: epochId, tick }),
 ]);
 export type NetClientMessage = z.infer<typeof NetClientMessageSchema>;
 
@@ -208,18 +216,30 @@ export const NetServerMessageSchema = z.discriminatedUnion('t', [
   z.strictObject({ t: z.literal('net.primary'), epoch: epochId, seat: seatIndex }),
   z.strictObject({
     t: z.literal('net.seats'),
-    epoch: epochId,
+    epoch: z.string(),
     seats: z.array(netSeatSchema).max(LIMITS_V2.maxPlayersCeiling),
     spectators: z.array(id),
   }),
-  z.strictObject({ t: z.literal('net.seat'), event: SeatEventSchema, epoch: epochId, seat: seatIndex }),
+  z.strictObject({ t: z.literal('net.seat'), event: SeatEventSchema, epoch: z.string(), seat: seatIndex }),
   z.strictObject({ t: z.literal('net.pause'), epoch: epochId, tick, startAt: nonNegativeInt }),
-  z.strictObject({ t: z.literal('net.resume'), epoch: epochId, tick, startAt: nonNegativeInt }),
+  z.strictObject({ t: z.literal('net.pause.prepare'), epoch: epochId, tick }),
+  z.strictObject({ t: z.literal('net.pause.probe'), epoch: epochId }),
+  z.strictObject({
+    t: z.literal('net.resume'),
+    epoch: epochId,
+    tick,
+    startAt: nonNegativeInt,
+    at: nonNegativeInt.optional(),
+  }),
+  z.strictObject({ t: z.literal('match.pause'), by: id, name: z.string().min(1).max(40) }),
+  z.strictObject({ t: z.literal('match.resume'), at: nonNegativeInt }),
+  z.strictObject({ t: z.literal('match.resumed') }),
   z.strictObject({ t: z.literal('net.epoch.end'), epoch: epochId, tick }),
   netInputsPayloadSchema.extend({ t: z.literal('net.inputs') }),
   netStatePayloadSchema.extend({ t: z.literal('net.state') }),
   netEventPayloadSchema.extend({ t: z.literal('net.event') }),
   netChecksumPayloadSchema.extend({ t: z.literal('net.checksum') }),
+  netRecoveryRequestPayloadSchema.extend({ t: z.literal('net.recovery.request') }),
   netSignalPayloadSchema.extend({ t: z.literal('net.signal') }),
   netRecoveryPayloadSchema.extend({ t: z.literal('net.recovery') }),
   z.strictObject({

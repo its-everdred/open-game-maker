@@ -24,6 +24,9 @@ const V2_ONLY_KEYS = [
   'primarySeat',
   'seed',
   'rulesetHash',
+  'matchPausedBy',
+  'matchPauseName',
+  'matchResumeAt',
 ] as const;
 
 /** The v1 view of a room document, whether the room runs protocol 1 or 2. */
