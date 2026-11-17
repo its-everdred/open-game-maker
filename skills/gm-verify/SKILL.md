@@ -23,7 +23,7 @@ A report budget whose status is `over` blocks the PR. Name the tier and measured
 
 ## Look
 
-- For every layout change, mark the board element with `data-gm-play-area` and run `gm look shell` at all four viewports. Read its board fill and horizontal offset numbers; the default gate requires at least 0.90 fill and at most 0.05 offset. For a fixed-aspect board set `data-gm-play-area-aspect` to width divided by height; fill must then reach 90% of the largest rectangle of that aspect that fits. `gm check` builds and captures a fresh verification `dist`, then restores the previous `dist`; the package build script must invoke the game builder directly, not `gm build`. Prepare generated assets with the game's own asset-build settings first. Set `playArea.tap` in `gm.manifest.json` to the `>`-separated actions that enter play; optional `playArea.minFill` and `playArea.maxOffset` override the defaults. Declare reserved vertical control bands in CSS pixels on the board as `data-gm-control-top` and `data-gm-control-bottom` (safe-area insets are measured separately). `gm look shell` reports a missing or hidden board without failing capture; `gm check` fails the gate. Games without a play area may set `playArea: false` to skip the board measurement, or `playArea: { "disabled": true, "tap": "Play>Start" }` to skip it while still capturing a journey; the image distortion gate still runs.
+- For every layout change, mark the board element with `data-gm-play-area` and run `gm look shell` at all four viewports. Read its board fill and horizontal offset numbers; the default gate requires at least 0.90 fill and at most 0.05 offset. For a fixed-aspect board set `data-gm-play-area-aspect` to width divided by height; fill must then reach 90% of the largest rectangle of that aspect that fits. `gm check` builds and captures a fresh verification `dist`, then restores the previous `dist`; the package build script must invoke the game builder directly, not `gm build`. Prepare generated assets with the game's own asset-build settings first. Set `playArea.tap` in `gm.manifest.json` to the `>`-separated actions that enter play; optional `playArea.minFill` and `playArea.maxOffset` override the defaults. Declare reserved vertical control bands in CSS pixels on the board as `data-gm-control-top` and `data-gm-control-bottom` (safe-area insets are measured separately). Each captured screen reports the board separately: a clipped board or visible UI overlapping it fails before fill is reported. Mark intentional DOM overlays with `data-gm-overlay-allowed`; canvas UI can report its bounds through the SDK `reportUiSprites` API. `gm look shell` skips inactive title, menu, or editor screens when another screen in that viewport has an active board. The final tapped gameplay screen (or play screen when no taps are configured) must have an active board; otherwise `gm check` fails the gate. Games without a play area may set `playArea: false` to skip the board measurement, or `playArea: { "disabled": true, "tap": "Play>Start" }` to skip it while still capturing a journey; the image distortion gate still runs.
 - Capture the touch phone and tablet stills, both orientations. Read every tile and name the worst defect first.
 - Motion: a timeline (a follow camera is drawn twice to settle its lag); small events: `--inputs`, closer `--frames`.
 - A target to match? A failed look is the next round's to-do list: work in rounds with `close-the-gap.md` here.
@@ -42,9 +42,6 @@ and raise one Command with the scored sheet (Blobs #309 ran 40 trials at 4.2-5.4
 creator to judge differences the scorer can judge. Follow the look broker's consent and licence restrictions.
 
 ## Binary visual checklist
-
-- Read the image distortion output from `gm look shell` and `gm check` at every captured viewport; fix every reported stretch.
-- For canvas or WebGL UI, run an instrumented draft build. `gm check` uses `build:verify` when provided and requests draft mode for Vite builds; other build scripts must produce a draft that exposes SDK sprite reports. An unavailable report is a failing gate line, not a completed check.
 
 Copy this into the PR and answer every line from the sheet:
 
@@ -82,3 +79,5 @@ Run `gm look score` and `gm look judge` on your changed screens against their ta
 **Seeing your own output.** Numeric checks (luminance, colour counts, magenta) never prove a frame looks right. If
 you cannot view images yourself, run the `gm-image-mock` look request on each still beside its target mock and put
 its answers in the evidence; fix every defect it names and look again until it answers `VERDICT: pass`.
+
+- Read the image distortion output from `gm look shell` and `gm check` at every captured viewport; fix every reported stretch.

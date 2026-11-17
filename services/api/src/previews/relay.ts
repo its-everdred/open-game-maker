@@ -503,7 +503,7 @@ export function startPreviewRelay(deps: AppDeps, verifyTicket: PreviewTicketVeri
     try {
       await scanPreviewRelay(deps, homedir(), verifyTicket);
     } catch (error) {
-      deps.log({ event: 'preview_relay_scan_failed', reason: error instanceof Error ? error.name : 'Error' });
+      deps.log({ event: 'preview_relay_scan_failed', reason: error instanceof Error ? error.message : 'Error' });
     } finally {
       running = false;
     }

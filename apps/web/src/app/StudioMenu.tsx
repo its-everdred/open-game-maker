@@ -603,7 +603,7 @@ export function StudioMenu() {
       <span className="sr" role="status" aria-live="polite">
         {announcement}
       </span>
-      <div className="studio-menu-tray" hidden={!open}>
+      <div className="studio-menu-tray" data-gm-overlay-allowed hidden={!open}>
         <div id="studio-menu-panel" className="studio-menu-row" role="group" aria-label="Menu">
           {renderedCircles.map((circle, index) => (
             <span key={circle.key} className="studio-menu-slot" style={{ '--i': index } as CSSProperties}>

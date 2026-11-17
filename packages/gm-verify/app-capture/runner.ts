@@ -13,6 +13,7 @@ import { GPU_ARGS, SOFTWARE_ARGS } from '../src/browser';
 import { encodeMp4 } from '../src/qa/media';
 
 import { captureStill, ScreenshotTimeout } from './still';
+import { inspectPlayArea } from './play-area-dom';
 import { fixedAspectMinimumFill, matchesPlayAreaAspect, measurePlayArea } from '../src/play-area';
 import { measureImageDistortion, type ImageDistortion } from './image-distortion';
 import { frameCovered, frameTransform } from './frame-geometry';
@@ -37,7 +38,9 @@ const limits = limitsJson
   ? (JSON.parse(limitsJson) as { minFill?: number; maxOffset?: number; skip?: boolean })
   : undefined;
 const measurements: (
-  { viewport: string; fill: number; offset: number; ok: boolean } | { viewport: string; ok: false; error: string }
+  | { viewport: string; screen: string; fill: number; offset: number; ok: boolean }
+  | { viewport: string; screen: string; ok: false; error: string; inactive?: boolean }
+  | { viewport: string; screen: string; ok: true; skipped: true; reason: string }
 )[] = [];
 const distortions: ImageDistortion[] = [];
 try {
@@ -197,7 +200,62 @@ try {
             error: 'screen changed during image measurement',
           });
         };
+        const measure = async (screen: string) => {
+          if (!limits?.skip) {
+            try {
+              const frame = page.frames().find((item) => item.url().includes(`/${build}/index.html`));
+              if (!frame) throw new Error(`game frame missing at ${size}`);
+              const geometry = await frame.evaluate(inspectPlayArea, null);
+              if (geometry.inactive !== undefined) {
+                measurements.push({ viewport: size, screen, ok: false, error: geometry.inactive, inactive: true });
+                return;
+              }
+              const frameBox = await (await frame.frameElement()).boundingBox();
+              if (!frameBox) throw new Error('game frame is hidden');
+              const scaleX = frameBox.width / geometry.viewport.width;
+              const scaleY = frameBox.height / geometry.viewport.height;
+              const board = geometry.board;
+              if (
+                frameBox.x + board.left * scaleX < 0 ||
+                frameBox.y + board.top * scaleY < 0 ||
+                frameBox.x + (board.left + board.width) * scaleX > width ||
+                frameBox.y + (board.top + board.height) * scaleY > height
+              )
+                throw new Error('play area is clipped by shell viewport');
+              const hostGeometry = await page.evaluate(inspectPlayArea, {
+                left: frameBox.x + board.left * scaleX,
+                top: frameBox.y + board.top * scaleY,
+                width: board.width * scaleX,
+                height: board.height * scaleY,
+              });
+              if (hostGeometry.inactive !== undefined) throw new Error(`game frame ${hostGeometry.inactive}`);
+              if (geometry.aspect !== undefined && (!Number.isFinite(geometry.aspect) || geometry.aspect <= 0))
+                throw new Error(`invalid play-area aspect at ${size}`);
+              const minFill =
+                limits?.minFill ??
+                (geometry.aspect === undefined ? 0.9 : fixedAspectMinimumFill(geometry, geometry.aspect));
+              const measurement = measurePlayArea(geometry, { minFill, maxOffset: limits?.maxOffset ?? 0.05 });
+              measurements.push({
+                viewport: size,
+                screen,
+                ...measurement,
+                ok:
+                  measurement.ok &&
+                  (geometry.aspect === undefined || matchesPlayAreaAspect(geometry.board, geometry.aspect)),
+              });
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              measurements.push({
+                viewport: size,
+                screen,
+                ok: false,
+                error: message,
+              });
+            }
+          }
+        };
         await measureImages('play', 'play');
+        await measure('play');
         console.error(`shell capture: play still captured at ${size}`);
         const game = page.frameLocator('.game-frame iframe');
         for (const text of taps) {
@@ -212,86 +270,14 @@ try {
           await page.waitForTimeout(fast ? 500 : 9_000);
           check();
           await measureImages('ingame', 'ingame');
-        }
-        if (!limits?.skip) {
-          try {
-            const frame = page.frames().find((item) => item.url().includes(`/${build}/index.html`));
-            if (!frame) throw new Error(`game frame missing at ${size}`);
-            const geometry = await frame
-              .evaluate(() => {
-                const board = document.querySelector<HTMLElement>('[data-gm-play-area]');
-                if (!board) throw new Error('not declared');
-                const rect = board.getBoundingClientRect();
-                for (let element: HTMLElement | null = board; element; element = element.parentElement) {
-                  const style = getComputedStyle(element);
-                  if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0)
-                    throw new Error('play area is hidden');
-                  if (element !== board) {
-                    const bounds = element.getBoundingClientRect();
-                    if (
-                      (['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowX) &&
-                        (rect.left < bounds.left - 1 || rect.right > bounds.right + 1)) ||
-                      (['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowY) &&
-                        (rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1))
-                    )
-                      throw new Error('play area is clipped by an ancestor');
-                  }
-                }
-                const probe = document.createElement('div');
-                probe.style.cssText =
-                  'position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
-                document.body.appendChild(probe);
-                const style = getComputedStyle(probe);
-                const safe = {
-                  top: parseFloat(style.paddingTop),
-                  right: parseFloat(style.paddingRight),
-                  bottom: parseFloat(style.paddingBottom),
-                  left: parseFloat(style.paddingLeft),
-                };
-                probe.remove();
-                return {
-                  viewport: { width: innerWidth, height: innerHeight },
-                  board: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                  safe,
-                  controls: {
-                    top: Number(board.dataset.gmControlTop ?? 0),
-                    bottom: Number(board.dataset.gmControlBottom ?? 0),
-                  },
-                  aspect:
-                    board.dataset.gmPlayAreaAspect === undefined ? undefined : Number(board.dataset.gmPlayAreaAspect),
-                };
-              })
-              .catch((error: unknown) => {
-                throw new Error(
-                  `play-area measurement at ${size}: ${error instanceof Error ? error.message : String(error)}`,
-                );
-              });
-            if (geometry.aspect !== undefined && (!Number.isFinite(geometry.aspect) || geometry.aspect <= 0))
-              throw new Error(`invalid play-area aspect at ${size}`);
-            const minFill =
-              limits?.minFill ??
-              (geometry.aspect === undefined ? 0.9 : fixedAspectMinimumFill(geometry, geometry.aspect));
-            const measurement = measurePlayArea(geometry, { minFill, maxOffset: limits?.maxOffset ?? 0.05 });
-            measurements.push({
-              viewport: size,
-              ...measurement,
-              ok:
-                measurement.ok &&
-                (geometry.aspect === undefined || matchesPlayAreaAspect(geometry.board, geometry.aspect)),
-            });
-          } catch (error) {
-            measurements.push({
-              viewport: size,
-              ok: false,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
+          await measure('ingame');
         }
         const menu = page.getByRole('button', { name: 'Menu', exact: true }).first();
         await menu.tap();
         await page.waitForTimeout(1_500);
         check();
         await measureImages('menu', 'menu');
+        await measure('menu');
         if (editArg === '1') {
           await page.getByRole('button', { name: 'Edit', exact: true }).tap();
           await page.getByLabel('Editor canvas').waitFor({ timeout: 30_000 });
@@ -307,6 +293,7 @@ try {
           await page.waitForTimeout(1_500);
           check();
           await measureImages('edit', 'edit');
+          await measure('edit');
         }
         const video = page.video();
         await context.close();
@@ -316,6 +303,27 @@ try {
       }
     } finally {
       await browser.close();
+    }
+  }
+  // A title or results screen may have no active board. Keep the missing-board failure
+  // when no screen in that viewport ever showed one.
+  for (let i = 0; i < measurements.length; i++) {
+    const item = measurements[i]!;
+    if (
+      'error' in item &&
+      item.inactive &&
+      item.screen !== (taps.length ? 'ingame' : 'play') &&
+      measurements.some(
+        (other) => other.viewport === item.viewport && other !== item && (!('error' in other) || !other.inactive),
+      )
+    ) {
+      measurements[i] = {
+        viewport: item.viewport,
+        screen: item.screen,
+        ok: true,
+        skipped: true,
+        reason: 'no active board',
+      };
     }
   }
   writeFileSync(resolve(out, 'play-area.json'), JSON.stringify(measurements));

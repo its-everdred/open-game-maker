@@ -43,16 +43,24 @@ vi.mock('../src/commands/capture/shell.js', async (original) => {
       writeFileSync(
         join(out, 'play-area.json'),
         JSON.stringify(
-          ['390x844', '844x390', '820x1180', '1180x820'].map((viewport) => ({
-            viewport,
-            ...(capture.undeclared
-              ? { ok: false, error: 'not declared' }
-              : {
-                  fill: capture.smallBoard && viewport === '1180x820' ? 0.61 : 0.95,
-                  offset: 0,
-                  ok: !(capture.smallBoard && viewport === '1180x820'),
-                }),
-          })),
+          ['390x844', '844x390', '820x1180', '1180x820'].flatMap((viewport) =>
+            [
+              'play',
+              ...((JSON.parse(args[3]!) as string[]).length ? ['ingame'] : []),
+              'menu',
+              ...(args[4] === '1' ? ['edit'] : []),
+            ].map((screen) => ({
+              viewport,
+              screen,
+              ...(capture.undeclared
+                ? { ok: false, error: 'not declared' }
+                : {
+                    fill: capture.smallBoard && viewport === '1180x820' ? 0.61 : 0.95,
+                    offset: 0,
+                    ok: !(capture.smallBoard && viewport === '1180x820'),
+                  }),
+            })),
+          ),
         ),
       );
       writeFileSync(

@@ -96,7 +96,9 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
     expect(distortions).toContainEqual(expect.objectContaining({ element: 'sdk-sprite', screen: 'play' }));
     expect(distortions.filter((item) => item.element === 'document')).toEqual([]);
     expect(JSON.parse(readFileSync(join(out, 'play-area.json'), 'utf8'))).toMatchObject(
-      ['390x844', '844x390', '820x1180', '1180x820'].map((viewport) => ({ viewport, ok: false })),
+      ['390x844', '844x390', '820x1180', '1180x820'].flatMap((viewport) =>
+        ['play', 'ingame', 'menu', 'edit'].map((screen) => ({ viewport, screen, ok: false })),
+      ),
     );
   } finally {
     await new Promise<void>((resolve) => external.close(() => resolve()));
@@ -195,3 +197,84 @@ it('captures every still when no play area is declared', async () => {
     rmSync(root, { recursive: true, force: true });
   }
 }, 250_000);
+
+it('measures the board separately before and after game actions', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-app-capture-overlap-'));
+  const game = join(root, 'game');
+  try {
+    cpSync(fixture, game, { recursive: true });
+    const html = join(game, 'index.html');
+    const source = readFileSync(html, 'utf8');
+    const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+    if (!script) throw new Error('fixture script missing');
+    writeFileSync(
+      join(game, 'fixture.js'),
+      `${script.replace("send('ready', { protocol: 1, manifest, marks: [['fixture-ready', performance.now()]] }, message.id);", "send('ready', { protocol: 1, manifest, marks: [['fixture-ready', performance.now()]] }, message.id); send('load.frame', {}); send('load.done', { ms: 0, fetchedBytes: 0, cachedBytes: 0, fetchedFiles: 0, cachedFiles: 0, persisted: null });")}
+document.querySelector('#start').addEventListener('click', () => { document.querySelector('[data-gm-play-area]').style.visibility = 'visible'; const hud = document.querySelector('#hud'); hud.style.left = '30px'; hud.setAttribute('aria-label', 'play area is hidden'); hud.removeAttribute('id'); });`,
+    );
+    writeFileSync(
+      html,
+      source
+        .replace(
+          'Bridge fixture</div>',
+          '<div data-gm-play-area style="visibility:hidden;position:absolute;left:30px;top:100px;width:200px;height:500px"></div><button id="start" style="position:absolute;left:260px;top:50px">Start</button><div id="hud" style="position:absolute;left:260px;top:100px;width:100px;height:30px;background:red">Score</div></div>',
+        )
+        .replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
+    );
+    await exec(
+      process.execPath,
+      [
+        runner,
+        game,
+        join(root, 'shots'),
+        '["Start"]',
+        '0',
+        '0',
+        process.env.GM_VERIFY_SOFTWARE_GL === '1' ? '1' : '0',
+        '--test-fast',
+        '{"minFill":0,"maxOffset":1}',
+      ],
+      { timeout: 90_000 },
+    );
+    const results = JSON.parse(readFileSync(join(root, 'shots/play-area.json'), 'utf8'));
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ screen: 'play', ok: true, skipped: true }),
+        expect.objectContaining({
+          screen: 'ingame',
+          ok: false,
+          error: expect.stringContaining('overlap: play area is hidden'),
+        }),
+      ]),
+    );
+    const js = join(game, 'fixture.js');
+    writeFileSync(js, readFileSync(js, 'utf8').replace("style.visibility = 'visible'", "style.visibility = 'hidden'"));
+    writeFileSync(
+      html,
+      readFileSync(html, 'utf8').replace('visibility:hidden;position:absolute', 'visibility:visible;position:absolute'),
+    );
+    await exec(
+      process.execPath,
+      [
+        runner,
+        game,
+        join(root, 'second'),
+        '["Start"]',
+        '0',
+        '0',
+        process.env.GM_VERIFY_SOFTWARE_GL === '1' ? '1' : '0',
+        '--test-fast',
+        '{"minFill":0,"maxOffset":1}',
+      ],
+      { timeout: 90_000 },
+    );
+    const hiddenAfterTap = JSON.parse(readFileSync(join(root, 'second/play-area.json'), 'utf8'));
+    expect(hiddenAfterTap).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ screen: 'ingame', ok: false, error: expect.stringContaining('play area is hidden') }),
+      ]),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 100_000);

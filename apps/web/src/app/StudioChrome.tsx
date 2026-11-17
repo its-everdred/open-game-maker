@@ -6,7 +6,7 @@ import '../features/commands-inbox/review-glass.css';
 
 export function StudioBackdrop() {
   return (
-    <div className="studio-backdrop" aria-hidden="true">
+    <div className="studio-backdrop" aria-hidden="true" data-gm-overlay-allowed>
       <GlowBackdrop />
     </div>
   );

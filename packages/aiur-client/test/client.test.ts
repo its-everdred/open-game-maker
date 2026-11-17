@@ -105,6 +105,11 @@ describe('createAiurClient', () => {
     });
   });
 
+  it('accepts a numeric request id from the aiur message response', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(fixture('message-numeric'), 202));
+    await expect(createAiurClient(daemon, fetchImpl).message('627', 'hello')).resolves.toEqual({ request_id: '99' });
+  });
+
   it('retries an outcome-unknown message once with the same message id', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

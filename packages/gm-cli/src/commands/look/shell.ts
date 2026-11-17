@@ -188,6 +188,9 @@ export const command: GmCommand = {
       }
       const measurements = JSON.parse(readFileSync(resolve(temp, 'play-area.json'), 'utf8')) as {
         viewport: string;
+        screen?: string;
+        skipped?: boolean;
+        inactive?: boolean;
         fill?: number;
         offset?: number;
         ok: boolean;
@@ -202,9 +205,15 @@ export const command: GmCommand = {
         screen: string;
         error?: string;
       }[];
+      const screens = ['play', ...(taps.length ? ['ingame'] : []), 'menu', ...(flags.edit ? ['edit'] : [])];
       if (
         !limits.skip &&
-        (measurements.length !== sizes.length || measurements.some((item, index) => item.viewport !== sizes[index]))
+        (measurements.length !== sizes.length * screens.length ||
+          measurements.some(
+            (item, index) =>
+              item.viewport !== sizes[Math.floor(index / screens.length)] ||
+              item.screen !== screens[index % screens.length],
+          ))
       )
         throw new CommandError('shell capture did not measure every viewport');
       stage = 'publishing stills';
@@ -267,9 +276,11 @@ export const command: GmCommand = {
         ctx.out('App-shell captures complete (mocked sign-in; not production or Safari).');
         for (const item of measurements)
           ctx.out(
-            item.error
-              ? `play area: ${item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport}: fail`
-              : `board fill ${item.fill!.toFixed(2)} at ${item.viewport}, offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
+            item.skipped
+              ? `play area: no active board at ${item.viewport} (${item.screen}): skipped`
+              : item.error
+                ? `play area: ${item.inactive && item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport} (${item.screen}): fail`
+                : `board fill ${item.fill!.toFixed(2)} at ${item.viewport} (${item.screen}), offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
           );
         for (const item of distortions)
           ctx.out(

@@ -12,3 +12,4 @@ export {
   type Runtime,
   type RuntimeInputOptions,
 } from './runtime.js';
+export { reportUiSprites, type UiSpriteBounds } from './ui-sprites.js';
