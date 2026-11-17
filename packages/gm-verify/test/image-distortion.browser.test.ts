@@ -225,6 +225,21 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
       const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
       canvas.width = canvas.width;
       const ctx = canvas.getContext('2d')!;
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      ctx.drawImage(source, 0, 0, 30, 30);
+      const mask = document.createElement('canvas');
+      mask.width = mask.height = 90;
+      mask.getContext('2d')!.fillRect(0, 0, 90, 90);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(mask, 0, 0);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
+    await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
+      canvas.width = canvas.width;
+      const ctx = canvas.getContext('2d')!;
       ctx.beginPath();
       ctx.rect(0, 0, 10, 10);
       ctx.rect(80, 80, 10, 10);
@@ -426,6 +441,20 @@ it('tracks DOM mutations that can invalidate a capture measurement', async () =>
       return [before, version()];
     });
     expect(stylesheetVersions[1]).toBeGreaterThan(stylesheetVersions[0]!);
+    const noOpVersions = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 90;
+      document.body.append(canvas);
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      const context = canvas.getContext('2d')!;
+      const version = (window as unknown as { __gmCaptureVersion: () => number }).__gmCaptureVersion;
+      const before = version();
+      context.drawImage(source, 0, 0, 0, 30);
+      return [before, version()];
+    });
+    expect(noOpVersions[1]).toBe(noOpVersions[0]);
   } finally {
     await browser.close();
   }

@@ -66,6 +66,7 @@ export function trackShadowRoots(): void {
     c: number;
     d: number;
     unverifiedClip: boolean;
+    unverifiedComposite?: boolean;
   };
   const canvasDraws = new Map<HTMLCanvasElement, Map<string, Draw>>();
   type Bounds = { left: number; top: number; right: number; bottom: number };
@@ -190,7 +191,12 @@ export function trackShadowRoots(): void {
             }
           }
           const canvas = (this as WebGLRenderingContext).canvas;
-          if (canvas instanceof HTMLCanvasElement && visibleCanvas(canvas)) version++;
+          const countIndex = name === 'drawRangeElements' ? 3 : name.startsWith('drawArrays') ? 2 : 1;
+          const empty =
+            name.startsWith('draw') &&
+            (Number(args[countIndex]) === 0 ||
+              (name.endsWith('Instanced') && Number(args[name.startsWith('drawArrays') ? 3 : 4]) === 0));
+          if (!empty && canvas instanceof HTMLCanvasElement && visibleCanvas(canvas)) version++;
           return result;
         },
       });
@@ -210,7 +216,9 @@ export function trackShadowRoots(): void {
           ) {
             wrappedExtensions.add(result as object);
             const canvas = this.canvas;
-            const gl = this;
+            const triangles = this.TRIANGLES;
+            const strip = this.TRIANGLE_STRIP;
+            const fan = this.TRIANGLE_FAN;
             for (const key of [
               'drawArraysInstancedANGLE',
               'drawElementsInstancedANGLE',
@@ -227,9 +235,9 @@ export function trackShadowRoots(): void {
                   const count = Number(callArgs[key.startsWith('drawArrays') ? 2 : 1]);
                   const instances = Number(callArgs[key.startsWith('drawArrays') ? 3 : 4]);
                   const quads =
-                    mode === gl.TRIANGLES && count > 0 && count % 6 === 0
+                    mode === triangles && count > 0 && count % 6 === 0
                       ? count / 6
-                      : (mode === gl.TRIANGLE_STRIP || mode === gl.TRIANGLE_FAN) && count === 4
+                      : (mode === strip || mode === fan) && count === 4
                         ? 1
                         : 0;
                   const entry = webglDraws.get(canvas) ?? { count: 0, unsupported: false };
@@ -239,7 +247,11 @@ export function trackShadowRoots(): void {
                   }
                   webglDraws.set(canvas, entry);
                 } else webglExtensions.add(canvas);
-                if (visibleCanvas(canvas)) version++;
+                const empty =
+                  key.endsWith('ANGLE') &&
+                  (Number(callArgs[key.startsWith('drawArrays') ? 2 : 1]) === 0 ||
+                    Number(callArgs[key.startsWith('drawArrays') ? 3 : 4]) === 0);
+                if (!empty && visibleCanvas(canvas)) version++;
                 return Reflect.apply(originalMethod, result, callArgs);
               };
             }
@@ -256,9 +268,6 @@ export function trackShadowRoots(): void {
     ...args: number[]
   ) {
     Reflect.apply(originalDraw, this, [image, ...args]);
-    if (visibleCanvas(this.canvas)) version++;
-    if (this.globalCompositeOperation === 'destination-out' || this.globalCompositeOperation === 'destination-in')
-      return;
     const source = image as CanvasImageSource & {
       naturalWidth?: number;
       naturalHeight?: number;
@@ -281,6 +290,39 @@ export function trackShadowRoots(): void {
     const drawnWidth = args.length === 8 ? args[6]! : args.length === 4 ? args[2]! : sourceWidth;
     const drawnHeight = args.length === 8 ? args[7]! : args.length === 4 ? args[3]! : sourceHeight;
     if (drawnWidth === 0 || drawnHeight === 0 || (args.length === 8 && (args[2] === 0 || args[3] === 0))) return;
+    if (visibleCanvas(this.canvas)) version++;
+    if (this.globalCompositeOperation === 'destination-out' || this.globalCompositeOperation === 'destination-in') {
+      const entries = canvasDraws.get(this.canvas);
+      if (entries?.size) {
+        const x = args.length === 8 ? args[4]! : args[0]!;
+        const y = args.length === 8 ? args[5]! : args[1]!;
+        let erased = false;
+        if (
+          this.globalCompositeOperation === 'destination-out' &&
+          this.globalAlpha === 1 &&
+          !clippedContexts.has(this) &&
+          this.getTransform().isIdentity &&
+          x <= 0 &&
+          y <= 0 &&
+          drawnWidth >= this.canvas.width &&
+          drawnHeight >= this.canvas.height &&
+          image instanceof HTMLCanvasElement &&
+          image !== this.canvas &&
+          args.length !== 8 &&
+          image.width * image.height <= 4_000_000
+        ) {
+          try {
+            const pixels = contexts2d.get(image)?.getImageData(0, 0, image.width, image.height).data;
+            erased = !!pixels && pixels.length > 0 && pixels.every((value, index) => index % 4 !== 3 || value === 255);
+          } catch {
+            /* Cross-origin or otherwise unreadable masks stay unverified. */
+          }
+        }
+        if (erased) canvasDraws.delete(this.canvas);
+        else for (const draw of entries.values()) draw.unverifiedComposite = true;
+      }
+      return;
+    }
     const matrix = this.getTransform();
     const x = args.length === 8 ? args[4]! : args[0]!;
     const y = args.length === 8 ? args[5]! : args[1]!;
