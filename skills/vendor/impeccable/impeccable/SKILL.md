@@ -4,7 +4,7 @@ description: "Use when the user wants to design, redesign, shape, critique, audi
 license: Apache-2.0
 source: pbakaus/impeccable@d41d9860b0094dcb68030657da63461212835aaa .agents/skills/impeccable/SKILL.md
 modified: true
-worker-note: "Workers must not use live, generate, login, health, or world/catalog fetches; GM rules take precedence."
+worker-note: "Workers may access the catalog with tracking off; live, generate, login and health are forbidden. GM rules take precedence."
 metadata:
   version: 4.9.2
 ---

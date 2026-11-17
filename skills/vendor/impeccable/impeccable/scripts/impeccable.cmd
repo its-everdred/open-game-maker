@@ -29,8 +29,6 @@ if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "arch=arm64"
 set "DO_NOT_TRACK=1"
 set "IMPECCABLE_NO_TELEMETRY=1"
 set "IMPECCABLE_NO_UPDATE_CHECK=1"
-set "IMPECCABLE_API_URL=http://127.0.0.1:9"
-set "IMPECCABLE_CARD_BASE=http://127.0.0.1:9"
 set "IMPECCABLE_UPDATE_HOST=http://127.0.0.1:9"
 set "IMPECCABLE_ACCOUNT_URL=http://127.0.0.1:9"
 set "worker_verb=%~1"
@@ -39,8 +37,6 @@ if /I "%~1"=="live" goto worker_forbidden
 if /I "%~1"=="generate" goto worker_forbidden
 if /I "%~1"=="login" goto worker_forbidden
 if /I "%~1"=="health" goto worker_forbidden
-if /I "%~1"=="world" goto worker_forbidden
-if /I "%~1"=="catalog" goto worker_forbidden
 if not defined IMPECCABLE_BIN goto no_env_bin
 if not exist "%IMPECCABLE_BIN%" goto no_env_bin
 set "run=%IMPECCABLE_BIN%"

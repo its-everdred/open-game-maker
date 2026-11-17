@@ -43,7 +43,7 @@ missing or unreadable, or a card's files will not load, stop asset work and tell
 workpad) the path and the error. Never present procedural stand-ins, primitives or placeholders as options for a
 creator's choice; a choice shown with stand-ins is not a choice.
 
-Set `IMPECCABLE_BIN="$HOME/.impeccable/bin/0.1.25/impeccable"` and `DO_NOT_TRACK=1` in the worker environment; if unavailable, the skill continues in degraded mode. For DOM/CSS UI (shell, menus, HUD overlays, review pages), load [impeccable](../vendor/impeccable/impeccable/SKILL.md) and use critique, audit, polish, layout, typeset or adapt; GM rules win: keep the prototype palette, avoid needless text, never stretch images or cover the board, and target Kevin’s concept. In-canvas art keeps its own skills; Workers must not use live, generate, login, health, or world/catalog fetches; do not re-enable network access or tracking.
+Set `IMPECCABLE_BIN="$HOME/.impeccable/bin/0.1.25/impeccable"` and `DO_NOT_TRACK=1` in the worker environment; if unavailable, the skill continues in degraded mode. For DOM/CSS UI (shell, menus, HUD overlays, review pages), load [impeccable](../vendor/impeccable/impeccable/SKILL.md) and use critique, audit, polish, layout, typeset or adapt; GM rules win: keep the prototype palette, avoid needless text, never stretch images or cover the board, and target Kevin’s concept. In-canvas art keeps its own skills; Catalog rolls and card images are allowed with tracking off; workers must not use live, generate, login or health, or re-enable tracking or update checks.
 
 ## Build loop
 

@@ -119,9 +119,12 @@ describe('impeccable worker launcher', () => {
     expect(missing.stderr).toContain('preinstalled IMPECCABLE_BIN unavailable');
     const settings = spawnSync('sh', [launcher], { env: { IMPECCABLE_BIN: '/usr/bin/env' }, encoding: 'utf8' });
     expect(settings.stdout).toContain('IMPECCABLE_NO_TELEMETRY=1');
-    expect(settings.stdout).toContain('IMPECCABLE_API_URL=http://127.0.0.1:9');
+    expect(settings.stdout).toContain('IMPECCABLE_ACCOUNT_URL=http://127.0.0.1:9');
+    expect(settings.stdout).toContain('IMPECCABLE_UPDATE_HOST=http://127.0.0.1:9');
+    expect(settings.stdout).not.toContain('IMPECCABLE_API_URL=');
+    expect(settings.stdout).not.toContain('IMPECCABLE_CARD_BASE=');
     expect(settings.stdout).toContain('IMPECCABLE_NO_UPDATE_CHECK=1');
-    for (const command of ['live', 'live-server', 'generate', 'login', 'health', 'world', 'catalog']) {
+    for (const command of ['live', 'live-server', 'generate', 'login', 'health']) {
       const result = spawnSync('sh', [launcher, command], { env: { IMPECCABLE_BIN: '/bin/true' }, encoding: 'utf8' });
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('not available to workers');

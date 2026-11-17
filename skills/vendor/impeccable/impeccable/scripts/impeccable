@@ -110,10 +110,9 @@ manifest="$dir/engine-checksums.txt"
 export IMPECCABLE_SKILL_DIR IMPECCABLE_SELF
 
 export DO_NOT_TRACK=1 IMPECCABLE_NO_TELEMETRY=1 IMPECCABLE_NO_UPDATE_CHECK=1
-export IMPECCABLE_API_URL=http://127.0.0.1:9 IMPECCABLE_CARD_BASE=http://127.0.0.1:9
 export IMPECCABLE_UPDATE_HOST=http://127.0.0.1:9 IMPECCABLE_ACCOUNT_URL=http://127.0.0.1:9
 case "${1:-}" in
-  live|live-*|generate|login|health|world|catalog) echo "impeccable: $1 is not available to workers" >&2; exit 1 ;;
+  live|live-*|generate|login|health) echo "impeccable: $1 is not available to workers" >&2; exit 1 ;;
 esac
 if [ -n "${IMPECCABLE_BIN:-}" ] && [ -x "${IMPECCABLE_BIN}" ]; then
   exec "${IMPECCABLE_BIN}" "$@"
