@@ -290,7 +290,13 @@ export function trackShadowRoots(): void {
     const drawnWidth = args.length === 8 ? args[6]! : args.length === 4 ? args[2]! : sourceWidth;
     const drawnHeight = args.length === 8 ? args[7]! : args.length === 4 ? args[3]! : sourceHeight;
     if (drawnWidth === 0 || drawnHeight === 0 || (args.length === 8 && (args[2] === 0 || args[3] === 0))) return;
+    if (this.globalAlpha === 0 && this.globalCompositeOperation === 'source-over') return;
     if (visibleCanvas(this.canvas)) version++;
+    if (this.globalCompositeOperation === 'copy') {
+      const entries = canvasDraws.get(this.canvas);
+      if (!clippedContexts.has(this)) canvasDraws.delete(this.canvas);
+      else if (entries) for (const draw of entries.values()) draw.unverifiedComposite = true;
+    }
     if (this.globalCompositeOperation === 'destination-out' || this.globalCompositeOperation === 'destination-in') {
       const entries = canvasDraws.get(this.canvas);
       if (entries?.size) {
@@ -538,6 +544,29 @@ export function trackShadowRoots(): void {
       writable: true,
       value: function (this: CanvasRenderingContext2D, ...args: unknown[]) {
         const result = Reflect.apply(original, this, args);
+        if (name === 'putImageData' && args[0] instanceof ImageData) {
+          const pixels = args[0];
+          const width = args.length >= 7 ? Math.abs(Number(args[5])) : pixels.width;
+          const height = args.length >= 7 ? Math.abs(Number(args[6])) : pixels.height;
+          if (width > 0 && height > 0) {
+            const entries = canvasDraws.get(this.canvas) ?? new Map<string, Draw>();
+            const draw: Draw = {
+              canvas: this.canvas,
+              file: 'pixel buffer',
+              sourceWidth: width,
+              sourceHeight: height,
+              drawnWidth: width,
+              drawnHeight: height,
+              a: 1,
+              b: 0,
+              c: 0,
+              d: 1,
+              unverifiedClip: false,
+            };
+            entries.set(`pixel:${width}:${height}`, draw);
+            canvasDraws.set(this.canvas, entries);
+          }
+        }
         if (name === 'reset') {
           canvasDraws.delete(this.canvas);
           patternedCanvases.delete(this.canvas);

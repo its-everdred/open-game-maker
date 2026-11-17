@@ -145,10 +145,26 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
     });
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
     await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
+      canvas.width = canvas.width;
+      const ctx = canvas.getContext('2d')!;
       const source = document.createElement('canvas');
       source.width = 90;
       source.height = 30;
-      const ctx = document.querySelector<HTMLCanvasElement>('#ui')!.getContext('2d')!;
+      ctx.drawImage(source, 0, 0, 30, 30);
+      const replacement = document.createElement('canvas');
+      replacement.width = replacement.height = 30;
+      ctx.globalCompositeOperation = 'copy';
+      ctx.drawImage(replacement, 0, 0);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
+    await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
+      canvas.width = canvas.width;
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      const ctx = canvas.getContext('2d')!;
       ctx.globalAlpha = 1;
       ctx.save();
       ctx.beginPath();
@@ -272,6 +288,24 @@ it('does not accept unreported WebGL2 drawRangeElements', async () => {
     expect(available).toBe(true);
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play', true)).toContainEqual(
       expect.objectContaining({ error: expect.stringContaining('WebGL UI coverage') }),
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+it('checks pixel buffers scaled by the visible canvas', async () => {
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
+  try {
+    const page = await browser.newPage();
+    await page.evaluate(trackShadowRoots);
+    await page.setContent('<canvas id="pixels" width="30" height="30" style="width:90px;height:30px"></canvas>');
+    await page.evaluate(() => {
+      const ctx = document.querySelector<HTMLCanvasElement>('#pixels')!.getContext('2d')!;
+      ctx.putImageData(ctx.createImageData(30, 30), 0, 0);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
+      expect.objectContaining({ element: '#pixels', natural: 1, drawn: 3 }),
     );
   } finally {
     await browser.close();
@@ -452,6 +486,8 @@ it('tracks DOM mutations that can invalidate a capture measurement', async () =>
       const version = (window as unknown as { __gmCaptureVersion: () => number }).__gmCaptureVersion;
       const before = version();
       context.drawImage(source, 0, 0, 0, 30);
+      context.globalAlpha = 0;
+      context.drawImage(source, 0, 0, 30, 30);
       return [before, version()];
     });
     expect(noOpVersions[1]).toBe(noOpVersions[0]);
