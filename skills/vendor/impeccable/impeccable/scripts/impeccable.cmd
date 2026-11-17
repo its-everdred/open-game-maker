@@ -27,16 +27,26 @@ set "arch=x64"
 if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "arch=arm64"
 
 set "DO_NOT_TRACK=1"
+set "IMPECCABLE_NO_TELEMETRY=1"
+set "IMPECCABLE_NO_UPDATE_CHECK=1"
+set "IMPECCABLE_API_URL=http://127.0.0.1:9"
+set "IMPECCABLE_CARD_BASE=http://127.0.0.1:9"
+set "IMPECCABLE_UPDATE_HOST=http://127.0.0.1:9"
+set "IMPECCABLE_ACCOUNT_URL=http://127.0.0.1:9"
 set "worker_verb=%~1"
 if /I "%worker_verb:~0,5%"=="live-" goto worker_forbidden
 if /I "%~1"=="live" goto worker_forbidden
 if /I "%~1"=="generate" goto worker_forbidden
+if /I "%~1"=="login" goto worker_forbidden
+if /I "%~1"=="health" goto worker_forbidden
+if /I "%~1"=="world" goto worker_forbidden
+if /I "%~1"=="catalog" goto worker_forbidden
 if not defined IMPECCABLE_BIN goto no_env_bin
 if not exist "%IMPECCABLE_BIN%" goto no_env_bin
 set "run=%IMPECCABLE_BIN%"
 goto run
 :worker_forbidden
-echo impeccable: live and generate are not available to workers 1>&2
+echo impeccable: network and live commands are not available to workers 1>&2
 exit /b 1
 :no_env_bin
 echo impeccable: preinstalled IMPECCABLE_BIN unavailable; continue with project context and reference/degraded 1>&2
