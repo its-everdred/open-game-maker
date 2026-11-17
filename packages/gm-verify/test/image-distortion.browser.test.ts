@@ -49,7 +49,7 @@ it('honours visibility, clipping, occlusion, fixed backgrounds and small pseudo 
       return canvas.toDataURL();
     });
     await page.setContent(
-      `<style>#anchor::before, #offscreen::before { content:''; display:block; width:90px; height:30px; background:url("${png}") 0 0 / 100% 100%; } #offscreen::before { position:absolute; left:0; top:0; }</style><div style="visibility:hidden"><img id="visible" src="${png}" style="visibility:visible;width:90px;height:30px"></div><div style="width:1px;height:1px;overflow:hidden"><canvas width="90" height="30" style="position:relative;left:100px"></canvas></div><canvas width="10" height="10"></canvas><div id="anchor" style="width:1px;height:1px"></div><div id="offscreen" style="position:fixed;left:-500px;top:0;width:30px;height:30px"></div><div id="fixed" style="width:100px;height:100px;background:url('${png}') 0 0 / 100% 100% fixed"></div><span id="badge" style="background:url('${png}') 0 0 / 20px 20px">long enough badge</span><img id="covered" src="${png}" style="position:fixed;left:10px;top:500px;width:90px;height:30px"><div style="position:fixed;left:0;top:490px;width:120px;height:50px;background:rgb(0,0,0)"></div>`,
+      `<style>#anchor::before, #offscreen::before { content:''; display:block; width:90px; height:30px; background:url("${png}") 0 0 / 100% 100%; } #offscreen::before { position:absolute; right:0; bottom:0; }</style><div style="visibility:hidden"><img id="visible" src="${png}" style="visibility:visible;width:90px;height:30px"></div><div style="width:1px;height:1px;overflow:hidden"><canvas width="90" height="30" style="position:relative;left:100px"></canvas></div><canvas width="10" height="10"></canvas><div id="anchor" style="width:1px;height:1px"></div><div id="offscreen" style="position:fixed;left:-500px;top:0;width:30px;height:30px"></div><div id="fixed" style="width:100px;height:100px;background:url('${png}') 0 0 / 100% 100% fixed"></div><span id="badge" style="background:url('${png}') 0 0 / 20px 20px">long enough badge</span><img id="covered" src="${png}" style="position:fixed;left:10px;top:500px;width:90px;height:30px"><div style="position:fixed;left:0;top:490px;width:120px;height:50px;background:rgb(0,0,0)"></div>`,
     );
     await page.locator('#visible').evaluate((image: HTMLImageElement) => image.decode());
     const findings = await measureImageDistortion(page.mainFrame(), '390x844', 'play', true);
@@ -186,6 +186,36 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
       ctx.fillRect(0, 0, 90, 90);
     });
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
+    await page.evaluate(() => {
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
+      const ctx = canvas.getContext('2d')!;
+      ctx.beginPath();
+      ctx.rect(60, 60, 10, 10);
+      ctx.clip();
+      canvas.width = canvas.width;
+      ctx.drawImage(source, 0, 0, 30, 30);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
+      expect.objectContaining({ element: '#ui', natural: 3, drawn: 1 }),
+    );
+    await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
+      canvas.width = canvas.width;
+      const ctx = canvas.getContext('2d')!;
+      const path = new Path2D();
+      path.rect(60, 60, 10, 10);
+      ctx.clip(path);
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      ctx.drawImage(source, 0, 0, 30, 30);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
+      expect.objectContaining({ error: 'canvas clip cannot be measured reliably' }),
+    );
   } finally {
     await browser.close();
   }
@@ -200,6 +230,7 @@ it('does not accept an empty UI report for a WebGL canvas', async () => {
     const available = await page.evaluate(() => {
       (window as unknown as { __gm: unknown }).__gm = { imageDraws: () => [], imageDrawsReady: () => true };
       const gl = document.querySelector<HTMLCanvasElement>('#webgl')!.getContext('webgl');
+      gl?.getExtension('ANGLE_instanced_arrays');
       gl?.drawArrays(gl.TRIANGLES, 0, 6);
       return !!gl;
     });

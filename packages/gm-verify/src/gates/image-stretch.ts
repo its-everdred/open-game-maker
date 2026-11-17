@@ -126,7 +126,7 @@ export function scanImageStretch(root: string): GateCheck[] {
         .split(',')
         .map((selector) => selector.trim());
       return (
-        /(?:linear|radial|conic)-gradient\(/i.test(declarations) &&
+        /\bbackground(?:-image)?\s*:/i.test(declarations) &&
         !rasterSource.test(declarations) &&
         !selectors.some((selector) => rasterSelectors.has(selector))
       );
@@ -160,6 +160,12 @@ export function scanImageStretch(root: string): GateCheck[] {
     }
     const isStyled = (tag: string) => {
       const classes = /\bclass(?:Name)?=["']([^"']+)["']/.exec(tag)?.[1]?.split(/\s+/) ?? [];
+      const moduleClass = /\bclassName\s*=\s*\{\s*([A-Za-z_$][\w$]*)\.([\w-]+)\s*\}/.exec(tag);
+      if (
+        moduleClass &&
+        new RegExp(`\\bimport\\s+${moduleClass[1]}\\s+from\\s+["'][^"']+\\.module\\.css["']`).test(code)
+      )
+        classes.push(moduleClass[2]!);
       const id = /\bid=["']([^"']+)["']/.exec(tag)?.[1];
       const selectors = ['img', ...classes.map((name) => `.${name}`), ...(id ? [`#${id}`] : [])];
       const styled = [...css.matchAll(/([^{}]+)\{[^{}]*object-fit\s*:\s*(?:contain|cover|none|scale-down)[^{}]*\}/gi)]

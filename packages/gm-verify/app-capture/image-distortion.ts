@@ -548,12 +548,23 @@ export async function measureImageDistortion(
               b: number;
               c: number;
               d: number;
+              unverifiedClip?: boolean;
             }[];
           }
         ).__gmCanvasDraws?.() ?? [];
       for (const draw of draws) {
         const geometry = canvasGeometry.get(draw.canvas);
         if (!geometry || !visibleElements.has(draw.canvas) || !raster(draw.file)) continue;
+        if (draw.unverifiedClip) {
+          results.push({
+            element: selector(draw.canvas),
+            file: draw.file,
+            natural: 0,
+            drawn: 0,
+            error: 'canvas clip cannot be measured reliably',
+          });
+          continue;
+        }
         if (geometry.unmeasurable) {
           results.push({
             element: selector(draw.canvas),

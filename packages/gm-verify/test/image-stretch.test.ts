@@ -89,8 +89,25 @@ it('detects literal stretch in setProperty and conditional inline styles', () =>
       join(root, 'view.tsx'),
       "element.style.setProperty('object-fit', 'fill');\nconst x = <img style={{ objectFit: selected ? 'contain' : 'fill' }} />;\nctx.drawImage(img, 0, 0, 90, 30, 0, 0, -30, 30);",
     );
-    writeFileSync(join(root, 'gradient.css'), '.background { background: linear-gradient(red, blue) / 100% 100%; }');
+    writeFileSync(
+      join(root, 'gradient.css'),
+      '.background { background: linear-gradient(red, blue) / 100% 100%; }\n.solid { background: red; background-size: 100% 100%; }',
+    );
     expect(runL0(root, { checks: ['image-stretch'] }).checks.map((item) => item.line)).toEqual([1, 2, 3]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it('accepts a CSS module class that supplies object-fit', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-stretch-module-'));
+  try {
+    writeFileSync(join(root, 'view.module.css'), '.safe { object-fit: contain; }');
+    writeFileSync(
+      join(root, 'view.tsx'),
+      "import styles from './view.module.css';\nconst view = <img className={styles.safe} width={90} height={30} />;",
+    );
+    expect(runL0(root, { checks: ['image-stretch'] }).ok).toBe(true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

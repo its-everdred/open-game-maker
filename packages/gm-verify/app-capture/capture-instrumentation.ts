@@ -65,10 +65,12 @@ export function trackShadowRoots(): void {
     b: number;
     c: number;
     d: number;
+    unverifiedClip: boolean;
   };
   const canvasDraws = new Map<HTMLCanvasElement, Map<string, Draw>>();
   type Bounds = { left: number; top: number; right: number; bottom: number };
   const clipBounds = new WeakMap<CanvasRenderingContext2D, Bounds>();
+  const contexts2d = new WeakMap<HTMLCanvasElement, CanvasRenderingContext2D>();
   const pathBounds = new WeakMap<CanvasRenderingContext2D, Bounds>();
   const rectangularPaths = new WeakSet<CanvasRenderingContext2D>();
   const boundsStack = new WeakMap<CanvasRenderingContext2D, (Bounds | undefined)[]>();
@@ -120,6 +122,7 @@ export function trackShadowRoots(): void {
   const originalContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...args: unknown[]) {
     const context = Reflect.apply(originalContext, this, [kind, ...args]);
+    if (context instanceof CanvasRenderingContext2D) contexts2d.set(this, context);
     if (context && (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl')) webglCanvases.add(this);
     return context;
   } as typeof HTMLCanvasElement.prototype.getContext;
@@ -153,8 +156,10 @@ export function trackShadowRoots(): void {
               gl.getParameter(gl.FRAMEBUFFER_BINDING) === null &&
               !gl.isEnabled(gl.SCISSOR_TEST) &&
               (gl.getParameter(gl.COLOR_WRITEMASK) as boolean[]).every(Boolean)
-            )
+            ) {
               webglDraws.delete(gl.canvas);
+              webglExtensions.delete(gl.canvas);
+            }
           }
           if (name.startsWith('draw') || name === 'blitFramebuffer') {
             const gl = this as WebGLRenderingContext | WebGL2RenderingContext;
@@ -197,8 +202,25 @@ export function trackShadowRoots(): void {
             result &&
             /^(ANGLE_instanced_arrays|WEBGL_multi_draw)$/i.test(String(args[0])) &&
             this.canvas instanceof HTMLCanvasElement
-          )
-            webglExtensions.add(this.canvas);
+          ) {
+            const canvas = this.canvas;
+            for (const key of [
+              'drawArraysInstancedANGLE',
+              'drawElementsInstancedANGLE',
+              'multiDrawArraysWEBGL',
+              'multiDrawElementsWEBGL',
+              'multiDrawArraysInstancedWEBGL',
+              'multiDrawElementsInstancedWEBGL',
+            ]) {
+              const originalMethod = (result as Record<string, unknown>)[key];
+              if (typeof originalMethod !== 'function') continue;
+              (result as Record<string, unknown>)[key] = function (...callArgs: unknown[]) {
+                webglExtensions.add(canvas);
+                if (visibleCanvas(canvas)) version++;
+                return Reflect.apply(originalMethod, result, callArgs);
+              };
+            }
+          }
           return result;
         },
       });
@@ -268,6 +290,7 @@ export function trackShadowRoots(): void {
       b: matrix.b,
       c: matrix.c,
       d: matrix.d,
+      unverifiedClip: unknownClips.has(this),
     };
     let entries = canvasDraws.get(this.canvas);
     if (!entries) {
@@ -284,6 +307,7 @@ export function trackShadowRoots(): void {
       matrix.b,
       matrix.c,
       matrix.d,
+      draw.unverifiedClip,
     ]);
     if (entries.size >= 10_000 && !entries.has(key)) {
       entries.set('__overflow__', { ...draw, sourceWidth: 0, sourceHeight: 0 });
@@ -291,6 +315,8 @@ export function trackShadowRoots(): void {
   } as typeof CanvasRenderingContext2D.prototype.drawImage;
   const originalClear = CanvasRenderingContext2D.prototype.clearRect;
   const clippedContexts = new WeakSet<CanvasRenderingContext2D>();
+  const unknownClips = new WeakSet<CanvasRenderingContext2D>();
+  const unknownClipStack = new WeakMap<CanvasRenderingContext2D, boolean[]>();
   const clipStack = new WeakMap<CanvasRenderingContext2D, boolean[]>();
   const originalSave = CanvasRenderingContext2D.prototype.save;
   const originalRestore = CanvasRenderingContext2D.prototype.restore;
@@ -298,6 +324,9 @@ export function trackShadowRoots(): void {
     const stack = clipStack.get(this) ?? [];
     stack.push(clippedContexts.has(this));
     clipStack.set(this, stack);
+    const unknown = unknownClipStack.get(this) ?? [];
+    unknown.push(unknownClips.has(this));
+    unknownClipStack.set(this, unknown);
     const bounds = boundsStack.get(this) ?? [];
     bounds.push(clipBounds.get(this));
     boundsStack.set(this, bounds);
@@ -308,6 +337,11 @@ export function trackShadowRoots(): void {
     if (stack?.length) {
       if (stack.pop()) clippedContexts.add(this);
       else clippedContexts.delete(this);
+    }
+    const unknown = unknownClipStack.get(this);
+    if (unknown?.length) {
+      if (unknown.pop()) unknownClips.add(this);
+      else unknownClips.delete(this);
     }
     const bounds = boundsStack.get(this);
     if (bounds?.length) {
@@ -370,6 +404,7 @@ export function trackShadowRoots(): void {
     clippedContexts.add(this);
     const path =
       typeof args[0] === 'object' ? undefined : rectangularPaths.has(this) ? pathBounds.get(this) : undefined;
+    if (!path) unknownClips.add(this);
     if (path) {
       const old = clipBounds.get(this);
       clipBounds.set(
@@ -437,6 +472,8 @@ export function trackShadowRoots(): void {
           canvasDraws.delete(this.canvas);
           patternedCanvases.delete(this.canvas);
           clippedContexts.delete(this);
+          unknownClips.delete(this);
+          unknownClipStack.delete(this);
           clipStack.delete(this);
           clipBounds.delete(this);
           boundsStack.delete(this);
@@ -458,6 +495,17 @@ export function trackShadowRoots(): void {
         set(value: number) {
           canvasDraws.delete(this as HTMLCanvasElement);
           patternedCanvases.delete(this as HTMLCanvasElement);
+          const context = contexts2d.get(this as HTMLCanvasElement);
+          if (context) {
+            clippedContexts.delete(context);
+            unknownClips.delete(context);
+            unknownClipStack.delete(context);
+            clipStack.delete(context);
+            clipBounds.delete(context);
+            boundsStack.delete(context);
+            pathBounds.delete(context);
+            rectangularPaths.delete(context);
+          }
           descriptor.set!.call(this, value);
           if (visibleCanvas(this as HTMLCanvasElement)) version++;
         },
