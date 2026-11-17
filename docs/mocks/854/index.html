@@ -17,8 +17,9 @@
     />
     <link rel="stylesheet" href="../../../apps/web/src/tokens.css" />
     <link rel="stylesheet" href="../../../apps/web/src/app/chrome.css" />
-    <link rel="stylesheet" href="../../../apps/web/src/features/build-chat/dock.css" />
     <link rel="stylesheet" href="../../../apps/web/src/features/build-chat/chat.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/build-chat/dock.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/build-chat/command-card.css" />
     <link rel="stylesheet" href="../../../apps/web/src/features/worker-builds/build-tracker.css" />
     <link rel="stylesheet" href="../../../apps/web/src/features/commands-inbox/review-glass.css" />
     <link rel="stylesheet" href="../../../apps/web/src/features/commands-inbox/review-deck.css" />
@@ -84,7 +85,11 @@
       .studio-menu-sheet {
         width: 100%;
       }
-            .build-chat-composer-actions button {
+            /* The phone chat fills the screen (100svh); inside a mock frame that is the frame. */
+      .build-chat-dock[data-state='chat'] .build-chat-panel {
+        height: 100% !important;
+      }
+      .build-chat-composer-actions button {
         min-height: var(--tap-secondary);
         min-width: var(--tap-secondary);
         display: grid;
@@ -160,12 +165,6 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
-      }
-      .build-chat-option.picked {
-        outline: 3px solid var(--yellow-b);
-      }
-      .build-chat-option span {
-        font: 700 15px var(--display);
       }
       /* Phone OS lock screen for the push mock (outside the app). */
       .lock {
@@ -252,7 +251,7 @@
         <div class="build-chat-panel">
           <section class="build-chat-chat" aria-label="Executor">
             <header class="build-chat-chat-head">
-              <button class="build-chat-back tap-secondary" aria-label="Close"><i data-icon="close" style="width: 20px; height: 20px"></i></button>
+              <button class="build-chat-back tap-secondary" type="button">Back</button>
               <h3>Blobs</h3>
             </header>
             <div class="build-chat-messages">
@@ -282,7 +281,7 @@
         <div class="build-chat-panel">
           <section class="build-chat-chat" aria-label="Executor">
             <header class="build-chat-chat-head">
-              <button class="build-chat-back tap-secondary" aria-label="Close"><i data-icon="close" style="width: 20px; height: 20px"></i></button>
+              <button class="build-chat-back tap-secondary" type="button">Back</button>
               <h3>Blobs</h3>
             </header>
             <div class="build-chat-messages">
@@ -315,7 +314,7 @@
         <div class="build-chat-panel">
           <section class="build-chat-chat" aria-label="Executor">
             <header class="build-chat-chat-head">
-              <button class="build-chat-back tap-secondary" aria-label="Close"><i data-icon="close" style="width: 20px; height: 20px"></i></button>
+              <button class="build-chat-back tap-secondary" type="button">Back</button>
               <h3>Blobs</h3>
             </header>
             <div class="build-chat-messages">
@@ -360,21 +359,32 @@
         <div class="build-chat-panel">
           <section class="build-chat-chat" aria-label="Executor">
             <header class="build-chat-chat-head">
-              <button class="build-chat-back tap-secondary" aria-label="Close"><i data-icon="close" style="width: 20px; height: 20px"></i></button>
+              <button class="build-chat-back tap-secondary" type="button">Back</button>
               <h3>Blobs</h3>
             </header>
             <div class="build-chat-messages">
               <div class="build-chat-row text creator"><p>Make Endless the big button, and put Mossbeard in front</p></div>
               <div class="build-chat-row text"><p>On it. Two looks for you in about 20 minutes.</p></div>
-              <div class="build-chat-row command">
-                <strong>Which menu?</strong>
+              <article class="build-chat-row command command-open" aria-labelledby="cmd-1">
+                <strong id="cmd-1">Which menu?</strong>
                 <div class="build-chat-options">
-                  <button class="build-chat-option"><img src="menu-phone.jpg" alt="" /><span>A</span></button>
-                  <button class="build-chat-option"><img src="vcpu-phone-results.jpg" alt="" /><span>B</span></button>
+                  <button class="build-chat-option" aria-label="A" aria-pressed="false" style="min-height: 64px">
+                    <span class="command-option-media"><img alt="" src="menu-phone.jpg" /></span><span class="command-option-label">A</span>
+                  </button>
+                  <button class="build-chat-option" aria-label="B" aria-pressed="false" style="min-height: 64px">
+                    <span class="command-option-media"><img alt="" src="vcpu-phone-results.jpg" /></span><span class="command-option-label">B</span>
+                  </button>
                 </div>
-                <button class="build-chat-read tap-secondary">Review</button>
-              </div>
+              </article>
               <p class="build-chat-row progress">9:36</p>
+            </div>
+            <div class="build-chat-composer">
+              <textarea rows="1"></textarea>
+              <div class="build-chat-composer-actions">
+                <button class="build-chat-attach tap-secondary" aria-label="Attach"><i data-icon="paperclip"></i></button>
+                <button class="build-chat-dictate tap-secondary" aria-label="Dictate"><i data-icon="mic"></i></button>
+                <button class="build-chat-send tap-primary" aria-label="Send"><i data-icon="send"></i></button>
+              </div>
             </div>
           </section>
         </div>
