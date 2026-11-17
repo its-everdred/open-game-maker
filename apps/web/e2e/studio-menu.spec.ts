@@ -224,7 +224,9 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   await swipe(true, dialog.locator('video'));
   await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
   await page.getByRole('button', { name: 'Undo' }).click();
-  await scroller.evaluate((element) => { element.scrollTop = 0; });
+  await scroller.evaluate((element) => {
+    element.scrollTop = 0;
+  });
   await swipe(true);
   await page.getByRole('button', { name: 'Undo' }).click();
   expect(roundAnswer).toBeUndefined();
