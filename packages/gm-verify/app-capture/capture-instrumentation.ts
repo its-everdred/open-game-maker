@@ -177,13 +177,15 @@ export function trackShadowRoots(): void {
                   : (mode === gl.TRIANGLE_STRIP || mode === gl.TRIANGLE_FAN) && count === 4
                     ? 1
                     : 0;
-              entry.count += quads * instances;
-              entry.unsupported ||=
-                name === 'drawRangeElements' ||
-                name === 'blitFramebuffer' ||
-                quads === 0 ||
-                !Number.isFinite(instances) ||
-                instances < 1;
+              if (name === 'blitFramebuffer' || (count !== 0 && instances !== 0)) {
+                entry.count += quads * instances;
+                entry.unsupported ||=
+                  name === 'drawRangeElements' ||
+                  name === 'blitFramebuffer' ||
+                  quads === 0 ||
+                  !Number.isFinite(instances) ||
+                  instances < 0;
+              }
               webglDraws.set(canvas, entry);
             }
           }
@@ -231,8 +233,10 @@ export function trackShadowRoots(): void {
                         ? 1
                         : 0;
                   const entry = webglDraws.get(canvas) ?? { count: 0, unsupported: false };
-                  entry.count += quads * instances;
-                  entry.unsupported ||= quads === 0 || !Number.isFinite(instances) || instances < 1;
+                  if (count !== 0 && instances !== 0) {
+                    entry.count += quads * instances;
+                    entry.unsupported ||= quads === 0 || !Number.isFinite(instances) || instances < 0;
+                  }
                   webglDraws.set(canvas, entry);
                 } else webglExtensions.add(canvas);
                 if (visibleCanvas(canvas)) version++;

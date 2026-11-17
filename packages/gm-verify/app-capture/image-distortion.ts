@@ -308,10 +308,14 @@ export async function measureImageDistortion(
           if (
             generated.position === 'absolute' &&
             style.position !== 'static' &&
-            transform.a === 1 &&
+            outer.a === 1 &&
+            outer.b === 0 &&
+            outer.c === 0 &&
+            outer.d === 1 &&
+            transform.a > 0 &&
             transform.b === 0 &&
             transform.c === 0 &&
-            transform.d === 1 &&
+            transform.d > 0 &&
             generated.transform === 'none' &&
             generated.translate === 'none' &&
             generated.rotate === 'none' &&
@@ -322,10 +326,10 @@ export async function measureImageDistortion(
               (value) => parseFloat(value) === 0,
             )
           ) {
-            const x = rect.left + (parseFloat(style.borderLeftWidth) || 0) + parseFloat(generated.left);
-            const y = rect.top + (parseFloat(style.borderTopWidth) || 0) + parseFloat(generated.top);
-            const width = parseFloat(generated.width);
-            const height = parseFloat(generated.height);
+            const x = rect.left + ((parseFloat(style.borderLeftWidth) || 0) + parseFloat(generated.left)) * transform.a;
+            const y = rect.top + ((parseFloat(style.borderTopWidth) || 0) + parseFloat(generated.top)) * transform.d;
+            const width = parseFloat(generated.width) * transform.a;
+            const height = parseFloat(generated.height) * transform.d;
             if (
               [x, y, width, height].every(Number.isFinite) &&
               (x + width <= 0 || y + height <= 0 || x >= innerWidth || y >= innerHeight)
