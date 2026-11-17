@@ -22,6 +22,7 @@
       "default": "./dist/server.js"
     },
     "./app-capture": "./dist/app-capture/runner.js",
+    "./app-capture/playtest": "./dist/app-capture/playtest.js",
     "./schemas/*": "./schemas/*"
   },
   "scripts": {

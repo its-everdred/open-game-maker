@@ -18,6 +18,7 @@ Never report a visual result you have not looked at. Code, logs, and a passing c
    `python3 .claude/skills/gm-image-mock/scripts/request-mock.py --kind look --out looks --ref <still> --ref <target> --prompt-file <questions>`.
    Make each ticket screen's comparison with `gm look sheet <screen> --still <png>` and look at the sheet. After committing any tracked captured stills, run `gm look scope add <screen> --still <png>` for each ticket screen (repeat `--still` for its looked-at stills), commit `design/look-scope.json`, then run `gm look check --changed` plus `gm look score`/`gm look judge` on those screens. Inherited gaps do not block. If the look broker fails, report the gate as blocked, never as a pass.
 7. Commit every file the PR links under `review/<ticket>/`; `gm look evidence --body <pr-body.md>` fails otherwise.
+8. Run `gm qa playtest <game> --all-modes` after building: a seeded bot plays every mode in `gm.manifest.json` `modes` (each `{id, label, tap}`) at the four touch sizes. It fails on the game's `qa.invariants()` (implement it on the instance: one entry per state rule), more or fewer than one `data-gm-play-area` board, UI over the board, console errors, and HUD text a long press selects (`user-select:none` and `-webkit-touch-callout:none` on the page). Look at every mode's stills and clip in `shots/playtest/`. It is required at every rung checkpoint from prototype on, and in game CI.
 
 A report budget whose status is `over` blocks the PR. Name the tier and measured value. List `unknown` under unchecked.
 

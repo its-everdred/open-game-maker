@@ -77,9 +77,10 @@ game=$checkout/games/blobs
 expected="$game | qa open --url $url --out $run
 $game | qa room --url $url --journey $journeys/online-2p.json --clients 3 --out $run
 $game | qa drive --url $url --journey $journeys/solo-cpu.json --out $run
+$game | qa playtest . --all-modes --url $url --out $run/playtest
 $game | qa look --out $run
 $game | qa look --report --out $run"
-assert_eq "$expected" "$(cat "$GM_LOG")" 'open, one command per journey by kind, look, then the report, from the game folder'
+assert_eq "$expected" "$(cat "$GM_LOG")" 'open, one command per journey by kind, every mode played, look, then the report, from the game folder'
 assert_grep "report $run/qa-report.md" "$scratch/out.txt"
 assert_not_grep 'internal-token-for-qa-tests' "$scratch/out.txt"
 
@@ -87,7 +88,7 @@ assert_not_grep 'internal-token-for-qa-tests' "$scratch/out.txt"
 : > "$GM_LOG"
 GM_FAIL_DRIVE=1 "$qa" blobs --api "$api" --build build_old --out "$scratch/run" > /dev/null 2>&1 &&
   fail "a failed drive should fail the run" || assert_eq 1 "$?" 'failed step exit'
-assert_eq 5 "$(wc -l < "$GM_LOG" | tr -d ' ')" 'every step ran after the failure'
+assert_eq 6 "$(wc -l < "$GM_LOG" | tr -d ' ')" 'every step ran after the failure'
 assert_grep "qa open --url https://games.example:10000/g/g_blobs/build_old/ --out $scratch/run" "$GM_LOG"
 
 # An empty repo path keeps the fields after it in place: the run plays rooted's build from the checkout root.

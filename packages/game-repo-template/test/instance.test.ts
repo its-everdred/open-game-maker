@@ -77,6 +77,20 @@ describe('renderInstanceTemplate', () => {
     }
   });
 
+  /* Kevin's Both-mode defects (#866) shipped because no check played the modes a PR did not name. */
+  it('plays every mode of each changed game on pull requests, after the build', () => {
+    const workflow = parse(file('.github/workflows/ci.yml')) as {
+      jobs: { required: { steps: Array<{ name?: string; run?: string; if?: string }> } };
+    };
+    const steps = workflow.jobs.required.steps;
+    const playtest = steps.findIndex((step) => step.run?.includes('gm qa playtest'));
+    expect(playtest).toBeGreaterThan(steps.findIndex((step) => step.run?.includes('run build')));
+    expect(steps[playtest]!.if).toBe("github.event_name == 'pull_request'");
+    expect(steps[playtest]!.run).toContain('pnpm gm qa playtest "$game" --all-modes || status=1');
+    expect(steps[playtest]!.run).toContain("'games/*/src/**'");
+    expect(steps[playtest]!.run).toContain('exit "$status"');
+  });
+
   it('is deterministic', () => {
     expect(renderInstanceTemplate()).toEqual(renderInstanceTemplate());
   });

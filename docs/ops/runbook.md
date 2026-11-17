@@ -324,7 +324,8 @@ ops/bin/ogm-qa blobs --build <buildId>    # a specific build
 
 It reads the internal token like `ogm-publish` and the games origin from `OGM_GAMES_ORIGIN` (`games.env`), asks the
 facts route for the newest build, then runs `gm qa open`, `gm qa drive` for each solo journey and `gm qa room` for each
-room journey in `<game>/qa/journeys/`, `gm qa look` and `gm qa look --report` from the game's folder in its registered
+room journey in `<game>/qa/journeys/`, `gm qa playtest . --all-modes` (every mode in `gm.manifest.json`, results in
+`playtest/`), `gm qa look` and `gm qa look --report` from the game's folder in its registered
 checkout. The run lands in `~/.local/state/ogm/qa/<slug>/<buildId>/` (`OGM_QA_ROOT` moves it). Answer
 `look/answers.json` there after opening the stills, then `gm qa look --report --out <run>` again. Exit codes: 0 the
 report passed, 1 a step failed or a look is unanswered, 64 bad usage, 65 no game, build, origin or token.

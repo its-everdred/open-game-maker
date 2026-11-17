@@ -25,11 +25,11 @@ copyFileSync(join(root, 'shell', 'host-shell.html'), join(out, 'host-shell.html'
 const appOut = join(root, 'dist', 'app-capture');
 mkdirSync(appOut, { recursive: true });
 await build({
-  entryPoints: [join(root, 'app-capture', 'runner.ts')],
+  entryPoints: [join(root, 'app-capture', 'runner.ts'), join(root, 'app-capture', 'playtest.ts')],
   bundle: true,
   platform: 'node',
   format: 'esm',
   packages: 'external',
-  outfile: join(appOut, 'runner.js'),
+  outdir: appOut,
   logLevel: 'warning',
 });
