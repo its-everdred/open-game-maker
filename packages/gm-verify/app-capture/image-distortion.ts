@@ -374,6 +374,16 @@ export async function measureImageDistortion(
             }
           }
           const files = urls(generated.backgroundImage).filter(raster);
+          if (files.length && /\bround\b/i.test(generated.backgroundRepeat)) {
+            results.push({
+              element: `${selector(element)}${pseudo}`,
+              file: files.join(', '),
+              natural: 0,
+              drawn: 0,
+              error: 'round background repetition cannot be measured reliably',
+            });
+            continue;
+          }
           const intrinsic = splitLayers(generated.backgroundSize).every((size) => {
             const parts = splitSize(size.trim());
             return parts.length === 1 || parts.includes('auto') || parts.includes('cover') || parts.includes('contain');
@@ -479,6 +489,7 @@ export async function measureImageDistortion(
         const sizes = splitLayers(style.backgroundSize);
         const origins = splitLayers(style.backgroundOrigin);
         const attachments = splitLayers(style.backgroundAttachment);
+        const repeats = splitLayers(style.backgroundRepeat);
         for (const [index, layer] of layers.entries()) {
           if (/image-set\(/i.test(layer)) {
             const candidates = urls(layer);
@@ -494,6 +505,16 @@ export async function measureImageDistortion(
           }
           const url = urls(layer)[0];
           if (!url || !raster(url)) continue;
+          if (/\bround\b/i.test(repeats[index] ?? repeats[0] ?? '')) {
+            results.push({
+              element: selector(element),
+              file: url,
+              natural: 0,
+              drawn: 0,
+              error: 'round background repetition cannot be measured reliably',
+            });
+            continue;
+          }
           const size = splitSize((sizes[index] ?? sizes[0] ?? '').trim());
           const image = new Image();
           image.src = url;
