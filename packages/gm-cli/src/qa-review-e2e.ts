@@ -1,6 +1,8 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { mediaFailures, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
+
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
 
@@ -22,6 +24,8 @@ export type ReviewE2eConfig = {
   out: string;
   /** Test-only: hides the round's note box, the regression the run must catch. */
   injectRegression: boolean;
+  /** Test-only: the review picture's URL answers 404, a broken media URL the run must catch. */
+  breakMedia: boolean;
   /** One id per run, so a viewport's fixtures never meet another's. */
   stamp: string;
 };
@@ -104,14 +108,26 @@ async function runViewport(
   const stills: string[] = [];
   const media = (file: string) => readFileSync(new URL(file, MEDIA_DIR)).toString('base64');
   const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
+  // Whether --break-media found the review picture to break; a run that broke nothing proves nothing.
+  let broke = false;
   try {
-    await internal(config, '/review-fixtures', {
+    const seeded = await internal(config, '/review-fixtures', {
       method: 'POST',
       body: JSON.stringify({
         run,
         media: { still: media('still.png'), clip: media('clip.mp4'), audio: media('sound.mp3') },
       }),
     });
+    if (config.breakMedia) {
+      const picture = readFileSync(new URL('still.png', MEDIA_DIR));
+      await context.route('**/*', async (route) => {
+        if (route.request().resourceType() !== 'image') return route.fallback();
+        const response = await route.fetch();
+        if (!(await response.body()).equals(picture)) return route.fulfill({ response });
+        broke = true;
+        return route.fulfill({ status: 404, body: '' });
+      });
+    }
     await context.addCookies([{ ...config.cookie, url: config.origin }]);
     if (config.injectRegression)
       await context.addInitScript((css) => {
@@ -140,7 +156,12 @@ async function runViewport(
         .first()
         .waitFor({ state: 'attached', ...timeout });
     });
-    await still('round');
+    await step('show the round', async () => {
+      await settleMedia(dialog);
+      await still('round');
+      const failures = [...(await mediaFailures(dialog, 'the round')), ...(await swipeDeckFailures(page, dialog))];
+      if (failures.length) throw new StepFailed(failures.join('; '));
+    });
     await step('swipe the round right and undo', async () => {
       await swipe(page, true);
       await page.getByRole('button', { name: 'Undo' }).click(timeout);
@@ -155,7 +176,15 @@ async function runViewport(
     await step('pick B on the Command with a note', async () => {
       await dialog.getByRole('button', { name: 'Next' }).click(timeout);
       await dialog.getByText('QA: which one?').waitFor(timeout);
+      await settleMedia(dialog);
       await still('command');
+      const failures = [
+        ...(await mediaFailures(dialog, 'the Command')),
+        ...(typeof seeded.options === 'number'
+          ? await optionFailures(dialog, seeded.options)
+          : ['the fixture seed did not say how many options the Command carries']),
+      ];
+      if (failures.length) throw new StepFailed(failures.join('; '));
       await dialog.getByLabel('Note (optional)').fill(PICK_NOTE, timeout);
       await dialog.getByRole('button', { name: /^Pick B/ }).click(timeout);
     });
@@ -167,9 +196,14 @@ async function runViewport(
     await still('command-sent');
     const alert = dialog.getByRole('alert');
     const failure = (await alert.count()) ? `the deck showed: ${await alert.first().innerText()}` : reached(report);
+    if (config.breakMedia && !broke)
+      return { viewport: name, ok: false, failure: '--break-media broke no picture', stills };
     return failure === null ? { viewport: name, ok: true, stills } : { viewport: name, ok: false, failure, stills };
   } catch (error) {
-    return { viewport: name, ok: false, failure: (error as Error).message, stills };
+    const failure = (error as Error).message;
+    if (config.breakMedia && !broke)
+      return { viewport: name, ok: false, failure: `--break-media broke no picture (${failure})`, stills };
+    return { viewport: name, ok: false, failure, stills };
   } finally {
     await context.close();
     await internal(config, `/review-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);

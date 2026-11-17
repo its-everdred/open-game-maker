@@ -360,9 +360,13 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
 2. `gm qa review-e2e --sha <deployed sha>`, at 390×844, 844×390, 820×1180 and 1180×820: seeds a round (picture, clip,
    sound) and a Command (A picture, B clip, C sound), swipes the round right, undoes, swipes it left with a note, picks
    B with a note, and checks that both verdicts reached the QA game's aiur boundary and that the deck showed no error.
+   Before swiping and before picking it fails the size on what the creator would see broken: a picture with no pixels
+   (`naturalWidth` 0), a clip not playable within 10 s (`readyState` under 2), a sound with no length, fewer options
+   than the Command carries or one off screen or without its media, and a round with no draggable card or no
+   "Looks good" and "Needs changes" controls; the failure names each element, and the still is saved first.
    It deletes its fixtures, saves four stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
-   `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box, to prove a broken
-   deck fails the run.
+   `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box and
+   `--break-media` answers the review picture with a 404, each to prove a broken deck fails the run.
 3. After a web deploy, auto-update calls `ops/bin/ogm-qa-review-hook <have> <want> --attention <file>`. It runs both
    steps when the deploy changed the review deck (`apps/web/src/**review**`,
    `apps/web/src/features/{worker-builds,commands-inbox}/`, `apps/web/src/app/StudioMenu*`) or the review API
