@@ -275,6 +275,21 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
       source.width = 90;
       source.height = 30;
       ctx.drawImage(source, 0, 0, 30, 30);
+      ctx.globalCompositeOperation = 'source-in';
+      ctx.globalAlpha = 0;
+      ctx.drawImage(source, 0, 0, 30, 30);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
+      expect.objectContaining({ error: 'canvas composite cannot be measured reliably' }),
+    );
+    await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('#ui')!;
+      canvas.width = canvas.width;
+      const ctx = canvas.getContext('2d')!;
+      const source = document.createElement('canvas');
+      source.width = 90;
+      source.height = 30;
+      ctx.drawImage(source, 0, 0, 30, 30);
       const mask = document.createElement('canvas');
       mask.width = mask.height = 90;
       mask.getContext('2d')!.fillRect(0, 0, 90, 90);

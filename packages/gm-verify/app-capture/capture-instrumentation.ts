@@ -323,6 +323,10 @@ export function trackShadowRoots(): void {
       if (!clippedContexts.has(this)) canvasDraws.delete(this.canvas);
       else if (entries) for (const draw of entries.values()) draw.unverifiedComposite = true;
     }
+    if (this.globalAlpha === 0 && this.globalCompositeOperation !== 'copy') {
+      const entries = canvasDraws.get(this.canvas);
+      if (entries) for (const draw of entries.values()) draw.unverifiedComposite = true;
+    }
     if (this.globalCompositeOperation === 'destination-out' || this.globalCompositeOperation === 'destination-in') {
       const entries = canvasDraws.get(this.canvas);
       if (entries?.size) {
