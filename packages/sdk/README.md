@@ -12,7 +12,8 @@ Mark a WebGL canvas that contains only game-world rendering with `data-gm-world-
 a canvas that contains UI. Canvas 2D `drawImage` calls are also inspected by the capture, including unreported draws.
 For WebGL UI, use a separate canvas from the world, give it a unique DOM id, and include that id as `canvasId` in each
 report. Draw sprites as quads after `beginImageDraws()`. The capture compares each canvas's quad count against its
-reports and reports unsupported geometry explicitly.
+reports and reports unsupported geometry explicitly. Clear the full color buffer before each new WebGL UI frame so
+coverage cannot discard a still-visible draw from an earlier frame.
 
 ## Shared player settings
 

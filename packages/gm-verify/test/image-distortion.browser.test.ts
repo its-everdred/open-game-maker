@@ -132,6 +132,10 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
       ctx.globalAlpha = 0;
       ctx.drawImage(source, 0, 0, 30, 30);
       ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(source, 0, 0, 30, 30);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(source, 10, 10, 0, 30);
       ctx.save();
       ctx.beginPath();
       ctx.rect(60, 60, 10, 10);
@@ -232,6 +236,27 @@ it('ignores invisible canvas draws and forgets draws after a restored clip and c
     });
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
       expect.objectContaining({ error: 'canvas clip cannot be measured reliably' }),
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+it('does not accept unreported WebGL2 drawRangeElements', async () => {
+  const browser = await chromium.launch({ headless: true, args: browserArgs });
+  try {
+    const page = await browser.newPage();
+    await page.evaluate(trackShadowRoots);
+    await page.setContent('<canvas id="range" width="90" height="90"></canvas>');
+    const available = await page.evaluate(() => {
+      (window as unknown as { __gm: unknown }).__gm = { imageDraws: () => [], imageDrawsReady: () => true };
+      const gl = document.querySelector<HTMLCanvasElement>('#range')!.getContext('webgl2');
+      gl?.drawRangeElements(gl.TRIANGLES, 0, 3, 6, gl.UNSIGNED_SHORT, 0);
+      return !!gl;
+    });
+    expect(available).toBe(true);
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play', true)).toContainEqual(
+      expect.objectContaining({ error: expect.stringContaining('WebGL UI coverage') }),
     );
   } finally {
     await browser.close();

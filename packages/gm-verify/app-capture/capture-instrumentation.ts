@@ -169,7 +169,7 @@ export function trackShadowRoots(): void {
             if (canvas instanceof HTMLCanvasElement) {
               const entry = webglDraws.get(canvas) ?? { count: 0, unsupported: false };
               const mode = Number(args[0]);
-              const count = Number(args[name.startsWith('drawArrays') ? 2 : 1]);
+              const count = Number(args[name === 'drawRangeElements' ? 3 : name.startsWith('drawArrays') ? 2 : 1]);
               const instances = name.endsWith('Instanced') ? Number(args[name.startsWith('drawArrays') ? 3 : 4]) : 1;
               const quads =
                 mode === gl.TRIANGLES && count > 0 && count % 6 === 0
@@ -257,6 +257,8 @@ export function trackShadowRoots(): void {
   ) {
     Reflect.apply(originalDraw, this, [image, ...args]);
     if (visibleCanvas(this.canvas)) version++;
+    if (this.globalCompositeOperation === 'destination-out' || this.globalCompositeOperation === 'destination-in')
+      return;
     const source = image as CanvasImageSource & {
       naturalWidth?: number;
       naturalHeight?: number;
@@ -278,6 +280,7 @@ export function trackShadowRoots(): void {
     const sourceHeight = args.length === 8 ? args[3]! : naturalHeight;
     const drawnWidth = args.length === 8 ? args[6]! : args.length === 4 ? args[2]! : sourceWidth;
     const drawnHeight = args.length === 8 ? args[7]! : args.length === 4 ? args[3]! : sourceHeight;
+    if (drawnWidth === 0 || drawnHeight === 0 || (args.length === 8 && (args[2] === 0 || args[3] === 0))) return;
     const matrix = this.getTransform();
     const x = args.length === 8 ? args[4]! : args[0]!;
     const y = args.length === 8 ? args[5]! : args[1]!;
