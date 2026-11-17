@@ -6,7 +6,6 @@ description: Load first in every Game Maker build. Routes the work, keeps the br
 # Game Maker core
 
 ## The job
-
 Build the game in `gm scope`. The scope owns the WHAT: theme, art, names, palette, and mechanics. Templates, skills,
 pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in the build chat instead. Loading artwork: declare `loading.portrait` and `loading.landscape` PNG paths under `media/` in `gm.manifest.json`, with 9:16 (at least 1440×2560) and 16:9 (at least 2560×1440) art in `public/media/`. Keep the subject in the centre 70%, the top 25% calm for the shell logo, and the bottom 20% calm for progress. Run `gm check`. For asynchronous startup, set `runtime.hooks.ready = false` before starting work and `true` only after the first frame renders.
 
@@ -56,7 +55,6 @@ Build the choice. After every `gm run`, send exactly one still or clip with `gm 
 `gm check`, `gm test`, and `gm run` are green and the PR's checklist is answered from the evidence sheet; look first.
 
 ## Energy
-
 Run `gm energy` at the start. `save` means a cheaper model, lower effort, and optional work deferred. `best` means the
 strongest model and effort. `balanced` is in between. When Energy is `limited` or `critical`, propose any scope cut as a
 `gm decide` question; never cut scope silently. The preference never lowers a quality gate. When Energy is `unknown` or
