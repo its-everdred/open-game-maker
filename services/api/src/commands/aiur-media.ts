@@ -139,7 +139,7 @@ async function resolveItem(
 // The media each option shows, by option id: its first picture or clip (else its first sound), and its first sound
 // beside a picture or clip (a character card's portrait with its voice). An item aiur cannot serve leaves its option
 // without that media (its copy logs the failure once); it never fails the inbox.
-export type ResolvedOptionMedia = { media?: OptionMedia; audio?: OptionMedia };
+export type ResolvedOptionMedia = { media?: OptionMedia; audio?: OptionMedia; audioClips?: OptionMedia[] };
 
 export async function optionMediaFromAiur(
   deps: AppDeps,
@@ -166,11 +166,14 @@ export async function optionMediaFromAiur(
       const sound = items.find(({ kind }) => KIND[kind ?? ''] === 'audio');
       const shown = visual ?? sound;
       const voice = visual === undefined ? undefined : sound;
-      const [media, audio] = await Promise.all([quietly(shown), quietly(voice)]);
-      if (media === undefined && audio === undefined) return;
+      const additional = items.filter((item) => KIND[item.kind ?? ''] === 'audio' && item !== sound).slice(0, 16);
+      const [media, audio, ...extra] = await Promise.all([quietly(shown), quietly(voice), ...additional.map(quietly)]);
+      const audioClips = extra.filter((item): item is OptionMedia => item !== undefined);
+      if (media === undefined && audio === undefined && audioClips.length === 0) return;
       resolved.set(option.id, {
         ...(media === undefined ? {} : { media }),
         ...(audio === undefined ? {} : { audio }),
+        ...(audioClips.length ? { audioClips } : {}),
       });
     }),
   );

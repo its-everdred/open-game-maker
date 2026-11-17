@@ -58,7 +58,7 @@ async function pushOne(
   deps: DeliverDeps,
   subscription: StoredPushSubscription,
   notification: Notification,
-): Promise<void> {
+): Promise<boolean> {
   const payload = JSON.stringify({
     id: notification.id,
     kind: notification.kind,
@@ -74,11 +74,16 @@ async function pushOne(
       timeout: 10_000,
     });
     recordSubscriptionSuccess(deps.sqlite, subscription.id);
+    return true;
   } catch (error) {
     const status = statusCode(error);
     deps.log?.({ event: 'push-failed', statusCode: status ?? null });
-    if (status === 404 || status === 410) deleteSubscriptionById(deps.sqlite, subscription.id);
-    else recordSubscriptionFailure(deps.sqlite, subscription.id);
+    if (status === 404 || status === 410) {
+      deleteSubscriptionById(deps.sqlite, subscription.id);
+      return true;
+    }
+    recordSubscriptionFailure(deps.sqlite, subscription.id);
+    return false;
   }
 }
 
@@ -110,14 +115,22 @@ export async function deliver(deps: DeliverDeps, trigger: NotificationTrigger): 
     for (const subscription of subscriptionsFor(deps.sqlite, userId)) pushes.push({ subscription, notification });
   }
 
-  await runWithConcurrency(pushes, 8, ({ subscription, notification }) => pushOne(deps, subscription, notification));
+  await runWithConcurrency(pushes, 8, async ({ subscription, notification }) => {
+    await pushOne(deps, subscription, notification);
+  });
   return { delivered: recipients.length };
 }
 
 // Deliver an already-persisted item without inserting a duplicate inbox row.
-export async function deliverStored(deps: DeliverDeps, notification: Notification): Promise<void> {
+export async function deliverStored(
+  deps: DeliverDeps,
+  notification: Notification,
+  options: { retryFailures?: boolean } = {},
+): Promise<void> {
   deps.stream.publish(notification.userId, notification);
-  await runWithConcurrency(subscriptionsFor(deps.sqlite, notification.userId), 8, (subscription) =>
-    pushOne(deps, subscription, notification),
-  );
+  let failed = false;
+  await runWithConcurrency(subscriptionsFor(deps.sqlite, notification.userId), 8, async (subscription) => {
+    if (!(await pushOne(deps, subscription, notification))) failed = true;
+  });
+  if (failed && options.retryFailures) throw new Error('push_delivery_failed');
 }

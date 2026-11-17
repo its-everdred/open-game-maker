@@ -9,7 +9,7 @@ import { parseBody } from '../app/validate.js';
 import type { ApiBindings } from '../app/types.js';
 import { authorizedGame } from '../games/authorize.js';
 import { requirePrincipal } from '../app/principal.js';
-import { roundForBuild } from '../review-rounds/store.js';
+import { latestRoundForTicket, roundForBuild } from '../review-rounds/store.js';
 import {
   beginReviewAnswer,
   bindReviewEpisode,
@@ -42,7 +42,9 @@ export default new Hono<ApiBindings>()
     const deps = c.get('deps');
     const previews = (await listPreviews(deps, game.id)).filter((preview) => {
       const round = roundForBuild(deps.db, game.id, preview.ticket, preview.buildId);
-      return !round || round.verdict === null;
+      return (
+        !round || (round.verdict === null && latestRoundForTicket(deps.db, game.id, preview.ticket)?.id === round.id)
+      );
     });
     const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
     const named = await Promise.all(
@@ -71,6 +73,8 @@ export default new Hono<ApiBindings>()
     if (!/^[1-9]\d{0,15}$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
     const round = roundForBuild(c.get('deps').db, game.id, ticket, buildId);
     if (round && requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
+    if (round && latestRoundForTicket(c.get('deps').db, game.id, ticket)?.id !== round.id)
+      throw new HttpError(409, 'review_round_superseded');
     const message = `Preview review of ${buildId}: ${verdict}.${note ? `\n${note}` : ''}`;
     const deps = c.get('deps');
     const guard = beginReviewAnswer(deps.db, game.id, ticket, `preview:${buildId}`);

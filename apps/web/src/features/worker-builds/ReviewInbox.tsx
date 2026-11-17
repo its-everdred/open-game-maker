@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   commandPath,
   commandSource,
-  commandTitle,
   targetPath,
   targetSource,
   type ReviewCommand,
@@ -10,7 +9,7 @@ import {
 } from './review-command';
 import { Dialog } from '../../components/Dialog';
 import { CommandReviewCard } from './CommandReviewCard';
-import { MissingMedia } from './MissingMedia';
+import { MissingMediaStatus, useMissingMedia } from './MissingMedia';
 import { PreviewCard } from '../../routes/review/PreviewReviews';
 import { RoundCard } from '../../routes/review/RoundReviews';
 import type { WorkerReview } from './useWorkerReviews';
@@ -40,6 +39,72 @@ export function ReviewInbox({
   const [command, setCommand] = useState<ReviewCommand | undefined>();
   const [sending, setSending] = useState(false);
   const [target, setTarget] = useState<(typeof targets)[number] | undefined>();
+  const pendingReviews = reviews.filter((review) => !answered.has(keyOf(review)));
+  const pendingCommands = commands.filter(
+    (item) => !answered.has(`command:${commandSource(item)}:${item.decision_id}`),
+  );
+  const pendingTargets = targets.filter((item) => !answeredTickets.has(`${targetSource(item)}:${item.ticket}`));
+  const queue = [
+    ...pendingReviews.map((item) => ({ kind: 'review' as const, item, key: keyOf(item) })),
+    ...pendingCommands.map((item) => ({
+      kind: 'command' as const,
+      item,
+      key: `command:${commandSource(item)}:${item.decision_id}`,
+    })),
+    ...pendingTargets.map((item) => ({
+      kind: 'target' as const,
+      item,
+      key: `target:${targetSource(item)}:${item.ticket}`,
+    })),
+  ];
+  const missingPaths = [
+    ...pendingReviews.flatMap((review) =>
+      review.kind === 'round' && !review.round.media.some((item) => item.role !== 'target') && !review.round.buildId
+        ? [
+            `/games/${encodeURIComponent(review.gameId)}/review-rounds/${encodeURIComponent(review.round.id)}/missing-media`,
+          ]
+        : [],
+    ),
+    ...pendingCommands.flatMap((item) =>
+      item.options.every(({ media, audio, audioClips, playable }) => media || audio || audioClips?.length || playable)
+        ? []
+        : [`${commandPath(item)}/${encodeURIComponent(item.decision_id)}/missing-media`],
+    ),
+    ...pendingTargets.map(targetPath),
+  ];
+  const missing = useMissingMedia(missingPaths);
+  const missingStatus = (path: string) => (
+    <MissingMediaStatus status={missing.statuses[path]} onRetry={() => missing.retry(path)} />
+  );
+  const activeKey = current
+    ? keyOf(current)
+    : command
+      ? `command:${commandSource(command)}:${command.decision_id}`
+      : target
+        ? `target:${targetSource(target)}:${target.ticket}`
+        : undefined;
+  const show = (entry: (typeof queue)[number] | undefined) => {
+    setCurrent(entry?.kind === 'review' ? entry.item : undefined);
+    setCommand(entry?.kind === 'command' ? entry.item : undefined);
+    setTarget(entry?.kind === 'target' ? entry.item : undefined);
+  };
+  const next = () => {
+    const index = queue.findIndex((entry) => entry.key === activeKey);
+    show(queue[index < 0 ? 0 : (index + 1) % queue.length]);
+  };
+  useEffect(() => {
+    if (!activeKey && queue.length) show(queue[0]);
+  });
+  const queueControls = (
+    <div>
+      <p aria-live="polite">{queue.length} left</p>
+      {(queue.length > 1 || (activeKey && !queue.some((entry) => entry.key === activeKey))) && (
+        <button type="button" disabled={sending} onClick={next}>
+          Next
+        </button>
+      )}
+    </div>
+  );
   useEffect(() => {
     if (current?.kind !== 'round' || !current.round.buildId) return;
     const recovered = reviews.find(
@@ -47,19 +112,28 @@ export function ReviewInbox({
     );
     if (recovered) setCurrent(recovered);
   }, [current, reviews]);
+  useEffect(() => {
+    if (!current || answered.has(keyOf(current))) return;
+    if (reviews.some((review) => keyOf(review) === keyOf(current))) return;
+    const ticket = current.kind === 'standalone-preview' ? current.preview.ticket : current.round.ticket;
+    const replacement = reviews.find(
+      (review) =>
+        review.gameId === current.gameId &&
+        (review.kind === 'standalone-preview' ? review.preview.ticket : review.round.ticket) === ticket,
+    );
+    if (replacement) setCurrent(replacement);
+  }, [answered, current, reviews]);
   if (target) {
     return (
       <Dialog
         title="Needs Review"
         className="job-conversation-dialog build-review-dialog"
         backdropClassName="job-conversation-backdrop"
-        onClose={() => setTarget(undefined)}
+        onClose={onClose}
       >
+        {queueControls}
         <p>{target.title}</p>
-        <MissingMedia path={targetPath(target)} />
-        <button type="button" onClick={() => setTarget(undefined)}>
-          Back
-        </button>
+        {missingStatus(targetPath(target))}
       </Dialog>
     );
   }
@@ -69,16 +143,17 @@ export function ReviewInbox({
         title="Needs Review"
         className="job-conversation-dialog build-review-dialog"
         backdropClassName="job-conversation-backdrop"
-        onClose={() => setCommand(undefined)}
+        onClose={onClose}
       >
+        {queueControls}
         <p role="alert">The playable preview is unavailable.</p>
-        <button type="button" onClick={() => setCommand(undefined)}>
-          Back
-        </button>
       </Dialog>
     );
   }
-  if (command && command.options.every(({ media, audio, playable }) => media || audio || playable)) {
+  if (
+    command &&
+    command.options.every(({ media, audio, audioClips, playable }) => media || audio || audioClips?.length || playable)
+  ) {
     return (
       <Dialog
         title="Needs Review"
@@ -89,11 +164,10 @@ export function ReviewInbox({
         }}
       >
         <div className="decision-deck-body">
+          {queueControls}
           {error && <p role="alert">Could not load all reviews.</p>}
-          <button type="button" disabled={sending} onClick={() => setCommand(undefined)}>
-            Back
-          </button>
           <CommandReviewCard
+            key={activeKey}
             command={command}
             onSendingChange={setSending}
             ticketState={
@@ -115,12 +189,10 @@ export function ReviewInbox({
         title="Needs Review"
         className="job-conversation-dialog build-review-dialog"
         backdropClassName="job-conversation-backdrop"
-        onClose={() => setCommand(undefined)}
+        onClose={onClose}
       >
-        <MissingMedia path={`${commandPath(command)}/${encodeURIComponent(command.decision_id)}/missing-media`} />
-        <button type="button" onClick={() => setCommand(undefined)}>
-          Back
-        </button>
+        {queueControls}
+        {missingStatus(`${commandPath(command)}/${encodeURIComponent(command.decision_id)}/missing-media`)}
       </Dialog>
     );
   }
@@ -132,55 +204,8 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
-        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
-          ×
-        </button>
-        <div className="decision-deck-body">
-          {error && <p role="alert">Could not load all reviews.</p>}
-          {reviews
-            .filter((review) => !answered.has(keyOf(review)))
-            .map((review) => (
-              <div key={keyOf(review)}>
-                <button type="button" className="worker-review-item" onClick={() => setCurrent(review)}>
-                  {review.gameTitle ? `${review.gameTitle} · ` : ''}
-                  {review.kind === 'standalone-preview'
-                    ? review.preview.question || review.preview.title || `Ticket ${review.preview.ticket}`
-                    : review.round.question || `Ticket ${review.round.ticket}`}
-                </button>
-                {review.kind === 'round' && review.round.media.length === 0 && !review.round.buildId && (
-                  <MissingMedia
-                    path={`/games/${encodeURIComponent(review.gameId)}/review-rounds/${encodeURIComponent(review.round.id)}/missing-media`}
-                  />
-                )}
-              </div>
-            ))}
-          {targets
-            .filter((item) => !answeredTickets.has(`${targetSource(item)}:${item.ticket}`))
-            .map((item) => (
-              <div key={`${targetSource(item)}:${item.ticket}`}>
-                <button type="button" className="worker-review-item" onClick={() => setTarget(item)}>
-                  {'source' in item ? 'Core · ' : ''}
-                  {item.title}
-                </button>
-                <MissingMedia path={targetPath(item)} />
-              </div>
-            ))}
-          {commands
-            .filter((item) => !answered.has(`command:${commandSource(item)}:${item.decision_id}`))
-            .map((item) => (
-              <div key={`${commandSource(item)}:${item.decision_id}`}>
-                <button type="button" className="worker-review-item" onClick={() => setCommand(item)}>
-                  {commandTitle(item)} · {item.summary ?? item.title}
-                </button>
-                {!item.options.every(({ media, audio, playable }) => media || audio || playable) && (
-                  <MissingMedia path={`${commandPath(item)}/${encodeURIComponent(item.decision_id)}/missing-media`} />
-                )}
-              </div>
-            ))}
-          {!error && reviews.length === 0 && commands.length === 0 && targets.length === 0 && (
-            <p>All reviews answered.</p>
-          )}
-        </div>
+        {error ? <p role="alert">Could not load all reviews.</p> : null}
+        {queue.length === 0 && !error ? <p>All reviews answered.</p> : null}
       </Dialog>
     );
   }
@@ -195,15 +220,15 @@ export function ReviewInbox({
       title="Needs Review"
       className="job-conversation-dialog decision-deck build-review-dialog"
       backdropClassName="job-conversation-backdrop"
-      onClose={onClose}
+      onClose={() => {
+        if (!sending) onClose();
+      }}
     >
-      <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+      <button type="button" className="job-conversation-close" aria-label="Close" disabled={sending} onClick={onClose}>
         ×
       </button>
       <div className="decision-deck-body">
-        <button type="button" onClick={() => setCurrent(undefined)}>
-          Back
-        </button>
+        {queueControls}
         {answered.has(keyOf(current)) && (
           <p role="status">
             Ticket state:{' '}
@@ -214,30 +239,32 @@ export function ReviewInbox({
             )?.state ?? 'updating'}
           </p>
         )}
-        {current.kind === 'round' && current.round.media.length === 0 && !current.round.buildId ? (
-          <MissingMedia
-            path={`/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media`}
-          />
+        {current.kind === 'round' &&
+        !current.round.media.some((item) => item.role !== 'target') &&
+        !current.round.buildId ? (
+          missingStatus(
+            `/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media`,
+          )
         ) : current.kind === 'round' ? (
-          <RoundCard key={keyOf(current)} gameId={current.gameId} round={current.round} onAnswered={done} />
+          <RoundCard
+            key={keyOf(current)}
+            gameId={current.gameId}
+            round={current.round}
+            onAnswered={done}
+            swipe
+            onPendingChange={setSending}
+          />
         ) : (
           <div key={keyOf(current)}>
-            {(current.kind === 'preview' ? current.round.media : []).map((item) => (
-              <div className="review-deck-playable" key={item.url}>
-                {item.kind === 'still' ? (
-                  <img className="review-deck-media" src={item.url} alt="Review" />
-                ) : (
-                  <video
-                    className="review-deck-media"
-                    style={{ pointerEvents: 'auto' }}
-                    src={item.url}
-                    controls
-                    playsInline
-                  />
-                )}
-              </div>
-            ))}
-            <PreviewCard gameId={current.gameId} preview={current.preview} onAnswered={done} />
+            <PreviewCard
+              gameId={current.gameId}
+              preview={current.preview}
+              onAnswered={done}
+              swipe
+              onPendingChange={setSending}
+              media={current.kind === 'preview' ? current.round.media : []}
+              {...(current.kind === 'preview' ? { roundId: current.round.id } : {})}
+            />
           </div>
         )}
       </div>

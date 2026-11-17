@@ -81,6 +81,118 @@ const energyView = {
 
 test.use({ serviceWorkers: 'block' });
 
+test('reviews a queue with swipe, undo, notes and an option pick', async ({ page }) => {
+  test.setTimeout(90_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await stubBrandArt(page);
+  await installGamesMenuApi(page);
+  let roundAnswer: unknown;
+  let choiceAnswer: unknown;
+  let asked = 0;
+  const options = ['A', 'B', 'C'].map((label) => ({
+    id: label.toLowerCase(),
+    label,
+    media: { url: '/art/logo.webp', width: 100, height: 100 },
+  }));
+  await page.route(/\/api\/v1\/me\/commands(?:\?.*)?$/, (route) =>
+    json(route, {
+      commands: [
+        {
+          game_id: gameId,
+          game_title: 'Moon Vault',
+          job_id: null,
+          ticket: '43',
+          title: 'Choose',
+          command_id: 'c',
+          decision_id: 'd',
+          version: 1,
+          question: 'Which?',
+          options,
+          blocking: true,
+          opened_at: '2026-11-13T00:00:00Z',
+        },
+      ],
+      sessions: [],
+    }),
+  );
+  await page.route(/\/api\/v1\/games\/[^/]+\/review-rounds\?/, (route) =>
+    json(route, {
+      rounds: [
+        {
+          id: 'r1',
+          ticket: '41',
+          question: 'Review?',
+          media: [
+            { kind: 'still', url: '/art/logo.webp', role: 'target' },
+            { kind: 'still', url: '/art/logo.webp' },
+            { kind: 'clip', url: '/clip.mp4' },
+            { kind: 'audio', url: '/clip.mp3' },
+          ],
+        },
+        { id: 'r2', ticket: '42', question: 'Missing?', media: [] },
+      ],
+    }),
+  );
+  await page.route(/\/api\/v1\/games\/[^/]+\/previews$/, (route) => json(route, { previews: [] }));
+  await page.route(/\/review-rounds\/r2\/missing-media$/, (route) => {
+    asked++;
+    return json(route, { status: 'asked' });
+  });
+  await page.route(/\/review-rounds\/r1\/answer$/, (route) => {
+    roundAnswer = route.request().postDataJSON();
+    return json(route, { status: 'answered' });
+  });
+  await page.route(/\/review-rounds\/r1\/status$/, (route) =>
+    json(route, { status: roundAnswer ? 'sent' : 'pending' }),
+  );
+  await page.route(/\/commands\/d\/answer$/, (route) => {
+    choiceAnswer = route.request().postDataJSON();
+    return json(route, { status: 'answered' });
+  });
+  await page.goto('/all');
+  await page.locator('.worker-tracker-button').click();
+  const dialog = page.getByRole('dialog', { name: 'Needs Review' });
+  await expect(dialog.getByText('3 left')).toBeVisible();
+  await expect(dialog.getByLabel('Concept target and review')).toBeVisible();
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+    { width: 820, height: 1180 },
+    { width: 1180, height: 820 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(dialog.getByRole('button', { name: 'Looks good' })).toBeInViewport();
+    await expect(dialog.getByRole('button', { name: 'Needs changes' })).toBeInViewport();
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog.locator('video')).toHaveAttribute('loop');
+  await expect(dialog.locator('audio')).toHaveCount(1);
+  await expect.poll(() => asked).toBe(1);
+  const media = dialog.locator('.review-deck-playable').first();
+  const swipe = async (right: boolean) => {
+    await media.scrollIntoViewIfNeeded();
+    const box = (await media.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + (right ? 110 : -110), box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+  };
+  await swipe(true);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  expect(roundAnswer).toBeUndefined();
+  await swipe(false);
+  await page.getByLabel('Note (optional)').fill('More contrast');
+  await page.getByRole('button', { name: 'Send changes' }).click();
+  await expect.poll(() => roundAnswer, { timeout: 10_000 }).toEqual({ verdict: 'needs_work', note: 'More contrast' });
+  await expect(dialog.getByRole('status').filter({ hasText: 'sent to agent' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await expect(dialog.getByText('Asked the agent for media in the next round.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await dialog.getByLabel('Note (optional)').fill('Keep blue');
+  await dialog.getByRole('button', { name: 'Pick B: B' }).click();
+  await expect.poll(() => choiceAnswer).toMatchObject({ option_id: 'b', review: { notes: 'Keep blue' } });
+});
+
 test('keeps sound clickable while the library menu is expanded', async ({ page }) => {
   await installAuthRoutes(page, { signedIn: true });
   await installGamesMenuApi(page);

@@ -20,6 +20,15 @@ export function getRound(db: Db, gameId: string, id: string): ReviewRound | unde
     .get();
 }
 
+export function latestRoundForTicket(db: Db, gameId: string, ticket: string): ReviewRound | undefined {
+  return db
+    .select()
+    .from(schema.reviewRounds)
+    .where(and(eq(schema.reviewRounds.gameId, gameId), eq(schema.reviewRounds.ticket, ticket)))
+    .orderBy(desc(sql`julianday(${schema.reviewRounds.postedAt})`), desc(sql`rowid`))
+    .get();
+}
+
 // A retry of the same answer is harmless; a different answer cannot overwrite history.
 export function answerRound(
   db: Db,

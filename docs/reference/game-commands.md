@@ -98,8 +98,10 @@ The Review view shows open art and sound rounds posted with `gm review post`, us
 Mock audio must be uploaded as a local file through the ticket-scoped preview relay.
 The game owner can answer Looks right or Needs work with a note; the answer is recorded against that round. Gameplay
 rounds appear as playable previews and include their design question.
+When a round names a concept target, the Review view places it beside the work or playable preview.
 For fidelity phases, a Looks right answer with a note stays on the current phase so the note can be addressed before advancing.
-An unanswered round gets one recorded notification after 24 hours. Waiting never records an answer.
+New rounds and creator Commands are grouped into a notification for the game owner. An unanswered round also gets one
+recorded reminder after 24 hours. Waiting never records an answer.
 
 ## Preview reviews
 

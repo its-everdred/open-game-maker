@@ -6,6 +6,7 @@ import { queryClient } from '../../app/query';
 import { creatorCommandsQueryKey, gameCommandsQueryKey } from '../commands-inbox/commands';
 import { mediaKindOf, withoutLinks } from '../commands-inbox/review';
 import { PlayableCard } from '../commands-inbox/playable';
+import { Dialog } from '../../components/Dialog';
 
 export function CommandReviewCard({
   command,
@@ -23,6 +24,7 @@ export function CommandReviewCard({
   const [sending, setSending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
+  const [zoom, setZoom] = useState<{ url: string; label: string }>();
   const coreState = useQuery({
     queryKey: ['core-review-state', command.ticket],
     enabled: saved && 'source' in command && Boolean(command.ticket),
@@ -43,7 +45,7 @@ export function CommandReviewCard({
           ...(change ? { change_request: true } : {}),
           ...(change
             ? { review: { likes: [], dislikes: [{ option_id: optionId }], notes: note.trim() } }
-            : { review: { likes: [optionId], dislikes: [] } }),
+            : { review: { likes: [optionId], dislikes: [], ...(note.trim() ? { notes: note.trim() } : {}) } }),
         },
       });
       await Promise.all([
@@ -62,27 +64,43 @@ export function CommandReviewCard({
   return (
     <section className="review-deck" aria-label={command.summary ?? command.title}>
       <p>{withoutLinks(command.question)}</p>
-      {command.options.map((option, index) => (
-        <div className="worker-review-option" key={option.id}>
-          {option.playable ? (
-            <PlayableCard gameId={commandSource(command)} card={option} options={command.options} />
-          ) : option.media && mediaKindOf(option.media) === 'audio' ? (
-            <audio controls src={option.media.url} aria-label={option.label} />
-          ) : option.media && mediaKindOf(option.media) === 'video' ? (
-            <video controls playsInline src={option.media.url} className="review-deck-media" />
-          ) : option.media ? (
-            <img src={option.media.url} alt={option.label} className="review-deck-media" />
-          ) : null}
-          {option.audio && <audio controls src={option.audio.url} aria-label={`${option.label} audio`} />}
-          <button disabled={sending || saved} type="button" onClick={() => void send(option.id, false)}>
-            Pick {String.fromCharCode(65 + index)}: {withoutLinks(option.label)}
-          </button>
-        </div>
-      ))}
       <label>
-        Change this
+        Note (optional)
         <textarea value={note} maxLength={2000} onChange={(event) => setNote(event.target.value)} />
       </label>
+      <div className="worker-review-options" aria-label="Review options">
+        {command.options.map((option, index) => (
+          <div className="worker-review-option" key={option.id}>
+            {option.playable ? (
+              <PlayableCard gameId={commandSource(command)} card={option} options={command.options} />
+            ) : option.media && mediaKindOf(option.media) === 'audio' ? (
+              <audio controls src={option.media.url} aria-label={option.label} />
+            ) : option.media && mediaKindOf(option.media) === 'video' ? (
+              <video controls playsInline autoPlay muted loop src={option.media.url} className="review-deck-media" />
+            ) : option.media ? (
+              <button
+                type="button"
+                className="worker-review-image"
+                onClick={() => setZoom({ url: option.media!.url, label: option.label })}
+              >
+                <img src={option.media.url} alt={option.label} className="review-deck-media" />
+              </button>
+            ) : null}
+            {option.audio && <audio controls src={option.audio.url} aria-label={`${option.label} audio`} />}
+            {option.audioClips?.map((clip, index) => (
+              <audio
+                key={`${clip.url}:${index}`}
+                controls
+                src={clip.url}
+                aria-label={`${option.label} audio ${index + 2}`}
+              />
+            ))}
+            <button disabled={sending || saved} type="button" onClick={() => void send(option.id, false)}>
+              Pick {String.fromCharCode(65 + index)}: {withoutLinks(option.label)}
+            </button>
+          </div>
+        ))}
+      </div>
       <label>
         Option to change
         <select value={changeOption} onChange={(event) => setChangeOption(event.target.value)}>
@@ -103,10 +121,32 @@ export function CommandReviewCard({
       </button>
       {saved && (
         <p role="status">
-          Saved · Ticket state: {('source' in command ? coreState.data?.state : ticketState) ?? 'updating'}
+          Saved · sent to agent · Ticket state:{' '}
+          {('source' in command ? coreState.data?.state : ticketState) ?? 'updating'}
         </p>
       )}
       {error && <p role="alert">That answer did not send. Try again.</p>}
+      {zoom && (
+        <div
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') event.stopPropagation();
+          }}
+        >
+          <Dialog
+            title="Review image"
+            className="review-deck-fullscreen"
+            backdropClassName="review-deck-fullscreen-backdrop worker-review-sheet-backdrop"
+            onClose={() => setZoom(undefined)}
+          >
+            <div className="review-deck-fullscreen-media">
+              <img src={zoom.url} alt={zoom.label} />
+            </div>
+            <button type="button" onClick={() => setZoom(undefined)}>
+              Close
+            </button>
+          </Dialog>
+        </div>
+      )}
     </section>
   );
 }

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { aiurMediaTiming, MAX_AIUR_IMAGE_BYTES } from '../../src/commands/aiur-media.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
+import { insertChatRow } from '../../src/build-chat/store.js';
 
 // A registered game's Commands have no job, so their option media lives on the aiur host (#611). The Blobs staging
 // Command carried a picture per option and the deck showed text only. The inbox must turn each option's aiur media into
@@ -115,7 +116,7 @@ const stalled = (signal?: AbortSignal) =>
 const defaults = { ...aiurMediaTiming };
 afterEach(() => Object.assign(aiurMediaTiming, defaults));
 
-async function setup(options: Decision['options'], files: Record<string, File>) {
+async function setup(options: Decision['options'], files: Record<string, File>, creatorMarker = true) {
   const deps = seed();
   const decisionMedia = vi.fn(
     async (_id: string, attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile> => {
@@ -127,13 +128,13 @@ async function setup(options: Decision['options'], files: Record<string, File>) 
   deps.aiurClientForGame = async () =>
     ({
       baseUrl: 'http://127.0.0.1:4100',
-      decisions: async () => [decision(options)],
+      decisions: async () => [{ ...decision(options), ...(creatorMarker ? {} : { context: {} }) }],
       decisionMedia,
     }) as unknown as AiurClient;
   const { app } = await makeApp(deps);
   const read = async () => {
     const response = await app.request(`/api/v1/games/${ids.game}/commands`, { headers: asUser(ids.user) });
-    expect(response.status).toBe(200);
+    expect(response.status, await response.clone().text()).toBe(200);
     const body = (await response.json()) as {
       commands: Array<{ options: Array<{ id: string; label: string; media?: Record<string, unknown> }> }>;
     };
@@ -143,6 +144,85 @@ async function setup(options: Decision['options'], files: Record<string, File>) 
 }
 
 describe('a jobless Command’s option media', () => {
+  it('retains all Aiur sounds for a matching job-linked Command but not for a different version', async () => {
+    const options = [
+      {
+        id: 'pip',
+        label: 'Pip',
+        media: [attachment('voice-1', 'audio', 'audio/mpeg'), attachment('voice-2', 'audio', 'audio/mpeg')],
+      },
+      { id: 'hum', label: 'Hum', media: [attachment('voice-3', 'audio', 'audio/mpeg')] },
+    ];
+    const files = Object.fromEntries(
+      ['voice-1', 'voice-2', 'voice-3'].map((id, index) => [
+        id,
+        { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 51 + index]) },
+      ]),
+    );
+    const { deps, read } = await setup(options, files, false);
+    const jobId = 'j_61100000-0000-4000-8000-000000000001';
+    deps.db
+      .insert(schema.jobs)
+      .values({
+        id: jobId,
+        gameId: ids.game,
+        branchId: 'main',
+        familyId: ids.family,
+        creatorId: ids.user,
+        kind: 'feature',
+        complexity: 2,
+        state: 'running',
+        start: 'now',
+        slot: 'edit',
+        plan: JSON.stringify({ title: 'Job', summary: 'Review', scope: { included: [], excluded: [] }, tickets: [{ key: 'T1', skills: [], dependsOn: [], acceptanceCriteria: [] }] }),
+        reservation: JSON.stringify({ amountMicroUsd: 1, sizeClass: 'small', confidence: 'high' }),
+        hardCapMicroUsd: 1,
+        aiurIssueNumber: 12,
+        aiurRepo: 'fixture/blobs',
+        createdAt: AT,
+        updatedAt: AT,
+      })
+      .run();
+    insertChatRow(deps.sqlite, {
+      id: '01JBX2Q7M3K8V5N4R6T9W0YZAC',
+      jobId,
+      actor: 'agent',
+      kind: 'image',
+      media: { hash: `sha256:${'a'.repeat(64)}`, width: 320, height: 200 },
+    });
+    const addCommand = (id: string, version: number) =>
+      insertChatRow(deps.sqlite, {
+        id,
+        jobId,
+        at: AT,
+        actor: 'agent',
+        kind: 'command',
+        command: {
+          command_id: 'local',
+          decision_id: 'dec_blobs',
+          version,
+          question: 'Which?',
+          options: [
+            { id: 'pip', label: 'Pip', media_id: '01JBX2Q7M3K8V5N4R6T9W0YZAC' },
+            { id: 'hum', label: 'Hum' },
+          ],
+          blocking: true,
+          status: 'open',
+        },
+      });
+    addCommand('01JBX2Q7M3K8V5N4R6T9W0YZAB', 1);
+    const [pip] = (await read()) as Array<{ media?: unknown; audio?: unknown; audioClips?: unknown[] }>;
+    expect(pip!.media).toMatchObject({ width: 320 });
+    expect(pip!.audio).toBeDefined();
+    expect(pip!.audioClips).toHaveLength(1);
+    deps.sqlite
+      .prepare("UPDATE build_chat_messages SET command_json = json_set(command_json, '$.version', 2) WHERE id = ?")
+      .run('01JBX2Q7M3K8V5N4R6T9W0YZAB');
+    const [newer] = (await read()) as Array<{ media?: unknown; audio?: unknown; audioClips?: unknown[] }>;
+    expect(newer!.media).toMatchObject({ width: 320 });
+    expect(newer!.audio).toBeUndefined();
+    expect(newer!.audioClips).toBeUndefined();
+  });
   it('signs image, clip and sample media so the deck can show each option', async () => {
     const png = new Uint8Array(await readFile(PNG));
     const { read, deps } = await setup(
@@ -199,6 +279,7 @@ describe('a jobless Command’s option media', () => {
           media: [
             attachment('med_pip_voice', 'audio', 'audio/mpeg', { duration_ms: 2500 }),
             attachment('med_pip', 'image', 'image/png'),
+            attachment('med_pip_voice_2', 'audio', 'audio/mpeg', { duration_ms: 1200 }),
           ],
         },
         { id: 'hum', label: 'Hum', media: [attachment('med_hum', 'audio', 'audio/mpeg', { duration_ms: 2000 })] },
@@ -206,15 +287,21 @@ describe('a jobless Command’s option media', () => {
       {
         med_pip: { mime: 'image/png', bytes: png },
         med_pip_voice: { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 51]) },
+        med_pip_voice_2: { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 52]) },
         med_hum: { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 51]) },
       },
     );
 
-    const [pip, hum] = (await read()) as Array<{ media?: Record<string, unknown>; audio?: Record<string, unknown> }>;
+    const [pip, hum] = (await read()) as Array<{
+      media?: Record<string, unknown>;
+      audio?: Record<string, unknown>;
+      audioClips?: Record<string, unknown>[];
+    }>;
 
     expect(pip!.media).toMatchObject({ kind: 'image' });
     expect(pip!.audio).toMatchObject({ duration_ms: 2500 });
     expect(String(pip!.audio!.url)).toContain('/blobs/');
+    expect(pip!.audioClips).toMatchObject([{ duration_ms: 1200 }]);
     // A card whose only item is a sound already plays it as its media; it gets no second copy.
     expect(hum!.media).toMatchObject({ kind: 'audio' });
     expect(hum!).not.toHaveProperty('audio');

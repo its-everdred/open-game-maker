@@ -10,6 +10,13 @@ const base = {
 };
 
 describe('review submissions', () => {
+  it('accepts one named concept target alongside the work but not a target alone', () => {
+    const target = { kind: 'still', ref: 'target.png', role: 'target' };
+    const work = { kind: 'still', ref: 'work.png' };
+    expect(ReviewSubmission.safeParse({ ...base, category: 'art', media: [target, work] }).success).toBe(true);
+    expect(ReviewSubmission.safeParse({ ...base, category: 'art', media: [target] }).success).toBe(false);
+    expect(ReviewSubmission.safeParse({ ...base, category: 'art', media: [target, target, work] }).success).toBe(false);
+  });
   it('requires a capture clip with audio for sound', () => {
     expect(
       ReviewSubmission.safeParse({ ...base, category: 'sound', media: [{ kind: 'audio', ref: 'cue.wav' }] }).success,

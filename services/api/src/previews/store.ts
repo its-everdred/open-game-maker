@@ -11,7 +11,7 @@ import { completeBuildCache } from '../builds/cache-plan.js';
 import { BadArchive, untarGz } from '../builds/untar.js';
 import { scanBuild } from '../gameplay/paid-integrations.js';
 import { paidApisDuringGameplay } from '../gameplay/policy.js';
-import { answerRound, getRound, roundForBuild, submitRound } from '../review-rounds/store.js';
+import { answerRound, getRound, latestRoundForTicket, roundForBuild, submitRound } from '../review-rounds/store.js';
 
 export type Preview = {
   gameId: string;
@@ -255,16 +255,19 @@ export async function answerPreview(
     if (!preview || preview.answered || preview.buildId !== buildId) return false;
     if (preview.pendingMessage !== undefined && preview.pendingMessage !== message) return false;
     const round = roundForBuild(deps.db, gameId, ticket, buildId);
-    if (
-      round &&
-      !answerRound(deps.db, gameId, round.id, {
-        verdict: verdict === 'looks right' ? 'approved' : 'needs_work',
-        notes: note ?? null,
-        source: 'preview',
-        at: new Date().toISOString(),
-      })
-    )
-      return false;
+    if (round) {
+      const accepted = deps.db.transaction(
+        (tx) =>
+          latestRoundForTicket(tx, gameId, ticket)?.id === round.id &&
+          answerRound(tx, gameId, round.id, {
+            verdict: verdict === 'looks right' ? 'approved' : 'needs_work',
+            notes: note ?? null,
+            source: 'preview',
+            at: new Date().toISOString(),
+          }),
+      );
+      if (!accepted) return false;
+    }
     if (round) {
       // The durable ledger is the outbox for track rounds; the reconciler owns their delivery.
       await writePreview(file, { ...preview, ...access(), pendingMessage: message, answered: true });

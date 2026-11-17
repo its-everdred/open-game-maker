@@ -3,6 +3,8 @@ import { useState } from 'react';
 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
+import { SwipeVerdict } from '../../features/worker-builds/SwipeVerdict';
+import { RoundMedia } from './RoundMedia';
 
 export type Round = {
   category?: 'art' | 'gameplay' | 'sound';
@@ -10,7 +12,7 @@ export type Round = {
   id: string;
   ticket: string;
   question: string | null;
-  media: { kind: 'still' | 'clip' | 'audio'; url: string }[];
+  media: { kind: 'still' | 'clip' | 'audio'; url: string; role?: 'target' }[];
 };
 const key = (gameId: string) => ['game-review-rounds', gameId] as const;
 
@@ -33,66 +35,99 @@ export function RoundReviews({ gameId, rounds }: { gameId: string; rounds: Round
   );
 }
 
-export function RoundCard({ gameId, round, onAnswered }: { gameId: string; round: Round; onAnswered?(): void }) {
+export function RoundCard({
+  gameId,
+  round,
+  onAnswered,
+  swipe = false,
+  onPendingChange,
+}: {
+  gameId: string;
+  round: Round;
+  onAnswered?(): void;
+  swipe?: boolean;
+  onPendingChange?(pending: boolean): void;
+}) {
   const [note, setNote] = useState('');
   const answer = useMutation({
-    mutationFn: (verdict: 'approved' | 'needs_work') =>
+    mutationFn: ({ verdict, note: answerNote }: { verdict: 'approved' | 'needs_work'; note: string }) =>
       api(`/games/${encodeURIComponent(gameId)}/review-rounds/${encodeURIComponent(round.id)}/answer`, {
         method: 'POST',
-        json: { verdict, ...(note.trim() ? { note } : {}) },
+        json: { verdict, ...(answerNote.trim() ? { note: answerNote } : {}) },
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: key(gameId) });
       onAnswered?.();
     },
   });
-  return (
-    <section className="review-deck" aria-label={`Review for ticket ${round.ticket}`}>
-      {round.media.map((item) => (
-        <div className="review-deck-playable" key={item.url}>
-          {item.kind === 'still' ? (
-            <img className="review-deck-media" src={item.url} alt="Review" />
-          ) : item.kind === 'audio' ? (
-            <audio src={item.url} controls aria-label="Review audio" />
-          ) : (
-            <video
-              className="review-deck-media"
-              style={{ pointerEvents: 'auto' }}
-              src={item.url}
-              controls
-              playsInline
-            />
-          )}
-        </div>
-      ))}
+  const delivery = useQuery({
+    queryKey: ['review-round-status', gameId, round.id],
+    enabled: answer.isSuccess,
+    queryFn: () =>
+      api<{ status: 'open' | 'pending' | 'sent'; nextPhase?: { phase: string; ticket: string }; newRound?: boolean }>(
+        `/games/${encodeURIComponent(gameId)}/review-rounds/${encodeURIComponent(round.id)}/status`,
+      ),
+    refetchInterval: 5000,
+    retry: false,
+  });
+  const media = (
+    <>
+      <RoundMedia media={round.media} />
       {round.question ? <p>{round.question}</p> : null}
       {round.buildId && <p role="alert">The playable review is unavailable. Try again later.</p>}
-      <label>
-        Note (optional)
-        <textarea
-          disabled={Boolean(round.buildId)}
-          value={note}
-          maxLength={3900}
-          onChange={(event) => setNote(event.target.value)}
-        />
-      </label>
-      <div className="review-deck-actions">
-        <button
-          type="button"
+    </>
+  );
+  return (
+    <section className="review-deck" aria-label={`Review for ticket ${round.ticket}`}>
+      {swipe ? (
+        <SwipeVerdict
           disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
-          onClick={() => answer.mutate('approved')}
+          onPendingChange={onPendingChange}
+          onSend={async (verdict, answerNote) => {
+            await answer.mutateAsync({ verdict, note: answerNote });
+          }}
         >
-          Looks right
-        </button>
-        <button
-          type="button"
-          disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
-          onClick={() => answer.mutate('needs_work')}
-        >
-          Needs work
-        </button>
-      </div>
-      {answer.isSuccess && <p role="status">Saved</p>}
+          {media}
+        </SwipeVerdict>
+      ) : (
+        <>
+          {media}
+          <label>
+            Note (optional)
+            <textarea
+              disabled={Boolean(round.buildId)}
+              value={note}
+              maxLength={3900}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+          <div className="review-deck-actions">
+            <button
+              type="button"
+              disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
+              onClick={() => answer.mutate({ verdict: 'approved', note })}
+            >
+              Looks right
+            </button>
+            <button
+              type="button"
+              disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
+              onClick={() => answer.mutate({ verdict: 'needs_work', note })}
+            >
+              Needs work
+            </button>
+          </div>
+        </>
+      )}
+      {answer.isSuccess && (
+        <p role="status">
+          Saved · {delivery.data?.status === 'sent' ? 'sent to agent' : 'sending to agent'}
+          {delivery.data?.newRound ? ' · New round ready' : ''}
+          {delivery.data?.nextPhase
+            ? ` · Next phase: ${delivery.data.nextPhase.phase} (ticket ${delivery.data.nextPhase.ticket})`
+            : ''}
+        </p>
+      )}
       {answer.isError ? <p role="alert">The review may not have sent. Tap the same verdict to retry.</p> : null}
     </section>
   );

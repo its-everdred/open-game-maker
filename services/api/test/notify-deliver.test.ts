@@ -47,6 +47,28 @@ describe('notification rendering', () => {
 });
 
 describe('deliver', () => {
+  it('reports retryable push failures for a stored review notification', async () => {
+    const deps = makeDeps();
+    upsertSubscription(deps.sqlite, ids.userOne, subscription('https://push.example.test/one'));
+    const notification = insertNotification(deps.sqlite, {
+      userId: ids.userOne,
+      kind: 'review.ready',
+      title: 'Reviews are ready',
+      body: 'New items are waiting.',
+    });
+    const sendNotification = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 503 })
+      .mockResolvedValueOnce({ statusCode: 201 });
+    const delivery = { sqlite: deps.sqlite, stream: { publish: vi.fn() }, push: { sendNotification } };
+    await expect(deliverStored(delivery, notification, { retryFailures: true })).rejects.toThrow(
+      'push_delivery_failed',
+    );
+    await expect(deliverStored(delivery, notification, { retryFailures: true })).resolves.toBeUndefined();
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(sendNotification.mock.calls[0]![1] as string).id).toBe(notification.id);
+    expect(JSON.parse(sendNotification.mock.calls[1]![1] as string).id).toBe(notification.id);
+  });
   it('pushes an existing reminder without writing a second inbox item', async () => {
     const deps = makeDeps();
     upsertSubscription(deps.sqlite, ids.userOne, subscription('https://push.example.test/one'));
