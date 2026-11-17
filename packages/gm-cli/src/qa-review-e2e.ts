@@ -108,6 +108,8 @@ async function runViewport(
   const stills: string[] = [];
   const media = (file: string) => readFileSync(new URL(file, MEDIA_DIR)).toString('base64');
   const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
+  // Whether --break-media found the review picture to break; a run that broke nothing proves nothing.
+  let broke = false;
   try {
     const seeded = await internal(config, '/review-fixtures', {
       method: 'POST',
@@ -121,8 +123,9 @@ async function runViewport(
       await context.route('**/*', async (route) => {
         if (route.request().resourceType() !== 'image') return route.fallback();
         const response = await route.fetch();
-        if ((await response.body()).equals(picture)) return route.fulfill({ status: 404, body: '' });
-        return route.fulfill({ response });
+        if (!(await response.body()).equals(picture)) return route.fulfill({ response });
+        broke = true;
+        return route.fulfill({ status: 404, body: '' });
       });
     }
     await context.addCookies([{ ...config.cookie, url: config.origin }]);
@@ -193,9 +196,14 @@ async function runViewport(
     await still('command-sent');
     const alert = dialog.getByRole('alert');
     const failure = (await alert.count()) ? `the deck showed: ${await alert.first().innerText()}` : reached(report);
+    if (config.breakMedia && !broke)
+      return { viewport: name, ok: false, failure: '--break-media broke no picture', stills };
     return failure === null ? { viewport: name, ok: true, stills } : { viewport: name, ok: false, failure, stills };
   } catch (error) {
-    return { viewport: name, ok: false, failure: (error as Error).message, stills };
+    const failure = (error as Error).message;
+    if (config.breakMedia && !broke)
+      return { viewport: name, ok: false, failure: `--break-media broke no picture (${failure})`, stills };
+    return { viewport: name, ok: false, failure, stills };
   } finally {
     await context.close();
     await internal(config, `/review-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);

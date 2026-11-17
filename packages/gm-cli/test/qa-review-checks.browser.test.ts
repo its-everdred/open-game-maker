@@ -14,8 +14,12 @@ const ORIGIN = 'http://review.test';
 type Page = {
   still?: string;
   clip?: string;
+  sound?: string;
   options?: number;
   hideOption?: number;
+  /** An option whose media is drawn but transparent. */
+  clearMedia?: number;
+  noMedia?: number;
   swipe?: boolean;
   controls?: boolean;
 };
@@ -23,18 +27,22 @@ type Page = {
 function html({
   still = 'still.png',
   clip = 'clip.mp4',
+  sound = 'sound.mp3',
   options = 3,
   hideOption,
+  clearMedia,
+  noMedia,
   swipe = true,
   controls = true,
 }: Page) {
   const media = [
     `<img src="${still}" alt="Picture">`,
     `<video src="${clip}" controls playsinline autoplay muted loop></video>`,
-    `<audio controls src="sound.mp3" aria-label="Sound"></audio>`,
+    `<audio controls src="${sound}" aria-label="Sound"></audio>`,
   ];
   const option = (index: number) =>
-    `<div class="worker-review-option"${index === hideOption ? ' style="visibility:hidden"' : ''}>${media[index]}` +
+    `<div class="worker-review-option"${index === hideOption ? ' style="visibility:hidden"' : ''}>` +
+    (index === noMedia ? '' : index === clearMedia ? `<div style="opacity:0">${media[index]}</div>` : media[index]) +
     `<button type="button">Pick ${String.fromCharCode(65 + index)}: Option</button></div>`;
   return `<!doctype html><body>
 <div role="dialog" aria-label="Needs Review">
@@ -114,9 +122,17 @@ describe('the review E2E checks what the creator sees', () => {
     );
   });
 
+  it('fail on a sound with no length', async () => {
+    expect(await failures({ sound: 'gone.mp3' }, 2_000)).toContain(
+      'the review <audio "Sound" gone.mp3> did not load (duration NaN)',
+    );
+  });
+
   it('fail when the deck shows fewer options than the Command carries, or one is not on screen', async () => {
     expect(await failures({ options: 1 })).toEqual(['the Command shows 1 of 3 options']);
-    expect(await failures({ hideOption: 2 })).toContain('option C is not on screen');
+    expect(await failures({ hideOption: 2 })).toContain('option C media is not on screen');
+    expect(await failures({ clearMedia: 1 })).toEqual(['option B media is not on screen']);
+    expect(await failures({ noMedia: 0 })).toEqual(['option A shows no media']);
   });
 
   it('fail when the round has no card that follows a drag, or no approve and changes controls', async () => {

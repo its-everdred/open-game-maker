@@ -169,7 +169,12 @@ describe('QA review fixtures (#859)', () => {
       body: JSON.stringify({ run: 'run-1', media: MEDIA }),
     });
     expect(seeded.status).toBe(201);
-    const { gameId, roundId, decisionId, options } = (await seeded.json()) as Record<string, string>;
+    const { gameId, roundId, decisionId, options } = (await seeded.json()) as {
+      gameId: string;
+      roundId: string;
+      decisionId: string;
+      options: number;
+    };
     expect(gameId).toBe(body.gameId);
 
     // The deck's two sources show the round with its three media and the Command with A-C.

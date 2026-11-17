@@ -81,8 +81,8 @@ export async function swipeDeckFailures(page: Page, dialog: Locator): Promise<st
 }
 
 /**
- * The Command's options: as many on screen as the Command carries, each one shown (scrolled to, not hidden or
- * covered) with its media and its pick button.
+ * The Command's options: as many on screen as the Command carries, each one showing its media (scrolled to, drawn,
+ * not transparent, hidden or covered) and its pick button.
  */
 export async function optionFailures(dialog: Locator, expected: number): Promise<string[]> {
   const options = dialog.locator('.worker-review-option');
@@ -92,14 +92,22 @@ export async function optionFailures(dialog: Locator, expected: number): Promise
     const option = options.nth(index);
     const letter = String.fromCharCode(65 + index);
     await option.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
-    const shown = await option.evaluate((element) => {
-      const box = element.getBoundingClientRect();
-      if (box.width === 0 || box.height === 0) return false;
-      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-      return hit !== null && element.contains(hit);
+    const media = await option.evaluate((root) => {
+      const all = [...root.querySelectorAll('img, video, audio')];
+      const seen = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) return false;
+        for (let node: Element | null = element; node && node !== root.parentElement; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+        }
+        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return hit !== null && (element === hit || element.contains(hit));
+      };
+      return { count: all.length, shown: all.filter(seen).length };
     });
-    if (!shown) failures.push(`option ${letter} is not on screen`);
-    if ((await option.locator('img, video, audio').count()) === 0) failures.push(`option ${letter} shows no media`);
+    if (media.count === 0) failures.push(`option ${letter} shows no media`);
+    else if (media.shown < media.count) failures.push(`option ${letter} media is not on screen`);
     if (!(await option.getByRole('button', { name: new RegExp(`^Pick ${letter}`, 'u') }).isVisible()))
       failures.push(`option ${letter} has no pick button`);
   }
