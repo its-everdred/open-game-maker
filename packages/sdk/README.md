@@ -8,6 +8,10 @@ In draft builds, canvas and WebGL UI renderers can report visible sprites to the
 describe its sampled rectangle; drawn dimensions are CSS pixels. The capture reads the latest frame through
 `window.__gm.imageDraws()`. Call `beginImageDraws()` even when a frame has no UI sprites, so a visible canvas can be
 verified as having no sprites to report. Do not report world textures, and omit the instrumentation from published builds.
+Mark a WebGL canvas that contains only game-world rendering with `data-gm-world-canvas="true"`; never use this marker on
+a canvas that contains UI. Canvas 2D `drawImage` calls are also inspected by the capture, including unreported draws.
+For WebGL UI, use a separate canvas from the world and draw each reported sprite as one non-instanced quad after
+`beginImageDraws()`. The capture checks the draw count against the report and reports unsupported batches explicitly.
 
 ## Shared player settings
 

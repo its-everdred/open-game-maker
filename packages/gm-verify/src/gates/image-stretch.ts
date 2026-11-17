@@ -3,6 +3,11 @@ import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import type { GateCheck } from './index.js';
 
+const rasterSource =
+  /(?:url\(\s*["']?data:image\/(?:png|jpe?g|webp|gif|avif)|url\([^)]*\.(?:png|jpe?g|webp|gif|avif)|var\()/i;
+const length = '(?:[+-]?(?:\\d*\\.)?\\d+(?:%|[a-z]+)?|(?:calc|min|max|clamp)\\([^;{}]*?\\))';
+const twoLengths = new RegExp(`^\\s*${length}\\s+${length}(?:\\s|;|$)`, 'i');
+
 function conditionalAt(text: string, end: number): boolean {
   const stack: boolean[] = [];
   let boundary = 0;
@@ -42,7 +47,8 @@ export function scanImageStretch(root: string): GateCheck[] {
     const previous = before.slice(Math.max(0, before.lastIndexOf('\n', lineStart - 2) + 1));
     const lineEnd = text.indexOf('\n', offset);
     const sameLine = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
-    if (/\/\*\s*gm-allow-stretch:\s*[^*\s][\s\S]*?\*\//.test(previous + sameLine)) return;
+    const exception = /\/\*\s*gm-allow-stretch:\s*[^*\s][\s\S]*?\*\//;
+    if (exception.test(sameLine) || /^\s*\/\*\s*gm-allow-stretch:\s*[^*\s][\s\S]*?\*\/\s*$/.test(previous)) return;
     findings.push({
       id: 'image-stretch',
       ok: false,
@@ -76,18 +82,30 @@ export function scanImageStretch(root: string): GateCheck[] {
     const collectStyles = (path: string) => {
       if (related.has(path)) return;
       related.add(path);
-      const content = byPath.get(path);
+      const content = maskComments(path, byPath.get(path) ?? '');
       if (!content) return;
       for (const match of content.matchAll(
         /(?:href\s*=\s*|(?:from\s+|import\s*)?)["'](?![a-z]+:|\/\/)([^"'?#]+\.css)["']/gi,
-      ))
+      )) {
+        const start = content.lastIndexOf('<link', match.index);
+        const end = content.indexOf('>', start);
+        if (start >= 0 && end >= match.index) {
+          const media = /\bmedia\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(content.slice(start, end + 1));
+          if (media && (media[1] ?? media[2] ?? media[3] ?? '').trim().toLowerCase() !== 'all') continue;
+        }
+        const line = content.slice(
+          content.lastIndexOf('\n', match.index) + 1,
+          content.indexOf('\n', match.index) < 0 ? content.length : content.indexOf('\n', match.index),
+        );
+        if (/^\s*@import\b/i.test(line) && /(?:["']|\))\s+(?!all\s*;)[^;]+;/i.test(line)) continue;
         collectStyles(match[1]!.startsWith('/') ? resolve(root, `.${match[1]!}`) : resolve(dirname(path), match[1]!));
+      }
     };
     collectStyles(resolve(file));
     const css = [...related].map((path) => maskComments(path, byPath.get(path) ?? '')).join('\n}\n');
     const rasterSelectors = new Set<string>();
     for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (/\bbackground(?:-image)?\s*:[^;]*(?:url\([^)]*\.(?:png|jpe?g|webp|gif|avif)|var\()/i.test(rule[2]!))
+      if (/\bbackground(?:-image)?\s*:/i.test(rule[2]!) && rasterSource.test(rule[2]!))
         for (const selector of rule[1]!.split(',')) rasterSelectors.add(selector.trim());
     }
     const code = maskComments(file, text);
@@ -99,26 +117,20 @@ export function scanImageStretch(root: string): GateCheck[] {
       report(file, text, match.index, 'background may be stretched by CSS');
     for (const block of code.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       if (
-        !/(?:url\([^)]*\.(?:png|jpe?g|webp|gif|avif)(?:[?#][^)]*)?["']?\)|var\()/i.test(block[2]!) &&
+        !rasterSource.test(block[2]!) &&
         !block[1]!.split(',').some((selector) => rasterSelectors.has(selector.trim()))
       )
         continue;
-      const size =
-        /\bbackground-size\s*:\s*(?:\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh))\s+(?:\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh))/i.exec(
-          block[2]!,
-        );
-      const shorthand =
-        /\bbackground\s*:[^;{}]*\/\s*(?:\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh))\s+(?:\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh))/i.exec(
-          block[2]!,
-        );
-      if (shorthand && !/100%\s+100%/i.test(shorthand[0]))
+      const size = /\bbackground-size\s*:\s*([^;{}]+)/i.exec(block[2]!);
+      const shorthand = /\bbackground\s*:[^;{}]*\/\s*([^;{}]+)/i.exec(block[2]!);
+      if (shorthand && twoLengths.test(shorthand[1]!) && !/100%\s+100%/i.test(shorthand[0]))
         report(
           file,
           text,
           block.index + block[1]!.length + 1 + shorthand.index,
           'raster background may be stretched by CSS',
         );
-      if (size && !/100%\s+100%/i.test(size[0]))
+      if (size && twoLengths.test(size[1]!) && !/100%\s+100%/i.test(size[0]))
         report(
           file,
           text,
@@ -126,9 +138,9 @@ export function scanImageStretch(root: string): GateCheck[] {
           'raster background may be stretched by CSS',
         );
     }
-    for (const match of code.matchAll(/<img\b[^>]*>/gi)) {
-      const classes = /\bclass(?:Name)?=["']([^"']+)["']/.exec(match[0])?.[1]?.split(/\s+/) ?? [];
-      const id = /\bid=["']([^"']+)["']/.exec(match[0])?.[1];
+    const isStyled = (tag: string) => {
+      const classes = /\bclass(?:Name)?=["']([^"']+)["']/.exec(tag)?.[1]?.split(/\s+/) ?? [];
+      const id = /\bid=["']([^"']+)["']/.exec(tag)?.[1];
       const selectors = ['img', ...classes.map((name) => `.${name}`), ...(id ? [`#${id}`] : [])];
       const styled = [...css.matchAll(/([^{}]+)\{[^{}]*object-fit\s*:\s*(?:contain|cover|none|scale-down)[^{}]*\}/gi)]
         .filter((rule) => !conditionalAt(css, rule.index))
@@ -140,7 +152,11 @@ export function scanImageStretch(root: string): GateCheck[] {
             return components.length > 0 && components.every((component) => selectors.includes(component));
           }),
         );
-      if (/\bwidth\s*=/.test(match[0]) && /\bheight\s*=/.test(match[0]) && !/object[-Ff]it/.test(match[0]) && !styled)
+      return /object[-Ff]it/.test(tag) || styled;
+    };
+    for (const match of code.matchAll(/<img\b[^>]*>/gi)) {
+      if (/\.[jt]sx$/.test(entry.name)) continue;
+      if (/\bwidth\s*=/.test(match[0]) && /\bheight\s*=/.test(match[0]) && !isStyled(match[0]))
         report(file, text, match.index, 'image has width and height without object-fit');
     }
     if (!/\.[cm]?[jt]sx?$/.test(entry.name)) continue;
@@ -152,6 +168,16 @@ export function scanImageStretch(root: string): GateCheck[] {
       entry.name.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     );
     const visit = (node: ts.Node) => {
+      if (
+        (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        node.tagName.getText(source) === 'img'
+      ) {
+        const attributes = node.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map((attr) => attr.name.getText(source));
+        if (attributes.includes('width') && attributes.includes('height') && !isStyled(node.getText(source)))
+          report(file, text, node.getStart(source), 'image has width and height without object-fit');
+      }
       let property: string | undefined;
       let value: ts.Expression | undefined;
       if (
@@ -177,10 +203,7 @@ export function scanImageStretch(root: string): GateCheck[] {
       if (value && ts.isStringLiteralLike(value)) {
         if (property === 'objectFit' && value.text === 'fill')
           report(file, text, node.getStart(source), 'image may be stretched by objectFit');
-        if (
-          property === 'backgroundSize' &&
-          /^(?:\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh))\s+(?:\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh))$/i.test(value.text)
-        )
+        if (property === 'backgroundSize' && twoLengths.test(value.text))
           report(file, text, node.getStart(source), 'background may be stretched by backgroundSize');
       }
       if (

@@ -14,7 +14,9 @@ import { encodeMp4 } from '../src/qa/media';
 
 import { captureStill, ScreenshotTimeout } from './still';
 import { fixedAspectMinimumFill, matchesPlayAreaAspect, measurePlayArea } from '../src/play-area';
-import { measureImageDistortion, trackShadowRoots, type ImageDistortion } from './image-distortion';
+import { measureImageDistortion, type ImageDistortion } from './image-distortion';
+import { frameCovered, frameTransform } from './frame-geometry';
+import { trackShadowRoots } from './capture-instrumentation';
 
 const [dist, out, tapsJson, editArg, videoArg, softwareArg, testFastArg, limitsJson] = process.argv.slice(2);
 if (!dist || !out || !tapsJson) throw new Error('missing capture arguments');
@@ -109,28 +111,93 @@ try {
           if (errors.length) throw new Error(errors.join('\n'));
         };
         check();
-        const measureImages = async (screen: string) => {
-          const frame = page.frames().find((item) => item.url().includes(`/${build}/index.html`));
-          if (!frame) throw new Error(`game frame missing at ${size}`);
-          for (const capturedFrame of page.frames()) {
-            if (capturedFrame !== page.mainFrame()) {
-              const owner = await capturedFrame.frameElement();
-              const bounds = await owner.boundingBox();
-              if (
-                !(await owner.isVisible()) ||
-                !bounds ||
-                bounds.x + bounds.width <= 0 ||
-                bounds.y + bounds.height <= 0 ||
-                bounds.x >= width ||
-                bounds.y >= height
-              )
-                continue;
+        const measureImages = async (screen: string, still?: string) => {
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const frames = page.frames();
+            const frame = frames.find((item) => item.url().includes(`/${build}/index.html`));
+            if (!frame) throw new Error(`game frame missing at ${size}`);
+            await Promise.all(
+              frames.map((item) =>
+                item.evaluate(() => (window as unknown as { __gmCapturePause?: () => void }).__gmCapturePause?.()),
+              ),
+            );
+            try {
+              const versions = await Promise.all(
+                frames.map((item) =>
+                  item.evaluate(
+                    () => (window as unknown as { __gmCaptureVersion?: () => number }).__gmCaptureVersion?.() ?? -1,
+                  ),
+                ),
+              );
+              const findings: ImageDistortion[] = [];
+              for (const capturedFrame of frames) {
+                if (capturedFrame !== page.mainFrame()) {
+                  const owner = await capturedFrame.frameElement();
+                  const bounds = await owner.boundingBox();
+                  if (
+                    !(await owner.isVisible()) ||
+                    !bounds ||
+                    bounds.x + bounds.width <= 0 ||
+                    bounds.y + bounds.height <= 0 ||
+                    bounds.x >= width ||
+                    bounds.y >= height
+                  )
+                    continue;
+                  if (await frameCovered(capturedFrame)) continue;
+                }
+                findings.push(
+                  ...(await measureImageDistortion(
+                    capturedFrame,
+                    size,
+                    screen,
+                    capturedFrame === frame,
+                    await frameTransform(capturedFrame),
+                  )),
+                );
+              }
+              if (still)
+                await captureStill(
+                  page,
+                  resolve(out, `${still}-${size}.png`),
+                  `${still} at ${size}`,
+                  screenshotTimeout,
+                );
+              const after = page.frames();
+              const stable =
+                frames.length === after.length &&
+                frames.every((item, index) => item === after[index]) &&
+                (
+                  await Promise.all(
+                    frames.map((item) =>
+                      item.evaluate(
+                        () => (window as unknown as { __gmCaptureVersion?: () => number }).__gmCaptureVersion?.() ?? -1,
+                      ),
+                    ),
+                  )
+                ).every((value, index) => value >= 0 && value === versions[index]);
+              if (stable) {
+                distortions.push(...findings);
+                return;
+              }
+            } finally {
+              await Promise.allSettled(
+                frames.map((item) =>
+                  item.evaluate(() => (window as unknown as { __gmCaptureResume?: () => void }).__gmCaptureResume?.()),
+                ),
+              );
             }
-            distortions.push(...(await measureImageDistortion(capturedFrame, size, screen, capturedFrame === frame)));
           }
+          distortions.push({
+            element: 'document',
+            file: '',
+            natural: 0,
+            drawn: 0,
+            viewport: size,
+            screen,
+            error: 'screen changed during image measurement',
+          });
         };
-        await measureImages('play');
-        await captureStill(page, resolve(out, `play-${size}.png`), `play at ${size}`, screenshotTimeout);
+        await measureImages('play', 'play');
         console.error(`shell capture: play still captured at ${size}`);
         const game = page.frameLocator('.game-frame iframe');
         for (const text of taps) {
@@ -144,8 +211,7 @@ try {
         if (taps.length) {
           await page.waitForTimeout(fast ? 500 : 9_000);
           check();
-          await measureImages('ingame');
-          await captureStill(page, resolve(out, `ingame-${size}.png`), `ingame at ${size}`, screenshotTimeout);
+          await measureImages('ingame', 'ingame');
         }
         if (!limits?.skip) {
           try {
@@ -225,8 +291,7 @@ try {
         await menu.tap();
         await page.waitForTimeout(1_500);
         check();
-        await measureImages('menu');
-        await captureStill(page, resolve(out, `menu-${size}.png`), `menu at ${size}`, screenshotTimeout);
+        await measureImages('menu', 'menu');
         if (editArg === '1') {
           await page.getByRole('button', { name: 'Edit', exact: true }).tap();
           await page.getByLabel('Editor canvas').waitFor({ timeout: 30_000 });
@@ -241,8 +306,7 @@ try {
           );
           await page.waitForTimeout(1_500);
           check();
-          await measureImages('edit');
-          await captureStill(page, resolve(out, `edit-${size}.png`), `edit at ${size}`, screenshotTimeout);
+          await measureImages('edit', 'edit');
         }
         const video = page.video();
         await context.close();

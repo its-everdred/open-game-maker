@@ -15,6 +15,8 @@ it('reports explicit stretch and respects a reasoned exception', () => {
         '/* gm-allow-stretch: intentional texture */',
         'ctx.drawImage(img, 0, 0, 90, 30, 0, 0, 30, 30);',
         'ctx.drawImage(img, 0, 0, 90, 30, 0, 0, 30, 30); /* gm-allow-stretch: intentional texture */',
+        'ctx.drawImage(img, 0, 0, 90, 30, 0, 0, 30, 30);',
+        'const y = <img width={w > 0 ? 90 : 30} height={30} src={url} />;',
       ].join('\n'),
     );
     writeFileSync(
@@ -23,6 +25,7 @@ it('reports explicit stretch and respects a reasoned exception', () => {
         '.stretched { background-image: url("button.png"); background-size: 100% 100%; }',
         '.shorthand { background: var(--button) center / 100% 100% no-repeat; }',
         '.fixed { background-image: url("button.png"); background-size: 100px 50px; }',
+        '.data { background-image: url(data:image/png;base64,aaa); background-size: 1in 2vmin; }',
         'img { object-fit: fill; }',
         '.slice { border-image: url("button.png") 10 fill / 10px stretch; }',
         '/* object-fit: fill; */',
@@ -36,11 +39,14 @@ it('reports explicit stretch and respects a reasoned exception', () => {
         ['view.css', 2],
         ['view.css', 3],
         ['view.css', 4],
+        ['view.css', 5],
         ['view.tsx', 1],
         ['view.tsx', 2],
+        ['view.tsx', 6],
+        ['view.tsx', 7],
       ]),
     );
-    expect(result.checks).toHaveLength(6);
+    expect(result.checks).toHaveLength(9);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -92,6 +98,17 @@ it('ignores prototypes and does not borrow unrelated or conditional stylesheet r
     writeFileSync(join(root, 'other.css'), '@media (min-width: 1000px) { .hero { object-fit: contain; } }');
     result = runL0(root, { checks: ['image-stretch'] });
     expect(result.checks.map((item) => item.file)).toEqual(['page.html']);
+    writeFileSync(join(root, 'other.css'), '.hero { object-fit: contain; }');
+    writeFileSync(
+      join(root, 'page.html'),
+      '<!-- <link href="./other.css"> --><img class="hero" width="90" height="30">',
+    );
+    expect(runL0(root, { checks: ['image-stretch'] }).checks.map((item) => item.file)).toEqual(['page.html']);
+    writeFileSync(
+      join(root, 'page.html'),
+      '<link href="./other.css" media="(min-width:1000px)"><img class="hero" width="90" height="30">',
+    );
+    expect(runL0(root, { checks: ['image-stretch'] }).checks.map((item) => item.file)).toEqual(['page.html']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

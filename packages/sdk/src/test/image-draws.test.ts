@@ -31,3 +31,28 @@ it('does not attest a missing or stale frame', () => {
     resetImageDraws();
   }
 });
+
+it('preserves the measured frame while capture is paused', () => {
+  const capture = window as unknown as { __gmCapturePausedAt?: number };
+  try {
+    beginImageDraws();
+    reportImageDraw({
+      id: 'before',
+      file: 'a.png',
+      source: { width: 30, height: 30 },
+      drawn: { width: 30, height: 30 },
+    });
+    capture.__gmCapturePausedAt = performance.now();
+    beginImageDraws();
+    reportImageDraw({
+      id: 'after',
+      file: 'b.png',
+      source: { width: 30, height: 30 },
+      drawn: { width: 30, height: 30 },
+    });
+    expect(imageDraws().map((draw) => draw.id)).toEqual(['before']);
+  } finally {
+    delete capture.__gmCapturePausedAt;
+    resetImageDraws();
+  }
+});

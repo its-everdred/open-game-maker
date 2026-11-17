@@ -46,14 +46,14 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
     });
     writeFileSync(
       join(game, 'fixture.js'),
-      `${sdk.outputFiles[0]!.text}\nfetch('http://127.0.0.1:${port}/').then(() => { document.querySelector('button').textContent = 'LEAKED'; }, () => { document.querySelector('button').textContent = 'Start'; });\n${script}`,
+      `${sdk.outputFiles[0]!.text}\nlet __lateAdded = false; const __decode = Image.prototype.decode; Image.prototype.decode = function() { if (__lateAdded) return __decode.call(this); __lateAdded = true; setTimeout(() => { const image = document.createElement('img'); image.id = 'late'; image.src = 'café scene.png'; image.style.cssText = 'width:90px;height:30px'; document.querySelector('#canvas').append(image); }, 25); return new Promise((resolve) => setTimeout(resolve, 100)).then(() => __decode.call(this)); };\nfetch('http://127.0.0.1:${port}/').then(() => { document.querySelector('button').textContent = 'LEAKED'; }, () => { document.querySelector('button').textContent = 'Start'; });\n${script}`,
     );
     writeFileSync(
       html,
       source
         .replace(
           'Bridge fixture</div>',
-          '<button data-gm-play-area>Waiting</button><img id="stretched" src="café scene.png" alt="" style="width:90px;height:30px"> </div>',
+          '<button data-gm-play-area>Waiting</button><img id="stretched" src="café scene.png" alt="" style="width:90px;height:30px"><div style="width:90px;height:30px;background:url(\'café scene.png\') 0 0 / 90px 30px"></div> </div>',
         )
         .replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
     );
@@ -91,8 +91,10 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
     }[];
     for (const viewport of ['390x844', '844x390', '820x1180', '1180x820'])
       expect(distortions).toContainEqual(expect.objectContaining({ element: '#stretched', viewport, screen: 'play' }));
+    expect(distortions).toContainEqual(expect.objectContaining({ element: '#late', screen: 'play' }));
     expect(distortions).toContainEqual(expect.objectContaining({ element: '#stretched', screen: 'after Start' }));
     expect(distortions).toContainEqual(expect.objectContaining({ element: 'sdk-sprite', screen: 'play' }));
+    expect(distortions.filter((item) => item.element === 'document')).toEqual([]);
     expect(JSON.parse(readFileSync(join(out, 'play-area.json'), 'utf8'))).toMatchObject(
       ['390x844', '844x390', '820x1180', '1180x820'].map((viewport) => ({ viewport, ok: false })),
     );

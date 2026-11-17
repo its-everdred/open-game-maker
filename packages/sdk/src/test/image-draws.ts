@@ -11,8 +11,14 @@ let lastFrame: number | undefined;
 
 /** Call at the start of each UI frame, then report each visible sprite. */
 export function beginImageDraws(): void {
+  if (
+    typeof window !== 'undefined' &&
+    (window as unknown as { __gmCapturePausedAt?: number }).__gmCapturePausedAt !== undefined
+  )
+    return;
   current = [];
   lastFrame = performance.now();
+  if (typeof window !== 'undefined') (window as unknown as { __gmBeginUiFrame?: () => void }).__gmBeginUiFrame?.();
 }
 
 /** Clear the previous game's report and its registration. */
@@ -22,10 +28,19 @@ export function resetImageDraws(): void {
 }
 
 export function imageDrawsReady(): boolean {
-  return lastFrame !== undefined && performance.now() - lastFrame < 1_000;
+  const now =
+    typeof window === 'undefined'
+      ? performance.now()
+      : ((window as unknown as { __gmCapturePausedAt?: number }).__gmCapturePausedAt ?? performance.now());
+  return lastFrame !== undefined && now - lastFrame < 1_000;
 }
 
 export function reportImageDraw(draw: ImageDraw): void {
+  if (
+    typeof window !== 'undefined' &&
+    (window as unknown as { __gmCapturePausedAt?: number }).__gmCapturePausedAt !== undefined
+  )
+    return;
   current.push(structuredClone(draw));
 }
 
