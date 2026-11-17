@@ -174,7 +174,12 @@ describe('a jobless Command’s option media', () => {
         state: 'running',
         start: 'now',
         slot: 'edit',
-        plan: JSON.stringify({ title: 'Job', summary: 'Review', scope: { included: [], excluded: [] }, tickets: [{ key: 'T1', skills: [], dependsOn: [], acceptanceCriteria: [] }] }),
+        plan: JSON.stringify({
+          title: 'Job',
+          summary: 'Review',
+          scope: { included: [], excluded: [] },
+          tickets: [{ key: 'T1', skills: [], dependsOn: [], acceptanceCriteria: [] }],
+        }),
         reservation: JSON.stringify({ amountMicroUsd: 1, sizeClass: 'small', confidence: 'high' }),
         hardCapMicroUsd: 1,
         aiurIssueNumber: 12,
