@@ -3,7 +3,7 @@
 // and the drift is CSS (review-glass.css), so reduced motion holds them still like every other animation.
 export function GlowBackdrop() {
   return (
-    <div className="glow-backdrop" aria-hidden="true">
+    <div className="glow-backdrop" aria-hidden="true" data-gm-overlay-allowed>
       <span />
       <span />
       <span />

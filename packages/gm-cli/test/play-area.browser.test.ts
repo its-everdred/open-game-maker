@@ -77,3 +77,57 @@ it('publishes all shell stills and reports an undeclared play area without faili
     rmSync(root, { recursive: true, force: true });
   }
 }, 240_000);
+
+it('fails gm check for an overlapping header and passes with the header beside the board', async () => {
+  const root = tempDir();
+  const fixture = fileURLToPath(new URL('../../../apps/web/e2e/fixtures/bridge-game/', import.meta.url));
+  try {
+    cpSync(fixture, join(root, 'source'), { recursive: true });
+    const html = join(root, 'source/index.html');
+    const source = readFileSync(html, 'utf8');
+    const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+    if (!script) throw new Error('fixture script missing');
+    const ready =
+      "send('ready', { protocol: 1, manifest, marks: [['fixture-ready', performance.now()]] }, message.id);";
+    writeFileSync(
+      join(root, 'source/fixture.js'),
+      script.replace(
+        ready,
+        `${ready} send('load.frame', {}); send('load.done', { ms: 0, fetchedBytes: 0, cachedBytes: 0, fetchedFiles: 0, cachedFiles: 0, persisted: null });`,
+      ),
+    );
+    const game = source
+      .replace(
+        'Bridge fixture</div>',
+        '<div data-gm-play-area style="position:absolute;left:30%;top:20%;width:40%;height:60%"></div><header id="hud" style="position:absolute;top:20%;left:40%;width:10%;height:5%;background:red">Score</header></div>',
+      )
+      .replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>');
+    writeFileSync(html, game);
+    writeFileSync(join(root, 'build.cjs'), "require('node:fs').cpSync('source', 'dist', { recursive: true })");
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ scripts: { build: 'node build.cjs' }, dependencies: { '@gm/sdk': '*' } }),
+    );
+    writeFileSync(join(root, 'gm.manifest.json'), JSON.stringify({ playArea: { minFill: 0, maxOffset: 1 } }));
+    mkdirSync(join(root, 'src'));
+    mkdirSync(join(root, 'design'));
+    writeFileSync(join(root, 'src/main.ts'), '');
+    writeFileSync(join(root, 'index.html'), '');
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    git('add', 'package.json');
+    git('commit', '-qm', 'fixture');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const env = { ...process.env, GM_VERIFY_SOFTWARE_GL: '1', XDG_RUNTIME_DIR: root };
+    const overlap = await gm(['check', '--json'], { cwd: root, env });
+    expect(overlap.code).toBe(1);
+    expect(JSON.parse(overlap.out[0]!).playArea).toMatchObject({ ok: false });
+    expect(JSON.stringify(JSON.parse(overlap.out[0]!).playArea)).toContain('overlap: #hud');
+    writeFileSync(html, game.replace('left:40%;width:10%', 'left:0%;width:10%'));
+    const side = await gm(['check', '--json'], { cwd: root, env });
+    expect(JSON.parse(side.out[0]!).playArea).toMatchObject({ ok: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 600_000);
