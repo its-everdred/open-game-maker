@@ -30,6 +30,36 @@
       "type": "string",
       "pattern": "^media\\/[a-zA-Z0-9_-]+\\.(png|webp|svg)$"
     },
+    "menus": {
+      "type": "object",
+      "properties": {
+        "selectors": {
+          "default": [],
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "routes": {
+          "default": [],
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "required": [
+        "selectors",
+        "routes"
+      ],
+      "additionalProperties": false
+    },
     "loading": {
       "type": "object",
       "properties": {
