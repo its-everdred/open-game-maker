@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+import { optionFailures, swipeDeckFailures } from '../../../packages/gm-cli/src/qa-review-checks';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { installGameApi } from './support/mock-game-api';
@@ -83,7 +84,7 @@ const energyView = {
 test.use({ serviceWorkers: 'block' });
 
 test('reviews a queue with swipe, undo, notes and an option pick', async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await installAuthRoutes(page, { signedIn: true });
   await stubBrandArt(page);
   await installGamesMenuApi(page);
@@ -184,6 +185,7 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
     .toBeGreaterThan(0);
   await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
   await expect.poll(() => dialog.locator('audio').evaluate((audio) => audio.duration)).toBeGreaterThan(1);
+  expect(await swipeDeckFailures(page, dialog)).toEqual([]);
   const roundStill = testInfo.outputPath('review-round.png');
   await page.screenshot({ path: roundStill });
   await testInfo.attach('review-round', { path: roundStill, contentType: 'image/png' });
@@ -238,6 +240,16 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   await dialog.getByRole('button', { name: 'Next' }).click();
   await expect(dialog.getByText('Asked the agent for media in the next round.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Next' }).click();
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+    { width: 820, height: 1180 },
+    { width: 1180, height: 820 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(await optionFailures(dialog, 3)).toEqual([]);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await dialog.getByLabel('Note (optional)').fill('Keep blue');
   await dialog.getByRole('button', { name: 'View option B' }).click();
   await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
