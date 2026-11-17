@@ -1,0 +1,546 @@
+<!doctype html>
+<!--
+  #854 phone mocks: the creator <-> Executor conversation inside the app.
+  Static mock, not product code. Every surface reuses the app's own CSS and markup classes
+  (studio menu, build-chat dock, review deck, toast) so nothing here is a new look.
+  Serve the repo root (python3 -m http.server) and open /docs/mocks/854/; add #<frame-id> for one phone-sized frame.
+  Thread data follows the aiur thread API shape (aiur-team/aiur#8034): messages with attachments, operator.notify.<kind>.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>#854 conversation mocks</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap"
+    />
+    <link rel="stylesheet" href="../../../apps/web/src/tokens.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/app/chrome.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/build-chat/dock.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/build-chat/chat.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/worker-builds/build-tracker.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/commands-inbox/review-glass.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/commands-inbox/review-deck.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/commands-inbox/decision-deck.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/commands-inbox/commands-inbox.css" />
+    <link rel="stylesheet" href="../../../apps/web/src/features/build-chat/conversation-modal.css" />
+    <style>
+      /* Mock scaffolding only: lay frames out as phones. A transform makes each frame the containing block for the
+         app's position: fixed chrome, so the real CSS lands inside the phone. */
+      body {
+        margin: 0;
+        padding: 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        background: #000;
+      }
+      .frame {
+        position: relative;
+        width: 390px;
+        height: 844px;
+        overflow: hidden;
+        transform: translateZ(0);
+        background: var(--night);
+        border-radius: 28px;
+      }
+      body.one {
+        padding: 0;
+      }
+      body.one .frame {
+        display: none;
+        border-radius: 0;
+      }
+      body.one .frame:target {
+        display: block;
+      }
+      .game-bg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .scrim {
+        filter: brightness(0.55);
+      }
+      .icon {
+        display: grid;
+      }
+      .icon svg {
+        width: 100%;
+        height: 100%;
+      }
+      .studio-menu-tray {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: calc(390px - 32px);
+        display: grid;
+        gap: 10px;
+        justify-items: end;
+      }
+      .studio-menu-sheet {
+        width: 100%;
+      }
+            .build-chat-composer-actions button {
+        min-height: var(--tap-secondary);
+        min-width: var(--tap-secondary);
+        display: grid;
+        place-items: center;
+      }
+      .build-chat-composer-actions .icon {
+        width: 22px;
+        height: 22px;
+      }
+      .menu-circle[data-on='true'] {
+        background: var(--yellow-b);
+        color: var(--dark);
+      }
+      /* The context the app attaches by itself: the same chip as a file attachment. */
+      .thumb-chip img {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        object-fit: cover;
+      }
+      .reply-audio {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: min(100%, 300px);
+        padding: 8px 12px 8px 8px;
+        border-radius: 14px 14px 14px 4px;
+        background: var(--surface-raised);
+      }
+      .reply-audio .play {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--yellow-b);
+        color: var(--dark);
+      }
+      .reply-audio .play .icon {
+        width: 18px;
+        height: 18px;
+      }
+      .wave {
+        flex: 1;
+        height: 28px;
+        background: repeating-linear-gradient(90deg, var(--ink-2) 0 2px, transparent 2px 5px);
+        mask: linear-gradient(transparent 0, #000 0) center / 100% 100%;
+        clip-path: polygon(0 40%, 8% 20%, 16% 55%, 24% 10%, 32% 45%, 40% 25%, 48% 0, 56% 35%, 64% 15%, 72% 50%, 80% 30%, 88% 45%, 100% 40%, 100% 60%, 88% 55%, 80% 70%, 72% 50%, 64% 85%, 56% 65%, 48% 100%, 40% 75%, 32% 55%, 24% 90%, 16% 45%, 8% 80%, 0 60%);
+      }
+      .reply-audio small {
+        color: var(--muted);
+        font-weight: 700;
+      }
+      .media-play {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+      }
+      .media-play .icon {
+        width: 56px;
+        height: 56px;
+        padding: 14px;
+        border-radius: 50%;
+        background: rgb(15 14 22 / 0.6);
+        color: var(--ink);
+      }
+      .build-chat-media-frame {
+        position: relative;
+        aspect-ratio: 9 / 12;
+      }
+      .media-pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .build-chat-option.picked {
+        outline: 3px solid var(--yellow-b);
+      }
+      .build-chat-option span {
+        font: 700 15px var(--display);
+      }
+      /* Phone OS lock screen for the push mock (outside the app). */
+      .lock {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, #2a2338, #0f0e16);
+        color: #fff;
+        font-family: system-ui, sans-serif;
+      }
+      .lock time {
+        display: block;
+        margin-top: 92px;
+        text-align: center;
+        font: 300 84px/1 system-ui, sans-serif;
+      }
+      .lock .date {
+        text-align: center;
+        font-size: 18px;
+        opacity: 0.85;
+      }
+      .pushes {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 120px;
+        display: grid;
+        gap: 8px;
+      }
+      .push {
+        display: grid;
+        grid-template-columns: 38px 1fr auto;
+        gap: 2px 10px;
+        padding: 12px;
+        border-radius: 20px;
+        background: rgb(255 255 255 / 0.18);
+        backdrop-filter: blur(20px);
+      }
+      .push img {
+        grid-row: span 2;
+        width: 38px;
+        height: 38px;
+        border-radius: 9px;
+      }
+      .push b {
+        font-size: 15px;
+      }
+      .push small {
+        opacity: 0.7;
+        font-size: 13px;
+      }
+      .push p {
+        grid-column: 2 / -1;
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.3;
+      }
+      .studio-menu-job .ago {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 1 ASK: the speak circle sits in the menu on every screen, next to the bug circle. -->
+    <section class="frame" id="ask-1">
+      <img class="game-bg scrim" src="menu-phone.jpg" alt="" />
+      <div class="studio-menu-control">
+        <button class="studio-menu-button" aria-label="Menu" aria-expanded="true"><i data-icon="menu"></i></button>
+        <div class="studio-menu-tray">
+          <div class="studio-menu-row" role="group" aria-label="Menu">
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Volume"><i data-icon="volume"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Report a bug"><i data-icon="bug"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" data-on="true" aria-label="Ask"><i data-icon="speak"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Builds"><i data-icon="build"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Games"><i data-icon="games"></i></button></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1 ASK, sent: screenshot + note. The game, screen and build go with it on their own. -->
+    <section class="frame" id="ask-2">
+      <img class="game-bg scrim" src="menu-phone.jpg" alt="" />
+      <aside class="build-chat-dock" data-state="chat">
+        <div class="build-chat-panel">
+          <section class="build-chat-chat" aria-label="Executor">
+            <header class="build-chat-chat-head">
+              <button class="build-chat-back tap-secondary" aria-label="Close"><i data-icon="close" style="width: 20px; height: 20px"></i></button>
+              <h3>Blobs</h3>
+            </header>
+            <div class="build-chat-messages">
+              <div class="build-chat-row text"><p>Live: Endless at Normal speed.</p></div>
+              <p class="build-chat-row progress">9:12</p>
+            </div>
+            <div class="build-chat-composer">
+              <ul class="build-chat-attachments">
+                <li class="thumb-chip"><img src="menu-phone.jpg" alt="" /><span>Choose your blobs</span><button aria-label="Remove"><i data-icon="close"></i></button></li>
+              </ul>
+              <textarea rows="2">Make Endless the big button, and put Mossbeard in front</textarea>
+              <div class="build-chat-composer-actions">
+                <button class="build-chat-attach tap-secondary" aria-label="Attach"><i data-icon="paperclip"></i></button>
+                <button class="build-chat-dictate tap-secondary" aria-label="Dictate"><i data-icon="mic"></i></button>
+                <button class="build-chat-send tap-primary" aria-label="Send"><i data-icon="send"></i></button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </section>
+
+    <!-- 2 ANSWER: a short status reply in seconds. -->
+    <section class="frame" id="answer-1">
+      <img class="game-bg scrim" src="menu-phone.jpg" alt="" />
+      <aside class="build-chat-dock" data-state="chat">
+        <div class="build-chat-panel">
+          <section class="build-chat-chat" aria-label="Executor">
+            <header class="build-chat-chat-head">
+              <button class="build-chat-back tap-secondary" aria-label="Close"><i data-icon="close" style="width: 20px; height: 20px"></i></button>
+              <h3>Blobs</h3>
+            </header>
+            <div class="build-chat-messages">
+              <div class="build-chat-row text creator">
+                <ul class="build-chat-attachments"><li class="thumb-chip"><img src="menu-phone.jpg" alt="" /><span>Choose your blobs</span></li></ul>
+                <p>Make Endless the big button, and put Mossbeard in front</p>
+              </div>
+              <div class="build-chat-row text"><p>On it. Two looks for you in about 20 minutes.</p></div>
+              <div class="build-chat-row text creator"><p>Is everything live?</p></div>
+              <div class="build-chat-row text"><p>Yes. Blobs build 41 is live. Nothing waiting on you.</p></div>
+              <p class="build-chat-row progress">9:14</p>
+            </div>
+            <div class="build-chat-composer">
+              <textarea rows="1"></textarea>
+              <div class="build-chat-composer-actions">
+                <button class="build-chat-attach tap-secondary" aria-label="Attach"><i data-icon="paperclip"></i></button>
+                <button class="build-chat-dictate tap-secondary" aria-label="Dictate"><i data-icon="mic"></i></button>
+                <button class="build-chat-send tap-primary" aria-label="Send"><i data-icon="send"></i></button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </section>
+
+    <!-- 2 ANSWER, with media: image, video and audio play inline. -->
+    <section class="frame" id="answer-2">
+      <img class="game-bg scrim" src="menu-phone.jpg" alt="" />
+      <aside class="build-chat-dock" data-state="chat">
+        <div class="build-chat-panel">
+          <section class="build-chat-chat" aria-label="Executor">
+            <header class="build-chat-chat-head">
+              <button class="build-chat-back tap-secondary" aria-label="Close"><i data-icon="close" style="width: 20px; height: 20px"></i></button>
+              <h3>Blobs</h3>
+            </header>
+            <div class="build-chat-messages">
+              <div class="build-chat-row text"><p>Versus CPU now ends on a results screen, and Nim has a new voice.</p></div>
+              <div class="build-chat-row media">
+                <div class="media-pair">
+                  <figure style="margin: 0">
+                    <div class="build-chat-media-frame"><img src="vcpu-phone-results.jpg" alt="Results screen" /></div>
+                  </figure>
+                  <figure style="margin: 0">
+                    <div class="build-chat-media-frame">
+                      <img src="vcpu-phone-play.jpg" alt="Versus CPU video" />
+                      <span class="media-play"><i data-icon="play"></i></span>
+                    </div>
+                  </figure>
+                </div>
+              </div>
+              <div class="reply-audio">
+                <span class="play"><i data-icon="play"></i></span>
+                <span class="wave" aria-hidden="true"></span>
+                <small>0:04</small>
+              </div>
+              <p class="build-chat-row progress">9:31</p>
+            </div>
+            <div class="build-chat-composer">
+              <textarea rows="1"></textarea>
+              <div class="build-chat-composer-actions">
+                <button class="build-chat-attach tap-secondary" aria-label="Attach"><i data-icon="paperclip"></i></button>
+                <button class="build-chat-dictate tap-secondary" aria-label="Dictate"><i data-icon="mic"></i></button>
+                <button class="build-chat-send tap-primary" aria-label="Send"><i data-icon="send"></i></button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </section>
+
+    <!-- 3 REVIEW: a review round arrives in the thread as a Command card; tapping it opens the #843 deck. -->
+    <section class="frame" id="review-1">
+      <img class="game-bg scrim" src="menu-phone.jpg" alt="" />
+      <aside class="build-chat-dock" data-state="chat">
+        <div class="build-chat-panel">
+          <section class="build-chat-chat" aria-label="Executor">
+            <header class="build-chat-chat-head">
+              <button class="build-chat-back tap-secondary" aria-label="Close"><i data-icon="close" style="width: 20px; height: 20px"></i></button>
+              <h3>Blobs</h3>
+            </header>
+            <div class="build-chat-messages">
+              <div class="build-chat-row text creator"><p>Make Endless the big button, and put Mossbeard in front</p></div>
+              <div class="build-chat-row text"><p>On it. Two looks for you in about 20 minutes.</p></div>
+              <div class="build-chat-row command">
+                <strong>Which menu?</strong>
+                <div class="build-chat-options">
+                  <button class="build-chat-option"><img src="menu-phone.jpg" alt="" /><span>A</span></button>
+                  <button class="build-chat-option"><img src="vcpu-phone-results.jpg" alt="" /><span>B</span></button>
+                </div>
+                <button class="build-chat-read tap-secondary">Review</button>
+              </div>
+              <p class="build-chat-row progress">9:36</p>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </section>
+
+    <!-- 3 REVIEW, in the deck (#843): swipe or thumbs, notes by voice. -->
+    <section class="frame" id="review-2">
+      <img class="game-bg scrim" src="menu-phone.jpg" alt="" />
+      <div class="job-conversation-backdrop">
+        <section class="job-conversation-dialog decision-deck" role="dialog" aria-labelledby="r2" style="height: 100%">
+          <h2 id="r2">Which menu?</h2>
+          <button class="job-conversation-close" aria-label="Close"><span aria-hidden="true">×</span></button>
+          <div class="decision-deck-body" style="grid-template-rows: auto minmax(0, 1fr)">
+            <p class="commands-inbox-question">Blobs</p>
+            <section class="review-deck" style="grid-template-rows: minmax(0, 1fr) auto; height: 100%">
+              <div class="review-deck-stage">
+                <div class="review-deck-card" data-kind="image" style="--ar: 0.462; transform: translateX(18px) rotate(4deg)">
+                  <img class="review-deck-media" src="menu-phone.jpg" alt="Menu A" />
+                  <p class="review-deck-label">A</p>
+                  <span class="review-deck-stamp review-deck-stamp-like" style="opacity: 0.9"><i data-icon="thumbsUp"></i></span>
+                  <span class="review-deck-stamp review-deck-stamp-dislike"><i data-icon="thumbsDown"></i></span>
+                </div>
+              </div>
+              <div class="review-deck-side">
+                <div class="review-deck-actions">
+                  <button class="review-deck-undo tap-secondary" aria-label="Undo the last swipe" disabled><i data-icon="rollback"></i></button>
+                  <button class="review-deck-thumb tap-secondary" aria-label="Dislike"><i data-icon="thumbsDown"></i></button>
+                  <button class="review-deck-thumb tap-secondary" aria-label="Like"><i data-icon="thumbsUp"></i></button>
+                </div>
+                <p class="review-deck-progress">1 of 2</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- 4 NOTIFY: outside the app, one push per event. -->
+    <section class="frame" id="notify-1">
+      <div class="lock">
+        <time>9:41</time>
+        <p class="date">Tuesday 17 November</p>
+        <div class="pushes">
+          <div class="push">
+            <img src="../../../apps/web/public/icons/icon-192.png" alt="" />
+            <b>Blobs is live</b><small>now</small>
+            <p>Versus CPU results screen</p>
+          </div>
+          <div class="push">
+            <img src="../../../apps/web/public/icons/icon-192.png" alt="" />
+            <b>Your review is ready</b><small>4m</small>
+            <p>Which menu? Blobs</p>
+          </div>
+          <div class="push">
+            <img src="../../../apps/web/public/icons/icon-192.png" alt="" />
+            <b>Stalled: Goblin Cellar</b><small>12m</small>
+            <p>Art pack failed to load. Retrying from the backup. Back by 10:15.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 NOTIFY, inside the app: the same event as the existing toast, and in the menu until seen. -->
+    <section class="frame" id="notify-2">
+      <img class="game-bg" src="vcpu-phone-results.jpg" alt="" />
+      <div class="studio-menu-control">
+        <span class="worker-tracker-toast worker-tracker-game-toast" role="status">Blobs is live</span>
+        <button class="studio-menu-button" aria-label="Menu"><i data-icon="menu"></i><span class="studio-menu-badge">1</span></button>
+      </div>
+    </section>
+
+    <!-- 5 STATUS: the builds circle answers "is everything live?" per game. -->
+    <section class="frame" id="status-1">
+      <img class="game-bg scrim" src="menu-phone.jpg" alt="" />
+      <div class="studio-menu-control">
+        <button class="studio-menu-button" aria-label="Menu" aria-expanded="true"><i data-icon="menu"></i></button>
+        <div class="studio-menu-tray">
+          <div class="studio-menu-row" role="group" aria-label="Menu">
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Volume"><i data-icon="volume"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Report a bug"><i data-icon="bug"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Ask"><i data-icon="speak"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" data-on="true" aria-label="Builds"><i data-icon="build"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Games"><i data-icon="games"></i></button></span>
+          </div>
+          <div class="studio-menu-sheet">
+            <ul class="studio-menu-builds" aria-label="Status">
+              <li>
+                <div class="studio-menu-build-group" role="group" aria-label="Blobs">
+                  <div class="studio-menu-build-heading"><strong>Blobs</strong><a href="#">Live</a></div>
+                  <ul>
+                    <li class="studio-menu-job-row">
+                      <button class="studio-menu-job" data-action-needed="true">
+                        <strong>Which menu?</strong><span class="studio-menu-job-state">Waiting on you</span>
+                      </button>
+                    </li>
+                    <li class="studio-menu-job-row">
+                      <button class="studio-menu-job" data-status="running">
+                        <strong>Big Endless button</strong><span class="studio-menu-job-state">Building</span>
+                        <span class="studio-menu-job-stage">Mossbeard in front</span><span class="studio-menu-job-percent">60%</span>
+                        <span class="studio-menu-job-progress"><span style="width: 60%"></span></span>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+              <li>
+                <div class="studio-menu-build-group" role="group" aria-label="Goblin Cellar">
+                  <div class="studio-menu-build-heading"><strong>Goblin Cellar</strong></div>
+                  <ul>
+                    <li class="studio-menu-job-row">
+                      <button class="studio-menu-job" data-blocking="true">
+                        <strong>Stalled: art pack failed to load</strong><span class="studio-menu-job-state">10:15</span>
+                        <span class="studio-menu-job-stage">Retrying from the backup</span>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 STATUS, all quiet: every game live, nothing waiting. -->
+    <section class="frame" id="status-2">
+      <img class="game-bg scrim" src="menu-phone.jpg" alt="" />
+      <div class="studio-menu-control">
+        <button class="studio-menu-button" aria-label="Menu" aria-expanded="true"><i data-icon="menu"></i></button>
+        <div class="studio-menu-tray">
+          <div class="studio-menu-row" role="group" aria-label="Menu">
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Volume"><i data-icon="volume"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Report a bug"><i data-icon="bug"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Ask"><i data-icon="speak"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" data-on="true" aria-label="Builds"><i data-icon="build"></i></button></span>
+            <span class="studio-menu-slot"><button class="menu-circle" aria-label="Games"><i data-icon="games"></i></button></span>
+          </div>
+          <div class="studio-menu-sheet">
+            <ul class="studio-menu-builds" aria-label="Status">
+              <li>
+                <div class="studio-menu-build-group" role="group" aria-label="Blobs">
+                  <div class="studio-menu-build-heading"><strong>Blobs</strong><a href="#">Live</a></div>
+                </div>
+              </li>
+              <li>
+                <div class="studio-menu-build-group" role="group" aria-label="Goblin Cellar">
+                  <div class="studio-menu-build-heading"><strong>Goblin Cellar</strong><a href="#">Live</a></div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script type="module">
+      // The app's own icon set, read straight from icons.ts so the mock can't drift from it.
+      const source = await (await fetch('../../../apps/web/src/icons.ts')).text();
+      const ICONS = new Function(source.replaceAll('(body: string)', '(body)').replace(/export const ICONS: Record<string, string> =/, 'return'))();
+      for (const node of document.querySelectorAll('[data-icon]')) {
+        node.classList.add('icon');
+        node.innerHTML = ICONS[node.dataset.icon] ?? '';
+      }
+      if (location.hash) document.body.classList.add('one');
+      document.body.dataset.ready = 'true';
+    </script>
+  </body>
+</html>
