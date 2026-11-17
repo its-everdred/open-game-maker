@@ -61,7 +61,7 @@ until the creator picks.
 
 Every game plan files three media tickets in the Build Order and records their native GitHub blocked-by edges:
 
-- **Thumbnail** (`role:visual`): composed scene key art showing the game's characters and world in a memorable moment, with the approved logo. Never use a gameplay screenshot; gameplay belongs in the trailer. Block it on the logo and graphics/look tickets.
+- **Thumbnail** (`role:visual`): composed scene key art showing the game's own play pieces as they look in the game (for Blobs, only blobs and blocks), never generic fantasy characters or people unless they are the game's actual play pieces. Art only: never draw the logo, title or any text into it; the shell overlays the manifest `logo` centred on top. Keep the centre open (roughly the middle 50% of the width and 45% of the height: calm sky, light or ground, no faces or key props), with the play pieces and action framing it from the edges and corners. Never use a gameplay screenshot; gameplay belongs in the trailer. Block it on the logo and graphics/look tickets.
 - **Loading image** (`role:visual`): supply art-only `public/media/loading-portrait.png` (at least 1440×2560, 9:16) and `public/media/loading-landscape.png` (at least 2560×1440, 16:9), declared as `loading.portrait` and `loading.landscape` in `gm.manifest.json` with paths relative to `public/`. Keep the subject within the centre 70%; leave the top 25% calm for the shell logo and bottom 20% calm for its progress bar. Block it on the graphics/look tickets.
 - **Trailer** (`role:visual`, `role:audio`): 15–30 seconds of real gameplay, with the game's own music and sound effects, in portrait and landscape cuts. Block it on the gameplay tickets.
 
