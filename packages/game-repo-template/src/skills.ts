@@ -49,7 +49,11 @@ function workspaceSkillPack(root: string, dir: string): SkillPack {
   const files = roots.flatMap((name) =>
     listFiles(join(dir, name)).map((path) => {
       const content = readFileSync(join(dir, name, path), 'utf8');
-      return { path: `${name}/${path}`, content, ...(isExecutable(join(dir, name, path)) ? { mode: '100755' as const } : {}) };
+      return {
+        path: `${name}/${path}`,
+        content,
+        ...(isExecutable(join(dir, name, path)) ? { mode: '100755' as const } : {}),
+      };
     }),
   );
   const version = packVersion(root, dir);

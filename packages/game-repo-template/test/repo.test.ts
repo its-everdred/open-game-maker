@@ -24,7 +24,9 @@ function summary(files: ReturnType<typeof renderRepoTemplate>['files']) {
 describe('renderRepoTemplate', () => {
   it('preserves the vendored launcher executable mode in game repositories', () => {
     const { files } = renderRepoTemplate('game-2d@1', ctx);
-    expect(files.find((file) => file.path === '.claude/skills/vendor/impeccable/impeccable/scripts/impeccable')?.mode).toBe('100755');
+    expect(
+      files.find((file) => file.path === '.claude/skills/vendor/impeccable/impeccable/scripts/impeccable')?.mode,
+    ).toBe('100755');
   });
 
   it('renders exactly the fixture file set for game-3d@1', () => {

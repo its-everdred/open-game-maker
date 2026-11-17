@@ -28,7 +28,10 @@ function walk(dir: string): string[] {
 const all = walk(vendor);
 const rel = (file: string) => relative(vendor, file);
 /** The vendored skill files: every markdown file inside a skill directory. */
-const skillFiles = all.filter((f) => f.endsWith('.md') && rel(f).split('/').length > 2 && (!rel(f).startsWith('impeccable/') || f.endsWith('/SKILL.md')));
+const skillFiles = all.filter(
+  (f) =>
+    f.endsWith('.md') && rel(f).split('/').length > 2 && (!rel(f).startsWith('impeccable/') || f.endsWith('/SKILL.md')),
+);
 const read = (path: string) => readFileSync(join(vendor, path), 'utf8');
 
 function frontMatter(file: string): Record<string, string> {
@@ -127,7 +130,9 @@ describe('vendored text runs nothing', () => {
     const inToolSet = (f: string) => TOOL_SETS.includes(rel(f).split('/')[0]);
     const runnable = all.filter((f) => !inToolSet(f) && /\.(sh|py|js|mjs|cjs|ts)$/.test(f));
     expect(runnable.map(rel)).toEqual([]);
-    expect(all.filter((f) => !rel(f).startsWith('impeccable/') && (statSync(f).mode & 0o111) !== 0).map(rel)).toEqual([]);
+    expect(all.filter((f) => !rel(f).startsWith('impeccable/') && (statSync(f).mode & 0o111) !== 0).map(rel)).toEqual(
+      [],
+    );
   });
 
   // Kevin's policy: no fal, no provider keys. Upstream video-to-game generates every asset with fal; only its local
