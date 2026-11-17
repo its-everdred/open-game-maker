@@ -178,7 +178,7 @@ export const CancelResultSchema = z
 
 export const MessageResultSchema = z
   .object({
-    request_id: z.string().nullable().optional(),
+    request_id: z.union([z.string(), z.number()]).transform(String).nullable().optional(),
     outcome: z.literal('unknown').optional(),
     retry_safe: z.boolean().optional(),
   })
