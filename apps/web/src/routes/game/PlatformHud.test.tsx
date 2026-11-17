@@ -175,6 +175,7 @@ describe('PlatformHud', () => {
       />,
     );
     expect(screen.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Paused' }).closest('[data-gm-overlay-allowed]')).not.toBeNull();
     expect(test.frame.pause).toHaveBeenCalledOnce();
     const resume = screen.getByRole('button', { name: 'Resume' });
     await waitFor(() => expect(resume).toHaveFocus());

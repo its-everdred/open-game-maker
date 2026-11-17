@@ -88,16 +88,27 @@ export async function checkPlayArea(ctx: GmContext, game: string): Promise<{ ok:
     );
     if (code !== 0) return { ok: false, output };
     const report = JSON.parse(reportOutput.join('\n')) as {
-      playArea: { viewport: string; ok: boolean; fill?: number; offset?: number; error?: string }[];
+      playArea: {
+        viewport: string;
+        screen?: string;
+        ok: boolean;
+        skipped?: boolean;
+        inactive?: boolean;
+        fill?: number;
+        offset?: number;
+        error?: string;
+      }[];
     };
     return {
       ok: report.playArea.every((item) => item.ok),
       output: [
         ...output,
         ...report.playArea.map((item) =>
-          item.error
-            ? `play area: ${item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport}: fail`
-            : `board fill ${item.fill!.toFixed(2)} at ${item.viewport}, offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
+          item.skipped
+            ? `play area: no active board at ${item.viewport} (${item.screen}): skipped`
+            : item.error
+              ? `play area: ${item.inactive && item.error.includes('not declared') ? 'not declared' : item.error} at ${item.viewport} (${item.screen}): fail`
+              : `board fill ${item.fill!.toFixed(2)} at ${item.viewport} (${item.screen}), offset ${item.offset!.toFixed(2)}: ${item.ok ? 'pass' : 'fail'}`,
         ),
       ],
     };
