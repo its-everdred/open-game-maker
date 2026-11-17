@@ -546,25 +546,59 @@ export function trackShadowRoots(): void {
         const result = Reflect.apply(original, this, args);
         if (name === 'putImageData' && args[0] instanceof ImageData) {
           const pixels = args[0];
-          const width = args.length >= 7 ? Math.abs(Number(args[5])) : pixels.width;
-          const height = args.length >= 7 ? Math.abs(Number(args[6])) : pixels.height;
-          if (width > 0 && height > 0) {
+          const dx = Math.trunc(Number(args[1]));
+          const dy = Math.trunc(Number(args[2]));
+          let sx = args.length >= 7 ? Math.trunc(Number(args[3])) : 0;
+          let sy = args.length >= 7 ? Math.trunc(Number(args[4])) : 0;
+          let width = args.length >= 7 ? Math.trunc(Number(args[5])) : pixels.width;
+          let height = args.length >= 7 ? Math.trunc(Number(args[6])) : pixels.height;
+          if (width < 0) {
+            sx += width;
+            width = -width;
+          }
+          if (height < 0) {
+            sy += height;
+            height = -height;
+          }
+          const left = Math.max(0, sx, -dx);
+          const top = Math.max(0, sy, -dy);
+          const right = Math.min(pixels.width, sx + width, this.canvas.width - dx);
+          const bottom = Math.min(pixels.height, sy + height, this.canvas.height - dy);
+          if (right > left && bottom > top) {
+            const previous = canvasDraws.get(this.canvas);
+            if (
+              dx + left === 0 &&
+              dy + top === 0 &&
+              dx + right === this.canvas.width &&
+              dy + bottom === this.canvas.height
+            )
+              canvasDraws.delete(this.canvas);
+            else if (previous) for (const draw of previous.values()) draw.unverifiedComposite = true;
+            let visible = false;
+            for (let y = top; y < bottom && !visible; y++)
+              for (let x = left; x < right; x++)
+                if (pixels.data[(y * pixels.width + x) * 4 + 3] !== 0) {
+                  visible = true;
+                  break;
+                }
             const entries = canvasDraws.get(this.canvas) ?? new Map<string, Draw>();
             const draw: Draw = {
               canvas: this.canvas,
               file: 'pixel buffer',
-              sourceWidth: width,
-              sourceHeight: height,
-              drawnWidth: width,
-              drawnHeight: height,
+              sourceWidth: right - left,
+              sourceHeight: bottom - top,
+              drawnWidth: right - left,
+              drawnHeight: bottom - top,
               a: 1,
               b: 0,
               c: 0,
               d: 1,
               unverifiedClip: false,
             };
-            entries.set(`pixel:${width}:${height}`, draw);
-            canvasDraws.set(this.canvas, entries);
+            if (visible) {
+              entries.set(`pixel:${right - left}:${bottom - top}`, draw);
+              canvasDraws.set(this.canvas, entries);
+            }
           }
         }
         if (name === 'reset') {

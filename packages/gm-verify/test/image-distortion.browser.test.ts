@@ -303,10 +303,25 @@ it('checks pixel buffers scaled by the visible canvas', async () => {
     await page.evaluate(() => {
       const ctx = document.querySelector<HTMLCanvasElement>('#pixels')!.getContext('2d')!;
       ctx.putImageData(ctx.createImageData(30, 30), 0, 0);
+      const outside = ctx.createImageData(30, 30);
+      outside.data[3] = 255;
+      ctx.putImageData(outside, -100, -100);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
+    await page.evaluate(() => {
+      const ctx = document.querySelector<HTMLCanvasElement>('#pixels')!.getContext('2d')!;
+      const pixels = ctx.createImageData(30, 30);
+      pixels.data[3] = 255;
+      ctx.putImageData(pixels, 0, 0);
     });
     expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toContainEqual(
       expect.objectContaining({ element: '#pixels', natural: 1, drawn: 3 }),
     );
+    await page.evaluate(() => {
+      const ctx = document.querySelector<HTMLCanvasElement>('#pixels')!.getContext('2d')!;
+      ctx.putImageData(ctx.createImageData(30, 30), 0, 0);
+    });
+    expect(await measureImageDistortion(page.mainFrame(), '390x844', 'play')).toEqual([]);
   } finally {
     await browser.close();
   }
