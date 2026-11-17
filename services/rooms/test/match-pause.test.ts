@@ -281,6 +281,66 @@ describe('match pause', () => {
     await waitFor(() => room.state.matchResumeAt > 0, 'countdown without the forfeited seat');
   });
 
+  it('gives a seat rejoining a prepared pause its own time to reach the boundary', async () => {
+    const room = await newRoom(harness.testServer, {
+      protocol: 2,
+      mode: 'per-seat',
+      maxPlayers: 2,
+      startLeadMs: 500,
+      timings: { seatReconnectSec: 1.5 },
+    });
+    const owner = await connect(harness.testServer, room, 'owner', 'owner');
+    const peer = await connect(harness.testServer, room, 'p1', 'player');
+    owner.send('net.start.request', { force: true });
+    await waitFor(() => room.state.epoch !== '', 'epoch');
+    await sleep(600);
+    reportPositions(room, owner, peer);
+    const prepare = owner.waitForMessage('net.pause.prepare');
+    owner.send('match.pause.request', {});
+    const boundary = await prepare;
+    const preparedAt = Date.now();
+    owner.send('net.pause.ack', boundary);
+    peer.send('net.pause.ack', boundary);
+    await sleep(1_000);
+    await peer.leave(false);
+    await waitFor(() => !room.state.seats[1].connected, 'peer offline');
+    const rejoined = await harness.testServer.sdk.joinById(room.roomId, await joinOptions(room, 'p1', 'player'));
+    /* Still running up to the boundary when the first sweep, timed from the prepare, would have fired. */
+    await waitFor(() => Date.now() > preparedAt + 1_700, 'first sweep passed');
+    expect(room.state.seats[1].connected).toBe(true);
+    rejoined.send('net.pause.ack', boundary);
+    owner.send('match.resume.request', {});
+    await waitFor(() => room.state.matchResumeAt > 0, 'countdown with the rejoined seat');
+  });
+
+  it('gives a seat joining the resume countdown the clock every other seat resumes on', async () => {
+    const room = await newRoom(harness.testServer, { protocol: 2, mode: 'per-seat', maxPlayers: 3, startLeadMs: 500 });
+    const owner = await connect(harness.testServer, room, 'owner', 'owner');
+    const peer = await connect(harness.testServer, room, 'p1', 'player');
+    owner.send('net.start.request', { force: true });
+    await waitFor(() => room.state.epoch !== '', 'epoch');
+    await sleep(600);
+    reportPositions(room, owner, peer);
+    const prepare = owner.waitForMessage('net.pause.prepare');
+    owner.send('match.pause.request', {});
+    const boundary = await prepare;
+    owner.send('net.pause.ack', boundary);
+    peer.send('net.pause.ack', boundary);
+    owner.send('match.resume.request', {});
+    await waitFor(() => room.state.matchResumeAt > Date.now(), 'countdown');
+    const originalTimeout = room.clock.setTimeout.bind(room.clock);
+    const delayJoinMessages = vi
+      .spyOn(room.clock, 'setTimeout')
+      .mockImplementation((callback, delay, ...args) => originalTimeout(callback, delay === 0 ? 50 : delay, ...args));
+    const late = await connect(harness.testServer, room, 'p2', 'player');
+    const starts = vi.fn();
+    late.onMessage('net.start', starts);
+    await waitFor(() => starts.mock.calls.length > 0, 'late seat start');
+    delayJoinMessages.mockRestore();
+    const startAt = starts.mock.calls[0]?.[0].startAt as number;
+    expect(Math.floor(((room.state.matchResumeAt - startAt) * 60) / 1000)).toBe(boundary.tick);
+  });
+
   it('starts the countdown once the forfeited pauser leaves every other seat connected', async () => {
     const room = await newRoom(harness.testServer, {
       protocol: 2,

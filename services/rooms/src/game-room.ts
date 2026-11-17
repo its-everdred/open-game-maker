@@ -546,6 +546,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
       if (this.state.epoch === '') return;
       const preparedPause = this.matchUsesBarrier && this.state.pausedAt !== 0;
       client.send('net.start', this.startPayload(seat?.seat, preparedPause));
+      if (preparedPause && seat !== undefined && this.state.matchResumeAt === 0) this.armMatchAckTimeout();
       if (this.matchUsesBarrier && this.state.pausedAt === 0) {
         if (seat !== undefined) this.probeMatchPositions();
         else client.send('net.pause.probe', { epoch: this.state.epoch });
@@ -627,6 +628,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
           tick: this.matchPauseTick,
           startAt: this.state.startAt,
         });
+        this.armMatchAckTimeout();
       }
       this.broadcast('match.pause', { by: this.state.matchPausedBy, name: this.state.matchPauseName });
     }
@@ -906,12 +908,15 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
 
   /**
    * `beforePause` places a seat joining a prepared pause short of the boundary, so it runs up to that tick and
-   * acknowledges it like the others instead of starting past it and being sent away as late.
+   * acknowledges it like the others instead of starting past it and being sent away as late. During the resume
+   * countdown it gets the resumed clock, which reaches the boundary exactly when every other seat resumes.
    */
   private startPayload(seat: number | undefined, beforePause = false): object {
-    const startAt = beforePause
-      ? resumeAt(this.state, Math.max(Date.now(), this.state.pausedAt)).startAt + PREPARED_JOIN_MARGIN_MS
-      : this.state.startAt;
+    let startAt = this.state.startAt;
+    if (beforePause && this.state.matchResumeAt > 0) startAt = resumeAt(this.state, this.state.matchResumeAt).startAt;
+    else if (beforePause) {
+      startAt = resumeAt(this.state, Math.max(Date.now(), this.state.pausedAt)).startAt + PREPARED_JOIN_MARGIN_MS;
+    }
     return {
       epoch: this.state.epoch,
       mode: this.authorityMode,
