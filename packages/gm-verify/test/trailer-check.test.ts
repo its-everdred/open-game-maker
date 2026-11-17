@@ -17,8 +17,12 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-/** A one-second clip at the given size with optional AAC audio, plus a capture record when asked. */
-function trailer(size: string, options: { audio?: boolean; record?: boolean; file?: string } = {}) {
+/** A clip at the given size (15 s unless told) with optional AAC audio, plus a capture record when asked. */
+function trailer(
+  size: string,
+  options: { audio?: boolean; record?: boolean; file?: string; seconds?: number; codec?: string } = {},
+) {
+  const seconds = options.seconds ?? 15;
   const file = join(dir, options.file ?? TRAILER_FILE);
   execFileSync('ffmpeg', [
     '-loglevel',
@@ -27,10 +31,12 @@ function trailer(size: string, options: { audio?: boolean; record?: boolean; fil
     '-f',
     'lavfi',
     '-i',
-    `color=green:size=${size}:duration=1:rate=10`,
-    ...(options.audio === false ? [] : ['-f', 'lavfi', '-i', 'sine=duration=1', '-c:a', 'aac']),
+    `color=green:size=${size}:duration=${seconds}:rate=2`,
+    ...(options.audio === false ? [] : ['-f', 'lavfi', '-i', `sine=duration=${seconds}`, '-c:a', 'aac']),
     '-c:v',
-    'libx264',
+    options.codec ?? 'libx264',
+    '-preset',
+    'ultrafast',
     '-pix_fmt',
     'yuv420p',
     '-shortest',
@@ -39,7 +45,7 @@ function trailer(size: string, options: { audio?: boolean; record?: boolean; fil
   if (options.record !== false)
     writeFileSync(
       join(dir, TRAILER_RECORD),
-      JSON.stringify(trailerRecord(readFileSync(file), 10, none, [{ scenario: 'combo', seconds: 1 }])),
+      JSON.stringify(trailerRecord(readFileSync(file), 2, none, [{ scenario: 'combo', seconds }])),
     );
 }
 
@@ -87,7 +93,7 @@ it.skipIf(!ffmpegAvailable)(
     expect(checkTrailer(dir, none)).toEqual([`${TRAILER_RECORD} is missing; capture the trailer with gm trailer`]);
     writeFileSync(
       join(dir, TRAILER_RECORD),
-      JSON.stringify(trailerRecord(Buffer.from('other'), 10, none, [{ seconds: 1 }])),
+      JSON.stringify(trailerRecord(Buffer.from('other'), 2, none, [{ seconds: 15 }])),
     );
     expect(checkTrailer(dir, none)).toEqual([
       `${TRAILER_RECORD} records a different video; capture the trailer again with gm trailer`,
@@ -104,8 +110,48 @@ it.skipIf(!ffmpegAvailable)(
     record.scenes[0]!.inPlay = 4;
     writeFileSync(join(dir, TRAILER_RECORD), JSON.stringify(record));
     expect(checkTrailer(dir, { selectors: ["[data-screen='title']"], routes: [] })).toEqual([
-      'scene 1 (combo) shows a menu in 6 of 10 frames; trailers are gameplay only',
+      'scene 1 (combo) shows a menu in 26 of 30 frames; trailers are gameplay only',
       "the capture predates the manifest's menu markers ([data-screen='title']); capture the trailer again",
+    ]);
+  },
+  60_000,
+);
+
+it.skipIf(!ffmpegAvailable)(
+  'fails a trailer shorter than 15 s or over 30 s (requires ffmpeg)',
+  () => {
+    trailer('1920x1080', { seconds: 1 });
+    expect(checkTrailer(dir, none)).toEqual([`${TRAILER_FILE} runs 1.000000 s; a trailer runs 15–30 s`]);
+    trailer('1920x1080', { seconds: 31 });
+    expect(checkTrailer(dir, none)).toEqual([`${TRAILER_FILE} runs 31.000000 s; a trailer runs 15–30 s`]);
+  },
+  60_000,
+);
+
+it.skipIf(!ffmpegAvailable)(
+  'fails a non-H.264 video and an unreadable file (requires ffmpeg)',
+  () => {
+    trailer('1920x1080', { codec: 'mpeg4' });
+    expect(checkTrailer(dir, none)).toEqual([`${TRAILER_FILE} video is mpeg4, not H.264`]);
+    writeFileSync(join(dir, TRAILER_FILE), 'not a video');
+    expect(checkTrailer(dir, none)).toEqual([
+      `${TRAILER_FILE} is not a readable video; capture the trailer again with gm trailer`,
+    ]);
+  },
+  60_000,
+);
+
+it.skipIf(!ffmpegAvailable)(
+  'fails a malformed record and one made before a manifest route (requires ffmpeg)',
+  () => {
+    trailer('1920x1080');
+    const record = readFileSync(join(dir, TRAILER_RECORD), 'utf8');
+    expect(checkTrailer(dir, { selectors: [], routes: ['#menu'] })).toEqual([
+      "the capture predates the manifest's menu markers (#menu); capture the trailer again",
+    ]);
+    writeFileSync(join(dir, TRAILER_RECORD), JSON.stringify({ ...JSON.parse(record), scenes: [{ frames: 30 }] }));
+    expect(checkTrailer(dir, none)).toEqual([
+      `${TRAILER_RECORD} is unreadable; capture the trailer again with gm trailer`,
     ]);
   },
   60_000,

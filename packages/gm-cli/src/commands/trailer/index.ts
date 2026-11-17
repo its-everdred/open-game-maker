@@ -46,11 +46,18 @@ export const command: GmCommand = {
         `invalid menus in gm.manifest.json: ${parsedMenus.error.message}`,
         'list menu CSS selectors in menus.selectors and menu routes in menus.routes',
       );
-    const menus = parsedMenus.data;
+    const menus = { selectors: parsedMenus.data.selectors ?? [], routes: parsedMenus.data.routes ?? [] };
     const verify = await import('@ogm/gm-verify');
     if (flags.check === true) {
       const dir = typeof flags.dir === 'string' ? resolve(ctx.cwd, flags.dir) : join(game, 'public', 'media');
-      const failures = verify.checkTrailer(dir, menus);
+      let failures: string[];
+      try {
+        failures = verify.checkTrailer(dir, menus);
+      } catch (error) {
+        if (error instanceof verify.FfmpegMissingError)
+          throw new UsageError('ffprobe is not installed', 'install ffmpeg, for example: sudo apt-get install ffmpeg');
+        throw error;
+      }
       if (ctx.json) printJson(ctx, { ok: failures.length === 0, failures });
       else if (failures.length) for (const failure of failures) ctx.err(failure);
       else ctx.out(`${verify.TRAILER_FILE} meets the trailer standard`);

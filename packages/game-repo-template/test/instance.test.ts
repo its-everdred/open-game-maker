@@ -83,8 +83,8 @@ describe('renderInstanceTemplate', () => {
     };
     const step = workflow.jobs.required.steps.find((candidate) => candidate.name === 'Check changed trailers');
     expect(step?.if).toBe("github.event_name == 'pull_request'");
-    expect(step?.run).toContain(`git diff --name-only "$base" HEAD -- 'games/*/public/media/trailer*'`);
-    expect(step?.run).toContain('pnpm exec gm trailer "$game" --check');
+    expect(step?.run).toContain(`git diff --name-only --diff-filter=d "$base" HEAD -- 'games/*/**/trailer*.mp4'`);
+    expect(step?.run).toContain('pnpm exec gm trailer "$(cut -d/ -f2 <<<"$dir")" --check --dir "$dir"');
   });
 
   it('is deterministic', () => {

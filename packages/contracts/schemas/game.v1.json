@@ -34,7 +34,6 @@
       "type": "object",
       "properties": {
         "selectors": {
-          "default": [],
           "maxItems": 32,
           "type": "array",
           "items": {
@@ -44,7 +43,6 @@
           }
         },
         "routes": {
-          "default": [],
           "maxItems": 32,
           "type": "array",
           "items": {
@@ -54,10 +52,6 @@
           }
         }
       },
-      "required": [
-        "selectors",
-        "routes"
-      ],
       "additionalProperties": false
     },
     "loading": {

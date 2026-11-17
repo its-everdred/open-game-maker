@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { z } from 'zod';
+
 import { FfmpegMissingError, hasFfmpeg } from './capture.js';
 import type { TrailerMenus } from './trailer-menus.js';
 
@@ -10,15 +12,27 @@ import type { TrailerMenus } from './trailer-menus.js';
 export const TRAILER_FILE = 'trailer-landscape.mp4';
 export const TRAILER_SIZE = { width: 1920, height: 1080 } as const;
 export const TRAILER_RECORD = 'trailer-landscape.frames.json';
-const MAX_SECONDS = 30;
+const SECONDS = { min: 15, max: 30 };
+// Concatenated clips can differ from the script's length by a few frames of audio.
+const SECONDS_SLACK = 0.1;
 
-export type TrailerRecord = {
-  video: string;
-  sha256: string;
-  fps: number;
-  menus: TrailerMenus;
-  scenes: { scenario: string | null; seconds: number; frames: number; inPlay: number }[];
-};
+const trailerRecordSchema = z.object({
+  video: z.literal(TRAILER_FILE),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+  fps: z.number().int().positive(),
+  menus: z.object({ selectors: z.array(z.string()), routes: z.array(z.string()) }),
+  scenes: z
+    .array(
+      z.object({
+        scenario: z.string().nullable(),
+        seconds: z.number().positive(),
+        frames: z.number().int().positive(),
+        inPlay: z.number().int().nonnegative(),
+      }),
+    )
+    .min(1),
+});
+export type TrailerRecord = z.infer<typeof trailerRecordSchema>;
 
 /** Capture aborts on a menu frame, so every recorded frame was in play. */
 export function trailerRecord(
@@ -55,23 +69,26 @@ export function checkTrailer(dir: string, menus: TrailerMenus, ffprobe = 'ffprob
   if (!files.includes(TRAILER_FILE)) return [...failures, `${TRAILER_FILE} is missing from ${dir}`];
 
   if (!hasFfmpeg(ffprobe)) throw new FfmpegMissingError(ffprobe);
-  const probe = JSON.parse(
-    execFileSync(
-      ffprobe,
-      [
-        '-v',
-        'error',
-        '-show_entries',
-        'stream=codec_type,codec_name,width,height:format=duration',
-        '-of',
-        'json',
-        video,
-      ],
-      {
-        encoding: 'utf8',
-      },
-    ),
-  ) as Probe;
+  let probe: Probe;
+  try {
+    probe = JSON.parse(
+      execFileSync(
+        ffprobe,
+        [
+          '-v',
+          'error',
+          '-show_entries',
+          'stream=codec_type,codec_name,width,height:format=duration',
+          '-of',
+          'json',
+          video,
+        ],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ),
+    ) as Probe;
+  } catch {
+    return [...failures, `${TRAILER_FILE} is not a readable video; capture the trailer again with gm trailer`];
+  }
   const streams = probe.streams ?? [];
   const picture = streams.find((stream) => stream.codec_type === 'video');
   const sound = streams.find((stream) => stream.codec_type === 'audio');
@@ -86,10 +103,9 @@ export function checkTrailer(dir: string, menus: TrailerMenus, ffprobe = 'ffprob
   if (sound?.codec_name !== 'aac')
     failures.push(`${TRAILER_FILE} ${sound ? `audio is ${sound.codec_name}, not AAC` : 'has no AAC audio'}`);
   const duration = Number(probe.format?.duration);
-  // Concatenated AAC frames can overrun the video by a few milliseconds.
-  if (!Number.isFinite(duration) || duration > MAX_SECONDS + 0.1)
+  if (!Number.isFinite(duration) || duration < SECONDS.min - SECONDS_SLACK || duration > SECONDS.max + SECONDS_SLACK)
     failures.push(
-      `${TRAILER_FILE} runs ${probe.format?.duration ?? 'an unknown length'} s; the limit is ${MAX_SECONDS} s`,
+      `${TRAILER_FILE} runs ${probe.format?.duration ?? 'an unknown length'} s; a trailer runs ${SECONDS.min}–${SECONDS.max} s`,
     );
 
   const recordPath = join(dir, TRAILER_RECORD);
@@ -97,13 +113,7 @@ export function checkTrailer(dir: string, menus: TrailerMenus, ffprobe = 'ffprob
     return [...failures, `${TRAILER_RECORD} is missing; capture the trailer with gm trailer`];
   let record: TrailerRecord;
   try {
-    record = JSON.parse(readFileSync(recordPath, 'utf8')) as TrailerRecord;
-    if (
-      !Array.isArray(record.scenes) ||
-      !Array.isArray(record.menus?.selectors) ||
-      !Array.isArray(record.menus?.routes)
-    )
-      throw new Error('missing fields');
+    record = trailerRecordSchema.parse(JSON.parse(readFileSync(recordPath, 'utf8')));
   } catch {
     return [...failures, `${TRAILER_RECORD} is unreadable; capture the trailer again with gm trailer`];
   }
