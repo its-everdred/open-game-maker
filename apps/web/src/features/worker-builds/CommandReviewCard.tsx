@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { commandPath, commandSource, type ReviewCommand } from './review-command';
 import { api } from '../../lib/api/client';
@@ -25,6 +25,11 @@ export function CommandReviewCard({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
   const [zoom, setZoom] = useState<{ url: string; label: string }>();
+  useEffect(() => {
+    setSaved(false);
+    setChangeOption('');
+    setError(false);
+  }, [command.version]);
   const coreState = useQuery({
     queryKey: ['core-review-state', command.ticket],
     enabled: saved && 'source' in command && Boolean(command.ticket),
@@ -113,7 +118,7 @@ export function CommandReviewCard({
         </select>
       </label>
       <button
-        disabled={sending || saved || !note.trim() || !changeOption}
+        disabled={sending || saved || !note.trim() || !command.options.some((option) => option.id === changeOption)}
         type="button"
         onClick={() => void send(changeOption, true)}
       >

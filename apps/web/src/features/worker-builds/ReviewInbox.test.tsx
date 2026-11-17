@@ -341,6 +341,7 @@ it('refreshes the version and options of the open command', () => {
       <ReviewInbox commands={[command]} reviews={[]} onClose={() => {}} />
     </QueryClientProvider>,
   );
+  fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Keep my note' } });
   view.rerender(
     <QueryClientProvider client={queryClient}>
       <ReviewInbox
@@ -351,6 +352,7 @@ it('refreshes the version and options of the open command', () => {
     </QueryClientProvider>,
   );
   expect(screen.getByRole('button', { name: 'Pick A: New' })).toBeVisible();
+  expect(screen.getByLabelText('Note (optional)')).toHaveValue('Keep my note');
 });
 
 it('keeps a command open while an answer is sending', async () => {

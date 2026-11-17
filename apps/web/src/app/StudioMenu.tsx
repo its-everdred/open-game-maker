@@ -443,19 +443,7 @@ export function StudioMenu() {
         ))}
       </ul>
     );
-  } else if (
-    sheet === 'builds' &&
-    (workers.length > 0 ||
-      reviews.length > 0 ||
-      reviewCommands.length > 0 ||
-      coreReview.targets.length > 0 ||
-      past.tickets.length > 0 ||
-      workerError ||
-      reviewData.error ||
-      gameReview.error ||
-      coreReview.error ||
-      past.error)
-  ) {
+  } else if (sheet === 'builds') {
     sheetContent = (
       <BuildPanel
         key={creatorId ?? 'signed-out'}

@@ -92,7 +92,8 @@ export async function createPreview(
     const previous = await readPreview(join(directory, `${ticket}.json`));
     if (previous) {
       const round = roundForBuild(deps.db, gameId, ticket, previous.buildId);
-      if (round && round.verdict === null) throw new BadArchive('review_round_open');
+      if (round && round.verdict === null && latestRoundForTicket(deps.db, gameId, ticket)?.id === round.id)
+        throw new BadArchive('review_round_open');
     }
     let installed = false;
     try {

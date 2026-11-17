@@ -180,7 +180,7 @@ export function ReviewInbox({
           {queueControls}
           {error && <p role="alert">Could not load all reviews.</p>}
           <CommandReviewCard
-            key={activeKey}
+            key={`${commandSource(command)}:${command.decision_id}`}
             command={command}
             onSendingChange={setSending}
             ticketState={

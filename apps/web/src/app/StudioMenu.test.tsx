@@ -702,6 +702,24 @@ describe('StudioMenu', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('keeps an open in-game review sheet mounted during a partial refresh', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1')];
+    const view = renderMenu('/g/game-blobs');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: '0 builds running' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
+    expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
+    state.decisions = [];
+    state.reviewLoading = true;
+    view.rerender(
+      <MemoryRouter initialEntries={['/g/game-blobs']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
+  });
+
   // On a shared device, a decision one creator opened must not stay on screen, answerable, for the next account.
   it('closes the open decision when another creator signs in', () => {
     state.session = { data: { user: { id: 'user-1' } } };

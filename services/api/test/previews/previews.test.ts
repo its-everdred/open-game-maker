@@ -200,6 +200,7 @@ describe('review round previews', () => {
     );
     expect(getRound(deps.db, ids.game, 'old-preview')?.verdict).toBeNull();
     expect(message).not.toHaveBeenCalled();
+    expect((await upload()).status).toBe(201);
   });
   it('hides and rejects a standalone preview when a newer round exists', async () => {
     const { deps, upload, list, answer, message } = setup();

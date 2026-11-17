@@ -74,6 +74,7 @@ export function PreviewCard({
     preview.pendingMessage ?? '',
   );
   const actualNote = pending ? (pending[2] ?? '') : note;
+  const swipeControls = swipe && !pending;
   const [frameError, setFrameError] = useState(false);
   const path = `/games/${encodeURIComponent(gameId)}/previews/${encodeURIComponent(preview.ticket)}`;
   const design = useQuery({
@@ -117,7 +118,7 @@ export function PreviewCard({
       onState: (state) => setFrameError(state.bridgeState === 'error'),
     });
     return () => frame.dispose();
-  }, [design.data, gameId, preview.accessId]);
+  }, [design.data, gameId, preview.accessId, swipeControls]);
   const content = (
     <>
       <RoundMedia
@@ -138,7 +139,7 @@ export function PreviewCard({
       className="review-deck"
       aria-label={`Preview for ticket ${preview.ticket}`}
     >
-      {swipe && !pending ? (
+      {swipeControls ? (
         <SwipeVerdict
           disabled={answer.isPending || answer.isSuccess}
           onPendingChange={onPendingChange}
