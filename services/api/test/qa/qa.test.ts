@@ -9,6 +9,7 @@ import { INTERNAL_TOKEN, makeApp, makeDeps } from '../helpers.js';
 
 const QA_EMAIL = 'qa@example.test';
 const b64 = (text: string) => Buffer.from(text).toString('base64');
+type QaSession = { userId: string; gameId: string; cookie: { name: string; value: string } };
 const MEDIA = { still: b64('qa-still'), clip: b64('qa-clip'), audio: b64('qa-audio') };
 
 // The QA game reaches its recording boundary; any other game would reach a real daemon, which a test has none of.
@@ -36,7 +37,7 @@ async function qaApp() {
 
 async function session(internal: Awaited<ReturnType<typeof qaApp>>['internal'], email = QA_EMAIL) {
   const response = await internal('/internal/qa/session', { method: 'POST', body: JSON.stringify({ email }) });
-  return { response, body: (await response.json()) as Record<string, any> };
+  return { response, body: (await response.json()) as QaSession };
 }
 
 describe('QA creator account (#859)', () => {
