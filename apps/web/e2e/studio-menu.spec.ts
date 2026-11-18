@@ -164,6 +164,7 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   });
   await page.goto('/all');
   await page.locator('.worker-tracker-button').click();
+  await page.getByRole('button', { name: '3 Needs Review' }).click();
   const dialog = page.getByRole('dialog', { name: 'Needs Review' });
   await expect(dialog.getByText('3 left')).toBeVisible();
   await expect(dialog.getByLabel('Concept target and review')).toBeVisible();
@@ -300,11 +301,15 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
   await expect(page.getByText('80%', { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Moon gate', { exact: true })).toBeVisible();
   await capturePhone(page, testInfo, 'worker-builds-expanded');
+  await page.getByRole('button', { name: '1 build running' }).click();
   complete = true;
-  await expect(page.getByRole('status').filter({ hasText: 'Moon gate is ready' })).toBeVisible({ timeout: 15_000 });
-  await capturePhone(page, testInfo, 'worker-builds-finished');
-  await page.getByRole('button', { name: 'Completed builds' }).click();
+  // A finished build only bumps the hammer's badge: its text waits behind a tap instead of covering the screen.
+  const tracker = page.getByRole('button', { name: 'Completed builds' });
+  await expect(tracker.locator('.worker-tracker-count')).toHaveText('1', { timeout: 15_000 });
   await expect(page.getByText('Moon gate is ready')).toHaveCount(0);
+  await capturePhone(page, testInfo, 'worker-builds-finished');
+  await tracker.click();
+  await expect(page.getByRole('region', { name: 'Builds' }).getByText('Moon gate is ready')).toBeVisible();
 });
 
 test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
