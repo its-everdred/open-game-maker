@@ -111,12 +111,12 @@ async function setup(read: (id: string) => Promise<TicketDetail>) {
   const { app } = await makeApp(deps);
   const get = (ticket: string, user = ids.user) =>
     app.request(`/api/v1/games/${ids.game}/tickets/${ticket}/detail`, { headers: asUser(user) });
-  return { deps, get, ticketDetail, ticketDetailMedia };
+  return { app, deps, get, ticketDetail, ticketDetailMedia };
 }
 
 describe('ticket detail route', () => {
   it('shows a closed ticket’s summary, PR, verdict quote and media the browser can load', async () => {
-    const { deps, get, ticketDetailMedia } = await setup(async (id) => detail(id));
+    const { app, deps, get, ticketDetailMedia } = await setup(async (id) => detail(id));
     const response = await get('11');
     expect(response.status, await response.clone().text()).toBe(200);
     const body = (await response.json()) as Record<string, unknown> & {
@@ -135,6 +135,13 @@ describe('ticket detail route', () => {
     expect(body.media.map((item) => [item.kind, item.caption])).toEqual([['video', '23 s cut']]);
     expect(body.media[0]!.url).toContain('/blobs/');
     expect(body.media[0]!.url).not.toContain('127.0.0.1:4100');
+    // On the app's own origin, through the API's blob proxy: prod signed the blob host's tailnet address, which the
+    // browser refused from the public app, so no detail picture, clip or sound loaded (#875).
+    const signed = new URL(body.media[0]!.url);
+    expect(signed.origin).toBe(deps.config.appOrigin);
+    const served = await app.request(`${signed.pathname}${signed.search}`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get('content-type')).toBe('video/mp4');
     expect(ticketDetailMedia).toHaveBeenCalledWith('11', '/api/v1/tickets/11/media/m_clip?sig=1', expect.anything());
     const hash = `sha256:${body.media[0]!.url.split('/blobs/sha256/')[1]!.split('?')[0]}` as const;
     expect((await deps.blobStore.open(hash))?.ref.mime).toBe('video/mp4');

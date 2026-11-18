@@ -23,7 +23,8 @@ import { belongsToGame, ticketScope } from './scope.js';
 import { isQaGame } from '../qa/state.js';
 import { qaCompleted, qaWorkers } from '../qa/tickets.js';
 import { AiurHttpError } from '@ogm/aiur-client';
-import { getChatRuntime } from '../build-chat/routes.js';
+import type { BlobHash } from '@ogm/blob-store';
+import { reviewMediaUrl } from '../blobs/review-url.js';
 import { ownsTicket, ticketDetailView } from './detail.js';
 
 export const prefix = '/api/v1';
@@ -254,6 +255,8 @@ routes.get('/games/:gameId/tickets/:ticket/detail', async (c) => {
     if (error instanceof AiurHttpError && error.status === 404) throw new HttpError(404, 'ticket_not_found');
     throw new HttpError(503, 'ticket_detail_unavailable');
   });
-  return c.json(await ticketDetailView(deps, client, ticket, getChatRuntime(deps).sign, read));
+  // Through the app origin like review media: a phone on the public app cannot load the blob host's own address (#875).
+  const sign = (hash: BlobHash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash);
+  return c.json(await ticketDetailView(deps, client, ticket, sign, read));
 });
 export default routes;
