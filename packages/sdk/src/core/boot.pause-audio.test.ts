@@ -29,6 +29,7 @@ function setHidden(hidden: boolean): void {
 describe('paused game audio (#874)', () => {
   afterEach(() => {
     Reflect.deleteProperty(document, 'hidden');
+    Reflect.deleteProperty(window, '__gmPaused');
   });
 
   it('keeps the sound off when the page returns until the player resumes', async () => {
@@ -78,5 +79,42 @@ describe('paused game audio (#874)', () => {
     setHidden(false);
     await vi.waitFor(() => expect(context.resumeCalls).toBe(1));
     audio.dispose();
+  });
+
+  it('holds the sound when the page hides before the pause arrives, the usual app-switch order', async () => {
+    const context = new FakeAudioContext();
+    context.state = 'running';
+    const audio = createAudio({ rng: () => 0.5, AudioContextCtor: contextConstructor(context) });
+    setHidden(true);
+    await vi.waitFor(() => expect(context.suspendCalls).toBe(1));
+    window.dispatchEvent(new CustomEvent('gm-pause', { detail: { paused: true } }));
+    setHidden(false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(context.resumeCalls).toBe(0);
+    expect(audio.status()).toBe('on');
+    window.dispatchEvent(new CustomEvent('gm-pause', { detail: { paused: false } }));
+    await vi.waitFor(() => expect(context.resumeCalls).toBe(1));
+    audio.dispose();
+  });
+
+  it('keeps audio a game creates during a pause quiet until the player resumes', async () => {
+    const { module } = createCounterGame();
+    const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
+    await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+    bridge.onMessage!(
+      message('hello', { protocol: 1, capabilities: [], mode: 'play', build: 'draft', playerIndex: 0 }),
+    );
+    const runtime = await pending;
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    const context = new FakeAudioContext();
+    context.state = 'running';
+    const audio = createAudio({ rng: () => 0.5, AudioContextCtor: contextConstructor(context) });
+    await vi.waitFor(() => expect(context.suspendCalls).toBe(1));
+    await audio.unlock();
+    expect(context.resumeCalls).toBe(0);
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    await vi.waitFor(() => expect(context.resumeCalls).toBe(1));
+    audio.dispose();
+    runtime.dispose();
   });
 });

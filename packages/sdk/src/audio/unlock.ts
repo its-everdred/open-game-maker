@@ -13,6 +13,8 @@ const UNLOCK_EVENTS = ['pointerup', 'touchend', 'keydown', 'click'] as const;
 
 /** The window event the SDK runtime dispatches when the host pauses or resumes the game (`detail.paused`). */
 export const GM_PAUSE_EVENT = 'gm-pause';
+/** The window property holding the latest pause state, for audio a game creates while already paused. */
+export const GM_PAUSED_FLAG = '__gmPaused';
 
 export class AudioUnlock {
   private readonly listeners = new Set<(status: AudioStatus) => void>();
@@ -29,6 +31,9 @@ export class AudioUnlock {
     options.context.addEventListener('statechange', this.stateChanged);
     options.win.document.addEventListener('visibilitychange', this.visibilityChanged);
     options.win.addEventListener(GM_PAUSE_EVENT, this.pauseChanged);
+    if (Reflect.get(options.win, GM_PAUSED_FLAG) === true) {
+      this.pauseChanged(new CustomEvent(GM_PAUSE_EVENT, { detail: { paused: true } }));
+    }
   }
 
   readonly unlock = (): Promise<void> => {

@@ -6,7 +6,7 @@ import { openGameBridge } from '@ogm/iframe-bridge';
 import { EventRing } from './events.js';
 import { SdkHostApi, type SendEnvelope } from './host-api.js';
 import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
-import { GM_PAUSE_EVENT } from '../audio/unlock.js';
+import { GM_PAUSED_FLAG, GM_PAUSE_EVENT } from '../audio/unlock.js';
 import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
 import { dispatchTest } from '../test/dispatch.js';
@@ -31,7 +31,9 @@ function originFromDocument(): string {
 
 /** Tells the game's audio that the host paused or resumed play, so it stays quiet until the player resumes. */
 function announcePause(paused: boolean): void {
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(GM_PAUSE_EVENT, { detail: { paused } }));
+  if (typeof window === 'undefined') return;
+  Reflect.set(window, GM_PAUSED_FLAG, paused);
+  window.dispatchEvent(new CustomEvent(GM_PAUSE_EVENT, { detail: { paused } }));
 }
 
 function markNow(): number {
