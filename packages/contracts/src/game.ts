@@ -98,6 +98,14 @@ export const controlDeclSchema = z.looseObject({
 });
 export type ControlDecl = z.infer<typeof controlDeclSchema>;
 
+/** Menu, pause and countdown screens a trailer must not show, besides elements marked `data-gm-menu`. */
+export const gameMenusSchema = z.strictObject({
+  /** CSS selectors of menu elements; a visible match marks the frame as a menu. */
+  selectors: z.array(z.string().min(1).max(256)).max(32).optional(),
+  /** `location.pathname` or `location.hash` values that are menu screens. */
+  routes: z.array(z.string().min(1).max(256)).max(32).optional(),
+});
+
 /** A4 §6 `core.manifest` fields plus the B7 §3 minimum additions. */
 export const gameManifestSchema = z.looseObject({
   id: z.string().min(1).max(64),
@@ -111,6 +119,7 @@ export const gameManifestSchema = z.looseObject({
     .string()
     .regex(/^media\/[a-zA-Z0-9_-]+\.(png|webp|svg)$/u)
     .optional(),
+  menus: gameMenusSchema.optional(),
   /** Build-relative source images used while this game loads. */
   loading: z
     .looseObject({

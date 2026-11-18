@@ -75,3 +75,11 @@ jobs:
             pnpm exec gm qa playtest "$game" --all-modes || status=1
           done
           exit "$status"
+      - name: Check changed trailers
+        if: github.event_name == 'pull_request'
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          dirs="$(git diff --name-only --diff-filter=d "$base" HEAD -- 'games/*/**/trailer*.mp4' 'games/*/**/trailer*.webm' 'games/*/**/trailer*.mov' 'games/*/**/trailer-landscape.frames.json' | xargs -r -n1 dirname | sort -u)"
+          [[ -z "$dirs" ]] && exit 0
+          command -v ffprobe >/dev/null || { sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends ffmpeg; }
+          for dir in $dirs; do pnpm exec gm trailer "$(cut -d/ -f2 <<<"$dir")" --check --dir "$dir"; done

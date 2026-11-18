@@ -29,13 +29,12 @@ describe('showcase detail', () => {
       ...mergeShowcase([])[0]!,
       coverUrl: '/thumbnail.png',
       trailerUrl: '/landscape.mp4',
-      portraitTrailerUrl: '/portrait.mp4',
     };
     render(<ShowcaseSpotlight game={game} canOpen onPlay={vi.fn()} onEdit={vi.fn()} onClose={vi.fn()} />);
     expect(document.querySelector('img[src="/thumbnail.png"]')).not.toBeNull();
-    expect(document.querySelector('video.game-trailer-portrait')).toHaveAttribute('src', '/portrait.mp4');
-    expect(document.querySelector('video.game-trailer-portrait')).toHaveAttribute('poster', '/thumbnail.png');
-    expect(document.querySelector('video.game-trailer-landscape')).toHaveAttribute('src', '/landscape.mp4');
+    expect(document.querySelectorAll('video')).toHaveLength(1);
+    expect(document.querySelector('video')).toHaveAttribute('src', '/landscape.mp4');
+    expect(document.querySelector('video')).toHaveAttribute('poster', '/thumbnail.png');
   });
 
   it('uses the responsive cover beneath a shared trailer without loading the original poster', () => {

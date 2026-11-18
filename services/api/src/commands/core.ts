@@ -7,7 +7,7 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
-import { getChatRuntime } from '../build-chat/routes.js';
+import { reviewMediaUrl } from '../blobs/review-url.js';
 import { isForCreator } from '../job-commands/correlate.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { optionMediaFromAiur } from './aiur-media.js';
@@ -68,7 +68,9 @@ export default new Hono<ApiBindings>()
       decisions.filter(open).map(async (decision) => {
         const command = toGameCommand(
           decision,
-          await optionMediaFromAiur(deps, client, decision, getChatRuntime(deps).sign),
+          await optionMediaFromAiur(deps, client, decision, (hash) =>
+            reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash),
+          ),
         );
         return command ? { ...command, source: 'core' as const } : null;
       }),

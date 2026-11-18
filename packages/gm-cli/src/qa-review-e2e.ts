@@ -1,7 +1,9 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { reviewOptionImageReady, reviewRoundMediaReady } from './qa-review-media.js';
 
 import { mediaFailures, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
+import { ticketDetailSteps } from './qa-ticket-detail-e2e.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
@@ -83,10 +85,21 @@ async function swipe(page: Page, right: boolean): Promise<void> {
   await media.scrollIntoViewIfNeeded();
   const box = await media.boundingBox();
   if (!box) throw new StepFailed('the review card has no media to swipe');
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + (right ? 110 : -110), box.y + box.height / 2, { steps: 5 });
-  await page.mouse.up();
+  const touch = await page.context().newCDPSession(page);
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  try {
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let step = 1; step <= 5; step++) {
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: x + (right ? 22 : -22) * step, y }],
+      });
+    }
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } finally {
+    await touch.detach();
+  }
 }
 
 async function step<T>(name: string, run: () => Promise<T>): Promise<T> {
@@ -107,10 +120,29 @@ async function runViewport(
   const run = `${config.stamp}-${name}`;
   const stills: string[] = [];
   const media = (file: string) => readFileSync(new URL(file, MEDIA_DIR)).toString('base64');
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 2, hasTouch: true });
   // Whether --break-media found the review picture to break; a run that broke nothing proves nothing.
   let broke = false;
   try {
+    // The hammer's ticket detail first, on its own page and fixtures, so the review deck below starts as it always has.
+    await internal(config, '/ticket-fixtures', {
+      method: 'POST',
+      body: JSON.stringify({
+        run,
+        media: { still: media('still.png'), clip: media('clip.mp4'), audio: media('sound.mp3') },
+      }),
+    });
+    await context.addCookies([{ ...config.cookie, url: config.origin }]);
+    const ticketPage = await context.newPage();
+    await step('open a running and a closed ticket', () =>
+      ticketDetailSteps(ticketPage, config.origin, async (label) => {
+        const file = join(config.out, `${name}-${stills.length + 1}-${label}.png`);
+        await ticketPage.screenshot({ path: file });
+        stills.push(file);
+      }),
+    );
+    await ticketPage.close();
+    await internal(config, `/ticket-fixtures/${run}`, { method: 'DELETE' });
     const seeded = await internal(config, '/review-fixtures', {
       method: 'POST',
       body: JSON.stringify({
@@ -128,7 +160,6 @@ async function runViewport(
         return route.fulfill({ status: 404, body: '' });
       });
     }
-    await context.addCookies([{ ...config.cookie, url: config.origin }]);
     if (config.injectRegression)
       await context.addInitScript((css) => {
         document.addEventListener('DOMContentLoaded', () => {
@@ -162,6 +193,9 @@ async function runViewport(
       const failures = [...(await mediaFailures(dialog, 'the round')), ...(await swipeDeckFailures(page, dialog))];
       if (failures.length) throw new StepFailed(failures.join('; '));
     });
+    await step('load the round image, video and audio', async () => {
+      await page.waitForFunction(reviewRoundMediaReady, null, timeout);
+    });
     await step('swipe the round right and undo', async () => {
       await swipe(page, true);
       await page.getByRole('button', { name: 'Undo' }).click(timeout);
@@ -178,6 +212,7 @@ async function runViewport(
       await dialog.getByText('QA: which one?').waitFor(timeout);
       await settleMedia(dialog);
       await still('command');
+      await page.waitForFunction(reviewOptionImageReady, null, timeout);
       const failures = [
         ...(await mediaFailures(dialog, 'the Command')),
         ...(typeof seeded.options === 'number'
@@ -186,6 +221,28 @@ async function runViewport(
       ];
       if (failures.length) throw new StepFailed(failures.join('; '));
       await dialog.getByLabel('Note (optional)').fill(PICK_NOTE, timeout);
+      await dialog.getByRole('button', { name: 'View option B' }).click(timeout);
+      await dialog.locator('video').first().waitFor(timeout);
+      await page.waitForFunction(
+        () => {
+          const video = document.querySelector('.worker-review-option video') as HTMLVideoElement | null;
+          return Boolean(video && video.readyState >= 2);
+        },
+        null,
+        timeout,
+      );
+      await still('command-b');
+      await dialog.getByRole('button', { name: 'View option C' }).click(timeout);
+      await page.waitForFunction(
+        () => {
+          const audio = document.querySelector('.worker-review-option audio') as HTMLAudioElement | null;
+          return Boolean(audio && audio.duration > 1);
+        },
+        null,
+        timeout,
+      );
+      await still('command-c');
+      await dialog.getByRole('button', { name: 'View option B' }).click(timeout);
       await dialog.getByRole('button', { name: /^Pick B/ }).click(timeout);
     });
     const report = await poll(
@@ -207,6 +264,7 @@ async function runViewport(
   } finally {
     await context.close();
     await internal(config, `/review-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);
+    await internal(config, `/ticket-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);
   }
 }
 
@@ -215,6 +273,7 @@ export async function reviewE2e(browser: Browser, config: ReviewE2eConfig): Prom
   mkdirSync(config.out, { recursive: true });
   // A run that died midway leaves its cards; they would sit ahead of this run's in the deck.
   await internal(config, '/review-fixtures', { method: 'DELETE' });
+  await internal(config, '/ticket-fixtures', { method: 'DELETE' });
   const results: ViewportResult[] = [];
   for (const viewport of REVIEW_VIEWPORTS) results.push(await runViewport(browser, config, viewport));
   return results;

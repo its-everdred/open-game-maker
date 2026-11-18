@@ -7,6 +7,7 @@ import { Dialog } from '../../components/Dialog';
 import { ReviewInbox } from './ReviewInbox';
 import { openConversation } from '../build-chat/conversation';
 import { TicketConversation } from './TicketConversation';
+import { TicketDetail } from './TicketDetail';
 import type { PastTicket } from './usePastTickets';
 import type { WorkerReview } from './useWorkerReviews';
 import type { FinishedWorker } from './useWorkerFinishes';
@@ -160,8 +161,10 @@ export function BuildPanel({
 }: PanelProps & { id: string }) {
   const [modal, setModal] = useState<'review' | 'completed'>();
   const [conversation, setConversation] = useState<PastTicket>();
+  const [detail, setDetail] = useState<DetailTarget>();
   const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
   const reviewCount = reviews.length + commands.length + targets.length;
+  const talk = detail && conversationOf(detail, jobs);
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
       <h2>Builds</h2>
@@ -175,13 +178,7 @@ export function BuildPanel({
       <ul className="worker-tracker-list">
         {workers.map((worker) => (
           <li key={worker.ticket}>
-            <div>
-              <strong>{worker.title}</strong>
-              <span>
-                {waitingLabel(worker.state) ??
-                  (worker.percent === 100 ? 'Finishing' : worker.percent == null ? '' : `${worker.percent}%`)}
-              </span>
-            </div>
+            <WorkerRow worker={worker} onOpen={setDetail} />
             {!waitingLabel(worker.state) && worker.percent != null && worker.percent < 100 && (
               <span className="worker-tracker-bar">
                 <span style={{ width: `${worker.percent}%` }} />
@@ -236,44 +233,83 @@ export function BuildPanel({
           {historyLoading && <p>Loading completed tickets…</p>}
           {historyError && <p role="alert">Could not load completed tickets.</p>}
           <ul className="worker-tracker-list">
-            {past.map((ticket) => {
-              const job =
-                jobs.find((item) => item.id === ticket.jobId) ??
-                jobs.find((item) => item.gameId === ticket.gameId && String(item.aiurIssueNumber) === ticket.ticket);
-              return (
-                <li key={`${ticket.gameId}:${ticket.ticket}`}>
-                  {job ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModal(undefined);
-                        openConversation(job.id);
-                      }}
-                    >
-                      {ticket.title} · {ticket.outcome}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModal(undefined);
-                        setConversation(ticket);
-                      }}
-                    >
-                      {ticket.title} · {ticket.outcome}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
+            {past.map((ticket) => (
+              <li key={`${ticket.gameId}:${ticket.ticket}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModal(undefined);
+                    setDetail(ticket);
+                  }}
+                >
+                  {ticket.title} · {ticket.outcome}
+                </button>
+              </li>
+            ))}
           </ul>
         </Dialog>
+      )}
+      {detail && (
+        <TicketDetail
+          gameId={detail.gameId}
+          ticket={detail.ticket}
+          title={detail.title}
+          creatorId={creatorId}
+          onClose={() => setDetail(undefined)}
+          onConversation={
+            talk === undefined
+              ? undefined
+              : () => {
+                  setDetail(undefined);
+                  if (typeof talk === 'string') openConversation(talk);
+                  else setConversation(talk);
+                }
+          }
+        />
       )}
       {conversation && (
         <TicketConversation creatorId={creatorId} ticket={conversation} onClose={() => setConversation(undefined)} />
       )}
     </section>
   );
+}
+
+type DetailTarget = { gameId: string; ticket: string; title: string } | PastTicket;
+
+// A worker's ticket is `<gameId>:<ticket>`; one without its game has no detail to open.
+function splitTicket(ticket: string): { gameId: string; ticket: string } | undefined {
+  const separator = ticket.lastIndexOf(':');
+  return separator < 0 ? undefined : { gameId: ticket.slice(0, separator), ticket: ticket.slice(separator + 1) };
+}
+
+function WorkerRow({ worker, onOpen }: { worker: WorkerBuild; onOpen(target: DetailTarget): void }) {
+  const row = (
+    <>
+      <strong>{worker.title}</strong>
+      <span>
+        {waitingLabel(worker.state) ??
+          (worker.percent === 100 ? 'Finishing' : worker.percent == null ? '' : `${worker.percent}%`)}
+      </span>
+    </>
+  );
+  const target = splitTicket(worker.ticket);
+  return target ? (
+    <button type="button" className="worker-tracker-row" onClick={() => onOpen({ ...target, title: worker.title })}>
+      {row}
+    </button>
+  ) : (
+    <div>{row}</div>
+  );
+}
+
+// A ticket's conversation from its detail: its job's build chat when a job filed it, else a closed ticket's
+// creator-visible discussion. A running ticket no job owns has none.
+function conversationOf(target: DetailTarget, jobs: readonly Job[]): string | PastTicket | undefined {
+  const past = 'outcome' in target ? target : undefined;
+  const job =
+    (past?.jobId ? jobs.find((item) => item.id === past.jobId) : undefined) ??
+    jobs.find((item) => item.gameId === target.gameId && String(item.aiurIssueNumber) === target.ticket);
+  return job?.id ?? past;
 }
 
 export function missingReviewTargets(
@@ -283,10 +319,9 @@ export function missingReviewTargets(
 ) {
   return workers.flatMap((worker) => {
     if (worker.state !== 'human-review') return [];
-    const separator = worker.ticket.lastIndexOf(':');
-    if (separator < 0) return [];
-    const gameId = worker.ticket.slice(0, separator);
-    const ticket = worker.ticket.slice(separator + 1);
+    const target = splitTicket(worker.ticket);
+    if (!target) return [];
+    const { gameId, ticket } = target;
     if (
       reviews.some(
         (review) =>

@@ -18,7 +18,7 @@ function headSha(cwd: string): string {
 
 export const command: GmCommand = {
   name: 'qa review-e2e',
-  summary: 'complete a review round and a three-option Command as the QA creator on the deployed app, at four sizes',
+  summary: 'open ticket details, then complete a review round and a Command as the QA creator, at four sizes',
   usage: '[--sha <deployed sha>] [--origin <app origin>] [--out <dir>]',
   example: 'qa review-e2e --sha 56d3dc1a2',
   flags: {

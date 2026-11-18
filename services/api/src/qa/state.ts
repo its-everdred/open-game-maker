@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { Decision } from '@ogm/aiur-client';
+import type { Decision, TicketDetail } from '@ogm/aiur-client';
 import { schema, type Db } from '@ogm/db';
 
 // The QA creator account (#859): one dedicated user, in a family of its own, owning one private game. Its ids, the
@@ -22,6 +22,8 @@ export type QaState = {
   gameId: string;
   decisions: Decision[];
   received: QaReceived[];
+  // Ticket details a ticket-detail E2E seeded (#873): open ones list as the game's builds, closed ones as completed.
+  tickets?: TicketDetail[];
 };
 
 export function readQaState(db: Db): QaState | null {

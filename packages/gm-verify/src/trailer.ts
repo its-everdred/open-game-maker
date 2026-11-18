@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { z } from 'zod';
@@ -8,7 +8,9 @@ import { ffmpeg } from './capture.js';
 import { trailerAudioArgs as trailerAudioArgsFor } from './trailer-audio.js';
 import { trailerInputSchema } from './trailer-script.js';
 import { soundLogCues, type SoundLog } from './trailer-log.js';
-import { recordTrailerVideo, type TrailerSize } from './trailer-video.js';
+import { TRAILER_FILE, TRAILER_RECORD, trailerRecord } from './trailer-check.js';
+import type { TrailerMenus } from './trailer-menus.js';
+import { recordTrailerVideo } from './trailer-video.js';
 import { acquireSlot, type SemaphoreOptions } from './semaphore.js';
 import { serveStatic } from './server.js';
 
@@ -33,17 +35,19 @@ export const trailerScriptSchema = z
   });
 export type TrailerScript = z.output<typeof trailerScriptSchema>;
 
-/** Capture each named scenario in isolation, then assemble the two complete videos. */
+/** Capture each named scenario in isolation, then assemble the game's one 16:9 trailer and its frame record. */
 export async function captureTrailer(options: {
   serveDir: string;
   outDir: string;
   script: TrailerScript;
   software: boolean;
   fps?: number;
+  menus?: TrailerMenus;
   slots?: SemaphoreOptions;
 }): Promise<string[]> {
   const script = trailerScriptSchema.parse(options.script);
   const fps = options.fps ?? 30;
+  const menus = options.menus ?? { selectors: [], routes: [] };
   if (!Number.isInteger(fps) || fps < 1 || fps > 60) throw new Error('frame rate must be an integer from 1 to 60');
   if (script.some((scene) => Math.abs(scene.seconds * fps - Math.round(scene.seconds * fps)) > 1e-7))
     throw new Error('scenario durations must align to the frame rate');
@@ -65,52 +69,54 @@ export async function captureTrailer(options: {
     server = await serveStatic(options.serveDir);
     browser = await launch(options.software, options.software);
     if (timedOut) throw new Error(`trailer timed out after ${timeoutMs} ms`);
-    const results: string[] = [];
     let audible = false;
-    for (const orientation of ['portrait', 'landscape'] as const) {
-      const clips: string[] = [];
-      for (const [index, scene] of script.entries()) {
-        const target = new URL(server.url);
-        if (scene.scenario) target.searchParams.set('scenario', scene.scenario);
-        const size = orientation === 'portrait' ? { width: 360, height: 640 } : { width: 640, height: 360 };
-        const game = await openGame(browser, target.href, {
-          viewport: 'phone',
-          tier: 'mobile',
-          trailerAudio: true,
-          contextOptions: { viewport: size, deviceScaleFactor: 1 },
-        });
-        const silent = join(tmp, `${orientation}-${index}-silent.mp4`);
-        const clip = join(tmp, `${orientation}-${index}.mp4`);
+    const clips: string[] = [];
+    for (const [index, scene] of script.entries()) {
+      const target = new URL(server.url);
+      if (scene.scenario) target.searchParams.set('scenario', scene.scenario);
+      const game = await openGame(browser, target.href, {
+        viewport: 'phone',
+        tier: 'mobile',
+        trailerAudio: true,
+        contextOptions: { viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 },
+      });
+      const silent = join(tmp, `${index}-silent.mp4`);
+      const clip = join(tmp, `${index}.mp4`);
+      try {
         try {
           await recordTrailerVideo(
             game.hooks,
-            { script: scene.inputs, seconds: scene.seconds, fps, orientation, surface: scene.surface },
+            { script: scene.inputs, seconds: scene.seconds, fps, surface: scene.surface, menus },
             silent,
           );
-          const log = await game.game.evaluate(
-            () => (window as unknown as { __gmTrailerAudio: SoundLog & { sdk?: boolean } }).__gmTrailerAudio,
-          );
-          if (!log?.sdk) throw new Error('game did not expose captured SDK audio events');
-          const cues = soundLogCues(log, options.serveDir, server.url, scene.seconds, tmp);
-          audible ||= cues.some((cue) => cue.gain > 0);
-          ffmpeg('ffmpeg', trailerAudioArgsFor(silent, clip, scene.seconds, cues));
-          clips.push(clip);
-        } finally {
-          await game.close();
+        } catch (error) {
+          const name = scene.scenario ? `scenario ${scene.scenario}` : 'scenario';
+          throw new Error(`${name} (scene ${index + 1}): ${error instanceof Error ? error.message : String(error)}`, {
+            cause: error,
+          });
         }
+        const log = await game.game.evaluate(
+          () => (window as unknown as { __gmTrailerAudio: SoundLog & { sdk?: boolean } }).__gmTrailerAudio,
+        );
+        if (!log?.sdk) throw new Error('game did not expose captured SDK audio events');
+        const cues = soundLogCues(log, options.serveDir, server.url, scene.seconds, tmp);
+        audible ||= cues.some((cue) => cue.gain > 0);
+        ffmpeg('ffmpeg', trailerAudioArgsFor(silent, clip, scene.seconds, cues));
+        clips.push(clip);
+      } finally {
+        await game.close();
       }
-      const list = join(tmp, `${orientation}.txt`);
-      writeFileSync(list, clips.map((_, index) => `file '${orientation}-${index}.mp4'`).join('\n') + '\n');
-      const assembled = join(tmp, `trailer-${orientation}.mp4`);
-      ffmpeg('ffmpeg', ['-f', 'concat', '-safe', '1', '-i', list, '-c', 'copy', '-movflags', '+faststart', assembled]);
-      results.push(assembled);
     }
     if (!audible) throw new Error('the game did not request audible SDK audio');
-    return results.map((path, index) => {
-      const destination = join(options.outDir, `trailer-${(['portrait', 'landscape'] as TrailerSize[])[index]}.mp4`);
-      renameSync(path, destination);
-      return destination;
-    });
+    const list = join(tmp, 'clips.txt');
+    writeFileSync(list, clips.map((_, index) => `file '${index}.mp4'`).join('\n') + '\n');
+    const assembled = join(tmp, TRAILER_FILE);
+    ffmpeg('ffmpeg', ['-f', 'concat', '-safe', '1', '-i', list, '-c', 'copy', '-movflags', '+faststart', assembled]);
+    const video = join(options.outDir, TRAILER_FILE);
+    const record = join(options.outDir, TRAILER_RECORD);
+    renameSync(assembled, video);
+    writeFileSync(record, JSON.stringify(trailerRecord(readFileSync(video), fps, menus, script), null, 2) + '\n');
+    return [video, record];
   } catch (error) {
     if (timedOut) throw new Error(`trailer timed out after ${timeoutMs} ms`, { cause: error });
     throw error;
