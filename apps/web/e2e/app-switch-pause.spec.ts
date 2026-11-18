@@ -90,10 +90,16 @@ test('a tab reloaded in the background comes back paused where the player left i
   // The SDK's save from the pause reaches the shell before the tab goes.
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('ogm.away.game'))).toContain('"counter"');
 
+  // The browser recreates an evicted tab while it is still in the background; the player opens it after.
+  await page.addInitScript(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+  });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect.poll(() => bridgeState(page), { timeout: 60_000 }).toBe('ready');
-  await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
   await expect.poll(async () => (await sdkState(page))?.counter).toBe(left.counter);
+  await setHidden(page, false);
+  await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
   expect((await sdkState(page))?.paused).toBe(true);
   await page.waitForTimeout(1_000);
   expect((await sdkState(page))?.counter).toBe(left.counter);
