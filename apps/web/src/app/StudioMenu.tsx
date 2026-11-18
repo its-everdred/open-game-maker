@@ -143,7 +143,11 @@ export function StudioMenu() {
   ]);
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
-  const buildGroups = useMemo(() => groupBuilds(visibleBuilds, gameTitles), [gameTitles, visibleBuilds]);
+  // Status: every game the creator owns, live or not, with its running builds and what waits on them.
+  const buildGroups = useMemo(
+    () => statusGroups(groupBuilds(visibleBuilds, gameTitles), ownedGames),
+    [gameTitles, ownedGames, visibleBuilds],
+  );
   const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
   // The badge counts every open player-facing decision across the creator's games, and each game's quick voice chat
   // as one entry; red when a decision blocks its build.
@@ -280,7 +284,7 @@ export function StudioMenu() {
         type="button"
         className="menu-circle"
         data-done={buildsDone}
-        aria-label={`Jobs: ${buildsPercent}%`}
+        aria-label={visibleBuilds.length > 0 ? `Jobs: ${buildsPercent}%` : 'Status'}
         aria-expanded={sheet === 'jobs'}
         aria-controls="studio-menu-jobs"
         onClick={() => toggleSheet('jobs')}
@@ -511,6 +515,11 @@ export function StudioMenu() {
             <div className="studio-menu-build-group" role="group" aria-label={`${group.title} builds`}>
               <div className="studio-menu-build-heading">
                 <strong>{group.title}</strong>
+                {group.live ? (
+                  <Link to={`/g/${encodeURIComponent(group.gameId)}`} onClick={close}>
+                    Live
+                  </Link>
+                ) : null}
                 {group.playable ? (
                   <Link to={buildPath(group.playable)} onClick={close}>
                     Ready to try
@@ -518,6 +527,26 @@ export function StudioMenu() {
                 ) : null}
               </div>
               <ul>
+                {decisions.commands
+                  .filter((command) => command.game_id === group.gameId)
+                  .map((command) => (
+                    <li key={command.decision_id} className="studio-menu-job-row">
+                      <button
+                        className="studio-menu-job"
+                        data-action-needed="true"
+                        data-blocking={command.blocking}
+                        type="button"
+                        onClick={() => {
+                          trigger.current?.focus();
+                          close();
+                          if (creatorId) setDeck({ creatorId, command });
+                        }}
+                      >
+                        <strong>{command.summary ?? command.title}</strong>
+                        <span className="studio-menu-job-state">Waiting on you</span>
+                      </button>
+                    </li>
+                  ))}
                 {group.jobs.map((job) => {
                   const state = menuJobState(job);
                   const percent = buildPercent(job);
@@ -719,7 +748,7 @@ function recentBuilds(jobs: readonly Job[], now = Date.now()): Job[] {
   });
 }
 
-type BuildGroup = { gameId: string; title: string; jobs: Job[]; playable?: Job };
+type BuildGroup = { gameId: string; title: string; jobs: Job[]; playable?: Job; live?: boolean };
 type MenuJobState = 'not-started' | 'active' | 'paused' | 'parked' | 'finished';
 
 function groupBuilds(jobs: readonly Job[], names: ReadonlyMap<string, string | undefined>): BuildGroup[] {
@@ -735,6 +764,21 @@ function groupBuilds(jobs: readonly Job[], names: ReadonlyMap<string, string | u
     groups.set(job.gameId, group);
   }
   return [...groups.values()];
+}
+
+// The build groups, then each owned game with nothing building, so the sheet answers "is everything live?" per game.
+function statusGroups(
+  groups: BuildGroup[],
+  owned: readonly { id: string; title?: string; live?: boolean }[],
+): BuildGroup[] {
+  const live = new Map(owned.map((game) => [game.id, game.live === true]));
+  const shown = new Set(groups.map((group) => group.gameId));
+  return [
+    ...groups.map((group) => ({ ...group, live: live.get(group.gameId) ?? false })),
+    ...owned
+      .filter((game) => !shown.has(game.id))
+      .map((game) => ({ gameId: game.id, title: game.title ?? game.id, jobs: [], live: game.live === true })),
+  ];
 }
 
 function buildPath(job: Job): string {

@@ -79,7 +79,7 @@ const state = vi.hoisted(() => ({
   jobs: {
     jobs: [] as TestJob[],
     active: [] as TestJob[],
-    games: [] as Array<{ id: string; title: string; ownerId?: string }>,
+    games: [] as Array<{ id: string; title: string; ownerId?: string; live?: boolean }>,
   },
   session: { data: null as { user: { id: string } } | null },
   decisions: [] as TestDecision[],
@@ -636,6 +636,36 @@ describe('StudioMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask: 2 new' }));
     expect(thread.openThread).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  // #854 Status: "is everything in prod?" answered per game at a glance, quiet games included.
+  it('shows every owned game with whether it is live, what waits on the creator and what is building', () => {
+    const job = runningJob({ id: 'job-status', gameId: 'game-blobs', plan: { title: 'Big Endless button' } });
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1', { summary: 'Which menu?' })];
+    state.jobs = {
+      jobs: [job],
+      active: [job],
+      games: [
+        { id: 'game-blobs', title: 'Blobs', ownerId: 'user-1', live: true },
+        { id: 'game-cellar', title: 'Goblin Cellar', ownerId: 'user-1', live: false },
+        { id: 'game-other', title: 'Not mine', ownerId: 'user-2', live: true },
+      ],
+    };
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Jobs: / }));
+
+    const blobs = screen.getByRole('group', { name: 'Blobs builds' });
+    expect(within(blobs).getByRole('link', { name: 'Live' })).toHaveAttribute('href', '/g/game-blobs');
+    expect(blobs).toHaveTextContent('Which menu?Waiting on you');
+    expect(blobs).toHaveTextContent('Big Endless button');
+    const cellar = screen.getByRole('group', { name: 'Goblin Cellar builds' });
+    expect(within(cellar).queryByRole('link', { name: 'Live' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Not mine builds' })).toBeNull();
+
+    fireEvent.click(within(blobs).getByRole('button', { name: /Which menu\?/u }));
+    expect(screen.getByRole('dialog', { name: 'Which menu?' })).toBeVisible();
   });
 
   it('offers no Executor thread to a creator the API refuses', () => {

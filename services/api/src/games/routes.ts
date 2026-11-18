@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
@@ -92,11 +92,28 @@ const routes = new Hono<ApiBindings>()
       c.get('deps'),
       games.map((game) => game.id),
     );
+    // A game with a published release is live: the menu's status shows it beside the game (#854).
+    const live = new Set(
+      games.length === 0
+        ? []
+        : db
+            .selectDistinct({ gameId: schema.releases.gameId })
+            .from(schema.releases)
+            .where(
+              inArray(
+                schema.releases.gameId,
+                games.map((game) => game.id),
+              ),
+            )
+            .all()
+            .map((row) => row.gameId),
+    );
     return c.json({
       games: games.map((game) => ({
         ...gameResponse(game),
         ...media.get(game.id),
         lastPlayedAt: playedAt.get(game.id) ?? null,
+        live: live.has(game.id),
       })),
     });
   })
