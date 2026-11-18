@@ -105,6 +105,11 @@ export function createQaAiurClient(db: Db, blobStore: () => BlobStore): AiurClie
     events: unsupported,
     eventsToken: unsupported,
     decide: unsupported,
+    executorThread: unsupported,
+    executorThreadMessages: unsupported,
+    sendExecutorThreadMessage: unsupported,
+    uploadExecutorThreadFile: unsupported,
+    executorThreadAttachment: unsupported,
   };
 }
 
