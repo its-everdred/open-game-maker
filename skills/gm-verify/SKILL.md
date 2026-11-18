@@ -7,6 +7,8 @@ description: Use before showing a creator any visual game change. Run determinis
 
 Never report a visual result you have not looked at. Code, logs, and a passing command are not visual evidence.
 
+For a custom rigged machine, see `vendor/anymachine/SKILL.md` for overlap sweeps and GLB re-import checks.
+
 ## Gates first
 
 1. Run `gm check`; fix every L0 failure. After building, run `gm check boot --dist dist` before marking the game ready; fix a blank frame or missing readiness at either viewport.

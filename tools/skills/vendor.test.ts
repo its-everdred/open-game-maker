@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 const vendor = join(dirname(fileURLToPath(import.meta.url)), '../../skills/vendor');
 const SETS = {
+  anymachine: 'MIT',
   phaser: 'MIT',
   threejs: 'MIT',
   gamedev: 'Apache-2.0',
@@ -16,7 +17,7 @@ const SETS = {
   impeccable: 'Apache-2.0',
 } as const;
 /** Tool sets ship the scripts their gm wrappers run; the engine sets stay text only. */
-const TOOL_SETS = ['sprite-forge', 'video-to-game', 'impeccable'];
+const TOOL_SETS = ['sprite-forge', 'video-to-game', 'impeccable', 'anymachine'];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -30,7 +31,7 @@ const rel = (file: string) => relative(vendor, file);
 /** The vendored skill files: every markdown file inside a skill directory. */
 const skillFiles = all.filter(
   (f) =>
-    f.endsWith('.md') && rel(f).split('/').length > 2 && (!rel(f).startsWith('impeccable/') || f.endsWith('/SKILL.md')),
+    f.endsWith('.md') && (rel(f).split('/').length > 2 || rel(f) === 'anymachine/SKILL.md') && (!rel(f).startsWith('impeccable/') || f.endsWith('/SKILL.md')),
 );
 const read = (path: string) => readFileSync(join(vendor, path), 'utf8');
 
@@ -55,7 +56,7 @@ describe('vendored skill sets', () => {
   it('holds the expected skills per set', () => {
     const count = (set: string) =>
       skillFiles.filter((f) => rel(f).startsWith(`${set}/`) && f.endsWith('/SKILL.md')).length;
-    expect(Object.keys(SETS).map(count)).toEqual([28, 11, 17, 5, 0, 1, 1]);
+    expect(Object.keys(SETS).map(count)).toEqual([1, 28, 11, 17, 5, 0, 1, 1]);
     expect(existsSync(join(vendor, 'threejs/threejs-react-three-fiber'))).toBe(false);
   });
 
@@ -97,6 +98,7 @@ describe('vendored skill sets', () => {
       '0x0funky/agent-sprite-forge',
       'CloudAI-X/threejs-skills',
       'anthropics/claude-plugins-official',
+      'apekshik/anymachine',
       'gamedev-skills/awesome-gamedev-agent-skills',
       'lovisdotio/video-to-game',
       'pbakaus/impeccable',

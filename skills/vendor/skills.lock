@@ -43,6 +43,13 @@
       "license": "Apache-2.0",
       "path": "impeccable",
       "modified": true
+    },
+    "apekshik/anymachine": {
+      "sha": "d5e8889eef0b33e0bbe62ddca6f713f94b154b68",
+      "license": "MIT",
+      "path": "anymachine",
+      "modified": true,
+      "partial": true
     }
   }
 }

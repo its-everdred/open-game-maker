@@ -19,6 +19,8 @@ inside Three.js or put game rules in a Blender script. For the runtime step, loa
 | post-processing | `vendor/threejs/threejs-postprocessing/SKILL.md` |
 | performance | `vendor/threejs/threejs-performance/SKILL.md` |
 
+For a custom prop or moving machine that packs cannot supply, load `vendor/anymachine/SKILL.md`.
+
 ## Author deterministically
 
 Start with installed asset cards or procedural geometry. Record asset provenance before opening a source file, and
