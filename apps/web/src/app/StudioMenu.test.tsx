@@ -88,6 +88,7 @@ const state = vi.hoisted(() => ({
     active: [] as TestJob[],
     games: [] as Array<{ id: string; title: string; ownerId?: string; live?: boolean }>,
   },
+  jobsLoading: false,
   session: { data: null as { user: { id: string } } | null },
   decisions: [] as TestDecision[],
   reviewLoading: false,
@@ -119,7 +120,7 @@ const thread = vi.hoisted(() => ({ openThread: vi.fn(), closeThread: vi.fn() }))
 
 vi.mock('../features/build-chat/jobs', () => ({
   isTerminal: (value: string) => ['done', 'failed', 'cancelled'].includes(value),
-  useMyJobs: () => state.jobs,
+  useMyJobs: () => ({ ...state.jobs, isLoading: state.jobsLoading }),
   setJobPaused: jobControls.setJobPaused,
 }));
 vi.mock('../features/worker-builds/useWorkers', () => ({
@@ -242,6 +243,7 @@ afterEach(() => {
   cleanup();
   state.admin = { data: undefined };
   state.jobs = { jobs: [], active: [], games: [] };
+  state.jobsLoading = false;
   state.session = { data: null };
   state.decisions = [];
   state.reviewLoading = false;
@@ -819,6 +821,22 @@ describe('StudioMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
+  });
+
+  it('opens reviews after the owned games request finishes following a hammer tap', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.jobsLoading = true;
+    state.workers = [{ ticket: 'game:42', title: 'Build', percent: 50, etaSeconds: null }];
+    const view = renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    state.jobsLoading = false;
+    state.decisions = [decision('d1')];
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
   });
 
   it('closes a Builds review when the signed-in creator changes', () => {
