@@ -17,6 +17,7 @@ export type TicketDetailView = {
   issueUrl: string | null;
   pr: { number: number; url: string; state: string; ci: string | null } | null;
   media: { id: string; kind: 'image' | 'video' | 'audio'; url: string; caption: string | null }[];
+  mediaPending: number;
   timeline: { at: string; kind: string; label: string | null; quote: string | null }[];
 };
 
@@ -68,8 +69,9 @@ export function TicketDetail({
     queryKey: ['ticket-detail', creatorId, gameId, ticket],
     queryFn: () =>
       api<TicketDetailView>(`/games/${encodeURIComponent(gameId)}/tickets/${encodeURIComponent(ticket)}/detail`),
-    // A running ticket keeps producing stills and rounds; a closed one does not change.
-    refetchInterval: (query) => (query.state.data?.running ? 5_000 : false),
+    // A running ticket keeps producing stills and rounds, and media still copying arrives on a later read; a closed
+    // ticket with all its media in place does not change.
+    refetchInterval: (query) => (query.state.data?.running || query.state.data?.mediaPending ? 5_000 : false),
     retry: false,
   });
   const data = detail.data;

@@ -2,16 +2,34 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Job } from '@ogm/contracts';
 import { BuildPanel, BuildTracker } from './BuildTracker';
 
 vi.mock('./ReviewInbox', () => ({ ReviewInbox: () => <div>Review deck</div> }));
 vi.mock('./TicketDetail', () => ({
-  TicketDetail: ({ title, ticket, gameId }: { title: string; ticket: string; gameId: string }) => (
+  TicketDetail: ({
+    title,
+    ticket,
+    gameId,
+    onConversation,
+  }: {
+    title: string;
+    ticket: string;
+    gameId: string;
+    onConversation?(): void;
+  }) => (
     <div>
       Detail: {title} {gameId}/{ticket}
+      {onConversation && (
+        <button type="button" onClick={onConversation}>
+          Conversation
+        </button>
+      )}
     </div>
   ),
 }));
+const openConversation = vi.hoisted(() => vi.fn());
+vi.mock('../build-chat/conversation', () => ({ openConversation }));
 vi.mock('./TicketConversation', () => ({
   TicketConversation: ({ ticket }: { ticket: { title: string } }) => <div>Conversation: {ticket.title}</div>,
 }));
@@ -83,6 +101,43 @@ describe('build tracker', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Newer · Completed' }));
     expect(screen.getByText('Detail: Newer g/2')).toBeVisible();
   });
+  // From a detail, Conversation goes to the job's build chat when a job filed the ticket, else to a closed ticket's
+  // creator-visible discussion; a running ticket no job owns has none to offer.
+  it('hands a detail over to the right conversation', () => {
+    const past = {
+      gameId: 'g',
+      ticket: '7',
+      title: 'Closed',
+      outcome: 'Completed',
+      closedAt: '2026-02-01',
+      url: 'https://github.com/owner/game/issues/7',
+    };
+    const job = { id: 'j_1', gameId: 'g', aiurIssueNumber: 7 } as unknown as Job;
+    const openPast = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Closed · Completed' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Conversation' }));
+    };
+    render(<BuildPanel id="builds" workers={[]} past={[past]} jobs={[job]} />);
+    openPast();
+    expect(openConversation).toHaveBeenCalledWith('j_1');
+    cleanup();
+    render(<BuildPanel id="builds" workers={[]} past={[past]} />);
+    openPast();
+    expect(screen.getByText('Conversation: Closed')).toBeVisible();
+    cleanup();
+    render(<BuildPanel id="builds" workers={[{ ticket: 'g:12', title: 'Running', percent: 5, etaSeconds: null }]} />);
+    fireEvent.click(screen.getByRole('button', { name: /Running/ }));
+    expect(screen.getByText('Detail: Running g/12')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Conversation' })).toBeNull();
+  });
+
+  it('leaves a worker without its game as a plain row', () => {
+    render(<BuildPanel id="builds" workers={[{ ticket: '12', title: 'Orphan', percent: 5, etaSeconds: null }]} />);
+    expect(screen.queryByRole('button', { name: /Orphan/ })).toBeNull();
+    expect(screen.getByText('Orphan')).toBeVisible();
+  });
+
   // A running build opens the same detail as a finished one (#873); its row carries the game it belongs to.
   it('opens a running build’s detail from its row', () => {
     render(

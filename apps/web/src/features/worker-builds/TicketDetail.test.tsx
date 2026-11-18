@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TicketDetail, type TicketDetailView } from './TicketDetail';
@@ -26,6 +26,7 @@ const view: TicketDetailView = {
     { id: 'b', kind: 'video', url: '/blobs/sha256/b?sig=1', caption: '23 s cut' },
     { id: 'c', kind: 'audio', url: '/blobs/sha256/c?sig=1', caption: null },
   ],
+  mediaPending: 0,
   timeline: [
     { at: '2026-11-17T09:00:00Z', kind: 'round_started', label: null, quote: null },
     { at: '2026-11-17T10:00:00Z', kind: 'creator_verdict', label: 'Needs changes', quote: 'trailers should loop' },
@@ -74,6 +75,26 @@ describe('ticket detail', () => {
     expect(within(dialog).getByRole('link', { name: 'Open game' })).toHaveAttribute('href', '/g/g%201');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Conversation' }));
     expect(onConversation).toHaveBeenCalled();
+  });
+
+  // A closed ticket's clip may still be copying when the dialog opens; it must appear without reopening the dialog.
+  it('reads a closed ticket again while its media is still copying, then stops', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const closed = { ...view, running: false, activity: null };
+      api
+        .mockResolvedValueOnce({ ...closed, media: view.media.slice(0, 1), mediaPending: 2 })
+        .mockResolvedValue(closed);
+      const dialog = show();
+      expect(await within(dialog).findByRole('img', { name: 'Title card' })).toBeVisible();
+      expect(dialog.querySelector('video')).toBeNull();
+      await vi.advanceTimersByTimeAsync(5_100);
+      await waitFor(() => expect(dialog.querySelector('video')).not.toBeNull());
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(api).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the listed title and says so when the detail cannot load', async () => {

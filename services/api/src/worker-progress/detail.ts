@@ -23,6 +23,8 @@ export type TicketDetailView = {
   issueUrl: string | null;
   pr: { number: number; url: string; state: string; ci: string | null } | null;
   media: { id: string; kind: MediaKind; url: string; caption: string | null }[];
+  // Files still copying: the panel polls until none are left, even for a closed ticket.
+  mediaPending: number;
   timeline: { at: string; kind: string; label: string | null; quote: string | null }[];
 };
 
@@ -30,38 +32,73 @@ const KIND: Record<string, MediaKind> = { image: 'image', animated_image: 'image
 // A ticket with many rounds can list many files; the gallery shows the newest ones.
 export const MAX_DETAIL_MEDIA = 40;
 
-const copies = new WeakMap<AppDeps, Map<string, Promise<BlobHash>>>();
+// At most this many daemon-to-blob copies run at once per API process: a ticket may list dozens of large clips, and
+// opening it must not start them all together. The rest wait their turn and report as pending.
+export const MAX_DETAIL_COPIES = 3;
 
-function copied(deps: AppDeps, client: AiurClient, ticket: string, item: TicketDetailMedia): Promise<BlobHash> {
-  let byKey = copies.get(deps);
-  if (byKey === undefined) copies.set(deps, (byKey = new Map()));
-  const key = `${client.baseUrl}\n${ticket}\n${item.id}`;
-  let pending = byKey.get(key);
-  if (pending === undefined) {
-    pending = (async () => {
-      const file = await client.ticketDetailMedia(ticket, item.url, AbortSignal.timeout(aiurMediaTiming.copyTimeoutMs));
-      const ref = await deps.blobStore.put(capped(file.body, MAX_AIUR_MEDIA_BYTES), item.mime ?? file.mime);
-      return ref.hash;
-    })();
-    byKey.set(key, pending);
-    pending.catch((error: unknown) => {
-      deps.log({ event: 'ticket_detail_media_copy_failed', ticket, error: (error as Error).name });
-      setTimeout(() => byKey.delete(key), aiurMediaTiming.retryAfterMs).unref();
-    });
-  }
-  return pending;
+type Copy = { promise: Promise<BlobHash>; state: 'pending' | 'done' | 'failed' };
+type CopyRuntime = { byKey: Map<string, Copy>; active: number; queue: (() => void)[] };
+const runtimes = new WeakMap<AppDeps, CopyRuntime>();
+
+async function slot(runtime: CopyRuntime): Promise<() => void> {
+  if (runtime.active >= MAX_DETAIL_COPIES) await new Promise<void>((resolve) => runtime.queue.push(resolve));
+  runtime.active += 1;
+  return () => {
+    runtime.active -= 1;
+    runtime.queue.shift()?.();
+  };
 }
 
-// A copy still running after a short wait leaves this read without the file; the panel's next poll shows it.
-async function withinWait<T>(pending: Promise<T>): Promise<T | undefined> {
+function copied(deps: AppDeps, client: AiurClient, ticket: string, item: TicketDetailMedia): Copy {
+  let runtime = runtimes.get(deps);
+  if (runtime === undefined) runtimes.set(deps, (runtime = { byKey: new Map(), active: 0, queue: [] }));
+  const { byKey } = runtime;
+  const key = `${client.baseUrl}\n${ticket}\n${item.id}`;
+  let copy = byKey.get(key);
+  if (copy === undefined) {
+    const started: Copy = {
+      state: 'pending',
+      promise: (async () => {
+        const release = await slot(runtime);
+        try {
+          const file = await client.ticketDetailMedia(
+            ticket,
+            item.url,
+            AbortSignal.timeout(aiurMediaTiming.copyTimeoutMs),
+          );
+          const ref = await deps.blobStore.put(capped(file.body, MAX_AIUR_MEDIA_BYTES), item.mime ?? file.mime);
+          return ref.hash;
+        } finally {
+          release();
+        }
+      })(),
+    };
+    started.promise.then(
+      () => {
+        started.state = 'done';
+      },
+      (error: unknown) => {
+        started.state = 'failed';
+        deps.log({ event: 'ticket_detail_media_copy_failed', ticket, error: (error as Error).name });
+        setTimeout(() => byKey.delete(key), aiurMediaTiming.retryAfterMs).unref();
+      },
+    );
+    byKey.set(key, (copy = started));
+  }
+  return copy;
+}
+
+// A copy still running after a short wait leaves this read without the file and counts it as pending, so the panel
+// polls again until it lands; a failed copy is left out until its retry window passes.
+async function withinWait(copy: Copy): Promise<BlobHash | 'pending' | 'failed'> {
   let timer: NodeJS.Timeout | undefined;
-  const late = new Promise<undefined>((resolve) => {
-    timer = setTimeout(() => resolve(undefined), aiurMediaTiming.inboxWaitMs);
+  const late = new Promise<'pending'>((resolve) => {
+    timer = setTimeout(() => resolve('pending'), aiurMediaTiming.inboxWaitMs);
   });
   try {
-    return await Promise.race([pending, late]);
+    return await Promise.race([copy.promise, late]);
   } catch {
-    return undefined;
+    return 'failed';
   } finally {
     clearTimeout(timer);
   }
@@ -79,10 +116,11 @@ export async function ticketDetailView(
   read: TicketDetail,
 ): Promise<TicketDetailView> {
   const items = read.media.filter((item) => KIND[item.kind] !== undefined).slice(-MAX_DETAIL_MEDIA);
+  const copies = await Promise.all(items.map((item) => withinWait(copied(deps, client, ticket, item))));
   const media = await Promise.all(
-    items.map(async (item) => {
-      const hash = await withinWait(copied(deps, client, ticket, item));
-      return hash === undefined
+    items.map(async (item, index) => {
+      const hash = copies[index]!;
+      return hash === 'pending' || hash === 'failed'
         ? []
         : [{ id: item.id, kind: KIND[item.kind]!, url: await sign(hash), caption: text(item.caption) }];
     }),
@@ -100,6 +138,7 @@ export async function ticketDetailView(
       ? { number: read.pr.number, url: read.pr.url, state: read.pr.state, ci: text(read.pr.ci?.state) }
       : null,
     media: media.flat(),
+    mediaPending: copies.filter((copy) => copy === 'pending').length,
     timeline: read.timeline.map((entry) => ({
       at: entry.at,
       kind: entry.kind,

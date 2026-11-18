@@ -164,6 +164,7 @@ export function BuildPanel({
   const [detail, setDetail] = useState<DetailTarget>();
   const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
   const reviewCount = reviews.length + commands.length + targets.length;
+  const talk = detail && conversationOf(detail, jobs);
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
       <h2>Builds</h2>
@@ -177,36 +178,7 @@ export function BuildPanel({
       <ul className="worker-tracker-list">
         {workers.map((worker) => (
           <li key={worker.ticket}>
-            {(() => {
-              const row = (
-                <>
-                  <strong>{worker.title}</strong>
-                  <span>
-                    {waitingLabel(worker.state) ??
-                      (worker.percent === 100 ? 'Finishing' : worker.percent == null ? '' : `${worker.percent}%`)}
-                  </span>
-                </>
-              );
-              // A worker's ticket is `<gameId>:<ticket>`; one without its game cannot open a detail.
-              const separator = worker.ticket.lastIndexOf(':');
-              return separator < 0 ? (
-                <div>{row}</div>
-              ) : (
-                <button
-                  type="button"
-                  className="worker-tracker-row"
-                  onClick={() =>
-                    setDetail({
-                      gameId: worker.ticket.slice(0, separator),
-                      ticket: worker.ticket.slice(separator + 1),
-                      title: worker.title,
-                    })
-                  }
-                >
-                  {row}
-                </button>
-              );
-            })()}
+            <WorkerRow worker={worker} onOpen={setDetail} />
             {!waitingLabel(worker.state) && worker.percent != null && worker.percent < 100 && (
               <span className="worker-tracker-bar">
                 <span style={{ width: `${worker.percent}%` }} />
@@ -284,15 +256,15 @@ export function BuildPanel({
           title={detail.title}
           creatorId={creatorId}
           onClose={() => setDetail(undefined)}
-          onConversation={(() => {
-            const target = conversationOf(detail, jobs);
-            if (!target) return undefined;
-            return () => {
-              setDetail(undefined);
-              if (typeof target === 'string') openConversation(target);
-              else setConversation(target);
-            };
-          })()}
+          onConversation={
+            talk === undefined
+              ? undefined
+              : () => {
+                  setDetail(undefined);
+                  if (typeof talk === 'string') openConversation(talk);
+                  else setConversation(talk);
+                }
+          }
         />
       )}
       {conversation && (
@@ -303,6 +275,32 @@ export function BuildPanel({
 }
 
 type DetailTarget = { gameId: string; ticket: string; title: string } | PastTicket;
+
+// A worker's ticket is `<gameId>:<ticket>`; one without its game has no detail to open.
+function splitTicket(ticket: string): { gameId: string; ticket: string } | undefined {
+  const separator = ticket.lastIndexOf(':');
+  return separator < 0 ? undefined : { gameId: ticket.slice(0, separator), ticket: ticket.slice(separator + 1) };
+}
+
+function WorkerRow({ worker, onOpen }: { worker: WorkerBuild; onOpen(target: DetailTarget): void }) {
+  const row = (
+    <>
+      <strong>{worker.title}</strong>
+      <span>
+        {waitingLabel(worker.state) ??
+          (worker.percent === 100 ? 'Finishing' : worker.percent == null ? '' : `${worker.percent}%`)}
+      </span>
+    </>
+  );
+  const target = splitTicket(worker.ticket);
+  return target ? (
+    <button type="button" className="worker-tracker-row" onClick={() => onOpen({ ...target, title: worker.title })}>
+      {row}
+    </button>
+  ) : (
+    <div>{row}</div>
+  );
+}
 
 // A ticket's conversation from its detail: its job's build chat when a job filed it, else a closed ticket's
 // creator-visible discussion. A running ticket no job owns has none.
@@ -321,10 +319,9 @@ export function missingReviewTargets(
 ) {
   return workers.flatMap((worker) => {
     if (worker.state !== 'human-review') return [];
-    const separator = worker.ticket.lastIndexOf(':');
-    if (separator < 0) return [];
-    const gameId = worker.ticket.slice(0, separator);
-    const ticket = worker.ticket.slice(separator + 1);
+    const target = splitTicket(worker.ticket);
+    if (!target) return [];
+    const { gameId, ticket } = target;
     if (
       reviews.some(
         (review) =>

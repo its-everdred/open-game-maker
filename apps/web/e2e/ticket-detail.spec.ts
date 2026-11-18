@@ -30,6 +30,7 @@ const detail = (ticket: string, running: boolean) => ({
     : 'The trailer loops now and shipped after your second look.',
   issueUrl: `https://github.com/owner/blobs/issues/${ticket}`,
   pr: running ? null : { number: 66, url: 'https://github.com/owner/blobs/pull/66', state: 'merged', ci: 'passed' },
+  mediaPending: 0,
   media: [
     { id: 's', kind: 'image', url: 'https://api.example.test/blobs/sha256/still', caption: 'Forest still' },
     { id: 'c', kind: 'video', url: 'https://api.example.test/blobs/sha256/clip', caption: 'Opening cut' },

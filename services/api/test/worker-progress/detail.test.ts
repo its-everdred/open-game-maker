@@ -1,6 +1,9 @@
 import { AiurHttpError, AiurUnavailableError, type AiurClient, type TicketDetail } from '@ogm/aiur-client';
 import { schema } from '@ogm/db';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { aiurMediaTiming } from '../../src/commands/aiur-media.js';
+import { MAX_DETAIL_COPIES } from '../../src/worker-progress/detail.js';
 
 import type { TrackerTicket } from '../../src/worker-progress/tracker.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
@@ -166,5 +169,82 @@ describe('ticket detail route', () => {
       throw new AiurUnavailableError('d', new Error('refused'));
     });
     expect((await down.get('11')).status).toBe(503);
+  });
+
+  it('opens a stale-snapshot ticket only when the game owns it or a fresh lookup says so, and fails closed on errors', async () => {
+    const stale = await setup(async (id) => detail(id));
+    stale.deps.registry.trackerTickets = async () => ({ stale: true, tickets: [tracked('11', 'blobs', true)] });
+    stale.deps.registry.trackerTicket = async (_repo, id) => tracked(id, id === '13' ? 'blobs' : 'other', false);
+    expect((await stale.get('11')).status).toBe(404);
+    expect((await stale.get('13')).status).toBe(200);
+    const down = await setup(async (id) => detail(id));
+    down.deps.registry.trackerTickets = async () => {
+      throw new Error('github down');
+    };
+    expect((await down.get('11')).status).toBe(503);
+    expect(down.ticketDetail).not.toHaveBeenCalled();
+  });
+});
+
+// A ticket's media is copied from the game's daemon on first view. A slow copy must still reach the open dialog, and
+// a ticket with many large clips must not start every copy at once.
+describe('ticket detail media copies', () => {
+  const timing = { ...aiurMediaTiming };
+  afterEach(() => Object.assign(aiurMediaTiming, timing));
+
+  const many = (identifier: string, count: number): TicketDetail => ({
+    ...detail(identifier),
+    media: Array.from({ length: count }, (_, index) => ({
+      id: `m_${index}`,
+      kind: 'image',
+      mime: 'image/png',
+      url: `/api/v1/tickets/${identifier}/media/m_${index}?sig=1`,
+    })),
+  });
+
+  it('reports a copy that outlasts the wait as pending and lists it on a later read', async () => {
+    Object.assign(aiurMediaTiming, { inboxWaitMs: 20 });
+    const { get, ticketDetailMedia } = await setup(async (id) => detail(id));
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => (finish = resolve));
+    ticketDetailMedia.mockImplementation(async () => {
+      await gate;
+      return { mime: 'video/mp4', body: new Response(new Uint8Array([1])).body! };
+    });
+    const first = (await (await get('11')).json()) as { media: unknown[]; mediaPending: number };
+    expect(first).toMatchObject({ media: [], mediaPending: 1 });
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const second = (await (await get('11')).json()) as { media: unknown[]; mediaPending: number };
+    expect(second.media).toHaveLength(1);
+    expect(second.mediaPending).toBe(0);
+    expect(ticketDetailMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a bounded number of copies at once and leaves a failed one out', async () => {
+    Object.assign(aiurMediaTiming, { inboxWaitMs: 20 });
+    const { get, ticketDetailMedia } = await setup(async (id) => many(id, 8));
+    let running = 0;
+    let peak = 0;
+    const releases: (() => void)[] = [];
+    ticketDetailMedia.mockImplementation(async (_ticket, url) => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      running -= 1;
+      if (url.includes('m_0?')) throw new Error('gone');
+      return { mime: 'image/png', body: new Response(new Uint8Array([1])).body! };
+    });
+    expect(((await (await get('11')).json()) as { mediaPending: number }).mediaPending).toBe(8);
+    expect(peak).toBe(MAX_DETAIL_COPIES);
+    while (ticketDetailMedia.mock.calls.length < 8 || releases.length) {
+      releases.shift()?.();
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    Object.assign(aiurMediaTiming, { inboxWaitMs: 2_000 });
+    const done = (await (await get('11')).json()) as { media: { id: string }[]; mediaPending: number };
+    expect(peak).toBe(MAX_DETAIL_COPIES);
+    expect(done.mediaPending).toBe(0);
+    expect(done.media.map((item) => item.id)).toEqual(['m_1', 'm_2', 'm_3', 'm_4', 'm_5', 'm_6', 'm_7']);
   });
 });
