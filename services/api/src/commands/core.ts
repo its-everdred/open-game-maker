@@ -29,7 +29,7 @@ const Answer = CommandAnswerBody.extend({
   change_request: z.boolean().optional(),
 });
 
-function owner(c: import('hono').Context<ApiBindings>): { client: AiurClient; principal: string } {
+export function owner(c: import('hono').Context<ApiBindings>): { client: AiurClient; principal: string } {
   const deps = c.get('deps');
   const principal = requirePrincipal(c, ['user']).userId;
   const ownerId = deps.config.instanceOwnerId;
