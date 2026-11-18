@@ -497,7 +497,9 @@ export function StudioMenu() {
         historyError={past.error}
         workerError={workerError}
         reviewError={reviewData.error || gameReview.error || coreReview.error}
-        reviewLoading={workersLoading || reviewData.loading || gameReview.loading || coreReview.loading}
+        reviewLoading={
+          builds.isLoading || workersLoading || reviewData.loading || gameReview.loading || coreReview.loading
+        }
         historyLoading={past.loading}
         jobs={builds.jobs}
         finished={[
@@ -603,7 +605,9 @@ export function StudioMenu() {
           historyError={past.error}
           workerError={workerError}
           reviewError={reviewData.error || gameReview.error || coreReview.error}
-          reviewLoading={workersLoading || reviewData.loading || gameReview.loading || coreReview.loading}
+          reviewLoading={
+            builds.isLoading || workersLoading || reviewData.loading || gameReview.loading || coreReview.loading
+          }
           historyLoading={past.loading}
           jobs={builds.jobs}
           finished={visibleFinished}
