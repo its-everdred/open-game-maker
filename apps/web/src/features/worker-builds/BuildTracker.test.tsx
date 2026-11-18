@@ -6,6 +6,7 @@ import type { Job } from '@ogm/contracts';
 import { BuildPanel, BuildTracker } from './BuildTracker';
 import { useNotificationFeed } from '../../lib/notify/feed';
 
+vi.mock('./MissingMedia', () => ({ MissingMedia: ({ path }: { path: string }) => <span>{path}</span> }));
 vi.mock('./ReviewInbox', () => ({
   ReviewInbox: ({ onClose }: { onClose(): void }) => (
     <div>
@@ -88,39 +89,47 @@ describe('build tracker', () => {
     view.rerender(<BuildTracker workers={[]} finished={[]} />);
     expect(screen.getByText('New world is ready')).toBeVisible();
   });
-  // Kevin's review path (#843): with a round waiting, one tap on the hammer lands on the deck, not on a list he must
-  // search for a second button; the panel with the updates is behind it.
-  it('opens straight on the review deck when items wait on the creator', () => {
+  it('opens the popover and filters reviews before opening one', () => {
     const reviews = [
-      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
+      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: 'Review forest', media: [] } },
     ];
-    const finished = [{ ticket: 'g:1', title: 'New world' }];
-    const view = render(<BuildTracker workers={[]} reviews={reviews} finished={finished} />);
-    fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
-    view.rerender(<BuildTracker workers={[]} reviews={reviews} />);
+    render(
+      <BuildTracker workers={[{ ticket: 'g:1', title: 'Running', percent: 20, etaSeconds: null }]} reviews={reviews} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    expect(screen.queryByText('Review deck')).toBeNull();
+    expect(screen.getByText('Running')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    expect(screen.queryByText('Running')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Review forest' }));
     expect(screen.getByText('Review deck')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Close deck' }));
-    expect(screen.queryByText('Review deck')).toBeNull();
-    expect(screen.getByText('New world is ready')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to builds' }));
+    expect(screen.getByText('Running')).toBeVisible();
   });
-  // A tap that lands before the reviews load still ends on the deck once they arrive; with none, the panel stays.
-  it('opens the deck when the reviews arrive after the tap', () => {
-    const running = [{ ticket: '1', title: 'Running', percent: 20, etaSeconds: null }];
+  it('keeps missing-review recovery in expanded rows, outside the review filter', () => {
+    render(
+      <BuildPanel
+        id="builds"
+        workers={[{ ticket: 'g:12', title: 'Waiting', percent: null, etaSeconds: null, state: 'human-review' }]}
+        coreTargets={[{ source: 'core', ticket: '9', title: 'Core waiting' }]}
+        reviewLoading
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /need review/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Waiting/ }));
+    expect(screen.getByText('/games/g/tickets/12/missing-review')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Core waiting' }));
+    expect(screen.getByText('/core/tickets/9/missing-review')).toBeVisible();
+  });
+  it('allows a loaded review to open while other feeds are loading', () => {
     const reviews = [
-      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
+      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: 'Available', media: [] } },
     ];
-    const view = render(<BuildTracker workers={running} reviewLoading />);
-    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
-    expect(screen.queryByText('Review deck')).toBeNull();
-    view.rerender(<BuildTracker workers={running} reviews={reviews} />);
+    render(<BuildPanel id="builds" workers={[]} reviews={reviews} reviewLoading />);
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Available' }));
     expect(screen.getByText('Review deck')).toBeVisible();
-    cleanup();
-    const empty = render(<BuildTracker workers={running} reviewLoading />);
-    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
-    empty.rerender(<BuildTracker workers={running} />);
-    empty.rerender(<BuildTracker workers={running} reviews={reviews} />);
-    expect(screen.queryByText('Review deck')).toBeNull();
-    expect(screen.getByRole('button', { name: '1 Needs Review' })).toBeVisible();
   });
   it('lists live progress without guessing an ETA and shows waiting states instead of a full bar', () => {
     render(
@@ -173,7 +182,8 @@ describe('build tracker', () => {
       { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
     ];
     render(<BuildPanel id="builds" workers={[]} past={past} reviews={reviews} />);
-    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Build #3' }));
     expect(screen.getByText('Review deck')).toBeVisible();
     cleanup();
     render(<BuildPanel id="builds" workers={[]} past={past} />);
@@ -214,6 +224,7 @@ describe('build tracker', () => {
     cleanup();
     render(<BuildPanel id="builds" workers={[{ ticket: 'g:12', title: 'Running', percent: 5, etaSeconds: null }]} />);
     fireEvent.click(screen.getByRole('button', { name: /Running/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
     expect(screen.getByText('Detail: Running g/12')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Conversation' })).toBeNull();
   });
@@ -233,6 +244,7 @@ describe('build tracker', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Forest backdrop/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
     expect(screen.getByText('Detail: Forest backdrop g_1/12')).toBeVisible();
   });
 });

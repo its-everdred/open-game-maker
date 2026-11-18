@@ -828,7 +828,7 @@ describe('StudioMenu', () => {
     expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
   });
 
-  it('opens reviews after the owned games request finishes following a hammer tap', () => {
+  it('keeps the popover open when reviews finish loading after a hammer tap', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.jobsLoading = true;
     setUpdateOwner('user-1');
@@ -853,6 +853,9 @@ describe('StudioMenu', () => {
         <TestStudioMenu />
       </MemoryRouter>,
     );
+    expect(screen.queryByRole('dialog', { name: 'Needs Review' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Build #3' }));
     expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
   });
 
@@ -861,7 +864,8 @@ describe('StudioMenu', () => {
     state.decisions = [decision('d1')];
     const view = renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
-    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Topic d1' }));
     expect(screen.getByRole('alert')).toBeVisible();
     state.session = { data: { user: { id: 'user-2' } } };
     state.decisions = [decision('d2')];
@@ -896,7 +900,8 @@ describe('StudioMenu', () => {
     const view = renderMenu('/g/game-blobs');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(screen.getByRole('button', { name: '0 builds running' }));
-    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Topic d1' }));
     expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
     state.decisions = [];
     state.reviewLoading = true;

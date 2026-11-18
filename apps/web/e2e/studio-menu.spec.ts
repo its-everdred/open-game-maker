@@ -283,7 +283,16 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
       json: {
         workers: complete
           ? []
-          : [{ ticket: '211', title: 'Moon gate', percent, etaSeconds: 10, startedAt: '2026-11-01T00:00:00Z' }],
+          : [
+              {
+                ticket: '211',
+                title: 'Moon gate',
+                percent,
+                etaSeconds: 10,
+                phase: 'Building',
+                startedAt: '2026-11-01T00:00:00Z',
+              },
+            ],
         cursor: complete ? 11 : 10,
         completed: complete ? [{ ticket: '211', seq: 11, at: '2026-11-01T00:00:01Z' }] : [],
       },
@@ -298,7 +307,11 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
   await expect(page.getByText('40%', { exact: true })).toBeVisible();
   percent = 80;
   await expect(page.getByText('80%', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Moon gate', { exact: true })).toBeVisible();
+  const row = page.getByRole('button', { name: /Moon gate/ });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText('Building', { exact: true })).toBeVisible();
   await capturePhone(page, testInfo, 'worker-builds-expanded');
   await page.getByRole('button', { name: '1 build running' }).click();
   complete = true;
