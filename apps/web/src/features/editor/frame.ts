@@ -34,6 +34,8 @@ export type GameFrameState = {
   errorCode?: string;
   firstFrame?: boolean;
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
+  /** The game's latest `host.pause.visible`; unset means visible, and a remount starts unset. */
+  hostPauseVisible?: boolean;
 };
 
 export type GameFrameController = {
@@ -281,6 +283,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     frame.send('editor.validatePlacement', { prefab: request.prefab, pose: request.pose });
   };
   stopPlacement = frame.on('editor.placement', finishPlacement);
+  const stopHostPause = frame.on('host.pause.visible', ({ visible }) => {
+    if (disposed || current.hostPauseVisible === visible) return;
+    current = { ...current, hostPauseVisible: visible };
+    publish();
+  });
   const stopRoomMessages = (
     [
       'net.input',
@@ -377,6 +384,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       saveLoadErrors.clear();
       window.removeEventListener('message', observeOrigin);
       stopPlacement();
+      stopHostPause();
       for (const stop of stopRoomMessages) stop();
       if (activePlacement !== undefined) {
         clearTimeout(activePlacement.timer);

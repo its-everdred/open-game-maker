@@ -639,6 +639,7 @@ export function GameScreen() {
             ],
             extras: gameExtraElements('topbar', extraProps),
             button: frameState.manifest?.playMenuButton,
+            hideButton: mode === 'play' && frameState.bridgeState === 'ready' && frameState.hostPauseVisible === false,
           }
         : {
             actions: [
@@ -658,6 +659,8 @@ export function GameScreen() {
       askForChange,
       extraProps,
       frameState.manifest?.playMenuButton,
+      frameState.bridgeState,
+      frameState.hostPauseVisible,
       leaveRoom,
       mode,
       requestMode,

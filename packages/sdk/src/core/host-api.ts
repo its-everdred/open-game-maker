@@ -71,6 +71,10 @@ export class SdkHostApi implements HostApi {
     },
   };
 
+  setHostPauseVisible(visible: boolean): void {
+    this.send('host.pause.visible', { visible });
+  }
+
   registeredHooks(): GmTestHooks | undefined {
     return this.hooks;
   }
