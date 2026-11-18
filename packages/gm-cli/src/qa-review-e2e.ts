@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { reviewOptionImageReady, reviewRoundMediaReady } from './qa-review-media.js';
 
-import { mediaFailures, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
+import { mediaFailures, openReviewDeck, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
 import { ticketDetailSteps } from './qa-ticket-detail-e2e.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
@@ -179,7 +179,7 @@ async function runViewport(
 
     await step('open the review deck', async () => {
       await page.goto(`${config.origin}/all`, { waitUntil: 'load', timeout: 60_000 });
-      await page.locator('.worker-tracker-button').click(timeout);
+      await openReviewDeck(page, timeout.timeout);
       await dialog.getByText('QA review round').waitFor(timeout);
       await dialog.locator('video').first().waitFor(timeout);
       await dialog

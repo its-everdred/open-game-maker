@@ -41,6 +41,7 @@ jobs:
         run: |
           browser_paths=(
             apps/web/
+            packages/gm-cli/src/qa-review-checks.ts
             packages/sdk/
             packages/contracts/
             packages/design-log/
@@ -113,7 +114,7 @@ jobs:
     name: browser tests
     needs: changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

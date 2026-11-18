@@ -68,6 +68,8 @@ export function BuildTracker({
   onDismiss?(): void;
 }) {
   const [open, setOpen] = useState(false);
+  // With items waiting on the creator, the hammer opens straight on the review deck (#843); the panel sits behind it.
+  const [reviewFirst, setReviewFirst] = useState(false);
   const [acknowledged, setAcknowledged] = useState<readonly FinishedWorker[]>([]);
   const unreadUpdates = useNotify((state) => (state.updateOwner === creatorId ? state.unreadUpdates : 0));
   const hasUpdates = useNotify((state) => state.updateOwner === creatorId && state.updates.length > 0);
@@ -109,6 +111,7 @@ export function BuildTracker({
           if (finished.length) setAcknowledged((prior) => [...prior, ...finished]);
           onDismiss?.();
           readUpdates();
+          setReviewFirst(!open && (pending > 0 || Boolean(reviewLoading)));
           setOpen(!open);
         }}
       >
@@ -136,6 +139,7 @@ export function BuildTracker({
           historyLoading={historyLoading}
           jobs={jobs}
           finished={[...acknowledged, ...finished]}
+          reviewFirst={reviewFirst}
           id={id}
         />
       )}
@@ -157,14 +161,21 @@ export function BuildPanel({
   creatorId,
   jobs = [],
   finished = [],
+  reviewFirst,
   id,
-}: PanelProps & { id: string }) {
+}: PanelProps & { id: string; reviewFirst?: boolean }) {
   const updates = useNotify((state) => (state.updateOwner === creatorId ? state.updates : EMPTY_UPDATES));
-  const [modal, setModal] = useState<'review' | 'completed'>();
+  const [modal, setModal] = useState<'review' | 'completed' | undefined>();
+  const [deckFirst, setDeckFirst] = useState(reviewFirst);
   const [conversation, setConversation] = useState<PastTicket>();
   const [detail, setDetail] = useState<DetailTarget>();
   const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
   const reviewCount = reviews.length + commands.length + targets.length;
+  // Opened deck-first: the deck shows once the reviews are known, unless the creator picked something else first.
+  if (deckFirst && !modal && !detail && reviewCount > 0) {
+    setDeckFirst(false);
+    setModal('review');
+  } else if (deckFirst && (modal || detail || !reviewLoading)) setDeckFirst(false);
   const talk = detail && conversationOf(detail, jobs);
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">

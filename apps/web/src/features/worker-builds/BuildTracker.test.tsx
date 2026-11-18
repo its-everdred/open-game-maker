@@ -6,7 +6,16 @@ import type { Job } from '@ogm/contracts';
 import { BuildPanel, BuildTracker } from './BuildTracker';
 import { useNotificationFeed } from '../../lib/notify/feed';
 
-vi.mock('./ReviewInbox', () => ({ ReviewInbox: () => <div>Review deck</div> }));
+vi.mock('./ReviewInbox', () => ({
+  ReviewInbox: ({ onClose }: { onClose(): void }) => (
+    <div>
+      Review deck
+      <button type="button" onClick={onClose}>
+        Close deck
+      </button>
+    </div>
+  ),
+}));
 vi.mock('./TicketDetail', () => ({
   TicketDetail: ({
     title,
@@ -78,6 +87,40 @@ describe('build tracker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Completed builds' }));
     view.rerender(<BuildTracker workers={[]} finished={[]} />);
     expect(screen.getByText('New world is ready')).toBeVisible();
+  });
+  // Kevin's review path (#843): with a round waiting, one tap on the hammer lands on the deck, not on a list he must
+  // search for a second button; the panel with the updates is behind it.
+  it('opens straight on the review deck when items wait on the creator', () => {
+    const reviews = [
+      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
+    ];
+    const finished = [{ ticket: 'g:1', title: 'New world' }];
+    const view = render(<BuildTracker workers={[]} reviews={reviews} finished={finished} />);
+    fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
+    view.rerender(<BuildTracker workers={[]} reviews={reviews} />);
+    expect(screen.getByText('Review deck')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Close deck' }));
+    expect(screen.queryByText('Review deck')).toBeNull();
+    expect(screen.getByText('New world is ready')).toBeVisible();
+  });
+  // A tap that lands before the reviews load still ends on the deck once they arrive; with none, the panel stays.
+  it('opens the deck when the reviews arrive after the tap', () => {
+    const running = [{ ticket: '1', title: 'Running', percent: 20, etaSeconds: null }];
+    const reviews = [
+      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
+    ];
+    const view = render(<BuildTracker workers={running} reviewLoading />);
+    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    expect(screen.queryByText('Review deck')).toBeNull();
+    view.rerender(<BuildTracker workers={running} reviews={reviews} />);
+    expect(screen.getByText('Review deck')).toBeVisible();
+    cleanup();
+    const empty = render(<BuildTracker workers={running} reviewLoading />);
+    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    empty.rerender(<BuildTracker workers={running} />);
+    empty.rerender(<BuildTracker workers={running} reviews={reviews} />);
+    expect(screen.queryByText('Review deck')).toBeNull();
+    expect(screen.getByRole('button', { name: '1 Needs Review' })).toBeVisible();
   });
   it('lists live progress without guessing an ETA and shows waiting states instead of a full bar', () => {
     render(
