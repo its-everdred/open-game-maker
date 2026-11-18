@@ -18,4 +18,6 @@ export * from './link/transport.js';
 export * from './qa/index.js';
 export * from './boot.js';
 export * from './trailer.js';
+export * from './trailer-check.js';
+export * from './trailer-menus.js';
 export * from './play-area.js';

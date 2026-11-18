@@ -5,12 +5,12 @@ import { ffmpeg, FfmpegMissingError, hasFfmpeg } from './capture.js';
 import type { HookDriver } from './hooks.js';
 import type { TrailerInput } from './trailer-script.js';
 import { scriptedCanvasFrames, scriptedPageFrames } from './trailer-frames.js';
-
-export type TrailerSize = 'portrait' | 'landscape';
+import { TRAILER_SIZE } from './trailer-check.js';
+import type { TrailerMenus } from './trailer-menus.js';
 
 /** Encode canvas frames at delivery dimensions without distorting gameplay. */
-export function trailerVideoArgs(dir: string, fps: number, orientation: TrailerSize, output: string): string[] {
-  const [width, height] = orientation === 'portrait' ? [1080, 1920] : [1920, 1080];
+export function trailerVideoArgs(dir: string, fps: number, output: string): string[] {
+  const { width, height } = TRAILER_SIZE;
   return [
     '-framerate',
     String(fps),
@@ -38,8 +38,8 @@ export async function recordTrailerVideo(
     script: TrailerInput[];
     seconds: number;
     fps: number;
-    orientation: TrailerSize;
     surface?: 'canvas' | 'page';
+    menus?: TrailerMenus;
   },
   output: string,
   binary = 'ffmpeg',
@@ -49,8 +49,8 @@ export async function recordTrailerVideo(
   const frames = mkdtempSync(`${output}.frames-`);
   try {
     const capture = options.surface === 'page' ? scriptedPageFrames : scriptedCanvasFrames;
-    await capture(hooks, options.script, options.seconds, options.fps, frames);
-    ffmpeg(binary, trailerVideoArgs(frames, options.fps, options.orientation, output));
+    await capture(hooks, options.script, options.seconds, options.fps, frames, options.menus);
+    ffmpeg(binary, trailerVideoArgs(frames, options.fps, output));
   } finally {
     rmSync(frames, { recursive: true, force: true });
   }

@@ -34,7 +34,6 @@ export type GameSummary = {
   loadingImages?: { portrait: DisplayImage; landscape: DisplayImage };
   coverUrl?: string | null;
   trailerUrl?: string | null;
-  portraitTrailerUrl?: string | null;
   publishedReleaseId?: string | null;
   tagline?: string;
   tags?: string[];

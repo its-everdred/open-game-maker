@@ -48,6 +48,7 @@ test('plays the published trailer on selection and removes it on close', async (
     )
     .toMatchObject({ paused: false, error: null });
   await expect(video).toHaveAttribute('loop');
+  await expect(video).toHaveCSS('object-fit', 'cover');
   await page.getByRole('button', { name: 'Close game' }).click();
   await expect(video).toHaveCount(0);
 });
