@@ -4,6 +4,13 @@ import { apiHeaders } from './api-headers.js';
 
 type Fetch = typeof fetch;
 
+export function repoResolverForApi(
+  config: { apiInternalUrl: string; internalToken: string },
+  fetchImpl?: Fetch,
+): RepoResolver {
+  return new RepoResolver(config.apiInternalUrl, config.internalToken, fetchImpl);
+}
+
 export class RepoResolver {
   private readonly fetchImpl: Fetch;
 

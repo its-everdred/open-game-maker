@@ -9,7 +9,7 @@ import { BoundaryChecker } from './boundary/checker.js';
 import { startBoundaryPoller } from './boundary/poller.js';
 import { loadCommitConfig } from './config.js';
 import { RealBoundaryGate } from './publish-gate/gate.js';
-import { RepoResolver } from './repo-resolver.js';
+import { repoResolverForApi } from './repo-resolver.js';
 import { createCommitApp } from './server.js';
 import { DefaultTemplateSource, withGameTemplates } from './template-source.js';
 
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   };
   const app = createCommitApp({
     serviceToken: config.serviceToken,
-    repos: new RepoResolver(config.apiInternalUrl, config.internalToken),
+    repos: repoResolverForApi(config),
     audit: new JsonlAuditWriter(config.dataDirectory),
     installations: github,
     operations: {
