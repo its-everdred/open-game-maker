@@ -10,10 +10,10 @@
 #   --checkout  the repository checkout holding <game>/qa/journeys (default: the daemon row's registered checkout)
 #   --api       the API's loopback base URL (default: http://127.0.0.1:$OGM_API_PORT)
 #
-# Runs `gm qa open`, `gm qa drive` for each solo journey, `gm qa room` for each room journey, `gm qa look`, then
-# `gm qa look --report`, from the game's folder so the look questions carry its feedback ledger. It keeps going after a
-# failure so the report covers every step. The look answers are a looker's job: answer look/answers.json in the run
-# directory and run `gm qa look --report --out <dir>` again.
+# Runs `gm qa open`, `gm qa drive` for each solo journey, `gm qa room` for each room journey, `gm qa playtest
+# --all-modes`, `gm qa look`, then `gm qa look --report`, from the game's folder so the look questions carry its
+# feedback ledger. It keeps going after a failure so the report covers every step. The look answers are a looker's
+# job: answer look/answers.json in the run directory and run `gm qa look --report --out <dir>` again.
 #
 # exit 0 the report passed; 1 it failed or has unchecked looks; 64 bad usage; 65 no game, build, origin or token.
 # The internal token is read from ~/.config/ogm/env/api.env (or OGM_INTERNAL_TOKEN); nothing here prints it.
@@ -111,6 +111,8 @@ for journey in "$game_dir"/qa/journeys/*.json; do
     step qa drive --url "$url" --journey "$journey" --out "$out"
   fi
 done
+# Every mode the manifest lists, played by a seeded bot at the four touch sizes (#866); it fails on invalid game state.
+step qa playtest . --all-modes --url "$url" --out "$out/playtest"
 step qa look --out "$out"
 step qa look --report --out "$out"
 printf 'report %s/qa-report.md\n' "$out"

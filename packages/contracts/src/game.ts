@@ -220,6 +220,23 @@ export const gameManifestSchema = z.looseObject({
       'Option IDs must be unique',
     )
     .optional(),
+  /** Playable modes and the exact game text tapped, `>`-separated, to start each; `gm qa playtest` plays every one. */
+  modes: z
+    .array(
+      z.looseObject({
+        id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
+        label,
+        tap: z
+          .string()
+          .min(1)
+          .max(200)
+          .refine((tap) => tap.split('>').every((text) => text.trim() !== ''), 'Tap path has an empty step'),
+      }),
+    )
+    .min(1)
+    .max(12)
+    .refine((modes) => new Set(modes.map((mode) => mode.id)).size === modes.length, 'Mode IDs must be unique')
+    .optional(),
   /** Appearance of the shell menu button while playing this game. */
   playMenuButton: z
     .looseObject({ colour: z.string().regex(/^#[0-9a-fA-F]{6}$/u), icon: z.enum(['pause', 'menu']) })
@@ -272,8 +289,17 @@ export interface GameInstance<D, S> {
   setSelection?(ids: string[]): void;
   /** Bridge `editor.camera`; throws for an unknown `target`. */
   setCamera?(mode: 'follow' | 'free', target?: string): void;
+  /** Game-state checks `gm qa playtest` reads while the bot plays; see `QaInvariant`. */
+  qa?: { invariants(): QaInvariant[] };
   /** Required by every template (E04-15). */
   net: MultiplayerHooks;
+}
+
+/** One game-state rule, such as "one piece per cell"; `ok: false` fails the playtest with `detail`. */
+export interface QaInvariant {
+  name: string;
+  ok: boolean;
+  detail?: string;
 }
 
 /**

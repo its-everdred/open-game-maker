@@ -8,6 +8,7 @@ import { SdkHostApi, type SendEnvelope } from './host-api.js';
 import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
 import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
+import { installQa } from './qa.js';
 import { dispatchTest } from '../test/dispatch.js';
 import { SdkHooks } from '../test/hooks.js';
 
@@ -144,6 +145,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       () => bridge.close(),
     );
     runtime.attachSender(send);
+    runtime.addCleanup(installQa(instance));
     runtime.setLocalPlayerIndex(hello.payload.playerIndex);
     runtimeState.current = runtime;
     runtime.addCleanup(() => {
