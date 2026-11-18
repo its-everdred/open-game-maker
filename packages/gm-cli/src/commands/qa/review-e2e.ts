@@ -68,7 +68,8 @@ export const command: GmCommand = {
       const { acquireSlot } = await import('@ogm/gm-verify');
       const waitMs = Number(ctx.env?.OGM_QA_LOCK_WAIT_MS) || LOCK_WAIT_MS;
       lock = await acquireSlot({
-        runtimeDir: join(ctx.home ?? homedir(), '.local', 'state', 'ogm', 'qa', 'review-e2e-lock'),
+        // Keyed on the env dir, which names the QA game, so every run against that game shares one lock.
+        runtimeDir: join(envDir, 'qa-review-e2e-lock'),
         slots: 1,
         waitMs,
         pollMs: 1_000,
