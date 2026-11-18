@@ -17,6 +17,108 @@ afterEach(() => {
 });
 
 describe('game frame adapter', () => {
+  it('restores a save before releasing an acknowledged startup hold', async () => {
+    let options: GameFrameOptions | undefined;
+    let resolveSave!: (save: { saveSchemaVersion: number; data: unknown }) => void;
+    const save = { saveSchemaVersion: 1, data: { room: 'crypt' } };
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    });
+    expect(options?.startupHold).toBe(true);
+    options?.onReady?.(manifest, [], true);
+    expect(controller.state().bridgeState).toBe('connecting');
+    await vi.waitFor(() => expect(resolveSave).toBeTypeOf('function'));
+    resolveSave(save);
+    await vi.waitFor(() => expect(controller.state().bridgeState).toBe('ready'));
+    expect(frame.send.mock.calls.map(([type]) => type)).toEqual(['design.apply', 'save.restore', 'lifecycle.resume']);
+    controller.dispose();
+  });
+  it('does not restore into a legacy game that cannot hold startup', () => {
+    let options: GameFrameOptions | undefined;
+    const restore = vi.fn();
+    const error = vi.fn();
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: restore,
+      onStartupRestoreError: error,
+    });
+    options?.onReady?.({ ...manifest, saves: true }, []);
+    expect(restore).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledOnce();
+    expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true });
+    controller.dispose();
+  });
+  it('disables saving for the session when the startup load fails', async () => {
+    let options: GameFrameOptions | undefined;
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const error = vi.fn();
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: async () => {
+        throw new Error('offline');
+      },
+      onStartupRestoreError: error,
+    });
+    options?.onReady?.(manifest, [], true);
+    await vi.waitFor(() => expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true }));
+    expect(error).toHaveBeenCalledOnce();
+    expect(frame.send).toHaveBeenCalledWith('lifecycle.resume', {});
+    controller.dispose();
+  });
   it('mounts through @gm/host, forwards mode, and counts rejected origins', async () => {
     const container = document.createElement('div');
     document.body.append(container);

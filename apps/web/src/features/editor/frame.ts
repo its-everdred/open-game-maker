@@ -32,6 +32,8 @@ export type GameFrameState = {
   manifest?: GameManifest;
   error?: string;
   errorCode?: string;
+  /** Do not write over an existing save after startup restore failed. */
+  startupSaveError?: boolean;
   firstFrame?: boolean;
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
 };
@@ -80,6 +82,10 @@ export type MountGameFrameOptions = {
   build?: 'draft' | 'test' | 'published';
   /** Query parameters the game boots with: a review deck's playable scenario (#608). */
   params?: Readonly<Record<string, string>>;
+  /** Load an initial save while a compatible SDK holds simulation. */
+  startupRestore?(manifest: GameManifest): Promise<SaveData<unknown> | undefined>;
+  onStartupRestoreError?(): void;
+  resumeAfterStartup?(): boolean;
   create?(options: GameFrameOptions): FrameLike;
   onState?(state: GameFrameState): void;
   onSaveWrite?(payload: { saveSchemaVersion: number; data: unknown }): void;
@@ -216,24 +222,55 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       build: options.build ?? 'draft',
       ...(options.params === undefined ? {} : { params: options.params }),
       mode: options.mode,
+      ...(options.startupRestore ? { startupHold: true } : {}),
       playerIndex: 0,
       capabilities: [],
       role: () => 'owner',
       readyTimeoutMs: 10_000,
-      onReady: (manifest, marks) => {
+      onReady: (manifest, marks, startupHold) => {
         if (current.bridgeState === 'error') return;
         // The games host forwards the existing game-ready event for legacy builds; new SDKs also send load.frame.
         expectsFirstFrame = true;
-        current = {
-          ...current,
-          bridgeState: 'ready',
-          manifest,
-          load: loadObserved ? current.load : { phase: 'ready', loaded: 0, total: 0, done: true },
-        };
-        armFirstFrameTimer();
         frame.send('design.apply', { rev: options.design.rev, doc: options.design.doc, patches: [] });
-        emitRoomMessage('ready', { protocol: SDK_PROTOCOL, manifest, marks });
-        publish();
+        const finish = () => {
+          if (disposed) return;
+          if (startupHold && (options.resumeAfterStartup?.() ?? true)) frame.send('lifecycle.resume', {});
+          current = {
+            ...current,
+            bridgeState: 'ready',
+            manifest,
+            load: loadObserved ? current.load : { phase: 'ready', loaded: 0, total: 0, done: true },
+          };
+          armFirstFrameTimer();
+          emitRoomMessage('ready', { protocol: SDK_PROTOCOL, manifest, marks });
+          publish();
+        };
+        if (!options.startupRestore || !startupHold) {
+          if (options.startupRestore && manifest.saves && !startupHold) {
+            current = { ...current, startupSaveError: true };
+            options.onStartupRestoreError?.();
+          }
+          finish();
+          return;
+        }
+        let timer: ReturnType<typeof setTimeout>;
+        const deadline = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('save restore timed out')), 10_000);
+        });
+        void Promise.race([Promise.resolve().then(() => options.startupRestore!(manifest)), deadline])
+          .then((save) => {
+            if (!disposed && save) frame.send('save.restore', save);
+          })
+          .catch(() => {
+            if (!disposed) {
+              current = { ...current, startupSaveError: true };
+              options.onStartupRestoreError?.();
+            }
+          })
+          .finally(() => {
+            clearTimeout(timer);
+            finish();
+          });
       },
       onLoad: handleLoad,
       onSaveWrite: options.onSaveWrite,
@@ -246,6 +283,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
          * broken frame: report it to the pause dialog and leave the game running.
          */
         if (failure.code === 'save_unsupported') {
+          if (options.startupRestore) {
+            current = { ...current, startupSaveError: true };
+            options.onStartupRestoreError?.();
+            publish();
+          }
           for (const callback of saveLoadErrors) callback(failure.message);
           return;
         }

@@ -183,6 +183,13 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       saveMachine.checkpoint();
     });
 
+    // Hold before announcing readiness, so no simulation step can race an initial restore.
+    if (hello.payload.startupHold) {
+      lifecyclePaused = true;
+      runtime.clock.pause();
+      instance.pause();
+    }
+
     // Inline literal check: a bundler that defines __GM_BUILD__ as 'published' drops the adapter chunk.
     if (!(typeof __GM_BUILD__ !== 'undefined' && __GM_BUILD__ === 'published') && build !== 'published') {
       const { installGlobals } = await import('../test/globals.js');
@@ -213,6 +220,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       manifest: readyManifest(module.manifest, instance),
       marks,
       firstFrameSignal: true,
+      ...(hello.payload.startupHold ? { startupHold: true } : {}),
     });
     // A game may draw during mount. Check only after its startup continuation can mark itself unready.
     if (!options.headless && typeof requestAnimationFrame === 'function') {
@@ -368,6 +376,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
             save = active.instance.migrate(save);
           }
           active.instance.restore(save as SaveData<S>);
+          saveMachineState.current?.restored(save as SaveData<S>);
           if (envelope.payload.saveSchemaVersion !== currentVersion) {
             saveMachineState.current?.migrated(save as SaveData<S>);
           }

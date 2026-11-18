@@ -18,6 +18,8 @@ import {
   getPreviewDesign,
   getScenerySource,
   getOptionalReapply,
+  getOptionalSaves,
+  getSave,
   listJobs,
   postAnalyticsEvent,
   NO_BUILD_ID,
@@ -25,6 +27,7 @@ import {
   type DesignSnapshot,
 } from '../../features/editor/api';
 import { inspectBuildChange, readyBuildSignal } from '../../features/editor/builds';
+import { saveSlotLoadable } from '../../features/editor/hud/saves';
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
 import { FocusZone } from '../../lib/input';
@@ -126,6 +129,11 @@ export function GameScreen() {
   const [frameController, setFrameController] = useState<GameFrameController>();
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
+  const skipRestore = useRef(false);
+  const menuOpenRef = useRef(menuOpen);
+  const roomIdRef = useRef(roomId);
+  menuOpenRef.current = menuOpen;
+  roomIdRef.current = roomId;
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
@@ -412,6 +420,8 @@ export function GameScreen() {
       return;
     }
     setFrameState(initialFrameState);
+    const restoreOnStart = mode === 'play' && roomId === undefined && !activePreview && !skipRestore.current;
+    skipRestore.current = false;
     let controller: GameFrameController;
     try {
       controller = activeStage
@@ -425,6 +435,29 @@ export function GameScreen() {
               buildId: activePreview?.accessId ?? snapshot.buildId,
               ...(activePreview ? { preview: true } : {}),
               mode,
+              ...(restoreOnStart
+                ? {
+                    startupRestore: async (manifest: import('@ogm/contracts/browser').GameManifest) => {
+                      if (!manifest.saves || roomIdRef.current !== undefined) return undefined;
+                      const query =
+                        manifest.saveSchema === undefined
+                          ? undefined
+                          : {
+                              schema: manifest.saveSchema,
+                              ...(manifest.migratesFrom === undefined ? {} : { migratesFrom: manifest.migratesFrom }),
+                            };
+                      const result = await getOptionalSaves(gameId, query);
+                      if (!result.available) throw new Error('saves unavailable');
+                      const slot = result.value.slots.find((candidate) => candidate.slotId === 'auto');
+                      if (!slot) return undefined;
+                      if (!saveSlotLoadable(slot)) throw new Error('save incompatible');
+                      const save = await getSave(gameId, 'auto');
+                      return roomIdRef.current === undefined ? save : undefined;
+                    },
+                    onStartupRestoreError: () => pushToast('Could not restore save'),
+                    resumeAfterStartup: () => !menuOpenRef.current,
+                  }
+                : {}),
               design: activePreview ? previewDesign.data! : snapshot,
               build,
               onState: setFrameState,
@@ -785,7 +818,7 @@ export function GameScreen() {
             resumeAt={room.snapshot?.matchPause?.resumeAt}
             serverOffsetMs={room.snapshot?.serverOffsetMs}
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
-            saves={frameState.manifest.saves}
+            saves={frameState.manifest.saves && !frameState.startupSaveError}
             saveSchema={frameState.manifest.saveSchema}
             migratesFrom={frameState.manifest.migratesFrom}
             onLeave={() => void leaveRoom()}
@@ -793,6 +826,7 @@ export function GameScreen() {
               roomId === undefined
                 ? () => {
                     setMenuOpen(false);
+                    skipRestore.current = true;
                     setFrameAttempt((attempt) => attempt + 1);
                   }
                 : undefined

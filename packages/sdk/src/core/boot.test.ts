@@ -57,6 +57,33 @@ describe('boot', () => {
     bridge.onMessage = undefined;
   });
 
+  it('holds simulation until the host resumes after startup', async () => {
+    const { module } = createCounterGame();
+    const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
+    await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+    bridge.onMessage!(
+      message('hello', {
+        protocol: 1,
+        capabilities: [],
+        mode: 'play',
+        build: 'draft',
+        playerIndex: 0,
+        startupHold: true,
+      }),
+    );
+    const runtime = await pending;
+    expect(runtime.clock.paused).toBe(true);
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        t: 'ready',
+        payload: expect.objectContaining({ startupHold: true }),
+      }),
+    );
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    expect(runtime.clock.paused).toBe(false);
+    runtime.dispose();
+  });
+
   it('does not start the live frame loop during test trailer capture', async () => {
     const startLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop');
     const state = window as Window & { __gmTrailerAudio?: unknown };

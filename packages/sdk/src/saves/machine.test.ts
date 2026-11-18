@@ -65,6 +65,16 @@ describe('save machine', () => {
     machine.dispose();
   });
 
+  it('uses the restored state as the last safe snapshot', () => {
+    const { machine, send, setSafe } = fixture();
+    machine.restored({ saveSchemaVersion: 1, data: { value: 42 } });
+    setSafe(false);
+    machine.markDirty();
+    machine.hidden();
+    expect(send).toHaveBeenCalledWith('save.write', expect.objectContaining({ data: { value: 42 } }));
+    machine.dispose();
+  });
+
   it('tracks local, cloud, conflict, queued, and read-only states', () => {
     const { machine, states } = fixture();
     machine.markDirty();

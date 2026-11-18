@@ -11,6 +11,7 @@ export interface SaveMachine<S> {
   checkpoint(): void;
   hidden(): void;
   interval(): void;
+  restored(save: SaveData<S>): void;
   migrated(save: SaveData<S>): void;
   savedCloud(): void;
   conflict(): void;
@@ -69,6 +70,10 @@ export function createSaveMachine<S>(options: {
     checkpoint: () => write('checkpoint'),
     hidden: () => write('hidden'),
     interval: () => write('interval'),
+    restored: (save) => {
+      lastSafe = structuredClone(save);
+      dirty = false;
+    },
     migrated: (save) => write('migration', save),
     savedCloud: () => transition('saved_cloud'),
     conflict: () => transition('conflict'),

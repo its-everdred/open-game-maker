@@ -88,6 +88,7 @@ export const hostToGameSchema = z
         capabilities: z.array(z.string()),
         mode: z.enum(['play', 'edit', 'test']),
         build: z.enum(['draft', 'test', 'published']),
+        startupHold: z.boolean().optional(),
         playerIndex: z
           .number()
           .int()
@@ -261,6 +262,7 @@ export const gameToHostSchema = z
         manifest: gameManifestSchema,
         marks: z.array(z.tuple([z.string(), z.number()])),
         firstFrameSignal: z.boolean().optional(),
+        startupHold: z.boolean().optional(),
       }),
     ),
     envelope('load.frame', z.looseObject({})),
