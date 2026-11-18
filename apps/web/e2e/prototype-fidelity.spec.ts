@@ -102,7 +102,13 @@ for (const scenario of scenarios) {
         const pathname = new URL(response.url()).pathname;
         const expectedMissingGameResource =
           response.status() === 404 && ['/api/v1/games/game/published', '/api/v1/games/game/saves'].includes(pathname);
-        if (response.status() >= 400 && !expectedVoiceFallback && !expectedMissingGameResource) {
+        const expectedThreadRefusal = response.status() === 403 && pathname === '/api/v1/me/executor/thread';
+        if (
+          response.status() >= 400 &&
+          !expectedVoiceFallback &&
+          !expectedMissingGameResource &&
+          !expectedThreadRefusal
+        ) {
           failedResponses.push(`${response.status()} ${response.url()}`);
         }
       });
@@ -114,6 +120,7 @@ for (const scenario of scenarios) {
           route.fulfill({ json: { commands: [], targets: [] } }),
         );
         await page.route('**/api/v1/notifications?*', (route) => route.fulfill({ json: [] }));
+        await page.route('**/api/v1/me/executor/thread', (route) => route.fulfill({ status: 403, json: {} }));
         const masks = await test.step('prepare app and prototype', () => scenario.prepare(page, reference));
         if (scenario.name === 'editor') {
           const appShell = await capture(page, []);
