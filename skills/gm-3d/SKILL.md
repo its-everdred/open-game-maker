@@ -5,8 +5,7 @@ description: Author and verify rights-cleared 3D assets offline with Blender, th
 
 # Game Maker 3D
 
-Use Blender for offline mesh, material, rig, animation, GLB, still, and turntable work. Do not rebuild offline authoring
-inside Three.js or put game rules in a Blender script. For the runtime step, load its skill:
+Use Blender for offline mesh, material, rig, animation, GLB, still, and turntable work. Do not rebuild offline authoring inside Three.js or put game rules in a Blender script. For the runtime step, load its skill:
 
 | Runtime step | Skill, under `.claude/skills/` |
 |---|---|
@@ -23,8 +22,7 @@ For a custom prop or moving machine that packs cannot supply, load `vendor/anyma
 
 ## Author deterministically
 
-Start with installed asset cards or procedural geometry. Record asset provenance before opening a source file, and
-keep paid-pack sources and derivatives under ignored `assets-local/`; never upload them. A script must create or open
+Start with installed asset cards or procedural geometry. Record asset provenance before opening a source file, and keep paid-pack sources and derivatives under ignored `assets-local/`; never upload them. A script must create or open
 an exact input, set units and transforms, name important objects, set an explicit renderer and camera, and write to an
 explicit local path.
 
