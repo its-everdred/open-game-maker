@@ -31,9 +31,10 @@ mkdir -p "$rel"
 cat > "$rel/voice_host" << 'EOF'
 #!/usr/bin/env bash
 [[ $1 == start ]] || exit 2
+# The real release's command line names voice_host; this stand-in carries it as an argument.
 exec node -e '
   require("http").createServer((q, s) => s.end(JSON.stringify({ service: "voice-host", provider: process.env.OGM_VOICE_PROVIDER })))
-    .listen(Number(process.env.OGM_VOICE_INTERNAL_PORT), "127.0.0.1");'
+    .listen(Number(process.env.OGM_VOICE_INTERNAL_PORT), "127.0.0.1");' voice_host
 EOF
 chmod +x "$rel/voice_host"
 
@@ -110,6 +111,32 @@ assert_eq 1 "$status" 'health should fail once the host is down'
 vh ensure > "$scratch/ensure.out"
 assert_grep 'down; restarting' "$scratch/ensure.out"
 vh health > /dev/null || fail 'ensure should bring the host back'
+
+# Another service on the internal port: it does not pass for the voice host, and stop leaves it running.
+vh stop > /dev/null
+node -e 'require("http").createServer((q, s) => s.end("{\"service\":\"rooms\"}")).listen(Number(process.argv[1]), "127.0.0.1")' "$internal" &
+other=$!
+for _ in $(seq 1 40); do [[ -n $(ss -ltnH "sport = :$internal") ]] && break; sleep 0.25; done
+set +e
+vh health > /dev/null 2>&1
+health_status=$?
+vh stop > /dev/null 2> "$scratch/stop.err"
+stop_status=$?
+set -e
+kill -0 "$other" 2> /dev/null || fail 'stop must not kill a process that is not the voice host'
+kill "$other"
+assert_eq 1 "$health_status" 'a foreign /healthz answer is not the voice host'
+assert_eq 1 "$stop_status" 'stop should refuse a foreign listener'
+assert_grep 'which is not the voice host' "$scratch/stop.err"
+
+# A provider the host does not know is named before start, not discovered by a crash loop.
+sed -i 's/^OGM_VOICE_PROVIDER=.*/OGM_VOICE_PROVIDER=elevenlabs/' "$OGM_ENV_DIR/voice-host.env"
+set +e
+vh check-env > /dev/null 2> "$scratch/provider.err"
+status=$?
+set -e
+assert_eq 1 "$status" 'an unknown provider fails the check'
+assert_grep 'OGM_VOICE_PROVIDER is not fake, elevenlabs_agents or openai_realtime' "$scratch/provider.err"
 
 set +e
 "$repo/ops/bin/ogm-voice-host" nonsense > /dev/null 2>&1

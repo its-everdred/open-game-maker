@@ -8,6 +8,10 @@ import { withBrowser } from '../../qa.js';
 import { costLine, elevenLabsUsage, voiceE2e } from '../../qa-voice-e2e.js';
 import { readEnvFile } from '../publish/index.js';
 
+// Each run replaces the QA game's voice build, so two runs at once (the deploy hook and a manual run) would delete each
+// other's build mid-call: one run at a time per host, as the review E2E does.
+const LOCK_WAIT_MS = 10 * 60_000;
+
 function headSha(cwd: string): string {
   try {
     return execFileSync('git', ['-C', cwd, 'rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -19,7 +23,7 @@ function headSha(cwd: string): string {
 export const command: GmCommand = {
   name: 'qa voice-e2e',
   summary: 'dictate into a build chat and hold a short voice session as the QA creator, on the deployed app',
-  usage: '[--sha <deployed sha>] [--origin <app origin>] [--out <dir>]',
+  usage: '[--sha <deployed sha>] [--origin <app origin>] [--api <url>] [--out <dir>]',
   example: 'qa voice-e2e --sha 56d3dc1a2',
   flags: {
     sha: { type: 'string', help: 'the deployed commit, which names the stills folder (default: this checkout)' },
@@ -58,7 +62,19 @@ export const command: GmCommand = {
     const sha = (flags.sha as string | undefined) ?? headSha(ctx.cwd);
     const out = resolve(ctx.cwd, (flags.out as string | undefined) ?? join('assets-local/review/app/voice-e2e', sha));
     let result: Awaited<ReturnType<typeof voiceE2e>>;
+    let lock: { release(): void } | undefined;
     try {
+      const { acquireSlot } = await import('@ogm/gm-verify');
+      const waitMs = Number(ctx.env?.OGM_QA_LOCK_WAIT_MS) || LOCK_WAIT_MS;
+      lock = await acquireSlot({
+        runtimeDir: join(envDir, 'qa-voice-e2e-lock'),
+        slots: 1,
+        waitMs,
+        pollMs: 1_000,
+      }).catch((error: Error) => {
+        if (!error.message.startsWith('no free capture slot')) throw error;
+        throw new Error(`another voice E2E still held the QA game after ${waitMs} ms`);
+      });
       result = await withBrowser(ctx, (browser) =>
         voiceE2e(browser, {
           origin,
@@ -76,6 +92,8 @@ export const command: GmCommand = {
     } catch (error) {
       ctx.err(`qa voice-e2e: ${(error as Error).message}`);
       return done(EXIT.failed);
+    } finally {
+      lock?.release();
     }
     const ok = result.steps.length === 2 && result.steps.every((step) => step.ok);
     if (ctx.json) printJson(ctx, { ok, out: relative(ctx.cwd, out) || '.', ...result });

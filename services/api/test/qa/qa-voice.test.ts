@@ -102,12 +102,22 @@ describe('QA voice fixtures (#879)', () => {
     expect(next.status).toBe(201);
     expect(deps.db.select({ id: schema.jobs.id }).from(schema.jobs).all()).toEqual([{ id: 'j_qa-voice-run-2' }]);
 
+    // Any other job on the QA game (not a voice fixture) survives every voice delete, including delete-all.
+    const at = new Date().toISOString();
+    const qaGame = deps.db.select().from(schema.jobs).get()!;
+    deps.db
+      .insert(schema.jobs)
+      .values({ ...qaGame, id: 'j-other', aiurRepo: 'owner/game', aiurIssueNumber: 7, createdAt: at, updatedAt: at })
+      .run();
+    expect((await internal('/internal/qa/voice-fixtures', { method: 'DELETE' })).status).toBe(200);
+    expect(deps.db.select({ id: schema.jobs.id }).from(schema.jobs).all()).toEqual([{ id: 'j-other' }]);
+    await internal('/internal/qa/voice-fixtures', { method: 'POST', body: JSON.stringify({ run: 'run-2' }) });
     deps.sqlite
       .prepare(`INSERT INTO build_chat_messages (id, job_id, at, actor, kind, text) VALUES (?, ?, ?, ?, ?, ?)`)
       .run('m-1', 'j_qa-voice-run-2', new Date().toISOString(), 'creator', 'text', 'Hello');
     const deleted = await internal('/internal/qa/voice-fixtures/run-2', { method: 'DELETE' });
     expect(deleted.status).toBe(200);
-    expect(deps.db.select().from(schema.jobs).all()).toEqual([]);
+    expect(deps.db.select({ id: schema.jobs.id }).from(schema.jobs).all()).toEqual([{ id: 'j-other' }]);
     expect(deps.db.select().from(schema.buildChatMessages).all()).toEqual([]);
     expect((await internal('/internal/qa/voice-fixtures/run-2')).status).toBe(404);
   });

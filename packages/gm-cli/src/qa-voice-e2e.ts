@@ -99,14 +99,16 @@ export function dictationFailure(box: string): string | null {
   return null;
 }
 
-/** Two-way: the agent's audio streamed back and a turn of the call is stored in the chat. */
+/** Two-way: the agent's audio streamed back and played, and a turn of the call is stored in the chat. */
 export function twoWayFailure(
   tally: VoiceTally,
+  playedSeconds: number,
   stored: readonly { actor: string; text: string | null }[],
 ): string | null {
   const failures: string[] = [];
   if (tally.errors.length) failures.push(`the voice socket sent errors: ${tally.errors.join(', ')}`);
   if (tally.agentAudioFrames === 0) failures.push('no agent audio streamed back');
+  else if (playedSeconds <= 0) failures.push('the agent audio arrived but the app played none of it');
   if (!stored.some((message) => message.text?.trim())) failures.push('no transcript was stored in the chat');
   return failures.length ? failures.join('; ') : null;
 }
@@ -135,7 +137,8 @@ export function costLine(cost: VoiceCost): string {
 
 /**
  * Replaces the page's microphone with one that is silent until `__ogmFakeMic.play(name)`, then plays that clip once.
- * The app's own capture code reads it through `getUserMedia`, exactly as it reads a phone's microphone.
+ * The app's own capture code reads it through `getUserMedia`, exactly as it reads a phone's microphone. It also counts
+ * the seconds of audio the page itself plays (`playedSeconds`), so a reply passes only once it reached the speaker path.
  */
 export function installFakeMic(clips: Record<string, string>): void {
   type Mic = {
@@ -143,8 +146,15 @@ export function installFakeMic(clips: Record<string, string>): void {
     destination?: MediaStreamAudioDestinationNode;
     played: string[];
     requested: number;
+    playedSeconds: number;
   };
-  const mic: Mic = { played: [], requested: 0 };
+  const mic: Mic = { played: [], requested: 0, playedSeconds: 0 };
+  const ours = new WeakSet<AudioBufferSourceNode>();
+  const start = AudioBufferSourceNode.prototype.start;
+  AudioBufferSourceNode.prototype.start = function (this: AudioBufferSourceNode, ...args: Parameters<typeof start>) {
+    if (!ours.has(this) && this.buffer) mic.playedSeconds += this.buffer.duration;
+    return start.apply(this, args);
+  };
   const ensure = () => {
     if (!mic.context) {
       mic.context = new AudioContext();
@@ -158,12 +168,16 @@ export function installFakeMic(clips: Record<string, string>): void {
       get requested() {
         return mic.requested;
       },
+      get playedSeconds() {
+        return mic.playedSeconds;
+      },
       async play(name: string) {
         const { context, destination } = ensure();
         await context.resume();
         const bytes = Uint8Array.from(atob(clips[name]!), (char) => char.charCodeAt(0));
         const buffer = await context.decodeAudioData(bytes.buffer);
         const source = context.createBufferSource();
+        ours.add(source);
         source.buffer = buffer;
         source.connect(destination);
         source.start();
@@ -177,11 +191,12 @@ export function installFakeMic(clips: Record<string, string>): void {
     mic.requested += 1;
     const { context, destination } = ensure();
     await context.resume();
-    return destination.stream;
+    // Each caller gets its own tracks: the app stops them when a capture ends, which must not mute the next capture.
+    return new MediaStream(destination.stream.getAudioTracks().map((track) => track.clone()));
   };
 }
 
-type FakeMic = { requested: number; played: string[]; play(name: string): Promise<void> };
+type FakeMic = { requested: number; playedSeconds: number; played: string[]; play(name: string): Promise<void> };
 // Page functions are serialized on their own, so each reaches the fake microphone through `window` itself.
 type MicWindow = { __ogmFakeMic: FakeMic };
 
@@ -225,6 +240,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
   const steps: VoiceStep[] = [];
   const frames: string[] = [];
   const cost: VoiceCost = { characters: null, audioSentSeconds: 0, callSeconds: 0 };
+  let callStarted: number | undefined;
   const clips = Object.fromEntries(
     Object.entries(CLIPS).map(([name, file]) => [name, readFileSync(new URL(file, MEDIA_DIR)).toString('base64')]),
   );
@@ -280,7 +296,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
     try {
       if (!(await dialog.isVisible())) await openChat(page, config.origin);
       frames.length = 0;
-      const started = Date.now();
+      callStarted = Date.now();
       await dialog.getByRole('button', { name: 'Start voice chat' }).click({ timeout: 20_000 });
       const listening = await until(() => tallyFrames(frames).states.includes('listening'), wait);
       if (!listening)
@@ -289,15 +305,17 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
         );
       await page.evaluate(() => (window as unknown as MicWindow).__ogmFakeMic.play('talk'));
       cost.audioSentSeconds += CLIP_SECONDS.talk;
-      await until(() => {
-        const tally = tallyFrames(frames);
-        return tally.agentAudioFrames > 0 && tally.agentText.length > 0;
-      }, wait);
+      const played = () => page.evaluate(() => (window as unknown as MicWindow).__ogmFakeMic.playedSeconds);
+      await until(async () => tallyFrames(frames).agentAudioFrames > 0 && (await played()) > 0, wait);
+      // Let the first reply finish arriving, so its caption and stored turn have landed.
+      await until(() => tallyFrames(frames).agentText.length > 0, 5_000);
+      const playedSeconds = await played();
       await still('voice');
       // Hang up as soon as the reply is in: the call is billed by the minute.
       const end = dialog.getByRole('button', { name: 'Type instead' });
       if (await end.isVisible().catch(() => false)) await end.click();
-      cost.callSeconds = (Date.now() - started) / 1000;
+      cost.callSeconds = (Date.now() - callStarted) / 1000;
+      callStarted = undefined;
       let stored: { actor: string; text: string | null }[] = [];
       await until(async () => {
         const report = await internal(config, `/voice-fixtures/${run}`);
@@ -305,18 +323,20 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
         return stored.some((message) => message.text?.trim());
       }, 15_000);
       const tally = tallyFrames(frames);
-      const failure = twoWayFailure(tally, stored);
+      const failure = twoWayFailure(tally, playedSeconds, stored);
       steps.push({
         name: 'two-way',
         ok: failure === null,
         ...(failure ? { failure } : {}),
-        detail: `agent audio ${tally.agentAudioFrames} frames, ${tally.agentAudioBytes} bytes; stored ${stored.length} turns`,
+        detail: `agent audio ${tally.agentAudioFrames} frames, ${playedSeconds.toFixed(1)} s played; stored ${stored.length} turns`,
       });
     } catch (error) {
       steps.push({ name: 'two-way', ok: false, failure: (error as Error).message.split('\n')[0] });
     }
   } finally {
-    await context.close();
+    // A step that failed mid-call still spent the minutes up to the hang-up that closing the page does.
+    if (callStarted !== undefined) cost.callSeconds = (Date.now() - callStarted) / 1000;
+    await context.close().catch(() => undefined);
     await internal(config, `/voice-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);
   }
   const after = (await config.usage?.()) ?? null;

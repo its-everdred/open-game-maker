@@ -132,6 +132,20 @@ exit=1 qa-voice-e2e" "$(cat "$scratch/out")" 'both result lines'
 assert_eq 1 "$(wc -l < "$attention")" 'only the failing run wakes the Executor'
 assert_grep "qa-voice-e2e failed on $short (exit 1): $OGM_QA_ROOT/voice-e2e/$short.log" "$attention"
 
+# A run that hangs is cut off, fails, and wakes the Executor rather than holding the next deploy's check.
+printf '#!/usr/bin/env bash\nsleep 30\n' > "$scratch/hang"
+chmod +x "$scratch/hang"
+from=$(git -C "$stack" rev-parse HEAD)
+to=$(commit packages/voice-client/src/dictation.ts)
+: > "$attention"
+set +e
+OGM_QA_GM=$scratch/hang OGM_QA_TIMEOUT_SEC=1 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a hung E2E fails'
+assert_grep 'exit=124 qa-voice-e2e' "$scratch/out"
+assert_grep 'qa-voice-e2e failed on' "$attention"
+
 # The session cannot be minted: no E2E, exit 1, and the Executor is woken.
 from=$(git -C "$stack" rev-parse HEAD)
 to=$(commit apps/web/src/routes/review/RoundMedia.tsx)

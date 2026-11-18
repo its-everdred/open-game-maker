@@ -1,6 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { costLine, dictationFailure, elevenLabsUsage, tallyFrames, twoWayFailure } from '../src/qa-voice-e2e.js';
+import { gm, tempDir } from './helpers.js';
+
+afterEach(() => vi.unstubAllGlobals());
 
 const frame = (value: Record<string, unknown>) => JSON.stringify(value);
 
@@ -48,11 +53,18 @@ describe('verdicts', () => {
 
   const heard = tallyFrames([frame({ type: 'agent_audio', turn_id: 't', format: 'pcm', data_b64: 'AAAA' })]);
 
-  it('passes two-way only when audio came back and a turn is stored in the chat', () => {
-    expect(twoWayFailure(heard, [{ actor: 'creator', text: 'Hello, can you hear me?' }])).toBeNull();
-    expect(twoWayFailure(tallyFrames([]), [{ actor: 'agent', text: 'Yes' }])).toBe('no agent audio streamed back');
-    expect(twoWayFailure(heard, [])).toBe('no transcript was stored in the chat');
-    expect(twoWayFailure(heard, [{ actor: 'creator', text: ' ' }])).toBe('no transcript was stored in the chat');
+  it('passes two-way only when audio came back, played, and a turn is stored in the chat', () => {
+    expect(twoWayFailure(heard, 1.2, [{ actor: 'creator', text: 'Hello, can you hear me?' }])).toBeNull();
+    expect(twoWayFailure(tallyFrames([]), 0, [{ actor: 'agent', text: 'Yes' }])).toBe('no agent audio streamed back');
+    expect(twoWayFailure(heard, 1.2, [])).toBe('no transcript was stored in the chat');
+    expect(twoWayFailure(heard, 1.2, [{ actor: 'creator', text: ' ' }])).toBe('no transcript was stored in the chat');
+  });
+
+  // Frames the app cannot decode never reach the speaker; Kevin would hear nothing, so the check must fail.
+  it('fails two-way when audio frames arrived but the app played none of them', () => {
+    expect(twoWayFailure(heard, 0, [{ actor: 'agent', text: 'Yes' }])).toBe(
+      'the agent audio arrived but the app played none of it',
+    );
   });
 
   it('fails two-way when the host reported an error, even with audio', () => {
@@ -60,7 +72,7 @@ describe('verdicts', () => {
       frame({ type: 'agent_audio', turn_id: 't', format: 'pcm', data_b64: 'AAAA' }),
       frame({ type: 'error', code: 'transcript_store_failed' }),
     ]);
-    expect(twoWayFailure(tally, [{ actor: 'agent', text: 'Yes' }])).toBe(
+    expect(twoWayFailure(tally, 1, [{ actor: 'agent', text: 'Yes' }])).toBe(
       'the voice socket sent errors: transcript_store_failed',
     );
   });
@@ -87,5 +99,57 @@ describe('cost report', () => {
       'cost elevenlabs characters=unknown minutes=0.15 audio_sent_s=3.2 call_s=9.0',
     );
     expect(costLine({ characters: 41, audioSentSeconds: 3.2, callSeconds: 12 })).toContain('characters=41');
+  });
+});
+
+function host(qa: string) {
+  const home = tempDir();
+  const env = join(home, '.config', 'ogm', 'env');
+  mkdirSync(env, { recursive: true });
+  writeFileSync(
+    join(env, 'api.env'),
+    'OGM_APP_ORIGIN=https://app.example.test\nOGM_API_PORT=4300\nOGM_INTERNAL_TOKEN=t\n',
+  );
+  if (qa) writeFileSync(join(env, 'qa.env'), qa);
+  return home;
+}
+
+describe('gm qa voice-e2e', () => {
+  // The deploy hook reads the last line, so a host that cannot run the check still ends with a failing exit line.
+  it('fails with its exit line when the host has no QA session', async () => {
+    const { code, out, err } = await gm(['qa', 'voice-e2e'], { home: host('') });
+    expect(code).toBe(1);
+    expect(out.at(-1)).toBe('exit=1 qa-voice-e2e');
+    expect(err.join('\n')).toContain('ops/bin/ogm-qa-session');
+  });
+
+  it('fails with its exit line when the QA session has expired', async () => {
+    const qa =
+      'OGM_QA_SESSION_COOKIE_NAME=s\nOGM_QA_SESSION_COOKIE=v\nOGM_QA_SESSION_EXPIRES=2020-01-01T00:00:00.000Z\n';
+    const { code, out, err } = await gm(['qa', 'voice-e2e'], { home: host(qa) });
+    expect(code).toBe(1);
+    expect(out.at(-1)).toBe('exit=1 qa-voice-e2e');
+    expect(err.join('\n')).toContain('expired');
+  });
+
+  // Each run replaces the QA game's voice build; a second run alongside the first would delete its build mid-call.
+  it('does not start while another run holds the QA game', async () => {
+    const env = join(host('OGM_QA_SESSION_COOKIE_NAME=s\nOGM_QA_SESSION_COOKIE=v\n'), '.config', 'ogm', 'env');
+    const { acquireSlot } = await import('@ogm/gm-verify');
+    const held = await acquireSlot({ runtimeDir: join(env, 'qa-voice-e2e-lock'), slots: 1 });
+    const launched = vi.fn();
+    vi.stubGlobal('fetch', launched);
+    try {
+      const { code, out, err } = await gm(['qa', 'voice-e2e'], {
+        home: tempDir(),
+        env: { OGM_ENV_DIR: env, OGM_QA_LOCK_WAIT_MS: '50' },
+      });
+      expect(code).toBe(1);
+      expect(out.at(-1)).toBe('exit=1 qa-voice-e2e');
+      expect(err.join('\n')).toContain('another voice E2E still held the QA game');
+      expect(launched).not.toHaveBeenCalled();
+    } finally {
+      held.release();
+    }
   });
 });

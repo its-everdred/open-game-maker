@@ -54,11 +54,34 @@ it('feeds the recorded clip, and only the clip, into the page microphone', async
       const silent = await peak(300);
       await mic.play('dictate');
       const speaking = await peak(1_200);
-      return { silent, speaking, requested: mic.requested };
+      // Dictation ends by stopping its tracks; the voice session's capture that follows must still hear the next clip.
+      for (const track of stream.getTracks()) track.stop();
+      const again = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const second = context.createAnalyser();
+      context.createMediaStreamSource(again).connect(second);
+      const samples2 = new Float32Array(second.fftSize);
+      await mic.play('talk');
+      let after = 0;
+      for (let i = 0; i < 60; i++) {
+        second.getFloatTimeDomainData(samples2);
+        for (const sample of samples2) after = Math.max(after, Math.abs(sample));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const micOnly = (window as unknown as { __ogmFakeMic: { playedSeconds: number } }).__ogmFakeMic.playedSeconds;
+      // The page's own playback (the agent's reply) counts; the fake microphone's clips do not.
+      const reply = context.createBufferSource();
+      reply.buffer = context.createBuffer(1, 24_000, 24_000);
+      reply.connect(context.destination);
+      reply.start();
+      const withReply = (window as unknown as { __ogmFakeMic: { playedSeconds: number } }).__ogmFakeMic.playedSeconds;
+      return { silent, speaking, after, micOnly, withReply, requested: mic.requested };
     });
-    expect(levels.requested).toBe(1);
+    expect(levels.requested).toBe(2);
     expect(levels.silent).toBeLessThan(0.001);
     expect(levels.speaking).toBeGreaterThan(0.05);
+    expect(levels.after).toBeGreaterThan(0.05);
+    expect(levels.micOnly).toBe(0);
+    expect(levels.withReply).toBeCloseTo(1, 5);
   } finally {
     await context.close();
   }

@@ -163,7 +163,7 @@ ops/bin/ogm-voice-host check-env   # names every missing or mismatched setting, 
 ops/bin/ogm-voice-host build       # Mix deps + prod release in services/voice-host (needs mise and GitHub)
 ops/bin/ogm-voice-host start       # check-env, start, wait for /healthz
 ops/bin/ogm-voice-host restart     # after each build
-ops/bin/ogm-voice-host ensure      # restart only when /healthz does not answer
+ops/bin/ogm-voice-host ensure      # restart only when /healthz does not answer as the voice host
 ops/bin/ogm-voice-host health
 ```
 
@@ -431,16 +431,18 @@ runs it), opens its chat from the menu's builds sheet, and replaces the micropho
 1. One-way: holds "Hold to talk" while "Make the sky blue." plays, and passes when the message box shows the clip's
    words. The words are cleared, never sent.
 2. Two-way: taps "Start voice chat", plays "Hello, can you hear me?" once the session is listening, and passes when the
-   agent's audio streams back over the socket and a turn of the call is stored in the build's chat. It hangs up as
-   soon as the reply arrives.
+   agent's audio streams back over the socket, the app plays it, and a turn of the call is stored in the build's chat.
+   It hangs up as soon as the reply arrives.
 
-It deletes the build and its chat, saves a still per step and `voice-e2e.json` (steps, socket tally, cost) in
+One run at a time per QA env dir: a second run waits up to 10 minutes, because each run replaces the voice build. It
+deletes the build and its chat, saves a still per step and `voice-e2e.json` (steps, socket tally, cost) in
 `assets-local/review/app/voice-e2e/<sha>/`, prints `cost elevenlabs characters=<n> minutes=<m> audio_sent_s=<s>
 call_s=<s>` (characters are the account's usage before and after, so another session at the same time counts too;
 `unknown` without `ELEVENLABS_API_KEY`) and ends with `exit=<n> qa-voice-e2e`. Each run spends ElevenLabs
 transcription and conversational-AI credits, so it runs only when voice code changes: `ogm-qa-review-hook` runs it after
 a deploy that touches a path in `ops/voice-paths` (the list CI's voice host job also reads), logs to
-`~/.local/state/ogm/qa/voice-e2e/<sha>.log`, and appends a `qa-voice-e2e failed` line to the attention file when it
+`~/.local/state/ogm/qa/voice-e2e/<sha>.log`, cuts off a run that takes longer than `OGM_QA_TIMEOUT_SEC` (3600), and
+appends a `qa-voice-e2e failed` line to the attention file when it
 fails. Run `ops/bin/ogm-voice-host build` and `restart` before it when the voice host changed.
 
 ## Prove the instance monorepo flow

@@ -70,11 +70,17 @@ check_env() {
     [[ -n $(env_value voice-host "$name") ]] || problems+=("voice-host.env: $name is empty")
   done
   provider=$(env_value voice-host OGM_VOICE_PROVIDER)
-  if [[ ${provider:-fake} != fake ]]; then
-    for name in OGM_VOICE_LLM OGM_VOICE_CLEANUP_ROOT ELEVENLABS_API_KEY; do
-      [[ -n $(env_value voice-host "$name") ]] || problems+=("voice-host.env: $name is empty (provider $provider)")
-    done
-  fi
+  case ${provider:-fake} in
+    fake) ;;
+    elevenlabs_agents | openai_realtime)
+      key=ELEVENLABS_API_KEY
+      [[ $provider == openai_realtime ]] && key=OPENAI_API_KEY
+      for name in OGM_VOICE_LLM OGM_VOICE_CLEANUP_ROOT "$key"; do
+        [[ -n $(env_value voice-host "$name") ]] || problems+=("voice-host.env: $name is empty (provider $provider)")
+      done
+      ;;
+    *) problems+=("voice-host.env: OGM_VOICE_PROVIDER is not fake, elevenlabs_agents or openai_realtime") ;;
+  esac
   # The API mints the tokens the host verifies and signs the calls the host answers: both secrets must be the same.
   for name in OGM_VOICE_TOKEN_SECRET OGM_VOICE_INTERNAL_SECRET; do
     [[ $(env_value api "$name") == "$(env_value voice-host "$name")" ]] || problems+=("$name differs between api.env and voice-host.env")
@@ -91,12 +97,21 @@ check_env() {
   say "env ok (provider ${provider:-fake}, ports $port and $internal)"
 }
 
+# Only an answer that names the voice host counts: another service on the port must not pass for it.
 healthz() {
-  curl -fsS --max-time 5 "http://127.0.0.1:$internal/healthz" 2> /dev/null
+  local answer
+  answer=$(curl -fsS --max-time 5 "http://127.0.0.1:$internal/healthz" 2> /dev/null) || return 1
+  [[ $answer == *voice-host* ]] || return 1
+  printf '%s' "$answer"
 }
 
 listener_pid() {
   ss -ltnpH "sport = :$internal" 2> /dev/null | grep -oE 'pid=[0-9]+' | head -n 1 | cut -d= -f2
+}
+
+# The release's command line names it; any other process on the port is left alone.
+ours() {
+  tr '\0' ' ' < "/proc/$1/cmdline" 2> /dev/null | grep -q voice_host
 }
 
 build() {
@@ -120,6 +135,7 @@ stop() {
     say 'not running'
     return 0
   }
+  ours "$pid" || die "port $internal is held by pid $pid, which is not the voice host; stop it by hand"
   kill "$pid" 2> /dev/null
   for i in $(seq 1 30); do
     [[ -z $(listener_pid) ]] && break
@@ -135,7 +151,7 @@ start() {
     say "already running: $answer"
     return 0
   fi
-  check_env || die 'fix the env files first (docs/ops/voice-host.md)'
+  check_env || die 'fix the env files first (docs/ops/runbook.md, "Run the voice host")'
   [[ -x $release ]] || die "no release at ${release#"$repo/"}: run ogm-voice-host build"
   # The env file is sourced only inside the detached child, so its values never reach this shell's output.
   (
