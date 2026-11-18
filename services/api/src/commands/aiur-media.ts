@@ -5,6 +5,7 @@ import sharp from 'sharp';
 
 import type { MediaSigner } from '../build-chat/store.js';
 import type { AppDeps } from '../app/types.js';
+import { pathMedia, type MediaScope } from './path-media.js';
 
 // A Command no job owns carries its option media in aiur's public projection: a vetted https file is a `url` locator
 // the browser may load as is, and a file on the aiur host is an `attachment` only the supervisor token can read. Such a
@@ -51,8 +52,19 @@ export async function* capped(body: ReadableStream<Uint8Array>, limit: number): 
   }
 }
 
-async function copy(deps: AppDeps, client: AiurClient, decisionId: string, item: DecisionMedia, attachmentId: string) {
-  const file = await client.decisionMedia(decisionId, attachmentId, AbortSignal.timeout(aiurMediaTiming.copyTimeoutMs));
+type Source =
+  { kind: 'attachment'; value: string } | { kind: 'path'; value: string; scope: MediaScope; version: number };
+async function copy(deps: AppDeps, client: AiurClient, decisionId: string, item: DecisionMedia, source: Source) {
+  const file =
+    source.kind === 'attachment'
+      ? await client.decisionMedia(decisionId, source.value, AbortSignal.timeout(aiurMediaTiming.copyTimeoutMs))
+      : await pathMedia(
+          deps,
+          source.scope,
+          source.value,
+          item.mime_type ?? 'application/octet-stream',
+          MAX_AIUR_MEDIA_BYTES,
+        );
   const mime = item.mime_type ?? file.mime;
   if (KIND[item.kind ?? ''] !== 'image' || (dimension(item.width) && dimension(item.height))) {
     const ref = await deps.blobStore.put(capped(file.body, MAX_AIUR_MEDIA_BYTES), mime);
@@ -67,16 +79,20 @@ async function copy(deps: AppDeps, client: AiurClient, decisionId: string, item:
   return { hash: ref.hash, width: meta.width, height: meta.height };
 }
 
-function stored(deps: AppDeps, client: AiurClient, decisionId: string, item: DecisionMedia, attachmentId: string) {
+function stored(deps: AppDeps, client: AiurClient, decisionId: string, item: DecisionMedia, source: Source) {
   let byKey = copies.get(deps);
   if (byKey === undefined) {
     byKey = new Map();
     copies.set(deps, byKey);
   }
-  const key = `${client.baseUrl}\n${decisionId}\n${attachmentId}`;
+  const scopeKey =
+    source.kind === 'path'
+      ? `${source.scope.owner}/${source.scope.name}/${source.scope.ticket}/${source.version}/${source.scope.workspaceRoot ?? ''}`
+      : '';
+  const key = `${client.baseUrl}\n${decisionId}\n${source.kind}\n${scopeKey}\n${source.value}`;
   let pending = byKey.get(key);
   if (pending === undefined) {
-    pending = copy(deps, client, decisionId, item, attachmentId);
+    pending = copy(deps, client, decisionId, item, source);
     byKey.set(key, pending);
     // Logged here, once, because a copy can fail after the read that started it has moved on.
     pending.catch((error: unknown) => {
@@ -104,8 +120,10 @@ async function resolveItem(
   deps: AppDeps,
   client: AiurClient,
   decisionId: string,
+  version: number,
   item: DecisionMedia,
   sign: MediaSigner,
+  scope?: MediaScope,
 ): Promise<OptionMedia | undefined> {
   const kind = KIND[item.kind ?? ''];
   const locator = item.locator;
@@ -115,7 +133,16 @@ async function resolveItem(
   if (locator.kind === 'url' && locator.value) {
     url = locator.value;
   } else if (locator.kind === 'attachment' && locator.attachment_id) {
-    const copied = await withinInboxWait(stored(deps, client, decisionId, item, locator.attachment_id));
+    const copied = await withinInboxWait(
+      stored(deps, client, decisionId, item, { kind: 'attachment', value: locator.attachment_id }),
+    );
+    if (copied === undefined) return undefined;
+    url = await sign(copied.hash);
+    measured = copied;
+  } else if (locator.kind === 'path' && locator.value && scope) {
+    const copied = await withinInboxWait(
+      stored(deps, client, decisionId, item, { kind: 'path', value: locator.value, scope, version }),
+    );
     if (copied === undefined) return undefined;
     url = await sign(copied.hash);
     measured = copied;
@@ -146,12 +173,13 @@ export async function optionMediaFromAiur(
   client: AiurClient,
   decision: Decision,
   sign: MediaSigner,
+  scope?: MediaScope,
 ): Promise<Map<string, ResolvedOptionMedia>> {
   const resolved = new Map<string, ResolvedOptionMedia>();
   const quietly = async (item: DecisionMedia | undefined) => {
     if (item === undefined) return undefined;
     try {
-      return await resolveItem(deps, client, decision.decision_id, item, sign);
+      return await resolveItem(deps, client, decision.decision_id, decision.version, item, sign, scope);
     } catch {
       // The failed copy was logged once when it failed; every poll in its retry window lands here quietly.
       return undefined;

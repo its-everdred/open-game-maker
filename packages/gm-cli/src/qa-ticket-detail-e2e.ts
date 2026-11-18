@@ -44,7 +44,9 @@ export async function ticketDetailSteps(page: Page, origin: string, still: (labe
       await page.getByRole('button', { name: 'Completed', exact: true }).click(timeout);
       await page.getByRole('button', { name: new RegExp(`^${CLOSED_TITLE}`, 'u') }).click(timeout);
     } else {
-      await page.getByRole('button', { name: new RegExp(`^${RUNNING_TITLE}`, 'u') }).click(timeout);
+      const row = page.getByRole('button', { name: new RegExp(`^${RUNNING_TITLE}`, 'u') });
+      await row.click(timeout);
+      await row.locator('..').getByRole('button', { name: 'Details', exact: true }).click(timeout);
     }
     const dialog = page.getByRole('dialog', { name: title });
     await summary(dialog).waitFor(timeout);

@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import type { Job } from '@ogm/contracts';
-import { commandSource, type ReviewCommand, type ReviewTarget } from './review-command';
+import { commandSource, targetPath, targetSource, type ReviewCommand, type ReviewTarget } from './review-command';
+import { MissingMedia } from './MissingMedia';
 import { Icon } from '../../components/Icon';
 import { MenuRing } from '../../components/MenuCircle';
 import { Dialog } from '../../components/Dialog';
@@ -68,8 +69,6 @@ export function BuildTracker({
   onDismiss?(): void;
 }) {
   const [open, setOpen] = useState(false);
-  // With items waiting on the creator, the hammer opens straight on the review deck (#843); the panel sits behind it.
-  const [reviewFirst, setReviewFirst] = useState(false);
   const [acknowledged, setAcknowledged] = useState<readonly FinishedWorker[]>([]);
   const unreadUpdates = useNotify((state) => (state.updateOwner === creatorId ? state.unreadUpdates : 0));
   const hasUpdates = useNotify((state) => state.updateOwner === creatorId && state.updates.length > 0);
@@ -90,8 +89,8 @@ export function BuildTracker({
     !open
   )
     return null;
-  const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
-  const pending = reviews.length + commands.length + targets.length;
+  const missingTargets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
+  const pending = reviews.length + commands.length;
   const count = workers.length
     ? `${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running`
     : pending
@@ -111,7 +110,6 @@ export function BuildTracker({
           if (finished.length) setAcknowledged((prior) => [...prior, ...finished]);
           onDismiss?.();
           readUpdates();
-          setReviewFirst(!open && (pending > 0 || Boolean(reviewLoading)));
           setOpen(!open);
         }}
       >
@@ -119,6 +117,7 @@ export function BuildTracker({
         <Icon name="hammer" />
         <span className="worker-tracker-count" aria-hidden="true">
           {pending +
+            missingTargets.length +
             finished.length +
             workers.filter((worker) => worker.state !== 'human-review').length +
             unreadUpdates || '✓'}
@@ -139,7 +138,6 @@ export function BuildTracker({
           historyLoading={historyLoading}
           jobs={jobs}
           finished={[...acknowledged, ...finished]}
-          reviewFirst={reviewFirst}
           id={id}
         />
       )}
@@ -161,21 +159,18 @@ export function BuildPanel({
   creatorId,
   jobs = [],
   finished = [],
-  reviewFirst,
   id,
-}: PanelProps & { id: string; reviewFirst?: boolean }) {
+}: PanelProps & { id: string }) {
   const updates = useNotify((state) => (state.updateOwner === creatorId ? state.updates : EMPTY_UPDATES));
   const [modal, setModal] = useState<'review' | 'completed' | undefined>();
-  const [deckFirst, setDeckFirst] = useState(reviewFirst);
+  const [filtered, setFiltered] = useState(false);
+  const [selectedReview, setSelectedReview] = useState<WorkerReview>();
+  const [selectedCommand, setSelectedCommand] = useState<ReviewCommand>();
+  const [expandedWorker, setExpandedWorker] = useState<string>();
   const [conversation, setConversation] = useState<PastTicket>();
   const [detail, setDetail] = useState<DetailTarget>();
-  const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
-  const reviewCount = reviews.length + commands.length + targets.length;
-  // Opened deck-first: the deck shows once the reviews are known, unless the creator picked something else first.
-  if (deckFirst && !modal && !detail && reviewCount > 0) {
-    setDeckFirst(false);
-    setModal('review');
-  } else if (deckFirst && (modal || detail || !reviewLoading)) setDeckFirst(false);
+  const reviewCount = reviews.length + commands.length;
+  const missingTargets = missingReviewTargets(workers, reviews, commands);
   const talk = detail && conversationOf(detail, jobs);
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
@@ -197,47 +192,130 @@ export function BuildPanel({
       {workerError && <p role="alert">Could not load all build updates.</p>}
       {reviewError && <p role="alert">Could not load all reviews.</p>}
       {reviewCount > 0 && (
-        <button type="button" className="worker-tracker-summary" onClick={() => setModal('review')}>
-          {reviewCount} Needs Review
+        <button type="button" className="worker-tracker-summary" onClick={() => setFiltered(true)}>
+          {reviewCount} need review
+        </button>
+      )}
+      {filtered && (
+        <button type="button" onClick={() => setFiltered(false)}>
+          Back to builds
         </button>
       )}
       <ul className="worker-tracker-list">
-        {workers.map((worker) => (
-          <li key={worker.ticket}>
-            <WorkerRow worker={worker} onOpen={setDetail} />
-            {!waitingLabel(worker.state) && worker.percent != null && worker.percent < 100 && (
-              <span className="worker-tracker-bar">
-                <span style={{ width: `${worker.percent}%` }} />
-              </span>
-            )}
-            {(worker.phase || worker.elapsedSeconds != null) && !waitingLabel(worker.state) && (
-              <small>
-                {[
-                  worker.phase,
-                  worker.elapsedSeconds == null
-                    ? undefined
-                    : `${Math.floor(worker.elapsedSeconds / 60)}m ${worker.elapsedSeconds % 60}s elapsed`,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </small>
-            )}
+        {filtered &&
+          reviews.map((review) => {
+            const ticket = review.kind === 'standalone-preview' ? review.preview.ticket : review.round.ticket;
+            const title =
+              workers.find((worker) => worker.ticket === `${review.gameId}:${ticket}`)?.title ??
+              (review.kind === 'standalone-preview' ? `Build #${ticket}` : review.round.question || `Build #${ticket}`);
+            return (
+              <li
+                key={`${review.gameId}:${review.kind}:${review.kind === 'standalone-preview' ? review.preview.buildId : review.round.id}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReview(review);
+                    setSelectedCommand(undefined);
+                    setModal('review');
+                  }}
+                >
+                  {title}
+                </button>
+              </li>
+            );
+          })}
+        {filtered &&
+          commands.map((command) => (
+            <li key={`${commandSource(command)}:${command.decision_id}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCommand(command);
+                  setSelectedReview(undefined);
+                  setModal('review');
+                }}
+              >
+                {command.summary || command.title}
+              </button>
+            </li>
+          ))}
+        {!filtered &&
+          workers.map((worker) => (
+            <li key={worker.ticket}>
+              <WorkerRow
+                worker={worker}
+                expanded={expandedWorker === worker.ticket}
+                onToggle={() => setExpandedWorker(expandedWorker === worker.ticket ? undefined : worker.ticket)}
+              />
+              {expandedWorker === worker.ticket &&
+                missingTargets
+                  .filter((target) => `${target.gameId}:${target.ticket}` === worker.ticket)
+                  .map((target) => <MissingMedia key={worker.ticket} path={targetPath(target)} />)}
+              {expandedWorker === worker.ticket && splitTicket(worker.ticket) && (
+                <button
+                  type="button"
+                  onClick={() => setDetail({ ...splitTicket(worker.ticket)!, title: worker.title })}
+                >
+                  Details
+                </button>
+              )}
+              {!waitingLabel(worker.state) && worker.percent != null && worker.percent < 100 && (
+                <span className="worker-tracker-bar">
+                  <span style={{ width: `${worker.percent}%` }} />
+                </span>
+              )}
+              {expandedWorker === worker.ticket &&
+                (worker.phase || worker.elapsedSeconds != null) &&
+                !waitingLabel(worker.state) && (
+                  <small>
+                    {[
+                      worker.phase,
+                      worker.elapsedSeconds == null
+                        ? undefined
+                        : `${Math.floor(worker.elapsedSeconds / 60)}m ${worker.elapsedSeconds % 60}s elapsed`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </small>
+                )}
+            </li>
+          ))}
+        {!filtered &&
+          coreTargets.map((target) => {
+            const key = `${targetSource(target)}:${target.ticket}`;
+            return (
+              <li key={key}>
+                <button
+                  type="button"
+                  className="worker-tracker-row"
+                  aria-expanded={expandedWorker === key}
+                  onClick={() => setExpandedWorker(expandedWorker === key ? undefined : key)}
+                >
+                  {target.title}
+                </button>
+                {expandedWorker === key && <MissingMedia path={targetPath(target)} />}
+              </li>
+            );
+          })}
+        {!filtered && (
+          <li>
+            <button type="button" onClick={() => setModal('completed')}>
+              Completed
+            </button>
           </li>
-        ))}
-        <li>
-          <button type="button" onClick={() => setModal('completed')}>
-            Completed
-          </button>
-        </li>
+        )}
       </ul>
       {modal === 'review' && (
         <ReviewInbox
           workers={workers}
           reviews={reviews}
           commands={commands}
+          initialReview={selectedReview}
+          initialCommand={selectedCommand}
           error={reviewError}
           incomplete={reviewLoading || workerError}
-          targets={targets}
+          targets={[]}
           onClose={() => setModal(undefined)}
         />
       )}
@@ -308,7 +386,7 @@ function splitTicket(ticket: string): { gameId: string; ticket: string } | undef
   return separator < 0 ? undefined : { gameId: ticket.slice(0, separator), ticket: ticket.slice(separator + 1) };
 }
 
-function WorkerRow({ worker, onOpen }: { worker: WorkerBuild; onOpen(target: DetailTarget): void }) {
+function WorkerRow({ worker, expanded, onToggle }: { worker: WorkerBuild; expanded: boolean; onToggle(): void }) {
   const row = (
     <>
       <strong>{worker.title}</strong>
@@ -320,7 +398,7 @@ function WorkerRow({ worker, onOpen }: { worker: WorkerBuild; onOpen(target: Det
   );
   const target = splitTicket(worker.ticket);
   return target ? (
-    <button type="button" className="worker-tracker-row" onClick={() => onOpen({ ...target, title: worker.title })}>
+    <button type="button" className="worker-tracker-row" aria-expanded={expanded} onClick={onToggle}>
       {row}
     </button>
   ) : (

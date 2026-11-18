@@ -36,6 +36,9 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   if (isQaGame(deps.db, game.id))
     return c.json({ workers: qaWorkers(deps), daemonUnavailable: false, trackerStale: false, ...history });
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
+  // A game without a linked repository has no daemon or tracker tickets yet.
+  if (!game.githubOwner && !game.githubRepo)
+    return c.json({ workers: [], daemonUnavailable: false, trackerStale: false, ...history });
   if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
   // Fail closed if the tracker is unavailable: a shared daemon may contain another game's tickets.
@@ -64,8 +67,13 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   const workers = await deps
     .aiurClientForGame(game.id)
     .then((client) => listWorkers(client))
-    .catch(() => {
-      daemonUnavailable = true;
+    .catch((error: unknown) => {
+      daemonUnavailable = !(
+        error instanceof HttpError &&
+        error.code === 'daemon_not_found' &&
+        !snapshot.stale &&
+        tickets.length === 0
+      );
       return [];
     });
   const unobserved = workers.filter((worker) => !observed.has(worker.ticket) && !scope.owned.has(worker.ticket));

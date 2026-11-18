@@ -33,12 +33,16 @@ function mediaStates(root: Element): MediaState[] {
 }
 
 /**
- * Kevin's way into the review deck (#843): one tap on the hammer with items waiting. The app's PR-CI spec
+ * Open the Builds popover, filter to reviews, and select an item. The app's PR-CI spec
  * (apps/web/e2e/studio-menu.spec.ts) opens the deck through this same step, so a change to the path fails CI before it
  * reaches the prod E2E (#891).
  */
-export async function openReviewDeck(page: Page, timeout = 20_000): Promise<Locator> {
+export async function openReviewDeck(page: Page, timeout = 20_000, title?: string): Promise<Locator> {
   await page.locator('.worker-tracker-button').click({ timeout });
+  const panel = page.getByRole('region', { name: 'Builds' });
+  await panel.getByRole('button', { name: /\d+ need review/i }).click({ timeout });
+  const items = panel.locator('.worker-tracker-list button');
+  await (title ? panel.getByRole('button', { name: title, exact: true }) : items.first()).click({ timeout });
   const dialog = page.getByRole('dialog', { name: 'Needs Review' });
   await dialog.waitFor({ timeout });
   return dialog;

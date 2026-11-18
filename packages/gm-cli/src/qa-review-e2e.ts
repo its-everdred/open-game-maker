@@ -179,7 +179,7 @@ async function runViewport(
 
     await step('open the review deck', async () => {
       await page.goto(`${config.origin}/all`, { waitUntil: 'load', timeout: 60_000 });
-      await openReviewDeck(page, timeout.timeout);
+      await openReviewDeck(page, timeout.timeout, 'QA review round');
       await dialog.getByText('QA review round').waitFor(timeout);
       await dialog.locator('video').first().waitFor(timeout);
       await dialog
@@ -208,7 +208,9 @@ async function runViewport(
     });
     await still('round-sent');
     await step('pick B on the Command with a note', async () => {
-      await dialog.getByRole('button', { name: 'Next' }).click(timeout);
+      await dialog.getByRole('button', { name: 'Close' }).click(timeout);
+      const list = page.getByRole('region', { name: 'Builds' });
+      await list.getByRole('button', { name: 'QA review', exact: true }).click(timeout);
       await dialog.getByText('QA: which one?').waitFor(timeout);
       await settleMedia(dialog);
       await still('command');

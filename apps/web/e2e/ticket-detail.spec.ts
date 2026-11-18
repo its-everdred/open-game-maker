@@ -52,7 +52,9 @@ test('opens a running and a closed ticket’s detail from the hammer', async ({ 
   await installApi(page);
   await page.goto('/all');
   await page.getByRole('button', { name: '1 build running' }).click();
-  await page.getByRole('button', { name: /Forest backdrop/ }).click();
+  const row = page.getByRole('button', { name: /Forest backdrop/ });
+  await row.click();
+  await row.locator('..').getByRole('button', { name: 'Details', exact: true }).click();
   let dialog = page.getByRole('dialog', { name: 'Forest backdrop' });
   await expect(dialog.getByText('Painting the forest behind the blobs; the first stills are in.')).toBeVisible();
   await expect(dialog.getByText('Capturing stills')).toBeVisible();

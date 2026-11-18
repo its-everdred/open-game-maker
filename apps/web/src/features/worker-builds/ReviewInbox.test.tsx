@@ -68,6 +68,28 @@ it('answers a ledger round with a note and advances to the next review', async (
   expect(screen.getByText('1 left')).toBeVisible();
 }, 10000);
 
+it('opens the selected review while keeping the rest of the queue', () => {
+  const first = {
+    kind: 'round' as const,
+    gameId: 'g',
+    round: { id: 'a', ticket: '12', question: 'First?', media: [{ kind: 'still' as const, url: '/first.png' }] },
+  };
+  const second = {
+    kind: 'round' as const,
+    gameId: 'g',
+    round: { id: 'b', ticket: '12', question: 'Second?', media: [{ kind: 'still' as const, url: '/second.png' }] },
+  };
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} onClose={() => {}} reviews={[first, second]} initialReview={second} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('2 left')).toBeVisible();
+  expect(screen.getByText('Second?')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByText('First?')).toBeVisible();
+});
+
 it('keeps an open review while an incomplete poll replaces the list', () => {
   const first = {
     kind: 'round' as const,
