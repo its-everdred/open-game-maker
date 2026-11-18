@@ -301,7 +301,7 @@ test('asking for a change with no build running starts an edit job and streams i
   // A scheduled poll cannot start until five seconds after the initial response.
   expect(postAdmissionJobRequestAt! - firstJobResponseAt!).toBeLessThan(4_000);
   await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
+  // Asking for a change enters edit mode, where the studio menu opens directly.
   await page.getByRole('button', { name: 'Jobs: 0%' }).click();
   await expect(page.getByText('Waiting for a free slot')).toBeVisible({ timeout: 2_000 });
 });
