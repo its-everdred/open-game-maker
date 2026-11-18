@@ -36,7 +36,17 @@ const blobs: GameSummary = {
 };
 // Goblin Cellar is a real stored game whose detail data comes from the curated record.
 const goblin: GameSummary = {
-  ...mergeShowcase([{ ...blobs, id: 'g-goblin', slug: 'goblin-cellar', title: 'Goblin Cellar', tags: [] }])[0]!,
+  ...mergeShowcase([
+    {
+      ...blobs,
+      id: 'g-goblin',
+      slug: 'goblin-cellar',
+      title: 'Goblin Cellar',
+      tags: undefined,
+      tagline: undefined,
+      stats: undefined,
+    },
+  ])[0]!,
   logoUrl: '/goblin-logo.png',
 };
 
@@ -73,6 +83,21 @@ describe('game detail', () => {
     expect(vi.mocked(splatMask).mock.calls.every(([seed]) => seed === 'goblin-cellar')).toBe(true);
     expect(views[0]!.html).toContain('Match colour blobs');
     expect(views[1]!.html).toContain('Build a dungeon');
+  });
+
+  it('prefers published details over stale showcase data for matched games', () => {
+    detail({
+      ...goblin,
+      tagline: 'Fresh description',
+      tags: ['Puzzle'],
+      choices: undefined,
+      stats: { plays: 42, version: '9.0' },
+    });
+    expect(screen.getByText('Fresh description')).toBeVisible();
+    expect(screen.getByText('Puzzle')).toBeVisible();
+    expect(screen.queryByText('Dungeon')).toBeNull();
+    expect(screen.getByText('42')).toBeVisible();
+    expect(screen.getByText('v9.0')).toBeVisible();
   });
 
   it('shows the name as text under an unobstructed trailer, never the logo', () => {

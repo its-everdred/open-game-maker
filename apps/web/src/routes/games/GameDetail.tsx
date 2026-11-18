@@ -36,28 +36,22 @@ function formatCount(value: number): string {
 /** The detail view shows the same rows for every game; only where the data comes from differs. */
 export function detailOf(game: GameSummary): { description?: string; tags: DetailTag[]; stats: DetailStats } {
   const curated = game.showcase;
-  if (curated) {
-    return {
-      description: curated.tagline,
-      tags: curated.displayTags.map(({ key, label, color }) => ({ key, label, color })),
-      stats: {
-        played: curated.played || undefined,
-        rating: curated.rating ?? undefined,
-        version: curated.version || undefined,
-        plays: curated.plays || undefined,
-      },
-    };
-  }
+  const publishedTags = gameTags(game);
   return {
-    description: game.tagline,
-    tags: gameTags(game).map((name) => {
-      const key = genreIcon(name);
-      const label = name === name.toLowerCase() ? name.charAt(0).toUpperCase() + name.slice(1) : name;
-      return { key, label, color: tagColor(key) };
-    }),
+    description: game.tagline ?? curated?.tagline,
+    tags:
+      game.tags !== undefined || !curated
+        ? publishedTags.map((name) => {
+            const key = genreIcon(name);
+            const label = name === name.toLowerCase() ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+            return { key, label, color: tagColor(key) };
+          })
+        : curated.displayTags.map(({ key, label, color }) => ({ key, label, color })),
     stats: {
-      version: game.stats?.version,
-      plays: game.stats?.plays === undefined ? undefined : formatCount(game.stats.plays),
+      played: curated?.played || undefined,
+      rating: curated?.rating ?? undefined,
+      version: game.stats?.version ?? (curated?.version || undefined),
+      plays: game.stats?.plays === undefined ? curated?.plays || undefined : formatCount(game.stats.plays),
     },
   };
 }
