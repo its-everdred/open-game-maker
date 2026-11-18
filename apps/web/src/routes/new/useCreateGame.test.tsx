@@ -114,4 +114,31 @@ describe('useCreateGame', () => {
 
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+
+  it('retries provisioning the existing game after a 502', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'repo_provisioning_failed', details: { gameId: 'g_1' } }), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'g_1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const { result } = renderHook(() => useCreateGame());
+    await act(async () => {
+      await expect(result.current({}, true)).rejects.toThrow('api 502');
+    });
+    await act(async () => {
+      await expect(result.current({}, true)).resolves.toBe('g_1');
+    });
+    expect(fetch.mock.calls[1]?.[0]).toBe('/api/v1/games/g_1/provision');
+    expect(fetch.mock.calls[1]?.[1]?.method).toBe('POST');
+  });
 });

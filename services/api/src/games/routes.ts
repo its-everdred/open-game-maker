@@ -68,6 +68,7 @@ const routes = new Hono<ApiBindings>()
     const principal = requirePrincipal(c, ['user']);
     requireAuthorization(authorize(actorFromPrincipal(principal), 'game.create', { familyId: principal.familyId }));
     const body = await parseBody(c, createBody);
+    if (!c.get('deps').registry.repoProvisioner) throw new HttpError(503, 'repo_provisioner_unavailable');
     // Creators never connect GitHub: the operator installed the App on the instance repository once.
     const game = createGameRow(c.get('deps').db, {
       familyId: principal.familyId,

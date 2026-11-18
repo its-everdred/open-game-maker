@@ -504,6 +504,15 @@ describe('games routes', () => {
     expect(deps.db.select().from(schema.games).get()?.repoUrl).toBe('https://github.com/instance/games');
   });
 
+  it('does not create a game when the provisioner is unavailable', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    const { app } = await makeApp(deps);
+    deps.registry.repoProvisioner = undefined;
+    expect((await createGame(app)).status).toBe(503);
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(0);
+  });
+
   it('lists family-visible games plus the caller private games', async () => {
     const deps = makeDeps();
     seedFamily(deps);
