@@ -86,11 +86,18 @@ export async function swipeDeckFailures(page: Page, dialog: Locator): Promise<st
  */
 export async function optionFailures(dialog: Locator, expected: number): Promise<string[]> {
   const options = dialog.locator('.worker-review-option');
-  const count = await options.count();
+  const navigation = dialog.getByRole('button', { name: /^View option [A-E]$/u });
+  const paged = (await navigation.count()) > 0;
+  const count = paged ? await navigation.count() : await options.count();
   const failures = count === expected ? [] : [`the Command shows ${count} of ${expected} options`];
   for (let index = 0; index < count; index += 1) {
-    const option = options.nth(index);
     const letter = String.fromCharCode(65 + index);
+    if (paged) await navigation.nth(index).click();
+    const option = options.nth(paged ? 0 : index);
+    if (paged) {
+      await settleMedia(option);
+      failures.push(...(await mediaFailures(option, `option ${letter}`)));
+    }
     await option.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
     const media = await option.evaluate((root) => {
       const all = [...root.querySelectorAll('img, video, audio')];
@@ -111,5 +118,6 @@ export async function optionFailures(dialog: Locator, expected: number): Promise
     if (!(await option.getByRole('button', { name: new RegExp(`^Pick ${letter}`, 'u') }).isVisible()))
       failures.push(`option ${letter} has no pick button`);
   }
+  if (paged && count > 0) await navigation.first().click();
   return failures;
 }

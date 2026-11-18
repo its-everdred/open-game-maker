@@ -13,7 +13,7 @@ const ffmpegAvailable = ['ffmpeg', 'ffprobe'].every(
 );
 
 it.skipIf(!ffmpegAvailable)(
-  'encodes the scripted canvas at portrait dimensions (requires ffmpeg)',
+  'encodes the scripted canvas as the 1920×1080 landscape trailer (requires ffmpeg)',
   async () => {
     const dir = mkdtempSync(join(tmpdir(), 'trailer-video-'));
     const image = join(dir, 'frame.png');
@@ -38,13 +38,13 @@ it.skipIf(!ffmpegAvailable)(
         page: { clock: { runFor: async () => {} } },
         game: { evaluate: async () => {}, locator: () => ({ first: () => ({ evaluate: async () => data }) }) },
       } as unknown as HookDriver;
-      await recordTrailerVideo(hooks, { script: [], seconds: 1, fps: 1, orientation: 'portrait' }, output);
+      await recordTrailerVideo(hooks, { script: [], seconds: 1, fps: 1 }, output);
       const size = execFileSync(
         'ffprobe',
         ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', output],
         { encoding: 'utf8' },
       ).trim();
-      expect(size).toBe('1080x1920');
+      expect(size).toBe('1920x1080');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

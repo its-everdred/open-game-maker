@@ -6,7 +6,7 @@ type Item = Round['media'][number];
 
 function MediaItem({ item }: { item: Item }) {
   return (
-    <div className="review-deck-playable">
+    <div className="review-deck-playable worker-review-media">
       {item.kind === 'still' ? (
         <img className="review-deck-media" src={item.url} alt={item.role === 'target' ? 'Concept target' : 'Review'} />
       ) : item.kind === 'audio' ? (

@@ -77,7 +77,9 @@ means another writer answered first and the returned status is the winner's.
 
 ## Builds review inbox
 
-The Builds badge and Needs Review entry open a list of the creator's game Commands, core Commands, and unanswered review rounds.
+The Builds badge and Needs Review entry open a one-card queue of the creator's game Commands, core Commands, and
+unanswered review rounds. Swipe a round right to approve or left to add a change note; the thumbs and undo buttons
+provide the same controls. Use the letter buttons to view each Command option before picking it or sending a note.
 Core Commands are labeled Core and are visible only to the instance owner. The API connects to the local core daemon
 using `AIUR_API_URL` and `AIUR_API_TOKEN` from its environment. `OGM_INSTANCE_OWNER_ID` authorizes the owner and
 `OGM_CORE_BUMP_CORE_REPO` identifies the core tracker. The core source or its target list is unavailable when its required

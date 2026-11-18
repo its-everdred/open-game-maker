@@ -92,7 +92,6 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
         choices?: { genre: string[] };
         coverUrl?: string;
         trailerUrl?: string;
-        portraitTrailerUrl?: string;
         coverImage?: DisplayImage;
         logoImage?: DisplayImage;
       },
@@ -110,10 +109,9 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
             return [gameId, {}] as const;
           }
           if (!(await exists(join(directory, '.complete')))) return [gameId, {}] as const;
-          const [cover, landscape, portrait, manifest] = await Promise.all([
+          const [cover, trailer, manifest] = await Promise.all([
             exists(join(directory, 'media/thumbnail.png')),
             exists(join(directory, 'media/trailer-landscape.mp4')),
-            exists(join(directory, 'media/trailer-portrait.mp4')),
             manifestMedia(directory),
           ]);
           const origin = deps.config.gamesOrigin.replace(/\/$/, '');
@@ -184,8 +182,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                 : {}),
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
               ...(cover ? { coverUrl: `${base}/thumbnail.png` } : {}),
-              ...(landscape ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
-              ...(portrait ? { portraitTrailerUrl: `${base}/trailer-portrait.mp4` } : {}),
+              ...(trailer ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
             },
           ] as const;
         }),

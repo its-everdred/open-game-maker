@@ -447,7 +447,14 @@ describe('review round previews', () => {
     const list = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
       headers: asUser(ids.user),
     });
-    expect(await list.json()).toMatchObject({ rounds: [{ id, media: [{ kind: 'still', url: expect.any(String) }] }] });
+    expect(await list.json()).toMatchObject({
+      rounds: [
+        {
+          id,
+          media: [{ kind: 'still', url: expect.stringContaining('https://app.example.test/api/v1/blobs/sha256/') }],
+        },
+      ],
+    });
     const answer = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/${id}/answer`, {
       method: 'POST',
       headers: { ...asUser(ids.user), 'content-type': 'application/json' },
