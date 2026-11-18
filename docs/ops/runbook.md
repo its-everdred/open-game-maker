@@ -370,8 +370,8 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    a sound and a quoted verdict), opens the hammer, taps the running ticket and then the closed one under Completed,
    and fails the size when a detail lacks its summary, its three media or the quote, scrolls sideways, or has media
    that did not load; one still per ticket.
-   One run at a time per QA env dir (`~/.config/ogm/env`): a second run waits up to 30 minutes for the first, because each run clears the QA
-   game's fixtures and would wipe the other's cards.
+   One run at a time per QA env dir (`~/.config/ogm/env`): a second run waits up to 30 minutes for the first,
+   because each run clears the QA game's fixtures and would wipe the other's cards.
    It deletes its fixtures, saves stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
    `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box and
    `--break-media` answers the review picture with a 404, each to prove a broken deck fails the run.
