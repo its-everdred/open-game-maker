@@ -11,17 +11,24 @@ interface UnlockOptions {
 
 const UNLOCK_EVENTS = ['pointerup', 'touchend', 'keydown', 'click'] as const;
 
+/** The window event the SDK runtime dispatches when the host pauses or resumes the game (`detail.paused`). */
+export const GM_PAUSE_EVENT = 'gm-pause';
+
 export class AudioUnlock {
   private readonly listeners = new Set<(status: AudioStatus) => void>();
   private managesVisibilityState = false;
   private pending: Promise<void> | null = null;
   private visibilityTransition = Promise.resolve();
   private disposed = false;
+  /** The host has the game paused: audio stays suspended, even when the page becomes visible again (#874). */
+  private held = false;
+  private heldSuspended = false;
 
   constructor(private readonly options: UnlockOptions) {
     for (const event of UNLOCK_EVENTS) options.win.addEventListener(event, this.unlock, { capture: true });
     options.context.addEventListener('statechange', this.stateChanged);
     options.win.document.addEventListener('visibilitychange', this.visibilityChanged);
+    options.win.addEventListener(GM_PAUSE_EVENT, this.pauseChanged);
   }
 
   readonly unlock = (): Promise<void> => {
@@ -32,7 +39,7 @@ export class AudioUnlock {
     } catch {
       // Audio Session is a Safari extension and can reject assignment.
     }
-    if (context.state === 'running' || win.document.hidden) return Promise.resolve();
+    if (this.held || context.state === 'running' || win.document.hidden) return Promise.resolve();
     if (this.pending) return this.pending;
 
     const source = context.createBufferSource();
@@ -52,6 +59,7 @@ export class AudioUnlock {
 
   status(): AudioStatus {
     if (this.options.isMuted()) return 'off';
+    if (this.heldSuspended) return 'on';
     return this.options.context.state === 'running' ? 'on' : 'tap';
   }
 
@@ -69,6 +77,7 @@ export class AudioUnlock {
     for (const event of UNLOCK_EVENTS) this.options.win.removeEventListener(event, this.unlock, true);
     this.options.context.removeEventListener('statechange', this.stateChanged);
     this.options.win.document.removeEventListener('visibilitychange', this.visibilityChanged);
+    this.options.win.removeEventListener(GM_PAUSE_EVENT, this.pauseChanged);
     this.listeners.clear();
   }
 
@@ -92,11 +101,42 @@ export class AudioUnlock {
           if (context.state === 'running') await context.suspend();
           return;
         }
+        if (this.held) {
+          this.heldSuspended = true;
+          this.managesVisibilityState = false;
+          return;
+        }
         if (context.state !== 'running') await context.resume();
         if (!win.document.hidden) this.managesVisibilityState = false;
       })
       .catch(() => {
         // A later visibility event can retry after a browser lifecycle rejection.
+      });
+  };
+
+  private readonly pauseChanged = (event: Event): void => {
+    const paused = (event as CustomEvent<{ paused?: unknown } | null>).detail?.paused === true;
+    if (paused === this.held) return;
+    this.held = paused;
+    const { context, win } = this.options;
+    this.visibilityTransition = this.visibilityTransition
+      .catch(() => {})
+      .then(async () => {
+        if (this.disposed) return;
+        if (this.held) {
+          if (context.state !== 'running') return;
+          this.heldSuspended = true;
+          await context.suspend();
+          return;
+        }
+        if (!this.heldSuspended) return;
+        this.heldSuspended = false;
+        // Resumed in a hidden tab: the next visibility change brings the sound back.
+        if (win.document.hidden) this.managesVisibilityState = true;
+        else if (context.state !== 'running') await context.resume();
+      })
+      .catch(() => {
+        // A later visibility event or gesture can retry after a browser lifecycle rejection.
       });
   };
 
