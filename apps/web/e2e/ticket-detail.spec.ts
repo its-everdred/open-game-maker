@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
-import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
 
@@ -46,7 +46,8 @@ const detail = (ticket: string, running: boolean) => ({
 test.use({ serviceWorkers: 'block' });
 
 test('opens a running and a closed ticket’s detail from the hammer', async ({ page }, testInfo) => {
-  testInfo.setTimeout(480_000);
+  test.skip(testInfo.project.name !== 'desktop', 'the test sets each acceptance viewport itself');
+  testInfo.setTimeout(240_000);
   await installAuthRoutes(page, { signedIn: true });
   await installApi(page);
   await page.goto('/all');
@@ -56,7 +57,7 @@ test('opens a running and a closed ticket’s detail from the hammer', async ({ 
   await expect(dialog.getByText('Painting the forest behind the blobs; the first stills are in.')).toBeVisible();
   await expect(dialog.getByText('Capturing stills')).toBeVisible();
   await expectMedia(dialog);
-  await sizes(page, testInfo, 'running');
+  await fitsEverySize(page);
   await dialog.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'Completed' }).click();
@@ -65,7 +66,7 @@ test('opens a running and a closed ticket’s detail from the hammer', async ({ 
   await expect(dialog.getByText('#66 Merged')).toBeVisible();
   await expect(dialog.getByText('make it loop')).toBeVisible();
   await expectMedia(dialog);
-  await sizes(page, testInfo, 'closed');
+  await fitsEverySize(page);
 });
 
 async function expectMedia(dialog: ReturnType<Page['getByRole']>) {
@@ -75,23 +76,13 @@ async function expectMedia(dialog: ReturnType<Page['getByRole']>) {
   await expect(dialog.locator('audio')).toHaveAttribute('src', 'https://api.example.test/blobs/sha256/sound');
 }
 
-async function sizes(page: Page, testInfo: TestInfo, name: string) {
+async function fitsEverySize(page: Page) {
   for (const viewport of VIEWPORTS) {
     await page.setViewportSize(viewport);
     await page.waitForTimeout(150);
     // Nothing in the detail scrolls sideways on a phone.
     const body = page.locator('.ticket-detail-body');
     expect(await body.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
-    const path = testInfo.outputPath(`${name}-${viewport.width}x${viewport.height}-${testInfo.project.name}.png`);
-    // A page with a playing clip never settles for page.screenshot; capture the surface as the studio-menu spec does.
-    const session = await page.context().newCDPSession(page);
-    try {
-      const { data } = await session.send('Page.captureScreenshot', { format: 'png', fromSurface: true });
-      writeFileSync(path, Buffer.from(data, 'base64'));
-    } finally {
-      await session.detach();
-    }
-    await testInfo.attach(`${name}-${viewport.width}x${viewport.height}`, { path, contentType: 'image/png' });
   }
 }
 
