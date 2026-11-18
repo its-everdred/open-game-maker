@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GameDetail } from './GameDetail';
+import { detailOf, GameDetail } from './GameDetail';
 import { GameTrailer } from './GameTrailer';
 import { mergeShowcase } from './showcase';
 import { splatMask } from './splatMask';
@@ -124,6 +124,14 @@ describe('game detail', () => {
     expect(screen.getByText('31.4k')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Play Blobs' })).toHaveTextContent('▶');
     expect(screen.getByRole('button', { name: 'Edit Blobs' })).toHaveTextContent('✎');
+  });
+
+  it('colours a tag with no curated colour from the shared palette tokens', () => {
+    // Chrome colours live only in tokens.css, so an unknown tag must reuse a token, never a literal.
+    const [tag] = detailOf({ ...blobs, tags: ['Zany'] }).tags;
+    expect(tag!.key).toBe('other');
+    expect(tag!.color).toMatch(/^var\(--(?:red|orange|yellow|green|aqua|blue|purple)-b\)$/);
+    expect(detailOf({ ...blobs, tags: ['Zany'] }).tags[0]!.color).toBe(tag!.color);
   });
 
   it('hides only the rows a game has no data for', () => {

@@ -20,11 +20,13 @@ const curatedColors = new Map(
   showcaseRecords.flatMap((record) => record.displayTags.map((tag) => [tag.key, tag.color] as const)),
 );
 
+const tagPalette = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple'].map((name) => `var(--${name}-b)`);
+
 function tagColor(key: string): string {
   const known = curatedColors.get(key);
   if (known) return known;
-  const hue = [...key].reduce((value, character) => (value * 31 + character.charCodeAt(0)) % 330, 7);
-  return `hsl(${hue} 72% 66%)`;
+  const index = [...key].reduce((value, character) => (value * 31 + character.charCodeAt(0)) % tagPalette.length, 7);
+  return tagPalette[index]!;
 }
 
 function formatCount(value: number): string {

@@ -101,10 +101,12 @@ test('keeps spotlight actions and close control touch sized on a phone', async (
   await expect(play).toBeEnabled();
   await expect(create).toHaveCount(0);
 
-  for (const target of [play, edit, close]) {
+  for (const target of [play, edit]) {
     const box = (await target.boundingBox())!;
     expect(box.height).toBeGreaterThanOrEqual(64);
   }
+  // Close matches the standard round buttons (Kevin, 2026-11-17), so it gets the secondary tap size.
+  expect((await close.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
   await close.click();
   await expect(create).toBeVisible();
