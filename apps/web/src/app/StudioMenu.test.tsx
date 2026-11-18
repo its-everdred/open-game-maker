@@ -359,6 +359,41 @@ describe('StudioMenu', () => {
     view.rerender(screenWith(null));
     expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
   });
+  it('shows the Pause control over a game menu when a decision blocks a build', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    const screenWith = () => (
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          <GameMenuScreen hideButton />
+        </GameMenuProvider>
+      </MemoryRouter>
+    );
+    state.decisions = [decision('d1')];
+    const view = render(screenWith());
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    view.unmount();
+    state.decisions = [decision('d1', { blocking: true })];
+    render(screenWith());
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
+  });
+  it('keeps the open menu closable when the game returns to its own menu', () => {
+    const screenWith = (hideButton: boolean) => (
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          <GameMenuScreen hideButton={hideButton} />
+        </GameMenuProvider>
+      </MemoryRouter>
+    );
+    const view = render(screenWith(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    view.rerender(screenWith(true));
+    const pause = screen.getByRole('button', { name: 'Menu' });
+    expect(pause).toBeVisible();
+    fireEvent.click(pause);
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+  });
   it('opens the always-available controls on the title without signed-in links', () => {
     renderMenu('/');
 

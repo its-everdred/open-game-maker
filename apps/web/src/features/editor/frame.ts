@@ -38,6 +38,11 @@ export type GameFrameState = {
   hostPauseVisible?: boolean;
 };
 
+/** The game hides the host Pause control only in play, while its bridge is up; any failure shows it again. */
+export function hidesHostPause(mode: 'play' | 'edit', state: Pick<GameFrameState, 'bridgeState' | 'hostPauseVisible'>) {
+  return mode === 'play' && state.bridgeState === 'ready' && state.hostPauseVisible === false;
+}
+
 export type GameFrameController = {
   state(): GameFrameState;
   setMode(mode: 'play' | 'edit'): void;

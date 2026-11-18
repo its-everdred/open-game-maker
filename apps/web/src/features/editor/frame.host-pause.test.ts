@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { GameFrameOptions } from '@gm/host';
 import type { DesignDoc, GameManifest } from '@ogm/contracts/browser';
 
-import { mountGameFrame, type GameFrameState } from './frame';
+import { hidesHostPause, mountGameFrame, type GameFrameState } from './frame';
 
 afterEach(() => document.body.replaceChildren());
 
@@ -56,12 +56,21 @@ it('reports the game asking to hide and show the host Pause control', () => {
   expect(states.at(-1)?.hostPauseVisible).toBe(true);
 });
 
-it('starts a reloaded game with the control visible and stops listening on exit', () => {
-  const first = mount();
-  first.tell(false);
-  first.controller.dispose();
-  expect(first.stops.get('host.pause.visible')).toHaveBeenCalledOnce();
+it('stops listening when the game exits, so a late message cannot hide the control', () => {
+  const { controller, states, stops, tell } = mount();
+  controller.dispose();
+  expect(stops.get('host.pause.visible')).toHaveBeenCalledOnce();
+  const published = states.length;
+  tell(false);
+  expect(states).toHaveLength(published);
+  expect(controller.state().hostPauseVisible).toBeUndefined();
+});
 
-  const reloaded = mount();
-  expect(reloaded.controller.state().hostPauseVisible).toBeUndefined();
+it('hides the control only in play with a live bridge, never stranding a player on a failed or loading game', () => {
+  expect(hidesHostPause('play', { bridgeState: 'ready', hostPauseVisible: false })).toBe(true);
+  expect(hidesHostPause('play', { bridgeState: 'ready', hostPauseVisible: true })).toBe(false);
+  expect(hidesHostPause('play', { bridgeState: 'ready' })).toBe(false);
+  expect(hidesHostPause('play', { bridgeState: 'error', hostPauseVisible: false })).toBe(false);
+  expect(hidesHostPause('play', { bridgeState: 'connecting', hostPauseVisible: false })).toBe(false);
+  expect(hidesHostPause('edit', { bridgeState: 'ready', hostPauseVisible: false })).toBe(false);
 });
