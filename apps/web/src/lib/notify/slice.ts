@@ -9,15 +9,13 @@ export type NotifySlice = {
   updateOwner: string | undefined;
 };
 
-useHostStore
-  .getState()
-  .registerSlice<NotifySlice>('notify', () => ({
-    denied: false,
-    toasts: [],
-    updates: [],
-    unreadUpdates: 0,
-    updateOwner: undefined,
-  }));
+useHostStore.getState().registerSlice<NotifySlice>('notify', () => ({
+  denied: false,
+  toasts: [],
+  updates: [],
+  unreadUpdates: 0,
+  updateOwner: undefined,
+}));
 
 const read = () => useHostStore.getState().slices.notify as NotifySlice;
 const write = (patch: Partial<NotifySlice>) =>
