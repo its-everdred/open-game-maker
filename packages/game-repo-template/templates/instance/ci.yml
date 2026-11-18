@@ -13,7 +13,7 @@ jobs:
   required:
     name: required
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +47,34 @@ jobs:
           else
             pnpm -r --if-present run build
           fi
+      # Every mode of every game whose screens or play changed, played by a seeded bot at the four touch sizes (#866).
+      # A core bump or shared package change can break any game, so it plays them all.
+      - name: Playtest changed games in every mode
+        if: github.event_name == 'pull_request'
+        env:
+          GM_VERIFY_SOFTWARE_GL: '1'
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          changed=$(git diff --name-only "$base" HEAD)
+          if grep -qE '^(packages/|vendor/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)' <<< "$changed"; then
+            games=$(ls -d games/*/ 2> /dev/null | sed 's#/$##' || true)
+          else
+            games=$(grep -E '^games/[^/]+/(src/|index\.html|design/|public/|assets/|gm\.manifest\.json)' <<< "$changed" |
+              cut -d/ -f1-2 | sort -u || true)
+          fi
+          [[ -n $games ]] || exit 0
+          if [[ ! -x node_modules/.bin/gm ]]; then
+            echo '::error::gm qa playtest needs the vendored Game Maker core (@ogm/gm-cli); run pnpm vendor:core'
+            exit 1
+          fi
+          playwright=$(ls -d node_modules/.pnpm/@ogm+gm-verify@*/node_modules/playwright | head -n 1)
+          node "$playwright/cli.js" install --with-deps chromium
+          status=0
+          for game in $games; do
+            [[ -f $game/gm.manifest.json ]] || continue
+            pnpm exec gm qa playtest "$game" --all-modes || status=1
+          done
+          exit "$status"
       - name: Check changed trailers
         if: github.event_name == 'pull_request'
         run: |

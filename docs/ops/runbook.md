@@ -324,7 +324,8 @@ ops/bin/ogm-qa blobs --build <buildId>    # a specific build
 
 It reads the internal token like `ogm-publish` and the games origin from `OGM_GAMES_ORIGIN` (`games.env`), asks the
 facts route for the newest build, then runs `gm qa open`, `gm qa drive` for each solo journey and `gm qa room` for each
-room journey in `<game>/qa/journeys/`, `gm qa look` and `gm qa look --report` from the game's folder in its registered
+room journey in `<game>/qa/journeys/`, `gm qa playtest . --all-modes` (every mode in `gm.manifest.json`, results in
+`playtest/`), `gm qa look` and `gm qa look --report` from the game's folder in its registered
 checkout. The run lands in `~/.local/state/ogm/qa/<slug>/<buildId>/` (`OGM_QA_ROOT` moves it). Answer
 `look/answers.json` there after opening the stills, then `gm qa look --report --out <run>` again. Exit codes: 0 the
 report passed, 1 a step failed or a look is unanswered, 64 bad usage, 65 no game, build, origin or token.
@@ -362,9 +363,16 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    the round right, undoes, swipes it left with a note, views B and C, picks B with a note, and checks that both
    verdicts reached the QA game's aiur boundary and that the deck showed no error.
    Before swiping and before picking it fails the size on what the creator would see broken: a picture with no pixels
-   (`naturalWidth` 0), a clip not playable within 10 s (`readyState` under 2), a sound with no length, fewer options
+   (`naturalWidth` 0), a clip that has not played a frame within 10 s or has an error (a looping clip drops to
+   `readyState` 1 for a moment at each loop, so `readyState` alone is not the test), a sound with no length, fewer options
    than the Command carries or one inaccessible or without its media, and a round with no draggable card or no
    "Looks good" and "Needs changes" controls; the failure names each element, and the still is saved first.
+   First, at each size, it seeds a running and a closed ticket on the QA game (each with a summary, a picture, a clip,
+   a sound and a quoted verdict), opens the hammer, taps the running ticket and then the closed one under Completed,
+   and fails the size when a detail lacks its summary, its three media or the quote, scrolls sideways, or has media
+   that did not load; one still per ticket.
+   One run at a time per QA env dir (`~/.config/ogm/env`): a second run waits up to 30 minutes for the first,
+   because each run clears the QA game's fixtures and would wipe the other's cards.
    It deletes its fixtures, saves stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
    `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box and
    `--break-media` answers the review picture with a 404, each to prove a broken deck fails the run.
@@ -374,7 +382,8 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    (`services/api/src/{review-rounds,commands,previews,qa,worker-progress,blobs,blob-proxy}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
    `~/.local/state/ogm/qa/review-e2e/<sha>.log`.
 
-The host routes behind it, `/internal/qa/session` and `/internal/qa/review-fixtures[/<run>]`, take only the internal
+The host routes behind it, `/internal/qa/session`, `/internal/qa/review-fixtures[/<run>]` and
+`/internal/qa/ticket-fixtures[/<run>]`, take only the internal
 token in `x-ogm-internal`.
 
 ## Prove the instance monorepo flow

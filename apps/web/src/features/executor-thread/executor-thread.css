@@ -1,0 +1,73 @@
+/* The Executor thread: the job conversation's dialog, filling the phone like the approved mock. */
+.job-conversation-dialog.executor-thread {
+  width: min(560px, 100%);
+  height: 100%;
+}
+
+.executor-thread .build-chat-chat {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.executor-thread .build-chat-messages {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.executor-thread .build-chat-row.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.executor-thread .build-chat-row[data-waiting] {
+  opacity: 0.7;
+}
+
+.executor-thread-media {
+  display: grid;
+  gap: 8px;
+}
+
+.executor-thread-media[data-count='2'] {
+  grid-template-columns: 1fr 1fr;
+}
+
+.executor-thread-media.creator {
+  align-self: flex-end;
+}
+
+.executor-thread-media .build-chat-media-frame {
+  margin: 0;
+  aspect-ratio: 9 / 12;
+}
+
+.executor-thread-media[data-count='1'] .build-chat-media-frame {
+  aspect-ratio: auto;
+  max-height: 60svh;
+}
+
+.executor-thread-media[data-count='1'] .build-chat-media-frame img,
+.executor-thread-media[data-count='1'] .build-chat-media-frame video {
+  object-fit: contain;
+}
+
+.executor-thread-media a {
+  display: block;
+  height: 100%;
+}
+
+.executor-thread-audio {
+  flex: none;
+  width: min(100%, 300px);
+  height: 44px;
+}
+
+/* The log is a flex column: rows keep their own height instead of shrinking to fit. */
+.executor-thread .build-chat-messages > * {
+  flex-shrink: 0;
+}
+
+.executor-thread-audio.creator {
+  align-self: flex-end;
+}

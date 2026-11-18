@@ -69,6 +69,26 @@ describe('game contract', () => {
       expect(gameJson({ ...manifest(), playMenuButton })).toBe(false);
     }
   });
+  it('lists playable modes with a tap path each, so the playtest can reach every one', () => {
+    const modes = [
+      { id: 'blobs', label: 'Blobs', tap: 'Play>Endless>Blobs>Play' },
+      { id: 'both', label: 'Both', tap: 'Play>Endless>Both>Play' },
+    ];
+    expect(gameManifestSchema.parse({ ...manifest(), modes }).modes).toEqual(modes);
+    expect(gameJson({ ...manifest(), modes })).toBe(true);
+    for (const bad of [
+      [],
+      [{ id: 'a', label: 'A', tap: 'Play>>Go' }],
+      [
+        { id: 'a', label: 'A', tap: 'Play' },
+        { id: 'a', label: 'B', tap: 'Go' },
+      ],
+      [{ id: 'Bad id', label: 'A', tap: 'Play' }],
+    ]) {
+      expect(gameManifestSchema.safeParse({ ...manifest(), modes: bad }).success).toBe(false);
+    }
+  });
+
   it('accepts the golden manifest in both Zod and the emitted JSON Schema', () => {
     expect(gameManifestSchema.safeParse(manifest()).success).toBe(true);
     expect(gameJson(manifest())).toBe(true);

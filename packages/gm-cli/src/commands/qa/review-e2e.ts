@@ -8,6 +8,10 @@ import { withBrowser } from '../../qa.js';
 import { reviewE2e } from '../../qa-review-e2e.js';
 import { readEnvFile } from '../publish/index.js';
 
+// Every run seeds and deletes fixtures on the host's one QA game, and starts by clearing what a dead run left, so two
+// runs at once (the deploy hook and a manual run) wipe each other's cards (#875). One run at a time per host.
+const LOCK_WAIT_MS = 30 * 60_000;
+
 function headSha(cwd: string): string {
   try {
     return execFileSync('git', ['-C', cwd, 'rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -18,7 +22,7 @@ function headSha(cwd: string): string {
 
 export const command: GmCommand = {
   name: 'qa review-e2e',
-  summary: 'complete a review round and a three-option Command as the QA creator on the deployed app, at four sizes',
+  summary: 'open ticket details, then complete a review round and a Command as the QA creator, at four sizes',
   usage: '[--sha <deployed sha>] [--origin <app origin>] [--out <dir>]',
   example: 'qa review-e2e --sha 56d3dc1a2',
   flags: {
@@ -59,7 +63,20 @@ export const command: GmCommand = {
     const sha = (flags.sha as string | undefined) ?? headSha(ctx.cwd);
     const out = resolve(ctx.cwd, (flags.out as string | undefined) ?? join('assets-local/review/app/qa-e2e', sha));
     let results: Awaited<ReturnType<typeof reviewE2e>>;
+    let lock: { release(): void } | undefined;
     try {
+      const { acquireSlot } = await import('@ogm/gm-verify');
+      const waitMs = Number(ctx.env?.OGM_QA_LOCK_WAIT_MS) || LOCK_WAIT_MS;
+      lock = await acquireSlot({
+        // Keyed on the env dir, which names the QA game, so every run against that game shares one lock.
+        runtimeDir: join(envDir, 'qa-review-e2e-lock'),
+        slots: 1,
+        waitMs,
+        pollMs: 1_000,
+      }).catch((error: Error) => {
+        if (!error.message.startsWith('no free capture slot')) throw error;
+        throw new Error(`another review E2E still held the QA game after ${waitMs} ms`);
+      });
       results = await withBrowser(ctx, (browser) =>
         reviewE2e(browser, {
           origin,
@@ -78,6 +95,8 @@ export const command: GmCommand = {
     } catch (error) {
       ctx.err(`qa review-e2e: ${(error as Error).message}`);
       return done(EXIT.failed);
+    } finally {
+      lock?.release();
     }
     const ok = results.every((result) => result.ok);
     if (ctx.json) printJson(ctx, { ok, out: relative(ctx.cwd, out) || '.', results });

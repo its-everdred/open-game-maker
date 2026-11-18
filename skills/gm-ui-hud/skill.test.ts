@@ -58,6 +58,7 @@ const sdkExports = {
     setSelection: 1,
     setCamera: 1,
     net: 1,
+    qa: 1,
   } satisfies Record<keyof GameInstance<unknown, unknown>, 1>,
 };
 

@@ -65,6 +65,11 @@
   right: max(76px, calc(var(--safe-r) + 60px));
 }
 
+/* The tray still spans the screen when the review tracker pushes the control left, so it does not spill off the left. */
+.studio-menu-control:has(.worker-tracker) .studio-menu-tray {
+  right: calc(max(16px, var(--safe-r)) - max(76px, calc(var(--safe-r) + 60px)));
+}
+
 .studio-library-volume {
   position: absolute;
   right: 0;

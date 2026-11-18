@@ -60,6 +60,22 @@ export function createQaAiurClient(db: Db, blobStore: () => BlobStore): AiurClie
         body: Readable.toWeb(Readable.from(file.stream)) as ReadableStream<Uint8Array>,
       };
     },
+    async ticketDetail(id) {
+      const found = readQaState(db)?.tickets?.find((item) => item.identifier === id);
+      if (!found) throw new AiurHttpError(404, 'not_found', 'ticket not found', DAEMON);
+      return found;
+    },
+    async ticketDetailMedia(id, url) {
+      const item = readQaState(db)
+        ?.tickets?.find((ticket) => ticket.identifier === id)
+        ?.media.find((media) => media.url === url);
+      const file = item ? await blobStore().open(item.id as BlobHash) : null;
+      if (!file) throw new AiurHttpError(404, 'not_found', 'media not found', DAEMON);
+      return {
+        mime: file.ref.mime,
+        body: Readable.toWeb(Readable.from(file.stream)) as ReadableStream<Uint8Array>,
+      };
+    },
     async ticketTranscript() {
       return { events: [], nextCursor: null };
     },
@@ -89,6 +105,11 @@ export function createQaAiurClient(db: Db, blobStore: () => BlobStore): AiurClie
     events: unsupported,
     eventsToken: unsupported,
     decide: unsupported,
+    executorThread: unsupported,
+    executorThreadMessages: unsupported,
+    sendExecutorThreadMessage: unsupported,
+    uploadExecutorThreadFile: unsupported,
+    executorThreadAttachment: unsupported,
   };
 }
 

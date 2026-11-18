@@ -6,3 +6,4 @@ export * from './open.js';
 export * from './drive.js';
 export * from './room.js';
 export * from './look.js';
+export * from './playtest.js';

@@ -22,7 +22,9 @@ function mediaStates(root: Element): MediaState[] {
       return { tag, name, ok, detail: ok ? '' : `naturalWidth ${element.naturalWidth}` };
     }
     if (element instanceof HTMLVideoElement) {
-      const ok = element.readyState >= 2;
+      // A looping clip drops to readyState 1 for a few ms each time it seeks back to its start (#875), so a clip that
+      // has played a frame and has no error counts as loaded.
+      const ok = element.error === null && (element.readyState >= 2 || element.played.length > 0);
       return { tag, name, ok, detail: ok ? '' : `readyState ${element.readyState}` };
     }
     const ok = element.duration > 0;

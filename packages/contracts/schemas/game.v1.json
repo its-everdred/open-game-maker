@@ -476,6 +476,36 @@
         ]
       }
     },
+    "modes": {
+      "minItems": 1,
+      "maxItems": 12,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "tap": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "tap"
+        ],
+        "additionalProperties": {}
+      }
+    },
     "playMenuButton": {
       "type": "object",
       "properties": {

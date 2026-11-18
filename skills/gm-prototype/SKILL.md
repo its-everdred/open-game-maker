@@ -31,7 +31,8 @@ raises your reasoning effort. Lessons and evidence: `references/lessons.md`. Run
 5. **Verify in the real game before posting:** app-shell stills of a fresh production build at all four sizes
    (390x844, 844x390, 820x1180 and 1180x820). Every in-game still must show the board filling the screen. For
    motion or sound, a `gm run` scenario clip. Never post estimates, fixture tests or a still that stopped short of
-   the screen.
+   the screen. From `phase:prototype` on (not `phase:mock`), `gm qa playtest <game> --all-modes` must pass before you
+   post (gm-verify step 8): the ticket's mode is not the only one the creator plays (#866).
 6. **Post one round and one question, then end the turn** in human-review. Raise picks non-blocking, with media
    on every option, and build your recommendation meanwhile. Never re-polish and re-ask before his verdict, and
    never ask the same question twice.

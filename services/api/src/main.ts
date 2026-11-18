@@ -37,6 +37,7 @@ import { recordReconcileHeartbeat } from './review-rounds/heartbeat.js';
 import { createReadyReviewNotifier, startReadyReviewNotifier } from './review-rounds/ready-notifications.js';
 import { reviewClientForGame } from './review-rounds/daemon.js';
 import { getNotifyRuntime } from './notify/routes.js';
+import { createExecutorNotifier } from './executor-thread/notify.js';
 import { createReviewIssues } from './review-rounds/issues.js';
 import { createWaitTickets } from './decision-waits/tickets.js';
 import { createTicketTitleReader, createWorkpadReader } from './worker-progress/workpad.js';
@@ -253,6 +254,14 @@ const reviewNotifications = startReadyReviewNotifier(
   Math.max(30_000, env.OGM_COMMAND_POLL_MS),
   log,
 );
+const executorNotify = createExecutorNotifier(deps, {
+  deliver: (notification) => getNotifyRuntime(deps).deliverStored(notification),
+});
+setInterval(() => {
+  void executorNotify().catch((error: unknown) =>
+    log({ event: 'executor_notify_error', error: (error as Error).name }),
+  );
+}, 30_000).unref();
 // Give the first scheduled pass one interval to start before the independent monitor checks it.
 recordReconcileHeartbeat(db, Date.now());
 decisionWaits.start(env.OGM_COMMAND_POLL_MS);
