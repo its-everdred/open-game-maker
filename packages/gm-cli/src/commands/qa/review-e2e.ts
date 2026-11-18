@@ -72,7 +72,8 @@ export const command: GmCommand = {
         slots: 1,
         waitMs,
         pollMs: 1_000,
-      }).catch(() => {
+      }).catch((error: Error) => {
+        if (!error.message.startsWith('no free capture slot')) throw error;
         throw new Error(`another review E2E still held the QA game after ${waitMs} ms`);
       });
       results = await withBrowser(ctx, (browser) =>

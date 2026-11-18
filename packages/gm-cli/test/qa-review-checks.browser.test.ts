@@ -140,6 +140,14 @@ describe('the review E2E checks what the creator sees', () => {
           Object.defineProperty(video, 'readyState', { get: () => HTMLMediaElement.HAVE_METADATA });
       });
       expect(await mediaFailures(dialog, 'the review')).toEqual([]);
+      // Having played once is not enough: a clip that then failed still fails the run.
+      await tab.evaluate(() => {
+        for (const video of document.querySelectorAll('video'))
+          Object.defineProperty(video, 'error', { get: () => ({ code: MediaError.MEDIA_ERR_NETWORK }) });
+      });
+      expect(await mediaFailures(dialog, 'the review')).toEqual([
+        'the review <video clip.mp4> did not load (readyState 1)',
+      ]);
     } finally {
       await close();
     }
