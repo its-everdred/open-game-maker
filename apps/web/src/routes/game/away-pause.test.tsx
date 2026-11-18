@@ -202,4 +202,15 @@ describe('useAwayPause (#874)', () => {
     rerender({ ...initial, frame: controller, gameId: 'other' });
     expect(frame.restoreSave).toHaveBeenCalledWith({ saveSchemaVersion: 1, data: 2 });
   });
+
+  it('keeps the restored save when the fresh game saves itself as the restore pauses it', () => {
+    const save = { saveSchemaVersion: 1, data: { counter: 7 } };
+    sessionStorage.setItem('ogm.away.game', JSON.stringify({ buildId: 'b1', save }));
+    const { controller, write } = fakeFrame();
+    mount({ frame: controller });
+    // The SDK answers the pause with a save of the reloaded game's own state, which predates the restore.
+    write({ saveSchemaVersion: 1, data: { counter: 0 }, reason: 'pause' });
+    act(() => setVisibility('hidden'));
+    expect(JSON.parse(sessionStorage.getItem('ogm.away.game')!)).toEqual({ buildId: 'b1', save });
+  });
 });

@@ -60,7 +60,10 @@ export function useAwayPause({ frame, gameId, buildId, solo, menuOpen, openMenu 
   const away = useRef(false);
   /** The game and build already checked for a snapshot, so a re-render does not restore twice. */
   const restoredFor = useRef<string | undefined>(undefined);
-  /** The restored save stands in for the game's latest one until it writes another, so leaving again keeps it. */
+  /**
+   * The restored save is the game's state until the player resumes: the save the fresh game writes as it pauses
+   * predates the restore, so saves are ignored until then and leaving again keeps the restored one.
+   */
   const restoredSave = useRef<SaveData<unknown> | undefined>(undefined);
   const wasOpen = useRef(menuOpen);
   const openMenuRef = useRef(openMenu);
@@ -82,6 +85,7 @@ export function useAwayPause({ frame, gameId, buildId, solo, menuOpen, openMenu 
   useEffect(() => {
     if (wasOpen.current && !menuOpen) {
       away.current = false;
+      restoredSave.current = undefined;
       clearAway(gameId);
     }
     wasOpen.current = menuOpen;
@@ -94,6 +98,7 @@ export function useAwayPause({ frame, gameId, buildId, solo, menuOpen, openMenu 
       if (solo) writeAway(gameId, { buildId, ...(latest ? { save: latest } : {}) });
     };
     const stopSave = frame.onSaveWrite(({ saveSchemaVersion, data }) => {
+      if (restoredSave.current) return;
       latest = { saveSchemaVersion, data };
       if (away.current) keep();
     });

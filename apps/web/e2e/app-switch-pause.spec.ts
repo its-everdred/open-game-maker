@@ -104,6 +104,14 @@ test('a tab reloaded in the background comes back paused where the player left i
   await page.waitForTimeout(1_000);
   expect((await sdkState(page))?.counter).toBe(left.counter);
 
+  // Evicted again before the player resumes: the same game comes back once more.
+  await setHidden(page, true);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect.poll(() => bridgeState(page), { timeout: 60_000 }).toBe('ready');
+  await expect.poll(async () => (await sdkState(page))?.counter).toBe(left.counter);
+  await setHidden(page, false);
+  await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+
   await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'Resume' }).click();
   await expect.poll(async () => (await sdkState(page))?.counter ?? 0).toBeGreaterThan(left.counter);
   // Resuming ends the away state: the next load starts fresh.
