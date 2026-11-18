@@ -102,6 +102,7 @@ describe('command registry', () => {
       'qa drive',
       'qa look',
       'qa open',
+      'qa playtest',
       'qa review-e2e',
       'qa room',
       'review close-check',

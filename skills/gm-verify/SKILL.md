@@ -74,8 +74,7 @@ Run `gm look score` and `gm look judge` on your changed screens against their ta
 - For app-shell touch stills without a QA account, use `gm look shell --dist <game/dist> --out <directory>`; use `--tap 'Play>Endless'` for successive game actions, `--edit` for the editor, and `--mp4` for motion. The shell mocks sign-in and game APIs: report it as local, not production or Safari.
 - Exit 3 means the total timeout expired. Stderr identifies the capture stage and viewport; the command publishes stills only after every requested view succeeds. A missing or inaccessible Chromium executable is reported by Playwright; it must be installed and executable in the worker sandbox. A missing `index.html` or `design/design.json` means the game needs a build first. Browser and game-resource errors appear on stderr. If the system temporary directory is unavailable, scratch files use the workspace and capture slots are shared within that workspace (`.gm-verify-runtime`).
 - After every `gm run`, send exactly one current still or clip with `gm chat post`.
-- Never install software or add a paid visual judge to verify a game.
-- Always list `iPhone Safari` and `sound` as unchecked unless an operator actually checked them.
+- Never install software or add a paid visual judge to verify a game. Always list `iPhone Safari` and `sound` as unchecked unless an operator actually checked them.
 
 **Seeing your own output.** Numeric checks (luminance, colour counts, magenta) never prove a frame looks right. If
 you cannot view images yourself, run the `gm-image-mock` look request on each still beside its target mock and put
