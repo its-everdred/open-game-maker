@@ -328,7 +328,7 @@ describe('GamesScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Midnight Crumbs' }, AUTO_SELECT)).toBeVisible();
     expect(container.querySelector('.games-spotlight-media .game-cover')).toBeVisible();
     expect(screen.queryByText(/Your library|My games|Selected game|Choose what happens next|Versions/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Close game' })).toHaveTextContent('×');
+    expect(screen.getByRole('button', { name: 'Close game' })).toContainHTML('<svg');
     expect(screen.queryByRole('listitem', { name: 'main' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play Midnight Crumbs' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit Midnight Crumbs' })).toBeDisabled();

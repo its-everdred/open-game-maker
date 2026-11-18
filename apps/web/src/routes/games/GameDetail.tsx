@@ -108,7 +108,7 @@ export function GameDetail({
     >
       <Ambient game={game} />
       <button ref={close} type="button" className="games-close" aria-label="Close game" onClick={onClose}>
-        <span aria-hidden="true">×</span>
+        <Icon name="close" />
       </button>
       <div className="games-spotlight-copy">
         <h1>{game.title}</h1>

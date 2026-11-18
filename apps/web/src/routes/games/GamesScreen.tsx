@@ -15,6 +15,7 @@ import {
   type TileRects,
 } from './flip';
 import { GameDetail } from './GameDetail';
+import { startTrailer, stopTrailers } from './trailerVideo';
 import { ShowcaseMenuControls } from './ShowcaseMenuControls';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
@@ -76,6 +77,7 @@ export function GamesScreen() {
   const select = (index: number) => {
     const game = sortedGames[index];
     if (!game) return;
+    startTrailer(game);
     initialViewChosen.current = true;
     captureTransition();
     const next = new URLSearchParams(searchParams);
@@ -84,6 +86,7 @@ export function GamesScreen() {
   };
 
   const close = () => {
+    stopTrailers();
     initialViewChosen.current = true;
     const returningTo = selected?.id;
     captureTransition();

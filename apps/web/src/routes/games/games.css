@@ -161,16 +161,26 @@
   top: 88px;
   left: max(16px, var(--safe-l));
   display: grid;
-  width: 64px;
-  height: 64px;
+  width: 50px;
+  height: 50px;
   padding: 0;
   place-items: center;
   border-radius: 50%;
   border-color: var(--border);
   background: var(--action-secondary);
   color: var(--games-hi);
-  font-size: 2rem;
   transition: transform 0.3s var(--games-ease);
+}
+
+.games-close .icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+}
+
+.games-close .icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .games-close:hover {
@@ -220,10 +230,21 @@
   opacity: 1;
 }
 
+.game-trailer {
+  display: contents;
+}
+
+/* The cached cover shows through until the trailer's first frame plays. */
 .game-trailer-layer video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.3s var(--games-ease);
+}
+
+.game-trailer-layer video[data-playing] {
+  opacity: 1;
 }
 
 .game-trailer-layer.is-closing {
