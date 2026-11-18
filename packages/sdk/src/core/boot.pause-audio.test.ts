@@ -35,7 +35,9 @@ describe('paused game audio (#874)', () => {
     const { module } = createCounterGame();
     const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
     await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
-    bridge.onMessage!(message('hello', { protocol: 1, capabilities: [], mode: 'play', build: 'draft', playerIndex: 0 }));
+    bridge.onMessage!(
+      message('hello', { protocol: 1, capabilities: [], mode: 'play', build: 'draft', playerIndex: 0 }),
+    );
     const runtime = await pending;
     const context = new FakeAudioContext();
     context.state = 'running';

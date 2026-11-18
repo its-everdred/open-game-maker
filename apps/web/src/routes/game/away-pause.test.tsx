@@ -125,7 +125,10 @@ describe('useAwayPause (#874)', () => {
   });
 
   it('starts another build paused without restoring a save it may not read', () => {
-    sessionStorage.setItem('ogm.away.game', JSON.stringify({ buildId: 'old', save: { saveSchemaVersion: 1, data: 1 } }));
+    sessionStorage.setItem(
+      'ogm.away.game',
+      JSON.stringify({ buildId: 'old', save: { saveSchemaVersion: 1, data: 1 } }),
+    );
     const { frame, controller } = fakeFrame();
     const { openMenu } = mount({ frame: controller });
     expect(frame.restoreSave).not.toHaveBeenCalled();
