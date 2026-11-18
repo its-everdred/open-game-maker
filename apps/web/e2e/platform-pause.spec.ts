@@ -201,8 +201,7 @@ test('opening the menu in a room does not pause the game', async ({ page }, test
   await expect(gameMenu).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Paused' })).toHaveCount(0);
   await expect(gameMenu.getByRole('button', { name: 'Restart' })).toHaveCount(0);
-  await gameMenu.getByRole('button', { name: 'More' }).click();
-  await expect(page.getByRole('dialog', { name: 'More' }).getByRole('group', { name: 'Menu' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Menu' })).toBeHidden();
   expect(await fixtureMessages(page)).not.toContain('lifecycle.pause');
 });
 
