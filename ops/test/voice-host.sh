@@ -60,6 +60,7 @@ assert_eq 1 "$status" 'an incomplete env should fail the check'
 for missing in 'voice-host.env: OGM_VOICE_TOKEN_SECRET is empty' 'voice-host.env: OGM_API_INTERNAL_URL is empty' \
   'voice-host.env: OGM_VOICE_LLM is empty (provider elevenlabs_agents)' \
   'voice-host.env: OGM_VOICE_CLEANUP_ROOT is empty (provider elevenlabs_agents)' \
+  'voice-host.env: ELEVENLABS_AGENT_ID is empty (provider elevenlabs_agents)' \
   'OGM_VOICE_INTERNAL_SECRET differs between api.env and voice-host.env' 'api.env: OGM_VOICE_WS_URL is empty' \
   "api.env: OGM_VOICE_HOST_INTERNAL_URL is not http://127.0.0.1:$internal"; do
   assert_grep "$missing" "$scratch/check.err"
@@ -77,13 +78,14 @@ assert_eq 1 "$status" 'start should refuse a broken env instead of crash-looping
 assert_grep 'fix the env files first' "$scratch/start.err"
 [[ -z $(ss -ltnH "sport = :$internal") ]] || fail 'a refused start must not leave a listener'
 
-# The runbook's settings: both secrets shared with the API, the API's loopback URL, a model and a cleanup root.
+# The runbook's settings: both secrets shared with the API, the API's loopback URL, a model, a cleanup root and the agent.
 cat >> "$OGM_ENV_DIR/voice-host.env" << EOF
 OGM_VOICE_TOKEN_SECRET=$token
 OGM_VOICE_INTERNAL_SECRET=$secret
 OGM_API_INTERNAL_URL=http://127.0.0.1:4300
 OGM_VOICE_LLM=gemini-2.5-flash
 OGM_VOICE_CLEANUP_ROOT=$scratch/cleanup
+ELEVENLABS_AGENT_ID=agent-test
 EOF
 sed -i "s#^OGM_VOICE_HOST_INTERNAL_URL=.*#OGM_VOICE_HOST_INTERNAL_URL=http://127.0.0.1:$internal#; s#^OGM_VOICE_WS_URL=.*#OGM_VOICE_WS_URL=wss://<tailnet-host>:8443/ws/voice#" "$OGM_ENV_DIR/api.env"
 vh check-env > "$scratch/check2.out"

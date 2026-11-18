@@ -431,8 +431,8 @@ runs it), opens its chat from the menu's builds sheet, and replaces the micropho
 1. One-way: holds "Hold to talk" while "Make the sky blue." plays, and passes when the message box shows the clip's
    words. The words are cleared, never sent.
 2. Two-way: taps "Start voice chat", plays "Hello, can you hear me?" once the session is listening, and passes when the
-   agent's audio streams back over the socket, the app plays it, and a turn of the call is stored in the build's chat.
-   It hangs up as soon as the reply arrives.
+   agent's audio streams back over the socket, the app plays it, and the creator's spoken turn is stored in the build's
+   chat. It hangs up as soon as the reply arrives.
 
 One run at a time per QA env dir: a second run waits up to 10 minutes, because each run replaces the voice build. It
 deletes the build and its chat, saves a still per step and `voice-e2e.json` (steps, socket tally, cost) in
