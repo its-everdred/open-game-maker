@@ -45,6 +45,7 @@ function seed() {
       slug: 'blobs',
       githubOwner: 'fixture',
       githubRepo: 'blobs',
+      githubPath: 'games/blobs',
       visibility: 'private',
       repoVisibility: 'private',
       createdAt: AT,
@@ -189,7 +190,7 @@ describe('a jobless Command’s option media', () => {
     const root = await mkdtemp(join(tmpdir(), 'ogm-fleet-media-'));
     try {
       const checkout = join(root, 'daemon');
-      const review = join(checkout, 'workspaces', 'fixture', 'blobs', '12', 'review', '12');
+      const review = join(checkout, 'workspaces', 'fixture', 'blobs', '12', 'games', 'blobs', 'review', '12');
       await mkdir(review, { recursive: true });
       const video = join(review, 'clip.mp4');
       await writeFile(video, 'first video');
@@ -229,7 +230,7 @@ describe('a jobless Command’s option media', () => {
       await writeFile(video, 'second video');
       version = 2;
       const second = (await read())[0]!.media!.url;
-      expect(second).not.toBe(first);
+      expect(new URL(second as string).pathname).not.toBe(new URL(first as string).pathname);
       const secret = join(root, 'secret.mp4');
       const linked = join(review, 'linked.mp4');
       await writeFile(secret, 'private');
@@ -238,7 +239,13 @@ describe('a jobless Command’s option media', () => {
       await expect(
         pathMedia(
           deps,
-          { owner: 'fixture', name: 'blobs', ticket: '12', workspaceRoot: join(checkout, 'workspaces') },
+          {
+            owner: 'fixture',
+            name: 'blobs',
+            ticket: '12',
+            workspaceRoot: join(checkout, 'workspaces'),
+            gamePath: 'games/blobs',
+          },
           linked,
           'video/mp4',
           100,

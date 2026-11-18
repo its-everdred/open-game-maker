@@ -336,12 +336,15 @@ it('lists core Commands alongside game reviews', () => {
       { id: 'b', label: 'B', media: { url: '/b.png', width: 10, height: 10 } },
     ],
   };
+  const close = vi.fn();
   render(
     <QueryClientProvider client={queryClient}>
-      <ReviewInbox commands={[core]} reviews={[]} onClose={() => {}} />
+      <ReviewInbox commands={[core]} reviews={[]} onClose={close} />
     </QueryClientProvider>,
   );
   expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(close).toHaveBeenCalledOnce();
 });
 
 it('refreshes the version and options of the open command', () => {
@@ -410,6 +413,7 @@ it('keeps a command open while an answer is sending', async () => {
   );
   fireEvent.click(screen.getByRole('button', { name: 'Pick A: A' }));
   expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
   expect(close).not.toHaveBeenCalled();
   finish({ status: 'answered' });

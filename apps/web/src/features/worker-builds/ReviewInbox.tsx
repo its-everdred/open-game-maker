@@ -152,6 +152,9 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
+        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
         {queueControls}
         <p>{target.title}</p>
         {missingStatus(targetPath(target))}
@@ -166,6 +169,9 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
+        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
         {queueControls}
         <p role="alert">The playable preview is unavailable.</p>
       </Dialog>
@@ -184,6 +190,15 @@ export function ReviewInbox({
           if (!sending) onClose();
         }}
       >
+        <button
+          type="button"
+          className="job-conversation-close"
+          aria-label="Close"
+          disabled={sending}
+          onClick={onClose}
+        >
+          ×
+        </button>
         <div className="decision-deck-body">
           {queueControls}
           {error && <p role="alert">Could not load all reviews.</p>}
@@ -212,6 +227,9 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
+        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
         {queueControls}
         {missingStatus(`${commandPath(command)}/${encodeURIComponent(command.decision_id)}/missing-media`)}
       </Dialog>
@@ -225,6 +243,9 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
+        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
         {error ? <p role="alert">Could not load all reviews.</p> : null}
         {queue.length === 0 && !error ? <p>All reviews answered.</p> : null}
       </Dialog>

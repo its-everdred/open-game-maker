@@ -87,7 +87,7 @@ function stored(deps: AppDeps, client: AiurClient, decisionId: string, item: Dec
   }
   const scopeKey =
     source.kind === 'path'
-      ? `${source.scope.owner}/${source.scope.name}/${source.scope.ticket}/${source.version}/${source.scope.workspaceRoot ?? ''}`
+      ? `${source.scope.owner}/${source.scope.name}/${source.scope.ticket}/${source.version}/${source.scope.workspaceRoot ?? ''}/${source.scope.gamePath ?? ''}`
       : '';
   const key = `${client.baseUrl}\n${decisionId}\n${source.kind}\n${scopeKey}\n${source.value}`;
   let pending = byKey.get(key);

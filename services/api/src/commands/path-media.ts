@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import type { DecisionMediaFile } from '@ogm/aiur-client';
 import type { AppDeps } from '../app/types.js';
 
-export type MediaScope = { owner: string; name: string; ticket: string; workspaceRoot?: string };
+export type MediaScope = { owner: string; name: string; ticket: string; workspaceRoot?: string; gamePath?: string };
 
 function inside(root: string, file: string): boolean {
   const part = relative(root, file);
@@ -30,18 +30,28 @@ export async function pathMedia(
   )
     throw new Error('invalid media scope');
   if ([scope.owner, scope.name].some((part) => part === '.' || part === '..')) throw new Error('invalid media scope');
+  const parts = scope.gamePath?.split('/') ?? [];
+  if (parts.some((part) => !/^[a-zA-Z0-9_.-]+$/u.test(part) || part === '.' || part === '..'))
+    throw new Error('invalid game path');
   const roots = [scope.workspaceRoot, deps.config.builderWorkspacesRoot, join(homedir(), '.aiur', 'w')].filter(
     (root): root is string => Boolean(root),
   );
-  const root = roots.find((candidate) =>
-    inside(join(candidate, scope.owner, scope.name, scope.ticket, 'review', scope.ticket), path),
+  const layouts = parts.length ? [[], parts] : [[]];
+  const candidates = roots.flatMap((root) =>
+    layouts.map((layout) => ({
+      root,
+      layout,
+      directory: join(root, scope.owner, scope.name, scope.ticket, ...layout, 'review', scope.ticket),
+    })),
   );
-  if (!root) throw new Error('media outside review directory');
-  const directory = join(root, scope.owner, scope.name, scope.ticket, 'review', scope.ticket);
-  if (!inside(directory, path)) throw new Error('media outside review directory');
+  const selected = candidates.find(({ directory }) => inside(directory, path));
+  if (!selected) throw new Error('media outside review directory');
+  const { root, layout, directory } = selected;
   const resolvedDirectory = await realpath(directory);
   const canonicalRoot = await realpath(root);
-  if (resolvedDirectory !== join(canonicalRoot, scope.owner, scope.name, scope.ticket, 'review', scope.ticket))
+  if (
+    resolvedDirectory !== join(canonicalRoot, scope.owner, scope.name, scope.ticket, ...layout, 'review', scope.ticket)
+  )
     throw new Error('invalid review directory');
   const resolvedPath = await realpath(path);
   if (!inside(resolvedDirectory, resolvedPath)) throw new Error('media outside review directory');

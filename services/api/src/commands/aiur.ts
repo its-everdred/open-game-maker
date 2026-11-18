@@ -183,6 +183,7 @@ export async function gameCommandsFromAiur(
                 name: game.githubRepo,
                 ticket: decision.ticket.identifier,
                 ...(workspaceRoot ? { workspaceRoot } : {}),
+                ...(game.githubPath ? { gamePath: game.githubPath } : {}),
               }
             : undefined,
         ),
