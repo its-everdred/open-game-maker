@@ -79,6 +79,17 @@ describe('build tracker', () => {
     view.rerender(<BuildTracker workers={[]} finished={[]} />);
     expect(screen.getByText('New world is ready')).toBeVisible();
   });
+  // Kevin's review path (#843): with a round waiting, one tap on the hammer lands on the deck, not on a list he must
+  // search for a second button; the panel with the updates is behind it.
+  it('opens straight on the review deck when items wait on the creator', () => {
+    const reviews = [
+      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
+    ];
+    render(<BuildTracker workers={[]} reviews={reviews} />);
+    fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
+    expect(screen.getByText('Review deck')).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Builds' })).toBeInTheDocument();
+  });
   it('lists live progress without guessing an ETA and shows waiting states instead of a full bar', () => {
     render(
       <BuildTracker

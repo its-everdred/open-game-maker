@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { optionFailures, swipeDeckFailures } from '../../../packages/gm-cli/src/qa-review-checks';
+import { openReviewDeck, optionFailures, swipeDeckFailures } from '../../../packages/gm-cli/src/qa-review-checks';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { installGameApi } from './support/mock-game-api';
@@ -163,9 +163,8 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
     return json(route, { status: 'answered' });
   });
   await page.goto('/all');
-  await page.locator('.worker-tracker-button').click();
-  await page.getByRole('button', { name: '3 Needs Review' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Needs Review' });
+  // The prod review E2E's own step (#891): if this path changes, the prod run would break, so CI fails here first.
+  const dialog = await openReviewDeck(page);
   await expect(dialog.getByText('3 left')).toBeVisible();
   await expect(dialog.getByLabel('Concept target and review')).toBeVisible();
   for (const viewport of [
