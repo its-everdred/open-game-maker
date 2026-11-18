@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 import { api, sse } from '../api/client';
-import { pushToast } from './slice';
+import { pushUpdate, setUpdateOwner } from './slice';
 
 // One SSE connection for the whole app, shared by every screen that shows the feed. EventSource reconnects by itself
 // after a dropped connection; a stream that never opens (OGM-016 not merged, signed out) gets at most five open
@@ -32,7 +32,7 @@ function showReview(message: MessageEvent<string>, kind: 'review.reminder' | 're
       seenReminders.delete(id as string),
     );
   }
-  pushToast(toastText(message));
+  pushUpdate(updateText(message));
   for (const listener of listeners.keys()) listener(kind, message);
 }
 
@@ -48,13 +48,17 @@ export function subscribeNotification(listener: NotificationListener): () => voi
   };
 }
 
-export function useNotificationFeed(): void {
+export function useNotificationFeed(owner?: string): void {
   useEffect(() => {
-    if (users++ === 0) open();
+    if (users++ === 0) {
+      setUpdateOwner(owner);
+      seenReminders.clear();
+      open();
+    }
     return () => {
       if (--users === 0) close();
     };
-  }, []);
+  }, [owner]);
 }
 
 function open(): void {
@@ -75,12 +79,13 @@ function open(): void {
   };
   for (const name of EVENTS) {
     es.addEventListener(name, (event) => {
+      if (source !== es) return;
       const message = event as MessageEvent<string>;
       if (name === 'review.reminder' || name === 'review.ready') {
         showReview(message, name);
         return;
       }
-      pushToast(toastText(message));
+      pushUpdate(updateText(message));
       for (const listener of listeners.keys()) listener(name, message);
     });
   }
@@ -104,15 +109,15 @@ function close(): void {
   failedOpens = 0;
 }
 
-function toastText(e: MessageEvent<string>): string {
+function updateText(event: MessageEvent<string>): string {
   try {
-    const data = JSON.parse(e.data) as { title?: unknown; body?: unknown };
-    const title = typeof data.title === 'string' ? data.title : undefined;
-    const body = typeof data.body === 'string' ? data.body : undefined;
-    const text = [title, body].filter((value): value is string => Boolean(value)).join(' — ');
+    const data = JSON.parse(event.data) as { title?: unknown; body?: unknown };
+    const text = [data.title, data.body]
+      .filter((value): value is string => typeof value === 'string' && Boolean(value))
+      .join(' — ');
     if (text) return text;
   } catch {
-    /* plain text payload */
+    // Plain text payload.
   }
-  return e.data;
+  return event.data;
 }

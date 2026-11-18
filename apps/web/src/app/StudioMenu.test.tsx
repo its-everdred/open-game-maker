@@ -9,6 +9,7 @@ import type { EnergyView } from '@ogm/contracts/browser';
 import { useDeckDraft, useReviewDraft } from '../features/commands-inbox/drafts';
 import { GameMenuProvider, useGameMenuControls } from './GameMenu';
 import { StudioMenu } from './StudioMenu';
+import { pushUpdate, setUpdateOwner } from '../lib/notify/slice';
 
 function TestStudioMenu() {
   return (
@@ -740,10 +741,10 @@ describe('StudioMenu', () => {
         <TestStudioMenu />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('button', { name: 'New review ready' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
   });
 
-  it('announces a game ticket newly waiting for review', async () => {
+  it('counts a game ticket newly waiting for review without overlay text', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.workers = [{ ticket: 'game:42', title: 'New build', percent: 50, etaSeconds: null, state: 'in-progress' }];
     const view = renderMenu('/games');
@@ -753,7 +754,9 @@ describe('StudioMenu', () => {
         <TestStudioMenu />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('button', { name: 'New review ready' })).toBeVisible();
+    expect(screen.queryByText('New build')).not.toBeInTheDocument();
+    expect(document.querySelector('.worker-tracker-count')).toHaveTextContent('1');
+    expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
@@ -764,6 +767,7 @@ describe('StudioMenu', () => {
     state.decisions = [decision('d1')];
     const view = renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
     expect(screen.getByRole('alert')).toBeVisible();
     state.session = { data: { user: { id: 'user-2' } } };
     state.decisions = [decision('d2')];
@@ -773,6 +777,23 @@ describe('StudioMenu', () => {
       </MemoryRouter>,
     );
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it.each(['/g/game-blobs', '/g/showcase/blobs'])('keeps updates behind the hammer in %s', (path) => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    setUpdateOwner('user-1');
+    const view = renderMenu(path);
+    act(() => pushUpdate('Private build update'));
+    expect(screen.queryByText('Private build update')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Menu' }).querySelector('.studio-menu-badge')).toHaveTextContent('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: '0 builds running, 1 new update' }));
+    expect(screen.getByText('Private build update')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '0 builds running' }));
+    fireEvent.click(screen.getByRole('button', { name: '0 builds running' }));
+    expect(screen.getByText('Private build update')).toBeVisible();
+    view.unmount();
+    setUpdateOwner(undefined);
   });
 
   it('keeps an open in-game review sheet mounted during a partial refresh', () => {

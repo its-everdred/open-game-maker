@@ -108,7 +108,7 @@ describe('useNotificationFeed', () => {
       }),
     );
 
-    expect(notify.notifyState().toasts.map((t) => t.text)).toEqual(['Build complete — Mossy Leap is built']);
+    expect(notify.notifyState().toasts).toEqual([]);
     expect(listener).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledWith('build.done', expect.any(MessageEvent));
     unsubscribe();
@@ -124,7 +124,7 @@ describe('useNotificationFeed', () => {
       new MessageEvent('job.started', { data: JSON.stringify({ title: '', body: 'Build started' }) }),
     );
 
-    expect(notify.notifyState().toasts.map((t) => t.text)).toEqual(['Build started']);
+    expect(notify.notifyState().toasts).toEqual([]);
     unmount();
   });
 
@@ -136,7 +136,7 @@ describe('useNotificationFeed', () => {
         data: JSON.stringify({ title: 'A review is waiting', body: 'Lantern Bay' }),
       }),
     );
-    expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual(['A review is waiting — Lantern Bay']);
+    expect(notify.notifyState().toasts).toEqual([]);
     unmount();
   });
 
@@ -150,9 +150,7 @@ describe('useNotificationFeed', () => {
         data: JSON.stringify({ title: 'Reviews are ready', body: 'New items are waiting for your review.' }),
       }),
     );
-    expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual([
-      'Reviews are ready — New items are waiting for your review.',
-    ]);
+    expect(notify.notifyState().toasts).toEqual([]);
     expect(listener).toHaveBeenCalledWith('review.ready', expect.any(MessageEvent));
     unsubscribe();
     unmount();
@@ -168,13 +166,11 @@ describe('useNotificationFeed', () => {
     const source = FakeEventSource.instances.at(-1)!;
     source.onopen?.();
     await waitFor(() =>
-      expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual([
-        'Reviews are ready — New items are waiting.',
-      ]),
+      expect(
+        calls.some((call) => call.url === '/api/v1/notifications/n-ready/read' && call.init?.method === 'POST'),
+      ).toBe(true),
     );
-    expect(
-      calls.some((call) => call.url === '/api/v1/notifications/n-ready/read' && call.init?.method === 'POST'),
-    ).toBe(true);
+    expect(notify.notifyState().toasts).toEqual([]);
     unmount();
   });
 
@@ -188,17 +184,37 @@ describe('useNotificationFeed', () => {
     const source = FakeEventSource.instances.at(-1)!;
     source.onopen?.();
     await waitFor(() =>
-      expect(notify.notifyState().toasts.map((toast) => toast.text)).toEqual(['A review is waiting — Lantern Bay']),
+      expect(calls.some((call) => call.url === '/api/v1/notifications/n-1/read' && call.init?.method === 'POST')).toBe(
+        true,
+      ),
     );
-    expect(calls.some((call) => call.url === '/api/v1/notifications/n-1/read' && call.init?.method === 'POST')).toBe(
-      true,
-    );
+    expect(notify.notifyState().toasts).toEqual([]);
     source.dispatchEvent(
       new MessageEvent('review.reminder', {
         data: JSON.stringify({ id: 'n-1', title: 'A review is waiting', body: 'Lantern Bay' }),
       }),
     );
-    expect(notify.notifyState().toasts).toHaveLength(1);
+    expect(notify.notifyState().toasts).toHaveLength(0);
+    unmount();
+  });
+
+  it('clears updates and review deduplication when the creator changes', () => {
+    const { rerender, unmount } = renderHook(({ owner }) => notify.useNotificationFeed(owner), {
+      initialProps: { owner: 'creator-a' },
+    });
+    const first = FakeEventSource.instances.at(-1)!;
+    first.dispatchEvent(
+      new MessageEvent('review.ready', { data: JSON.stringify({ id: 'shared', title: 'Private update' }) }),
+    );
+    expect(notify.notifyState().updates.map((item) => item.text)).toEqual(['Private update']);
+    rerender({ owner: 'creator-b' });
+    expect(notify.notifyState().updates).toEqual([]);
+    const second = FakeEventSource.instances.at(-1)!;
+    first.dispatchEvent(new MessageEvent('job.started', { data: 'Stale update' }));
+    second.dispatchEvent(
+      new MessageEvent('review.ready', { data: JSON.stringify({ id: 'shared', title: 'New update' }) }),
+    );
+    expect(notify.notifyState().updates.map((item) => item.text)).toEqual(['New update']);
     unmount();
   });
 
