@@ -152,11 +152,13 @@ test('asks the Executor from a game, reads the reply with media, and sees each g
       return json(route, { workers: [], daemonUnavailable: false, trackerStale: false, cursor: 0, completed: [] });
     if (url.pathname.endsWith('/review-rounds')) return json(route, { rounds: [] });
     if (url.pathname.endsWith('/previews')) return json(route, { previews: [] });
-    return json(route, {});
+    if (/^\/api\/v1\/games\/[^/]+\/commands$/u.test(url.pathname)) return json(route, { commands: [] });
+    if (url.pathname === '/api/v1/me') return json(route, { platformRole: 'none' });
+    return json(route, { error: 'not_mocked', path: url.pathname }, 404);
   });
 
   await page.goto('/all');
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await openMenu(page);
   await page.getByRole('button', { name: 'Ask' }).click();
   const thread = page.getByRole('dialog', { name: 'Executor' });
   await expect(thread.getByText('Live: Endless at Normal speed.')).toBeVisible();
@@ -181,6 +183,7 @@ test('asks the Executor from a game, reads the reply with media, and sees each g
   await expect.poll(() => thread.locator('audio').evaluate((audio) => audio.duration)).toBeGreaterThan(1);
   const overflow = await thread.evaluate((node) => node.scrollWidth - node.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+  expect((await thread.locator('audio').boundingBox())!.height).toBeGreaterThan(20);
   await capture(page, testInfo, 'answer');
 
   await thread.getByRole('button', { name: 'B' }).click();
@@ -188,15 +191,23 @@ test('asks the Executor from a game, reads the reply with media, and sees each g
   await capture(page, testInfo, 'review');
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await openMenu(page);
   await page.getByRole('button', { name: 'Status' }).click();
   const status = page.getByRole('list', { name: 'Build progress' });
   await expect(status.getByRole('group', { name: 'Blobs builds' })).toContainText('Which menu?Waiting on you');
   await expect(
     status.getByRole('group', { name: 'Goblin Cellar builds' }).getByRole('link', { name: 'Live' }),
   ).toBeVisible();
+  const sheet = (await page.locator('.studio-menu-sheet').boundingBox())!;
+  expect(sheet.x).toBeGreaterThanOrEqual(0);
+  expect(sheet.x + sheet.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   await capture(page, testInfo, 'status');
 });
+
+// On the library the menu opens from the sound control (long press, or Shift+F10).
+async function openMenu(page: Page) {
+  await page.locator('.studio-library-volume button').press('Shift+F10');
+}
 
 async function capture(page: Page, testInfo: TestInfo, name: string) {
   await page.waitForTimeout(300);

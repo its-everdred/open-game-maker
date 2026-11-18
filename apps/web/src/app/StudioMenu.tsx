@@ -160,7 +160,11 @@ export function StudioMenu() {
   const unreadReplies = useUnreadReplies(threadAccess ? creatorId : undefined);
   const menuBadge = openDecisions + unreadReplies;
   const threadCommands = useMemo(
-    () => decisions.commands.filter((command) => 'source' in command || command.game_id === gameId),
+    // In a game, that game's Commands and the core's; on the library, all of them.
+    () =>
+      gameId === undefined
+        ? decisions.commands
+        : decisions.commands.filter((command) => 'source' in command || command.game_id === gameId),
     [decisions.commands, gameId],
   );
 
@@ -361,7 +365,7 @@ export function StudioMenu() {
       onMute={setMuted}
       sliderOpen={sheet === 'volume'}
       menuOpen={hasStudioHeader && open}
-      decisionCount={hasStudioHeader && !open ? openDecisions : 0}
+      decisionCount={hasStudioHeader && !open ? menuBadge : 0}
       blocked={hasStudioHeader && blocked}
       building={hasStudioHeader && buildingJobs.length > 0}
       onMenu={

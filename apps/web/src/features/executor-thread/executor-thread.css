@@ -58,7 +58,14 @@
 }
 
 .executor-thread-audio {
+  flex: none;
   width: min(100%, 300px);
+  height: 44px;
+}
+
+/* The log is a flex column: rows keep their own height instead of shrinking to fit. */
+.executor-thread .build-chat-messages > * {
+  flex-shrink: 0;
 }
 
 .executor-thread-audio.creator {
