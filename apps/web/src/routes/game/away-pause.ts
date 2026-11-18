@@ -58,15 +58,20 @@ type AwayPauseOptions = {
  */
 export function useAwayPause({ frame, gameId, buildId, solo, menuOpen, openMenu }: AwayPauseOptions): void {
   const away = useRef(false);
-  const restored = useRef(false);
+  /** The game and build already checked for a snapshot, so a re-render does not restore twice. */
+  const restoredFor = useRef<string | undefined>(undefined);
+  /** The restored save stands in for the game's latest one until it writes another, so leaving again keeps it. */
+  const restoredSave = useRef<SaveData<unknown> | undefined>(undefined);
   const wasOpen = useRef(menuOpen);
   const openMenuRef = useRef(openMenu);
   openMenuRef.current = openMenu;
 
   useEffect(() => {
-    if (!frame || buildId === undefined || !solo || restored.current) return;
-    restored.current = true;
+    const key = `${gameId}\n${buildId}`;
+    if (!frame || buildId === undefined || !solo || restoredFor.current === key) return;
+    restoredFor.current = key;
     const snapshot = readAway(gameId, buildId);
+    restoredSave.current = snapshot?.save;
     if (!snapshot) return;
     away.current = true;
     frame.pause();
@@ -84,7 +89,7 @@ export function useAwayPause({ frame, gameId, buildId, solo, menuOpen, openMenu 
 
   useEffect(() => {
     if (!frame || buildId === undefined) return;
-    let latest: SaveData<unknown> | undefined;
+    let latest = restoredSave.current;
     const keep = () => {
       if (solo) writeAway(gameId, { buildId, ...(latest ? { save: latest } : {}) });
     };
@@ -108,17 +113,26 @@ export function useAwayPause({ frame, gameId, buildId, solo, menuOpen, openMenu 
       if (document.visibilityState === 'hidden') leave();
     };
     // A blur also fires when focus moves into the game frame; the deferred check tells the two apart.
-    const onBlur = () => setTimeout(checkFocus, 0);
+    let blurCheck: ReturnType<typeof setTimeout> | undefined;
+    const onBlur = () => {
+      blurCheck = setTimeout(checkFocus, 0);
+    };
     const poll = setInterval(checkFocus, FOCUS_POLL_MS);
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', leave);
     window.addEventListener('blur', onBlur);
     return () => {
       stopSave();
+      clearTimeout(blurCheck);
       clearInterval(poll);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', leave);
       window.removeEventListener('blur', onBlur);
+      // Play ended inside the app (edit mode, another screen): a later visit starts fresh. A reload never gets here.
+      if (away.current) {
+        away.current = false;
+        clearAway(gameId);
+      }
     };
   }, [buildId, frame, gameId, solo]);
 }

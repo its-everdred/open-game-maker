@@ -158,4 +158,48 @@ describe('useAwayPause (#874)', () => {
     expect(openMenu).toHaveBeenCalledOnce();
     expect(sessionStorage.getItem('ogm.away.game')).toBeNull();
   });
+
+  it('keeps the restored game through a second eviction before the player resumes', () => {
+    const save = { saveSchemaVersion: 1, data: { counter: 7 } };
+    sessionStorage.setItem('ogm.away.game', JSON.stringify({ buildId: 'b1', save }));
+    const { controller } = fakeFrame();
+    const { rerender, initial } = mount({ frame: controller });
+    rerender({ ...initial, frame: controller, menuOpen: true });
+    // The paused game writes no new save, so the second leave must keep the one it was restored from.
+    act(() => setVisibility('hidden'));
+    expect(JSON.parse(sessionStorage.getItem('ogm.away.game')!)).toEqual({ buildId: 'b1', save });
+  });
+
+  it('starts fresh next time when the player leaves play inside the app while paused', () => {
+    const { controller, write } = fakeFrame();
+    const { unmount } = mount({ frame: controller });
+    write({ saveSchemaVersion: 1, data: { counter: 4 } });
+    act(() => setVisibility('hidden'));
+    expect(sessionStorage.getItem('ogm.away.game')).not.toBeNull();
+    unmount();
+    expect(sessionStorage.getItem('ogm.away.game')).toBeNull();
+  });
+
+  it('ignores a blur whose focus check lands after play has ended', () => {
+    vi.useFakeTimers();
+    const { controller } = fakeFrame();
+    const { openMenu, unmount } = mount({ frame: controller });
+    focused = false;
+    window.dispatchEvent(new Event('blur'));
+    unmount();
+    act(() => vi.advanceTimersByTime(FOCUS_POLL_MS));
+    expect(openMenu).not.toHaveBeenCalled();
+  });
+
+  it('restores the next game opened in the same screen too', () => {
+    const { frame, controller } = fakeFrame();
+    const { rerender, initial } = mount({ frame: controller });
+    expect(frame.restoreSave).not.toHaveBeenCalled();
+    sessionStorage.setItem(
+      'ogm.away.other',
+      JSON.stringify({ buildId: 'b1', save: { saveSchemaVersion: 1, data: 2 } }),
+    );
+    rerender({ ...initial, frame: controller, gameId: 'other' });
+    expect(frame.restoreSave).toHaveBeenCalledWith({ saveSchemaVersion: 1, data: 2 });
+  });
 });
