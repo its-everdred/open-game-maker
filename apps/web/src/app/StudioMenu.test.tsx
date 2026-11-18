@@ -86,6 +86,8 @@ const state = vi.hoisted(() => ({
   reviewLoading: false,
   sessions: [] as Array<{ game_id: string; game_title: string; count: number }>,
   energy: { data: undefined as EnergyView | undefined },
+  threadAccess: false,
+  unreadReplies: 0,
   workers: [] as Array<{
     ticket: string;
     title: string;
@@ -106,6 +108,7 @@ const auth = vi.hoisted(() => ({ signOut: vi.fn() }));
 const report = vi.hoisted(() => ({ sendReport: vi.fn() }));
 const jobControls = vi.hoisted(() => ({ setJobPaused: vi.fn() }));
 const workerHooks = vi.hoisted(() => ({ observed: vi.fn() }));
+const thread = vi.hoisted(() => ({ openThread: vi.fn(), closeThread: vi.fn() }));
 
 vi.mock('../features/build-chat/jobs', () => ({
   isTerminal: (value: string) => ['done', 'failed', 'cancelled'].includes(value),
@@ -147,6 +150,13 @@ vi.mock('../features/commands-inbox/QuestionSession', () => ({
     </div>
   ),
 }));
+vi.mock('../features/executor-thread/thread', () => ({
+  ...thread,
+  useThreadAccess: (creatorId: string | undefined) => Boolean(creatorId) && state.threadAccess,
+  useThreadPolling: () => undefined,
+  useUnreadReplies: (creatorId: string | undefined) => (creatorId ? state.unreadReplies : 0),
+}));
+vi.mock('../features/executor-thread/ExecutorThread', () => ({ ExecutorThread: () => null }));
 vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
 vi.mock('../features/bug-report/send', () => report);
@@ -231,6 +241,9 @@ afterEach(() => {
   state.sessions = [];
   state.energy = { data: undefined };
   state.workers = [];
+  state.threadAccess = false;
+  state.unreadReplies = 0;
+  thread.openThread.mockReset();
   sound.setMuted.mockReset();
   sound.setVolume.mockReset();
   auth.signOut.mockReset();
@@ -603,6 +616,33 @@ describe('StudioMenu', () => {
     state.decisions = [decision('d1'), decision('d3', { blocking: true })];
     renderMenu('/games');
     expect(screen.getByRole('button', { name: 'Menu' })).toHaveAttribute('data-blocking', 'true');
+  });
+
+  // #854 Ask and Notify: the instance owner reaches the Executor from the menu; a reply only raises the count (#878).
+  it('offers the owner the Executor thread and counts unread replies on the badge, not as text', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.threadAccess = true;
+    state.unreadReplies = 2;
+    state.decisions = [decision('d1')];
+    renderMenu('/games');
+
+    expect(screen.getByText('3', { selector: '.studio-menu-badge' })).toBeVisible();
+    expect(document.getElementById('studio-menu-requests')).toHaveTextContent(
+      '1 decision needs your answer, 2 new replies',
+    );
+    expect(document.querySelector('.worker-tracker-toast')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask: 2 new' }));
+    expect(thread.openThread).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('offers no Executor thread to a creator the API refuses', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.queryByRole('button', { name: /^Ask/u })).not.toBeInTheDocument();
   });
 
   it('shows no badge to a visitor who is not signed in', () => {

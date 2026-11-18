@@ -31,6 +31,14 @@ import {
   useCreatorReviewCommands,
 } from '../features/commands-inbox/commands';
 import { QuestionSession } from '../features/commands-inbox/QuestionSession';
+import { ExecutorThread } from '../features/executor-thread/ExecutorThread';
+import {
+  closeThread,
+  openThread,
+  useThreadAccess,
+  useThreadPolling,
+  useUnreadReplies,
+} from '../features/executor-thread/thread';
 import { signOut } from '../lib/api/auth';
 import { useSession } from '../lib/api/session';
 import { getVolume, onChange, setMuted, setVolume, status } from '../lib/sound';
@@ -141,6 +149,16 @@ export function StudioMenu() {
   // as one entry; red when a decision blocks its build.
   const openDecisions = decisions.commands.length + decisions.sessions.length;
   const blocked = decisions.commands.some((command) => command.blocking);
+  // The instance owner's thread with the Executor. A reply only raises a count, never text over the screen; its text
+  // shows when the owner opens the thread.
+  const threadAccess = useThreadAccess(isShowcase ? undefined : creatorId);
+  useThreadPolling(creatorId, threadAccess);
+  const unreadReplies = useUnreadReplies(threadAccess ? creatorId : undefined);
+  const menuBadge = openDecisions + unreadReplies;
+  const threadCommands = useMemo(
+    () => decisions.commands.filter((command) => 'source' in command || command.game_id === gameId),
+    [decisions.commands, gameId],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -301,6 +319,29 @@ export function StudioMenu() {
         <span className="studio-menu-badge" aria-hidden="true">
           {workers.length}
         </span>
+      </button>,
+    );
+  }
+  if (threadAccess) {
+    circles.push(
+      <button
+        key="ask"
+        type="button"
+        className="menu-circle"
+        aria-label={unreadReplies > 0 ? `Ask: ${unreadReplies} new` : 'Ask'}
+        onClick={() => {
+          trigger.current?.focus();
+          close();
+          openThread();
+        }}
+      >
+        <MenuRing />
+        <Icon name="speak" />
+        {unreadReplies > 0 ? (
+          <span className="studio-menu-badge" aria-hidden="true">
+            {unreadReplies}
+          </span>
+        ) : null}
       </button>,
     );
   }
@@ -568,7 +609,7 @@ export function StudioMenu() {
         data-building={buildingJobs.length > 0}
         data-blocking={blocked}
         aria-label="Menu"
-        aria-describedby={openDecisions > 0 ? 'studio-menu-requests' : undefined}
+        aria-describedby={menuBadge > 0 ? 'studio-menu-requests' : undefined}
         aria-expanded={open}
         aria-controls="studio-menu-panel"
         onClick={() => {
@@ -579,15 +620,22 @@ export function StudioMenu() {
       >
         <span className="studio-menu-ring" aria-hidden="true" />
         <Icon name={controls?.button?.icon ?? 'menu'} />
-        {openDecisions > 0 && !open && !hasStudioHeader ? (
+        {menuBadge > 0 && !open && !hasStudioHeader ? (
           <span className="studio-menu-badge" aria-hidden="true">
-            {openDecisions}
+            {menuBadge}
           </span>
         ) : null}
       </button>
-      {openDecisions > 0 ? (
+      {menuBadge > 0 ? (
         <span id="studio-menu-requests" className="sr">
-          {openDecisions} {openDecisions === 1 ? 'decision needs' : 'decisions need'} your answer
+          {[
+            openDecisions > 0
+              ? `${openDecisions} ${openDecisions === 1 ? 'decision needs' : 'decisions need'} your answer`
+              : '',
+            unreadReplies > 0 ? `${unreadReplies} new ${unreadReplies === 1 ? 'reply' : 'replies'}` : '',
+          ]
+            .filter(Boolean)
+            .join(', ')}
         </span>
       ) : null}
       <span className="sr" role="status" aria-live="polite">
@@ -607,6 +655,21 @@ export function StudioMenu() {
         {open && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
       </div>
       <JobConversationModal />
+      {threadAccess && creatorId ? (
+        <ExecutorThread
+          creatorId={creatorId}
+          title={(gameId && gameTitles.get(gameId)) || 'Executor'}
+          context={{
+            ...(gameId ? { game_id: gameId } : {}),
+            screen: `${location.pathname}${location.search}`.slice(0, 300),
+          }}
+          commands={threadCommands}
+          onOpenCommand={(command) => {
+            closeThread();
+            setDeck({ creatorId, command });
+          }}
+        />
+      ) : null}
       {deck && deck.creatorId === creatorId ? (
         <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />
       ) : null}
