@@ -120,6 +120,14 @@ describe('gm skills search and show', () => {
     expect(names.slice(firstDescriptionOnly).every((name) => !name.includes('audio'))).toBe(true);
   });
 
+  it('discovers the AnyMachine Blender skill', async () => {
+    const search = await gm(['skills', 'search', 'blender', 'rig'], {});
+    expect(search.out.some((line) => line.startsWith('anymachine  '))).toBe(true);
+    const show = await gm(['skills', 'show', 'anymachine'], {});
+    expect(show.code).toBe(0);
+    expect(show.out.join('\n')).toContain('name: anymachine');
+  });
+
   it('fails loud when nothing matches', async () => {
     const result = await gm(['skills', 'search', 'zzzqqq'], {});
     expect(result.code).toBe(1);

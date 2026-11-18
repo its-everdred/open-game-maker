@@ -3,6 +3,7 @@
 Reference skills for Phaser 4.2 and three.js r186, and three art and design tool sets, copied at pinned commits
 (`skills.lock`):
 
+- `anymachine/`: AnyMachine reference-based Blender prop and machine method (MIT), with asset-specific check examples.
 - `phaser/`: the 28 official Phaser skills (`phaserjs/phaser`, MIT).
 - `threejs/`: 11 CloudAI-X three.js skills (MIT); `threejs-react-three-fiber` and `threejs-asset-pipeline` are left out.
 - `gamedev/`: 17 awesome-gamedev skills (Apache-2.0) with every code block rewritten to TypeScript.
