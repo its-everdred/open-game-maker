@@ -1,14 +1,11 @@
 import { fileURLToPath } from 'node:url';
 
-import { expect, test, type Frame, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { build } from 'esbuild';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
-
-// eslint-disable-next-line no-restricted-properties
-const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '10001';
-const bridgeOrigin = `http://127.0.0.1:${bridgePort}`;
+import { bridgeOrigin, bridgeState, gameFrame, setHidden } from './support/visibility';
 
 type SdkState = { tick: number; paused: boolean; counter: number };
 
@@ -111,33 +108,6 @@ async function openPlaying(page: Page): Promise<void> {
   await page.goto('/g/game?test');
   await expect.poll(() => bridgeState(page), { timeout: 60_000 }).toBe('ready');
   await expect.poll(async () => (await sdkState(page))?.counter ?? 0, { timeout: 15_000 }).toBeGreaterThan(10);
-}
-
-function bridgeState(page: Page): Promise<string | undefined> {
-  return page.evaluate(
-    () => (window as Window & { __ogmHost?: { game?: { bridgeState: string } } }).__ogmHost?.game?.bridgeState,
-  );
-}
-
-function gameFrame(page: Page): Frame | undefined {
-  return page.frames().find((frame) => frame.url().startsWith(`${bridgeOrigin}/g/`));
-}
-
-/** Emulates the browser hiding and showing the tab, in the shell and in the game frame alike. */
-async function setHidden(page: Page, hidden: boolean): Promise<void> {
-  const frame = gameFrame(page);
-  for (const target of frame ? [page.mainFrame(), frame] : [page.mainFrame()]) {
-    await target.evaluate((value) => {
-      if (value) {
-        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
-        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
-      } else {
-        Reflect.deleteProperty(document, 'visibilityState');
-        Reflect.deleteProperty(document, 'hidden');
-      }
-      document.dispatchEvent(new Event('visibilitychange'));
-    }, hidden);
-  }
 }
 
 async function sdkState(page: Page): Promise<SdkState | undefined> {
