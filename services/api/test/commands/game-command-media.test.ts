@@ -144,6 +144,34 @@ async function setup(options: Decision['options'], files: Record<string, File>, 
 }
 
 describe('a jobless Command’s option media', () => {
+  it('routes core Command attachments through the app origin', async () => {
+    const png = new Uint8Array(await readFile(PNG));
+    const options = [
+      { id: 'a', label: 'Portrait', media: [attachment('core-image', 'image', 'image/png')] },
+      {
+        id: 'b',
+        label: 'Alternative',
+        media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/b.png' } }],
+      },
+    ];
+    const deps = seed();
+    deps.config.instanceOwnerId = ids.user;
+    deps.registry.coreAiurClient = {
+      baseUrl: 'https://core.example.test',
+      decisions: async () => [decision(options)],
+      decisionMedia: async () => ({ mime: 'image/png', body: new Response(png).body! }),
+    } as unknown as AiurClient;
+    const { app } = await makeApp(deps);
+    const response = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { commands: { options: { media: { url: string } }[] }[] };
+    const url = new URL(body.commands[0]!.options[0]!.media.url);
+    expect(url.origin).toBe(deps.config.appOrigin);
+    expect(url.pathname).toMatch(/^\/api\/v1\/blobs\/sha256\//);
+    const image = await app.request(`${url.pathname}${url.search}`);
+    expect(image.status).toBe(200);
+    expect(new Uint8Array(await image.arrayBuffer())).toEqual(png);
+  });
   it('retains all Aiur sounds for a matching job-linked Command but not for a different version', async () => {
     const options = [
       {
@@ -256,7 +284,7 @@ describe('a jobless Command’s option media', () => {
     const [flat, roll, hum] = options.map((option) => option.media);
     // Every URL is a signed blob URL, never the aiur host and never carrying its token.
     for (const media of [flat, roll, hum]) {
-      expect(media?.url).toContain('/blobs/');
+      expect(media?.url).toContain('https://app.example.test/api/v1/blobs/sha256/');
       expect(String(media?.url)).not.toContain('127.0.0.1:4100');
     }
     // A still aiur sent without a size is measured, so its card keeps the picture's shape.

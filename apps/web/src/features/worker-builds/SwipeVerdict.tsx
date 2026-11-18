@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
+import { Icon } from '../../components/Icon';
 
 type Verdict = 'approved' | 'needs_work';
 
@@ -51,10 +52,16 @@ export function SwipeVerdict({
     if (event.isPrimary === false) {
       start.current = undefined;
       event.currentTarget.style.transform = '';
+      event.currentTarget.style.removeProperty('--vote-like');
+      event.currentTarget.style.removeProperty('--vote-dislike');
       delete event.currentTarget.dataset.dragging;
       return;
     }
-    if ((event.target as HTMLElement).closest('button, a, video, audio, input, textarea')) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, audio, input, textarea')) return;
+    const video = target.closest('video');
+    // Keep the browser's native playback controls interactive; the picture above them is draggable.
+    if (video && event.clientY >= video.getBoundingClientRect().bottom - 48) return;
     const image = (event.target as HTMLElement).closest('.review-deck-playable')?.querySelector('img');
     start.current = {
       x: event.clientX,
@@ -77,55 +84,87 @@ export function SwipeVerdict({
     const moved = start.current.moved;
     start.current = undefined;
     event.currentTarget.style.transform = '';
+    event.currentTarget.style.removeProperty('--vote-like');
+    event.currentTarget.style.removeProperty('--vote-dislike');
     delete event.currentTarget.dataset.dragging;
     if (Math.abs(dx) >= 80 && Math.abs(dx) > Math.abs(dy)) vote(dx > 0 ? 'approved' : 'needs_work');
     else if (!moved && Math.abs(dx) < 8 && Math.abs(dy) < 8 && image) setZoom(image);
   };
   return (
     <>
-      <div
-        className="worker-review-swipe"
-        tabIndex={0}
-        aria-label="Review media; press Enter to zoom an image"
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter') return;
-          const image = event.currentTarget.querySelector('img');
-          if (image) setZoom({ src: image.src, alt: image.alt });
-        }}
-        onPointerDown={pointerDown}
-        onPointerMove={(event) => {
-          if (!start.current || event.pointerId !== start.current.id) return;
-          const dx = event.clientX - start.current.x;
-          const dy = event.clientY - start.current.y;
-          if (Math.abs(dx) >= 8 || Math.abs(dy) >= 8) start.current.moved = true;
-          if (disabled || pending || sending) return;
-          if (Math.abs(dx) < 8 || Math.abs(dx) <= Math.abs(dy)) return;
-          event.currentTarget.dataset.dragging = 'true';
-          event.currentTarget.style.transform = `translateX(${dx}px) rotate(${Math.max(-12, Math.min(12, dx / 18))}deg)`;
-        }}
-        onPointerUp={pointerUp}
-        onPointerCancel={(event) => {
-          start.current = undefined;
-          event.currentTarget.style.transform = '';
-          delete event.currentTarget.dataset.dragging;
-        }}
-      >
-        {children}
+      <div className="review-deck-stage worker-review-stage">
+        <div
+          className="review-deck-card worker-review-swipe"
+          tabIndex={0}
+          aria-label="Review media; press Enter to zoom an image"
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            const image = event.currentTarget.querySelector('img');
+            if (image) setZoom({ src: image.src, alt: image.alt });
+          }}
+          onPointerDown={pointerDown}
+          onPointerMove={(event) => {
+            if (!start.current || event.pointerId !== start.current.id) return;
+            const dx = event.clientX - start.current.x;
+            const dy = event.clientY - start.current.y;
+            if (Math.abs(dx) >= 8 || Math.abs(dy) >= 8) start.current.moved = true;
+            if (disabled || pending || sending) return;
+            if (Math.abs(dx) < 8 || Math.abs(dx) <= Math.abs(dy)) return;
+            event.currentTarget.dataset.dragging = 'true';
+            event.currentTarget.style.transform = `translateX(${dx}px) rotate(${Math.max(-12, Math.min(12, dx / 18))}deg)`;
+            event.currentTarget.style.setProperty('--vote-like', String(Math.max(0, Math.min(1, dx / 80))));
+            event.currentTarget.style.setProperty('--vote-dislike', String(Math.max(0, Math.min(1, -dx / 80))));
+          }}
+          onPointerUp={pointerUp}
+          onPointerCancel={(event) => {
+            start.current = undefined;
+            event.currentTarget.style.transform = '';
+            event.currentTarget.style.removeProperty('--vote-like');
+            event.currentTarget.style.removeProperty('--vote-dislike');
+            delete event.currentTarget.dataset.dragging;
+          }}
+        >
+          {children}
+          <span className="review-deck-stamp review-deck-stamp-like worker-vote-like">
+            <Icon name="thumbsUp" />
+          </span>
+          <span className="review-deck-stamp review-deck-stamp-dislike worker-vote-dislike">
+            <Icon name="thumbsDown" />
+          </span>
+        </div>
       </div>
       <div className="review-deck-actions">
-        <button type="button" disabled={disabled || Boolean(pending) || sending} onClick={() => vote('approved')}>
-          Looks good
+        <button
+          type="button"
+          className="review-deck-undo tap-secondary"
+          aria-label="Undo"
+          disabled={!pending || sending}
+          onClick={() => setPending(undefined)}
+        >
+          <Icon name="rollback" />
         </button>
-        <button type="button" disabled={disabled || Boolean(pending) || sending} onClick={() => vote('needs_work')}>
-          Needs changes
+        <button
+          type="button"
+          className="review-deck-thumb tap-secondary"
+          aria-label="Needs changes"
+          disabled={disabled || Boolean(pending) || sending}
+          onClick={() => vote('needs_work')}
+        >
+          <Icon name="thumbsDown" />
+        </button>
+        <button
+          type="button"
+          className="review-deck-thumb tap-secondary"
+          aria-label="Looks good"
+          disabled={disabled || Boolean(pending) || sending}
+          onClick={() => vote('approved')}
+        >
+          <Icon name="thumbsUp" />
         </button>
       </div>
       {pending && !sending && (
-        <div role="status">
-          Sending in 5 seconds{' '}
-          <button type="button" onClick={() => setPending(undefined)}>
-            Undo
-          </button>
+        <div role="status" className="review-deck-progress">
+          Sending in 5 seconds
         </div>
       )}
       {notesOpen && (
@@ -144,18 +183,20 @@ export function SwipeVerdict({
               Note (optional)
               <textarea value={note} maxLength={3900} onChange={(event) => setNote(event.target.value)} />
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                setNotesOpen(false);
-                setPending({ verdict: 'needs_work', note });
-              }}
-            >
-              Send changes
-            </button>
-            <button type="button" onClick={() => setNotesOpen(false)}>
-              Cancel
-            </button>
+            <div className="review-deck-reason-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setNotesOpen(false);
+                  setPending({ verdict: 'needs_work', note });
+                }}
+              >
+                Send changes
+              </button>
+              <button type="button" onClick={() => setNotesOpen(false)}>
+                Cancel
+              </button>
+            </div>
           </Dialog>
         </div>
       )}

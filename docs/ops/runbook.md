@@ -358,19 +358,20 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    address no one signs in with) and mints a 7-day session into `~/.config/ogm/env/qa.env` (mode 600). It prints the
    account, the game and the key names it wrote, never the cookie.
 2. `gm qa review-e2e --sha <deployed sha>`, at 390×844, 844×390, 820×1180 and 1180×820: seeds a round (picture, clip,
-   sound) and a Command (A picture, B clip, C sound), swipes the round right, undoes, swipes it left with a note, picks
-   B with a note, and checks that both verdicts reached the QA game's aiur boundary and that the deck showed no error.
+   sound) and a Command (A picture, B clip, C sound), verifies the image decodes and the video and audio load, swipes
+   the round right, undoes, swipes it left with a note, views B and C, picks B with a note, and checks that both
+   verdicts reached the QA game's aiur boundary and that the deck showed no error.
    Before swiping and before picking it fails the size on what the creator would see broken: a picture with no pixels
    (`naturalWidth` 0), a clip not playable within 10 s (`readyState` under 2), a sound with no length, fewer options
-   than the Command carries or one off screen or without its media, and a round with no draggable card or no
+   than the Command carries or one inaccessible or without its media, and a round with no draggable card or no
    "Looks good" and "Needs changes" controls; the failure names each element, and the still is saved first.
-   It deletes its fixtures, saves four stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
+   It deletes its fixtures, saves stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
    `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box and
    `--break-media` answers the review picture with a 404, each to prove a broken deck fails the run.
 3. After a web deploy, auto-update calls `ops/bin/ogm-qa-review-hook <have> <want> --attention <file>`. It runs both
    steps when the deploy changed the review deck (`apps/web/src/**review**`,
    `apps/web/src/features/{worker-builds,commands-inbox}/`, `apps/web/src/app/StudioMenu*`) or the review API
-   (`services/api/src/{review-rounds,commands,previews,qa,worker-progress}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
+   (`services/api/src/{review-rounds,commands,previews,qa,worker-progress,blobs,blob-proxy}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
    `~/.local/state/ogm/qa/review-e2e/<sha>.log`.
 
 The host routes behind it, `/internal/qa/session` and `/internal/qa/review-fixtures[/<run>]`, take only the internal
