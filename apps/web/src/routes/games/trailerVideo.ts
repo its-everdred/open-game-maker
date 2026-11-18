@@ -1,7 +1,7 @@
 import { getVolume, status } from '../../lib/sound';
 import type { GameSummary } from './types';
 
-type TrailerGame = Pick<GameSummary, 'trailerUrl' | 'portraitTrailerUrl'>;
+type TrailerGame = Pick<GameSummary, 'trailerUrl'>;
 
 // One video per trailer URL, created by the tap that selects a game and adopted by GameTrailer when it mounts:
 // iOS only plays a video with sound when its play() call starts inside a user gesture.
@@ -24,10 +24,7 @@ export function trailerVideo(url: string): HTMLVideoElement {
 }
 
 export function activeTrailerUrl(game: TrailerGame): string | undefined {
-  const portrait = Boolean(
-    game.portraitTrailerUrl && (!game.trailerUrl || window.matchMedia?.('(orientation: portrait)').matches),
-  );
-  return (portrait ? game.portraitTrailerUrl : game.trailerUrl) ?? undefined;
+  return game.trailerUrl ?? undefined;
 }
 
 /** Plays with sound unless the app is muted; falls back to muted when the browser refuses (no gesture). */

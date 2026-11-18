@@ -36,6 +36,7 @@ it('sends a pick through the creator answer route and shows it was saved', async
       <CommandReviewCard command={command} onAnswered={answered} />
     </QueryClientProvider>,
   );
+  fireEvent.click(screen.getByRole('button', { name: 'View option B' }));
   fireEvent.click(screen.getByRole('button', { name: 'Pick B: Second' }));
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', {
@@ -47,15 +48,14 @@ it('sends a pick through the creator answer route and shows it was saved', async
   expect(answered).toHaveBeenCalledOnce();
 });
 
-it('requires an explicit option for a change request and records it as disliked', async () => {
+it('records the displayed option as disliked for a change request', async () => {
   render(
     <QueryClientProvider client={queryClient}>
       <CommandReviewCard command={command} onAnswered={() => {}} />
     </QueryClientProvider>,
   );
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'More contrast' } });
-  expect(screen.getByRole('button', { name: 'Send changes' })).toBeDisabled();
-  fireEvent.change(screen.getByLabelText('Option to change'), { target: { value: 'b' } });
+  fireEvent.click(screen.getByRole('button', { name: 'View option B' }));
   fireEvent.click(screen.getByRole('button', { name: 'Send changes' }));
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', {
@@ -84,6 +84,26 @@ it('includes an optional note when picking an option', async () => {
       json: { option_id: 'a', version: 2, review: { likes: ['a'], dislikes: [], notes: 'Keep the blue' } },
     }),
   );
+});
+
+it('keeps the displayed option fixed while its answer is sending', async () => {
+  let finish!: (value: unknown) => void;
+  api.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={command} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Pick A: First' }));
+  expect(screen.getByRole('button', { name: 'View option B' })).toBeDisabled();
+  expect(screen.getByLabelText('Note (optional)')).toBeDisabled();
+  finish({ status: 'answered' });
+  await screen.findByText(/Saved/);
 });
 
 it('offers every sound attached to an option', () => {

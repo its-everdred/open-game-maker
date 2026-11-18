@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { GameTrailer } from './GameTrailer';
 import { mergeShowcase } from './showcase';
 import { startTrailer, stopTrailers } from './trailerVideo';
+import type { GameSummary } from './types';
 
 let sound = 'off';
 let volume = 1;
@@ -26,27 +27,19 @@ afterEach(() => {
   volume = 1;
 });
 
-it('switches playback when the device rotates', async () => {
-  let rotate = () => {};
-  const media = {
-    matches: false,
-    addEventListener: (_event: string, listener: () => void) => {
-      rotate = listener;
-    },
-    removeEventListener: () => {},
-  };
-  vi.stubGlobal('matchMedia', () => media);
+it('plays the one landscape trailer in portrait too, ignoring a legacy portrait cut', async () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
   const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
-  const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
-  const game = { ...mergeShowcase([])[0]!, trailerUrl: '/landscape.mp4', portraitTrailerUrl: '/portrait.mp4' };
+  const game = {
+    ...mergeShowcase([])[0]!,
+    trailerUrl: '/landscape.mp4',
+    portraitTrailerUrl: '/portrait.mp4',
+  } as GameSummary;
   const view = render(<GameTrailer game={game} />);
-  const landscape = view.container.querySelector<HTMLVideoElement>('.game-trailer-landscape')!;
-  const portrait = view.container.querySelector<HTMLVideoElement>('.game-trailer-portrait')!;
-  expect(play.mock.instances).toContain(landscape);
-  media.matches = true;
-  await act(async () => rotate());
-  expect(pause.mock.instances).toContain(landscape);
-  expect(play.mock.instances).toContain(portrait);
+  const videos = view.container.querySelectorAll('video');
+  expect(videos).toHaveLength(1);
+  expect(videos[0]).toHaveAttribute('src', '/landscape.mp4');
+  expect(play.mock.instances).toEqual([videos[0]]);
 });
 
 it('starts muted when the app is muted, follows sound, and stops on close', async () => {

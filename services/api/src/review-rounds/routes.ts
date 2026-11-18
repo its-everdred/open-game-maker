@@ -8,6 +8,7 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
+import { reviewMediaUrl } from '../blobs/review-url.js';
 import { answerRound, getRound, latestRoundForTicket } from './store.js';
 import { bindReviewEpisode, markReviewAnswered, readReviewEpisode } from './answer-guard.js';
 
@@ -65,7 +66,7 @@ export default new Hono<ApiBindings>()
             .map(async (item) => ({
               kind: item.kind,
               ...(item.role === 'target' ? { role: item.role } : {}),
-              url: (await deps.blobStore.signedGet(item.ref as BlobHash, new Date(Date.now() + 3600000))).url,
+              url: await reviewMediaUrl(deps.blobStore, deps.config.appOrigin, item.ref as BlobHash),
             })),
         );
         return {

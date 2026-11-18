@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import type { HookDriver } from './hooks.js';
 import type { TrailerInput } from './trailer-script.js';
+import { visibleMenu, type TrailerMenus } from './trailer-menus.js';
 
 /** Advance in chronological order: input at a frame boundary is applied before that frame is drawn. */
 export async function scriptedFrames(
@@ -70,8 +71,15 @@ async function timedFrames(
   script: TrailerInput[],
   seconds: number,
   fps: number,
-  capture: (index: number) => Promise<void>,
+  draw: (index: number) => Promise<void>,
+  menus?: TrailerMenus,
 ): Promise<void> {
+  const capture = async (index: number) => {
+    await draw(index);
+    const menu = menus ? await visibleMenu(hooks.game, menus) : null;
+    if (menu)
+      throw new Error(`menu ${menu} is showing at ${(index / fps).toFixed(2)} s; trailer frames must be gameplay only`);
+  };
   let clockMs = 0;
   let timerMs = 0;
   let queued: Parameters<HookDriver['inject']>[0][] = [];
@@ -114,19 +122,27 @@ export async function scriptedCanvasFrames(
   seconds: number,
   fps: number,
   dir: string,
+  menus?: TrailerMenus,
 ): Promise<void> {
   const canvas = hooks.game.locator('canvas').first();
-  await timedFrames(hooks, script, seconds, fps, async (index) => {
-    const data = await canvas.evaluate((element) => {
-      const gm = (window as unknown as { __gm?: { renderTrailer?: () => void } }).__gm;
-      if (!gm?.renderTrailer) throw new Error('game SDK does not support trailer rendering');
-      gm.renderTrailer();
-      return (element as HTMLCanvasElement).toDataURL('image/png');
-    });
-    const match = /^data:image\/png;base64,(.+)$/.exec(data);
-    if (!match) throw new Error('game canvas did not produce a PNG frame');
-    writeFileSync(join(dir, `f${String(index).padStart(5, '0')}.png`), Buffer.from(match[1]!, 'base64'));
-  });
+  await timedFrames(
+    hooks,
+    script,
+    seconds,
+    fps,
+    async (index) => {
+      const data = await canvas.evaluate((element) => {
+        const gm = (window as unknown as { __gm?: { renderTrailer?: () => void } }).__gm;
+        if (!gm?.renderTrailer) throw new Error('game SDK does not support trailer rendering');
+        gm.renderTrailer();
+        return (element as HTMLCanvasElement).toDataURL('image/png');
+      });
+      const match = /^data:image\/png;base64,(.+)$/.exec(data);
+      if (!match) throw new Error('game canvas did not produce a PNG frame');
+      writeFileSync(join(dir, `f${String(index).padStart(5, '0')}.png`), Buffer.from(match[1]!, 'base64'));
+    },
+    menus,
+  );
 }
 
 /** Capture the page for games whose visible HUD or menus are HTML overlays. */
@@ -136,13 +152,21 @@ export async function scriptedPageFrames(
   seconds: number,
   fps: number,
   dir: string,
+  menus?: TrailerMenus,
 ): Promise<void> {
-  await timedFrames(hooks, script, seconds, fps, async (index) => {
-    await hooks.game.evaluate(() => {
-      const gm = (window as unknown as { __gm?: { renderTrailer?: () => void } }).__gm;
-      if (!gm?.renderTrailer) throw new Error('game SDK does not support trailer rendering');
-      gm.renderTrailer();
-    });
-    await hooks.page.screenshot({ path: join(dir, `f${String(index).padStart(5, '0')}.png`), type: 'png' });
-  });
+  await timedFrames(
+    hooks,
+    script,
+    seconds,
+    fps,
+    async (index) => {
+      await hooks.game.evaluate(() => {
+        const gm = (window as unknown as { __gm?: { renderTrailer?: () => void } }).__gm;
+        if (!gm?.renderTrailer) throw new Error('game SDK does not support trailer rendering');
+        gm.renderTrailer();
+      });
+      await hooks.page.screenshot({ path: join(dir, `f${String(index).padStart(5, '0')}.png`), type: 'png' });
+    },
+    menus,
+  );
 }

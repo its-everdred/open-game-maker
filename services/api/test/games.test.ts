@@ -253,8 +253,9 @@ describe('games routes', () => {
         landscape: `https://games.example.test/g/${id}/build1/media/loading-landscape.png`,
       },
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
-      portraitTrailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-portrait.mp4`,
     });
+    // An older build's portrait cut is never offered: every game shows its one 16:9 trailer.
+    expect(await list()).not.toHaveProperty('portraitTrailerUrl');
     for (const badImage of [
       { width: 0, height: 360, sources },
       { width: 640, height: 360, sources: { ...sources, avif: [] } },

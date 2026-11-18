@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { getVolume, onChange, status } from '../../lib/sound';
-import { activeTrailerUrl, playTrailer, stopTrailers, trailerVideo } from './trailerVideo';
+import { playTrailer, stopTrailers, trailerVideo } from './trailerVideo';
 import type { GameSummary } from './types';
 
 export function GameTrailer({ game, transparentPoster = false }: { game: GameSummary; transparentPoster?: boolean }) {
@@ -19,35 +19,19 @@ export function GameTrailer({ game, transparentPoster = false }: { game: GameSum
   const poster = transparentPoster
     ? transparent
     : (posters?.find((item) => item.width >= 640)?.path ?? posters?.at(-1)?.path ?? game.coverUrl ?? undefined);
-  const { portraitTrailerUrl, trailerUrl, title } = game;
+  const { trailerUrl, title } = game;
   useEffect(() => {
-    const both = portraitTrailerUrl && trailerUrl;
-    const urls = [portraitTrailerUrl, trailerUrl];
-    const orientation = window.matchMedia?.('(orientation: portrait)');
-    const update = () => {
-      const active = activeTrailerUrl({ portraitTrailerUrl, trailerUrl });
-      const videos = urls.flatMap((url) => {
-        if (!url) return [];
-        const video = trailerVideo(url);
-        if (both) video.className = url === portraitTrailerUrl ? 'game-trailer-portrait' : 'game-trailer-landscape';
-        video.setAttribute('aria-label', `${title} trailer`);
-        if (poster) video.poster = poster;
-        if (url === active) {
-          playing.current = video;
-          // A tap that selected the game has already started it with sound.
-          if (video.paused) void playTrailer(video);
-        } else video.pause();
-        return [video];
-      });
-      host.current?.replaceChildren(...videos);
-    };
-    update();
-    orientation?.addEventListener('change', update);
+    if (!trailerUrl) return;
+    const video = trailerVideo(trailerUrl);
+    video.setAttribute('aria-label', `${title} trailer`);
+    if (poster) video.poster = poster;
+    playing.current = video;
+    if (video.paused) void playTrailer(video);
+    host.current?.replaceChildren(video);
     return () => {
-      orientation?.removeEventListener('change', update);
       playing.current = null;
-      stopTrailers(urls);
+      stopTrailers([trailerUrl]);
     };
-  }, [portraitTrailerUrl, trailerUrl, title, poster]);
+  }, [trailerUrl, title, poster]);
   return <span ref={host} className="game-trailer" />;
 }

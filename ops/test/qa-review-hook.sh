@@ -77,7 +77,8 @@ assert_grep 'exit=1 qa-review-e2e' "$OGM_QA_ROOT/review-e2e/$short.log"
 # Every part of the deck triggers the run, not only files named review.
 for path in apps/web/src/features/worker-builds/SwipeVerdict.tsx apps/web/src/features/commands-inbox/commands.ts \
   apps/web/src/app/StudioMenu.tsx services/api/src/commands/routes.ts services/api/src/previews/routes.ts \
-  services/api/src/qa/routes.ts services/api/src/worker-progress/routes.ts; do
+  services/api/src/qa/routes.ts services/api/src/worker-progress/routes.ts services/api/src/blobs/review-url.ts \
+  services/api/src/blob-proxy/routes.ts; do
   from=$(git -C "$stack" rev-parse HEAD)
   to=$(commit "$path")
   : > "$scratch/calls"

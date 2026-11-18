@@ -22,6 +22,7 @@ type Page = {
   noMedia?: number;
   swipe?: boolean;
   controls?: boolean;
+  paged?: boolean;
 };
 
 function html({
@@ -34,6 +35,7 @@ function html({
   noMedia,
   swipe = true,
   controls = true,
+  paged = false,
 }: Page) {
   const media = [
     `<img src="${still}" alt="Picture">`,
@@ -50,9 +52,14 @@ function html({
     <div class="review-deck-playable"><img src="${still}" alt="Review" width="200" height="120"></div>
   </div>
   ${controls ? '<div><button type="button">Looks good</button><button type="button">Needs changes</button></div>' : ''}
-  <div class="worker-review-options">${Array.from({ length: options }, (_, index) => option(index)).join('')}</div>
+  ${paged ? Array.from({ length: options }, (_, index) => `<button aria-label="View option ${String.fromCharCode(65 + index)}" data-option="${index}">View</button>`).join('') : ''}
+  <div class="worker-review-options">${Array.from({ length: paged ? Math.min(options, 1) : options }, (_, index) => option(index)).join('')}</div>
 </div>
 <script>
+  const options = ${JSON.stringify(Array.from({ length: options }, (_, index) => option(index)))};
+  document.querySelectorAll('[data-option]').forEach(button => button.addEventListener('click', () => {
+    document.querySelector('.worker-review-options').innerHTML = options[Number(button.dataset.option)];
+  }));
   const card = document.querySelector('.worker-review-swipe');
   let start;
   if (${swipe}) {
@@ -133,6 +140,12 @@ describe('the review E2E checks what the creator sees', () => {
     expect(await failures({ hideOption: 2 })).toContain('option C media is not on screen');
     expect(await failures({ clearMedia: 1 })).toEqual(['option B media is not on screen']);
     expect(await failures({ noMedia: 0 })).toEqual(['option A shows no media']);
+  });
+
+  it('checks each navigable option and its loaded media in a card deck', async () => {
+    expect(await failures({ paged: true })).toEqual([]);
+    expect(await failures({ paged: true, noMedia: 1 })).toContain('option B shows no media');
+    expect(await failures({ paged: true, options: 1 })).toContain('the Command shows 1 of 3 options');
   });
 
   it('fail when the round has no card that follows a drag, or no approve and changes controls', async () => {
