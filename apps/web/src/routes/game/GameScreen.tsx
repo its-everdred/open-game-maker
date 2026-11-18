@@ -63,6 +63,7 @@ import { useBranches } from '../games/useBranches';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
 import { LoadingLayer } from './LoadingLayer';
 import { gameLoadActivity } from './load-analytics';
+import { useAwayPause } from './away-pause';
 import { PlatformHud } from './PlatformHud';
 import { roomFacts } from './room-facts';
 import { recordPlay } from './recordPlay';
@@ -671,6 +672,14 @@ export function GameScreen() {
     frameRef.current !== undefined &&
     frameState.manifest !== undefined &&
     activeSnapshot !== undefined;
+  useAwayPause({
+    frame: hudShown ? frameRef.current : undefined,
+    gameId,
+    buildId: activeSnapshot?.buildId,
+    solo: roomId === undefined,
+    menuOpen,
+    openMenu: () => setMenuOpen(true),
+  });
 
   return (
     <section
