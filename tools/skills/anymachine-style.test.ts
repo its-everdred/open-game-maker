@@ -16,10 +16,10 @@ describe('AnyMachine style check', () => {
       const source = join(dir, 'source.gltf');
       const prop = join(dir, 'prop.gltf');
       writeFileSync(source, JSON.stringify(mesh('pack', true, 300)));
-      writeFileSync(prop, JSON.stringify(mesh('prop', false, 30)));
+      writeFileSync(prop, JSON.stringify(mesh('pack', false, 30)));
       const result = spawnSync(
         'python3',
-        [join(process.cwd(), '../../skills/vendor/anymachine/scripts/style-check.py'), prop, source],
+        [join(process.cwd(), '../../skills/vendor/anymachine/scripts/style-check.py'), '--standalone', prop, source],
         { encoding: 'utf8' },
       );
       expect(result.status).toBe(1);

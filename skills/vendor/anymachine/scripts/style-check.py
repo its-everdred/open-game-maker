@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Flag added meshes in a variant GLB that won't match their pack's style.
 
-Usage: style-check.py <variant.glb> [<source.glb> ...]
+Usage: style-check.py [--standalone] <variant.glb> [<source.glb> ...]
 Meshes that also appear in a source GLB (same name) are the pack's own. Every other mesh is "added" and gets checked
 against the pack's numbers:
   - shading: vertices per triangle. Pack meshes share vertices (KayKit 0.7-1.0) and so shade smooth and round. Above
@@ -39,12 +39,12 @@ def meshes(doc):
                    'textured': textured, 'density': tris / area}
 
 
-def main(variant, sources):
+def main(variant, sources, standalone=False):
     source_meshes = [m for s in sources for m in meshes(load(s))]
     pack_names = {m['name'] for m in source_meshes}
     rows = list(meshes(load(variant)))
     pack = source_meshes if sources else rows
-    added = [r for r in rows if r['name'] not in pack_names] if sources else []
+    added = [r for r in rows if standalone or r['name'] not in pack_names] if sources else []
     atlas = any(r['textured'] for r in pack)
     median_density = statistics.median(r['density'] for r in pack)
     print(f"pack meshes: {len(pack)}, verts/tri {min(r['vpt'] for r in pack):.2f}-{max(r['vpt'] for r in pack):.2f}, "
@@ -66,6 +66,10 @@ def main(variant, sources):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
+    args = sys.argv[1:]
+    standalone = '--standalone' in args
+    if standalone:
+        args.remove('--standalone')
+    if not args or (standalone and len(args) < 2):
         sys.exit(__doc__)
-    sys.exit(main(sys.argv[1], sys.argv[2:]))
+    sys.exit(main(args[0], args[1:], standalone))

@@ -12,7 +12,7 @@ Use for a custom moving machine or complicated static prop in a 3D game. Project
 
 ## Rules and host
 
-Load `gm-assets` first when available; otherwise use `gm assets search` and `gm assets info` to search installed packs. Use fitting parts before building a part; match the pack style and run `python3 .claude/skills/vendor/anymachine/scripts/style-check.py <variant.glb> <source.glb>...`. Never send paid-pack assets or derivatives to the cloud. Do not use fal, Meshy or Tripo, provider keys, or paid services. Make references with our own Sprite Forge / Codex imagegen (mark them AI-generated) or local pack renders.
+Load `gm-assets` first when available; otherwise use `gm assets search` and `gm assets info` to search installed packs. Use fitting parts before building a part; match the pack style and run `python3 .claude/skills/vendor/anymachine/scripts/style-check.py --standalone <part.glb> <source.glb>...` for a new part; omit `--standalone` for a variant that includes unchanged source meshes. Never send paid-pack assets or derivatives to the cloud. Do not use fal, Meshy or Tripo, provider keys, or paid services. Make references with our own Sprite Forge / Codex imagegen (mark them AI-generated) or local pack renders.
 
 The upstream method requires Blender 5.x (5.2 for its current pipeline). This host has Blender 4.3.2 at `/usr/bin/blender`, not 5.x. A worker sandbox must have a Blender 5.x executable and its libraries exposed to it before running this workflow; do not install it as part of the task. Check `blender --version` inside the worker; host availability alone does not prove sandbox access.
 
