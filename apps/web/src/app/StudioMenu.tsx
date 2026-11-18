@@ -305,7 +305,7 @@ export function StudioMenu() {
           if (visibleFinished.length)
             setAcknowledged((prior) => ({
               creatorId,
-              finished: [...(prior?.creatorId === creatorId ? prior.finished : []), ...visibleFinished],
+              finished: [...(prior && prior.creatorId === creatorId ? prior.finished : []), ...visibleFinished],
             }));
           dismissFinished(visibleFinished.map((item) => item.ticket));
           toggleSheet('builds');
