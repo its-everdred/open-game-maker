@@ -31,7 +31,9 @@ const rel = (file: string) => relative(vendor, file);
 /** The vendored skill files: every markdown file inside a skill directory. */
 const skillFiles = all.filter(
   (f) =>
-    f.endsWith('.md') && (rel(f).split('/').length > 2 || rel(f) === 'anymachine/SKILL.md') && (!rel(f).startsWith('impeccable/') || f.endsWith('/SKILL.md')),
+    f.endsWith('.md') &&
+    (rel(f).split('/').length > 2 || rel(f) === 'anymachine/SKILL.md') &&
+    (!rel(f).startsWith('impeccable/') || f.endsWith('/SKILL.md')),
 );
 const read = (path: string) => readFileSync(join(vendor, path), 'utf8');
 
