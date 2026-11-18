@@ -1,0 +1,329 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
+type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
+
+// The prod voice check (#879): as the QA creator, open a seeded build's chat on a phone, hold the mic while a recorded
+// clip plays into a fake microphone and see the words land in the message box, then hold a short voice session and
+// see the agent's audio stream back and the turn stored in the chat. Everything after the seed is the deployed path:
+// the app, the API's tokens, the voice host and ElevenLabs.
+
+/** Spoken by Piper's public-domain LJSpeech voice, 16 kHz mono; together 3.2 s, under the ticket's 10 s cap. */
+export const CLIPS = { dictate: 'say.wav', talk: 'hello.wav' } as const;
+export const CLIP_SECONDS = { dictate: 1.61, talk: 1.62 } as const;
+/** What the dictation clip says; the box must show at least one of its words, so stray text cannot pass. */
+export const DICTATED = /\b(sky|blue)\b/iu;
+const MEDIA_DIR = new URL('../qa/voice-e2e/', import.meta.url);
+const VIEWPORT = { width: 390, height: 844 };
+const TITLE = 'QA voice';
+
+export type VoiceE2eConfig = {
+  origin: string;
+  api: string;
+  internalToken: string;
+  cookie: { name: string; value: string };
+  out: string;
+  stamp: string;
+  /** Reads the ElevenLabs account's used characters; absent when no key is configured. */
+  usage?: () => Promise<number | null>;
+  /** How long to wait for each voice step; prod runs keep the default. */
+  timeoutMs?: number;
+};
+
+/** What crossed the voice socket, by the voice-client wire's frame types. */
+export type VoiceTally = {
+  states: string[];
+  finalTranscripts: string[];
+  agentText: string[];
+  agentAudioFrames: number;
+  agentAudioBytes: number;
+  errors: string[];
+};
+
+export type VoiceStep = { name: 'dictation' | 'two-way'; ok: boolean; failure?: string; detail?: string };
+
+export type VoiceCost = {
+  characters: number | null;
+  audioSentSeconds: number;
+  callSeconds: number;
+};
+
+export type VoiceE2eResult = { steps: VoiceStep[]; cost: VoiceCost; stills: string[] };
+
+export function tallyFrames(frames: readonly string[]): VoiceTally {
+  const tally: VoiceTally = {
+    states: [],
+    finalTranscripts: [],
+    agentText: [],
+    agentAudioFrames: 0,
+    agentAudioBytes: 0,
+    errors: [],
+  };
+  for (const raw of frames) {
+    let frame: Record<string, unknown>;
+    try {
+      frame = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const text = typeof frame.text === 'string' ? frame.text : '';
+    switch (frame.type) {
+      case 'state':
+        if (typeof frame.state === 'string') tally.states.push(frame.state);
+        break;
+      case 'transcript':
+        if (frame.kind === 'final' && text) tally.finalTranscripts.push(text);
+        break;
+      case 'agent_text':
+        if (frame.final === true && text) tally.agentText.push(text);
+        break;
+      case 'agent_audio':
+        if (typeof frame.data_b64 === 'string' && frame.data_b64.length > 0) {
+          tally.agentAudioFrames += 1;
+          tally.agentAudioBytes += Math.floor((frame.data_b64.length * 3) / 4);
+        }
+        break;
+      case 'error':
+        tally.errors.push(typeof frame.code === 'string' ? frame.code : JSON.stringify(frame).slice(0, 120));
+        break;
+    }
+  }
+  return tally;
+}
+
+/** One-way: the clip's words reached the message box. */
+export function dictationFailure(box: string): string | null {
+  if (!box.trim()) return 'the message box stayed empty after the clip';
+  if (!DICTATED.test(box)) return `the message box shows "${box.slice(0, 80)}", not the clip's words`;
+  return null;
+}
+
+/** Two-way: the agent's audio streamed back and a turn of the call is stored in the chat. */
+export function twoWayFailure(
+  tally: VoiceTally,
+  stored: readonly { actor: string; text: string | null }[],
+): string | null {
+  const failures: string[] = [];
+  if (tally.errors.length) failures.push(`the voice socket sent errors: ${tally.errors.join(', ')}`);
+  if (tally.agentAudioFrames === 0) failures.push('no agent audio streamed back');
+  if (!stored.some((message) => message.text?.trim())) failures.push('no transcript was stored in the chat');
+  return failures.length ? failures.join('; ') : null;
+}
+
+/** The characters an ElevenLabs account has used this period, from its subscription; null when unreadable. */
+export function elevenLabsUsage(apiKey: string, fetcher: typeof fetch = fetch): () => Promise<number | null> {
+  return async () => {
+    try {
+      const response = await fetcher('https://api.elevenlabs.io/v1/user/subscription', {
+        headers: { 'xi-api-key': apiKey },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as { character_count?: unknown };
+      return typeof body.character_count === 'number' ? body.character_count : null;
+    } catch {
+      return null;
+    }
+  };
+}
+
+export function costLine(cost: VoiceCost): string {
+  const characters = cost.characters === null ? 'unknown' : String(cost.characters);
+  return `cost elevenlabs characters=${characters} minutes=${(cost.callSeconds / 60).toFixed(2)} audio_sent_s=${cost.audioSentSeconds.toFixed(1)} call_s=${cost.callSeconds.toFixed(1)}`;
+}
+
+/**
+ * Replaces the page's microphone with one that is silent until `__ogmFakeMic.play(name)`, then plays that clip once.
+ * The app's own capture code reads it through `getUserMedia`, exactly as it reads a phone's microphone.
+ */
+export function installFakeMic(clips: Record<string, string>): void {
+  type Mic = {
+    context?: AudioContext;
+    destination?: MediaStreamAudioDestinationNode;
+    played: string[];
+    requested: number;
+  };
+  const mic: Mic = { played: [], requested: 0 };
+  const ensure = () => {
+    if (!mic.context) {
+      mic.context = new AudioContext();
+      mic.destination = mic.context.createMediaStreamDestination();
+    }
+    return { context: mic.context, destination: mic.destination! };
+  };
+  Object.defineProperty(window, '__ogmFakeMic', {
+    value: {
+      played: mic.played,
+      get requested() {
+        return mic.requested;
+      },
+      async play(name: string) {
+        const { context, destination } = ensure();
+        await context.resume();
+        const bytes = Uint8Array.from(atob(clips[name]!), (char) => char.charCodeAt(0));
+        const buffer = await context.decodeAudioData(bytes.buffer);
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(destination);
+        source.start();
+        mic.played.push(name);
+      },
+    },
+  });
+  const devices = navigator.mediaDevices;
+  if (!devices) return;
+  devices.getUserMedia = async () => {
+    mic.requested += 1;
+    const { context, destination } = ensure();
+    await context.resume();
+    return destination.stream;
+  };
+}
+
+type FakeMic = { requested: number; played: string[]; play(name: string): Promise<void> };
+// Page functions are serialized on their own, so each reaches the fake microphone through `window` itself.
+type MicWindow = { __ogmFakeMic: FakeMic };
+
+class StepFailed extends Error {}
+
+async function internal(config: VoiceE2eConfig, path: string, init: RequestInit = {}) {
+  const response = await fetch(`${config.api}/internal/qa${path}`, {
+    ...init,
+    headers: { 'content-type': 'application/json', 'x-ogm-internal': config.internalToken, ...init.headers },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) throw new StepFailed(`${init.method ?? 'GET'} ${path} answered ${response.status}`);
+  return body;
+}
+
+async function until(check: () => boolean | Promise<boolean>, timeoutMs: number): Promise<boolean> {
+  const end = Date.now() + timeoutMs;
+  for (;;) {
+    if (await check()) return true;
+    if (Date.now() > end) return false;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+async function openChat(page: Page, origin: string): Promise<void> {
+  const timeout = { timeout: 20_000 };
+  await page.goto(`${origin}/all`, { waitUntil: 'load', timeout: 60_000 });
+  const menu = page.getByRole('button', { name: 'Menu', exact: true });
+  if (await menu.isVisible().catch(() => false)) await menu.click(timeout);
+  await page.locator('button[aria-controls="studio-menu-jobs"]').click(timeout);
+  await page.getByRole('button', { name: new RegExp(`^${TITLE}`, 'u') }).click(timeout);
+  await page.getByRole('dialog', { name: TITLE }).waitFor(timeout);
+}
+
+export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promise<VoiceE2eResult> {
+  mkdirSync(config.out, { recursive: true });
+  const wait = config.timeoutMs ?? 30_000;
+  const run = config.stamp;
+  const stills: string[] = [];
+  const steps: VoiceStep[] = [];
+  const frames: string[] = [];
+  const cost: VoiceCost = { characters: null, audioSentSeconds: 0, callSeconds: 0 };
+  const clips = Object.fromEntries(
+    Object.entries(CLIPS).map(([name, file]) => [name, readFileSync(new URL(file, MEDIA_DIR)).toString('base64')]),
+  );
+  const before = (await config.usage?.()) ?? null;
+  const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2, hasTouch: true });
+  try {
+    // A dead run's build would list beside this one; the seed replaces it.
+    await internal(config, '/voice-fixtures', { method: 'POST', body: JSON.stringify({ run }) });
+    await context.addCookies([{ ...config.cookie, url: config.origin }]);
+    await context.addInitScript(installFakeMic, clips);
+    const page = await context.newPage();
+    page.on('websocket', (socket) => {
+      if (!socket.url().includes('/ws/voice')) return;
+      socket.on('framereceived', ({ payload }) => {
+        if (typeof payload === 'string') frames.push(payload);
+      });
+    });
+    const still = async (label: string) => {
+      const file = join(config.out, `voice-${stills.length + 1}-${label}.png`);
+      await page.screenshot({ path: file });
+      stills.push(file);
+    };
+    const dialog = page.getByRole('dialog', { name: TITLE });
+
+    try {
+      await openChat(page, config.origin);
+      const mic = dialog.getByRole('button', { name: 'Hold to talk' });
+      await mic.waitFor({ timeout: 20_000 });
+      const box = (await mic.boundingBox())!;
+      const textbox = dialog.locator('textarea').first();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      // The clip starts once the app has opened the microphone, so none of it is spoken into nothing.
+      await page.waitForFunction(() => (window as unknown as MicWindow).__ogmFakeMic.requested > 0, null, {
+        timeout: wait,
+      });
+      await page.waitForTimeout(300);
+      await page.evaluate(() => (window as unknown as MicWindow).__ogmFakeMic.play('dictate'));
+      cost.audioSentSeconds += CLIP_SECONDS.dictate;
+      await page.waitForTimeout(CLIP_SECONDS.dictate * 1000 + 800);
+      await page.mouse.up();
+      await until(async () => dictationFailure(await textbox.inputValue()) === null, wait);
+      const text = await textbox.inputValue();
+      await still('dictation');
+      const failure = dictationFailure(text);
+      steps.push({ name: 'dictation', ok: failure === null, ...(failure ? { failure } : { detail: text }) });
+      // The words stay a draft: the run never sends them.
+      await textbox.fill('');
+    } catch (error) {
+      steps.push({ name: 'dictation', ok: false, failure: (error as Error).message.split('\n')[0] });
+    }
+
+    try {
+      if (!(await dialog.isVisible())) await openChat(page, config.origin);
+      frames.length = 0;
+      const started = Date.now();
+      await dialog.getByRole('button', { name: 'Start voice chat' }).click({ timeout: 20_000 });
+      const listening = await until(() => tallyFrames(frames).states.includes('listening'), wait);
+      if (!listening)
+        throw new StepFailed(
+          `the session never reached listening (states: ${tallyFrames(frames).states.join(', ') || 'none'})`,
+        );
+      await page.evaluate(() => (window as unknown as MicWindow).__ogmFakeMic.play('talk'));
+      cost.audioSentSeconds += CLIP_SECONDS.talk;
+      await until(() => {
+        const tally = tallyFrames(frames);
+        return tally.agentAudioFrames > 0 && tally.agentText.length > 0;
+      }, wait);
+      await still('voice');
+      // Hang up as soon as the reply is in: the call is billed by the minute.
+      const end = dialog.getByRole('button', { name: 'Type instead' });
+      if (await end.isVisible().catch(() => false)) await end.click();
+      cost.callSeconds = (Date.now() - started) / 1000;
+      let stored: { actor: string; text: string | null }[] = [];
+      await until(async () => {
+        const report = await internal(config, `/voice-fixtures/${run}`);
+        stored = (report.messages as typeof stored) ?? [];
+        return stored.some((message) => message.text?.trim());
+      }, 15_000);
+      const tally = tallyFrames(frames);
+      const failure = twoWayFailure(tally, stored);
+      steps.push({
+        name: 'two-way',
+        ok: failure === null,
+        ...(failure ? { failure } : {}),
+        detail: `agent audio ${tally.agentAudioFrames} frames, ${tally.agentAudioBytes} bytes; stored ${stored.length} turns`,
+      });
+    } catch (error) {
+      steps.push({ name: 'two-way', ok: false, failure: (error as Error).message.split('\n')[0] });
+    }
+  } finally {
+    await context.close();
+    await internal(config, `/voice-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+  const after = (await config.usage?.()) ?? null;
+  cost.characters = before === null || after === null ? null : after - before;
+  writeFileSync(
+    join(config.out, 'voice-e2e.json'),
+    `${JSON.stringify({ steps, cost, frames: tallyFrames(frames), stills }, null, 2)}\n`,
+  );
+  return { steps, cost, stills };
+}

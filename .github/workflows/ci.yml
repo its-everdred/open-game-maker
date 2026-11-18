@@ -79,7 +79,8 @@ jobs:
 
           if [[ "$diff_available" != "true" ]]; then
             echo "voice_host=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "$base" "$head" -- services/voice-host/ .github/workflows/ci.yml; then
+          # The voice paths (ops/voice-paths) are the host and every package that speaks its protocol (#879).
+          elif mapfile -t voice_paths < ops/voice-paths && git diff --quiet "$base" "$head" -- "${voice_paths[@]}" .github/workflows/ci.yml; then
             echo "voice_host=false" >> "$GITHUB_OUTPUT"
           else
             echo "voice_host=true" >> "$GITHUB_OUTPUT"
@@ -164,16 +165,28 @@ jobs:
   voice_host:
     name: voice host
     needs: changes
-    if: needs.changes.outputs.voice_host == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      VOICE_CHANGED: ${{ needs.changes.outputs.voice_host }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+      # The job always runs, so a skip is a visible line naming why rather than a silently skipped check.
+      - name: Voice paths changed?
+        run: |
+          if [[ "$VOICE_CHANGED" == "true" ]]; then
+            echo "voice paths changed: building and testing the voice host"
+          else
+            echo "voice host not run: this diff changes none of the paths in ops/voice-paths"
+          fi
+      - if: env.VOICE_CHANGED == 'true'
+        uses: actions/checkout@v4
+      - if: env.VOICE_CHANGED == 'true'
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
         with:
           working_directory: services/voice-host
           cache: true
       - name: Cache Mix dependencies and build
+        if: env.VOICE_CHANGED == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -183,15 +196,19 @@ jobs:
           restore-keys: |
             voice-host-mix-${{ runner.os }}-
       - name: Fetch voice-host dependencies
+        if: env.VOICE_CHANGED == 'true'
         working-directory: services/voice-host
         run: mise exec -- mix deps.get
       - name: Compile voice host
+        if: env.VOICE_CHANGED == 'true'
         working-directory: services/voice-host
         run: mise exec -- mix compile --warnings-as-errors
       - name: Check voice-host formatting
+        if: env.VOICE_CHANGED == 'true'
         working-directory: services/voice-host
         run: mise exec -- mix format --check-formatted
       - name: Test voice host
+        if: env.VOICE_CHANGED == 'true'
         working-directory: services/voice-host
         run: mise exec -- mix test
 
@@ -209,7 +226,7 @@ jobs:
           OPS_RESULT: ${{ needs.ops.result }}
           VOICE_HOST_RESULT: ${{ needs.voice_host.result }}
         run: |
-          if [[ "$CHANGES_RESULT" == "success" && "$WORKSPACE_RESULT" == "success" && "$BROWSER_RESULT" == "success" && "$OPS_RESULT" == "success" && ( "$VOICE_HOST_RESULT" == "success" || "$VOICE_HOST_RESULT" == "skipped" ) ]]; then
+          if [[ "$CHANGES_RESULT" == "success" && "$WORKSPACE_RESULT" == "success" && "$BROWSER_RESULT" == "success" && "$OPS_RESULT" == "success" && "$VOICE_HOST_RESULT" == "success" ]]; then
             exit 0
           fi
 

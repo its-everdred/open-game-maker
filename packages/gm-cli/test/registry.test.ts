@@ -105,6 +105,7 @@ describe('command registry', () => {
       'qa playtest',
       'qa review-e2e',
       'qa room',
+      'qa voice-e2e',
       'review close-check',
       'review post',
       'run',
