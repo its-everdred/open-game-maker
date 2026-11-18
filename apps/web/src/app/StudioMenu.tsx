@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type ReactElement,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, matchPath, useLocation } from 'react-router';
 
 import {
@@ -61,7 +62,7 @@ export function StudioMenu() {
   const trigger = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
   const location = useLocation();
-  const { controls, open, setOpen } = useGameMenu();
+  const { controls, open, setOpen, moreHost } = useGameMenu();
   const { data: session } = useSession();
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
@@ -228,9 +229,14 @@ export function StudioMenu() {
 
   // Nearest the menu button first; the row runs right to left.
   const circles: ReactElement[] = [];
+  // Inside the pause panel's More page, Leave, Edit and Sound already sit on the panel itself.
+  const inPause = moreHost !== null;
+  const trayOpen = open || inPause;
   if (controls) {
     circles.push(
-      ...controls.actions.map((action) => <MenuAction key={action.id} action={action} close={close} />),
+      ...controls.actions
+        .filter((action) => !inPause || (action.id !== 'games' && action.id !== 'edit'))
+        .map((action) => <MenuAction key={action.id} action={action} close={close} />),
       ...controls.extras,
     );
   }
@@ -333,7 +339,7 @@ export function StudioMenu() {
       }}
     />
   );
-  if (!hasStudioHeader) circles.push(volumeCircle);
+  if (!hasStudioHeader && !inPause) circles.push(volumeCircle);
   circles.push(<BugButton key="bug" open={sheet === 'bug'} onToggle={() => toggleSheet('bug')} />);
   if (gamePath) {
     circles.push(
@@ -356,7 +362,7 @@ export function StudioMenu() {
   }
   // Game extras can own in-flight operations (for example room creation), so only those controls stay mounted while
   // the tray is folded. The rest of the menu keeps its original open-only DOM lifetime.
-  const renderedCircles = open ? circles : (controls?.extras ?? []);
+  const renderedCircles = trayOpen ? circles : (controls?.extras ?? []);
   if (session) {
     circles.push(<MenuLink key="credits" label="Credits" icon="credits" to="/settings/credits" close={close} />);
     if (requireAdmin(admin.data ?? null) === 'ok') {
@@ -513,6 +519,22 @@ export function StudioMenu() {
     );
   }
 
+  const tray = (
+    <div className="studio-menu-tray" data-gm-overlay-allowed hidden={!trayOpen}>
+      <div id="studio-menu-panel" className="studio-menu-row" role="group" aria-label="Menu">
+        {renderedCircles.map((circle, index) => (
+          <span key={circle.key} className="studio-menu-slot" style={{ '--i': index } as CSSProperties}>
+            {circle}
+          </span>
+        ))}
+      </div>
+      {gameId && new URLSearchParams(location.search).get('mode') === 'edit' && (
+        <div id="studio-editor-tools" className="studio-editor-tools" />
+      )}
+      {trayOpen && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
+    </div>
+  );
+
   return (
     <div ref={root} className="studio-menu-control">
       {hasStudioHeader && <div className="studio-library-volume">{volumeCircle}</div>}
@@ -593,19 +615,7 @@ export function StudioMenu() {
       <span className="sr" role="status" aria-live="polite">
         {announcement}
       </span>
-      <div className="studio-menu-tray" data-gm-overlay-allowed hidden={!open}>
-        <div id="studio-menu-panel" className="studio-menu-row" role="group" aria-label="Menu">
-          {renderedCircles.map((circle, index) => (
-            <span key={circle.key} className="studio-menu-slot" style={{ '--i': index } as CSSProperties}>
-              {circle}
-            </span>
-          ))}
-        </div>
-        {gameId && new URLSearchParams(location.search).get('mode') === 'edit' && (
-          <div id="studio-editor-tools" className="studio-editor-tools" />
-        )}
-        {open && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
-      </div>
+      {moreHost ? createPortal(tray, moreHost) : tray}
       <JobConversationModal />
       {deck && deck.creatorId === creatorId ? (
         <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />

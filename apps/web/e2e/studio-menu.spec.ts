@@ -456,6 +456,8 @@ for (const mode of ['play', 'edit'] as const) {
     await installGameApi(page);
     await page.goto(`/g/game?mode=${mode}`);
     await page.getByRole('button', { name: 'Menu' }).click();
+    if (mode === 'play')
+      await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
     await expect(page.getByRole('link', { name: 'Versions' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Publish' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Rollback' })).toBeVisible();

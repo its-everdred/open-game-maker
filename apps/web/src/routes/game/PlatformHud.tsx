@@ -28,10 +28,12 @@ import {
 } from '../../features/editor/hud/saves';
 import { loadSettings, saveSettings } from '../../features/editor/hud/settings';
 import { pushToast } from '../../lib/notify/slice';
+import { Icon } from '../../components/Icon';
 import { CreditsList } from '../settings/CreditsList';
 import { getCredits } from '../settings/credits';
 import { SharedSettings } from './SharedSettings';
 import { assignableKey } from './control-keys';
+import { PauseMenu } from './PauseMenu';
 
 export type PlatformSaveApi = {
   list(gameId: string, query?: SaveListQuery): Promise<OptionalCapability<{ slots: SaveSlot[] }>>;
@@ -63,6 +65,12 @@ type PlatformHudProps = {
   toast?: (message: string) => void;
   creditsApi?: (gameId: string, buildId: string) => Promise<CreditsDocument>;
   onLeave?(): void;
+  /** Starts the game over from a fresh frame; absent in room play, where one player cannot restart the match. */
+  onRestart?(): void;
+  onEdit?(): void;
+  editDisabled?: boolean;
+  /** Receives the More page's container, where the studio menu shows the rest of the actions. */
+  onMoreHost?(host: HTMLElement | null): void;
   onResume(): void;
 };
 
@@ -146,6 +154,10 @@ export function PlatformHud({
   toast = pushToast,
   creditsApi = defaultCreditsApi,
   onLeave,
+  onRestart,
+  onEdit,
+  editDisabled,
+  onMoreHost,
   onResume,
 }: PlatformHudProps) {
   const visible = open ?? paused;
@@ -153,7 +165,8 @@ export function PlatformHud({
   const [savesAvailable, setSavesAvailable] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SaveSlotId>('auto');
   const [settings, setSettings] = useState<PlayerSettings>(() => loadSettings());
-  const [page, setPage] = useState<'pause' | 'credits' | 'settings'>('pause');
+  const [page, setPage] = useState<'pause' | 'settings' | 'more'>('pause');
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [optionValues, setOptionValues] = useState<Record<string, boolean | string | number>>(() =>
     loadGameOptions(gameId, gameOptions ?? []),
   );
@@ -263,6 +276,7 @@ export function PlatformHud({
   useEffect(() => {
     if (!visible) {
       setPage('pause');
+      setCreditsOpen(false);
     }
   }, [visible]);
 
@@ -278,7 +292,7 @@ export function PlatformHud({
   }, [gameId, saveContext.buildId]);
 
   useEffect(() => {
-    if (page !== 'credits' || credits !== undefined) return;
+    if (!creditsOpen || credits !== undefined) return;
     let active = true;
     setCreditsFailed(false);
     void creditsApi(gameId, saveContext.buildId)
@@ -291,7 +305,7 @@ export function PlatformHud({
     return () => {
       active = false;
     };
-  }, [credits, creditsApi, gameId, page, saveContext.buildId]);
+  }, [credits, creditsApi, creditsOpen, gameId, saveContext.buildId]);
 
   const resume = () => {
     onResume();
@@ -316,105 +330,115 @@ export function PlatformHud({
             data-studio-menu-boundary
             role="dialog"
             aria-modal="true"
-            aria-label={
-              page === 'pause' ? (paused ? 'Paused' : 'Game menu') : page === 'credits' ? 'Credits' : 'Settings'
-            }
+            aria-label={page === 'pause' ? (paused ? 'Paused' : 'Game menu') : page === 'more' ? 'More' : 'Settings'}
           >
             {page === 'settings' ? (
-              <>
-                <SharedSettings
-                  settings={settings}
-                  onChange={setSettings}
-                  actions={actions ?? {}}
-                  bindings={controlBindings ? bindings : undefined}
-                  reservedKeys={controlReservedKeys}
-                  onBindingsChange={(next) => {
-                    setBindings(next);
-                    try {
-                      localStorage.setItem(`ogm.controls.${gameId}`, JSON.stringify(next));
-                    } catch {
-                      /* Storage is optional. */
-                    }
-                  }}
-                  onResetBindings={() => {
-                    const next = { ...controlBindings };
-                    setBindings(next);
-                    try {
-                      localStorage.removeItem(`ogm.controls.${gameId}`);
-                    } catch {
-                      /* Storage is optional. */
-                    }
-                  }}
-                  options={gameOptions ?? []}
-                  gameOptions={optionValues}
-                  onGameOptionsChange={(values) => {
-                    setOptionValues(values);
-                    try {
-                      localStorage.setItem(`ogm.game-options.${gameId}`, JSON.stringify(values));
-                    } catch {
-                      /* Storage is optional. */
-                    }
-                  }}
-                  backRef={backRef}
-                  onBack={() => setPage('pause')}
-                />
-              </>
-            ) : page === 'credits' ? (
-              <>
-                <h2>Credits</h2>
-                <button ref={backRef} className="tap-secondary" type="button" onClick={() => setPage('pause')}>
-                  Back
-                </button>
-                {credits === undefined && !creditsFailed ? <p>Loading…</p> : null}
-                {creditsFailed ? <p role="alert">Unavailable</p> : null}
-                {credits ? <CreditsList packs={credits.packs} /> : null}
-              </>
-            ) : (
-              <>
-                <h2>{paused ? 'Paused' : 'Game menu'}</h2>
-                {pauseName ? <p>Paused by {pauseName}</p> : null}
-                {resumeAt ? (
-                  <p aria-live="polite">{Math.max(1, Math.ceil((resumeAt - (now + serverOffsetMs)) / 1000))}</p>
-                ) : null}
-                <button ref={resumeRef} className="tap-primary" type="button" onClick={resume} disabled={!!resumeAt}>
-                  Resume
-                </button>
+              <SharedSettings
+                settings={settings}
+                onChange={setSettings}
+                actions={actions ?? {}}
+                bindings={controlBindings ? bindings : undefined}
+                reservedKeys={controlReservedKeys}
+                onBindingsChange={(next) => {
+                  setBindings(next);
+                  try {
+                    localStorage.setItem(`ogm.controls.${gameId}`, JSON.stringify(next));
+                  } catch {
+                    /* Storage is optional. */
+                  }
+                }}
+                onResetBindings={() => {
+                  const next = { ...controlBindings };
+                  setBindings(next);
+                  try {
+                    localStorage.removeItem(`ogm.controls.${gameId}`);
+                  } catch {
+                    /* Storage is optional. */
+                  }
+                }}
+                options={gameOptions ?? []}
+                gameOptions={optionValues}
+                onGameOptionsChange={(values) => {
+                  setOptionValues(values);
+                  try {
+                    localStorage.setItem(`ogm.game-options.${gameId}`, JSON.stringify(values));
+                  } catch {
+                    /* Storage is optional. */
+                  }
+                }}
+                backRef={backRef}
+                onBack={() => setPage('pause')}
+              >
                 {savesAvailable && slots !== undefined ? (
-                  <div className="save-slots" role="group" aria-label="Save slots">
-                    {saveSlotOptions(slots).map(({ id }) => (
+                  <details>
+                    <summary>
+                      <Icon name="publish" />
+                      Saves
+                    </summary>
+                    <div className="shared-settings-content save-slots" role="group" aria-label="Save slots">
+                      {saveSlotOptions(slots).map(({ id, slot }) => (
+                        <button
+                          className="tap-secondary"
+                          type="button"
+                          key={id}
+                          aria-pressed={selectedSlot === id}
+                          onClick={() => setSelectedSlot(id)}
+                        >
+                          {slot?.label ?? saveSlotLabel(id)}
+                        </button>
+                      ))}
                       <button
                         className="tap-secondary"
                         type="button"
-                        key={id}
-                        aria-label={saveSlotLabel(id)}
-                        aria-pressed={selectedSlot === id}
-                        onClick={() => setSelectedSlot(id)}
+                        disabled={!saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))}
+                        onClick={() => void load()}
                       >
-                        {id === 'auto' ? 'Auto' : id}
+                        Load
                       </button>
-                    ))}
-                    <button
-                      className="tap-secondary"
-                      type="button"
-                      disabled={!saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))}
-                      onClick={() => void load()}
-                    >
-                      Load
-                    </button>
+                    </div>
+                  </details>
+                ) : null}
+                <details onToggle={(event) => setCreditsOpen(event.currentTarget.open)}>
+                  <summary>
+                    <Icon name="credits" />
+                    Credits
+                  </summary>
+                  <div className="shared-settings-content">
+                    {credits === undefined && !creditsFailed ? <p>Loading…</p> : null}
+                    {creditsFailed ? <p role="alert">Unavailable</p> : null}
+                    {credits ? <CreditsList packs={credits.packs} /> : null}
                   </div>
-                ) : null}
-                <button className="tap-secondary" type="button" onClick={() => setPage('settings')}>
-                  Settings
+                </details>
+              </SharedSettings>
+            ) : page === 'more' ? (
+              <div className="pause-more">
+                <button
+                  ref={backRef}
+                  type="button"
+                  className="shared-settings-back"
+                  aria-label="Back"
+                  onClick={() => setPage('pause')}
+                >
+                  <Icon name="close" />
                 </button>
-                <button className="tap-secondary" type="button" onClick={() => setPage('credits')}>
-                  Credits
-                </button>
-                {onLeave ? (
-                  <button className="tap-primary" type="button" onClick={onLeave}>
-                    Leave
-                  </button>
-                ) : null}
-              </>
+                <div ref={onMoreHost} className="pause-more-host" />
+              </div>
+            ) : (
+              <PauseMenu
+                title={paused ? 'Paused' : 'Game menu'}
+                pauseName={pauseName}
+                countdown={resumeAt ? Math.max(1, Math.ceil((resumeAt - (now + serverOffsetMs)) / 1000)) : undefined}
+                muted={settings.mute}
+                resumeRef={resumeRef}
+                editDisabled={editDisabled}
+                onResume={resume}
+                onRestart={onRestart}
+                onLeave={onLeave}
+                onMute={(mute) => setSettings((current) => ({ ...current, mute }))}
+                onSettings={() => setPage('settings')}
+                onEdit={onEdit}
+                onMore={() => setPage('more')}
+              />
             )}
           </div>
         </div>

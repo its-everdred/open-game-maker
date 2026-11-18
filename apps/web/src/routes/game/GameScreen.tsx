@@ -91,7 +91,7 @@ export function GameScreen() {
   const { gameId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { open: menuOpen, setOpen: setMenuOpen } = useGameMenu();
+  const { open: menuOpen, setOpen: setMenuOpen, setMoreHost } = useGameMenu();
   const branch = searchParams.get('v')?.trim() || 'main';
   const roomId = searchParams.get('room')?.trim() || undefined;
   const isGameRoute = useMatch('/g/:gameId') !== null;
@@ -782,6 +782,20 @@ export function GameScreen() {
             saveSchema={frameState.manifest.saveSchema}
             migratesFrom={frameState.manifest.migratesFrom}
             onLeave={() => void leaveRoom()}
+            onRestart={
+              roomId === undefined
+                ? () => {
+                    setMenuOpen(false);
+                    setFrameAttempt((attempt) => attempt + 1);
+                  }
+                : undefined
+            }
+            onEdit={() => {
+              setMenuOpen(false);
+              void requestMode('edit');
+            }}
+            editDisabled={room.snapshot?.role === 'peer'}
+            onMoreHost={setMoreHost}
             onResume={() => {
               if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });
               setMenuOpen(false);

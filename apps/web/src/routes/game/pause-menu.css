@@ -1,0 +1,93 @@
+.pause-menu {
+  display: grid;
+  gap: 12px;
+  text-align: center;
+}
+
+.pause-menu p {
+  margin: 0;
+}
+
+.pause-menu .pause-resume,
+.pause-row button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.pause-menu .pause-resume {
+  min-height: 56px;
+  font-size: 1.2rem;
+}
+
+.pause-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pause-row button {
+  min-height: 44px;
+}
+
+.pause-resume .icon,
+.pause-row .icon {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+}
+
+.pause-resume .icon svg,
+.pause-row .icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.pause-icons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* The studio's round buttons keep their own shape inside the pause panel. */
+.platform-pause-dialog .menu-circle {
+  border: 0;
+  border-radius: 50%;
+  background: var(--night-3);
+  color: var(--cream);
+}
+
+/* While the pause panel is up, the studio tray never floats over it; More shows it inside the panel instead. */
+body:has(.platform-pause-dialog) .studio-menu-control > .studio-menu-tray {
+  display: none;
+}
+
+.pause-more {
+  position: relative;
+  padding-top: 56px;
+}
+
+.platform-pause-dialog .pause-more-host .studio-menu-tray {
+  position: static;
+  align-items: stretch;
+  width: auto;
+  max-height: none;
+  pointer-events: auto;
+}
+
+.platform-pause-dialog .pause-more-host .studio-menu-tray .studio-menu-row {
+  flex-flow: row wrap;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  margin: 0;
+  overflow: visible;
+}
+
+.platform-pause-dialog .pause-more-host .studio-menu-tray .studio-menu-sheet {
+  position: static;
+  width: 100%;
+  max-height: none;
+}

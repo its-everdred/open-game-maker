@@ -39,6 +39,12 @@ function frameHarness() {
 
 const saveContext = { branch: 'main', buildId: 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ' };
 
+/** Saves and credits live in Settings, not on the pause panel itself. */
+async function openSettingsSection(name: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+  fireEvent.click(await screen.findByText(name));
+}
+
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();
@@ -278,6 +284,7 @@ describe('PlatformHud', () => {
 
   it('hides save controls when the later-owned route is unavailable', async () => {
     const test = frameHarness();
+    const list = vi.fn().mockResolvedValue({ available: false });
     render(
       <PlatformHud
         build="draft"
@@ -286,12 +293,15 @@ describe('PlatformHud', () => {
         paused
         saveContext={saveContext}
         saves
-        saveApi={{ list: vi.fn().mockResolvedValue({ available: false }), read: vi.fn(), write: vi.fn() }}
+        saveApi={{ list, read: vi.fn(), write: vi.fn() }}
         onResume={vi.fn()}
       />,
     );
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
-    await waitFor(() => expect(screen.queryByRole('group', { name: 'Save slots' })).not.toBeInTheDocument());
+    expect(screen.queryByText('Saves')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Save slots' })).not.toBeInTheDocument();
   });
 
   // A slot the running build cannot read must not offer Load: the SDK would refuse the restore and the host used to
@@ -317,6 +327,7 @@ describe('PlatformHud', () => {
         onResume={vi.fn()}
       />,
     );
+    await openSettingsSection('Saves');
     const load = await screen.findByRole('button', { name: 'Load' });
 
     expect(load).toBeEnabled();
@@ -394,6 +405,7 @@ describe('PlatformHud', () => {
         onResume={onResume}
       />,
     );
+    await openSettingsSection('Saves');
     fireEvent.click(await screen.findByRole('button', { name: 'Load' }));
 
     await waitFor(() => expect(test.frame.restoreSave).toHaveBeenCalledWith(save));
@@ -421,6 +433,7 @@ describe('PlatformHud', () => {
       />,
     );
 
+    await openSettingsSection('Saves');
     expect(await screen.findByRole('button', { name: 'Auto save' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 1' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 2' })).toBeVisible();
@@ -529,7 +542,7 @@ describe('PlatformHud', () => {
     expect(toast).toHaveBeenCalledWith('Opened the crypt (test)');
   });
 
-  it('shows exact-build credits from pause, including private packs without a download action', async () => {
+  it('shows exact-build credits from pause settings, including private packs without a download action', async () => {
     const test = frameHarness();
     const credits = vi.fn().mockResolvedValue({
       version: 1,
@@ -558,7 +571,7 @@ describe('PlatformHud', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Credits' }));
+    await openSettingsSection('Credits');
 
     expect(await screen.findByText('Synty Pack')).toBeVisible();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toHaveFocus());
