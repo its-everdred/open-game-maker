@@ -6,7 +6,16 @@ import type { Job } from '@ogm/contracts';
 import { BuildPanel, BuildTracker } from './BuildTracker';
 import { useNotificationFeed } from '../../lib/notify/feed';
 
-vi.mock('./ReviewInbox', () => ({ ReviewInbox: () => <div>Review deck</div> }));
+vi.mock('./ReviewInbox', () => ({
+  ReviewInbox: ({ onClose }: { onClose(): void }) => (
+    <div>
+      Review deck
+      <button type="button" onClick={onClose}>
+        Close deck
+      </button>
+    </div>
+  ),
+}));
 vi.mock('./TicketDetail', () => ({
   TicketDetail: ({
     title,
@@ -85,10 +94,33 @@ describe('build tracker', () => {
     const reviews = [
       { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
     ];
-    render(<BuildTracker workers={[]} reviews={reviews} />);
+    const finished = [{ ticket: 'g:1', title: 'New world' }];
+    const view = render(<BuildTracker workers={[]} reviews={reviews} finished={finished} />);
     fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
+    view.rerender(<BuildTracker workers={[]} reviews={reviews} />);
     expect(screen.getByText('Review deck')).toBeVisible();
-    expect(screen.getByRole('region', { name: 'Builds' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close deck' }));
+    expect(screen.queryByText('Review deck')).toBeNull();
+    expect(screen.getByText('New world is ready')).toBeVisible();
+  });
+  // A tap that lands before the reviews load still ends on the deck once they arrive; with none, the panel stays.
+  it('opens the deck when the reviews arrive after the tap', () => {
+    const running = [{ ticket: '1', title: 'Running', percent: 20, etaSeconds: null }];
+    const reviews = [
+      { kind: 'round' as const, gameId: 'g', round: { id: 'r', ticket: '3', question: null, media: [] } },
+    ];
+    const view = render(<BuildTracker workers={running} reviewLoading />);
+    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    expect(screen.queryByText('Review deck')).toBeNull();
+    view.rerender(<BuildTracker workers={running} reviews={reviews} />);
+    expect(screen.getByText('Review deck')).toBeVisible();
+    cleanup();
+    const empty = render(<BuildTracker workers={running} reviewLoading />);
+    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    empty.rerender(<BuildTracker workers={running} />);
+    empty.rerender(<BuildTracker workers={running} reviews={reviews} />);
+    expect(screen.queryByText('Review deck')).toBeNull();
+    expect(screen.getByRole('button', { name: '1 Needs Review' })).toBeVisible();
   });
   it('lists live progress without guessing an ETA and shows waiting states instead of a full bar', () => {
     render(

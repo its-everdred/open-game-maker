@@ -111,7 +111,7 @@ export function BuildTracker({
           if (finished.length) setAcknowledged((prior) => [...prior, ...finished]);
           onDismiss?.();
           readUpdates();
-          setReviewFirst(!open && pending > 0);
+          setReviewFirst(!open && (pending > 0 || Boolean(reviewLoading)));
           setOpen(!open);
         }}
       >
@@ -165,11 +165,17 @@ export function BuildPanel({
   id,
 }: PanelProps & { id: string; reviewFirst?: boolean }) {
   const updates = useNotify((state) => (state.updateOwner === creatorId ? state.updates : EMPTY_UPDATES));
-  const [modal, setModal] = useState<'review' | 'completed' | undefined>(reviewFirst ? 'review' : undefined);
+  const [modal, setModal] = useState<'review' | 'completed' | undefined>();
+  const [deckFirst, setDeckFirst] = useState(reviewFirst);
   const [conversation, setConversation] = useState<PastTicket>();
   const [detail, setDetail] = useState<DetailTarget>();
   const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
   const reviewCount = reviews.length + commands.length + targets.length;
+  // Opened deck-first: the deck shows once the reviews are known, unless the creator picked something else first.
+  if (deckFirst && !modal && !detail && reviewCount > 0) {
+    setDeckFirst(false);
+    setModal('review');
+  } else if (deckFirst && (modal || detail || !reviewLoading)) setDeckFirst(false);
   const talk = detail && conversationOf(detail, jobs);
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
