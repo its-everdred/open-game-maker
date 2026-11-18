@@ -34,6 +34,7 @@
 .games-spotlight-copy {
   display: grid;
   min-width: 0;
+  container-type: inline-size;
   gap: 16px;
   align-content: center;
 }
@@ -44,7 +45,7 @@
   padding-bottom: 16px;
   margin: 0;
   color: var(--games-hi);
-  font: 700 clamp(36px, 4.4vw, 64px) / 1.05 var(--display);
+  font: 700 clamp(36px, min(4.4vw, 13cqi), 64px) / 1.05 var(--display);
   overflow-wrap: anywhere;
   text-shadow: 0 4px 24px var(--shadow-color);
 }

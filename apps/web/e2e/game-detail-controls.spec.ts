@@ -152,6 +152,7 @@ for (const size of [
   { width: 844, height: 390 },
   { width: 1180, height: 820 },
   { width: 1024, height: 768 },
+  { width: 1366, height: 1024 },
 ]) {
   test(`RestoreBound detail fits its landscape column at ${size.width}x${size.height}`, async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'each case sets its own viewport');
@@ -169,7 +170,11 @@ for (const size of [
       const stats = [...element.querySelectorAll('.games-detail-stats dt, .games-detail-stats dd')].map((item) =>
         item.getBoundingClientRect(),
       );
+      // A one-word title must never split mid-word; it shrinks to its column instead.
+      const titleRange = document.createRange();
+      titleRange.selectNodeContents(element.querySelector('h1')!);
       return {
+        titleLines: new Set([...titleRange.getClientRects()].map((rect) => Math.round(rect.top))).size,
         titleOverlapsClose:
           heading.left < close.right &&
           heading.right > close.left &&
@@ -178,7 +183,7 @@ for (const size of [
         clippedStats: stats.some((item) => item.left < copy.left - 1 || item.right > copy.right + 1),
       };
     });
-    expect(geometry).toEqual({ titleOverlapsClose: false, clippedStats: false });
+    expect(geometry).toEqual({ titleLines: 1, titleOverlapsClose: false, clippedStats: false });
     for (const name of ['Play RestoreBound', 'Edit RestoreBound']) {
       const button = page.getByRole('button', { name });
       await button.scrollIntoViewIfNeeded();
