@@ -41,11 +41,11 @@ afterEach(() => {
 
 describe('build tracker', () => {
   it('counts an update without placing its text over a running game', () => {
-    let source: EventTarget | undefined;
     class TestSource extends EventTarget {
+      static instances: TestSource[] = [];
       constructor() {
         super();
-        source = this;
+        TestSource.instances.push(this);
       }
       close() {}
     }
@@ -62,7 +62,7 @@ describe('build tracker', () => {
     render(<GameWithFeed />);
     expect(document.querySelector('.worker-tracker-count')).toHaveTextContent('1');
     act(() =>
-      source!.dispatchEvent(
+      TestSource.instances[0]!.dispatchEvent(
         new MessageEvent('build.done', { data: JSON.stringify({ title: 'Build complete', body: 'New world' }) }),
       ),
     );
