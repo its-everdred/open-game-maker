@@ -53,16 +53,24 @@ describe('verdicts', () => {
 
   const heard = tallyFrames([frame({ type: 'agent_audio', turn_id: 't', format: 'pcm', data_b64: 'AAAA' })]);
 
-  it('passes two-way only when audio came back, played, and a turn is stored in the chat', () => {
+  it('passes two-way only when audio came back, played, and the creator turn is stored in the chat', () => {
     expect(twoWayFailure(heard, 1.2, [{ actor: 'creator', text: 'Hello, can you hear me?' }])).toBeNull();
-    expect(twoWayFailure(tallyFrames([]), 0, [{ actor: 'agent', text: 'Yes' }])).toBe('no agent audio streamed back');
-    expect(twoWayFailure(heard, 1.2, [])).toBe('no transcript was stored in the chat');
-    expect(twoWayFailure(heard, 1.2, [{ actor: 'creator', text: ' ' }])).toBe('no transcript was stored in the chat');
+    expect(twoWayFailure(tallyFrames([]), 0, [{ actor: 'creator', text: 'Hello' }])).toBe(
+      'no agent audio streamed back',
+    );
+    expect(twoWayFailure(heard, 1.2, [])).toBe("no transcript of the creator's turn was stored in the chat");
+    expect(twoWayFailure(heard, 1.2, [{ actor: 'creator', text: ' ' }])).toBe(
+      "no transcript of the creator's turn was stored in the chat",
+    );
+    // An agent greeting is stored even when the clip was never heard, so it alone must not pass.
+    expect(twoWayFailure(heard, 1.2, [{ actor: 'agent', text: 'Hi there' }])).toBe(
+      "no transcript of the creator's turn was stored in the chat",
+    );
   });
 
   // Frames the app cannot decode never reach the speaker; Kevin would hear nothing, so the check must fail.
   it('fails two-way when audio frames arrived but the app played none of them', () => {
-    expect(twoWayFailure(heard, 0, [{ actor: 'agent', text: 'Yes' }])).toBe(
+    expect(twoWayFailure(heard, 0, [{ actor: 'creator', text: 'Hello' }])).toBe(
       'the agent audio arrived but the app played none of it',
     );
   });
@@ -72,7 +80,7 @@ describe('verdicts', () => {
       frame({ type: 'agent_audio', turn_id: 't', format: 'pcm', data_b64: 'AAAA' }),
       frame({ type: 'error', code: 'transcript_store_failed' }),
     ]);
-    expect(twoWayFailure(tally, 1, [{ actor: 'agent', text: 'Yes' }])).toBe(
+    expect(twoWayFailure(tally, 1, [{ actor: 'creator', text: 'Hello' }])).toBe(
       'the voice socket sent errors: transcript_store_failed',
     );
   });

@@ -115,8 +115,10 @@ vh health > /dev/null || fail 'ensure should bring the host back'
 # Another service on the internal port: it does not pass for the voice host, and stop leaves it running.
 vh stop > /dev/null
 node -e 'require("http").createServer((q, s) => s.end("{\"service\":\"rooms\"}")).listen(Number(process.argv[1]), "127.0.0.1")' "$internal" &
-other=$!
 for _ in $(seq 1 40); do [[ -n $(ss -ltnH "sport = :$internal") ]] && break; sleep 0.25; done
+# The listener itself, not $!: node may be a wrapper script whose child holds the port, and would outlive a kill of $!.
+other=$(ss -ltnpH "sport = :$internal" | grep -oE 'pid=[0-9]+' | head -n 1 | cut -d= -f2)
+[[ -n $other ]] || fail 'the stand-in service did not listen'
 set +e
 vh health > /dev/null 2>&1
 health_status=$?

@@ -99,7 +99,7 @@ export function dictationFailure(box: string): string | null {
   return null;
 }
 
-/** Two-way: the agent's audio streamed back and played, and a turn of the call is stored in the chat. */
+/** Two-way: the agent's audio streamed back and played, and the creator's spoken turn is stored in the chat. */
 export function twoWayFailure(
   tally: VoiceTally,
   playedSeconds: number,
@@ -109,7 +109,9 @@ export function twoWayFailure(
   if (tally.errors.length) failures.push(`the voice socket sent errors: ${tally.errors.join(', ')}`);
   if (tally.agentAudioFrames === 0) failures.push('no agent audio streamed back');
   else if (playedSeconds <= 0) failures.push('the agent audio arrived but the app played none of it');
-  if (!stored.some((message) => message.text?.trim())) failures.push('no transcript was stored in the chat');
+  // Only the creator's turn proves the clip was heard: an agent greeting alone would be stored without it.
+  if (!stored.some((message) => message.actor === 'creator' && message.text?.trim()))
+    failures.push("no transcript of the creator's turn was stored in the chat");
   return failures.length ? failures.join('; ') : null;
 }
 
@@ -321,7 +323,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       await until(async () => {
         const report = await internal(config, `/voice-fixtures/${run}`);
         stored = (report.messages as typeof stored) ?? [];
-        return stored.some((message) => message.text?.trim());
+        return stored.some((message) => message.actor === 'creator' && message.text?.trim());
       }, 15_000);
       const tally = tallyFrames(frames);
       const failure = twoWayFailure(tally, playedSeconds, stored);
