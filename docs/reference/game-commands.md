@@ -77,8 +77,7 @@ means another writer answered first and the returned status is the winner's.
 
 ## Builds review inbox
 
-The Builds badge and Needs Review entry open a one-card queue of the creator's game Commands, core Commands, and
-unanswered review rounds. Swipe a round right to approve or left to add a change note; the thumbs and undo buttons
+The Builds badge opens the Builds popover. Its need-review button filters the list to the creator's game Commands, core Commands, and unanswered review rounds; select an item to open its review. Swipe a round right to approve or left to add a change note; the thumbs and undo buttons
 provide the same controls. Use the letter buttons to view each Command option before picking it or sending a note.
 Core Commands are labeled Core and are visible only to the instance owner. The API connects to the local core daemon
 using `AIUR_API_URL` and `AIUR_API_TOKEN` from its environment. `OGM_INSTANCE_OWNER_ID` authorizes the owner and
@@ -89,7 +88,7 @@ with the displayed version. Aiur records the creator's answer and the review led
 
 When a review lacks media, the inbox does not offer a verdict. It requests media from the owning ticket with an
 idempotent message and shows whether that request was confirmed. A human-review ticket without a matching Command or
-round also appears as a missing-review item. The API checks the ticket still belongs to the game and has no open
+round appears in the Builds list; expand its row to request missing media. The API checks the ticket still belongs to the game and has no open
 review before requesting media. Its endpoints are `POST /games/:gameId/commands/:decisionId/missing-media`,
 `POST /games/:gameId/review-rounds/:id/missing-media`, and `POST /games/:gameId/tickets/:ticket/missing-review`
 under `/api/v1`; they require the game owner and reject a request when the review is already present.

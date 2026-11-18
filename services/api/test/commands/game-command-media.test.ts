@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import type { AiurClient, Decision, DecisionMedia, DecisionMediaFile } from '@ogm/aiur-client';
 import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { eq } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -207,6 +208,11 @@ describe('a jobless Command’s option media', () => {
         },
       ];
       const { deps, read } = await setup(options, {}, true, root);
+      deps.db
+        .update(schema.games)
+        .set({ githubOwner: 'Fixture', githubRepo: 'Blobs' })
+        .where(eq(schema.games.id, ids.game))
+        .run();
       deps.db
         .insert(schema.gameDaemons)
         .values({

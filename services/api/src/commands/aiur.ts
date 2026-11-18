@@ -168,6 +168,8 @@ export async function gameCommandsFromAiur(
     daemon.repo.toLowerCase() === `${game.githubOwner}/${game.githubRepo}`.toLowerCase()
       ? join(daemon.checkoutPath, 'workspaces')
       : undefined;
+  const [mediaOwner, mediaRepo] =
+    workspaceRoot && daemon ? daemon.repo.split('/') : [game.githubOwner, game.githubRepo];
   const commands = await Promise.all(
     open.map(async (decision) =>
       toGameCommand(
@@ -177,10 +179,10 @@ export async function gameCommandsFromAiur(
           client,
           decision,
           sign,
-          game.githubOwner && game.githubRepo
+          mediaOwner && mediaRepo
             ? {
-                owner: game.githubOwner,
-                name: game.githubRepo,
+                owner: mediaOwner,
+                name: mediaRepo,
                 ticket: decision.ticket.identifier,
                 ...(workspaceRoot ? { workspaceRoot } : {}),
                 ...(game.githubPath ? { gamePath: game.githubPath } : {}),
