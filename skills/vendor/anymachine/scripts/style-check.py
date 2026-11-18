@@ -40,9 +40,10 @@ def meshes(doc):
 
 
 def main(variant, sources):
-    pack_names = {m['name'] for s in sources for m in meshes(load(s))}
+    source_meshes = [m for s in sources for m in meshes(load(s))]
+    pack_names = {m['name'] for m in source_meshes}
     rows = list(meshes(load(variant)))
-    pack = [r for r in rows if r['name'] in pack_names] or rows
+    pack = source_meshes if sources else rows
     added = [r for r in rows if r['name'] not in pack_names] if sources else []
     atlas = any(r['textured'] for r in pack)
     median_density = statistics.median(r['density'] for r in pack)
