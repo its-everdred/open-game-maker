@@ -1,59 +1,37 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { getVolume, onChange, status } from '../../lib/sound';
+import { playTrailer, stopTrailers, trailerVideo } from './trailerVideo';
 import type { GameSummary } from './types';
 
 export function GameTrailer({ game, transparentPoster = false }: { game: GameSummary; transparentPoster?: boolean }) {
-  const ref = useRef<HTMLVideoElement>(null);
+  const host = useRef<HTMLSpanElement>(null);
   const sound = useSyncExternalStore(onChange, status);
   const volume = useSyncExternalStore(onChange, getVolume);
-  const soundRef = useRef({ sound, volume });
   const playing = useRef<HTMLVideoElement | null>(null);
-  soundRef.current = { sound, volume };
   useEffect(() => {
-    if (playing.current) {
-      playing.current.muted = sound !== 'on';
-      playing.current.volume = volume;
-    }
+    const video = playing.current;
+    if (!video) return;
+    video.volume = volume;
+    video.muted = sound === 'off';
   }, [sound, volume]);
-  useEffect(() => {
-    let current = true;
-    const video = ref.current;
-    if (video) {
-      video.muted = true;
-      video.volume = soundRef.current.volume;
-      void video
-        .play()
-        .then(() => {
-          if (current) {
-            playing.current = video;
-            video.volume = soundRef.current.volume;
-            video.muted = soundRef.current.sound !== 'on';
-          }
-        })
-        .catch(() => {});
-    }
-    return () => {
-      current = false;
-      playing.current = null;
-      video?.pause();
-    };
-  }, [game.trailerUrl]);
-  const transparent = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E';
   const posters = game.coverImage?.sources.webp;
+  const transparent = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E';
   const poster = transparentPoster
     ? transparent
     : (posters?.find((item) => item.width >= 640)?.path ?? posters?.at(-1)?.path ?? game.coverUrl ?? undefined);
-  if (!game.trailerUrl) return null;
-  return (
-    <video
-      ref={ref}
-      muted
-      loop
-      playsInline
-      preload="auto"
-      poster={poster}
-      aria-label={`${game.title} trailer`}
-      src={game.trailerUrl}
-    />
-  );
+  const { trailerUrl, title } = game;
+  useEffect(() => {
+    if (!trailerUrl) return;
+    const video = trailerVideo(trailerUrl);
+    video.setAttribute('aria-label', `${title} trailer`);
+    if (poster) video.poster = poster;
+    playing.current = video;
+    if (video.paused) void playTrailer(video);
+    host.current?.replaceChildren(video);
+    return () => {
+      playing.current = null;
+      stopTrailers([trailerUrl]);
+    };
+  }, [trailerUrl, title, poster]);
+  return <span ref={host} className="game-trailer" />;
 }

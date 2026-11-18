@@ -15,7 +15,7 @@ const attachment = (id: string, kind: string, mime: string) => ({
   url: `/api/v1/me/executor/thread/attachments/${id}`,
 });
 
-test.use({ serviceWorkers: 'block' });
+test.use({ serviceWorkers: 'block', reducedMotion: 'reduce' });
 
 test('asks the Executor from a game, reads the reply with media, and sees each game’s status', async ({
   page,
