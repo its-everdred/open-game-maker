@@ -80,7 +80,8 @@ function sessionReturnPath(pathname: string, search: string): string {
 }
 
 function AppChrome({ children }: { children: ReactNode }) {
-  useNotificationFeed();
+  const { data: session } = useSession();
+  useNotificationFeed(session?.user.id);
   const location = useLocation();
   const gamePlay =
     matchPath('/g/:gameId', location.pathname) !== null && new URLSearchParams(location.search).get('mode') !== 'edit';

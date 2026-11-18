@@ -11,7 +11,10 @@ import { TicketDetail } from './TicketDetail';
 import type { PastTicket } from './usePastTickets';
 import type { WorkerReview } from './useWorkerReviews';
 import type { FinishedWorker } from './useWorkerFinishes';
+import { readUpdates, useNotify } from '../../lib/notify/slice';
 import './build-tracker.css';
+
+const EMPTY_UPDATES: readonly { id: number; text: string }[] = [];
 
 export type WorkerBuild = {
   ticket: string;
@@ -43,6 +46,7 @@ type PanelProps = {
   workerError?: boolean;
   creatorId?: string;
   jobs?: readonly Job[];
+  finished?: readonly FinishedWorker[];
 };
 export function BuildTracker({
   workers,
@@ -64,9 +68,13 @@ export function BuildTracker({
   onDismiss?(): void;
 }) {
   const [open, setOpen] = useState(false);
-  const [openReview, setOpenReview] = useState(false);
+  const [acknowledged, setAcknowledged] = useState<readonly FinishedWorker[]>([]);
+  const unreadUpdates = useNotify((state) => (state.updateOwner === creatorId ? state.unreadUpdates : 0));
+  const hasUpdates = useNotify((state) => state.updateOwner === creatorId && state.updates.length > 0);
   const id = useId();
   if (
+    !hasUpdates &&
+    !acknowledged.length &&
     !workers.length &&
     !finished.length &&
     !reviews.length &&
@@ -77,7 +85,7 @@ export function BuildTracker({
     !historyLoading &&
     !workerError &&
     !reviewError &&
-    !openReview
+    !open
   )
     return null;
   const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
@@ -92,37 +100,27 @@ export function BuildTracker({
       <button
         type="button"
         className="worker-tracker-button"
-        aria-label={count}
-        aria-expanded={open || openReview}
+        aria-label={
+          unreadUpdates ? `${count}, ${unreadUpdates} new ${unreadUpdates === 1 ? 'update' : 'updates'}` : count
+        }
+        aria-expanded={open}
         aria-controls={id}
         onClick={() => {
+          if (finished.length) setAcknowledged((prior) => [...prior, ...finished]);
           onDismiss?.();
-          if (pending > 0) setOpenReview(true);
-          else setOpen(!open);
+          readUpdates();
+          setOpen(!open);
         }}
       >
         <MenuRing percent={workers.length ? (combinedPercent(workers) ?? undefined) : undefined} />
         <Icon name="hammer" />
         <span className="worker-tracker-count" aria-hidden="true">
-          {pending || workers.length || '✓'}
+          {pending +
+            finished.length +
+            workers.filter((worker) => worker.state !== 'human-review').length +
+            unreadUpdates || '✓'}
         </span>
       </button>
-      {finished.length > 0 && (
-        <span className="worker-tracker-toast" role="status">
-          {finished.at(-1)!.title} is ready
-        </span>
-      )}
-      {openReview && (
-        <ReviewInbox
-          workers={workers}
-          reviews={reviews}
-          commands={commands}
-          error={reviewError}
-          incomplete={reviewLoading || workerError}
-          targets={targets}
-          onClose={() => setOpenReview(false)}
-        />
-      )}
       {open && (
         <BuildPanel
           workers={workers}
@@ -137,6 +135,7 @@ export function BuildTracker({
           reviewLoading={reviewLoading}
           historyLoading={historyLoading}
           jobs={jobs}
+          finished={[...acknowledged, ...finished]}
           id={id}
         />
       )}
@@ -157,8 +156,10 @@ export function BuildPanel({
   workerError,
   creatorId,
   jobs = [],
+  finished = [],
   id,
 }: PanelProps & { id: string }) {
+  const updates = useNotify((state) => (state.updateOwner === creatorId ? state.updates : EMPTY_UPDATES));
   const [modal, setModal] = useState<'review' | 'completed'>();
   const [conversation, setConversation] = useState<PastTicket>();
   const [detail, setDetail] = useState<DetailTarget>();
@@ -168,6 +169,20 @@ export function BuildPanel({
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
       <h2>Builds</h2>
+      {finished.length > 0 && (
+        <ul>
+          {finished.map((item) => (
+            <li key={item.ticket}>{item.title} is ready</li>
+          ))}
+        </ul>
+      )}
+      {updates.length > 0 && (
+        <ul>
+          {updates.map((update) => (
+            <li key={update.id}>{update.text}</li>
+          ))}
+        </ul>
+      )}
       {workerError && <p role="alert">Could not load all build updates.</p>}
       {reviewError && <p role="alert">Could not load all reviews.</p>}
       {reviewCount > 0 && (

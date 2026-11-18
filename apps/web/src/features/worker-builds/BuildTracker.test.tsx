@@ -1,9 +1,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Job } from '@ogm/contracts';
 import { BuildPanel, BuildTracker } from './BuildTracker';
+import { useNotificationFeed } from '../../lib/notify/feed';
 
 vi.mock('./ReviewInbox', () => ({ ReviewInbox: () => <div>Review deck</div> }));
 vi.mock('./TicketDetail', () => ({
@@ -33,9 +34,51 @@ vi.mock('../build-chat/conversation', () => ({ openConversation }));
 vi.mock('./TicketConversation', () => ({
   TicketConversation: ({ ticket }: { ticket: { title: string } }) => <div>Conversation: {ticket.title}</div>,
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('build tracker', () => {
+  it('counts an update without placing its text over a running game', () => {
+    let source: EventTarget | undefined;
+    class TestSource extends EventTarget {
+      constructor() {
+        super();
+        source = this;
+      }
+      close() {}
+    }
+    vi.stubGlobal('EventSource', TestSource);
+    function GameWithFeed() {
+      useNotificationFeed();
+      return (
+        <>
+          <iframe title="Game" />
+          <BuildTracker workers={[{ ticket: '1', title: 'Running', percent: 20, etaSeconds: null }]} />
+        </>
+      );
+    }
+    render(<GameWithFeed />);
+    expect(document.querySelector('.worker-tracker-count')).toHaveTextContent('1');
+    act(() =>
+      source!.dispatchEvent(
+        new MessageEvent('build.done', { data: JSON.stringify({ title: 'Build complete', body: 'New world' }) }),
+      ),
+    );
+    expect(document.querySelector('.worker-tracker-count')).toHaveTextContent('2');
+    expect(screen.queryByText('Build complete — New world')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '1 build running, 1 new update' }));
+    expect(screen.getByText('Build complete — New world')).toBeVisible();
+  });
+  it('shows a completed title after the badge is acknowledged', () => {
+    const finished = [{ ticket: 'g:1', title: 'New world' }];
+    const view = render(<BuildTracker workers={[]} finished={finished} />);
+    expect(screen.queryByText('New world is ready')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Completed builds' }));
+    view.rerender(<BuildTracker workers={[]} finished={[]} />);
+    expect(screen.getByText('New world is ready')).toBeVisible();
+  });
   it('lists live progress without guessing an ETA and shows waiting states instead of a full bar', () => {
     render(
       <BuildTracker
