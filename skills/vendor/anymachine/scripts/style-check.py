@@ -43,6 +43,9 @@ def main(variant, sources, standalone=False):
     source_meshes = [m for s in sources for m in meshes(load(s))]
     pack_names = {m['name'] for m in source_meshes}
     rows = list(meshes(load(variant)))
+    if not rows or (sources and not source_meshes):
+        print('FAIL: candidate and source packs must contain meshes')
+        return 1
     pack = source_meshes if sources else rows
     added = [r for r in rows if standalone or r['name'] not in pack_names] if sources else []
     atlas = any(r['textured'] for r in pack)

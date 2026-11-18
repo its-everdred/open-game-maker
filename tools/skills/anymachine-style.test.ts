@@ -25,6 +25,14 @@ describe('AnyMachine style check', () => {
       expect(result.status).toBe(1);
       expect(result.stdout).toContain('flat-colour material');
       expect(result.stdout).toContain('coarse');
+      writeFileSync(prop, JSON.stringify({ accessors: [], meshes: [] }));
+      const empty = spawnSync(
+        'python3',
+        [join(process.cwd(), '../../skills/vendor/anymachine/scripts/style-check.py'), '--standalone', prop, source],
+        { encoding: 'utf8' },
+      );
+      expect(empty.status).toBe(1);
+      expect(empty.stdout).toContain('must contain meshes');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
