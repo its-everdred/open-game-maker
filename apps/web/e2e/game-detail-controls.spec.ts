@@ -56,10 +56,8 @@ for (const size of sizes) {
     const release = await openWhileLoading(page);
     await page.goto('/all?test&spotlight=g_1', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'Play Midnight Crumbs' })).toBeVisible({ timeout: 90_000 });
-    await testInfo.attach(`loading-${size.width}x${size.height}`, {
-      body: await page.screenshot(),
-      contentType: 'image/png',
-    });
+    await expect(page.getByText('Building 40%')).toBeVisible();
+    await page.getByRole('button', { name: 'Play Midnight Crumbs' }).scrollIntoViewIfNeeded();
     // Each control must be the topmost element at its centre and at points just inside its edges.
     const covered = () =>
       page.evaluate(() => {
