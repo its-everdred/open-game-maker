@@ -68,6 +68,10 @@ it('feeds the recorded clip, and only the clip, into the page microphone', async
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
       const micOnly = (window as unknown as { __ogmFakeMic: { playedSeconds: number } }).__ogmFakeMic.playedSeconds;
+      // The client's one-sample audio unlock is not a reply.
+      const unlock = context.createBufferSource();
+      unlock.buffer = context.createBuffer(1, 1, 24_000);
+      unlock.start();
       // The page's own playback (the agent's reply) counts; the fake microphone's clips do not.
       const reply = context.createBufferSource();
       reply.buffer = context.createBuffer(1, 24_000, 24_000);

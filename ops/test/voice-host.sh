@@ -129,6 +129,14 @@ assert_eq 1 "$health_status" 'a foreign /healthz answer is not the voice host'
 assert_eq 1 "$stop_status" 'stop should refuse a foreign listener'
 assert_grep 'which is not the voice host' "$scratch/stop.err"
 
+# The OpenAI provider needs its own key and still the ElevenLabs one, which dictation uses.
+sed -i 's/^OGM_VOICE_PROVIDER=.*/OGM_VOICE_PROVIDER=openai_realtime/; /^ELEVENLABS_API_KEY=/d' "$OGM_ENV_DIR/voice-host.env"
+set +e
+vh check-env > /dev/null 2> "$scratch/openai.err"
+set -e
+assert_grep 'ELEVENLABS_API_KEY is empty (provider openai_realtime)' "$scratch/openai.err"
+assert_grep 'OPENAI_API_KEY is empty (provider openai_realtime)' "$scratch/openai.err"
+
 # A provider the host does not know is named before start, not discovered by a crash loop.
 sed -i 's/^OGM_VOICE_PROVIDER=.*/OGM_VOICE_PROVIDER=elevenlabs/' "$OGM_ENV_DIR/voice-host.env"
 set +e

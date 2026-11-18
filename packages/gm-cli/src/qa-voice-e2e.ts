@@ -152,7 +152,8 @@ export function installFakeMic(clips: Record<string, string>): void {
   const ours = new WeakSet<AudioBufferSourceNode>();
   const start = AudioBufferSourceNode.prototype.start;
   AudioBufferSourceNode.prototype.start = function (this: AudioBufferSourceNode, ...args: Parameters<typeof start>) {
-    if (!ours.has(this) && this.buffer) mic.playedSeconds += this.buffer.duration;
+    // The client's audio unlock starts a one-sample silent buffer; only real audio (10 ms or more) counts.
+    if (!ours.has(this) && this.buffer && this.buffer.duration >= 0.01) mic.playedSeconds += this.buffer.duration;
     return start.apply(this, args);
   };
   const ensure = () => {

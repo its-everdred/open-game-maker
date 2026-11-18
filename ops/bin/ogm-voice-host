@@ -73,9 +73,10 @@ check_env() {
   case ${provider:-fake} in
     fake) ;;
     elevenlabs_agents | openai_realtime)
-      key=ELEVENLABS_API_KEY
-      [[ $provider == openai_realtime ]] && key=OPENAI_API_KEY
-      for name in OGM_VOICE_LLM OGM_VOICE_CLEANUP_ROOT "$key"; do
+      # Dictation always transcribes through ElevenLabs Scribe; the OpenAI provider adds its own key.
+      names=(OGM_VOICE_LLM OGM_VOICE_CLEANUP_ROOT ELEVENLABS_API_KEY)
+      [[ $provider == openai_realtime ]] && names+=(OPENAI_API_KEY)
+      for name in "${names[@]}"; do
         [[ -n $(env_value voice-host "$name") ]] || problems+=("voice-host.env: $name is empty (provider $provider)")
       done
       ;;
