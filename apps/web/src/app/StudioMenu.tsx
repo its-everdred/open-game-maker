@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -61,8 +62,20 @@ export function StudioMenu() {
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
+  const traySlot = useRef<HTMLDivElement>(null);
+  // The tray keeps one container for the menu's whole life and only that container moves between the studio control
+  // and the pause panel's More page, so stateful extras (a pending room invite) never remount on the way.
+  const [trayHost] = useState(() => {
+    const host = document.createElement('div');
+    host.style.display = 'contents';
+    return host;
+  });
   const location = useLocation();
   const { controls, open, setOpen, moreHost } = useGameMenu();
+  // Before paint, so the tray never shows a frame in the place it just left.
+  useLayoutEffect(() => {
+    (moreHost ?? traySlot.current)?.appendChild(trayHost);
+  }, [moreHost, trayHost]);
   const { data: session } = useSession();
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
@@ -229,13 +242,13 @@ export function StudioMenu() {
 
   // Nearest the menu button first; the row runs right to left.
   const circles: ReactElement[] = [];
-  // Inside the pause panel's More page, Leave, Edit and Sound already sit on the panel itself.
+  // Inside the pause panel's More page, actions the panel itself offers (Leave, Edit) and Sound are not repeated.
   const inPause = moreHost !== null;
   const trayOpen = open || inPause;
   if (controls) {
     circles.push(
       ...controls.actions
-        .filter((action) => !inPause || (action.id !== 'games' && action.id !== 'edit'))
+        .filter((action) => !inPause || !action.onPausePanel)
         .map((action) => <MenuAction key={action.id} action={action} close={close} />),
       ...controls.extras,
     );
@@ -615,7 +628,8 @@ export function StudioMenu() {
       <span className="sr" role="status" aria-live="polite">
         {announcement}
       </span>
-      {moreHost ? createPortal(tray, moreHost) : tray}
+      <div ref={traySlot} style={{ display: 'contents' }} />
+      {createPortal(tray, trayHost)}
       <JobConversationModal />
       {deck && deck.creatorId === creatorId ? (
         <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />

@@ -33,15 +33,30 @@ vi.mock('../lib/sound', () => ({
   status: () => 'on',
 }));
 
+function PendingExtra() {
+  const [pending, setPending] = useState(false);
+  return (
+    <button
+      className="menu-circle"
+      type="button"
+      aria-label={pending ? 'Invite pending' : 'Invite'}
+      onClick={() => setPending(true)}
+    />
+  );
+}
+
 function PlayControls() {
   const controls = useMemo(
     () => ({
       actions: [
-        { id: 'games', label: 'Games', icon: 'games', onSelect: vi.fn() },
-        { id: 'edit', label: 'Edit', icon: 'edit', onSelect: vi.fn() },
+        { id: 'games', label: 'Games', icon: 'games', onPausePanel: true, onSelect: vi.fn() },
+        { id: 'edit', label: 'Edit', icon: 'edit', onPausePanel: true, onSelect: vi.fn() },
         { id: 'ask', label: 'Ask for a change', icon: 'speak', onSelect: vi.fn() },
       ],
-      extras: [<button key="fork" className="menu-circle" type="button" aria-label="Fork" />],
+      extras: [
+        <button key="fork" className="menu-circle" type="button" aria-label="Fork" />,
+        <PendingExtra key="invite" />,
+      ],
     }),
     [],
   );
@@ -117,5 +132,20 @@ describe('StudioMenu inside the pause panel', () => {
       screen.getByRole('group', { name: 'Menu' }),
     );
     expect(circleNames()).toContain('Games');
+  });
+
+  // A remount would drop an invite already in flight, and a second tap would then create a second room.
+  it('keeps a game extra mounted, with its state, across the More page', async () => {
+    renderGame();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Menu' })).toHaveAttribute('data-game-play', 'true'));
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle more' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle more' }));
+    expect(screen.getByRole('button', { name: 'Invite pending' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle more' }));
+
+    expect(screen.getByTestId('more-host')).toContainElement(screen.getByRole('button', { name: 'Invite pending' }));
   });
 });

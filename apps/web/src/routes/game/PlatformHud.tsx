@@ -367,7 +367,10 @@ export function PlatformHud({
                   }
                 }}
                 backRef={backRef}
-                onBack={() => setPage('pause')}
+                onBack={() => {
+                  setPage('pause');
+                  setCreditsOpen(false);
+                }}
               >
                 {savesAvailable && slots !== undefined ? (
                   <details>

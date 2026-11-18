@@ -613,7 +613,13 @@ export function GameScreen() {
       mode === 'play' || frameState.manifest?.capabilities.includes('scenery')
         ? {
             actions: [
-              { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
+              {
+                id: 'games',
+                label: 'Games',
+                icon: 'games',
+                onPausePanel: true,
+                onSelect: (): void => void leaveRoom(),
+              },
               ...preferenceAction,
               ...(mode === 'play'
                 ? [
@@ -621,6 +627,7 @@ export function GameScreen() {
                       id: 'edit',
                       label: 'Edit',
                       icon: 'edit',
+                      onPausePanel: true,
                       disabled: room.snapshot?.role === 'peer',
                       onSelect: (): void => {
                         void requestMode('edit');

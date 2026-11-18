@@ -15,6 +15,8 @@ export type GameMenuAction = {
   label: string;
   icon: string;
   disabled?: boolean;
+  /** The pause panel shows this action itself, so its More page leaves it out. */
+  onPausePanel?: boolean;
   onSelect(): void;
 };
 

@@ -101,6 +101,31 @@ describe('PlatformHud pause panel', () => {
     expect(screen.getByRole('button', { name: 'Leave' })).toBeVisible();
   });
 
+  // A room peer cannot switch the shared game into edit mode.
+  it('disables Edit when the screen says the player may not edit', () => {
+    const onEdit = vi.fn();
+    renderPaused({ onEdit, editDisabled: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('loads credits again after a failure once the player comes back to Settings', async () => {
+    const creditsApi = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ version: 1, packs: [] });
+    renderPaused({ saves: false, creditsApi });
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByText('Credits'));
+    expect(await screen.findByText('Unavailable')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByText('Credits'));
+
+    await waitFor(() => expect(creditsApi).toHaveBeenCalledTimes(2));
+  });
+
   it('lends its More page to the studio menu and takes it back on Back', async () => {
     const onMoreHost = vi.fn();
     renderPaused({ onMoreHost });

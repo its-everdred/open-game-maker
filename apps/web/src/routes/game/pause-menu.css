@@ -59,7 +59,7 @@
 }
 
 /* While the pause panel is up, the studio tray never floats over it; More shows it inside the panel instead. */
-body:has(.platform-pause-dialog) .studio-menu-control > .studio-menu-tray {
+body:has(.platform-pause-dialog) .studio-menu-control .studio-menu-tray {
   display: none;
 }
 
