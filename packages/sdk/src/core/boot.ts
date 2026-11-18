@@ -6,6 +6,7 @@ import { openGameBridge } from '@ogm/iframe-bridge';
 import { EventRing } from './events.js';
 import { SdkHostApi, type SendEnvelope } from './host-api.js';
 import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
+import { GM_PAUSED_FLAG, GM_PAUSE_EVENT } from '../audio/unlock.js';
 import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
 import { installQa } from './qa.js';
@@ -27,6 +28,13 @@ function canonicalOrigin(origin: string): string {
 function originFromDocument(): string {
   if (!document.referrer) throw new Error('boot requires hostOrigin when document.referrer is empty');
   return canonicalOrigin(document.referrer);
+}
+
+/** Tells the game's audio that the host paused or resumed play, so it stays quiet until the player resumes. */
+function announcePause(paused: boolean): void {
+  if (typeof window === 'undefined') return;
+  Reflect.set(window, GM_PAUSED_FLAG, paused);
+  window.dispatchEvent(new CustomEvent(GM_PAUSE_EVENT, { detail: { paused } }));
 }
 
 function markNow(): number {
@@ -261,6 +269,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
         case 'lifecycle.pause':
           if (lifecyclePaused) return;
           lifecyclePaused = true;
+          announcePause(true);
           if (networkPaused || cancelPausePreparation) return;
           saveMachineState.current?.pause();
           active.discardPendingInput();
@@ -269,6 +278,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           events.push(++eventCursor, 'pause');
           return;
         case 'lifecycle.resume':
+          if (lifecyclePaused) announcePause(false);
           lifecyclePaused = false;
           if (networkPaused) return;
           active.discardPendingInput();
