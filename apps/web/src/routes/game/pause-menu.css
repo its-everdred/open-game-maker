@@ -91,3 +91,8 @@ body:has(.platform-pause-dialog) .studio-menu-control .studio-menu-tray {
   width: 100%;
   max-height: none;
 }
+
+/* A game extra with nothing to show (room members outside a room) leaves no gap in the row. */
+.platform-pause-dialog .pause-more-host .studio-menu-slot:empty {
+  display: none;
+}
