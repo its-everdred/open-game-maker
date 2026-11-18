@@ -418,7 +418,7 @@ describe('PlatformHud', () => {
 
   it('renders all contract slots and writes game saves into the selected host slot', async () => {
     const test = frameHarness();
-    const slots = [{ slotId: 'auto', headRevision: 4 }] as SaveSlot[];
+    const slots = [{ slotId: 'auto', headRevision: 4, savedAt: '2026-11-01T16:00:00.000Z' }] as SaveSlot[];
     const write = vi.fn().mockResolvedValue(undefined);
     render(
       <PlatformHud
@@ -434,7 +434,8 @@ describe('PlatformHud', () => {
     );
 
     await openSettingsSection('Saves');
-    expect(await screen.findByRole('button', { name: 'Auto save' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: /Auto save/ })).toBeVisible();
+    expect(document.querySelector('time')).toHaveAttribute('datetime', '2026-11-01T16:00:00.000Z');
     expect(screen.getByRole('button', { name: 'Save slot 1' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 2' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 3' })).toBeVisible();

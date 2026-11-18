@@ -80,7 +80,9 @@ describe('web save client against the API', () => {
     const listed = await getOptionalSaves(ids.game);
     expect(listed).toEqual({
       available: true,
-      value: { slots: [expect.objectContaining({ slotId: '2', headRevision: 1, status: 'ok' })] },
+      value: {
+        slots: [expect.objectContaining({ slotId: '2', headRevision: 1, status: 'ok', savedAt: expect.any(String) })],
+      },
     });
 
     await expect(

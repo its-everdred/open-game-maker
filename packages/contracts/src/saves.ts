@@ -9,6 +9,7 @@ export const SaveSlotSchema = z.looseObject({
   kind: z.enum(['auto', 'manual']),
   label: z.string().optional(),
   headRevision: RevisionSchema,
+  savedAt: IsoTimeSchema.optional(),
   status: z.enum(['ok', 'needs_migration', 'unsupported_old', 'incompatible_after_rollback']),
 });
 export type SaveSlot = z.infer<typeof SaveSlotSchema>;

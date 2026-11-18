@@ -52,6 +52,7 @@ export type StoredSaveSlot = {
   label?: string;
   headRevision: number;
   headSchema: number;
+  savedAt: string;
 };
 
 export class StaleRevision extends Error {
@@ -213,10 +214,11 @@ export function listSaveSlots(sqlite: Sqlite, userId: string, gameId: string): S
         label: string | null;
         head_revision: number;
         head_schema: number;
+        saved_at: string;
       }
     >(
       `SELECT s.user_id, s.game_id, s.slot_id, s.kind, s.label, s.head_revision,
-              r.save_schema_version AS head_schema
+              r.save_schema_version AS head_schema, r.created_at AS saved_at
        FROM save_slots s
        JOIN save_revisions r ON r.user_id = s.user_id AND r.game_id = s.game_id
          AND r.slot_id = s.slot_id AND r.revision = s.head_revision
@@ -232,6 +234,7 @@ export function listSaveSlots(sqlite: Sqlite, userId: string, gameId: string): S
       label: row.label ?? undefined,
       headRevision: row.head_revision,
       headSchema: row.head_schema,
+      savedAt: row.saved_at,
     }));
 }
 

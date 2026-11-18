@@ -119,7 +119,7 @@ describe('save store', () => {
     putSaveRevision(deps.sqlite, putInput(1, { clientSeq: 2, saveSchemaVersion: 2 }));
 
     expect(listSaveSlots(deps.sqlite, ids.user, ids.game)).toMatchObject([
-      { slotId: 'auto', headRevision: 2, headSchema: 2 },
+      { slotId: 'auto', headRevision: 2, headSchema: 2, savedAt: '2026-11-01T16:00:01.000Z' },
     ]);
     expect(countSavesAboveSchema(deps.sqlite, ids.game, 3)).toBe(1);
   });

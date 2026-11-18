@@ -388,6 +388,9 @@ export function PlatformHud({
                           onClick={() => setSelectedSlot(id)}
                         >
                           {slot?.label ?? saveSlotLabel(id)}
+                          {slot?.savedAt ? (
+                            <time dateTime={slot.savedAt}> {new Date(slot.savedAt).toLocaleString()}</time>
+                          ) : null}
                         </button>
                       ))}
                       <button
