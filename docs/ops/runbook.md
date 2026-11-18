@@ -365,6 +365,10 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    (`naturalWidth` 0), a clip not playable within 10 s (`readyState` under 2), a sound with no length, fewer options
    than the Command carries or one inaccessible or without its media, and a round with no draggable card or no
    "Looks good" and "Needs changes" controls; the failure names each element, and the still is saved first.
+   First, at each size, it seeds a running and a closed ticket on the QA game (each with a summary, a picture, a clip,
+   a sound and a quoted verdict), opens the hammer, taps the running ticket and then the closed one under Completed,
+   and fails the size when a detail lacks its summary, its three media or the quote, scrolls sideways, or has media
+   that did not load; one still per ticket.
    It deletes its fixtures, saves stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
    `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box and
    `--break-media` answers the review picture with a 404, each to prove a broken deck fails the run.
@@ -374,7 +378,8 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    (`services/api/src/{review-rounds,commands,previews,qa,worker-progress,blobs,blob-proxy}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
    `~/.local/state/ogm/qa/review-e2e/<sha>.log`.
 
-The host routes behind it, `/internal/qa/session` and `/internal/qa/review-fixtures[/<run>]`, take only the internal
+The host routes behind it, `/internal/qa/session`, `/internal/qa/review-fixtures[/<run>]` and
+`/internal/qa/ticket-fixtures[/<run>]`, take only the internal
 token in `x-ogm-internal`.
 
 ## Prove the instance monorepo flow

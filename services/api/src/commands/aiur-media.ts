@@ -42,7 +42,7 @@ function dimension(value: number | null | undefined): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
-async function* capped(body: ReadableStream<Uint8Array>, limit: number): AsyncGenerator<Uint8Array> {
+export async function* capped(body: ReadableStream<Uint8Array>, limit: number): AsyncGenerator<Uint8Array> {
   let total = 0;
   for await (const chunk of body) {
     total += chunk.byteLength;

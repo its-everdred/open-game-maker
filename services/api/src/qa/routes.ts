@@ -9,6 +9,7 @@ import { parseBody } from '../app/validate.js';
 import { parseEmailList } from '../auth/access.js';
 import { authContextFor } from '../auth/routes.js';
 import { ensureQaAccount, mintQaSession } from './account.js';
+import { deleteTicketFixtures, seedTicketFixtures } from './tickets.js';
 import { deleteReviewFixtures, reviewFixtureReport, seedReviewFixtures } from './fixtures.js';
 
 // The host's QA routes (#859): the QA creator account and its session (`ops/bin/ogm-qa-session`), and the fixtures a
@@ -71,5 +72,26 @@ export default new Hono<ApiBindings>()
   .delete('/review-fixtures/:run', (c) => {
     requireOperator(c);
     deleteReviewFixtures(c.get('deps'), run(c));
+    return c.json({ status: 'deleted' });
+  })
+  .post('/ticket-fixtures', bodyLimit({ maxSize: 12_000_000 }), async (c) => {
+    requireOperator(c);
+    const body = await parseBody(c, FixturesBody);
+    const bytes = (value: string) => new Uint8Array(Buffer.from(value, 'base64'));
+    const seeded = await seedTicketFixtures(c.get('deps'), body.run, {
+      still: bytes(body.media.still),
+      clip: bytes(body.media.clip),
+      audio: bytes(body.media.audio),
+    });
+    return c.json(seeded, 201);
+  })
+  .delete('/ticket-fixtures', (c) => {
+    requireOperator(c);
+    deleteTicketFixtures(c.get('deps'));
+    return c.json({ status: 'deleted' });
+  })
+  .delete('/ticket-fixtures/:run', (c) => {
+    requireOperator(c);
+    deleteTicketFixtures(c.get('deps'), run(c));
     return c.json({ status: 'deleted' });
   });

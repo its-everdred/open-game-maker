@@ -28,6 +28,7 @@ import {
   type TicketUsage,
   type UsageAccounts,
 } from './schemas.js';
+import { TicketDetailSchema, type TicketDetail } from './ticket-detail.js';
 
 export type AiurDaemon = {
   baseUrl: string;
@@ -106,6 +107,10 @@ export interface AiurClient {
   decide(id: string, answer: DecisionAnswer): Promise<Decision>;
   answerAsCreator(id: string, answer: CreatorAnswer): Promise<void>;
   decisionMedia(id: string, attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile>;
+  ticketDetail(id: string, signal?: AbortSignal): Promise<TicketDetail>;
+  // One media file of a ticket's detail, by the signed URL the detail listed. Only that ticket's media route on this
+  // daemon is fetched; any other URL is refused.
+  ticketDetailMedia(id: string, url: string, signal?: AbortSignal): Promise<DecisionMediaFile>;
   healthz(): Promise<boolean>;
 }
 
@@ -405,6 +410,19 @@ export function createAiurClient(
         `/api/v1/decisions/${encodeURIComponent(id)}/media/${encodeURIComponent(attachmentId)}`,
         { supervisor: true, write: true, raw: true, signal },
       );
+      if (response.body === null) throw new AiurUnavailableError(baseUrl, new Error('empty media response'));
+      return { mime: response.headers.get('content-type') ?? 'application/octet-stream', body: response.body };
+    },
+    async ticketDetail(id, signal) {
+      const { body } = await fetchResponse('GET', `/api/v1/tickets/${encodeURIComponent(id)}/detail`, { signal });
+      return parseContract(TicketDetailSchema, body);
+    },
+    async ticketDetailMedia(id, url, signal) {
+      const route = `/api/v1/tickets/${encodeURIComponent(id)}/media/`;
+      const path = url.startsWith(baseUrl) ? url.slice(baseUrl.length) : url;
+      if (!path.startsWith(route) || !/^[\w-]+(?:\?[^#]*)?$/u.test(path.slice(route.length)))
+        throw new AiurConfigError('ticket media URL is not this ticket on this daemon');
+      const { response } = await fetchResponse('GET', path, { raw: true, signal });
       if (response.body === null) throw new AiurUnavailableError(baseUrl, new Error('empty media response'));
       return { mime: response.headers.get('content-type') ?? 'application/octet-stream', body: response.body };
     },
