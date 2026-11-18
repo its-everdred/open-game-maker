@@ -41,6 +41,7 @@ jobs:
         run: |
           browser_paths=(
             apps/web/
+            packages/gm-cli/src/qa-review-checks.ts
             packages/sdk/
             packages/contracts/
             packages/design-log/

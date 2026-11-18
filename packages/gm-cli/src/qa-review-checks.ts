@@ -32,6 +32,18 @@ function mediaStates(root: Element): MediaState[] {
   });
 }
 
+/**
+ * Kevin's way into the review deck (#843): one tap on the hammer with items waiting. The app's PR-CI spec
+ * (apps/web/e2e/studio-menu.spec.ts) opens the deck through this same step, so a change to the path fails CI before it
+ * reaches the prod E2E (#891).
+ */
+export async function openReviewDeck(page: Page, timeout = 20_000): Promise<Locator> {
+  await page.locator('.worker-tracker-button').click({ timeout });
+  const dialog = page.getByRole('dialog', { name: 'Needs Review' });
+  await dialog.waitFor({ timeout });
+  return dialog;
+}
+
 /** Waits up to `timeoutMs` for the media under `root` to load; returns once it has or the time is up. */
 export async function settleMedia(root: Locator, timeoutMs = MEDIA_TIMEOUT_MS): Promise<void> {
   const until = Date.now() + timeoutMs;
