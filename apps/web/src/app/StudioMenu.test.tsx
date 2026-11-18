@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameCommand } from '@ogm/contracts';
 import type { EnergyView } from '@ogm/contracts/browser';
+import type { WorkerReview } from '../features/worker-builds/useWorkerReviews';
 
 import { useDeckDraft, useReviewDraft } from '../features/commands-inbox/drafts';
 import { GameMenuProvider, useGameMenuControls } from './GameMenu';
@@ -89,6 +90,8 @@ const state = vi.hoisted(() => ({
     games: [] as Array<{ id: string; title: string; ownerId?: string; live?: boolean }>,
   },
   jobsLoading: false,
+  workerReviews: [] as WorkerReview[],
+  workerReviewsLoading: false,
   session: { data: null as { user: { id: string } } | null },
   decisions: [] as TestDecision[],
   reviewLoading: false,
@@ -130,7 +133,7 @@ vi.mock('../features/worker-builds/useWorkers', () => ({
   },
 }));
 vi.mock('../features/worker-builds/useWorkerReviews', () => ({
-  useWorkerReviews: () => ({ reviews: [], error: false, loading: false }),
+  useWorkerReviews: () => ({ reviews: state.workerReviews, error: false, loading: state.workerReviewsLoading }),
 }));
 vi.mock('../features/worker-builds/usePastTickets', () => ({
   usePastTickets: () => ({ tickets: [], error: false, loading: false }),
@@ -244,6 +247,8 @@ afterEach(() => {
   state.admin = { data: undefined };
   state.jobs = { jobs: [], active: [], games: [] };
   state.jobsLoading = false;
+  state.workerReviews = [];
+  state.workerReviewsLoading = false;
   state.session = { data: null };
   state.decisions = [];
   state.reviewLoading = false;
@@ -826,11 +831,23 @@ describe('StudioMenu', () => {
   it('opens reviews after the owned games request finishes following a hammer tap', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.jobsLoading = true;
-    state.workers = [{ ticket: 'game:42', title: 'Build', percent: 50, etaSeconds: null }];
+    setUpdateOwner('user-1');
+    pushUpdate('Build update');
     const view = renderMenu('/games');
-    fireEvent.click(screen.getByRole('button', { name: '1 build running' }));
+    fireEvent.click(screen.getByRole('button', { name: /Completed builds/ }));
     state.jobsLoading = false;
-    state.decisions = [decision('d1')];
+    state.jobs.games = [{ id: 'game', title: 'Game', ownerId: 'user-1' }];
+    state.workerReviewsLoading = true;
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('dialog', { name: 'Needs Review' })).toBeNull();
+    state.workerReviewsLoading = false;
+    state.workerReviews = [
+      { kind: 'round', gameId: 'game', round: { id: 'r', ticket: '3', question: null, media: [] } },
+    ];
     view.rerender(
       <MemoryRouter initialEntries={['/games']}>
         <TestStudioMenu />
