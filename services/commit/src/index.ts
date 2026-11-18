@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   };
   const app = createCommitApp({
     serviceToken: config.serviceToken,
-    repos: new RepoResolver(config.apiInternalUrl, config.serviceToken),
+    repos: new RepoResolver(config.apiInternalUrl, config.internalToken),
     audit: new JsonlAuditWriter(config.dataDirectory),
     installations: github,
     operations: {

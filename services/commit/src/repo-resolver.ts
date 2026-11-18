@@ -1,5 +1,6 @@
 import type { GameRepository } from './types.js';
 import { fetchWithTimeout } from './fetch-timeout.js';
+import { apiHeaders } from './api-headers.js';
 
 type Fetch = typeof fetch;
 
@@ -18,7 +19,7 @@ export class RepoResolver {
   async resolve(gameId: string): Promise<GameRepository> {
     const response = await this.fetchImpl(
       `${this.internalUrl.replace(/\/$/u, '')}/internal/games/${encodeURIComponent(gameId)}/repo`,
-      { headers: { authorization: `Bearer ${this.serviceToken}` } },
+      { headers: apiHeaders(this.serviceToken) },
     );
     if (!response.ok) throw new Error(`repository lookup failed (${response.status})`);
 
