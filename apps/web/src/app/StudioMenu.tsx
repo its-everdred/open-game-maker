@@ -614,7 +614,7 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
-        hidden={hasStudioHeader}
+        hidden={hasStudioHeader || (controls?.hideButton === true && !open && !blocked)}
         style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}

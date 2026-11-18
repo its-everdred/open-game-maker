@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -71,6 +71,12 @@ function ThemedControls() {
     () => ({ actions: [], extras: [], button: { colour: '#e02020', icon: 'pause' as const } }),
     [],
   );
+  useGameMenuControls(controls);
+  return null;
+}
+
+function GameMenuScreen({ hideButton }: { hideButton: boolean }) {
+  const controls = useMemo(() => ({ actions: [], extras: [], hideButton }), [hideButton]);
   useGameMenuControls(controls);
   return null;
 }
@@ -334,6 +340,59 @@ describe('StudioMenu', () => {
     );
     expect(button.style.getPropertyValue('--play-menu-colour')).toBe('');
     expect(button.querySelector('path')?.getAttribute('d')).not.toBe('M96 64v128M160 64v128');
+  });
+  it('hides the Pause control on a game menu screen and brings it back in play and after the game leaves', () => {
+    const screenWith = (game: ReactElement | null) => (
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          {game}
+        </GameMenuProvider>
+      </MemoryRouter>
+    );
+    const view = render(screenWith(<GameMenuScreen hideButton />));
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    view.rerender(screenWith(<GameMenuScreen hideButton={false} />));
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
+    view.rerender(screenWith(<GameMenuScreen hideButton />));
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    view.rerender(screenWith(null));
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
+  });
+  it('shows the Pause control over a game menu when a decision blocks a build', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    const screenWith = () => (
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          <GameMenuScreen hideButton />
+        </GameMenuProvider>
+      </MemoryRouter>
+    );
+    state.decisions = [decision('d1')];
+    const view = render(screenWith());
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    view.unmount();
+    state.decisions = [decision('d1', { blocking: true })];
+    render(screenWith());
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
+  });
+  it('keeps the open menu closable when the game returns to its own menu', () => {
+    const screenWith = (hideButton: boolean) => (
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          <GameMenuScreen hideButton={hideButton} />
+        </GameMenuProvider>
+      </MemoryRouter>
+    );
+    const view = render(screenWith(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    view.rerender(screenWith(true));
+    const pause = screen.getByRole('button', { name: 'Menu' });
+    expect(pause).toBeVisible();
+    fireEvent.click(pause);
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
   });
   it('opens the always-available controls on the title without signed-in links', () => {
     renderMenu('/');
