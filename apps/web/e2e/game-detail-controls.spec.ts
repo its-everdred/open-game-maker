@@ -38,7 +38,10 @@ async function openWhileLoading(page: Page) {
   );
   await page.route('**/fixture-trailer.mp4', async (route) => {
     await held;
-    await route.fulfill({ contentType: 'video/mp4', body: readFileSync(new URL('./fixtures/tiny.mp4', import.meta.url)) });
+    await route.fulfill({
+      contentType: 'video/mp4',
+      body: readFileSync(new URL('./fixtures/tiny.mp4', import.meta.url)),
+    });
   });
   return release;
 }
