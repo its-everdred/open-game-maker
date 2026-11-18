@@ -44,7 +44,7 @@ const goblin: GameSummary = {
       title: 'Goblin Cellar',
       tags: undefined,
       tagline: undefined,
-      stats: undefined,
+      stats: { plays: 31_400, version: '1.12.5' },
     },
   ])[0]!,
   logoUrl: '/goblin-logo.png',
@@ -100,6 +100,13 @@ describe('game detail', () => {
     expect(screen.getByText('v9.0')).toBeVisible();
   });
 
+  it('does not present showcase placeholder stats as a real game’s measured data', () => {
+    detail({ ...goblin, stats: undefined });
+    expect(screen.queryByText('Plays')).toBeNull();
+    expect(screen.queryByText('Rating')).toBeNull();
+    expect(screen.queryByText('Time played')).toBeNull();
+  });
+
   it('shows the name as text under an unobstructed trailer, never the logo', () => {
     const { container } = detail(blobs);
     expect(screen.getByRole('heading', { name: 'Blobs' })).toBeInTheDocument();
@@ -142,7 +149,7 @@ describe('game detail', () => {
 
   it('shows the curated tags and stats and opens the selected action', () => {
     const play = vi.fn();
-    detail(goblin, { onPlay: play });
+    detail(mergeShowcase([])[0]!, { onPlay: play });
     expect(screen.getByText('Dungeon')).toBeVisible();
     expect(screen.getByText('5h 25m')).toBeVisible();
     expect(screen.getByText('31.4k')).toBeVisible();

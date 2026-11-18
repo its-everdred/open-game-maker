@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
-import { eq } from 'drizzle-orm';
+import { and, count, eq, lt, sql } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
@@ -146,10 +147,44 @@ const routes = new Hono<ApiBindings>()
       }),
     );
     const lastPlayedAt = new Date().toISOString();
-    db.insert(schema.gamePlays)
-      .values({ gameId: game.id, userId: principal.userId, lastPlayedAt })
-      .onConflictDoUpdate({ target: [schema.gamePlays.gameId, schema.gamePlays.userId], set: { lastPlayedAt } })
-      .run();
+    const suppliedId = c.req.header('x-ogm-play-id');
+    if (suppliedId && !z.uuid().safeParse(suppliedId).success) throw new HttpError(400, 'invalid_play_id');
+    db.transaction((tx) => {
+      tx.insert(schema.gamePlays)
+        .values({ gameId: game.id, userId: principal.userId, lastPlayedAt })
+        .onConflictDoUpdate({ target: [schema.gamePlays.gameId, schema.gamePlays.userId], set: { lastPlayedAt } })
+        .run();
+      const sessions = schema.gamePlaySessions;
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      tx.delete(sessions).where(lt(sessions.createdAt, cutoff)).run();
+      const recent =
+        tx
+          .select({ value: count() })
+          .from(sessions)
+          .where(and(eq(sessions.gameId, game.id), eq(sessions.userId, principal.userId)))
+          .get()?.value ?? 0;
+      if (recent < 100) {
+        const inserted = tx
+          .insert(sessions)
+          .values({
+            gameId: game.id,
+            id: suppliedId ?? randomUUID(),
+            userId: principal.userId,
+            createdAt: lastPlayedAt,
+          })
+          .onConflictDoNothing()
+          .run();
+        if (inserted.changes) {
+          tx.insert(schema.gamePlayTotals)
+            .values({ gameId: game.id, plays: 1 })
+            .onConflictDoUpdate({
+              target: schema.gamePlayTotals.gameId,
+              set: { plays: sql`${schema.gamePlayTotals.plays} + 1` },
+            })
+            .run();
+        }
+      }
+    });
     return c.json({ lastPlayedAt });
   })
   .patch('/games/:id', async (c) => {

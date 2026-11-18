@@ -4,6 +4,7 @@ import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
+import { sweepPlaySessions } from '../src/analytics/retention.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 
@@ -194,6 +195,15 @@ describe('games routes', () => {
         loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
       }),
     );
+    writeFileSync(
+      join(directory, 'manifest.json'),
+      JSON.stringify({ description: 'Published description', tags: ['Cozy'] }),
+    );
+    expect(await list()).toMatchObject({
+      tagline: 'Published description',
+      tags: ['Cozy'],
+      logoUrl: expect.any(String),
+    });
     expect(
       (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
     ).toBe(200);
@@ -349,17 +359,51 @@ describe('games routes', () => {
       })
       .run();
     deps.db.update(schema.games).set({ publishedReleaseId: 'rel-stats' }).where(eq(schema.games.id, id)).run();
-    // Per-release rows repeat the aggregate; counting them too would double the plays.
+    const playId = '258db497-0012-41aa-8c12-c69c3a29b503';
+    const play = (id: string) =>
+      app.request(`/api/v1/games/${id}/play`, {
+        method: 'POST',
+        headers: { ...asUser(creator.userId), 'x-ogm-play-id': playId },
+      });
+    expect((await play(id)).status).toBe(200);
+    expect((await play(id)).status).toBe(200);
+    expect(await stats()).toEqual({ plays: 1, version: '2.1.0' });
+    const current = new Date().toISOString();
     deps.db
-      .insert(schema.creatorAnalyticsDaily)
-      .values([
-        { gameId: id, day: '2026-11-01', releaseId: '', metric: 'plays', scope: '', value: 3 },
-        { gameId: id, day: '2026-11-02', releaseId: '', metric: 'plays', scope: '', value: 4 },
-        { gameId: id, day: '2026-11-02', releaseId: 'rel-stats', metric: 'plays', scope: '', value: 4 },
-        { gameId: id, day: '2026-11-02', releaseId: '', metric: 'players', scope: '', value: 2 },
-      ])
+      .insert(schema.gamePlaySessions)
+      .values(
+        Array.from({ length: 99 }, (_, i) => ({
+          gameId: id,
+          id: `other-${i}`,
+          userId: creator.userId,
+          createdAt: current,
+        })),
+      )
       .run();
-    expect(await stats()).toEqual({ plays: 7, version: '2.1.0' });
+    expect(
+      (
+        await app.request(`/api/v1/games/${id}/play`, {
+          method: 'POST',
+          headers: { ...asUser(creator.userId), 'x-ogm-play-id': '258db497-0012-41aa-8c12-c69c3a29b504' },
+        })
+      ).status,
+    ).toBe(200);
+    expect(await stats()).toEqual({ plays: 1, version: '2.1.0' });
+    deps.db.update(schema.gamePlaySessions).set({ createdAt: '2000-01-01T00:00:00.000Z' }).run();
+    expect(sweepPlaySessions(deps.sqlite)).toBe(100);
+    expect(await stats()).toEqual({ plays: 1, version: '2.1.0' });
+    expect(
+      (
+        await app.request(`/api/v1/games/${id}/play`, {
+          method: 'POST',
+          headers: { ...asUser(creator.userId), 'x-ogm-play-id': '258db497-0012-41aa-8c12-c69c3a29b505' },
+        })
+      ).status,
+    ).toBe(200);
+    expect(await stats()).toEqual({ plays: 2, version: '2.1.0' });
+
+    const detail = await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) });
+    expect(((await detail.json()) as { stats: unknown }).stats).toEqual({ plays: 2, version: '2.1.0' });
   });
 
   it('refuses game creation by a player before provisioning', async () => {

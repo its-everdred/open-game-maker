@@ -14,6 +14,9 @@ it('retries a failed play record', async () => {
   await vi.advanceTimersByTimeAsync(500);
   await recording;
   expect(fetch).toHaveBeenCalledTimes(2);
+  expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get('x-ogm-play-id')).toBe(
+    new Headers(fetch.mock.calls[1]?.[1]?.headers).get('x-ogm-play-id'),
+  );
 });
 
 it('does not retry an older play after leaving the game', async () => {

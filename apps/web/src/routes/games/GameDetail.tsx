@@ -37,6 +37,7 @@ function formatCount(value: number): string {
 export function detailOf(game: GameSummary): { description?: string; tags: DetailTag[]; stats: DetailStats } {
   const curated = game.showcase;
   const publishedTags = gameTags(game);
+  const showcaseOnly = game.id.startsWith('showcase:');
   return {
     description: game.tagline ?? curated?.tagline,
     tags:
@@ -48,10 +49,15 @@ export function detailOf(game: GameSummary): { description?: string; tags: Detai
           })
         : curated.displayTags.map(({ key, label, color }) => ({ key, label, color })),
     stats: {
-      played: curated?.played || undefined,
-      rating: curated?.rating ?? undefined,
-      version: game.stats?.version ?? (curated?.version || undefined),
-      plays: game.stats?.plays === undefined ? curated?.plays || undefined : formatCount(game.stats.plays),
+      played: showcaseOnly ? curated?.played || undefined : undefined,
+      rating: showcaseOnly ? (curated?.rating ?? undefined) : undefined,
+      version: game.stats?.version ?? (showcaseOnly ? curated?.version || undefined : undefined),
+      plays:
+        game.stats?.plays === undefined
+          ? showcaseOnly
+            ? curated?.plays || undefined
+            : undefined
+          : formatCount(game.stats.plays),
     },
   };
 }

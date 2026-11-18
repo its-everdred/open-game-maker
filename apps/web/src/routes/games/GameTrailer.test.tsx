@@ -101,6 +101,23 @@ it('falls back to muted when the browser refuses sound without a gesture', async
   expect(view.container.querySelector('video')!.muted).toBe(true);
 });
 
+it('does not restart a stopped trailer after a delayed rejection', async () => {
+  sound = 'on';
+  let rejectPlay!: (reason: DOMException) => void;
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementationOnce(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectPlay = reject;
+      }),
+  );
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  startTrailer({ trailerUrl: '/slow.mp4' });
+  stopTrailers();
+  rejectPlay(new DOMException('no gesture', 'NotAllowedError'));
+  await act(async () => {});
+  expect(play).toHaveBeenCalledOnce();
+});
+
 it('selecting another game stops the previous trailer', () => {
   const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();

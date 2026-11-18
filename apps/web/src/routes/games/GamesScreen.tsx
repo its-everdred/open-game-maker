@@ -15,7 +15,7 @@ import {
   type TileRects,
 } from './flip';
 import { GameDetail } from './GameDetail';
-import { startTrailer, stopTrailers } from './trailerVideo';
+import { startTrailer, stopOtherTrailers, stopTrailers } from './trailerVideo';
 import { ShowcaseMenuControls } from './ShowcaseMenuControls';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
@@ -69,6 +69,15 @@ export function GamesScreen() {
   const initialViewChosen = useRef(false);
   const fitsThumbnailRow = gridCapacity !== null && sortedGames.length <= gridCapacity;
 
+  useEffect(() => () => stopTrailers(), []);
+  useEffect(() => stopOtherTrailers(selected?.trailerUrl), [selected?.trailerUrl]);
+
+  const branch = branches.find((item) => item.name === 'main') ?? branches[0];
+  const canOpen = Boolean(
+    (selected?.id.startsWith('showcase:') && selected.showcase?.id !== 'goblin-cellar') ||
+    (selected && target && branch?.latestBuildId && activeJobs.get(selected.id)?.kind !== 'new_game'),
+  );
+
   const captureTransition = () => {
     pendingRects.current = measureTiles(gridRef.current);
     pendingCovers.current = measureCovers(gridRef.current);
@@ -98,8 +107,7 @@ export function GamesScreen() {
 
   const open = (index: number, mode: 'play' | 'edit' = 'play') => {
     const game = sortedGames[index];
-    const branch = branches.find((item) => item.name === 'main') ?? branches[0];
-    if (!game || game.id !== selected?.id) return;
+    if (!game || game.id !== selected?.id || !canOpen) return;
     if (game.id.startsWith('showcase:') && game.showcase && game.showcase.id !== 'goblin-cellar') {
       navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
       return;
@@ -240,12 +248,7 @@ export function GamesScreen() {
                           game={selected}
                           sharedCover
                           job={activeJobs.get(selected.id)}
-                          canOpen={Boolean(
-                            (selected.id.startsWith('showcase:') && selected.showcase?.id !== 'goblin-cellar') ||
-                            (target &&
-                              (branches.find((branch) => branch.name === 'main') ?? branches[0])?.latestBuildId &&
-                              activeJobs.get(selected.id)?.kind !== 'new_game'),
-                          )}
+                          canOpen={canOpen}
                           onPlay={() => open(selectedIndex ?? -1, 'play')}
                           onEdit={() => open(selectedIndex ?? -1, 'edit')}
                           onClose={close}

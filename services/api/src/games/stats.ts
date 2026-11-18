@@ -1,5 +1,5 @@
 import { schema, type Db } from '@ogm/db';
-import { and, eq, inArray, sum } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 
 export type GameStats = { plays?: number; version?: string };
 
@@ -7,22 +7,16 @@ export type GameStats = { plays?: number; version?: string };
 export function gameStats(db: Db, games: Array<{ id: string; publishedReleaseId: string | null }>) {
   const stats = new Map<string, GameStats>(games.map((game) => [game.id, {}]));
   if (!games.length) return stats;
-  const daily = schema.creatorAnalyticsDaily;
+  const totals = schema.gamePlayTotals;
   const plays = db
-    .select({ gameId: daily.gameId, plays: sum(daily.value).mapWith(Number) })
-    .from(daily)
+    .select({ gameId: totals.gameId, plays: totals.plays })
+    .from(totals)
     .where(
-      and(
-        inArray(
-          daily.gameId,
-          games.map((game) => game.id),
-        ),
-        eq(daily.metric, 'plays'),
-        eq(daily.releaseId, ''),
-        eq(daily.scope, ''),
+      inArray(
+        totals.gameId,
+        games.map((game) => game.id),
       ),
     )
-    .groupBy(daily.gameId)
     .all();
   for (const row of plays) if (row.plays > 0) stats.get(row.gameId)!.plays = row.plays;
   const releaseIds = games.flatMap((game) => (game.publishedReleaseId ? [game.publishedReleaseId] : []));

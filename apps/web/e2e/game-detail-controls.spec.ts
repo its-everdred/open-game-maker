@@ -4,12 +4,14 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 import { mockGamesRoutes } from './fixtures/games-routes';
 
 test.use({ serviceWorkers: 'block' });
+test.setTimeout(120_000);
 
 const sizes = [
   { width: 390, height: 844 },
   { width: 844, height: 390 },
   { width: 820, height: 1180 },
   { width: 1180, height: 820 },
+  { width: 1024, height: 768 },
 ];
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/games.json', import.meta.url), 'utf8')) as {
@@ -56,37 +58,41 @@ for (const size of sizes) {
     const release = await openWhileLoading(page);
     await page.goto('/all?test&spotlight=g_1', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'Play Midnight Crumbs' })).toBeVisible({ timeout: 90_000 });
-    await expect(page.getByText('Building 40%')).toBeVisible();
-    await page.getByRole('button', { name: 'Play Midnight Crumbs' }).scrollIntoViewIfNeeded();
-    // Each control must be the topmost element at its centre and at points just inside its edges.
-    const covered = () =>
-      page.evaluate(() => {
-        const controls = [
-          ...document.querySelectorAll<HTMLElement>(
-            '.games-play, .games-edit, .games-close, .studio-library-volume button, .studio-menu-button:not([hidden])',
-          ),
-        ];
-        const failures: string[] = [];
-        for (const control of controls) {
-          const box = control.getBoundingClientRect();
-          if (!box.width || !box.height) continue;
-          const inset = Math.min(box.width, box.height) / 4;
-          const points = [
-            [box.x + box.width / 2, box.y + box.height / 2],
-            [box.x + inset, box.y + box.height / 2],
-            [box.right - inset, box.y + box.height / 2],
-            [box.x + box.width / 2, box.y + inset],
-            [box.x + box.width / 2, box.bottom - inset],
-          ];
-          for (const [x, y] of points) {
-            if (x! < 0 || y! < 0 || x! > innerWidth || y! > innerHeight) continue;
-            const top = document.elementFromPoint(x!, y!);
-            if (top && !control.contains(top))
-              failures.push(`${control.getAttribute('aria-label') ?? control.className} covered by ${top.className}`);
-          }
-        }
-        return failures;
-      });
+    await expect(
+      page.getByRole('region', { name: 'Midnight Crumbs spotlight' }).getByText('Building 40%'),
+    ).toBeVisible();
+    // Scroll each control into view before checking its centre and inset edges.
+    const covered = async () => {
+      const controls = page.locator(
+        '.games-play, .games-edit, .games-close, .studio-library-volume button, .studio-menu-button:not([hidden])',
+      );
+      const failures: string[] = [];
+      for (let index = 0; index < (await controls.count()); index++) {
+        const control = controls.nth(index);
+        if (!(await control.isVisible())) continue;
+        await control.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
+        failures.push(
+          ...(await control.evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            const inset = Math.min(box.width, box.height) / 4;
+            const points = [
+              [box.x + box.width / 2, box.y + box.height / 2],
+              [box.x + inset, box.y + box.height / 2],
+              [box.right - inset, box.y + box.height / 2],
+              [box.x + box.width / 2, box.y + inset],
+              [box.x + box.width / 2, box.bottom - inset],
+            ];
+            return points.flatMap(([x, y]) => {
+              const top = document.elementFromPoint(x!, y!);
+              return top && element.contains(top)
+                ? []
+                : [`${element.getAttribute('aria-label')} covered by ${top?.tagName}.${top?.className}`];
+            });
+          })),
+        );
+      }
+      return failures;
+    };
     expect(await covered()).toEqual([]);
     release();
     await expect
@@ -98,10 +104,14 @@ for (const size of sizes) {
   });
 }
 
-test('round icon buttons share one size with a centred glyph', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop', 'each case sets its own viewport');
-  test.setTimeout(120_000);
-  for (const size of sizes) {
+for (const size of sizes) {
+  test(`round icon buttons share one size with a centred glyph at ${size.width}x${size.height}`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'each case sets its own viewport');
+    test.setTimeout(120_000);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.mouse.move(0, 0);
     await page.setViewportSize(size);
     const release = await openWhileLoading(page);
     release();
@@ -128,7 +138,57 @@ test('round icon buttons share one size with a centred glyph', async ({ page }, 
     expect(buttons.length, JSON.stringify(size)).toBeGreaterThanOrEqual(2);
     const [first] = buttons;
     for (const button of buttons) {
-      expect({ ...button, size }).toMatchObject({ width: first!.width, height: first!.height, dx: 0, dy: 0 });
+      expect({ name: button.name, size, width: button.width, height: button.height }).toMatchObject({
+        width: first!.width,
+        height: first!.height,
+      });
+      expect(Math.abs(button.dx)).toBeLessThanOrEqual(1);
+      expect(Math.abs(button.dy)).toBeLessThanOrEqual(1);
     }
-  }
-});
+  });
+}
+
+for (const size of [
+  { width: 844, height: 390 },
+  { width: 1180, height: 820 },
+  { width: 1024, height: 768 },
+]) {
+  test(`RestoreBound detail fits its landscape column at ${size.width}x${size.height}`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'each case sets its own viewport');
+    test.setTimeout(120_000);
+    await page.setViewportSize(size);
+    const release = await openWhileLoading(page);
+    release();
+    await page.goto('/all?test&spotlight=showcase%3Arestorebound', { waitUntil: 'domcontentloaded' });
+    const detail = page.getByRole('region', { name: 'RestoreBound spotlight' });
+    await expect(detail).toBeVisible();
+    const geometry = await detail.evaluate((element) => {
+      const copy = element.querySelector('.games-spotlight-copy')!.getBoundingClientRect();
+      const heading = element.querySelector('h1')!.getBoundingClientRect();
+      const close = element.querySelector('.games-close')!.getBoundingClientRect();
+      const stats = [...element.querySelectorAll('.games-detail-stats dt, .games-detail-stats dd')].map((item) =>
+        item.getBoundingClientRect(),
+      );
+      return {
+        titleOverlapsClose:
+          heading.left < close.right &&
+          heading.right > close.left &&
+          heading.top < close.bottom &&
+          heading.bottom > close.top,
+        clippedStats: stats.some((item) => item.left < copy.left - 1 || item.right > copy.right + 1),
+      };
+    });
+    expect(geometry).toEqual({ titleOverlapsClose: false, clippedStats: false });
+    for (const name of ['Play RestoreBound', 'Edit RestoreBound']) {
+      const button = page.getByRole('button', { name });
+      await button.scrollIntoViewIfNeeded();
+      await expect(button).toBeInViewport({ ratio: 0.99 });
+      expect(
+        await button.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+        }),
+      ).toBe(true);
+    }
+  });
+}

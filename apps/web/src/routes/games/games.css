@@ -682,8 +682,8 @@
 }
 .games-detail-stats {
   display: grid;
-  grid-template-columns: repeat(4, auto);
-  justify-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  min-width: 0;
   gap: 8px 32px;
   margin: 0;
   padding: 16px 0;

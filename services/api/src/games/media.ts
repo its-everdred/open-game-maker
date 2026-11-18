@@ -14,6 +14,32 @@ const exists = async (path: string) =>
 
 const MAX_LEGACY_MANIFEST_BYTES = 1024 * 1024;
 
+async function readDisplayFile(path: string): Promise<Record<string, unknown> | undefined> {
+  try {
+    const file = await open(path, 'r');
+    try {
+      const size = (await file.stat()).size;
+      if (size > MAX_LEGACY_MANIFEST_BYTES) return undefined;
+      const buffer = Buffer.alloc(size + 1);
+      let length = 0;
+      while (length < buffer.length) {
+        const result = await file.read(buffer, length, buffer.length - length, length);
+        if (result.bytesRead === 0) break;
+        length += result.bytesRead;
+      }
+      if (length > size) return undefined;
+      const value: unknown = JSON.parse(buffer.subarray(0, length).toString('utf8'));
+      return value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : undefined;
+    } finally {
+      await file.close();
+    }
+  } catch {
+    return undefined;
+  }
+}
+
 async function manifestMedia(directory: string): Promise<{
   logo?: string;
   genres?: string[];
@@ -23,27 +49,12 @@ async function manifestMedia(directory: string): Promise<{
   loading?: { portrait: string; landscape: string };
 }> {
   try {
-    const file = await open(join(directory, '.ogm-display.json'), 'r').catch(() =>
-      open(join(directory, 'manifest.json'), 'r'),
-    );
-    let bytes: Buffer;
-    try {
-      const size = (await file.stat()).size;
-      if (size > MAX_LEGACY_MANIFEST_BYTES) return {};
-      // One extra byte detects a file that grows between stat and read.
-      const buffer = Buffer.alloc(size + 1);
-      let length = 0;
-      while (length < buffer.length) {
-        const result = await file.read(buffer, length, buffer.length - length, length);
-        if (result.bytesRead === 0) break;
-        length += result.bytesRead;
-      }
-      if (length > size) return {};
-      bytes = buffer.subarray(0, length);
-    } finally {
-      await file.close();
-    }
-    const manifest = JSON.parse(bytes.toString('utf8')) as {
+    const sidecar = await readDisplayFile(join(directory, '.ogm-display.json'));
+    const source =
+      !sidecar || sidecar.description === undefined || sidecar.tags === undefined
+        ? await readDisplayFile(join(directory, 'manifest.json'))
+        : undefined;
+    const manifest = { ...source, ...sidecar } as {
       logo?: unknown;
       genres?: unknown;
       description?: unknown;

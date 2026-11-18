@@ -32,7 +32,12 @@ export function playTrailer(video: HTMLVideoElement): Promise<void> {
   video.volume = getVolume();
   video.muted = status() === 'off';
   return video.play().catch((error: unknown) => {
-    if (video.muted || (error as Error | undefined)?.name !== 'NotAllowedError') return;
+    if (
+      ![...videos.values()].includes(video) ||
+      video.muted ||
+      (error as Error | undefined)?.name !== 'NotAllowedError'
+    )
+      return;
     video.muted = true;
     return video.play().catch(() => {});
   });
@@ -41,8 +46,13 @@ export function playTrailer(video: HTMLVideoElement): Promise<void> {
 /** Call inside the tap or key press that selects a game. */
 export function startTrailer(game: TrailerGame): void {
   const url = activeTrailerUrl(game);
-  stopTrailers([...videos.keys()].filter((other) => other !== url));
+  stopOtherTrailers(url);
   if (url) void playTrailer(trailerVideo(url));
+}
+
+/** Keep the current selection's gesture-started video and stop any earlier selection. */
+export function stopOtherTrailers(url?: string | null): void {
+  stopTrailers([...videos.keys()].filter((other) => other !== url));
 }
 
 /** Stops and forgets these trailers (every trailer by default), so nothing plays after its game is closed. */
