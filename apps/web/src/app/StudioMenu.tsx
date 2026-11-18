@@ -690,7 +690,7 @@ export function StudioMenu() {
           title={(gameId && gameTitles.get(gameId)) || 'Executor'}
           context={{
             ...(gameId ? { game_id: gameId } : {}),
-            screen: `${location.pathname}${location.search}`.slice(0, 300),
+            screen: location.pathname.slice(0, 300),
           }}
           commands={threadCommands}
           onOpenCommand={(command) => {

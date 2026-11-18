@@ -110,6 +110,31 @@ describe('executor thread', () => {
     expect(screen.getByText('Make Endless the big button')).toBeTruthy();
   });
 
+  // A send whose reply was lost may already be queued in aiur: the retry must be the same message, not a second one.
+  it('retries a failed send under the same request id', async () => {
+    const fetchMock = vi.mocked(fetch);
+    const original = fetchMock.getMockImplementation()!;
+    let failed = false;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (!failed && init?.method === 'POST') {
+        failed = true;
+        calls.push({ url: String(input), method: 'POST', body: JSON.parse(String(init.body)) });
+        return json({ error: 'core_daemon_unavailable' }, 502);
+      }
+      return original(input, init);
+    });
+    render(<ExecutorThread creatorId={OWNER} title="Blobs" context={{}} commands={[]} onOpenCommand={vi.fn()} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Ship it' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('Ship it'));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(2));
+    const [first, second] = calls.filter((call) => call.method === 'POST') as Array<{
+      body: { client_request_id: string };
+    }>;
+    expect(second!.body.client_request_id).toBe(first!.body.client_request_id);
+  });
+
   it('uploads a screenshot to the thread and sends it as an attachment', async () => {
     render(<ExecutorThread creatorId={OWNER} title="Blobs" context={{}} commands={[]} onOpenCommand={vi.fn()} />);
     const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;

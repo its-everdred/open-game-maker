@@ -125,7 +125,15 @@ function merge(current: ThreadMessage[], incoming: ThreadMessage[]): ThreadMessa
 // A sent message is listed once aiur reports it, queued or delivered, under the request id the send returned.
 function listed(message: ThreadMessage, page: Page): boolean {
   if (message.request_id == null) return false;
-  return [...page.messages, ...page.queued].some((item) => item.request_id === message.request_id);
+  return [...page.messages, ...page.queued].some(
+    (item) =>
+      item.request_id === message.request_id ||
+      /* A journal entry aiur lists without its request id still matches by what was written. */
+      (message.local === 'sent' &&
+        item.request_id == null &&
+        item.role === 'operator' &&
+        shownText(item) === message.text),
+  );
 }
 
 // Polls the thread for the signed-in owner: often while it is open, rarely otherwise (enough for the badge).

@@ -45,6 +45,7 @@ export function ExecutorThread({
   const pinned = useRef(true);
   // What each upload was, by the id the composer hands back; pasted text never uploads and goes into the message.
   const uploads = useRef(new Map<string, ThreadAttachment | { text: string; name: string }>());
+  const retry = useRef<{ key: string; id: string }>(undefined);
   const messages = threadMessages({ journal, queued, local });
 
   useEffect(() => {
@@ -75,8 +76,12 @@ export function ExecutorThread({
       if ('upload_id' in item) attachments.push(item);
       else pasted.push(`${item.name}:\n${item.text}`);
     }
-    const body = [text, ...pasted].filter(Boolean).join('\n\n') || 'See attached.';
-    await sendThreadMessage(creatorId, body, context, attachments);
+    const body = fit([text, ...pasted].filter(Boolean).join('\n\n')) || 'See attached.';
+    // A retry of the same message keeps its id, so a send whose reply was lost is not delivered twice.
+    const key = JSON.stringify([body, attachments]);
+    if (retry.current?.key !== key) retry.current = { key, id: crypto.randomUUID() };
+    await sendThreadMessage(creatorId, body, context, attachments, retry.current.id);
+    retry.current = undefined;
   };
 
   return (
@@ -112,6 +117,12 @@ export function ExecutorThread({
       </section>
     </Dialog>
   );
+}
+
+// The API takes up to MAX_THREAD_TEXT characters; a long paste is cut rather than failing the whole message.
+const MAX_THREAD_TEXT = 15_000;
+function fit(text: string): string {
+  return text.length <= MAX_THREAD_TEXT ? text : `${text.slice(0, MAX_THREAD_TEXT - 1)}…`;
 }
 
 function ThreadRow({ message }: { message: ThreadMessage }) {

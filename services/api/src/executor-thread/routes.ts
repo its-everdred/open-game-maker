@@ -24,7 +24,7 @@ const ATTACHMENT_ID = /^[A-Za-z0-9_-]{1,128}$/u;
 
 const SendBody = z
   .object({
-    text: z.string().trim().min(1).max(8000),
+    text: z.string().trim().min(1).max(16000),
     client_request_id: z.string().regex(/^[A-Za-z0-9:_-]{1,100}$/u),
     // Where the creator was when they asked; the API names the game and its build from its own records.
     context: z
