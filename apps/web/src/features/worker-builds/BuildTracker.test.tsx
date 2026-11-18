@@ -5,6 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BuildPanel, BuildTracker } from './BuildTracker';
 
 vi.mock('./ReviewInbox', () => ({ ReviewInbox: () => <div>Review deck</div> }));
+vi.mock('./TicketDetail', () => ({
+  TicketDetail: ({ title, ticket, gameId }: { title: string; ticket: string; gameId: string }) => (
+    <div>
+      Detail: {title} {gameId}/{ticket}
+    </div>
+  ),
+}));
 vi.mock('./TicketConversation', () => ({
   TicketConversation: ({ ticket }: { ticket: { title: string } }) => <div>Conversation: {ticket.title}</div>,
 }));
@@ -74,6 +81,17 @@ describe('build tracker', () => {
         .map((item) => item.textContent),
     ).toEqual(['Newer · Completed', 'Older · Cancelled']);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Newer · Completed' }));
-    expect(screen.getByText('Conversation: Newer')).toBeVisible();
+    expect(screen.getByText('Detail: Newer g/2')).toBeVisible();
+  });
+  // A running build opens the same detail as a finished one (#873); its row carries the game it belongs to.
+  it('opens a running build’s detail from its row', () => {
+    render(
+      <BuildPanel
+        id="builds"
+        workers={[{ ticket: 'g_1:12', title: 'Forest backdrop', percent: 40, etaSeconds: null }]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Forest backdrop/ }));
+    expect(screen.getByText('Detail: Forest backdrop g_1/12')).toBeVisible();
   });
 });

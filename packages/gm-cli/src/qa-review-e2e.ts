@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { mediaFailures, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
+import { ticketDetailSteps } from './qa-ticket-detail-e2e.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
@@ -111,6 +112,25 @@ async function runViewport(
   // Whether --break-media found the review picture to break; a run that broke nothing proves nothing.
   let broke = false;
   try {
+    // The hammer's ticket detail first, on its own page and fixtures, so the review deck below starts as it always has.
+    await internal(config, '/ticket-fixtures', {
+      method: 'POST',
+      body: JSON.stringify({
+        run,
+        media: { still: media('still.png'), clip: media('clip.mp4'), audio: media('sound.mp3') },
+      }),
+    });
+    await context.addCookies([{ ...config.cookie, url: config.origin }]);
+    const ticketPage = await context.newPage();
+    await step('open a running and a closed ticket', () =>
+      ticketDetailSteps(ticketPage, config.origin, async (label) => {
+        const file = join(config.out, `${name}-${stills.length + 1}-${label}.png`);
+        await ticketPage.screenshot({ path: file });
+        stills.push(file);
+      }),
+    );
+    await ticketPage.close();
+    await internal(config, `/ticket-fixtures/${run}`, { method: 'DELETE' });
     const seeded = await internal(config, '/review-fixtures', {
       method: 'POST',
       body: JSON.stringify({
@@ -128,7 +148,6 @@ async function runViewport(
         return route.fulfill({ status: 404, body: '' });
       });
     }
-    await context.addCookies([{ ...config.cookie, url: config.origin }]);
     if (config.injectRegression)
       await context.addInitScript((css) => {
         document.addEventListener('DOMContentLoaded', () => {
@@ -207,6 +226,7 @@ async function runViewport(
   } finally {
     await context.close();
     await internal(config, `/review-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);
+    await internal(config, `/ticket-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);
   }
 }
 
@@ -215,6 +235,7 @@ export async function reviewE2e(browser: Browser, config: ReviewE2eConfig): Prom
   mkdirSync(config.out, { recursive: true });
   // A run that died midway leaves its cards; they would sit ahead of this run's in the deck.
   await internal(config, '/review-fixtures', { method: 'DELETE' });
+  await internal(config, '/ticket-fixtures', { method: 'DELETE' });
   const results: ViewportResult[] = [];
   for (const viewport of REVIEW_VIEWPORTS) results.push(await runViewport(browser, config, viewport));
   return results;

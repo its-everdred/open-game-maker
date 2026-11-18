@@ -7,6 +7,7 @@ import { Dialog } from '../../components/Dialog';
 import { ReviewInbox } from './ReviewInbox';
 import { openConversation } from '../build-chat/conversation';
 import { TicketConversation } from './TicketConversation';
+import { TicketDetail } from './TicketDetail';
 import type { PastTicket } from './usePastTickets';
 import type { WorkerReview } from './useWorkerReviews';
 import type { FinishedWorker } from './useWorkerFinishes';
@@ -160,6 +161,7 @@ export function BuildPanel({
 }: PanelProps & { id: string }) {
   const [modal, setModal] = useState<'review' | 'completed'>();
   const [conversation, setConversation] = useState<PastTicket>();
+  const [detail, setDetail] = useState<DetailTarget>();
   const targets = [...missingReviewTargets(workers, reviews, commands), ...coreTargets];
   const reviewCount = reviews.length + commands.length + targets.length;
   return (
@@ -175,13 +177,36 @@ export function BuildPanel({
       <ul className="worker-tracker-list">
         {workers.map((worker) => (
           <li key={worker.ticket}>
-            <div>
-              <strong>{worker.title}</strong>
-              <span>
-                {waitingLabel(worker.state) ??
-                  (worker.percent === 100 ? 'Finishing' : worker.percent == null ? '' : `${worker.percent}%`)}
-              </span>
-            </div>
+            {(() => {
+              const row = (
+                <>
+                  <strong>{worker.title}</strong>
+                  <span>
+                    {waitingLabel(worker.state) ??
+                      (worker.percent === 100 ? 'Finishing' : worker.percent == null ? '' : `${worker.percent}%`)}
+                  </span>
+                </>
+              );
+              // A worker's ticket is `<gameId>:<ticket>`; one without its game cannot open a detail.
+              const separator = worker.ticket.lastIndexOf(':');
+              return separator < 0 ? (
+                <div>{row}</div>
+              ) : (
+                <button
+                  type="button"
+                  className="worker-tracker-row"
+                  onClick={() =>
+                    setDetail({
+                      gameId: worker.ticket.slice(0, separator),
+                      ticket: worker.ticket.slice(separator + 1),
+                      title: worker.title,
+                    })
+                  }
+                >
+                  {row}
+                </button>
+              );
+            })()}
             {!waitingLabel(worker.state) && worker.percent != null && worker.percent < 100 && (
               <span className="worker-tracker-bar">
                 <span style={{ width: `${worker.percent}%` }} />
@@ -236,44 +261,57 @@ export function BuildPanel({
           {historyLoading && <p>Loading completed tickets…</p>}
           {historyError && <p role="alert">Could not load completed tickets.</p>}
           <ul className="worker-tracker-list">
-            {past.map((ticket) => {
-              const job =
-                jobs.find((item) => item.id === ticket.jobId) ??
-                jobs.find((item) => item.gameId === ticket.gameId && String(item.aiurIssueNumber) === ticket.ticket);
-              return (
-                <li key={`${ticket.gameId}:${ticket.ticket}`}>
-                  {job ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModal(undefined);
-                        openConversation(job.id);
-                      }}
-                    >
-                      {ticket.title} · {ticket.outcome}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModal(undefined);
-                        setConversation(ticket);
-                      }}
-                    >
-                      {ticket.title} · {ticket.outcome}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
+            {past.map((ticket) => (
+              <li key={`${ticket.gameId}:${ticket.ticket}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModal(undefined);
+                    setDetail(ticket);
+                  }}
+                >
+                  {ticket.title} · {ticket.outcome}
+                </button>
+              </li>
+            ))}
           </ul>
         </Dialog>
+      )}
+      {detail && (
+        <TicketDetail
+          gameId={detail.gameId}
+          ticket={detail.ticket}
+          title={detail.title}
+          creatorId={creatorId}
+          onClose={() => setDetail(undefined)}
+          onConversation={(() => {
+            const target = conversationOf(detail, jobs);
+            if (!target) return undefined;
+            return () => {
+              setDetail(undefined);
+              if (typeof target === 'string') openConversation(target);
+              else setConversation(target);
+            };
+          })()}
+        />
       )}
       {conversation && (
         <TicketConversation creatorId={creatorId} ticket={conversation} onClose={() => setConversation(undefined)} />
       )}
     </section>
   );
+}
+
+type DetailTarget = { gameId: string; ticket: string; title: string } | PastTicket;
+
+// A ticket's conversation from its detail: its job's build chat when a job filed it, else a closed ticket's
+// creator-visible discussion. A running ticket no job owns has none.
+function conversationOf(target: DetailTarget, jobs: readonly Job[]): string | PastTicket | undefined {
+  const past = 'outcome' in target ? target : undefined;
+  const job =
+    (past?.jobId ? jobs.find((item) => item.id === past.jobId) : undefined) ??
+    jobs.find((item) => item.gameId === target.gameId && String(item.aiurIssueNumber) === target.ticket);
+  return job?.id ?? past;
 }
 
 export function missingReviewTargets(
