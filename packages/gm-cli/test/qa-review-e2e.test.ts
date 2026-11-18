@@ -13,6 +13,10 @@ vi.mock('../src/qa-review-checks.js', () => ({
   optionFailures: async () => [],
 }));
 
+// The hammer's ticket-detail steps (#873) run first in each size and have their own browser test; this suite drives the
+// review deck.
+vi.mock('../src/qa-ticket-detail-e2e.js', () => ({ ticketDetailSteps: async () => {} }));
+
 afterEach(() => vi.unstubAllGlobals());
 
 it('rejects broken images and unloaded video or audio in the production readiness gate', () => {
@@ -84,6 +88,7 @@ it.each(['image', 'video', 'audio', 'option'] as const)(
       newCDPSession: async () => ({ send: async () => {}, detach: async () => {} }),
       newPage: async () => ({
         goto: async () => {},
+        close: async () => {},
         screenshot: async () => {},
         getByRole: () => element,
         getByLabel: () => element,
