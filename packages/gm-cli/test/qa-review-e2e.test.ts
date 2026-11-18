@@ -148,6 +148,29 @@ describe('gm qa review-e2e', () => {
     expect(out.at(-1)).toBe('exit=1 qa-review-e2e');
     expect(err.join('\n')).toContain('expired');
   });
+
+  // Two runs at once share the host's one QA game: each clears and seeds its fixtures, so one wiped the other's cards
+  // and the deck never opened (#875). A second run waits for the first and gives up rather than run alongside it.
+  it('does not start while another run holds the QA game', async () => {
+    const env = join(host('OGM_QA_SESSION_COOKIE_NAME=s\nOGM_QA_SESSION_COOKIE=v\n'), '.config', 'ogm', 'env');
+    const { acquireSlot } = await import('@ogm/gm-verify');
+    const held = await acquireSlot({ runtimeDir: join(env, 'qa-review-e2e-lock'), slots: 1 });
+    const launched = vi.fn();
+    vi.stubGlobal('fetch', launched);
+    try {
+      // Another home on the same QA env (another user or service) waits too: the lock follows the QA game.
+      const { code, out, err } = await gm(['qa', 'review-e2e'], {
+        home: tempDir(),
+        env: { OGM_ENV_DIR: env, OGM_QA_LOCK_WAIT_MS: '50' },
+      });
+      expect(code).toBe(1);
+      expect(out.at(-1)).toBe('exit=1 qa-review-e2e');
+      expect(err.join('\n')).toContain('another review E2E still held the QA game');
+      expect(launched).not.toHaveBeenCalled();
+    } finally {
+      held.release();
+    }
+  });
 });
 
 describe('verdicts reaching aiur', () => {

@@ -11,10 +11,13 @@ type Locator = ReturnType<Page['locator']>;
 export const RUNNING_TITLE = 'QA running ticket';
 export const CLOSED_TITLE = 'QA closed ticket';
 
+/** The detail's summary line; the verdict quote also starts "QA: ", so text alone matches two elements (#875). */
+export const summary = (dialog: Locator) => dialog.locator('.ticket-detail-summary');
+
 /** What one ticket's detail must show; the empty list means it passed. */
 export async function detailFailures(dialog: Locator, where: string): Promise<string[]> {
   const failures: string[] = [];
-  if (!(await dialog.getByText(/^QA: /u).count())) failures.push(`${where}: no summary`);
+  if (!(await summary(dialog).count())) failures.push(`${where}: no summary`);
   if ((await dialog.locator('img, video, audio').count()) !== 3)
     failures.push(`${where}: not a picture, clip and sound`);
   if (!(await dialog.locator('blockquote').count())) failures.push(`${where}: no verdict quote`);
@@ -44,7 +47,7 @@ export async function ticketDetailSteps(page: Page, origin: string, still: (labe
       await page.getByRole('button', { name: new RegExp(`^${RUNNING_TITLE}`, 'u') }).click(timeout);
     }
     const dialog = page.getByRole('dialog', { name: title });
-    await dialog.getByText(/^QA: /u).waitFor(timeout);
+    await summary(dialog).waitFor(timeout);
     await settleMedia(dialog);
     await still(label);
     failures.push(...(await detailFailures(dialog, `the ${label.replace('ticket-', '')} ticket`)));

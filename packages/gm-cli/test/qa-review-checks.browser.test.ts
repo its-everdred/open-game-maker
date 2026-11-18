@@ -129,6 +129,30 @@ describe('the review E2E checks what the creator sees', () => {
     );
   });
 
+  // A looping clip drops to readyState 1 for a few ms each time it seeks back to its start; sampled then, the prod run
+  // failed a deck whose clip was playing (#875). A clip that has played and has no error is loaded.
+  it('pass a looping clip caught while it seeks back to its start', async () => {
+    const { tab, dialog, close } = await open({});
+    try {
+      await settleMedia(dialog);
+      await tab.evaluate(() => {
+        for (const video of document.querySelectorAll('video'))
+          Object.defineProperty(video, 'readyState', { get: () => HTMLMediaElement.HAVE_METADATA });
+      });
+      expect(await mediaFailures(dialog, 'the review')).toEqual([]);
+      // Having played once is not enough: a clip that then failed still fails the run.
+      await tab.evaluate(() => {
+        for (const video of document.querySelectorAll('video'))
+          Object.defineProperty(video, 'error', { get: () => ({ code: MediaError.MEDIA_ERR_NETWORK }) });
+      });
+      expect(await mediaFailures(dialog, 'the review')).toEqual([
+        'the review <video clip.mp4> did not load (readyState 1)',
+      ]);
+    } finally {
+      await close();
+    }
+  });
+
   it('fail on a sound with no length', async () => {
     expect(await failures({ sound: 'gone.mp3' }, 2_000)).toContain(
       'the review <audio "Sound" gone.mp3> did not load (duration NaN)',
