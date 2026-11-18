@@ -236,6 +236,20 @@ describe('a jobless Command’s option media', () => {
       await writeFile(secret, 'private');
       await link(secret, linked);
       const { pathMedia } = await import('../../src/commands/path-media.js');
+      const namespaced = await pathMedia(
+        deps,
+        {
+          owner: 'fixture',
+          name: 'blobs',
+          ticket: '12',
+          workspaceRoot: join(checkout, 'workspaces', 'fixture', 'blobs'),
+          gamePath: 'games/blobs',
+        },
+        video,
+        'video/mp4',
+        100,
+      );
+      expect(await new Response(namespaced.body).text()).toBe('second video');
       await expect(
         pathMedia(
           deps,

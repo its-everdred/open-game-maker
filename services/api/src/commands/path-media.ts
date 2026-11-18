@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { open, readlink, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import type { DecisionMediaFile } from '@ogm/aiur-client';
 import type { AppDeps } from '../app/types.js';
@@ -37,21 +37,22 @@ export async function pathMedia(
     (root): root is string => Boolean(root),
   );
   const layouts = parts.length ? [[], parts] : [[]];
-  const candidates = roots.flatMap((root) =>
-    layouts.map((layout) => ({
+  const candidates = roots.flatMap((root) => {
+    const namespace =
+      basename(root) === scope.name && basename(dirname(root)) === scope.owner ? [] : [scope.owner, scope.name];
+    return layouts.map((layout) => ({
       root,
       layout,
-      directory: join(root, scope.owner, scope.name, scope.ticket, ...layout, 'review', scope.ticket),
-    })),
-  );
+      namespace,
+      directory: join(root, ...namespace, scope.ticket, ...layout, 'review', scope.ticket),
+    }));
+  });
   const selected = candidates.find(({ directory }) => inside(directory, path));
   if (!selected) throw new Error('media outside review directory');
-  const { root, layout, directory } = selected;
+  const { root, layout, namespace, directory } = selected;
   const resolvedDirectory = await realpath(directory);
   const canonicalRoot = await realpath(root);
-  if (
-    resolvedDirectory !== join(canonicalRoot, scope.owner, scope.name, scope.ticket, ...layout, 'review', scope.ticket)
-  )
+  if (resolvedDirectory !== join(canonicalRoot, ...namespace, scope.ticket, ...layout, 'review', scope.ticket))
     throw new Error('invalid review directory');
   const resolvedPath = await realpath(path);
   if (!inside(resolvedDirectory, resolvedPath)) throw new Error('media outside review directory');

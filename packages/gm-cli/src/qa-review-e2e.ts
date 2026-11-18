@@ -178,7 +178,13 @@ async function runViewport(
 
     await step('open the review deck', async () => {
       await page.goto(`${config.origin}/all`, { waitUntil: 'load', timeout: 60_000 });
-      await openReviewDeck(page, timeout.timeout, 'QA review round', ['QA review round', 'QA review']);
+      await openReviewDeck(
+        page,
+        timeout.timeout,
+        'QA review round',
+        ['QA review round', 'QA review'],
+        'QA running ticket',
+      );
       await dialog.getByText('QA review round').waitFor(timeout);
       await dialog.locator('video').first().waitFor(timeout);
       await dialog
