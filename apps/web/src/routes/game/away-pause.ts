@@ -53,7 +53,7 @@ type AwayPauseOptions = {
 
 /**
  * Leaving play (the page hidden, unloaded, or the window losing focus) opens the pause menu exactly like the Menu
- * button, so the game stays paused on return until the player resumes (#874). Solo play also keeps the game's latest
+ * button, so the game stays paused on return until the player resumes. Solo play also keeps the game's latest
  * save in the tab's session store, so a tab the browser evicted in the background reloads to the same paused state.
  */
 export function useAwayPause({ frame, gameId, buildId, solo, menuOpen, openMenu }: AwayPauseOptions): void {
