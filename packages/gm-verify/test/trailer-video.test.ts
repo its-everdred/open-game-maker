@@ -13,7 +13,7 @@ const ffmpegAvailable = ['ffmpeg', 'ffprobe'].every(
 );
 
 it.skipIf(!ffmpegAvailable)(
-  'encodes the scripted canvas as the 1920×1080 landscape trailer (requires ffmpeg)',
+  'encodes the scripted canvas as a 1920×1080 trailer a phone can play: Main profile, level 4.1 or lower (requires ffmpeg)',
   async () => {
     const dir = mkdtempSync(join(tmpdir(), 'trailer-video-'));
     const image = join(dir, 'frame.png');
@@ -38,13 +38,39 @@ it.skipIf(!ffmpegAvailable)(
         page: { clock: { runFor: async () => {} } },
         game: { evaluate: async () => {}, locator: () => ({ first: () => ({ evaluate: async () => data }) }) },
       } as unknown as HookDriver;
-      await recordTrailerVideo(hooks, { script: [], seconds: 1, fps: 1 }, output);
-      const size = execFileSync(
+      await recordTrailerVideo(hooks, { script: [], seconds: 1, fps: 10 }, output);
+      const stream = execFileSync(
         'ffprobe',
-        ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', output],
+        [
+          '-v',
+          'error',
+          '-select_streams',
+          'v:0',
+          '-show_entries',
+          'stream=width,height,profile,level,r_frame_rate',
+          '-of',
+          'default=nw=1',
+          output,
+        ],
         { encoding: 'utf8' },
-      ).trim();
-      expect(size).toBe('1920x1080');
+      );
+      const {
+        width,
+        height,
+        profile,
+        level,
+        r_frame_rate: rate,
+      } = Object.fromEntries(
+        stream
+          .trim()
+          .split('\n')
+          .map((line) => line.split('=')),
+      );
+      expect(`${width}x${height}`).toBe('1920x1080');
+      /* x264's own pick (High, level 6.2) never played on the creator's phone. */
+      expect(profile).toBe('Main');
+      expect(Number(level)).toBeLessThanOrEqual(41);
+      expect(rate).toBe('10/1');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

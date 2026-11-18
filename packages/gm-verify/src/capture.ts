@@ -30,22 +30,16 @@ export function ffmpeg(binary: string, args: string[]): void {
   execFileSync(binary, ['-loglevel', 'error', '-y', ...args], { timeout: FFMPEG_TIMEOUT_MS, killSignal: 'SIGKILL' });
 }
 
-function h264Args(out: string, preset: 'fast' | 'slow' = 'fast'): string[] {
-  return [
-    '-c:v',
-    'libx264',
-    '-pix_fmt',
-    'yuv420p',
-    '-color_range',
-    'tv',
-    '-preset',
-    preset,
-    '-crf',
-    '27',
-    '-movflags',
-    '+faststart',
-    out,
-  ];
+/**
+ * Main profile at level 4.1 and a constant frame rate: what every phone decodes. Left alone, x264 picked High at
+ * level 6.2 for a 1080p30 trailer, which never played on the creator's phone.
+ */
+export function phoneH264Args(fps: number): string[] {
+  return ['-c:v', 'libx264', '-profile:v', 'main', '-level:v', '4.1', '-r', String(fps), '-pix_fmt', 'yuv420p'];
+}
+
+function h264Args(out: string, fps: number, preset: 'fast' | 'slow' = 'fast'): string[] {
+  return [...phoneH264Args(fps), '-color_range', 'tv', '-preset', preset, '-crf', '27', '-movflags', '+faststart', out];
 }
 
 async function shot(h: HookDriver, ms: number, path: string, type: 'png' | 'jpeg' = 'png'): Promise<void> {
@@ -161,7 +155,7 @@ export async function timeline(h: HookDriver, times: number[], out: string, bina
   }
 }
 
-/** The phone-verified encode (E10-2): H.264, yuv420p, 960 px wide, CRF 27, moov first. */
+/** The phone-verified encode (E10-2): H.264 Main 4.1, yuv420p, 960 px wide, CRF 27, moov first. */
 export function clipArgs(framesDir: string, fps: number, out: string): string[] {
   return [
     '-framerate',
@@ -170,7 +164,7 @@ export function clipArgs(framesDir: string, fps: number, out: string): string[] 
     join(framesDir, 'f%05d.jpg'),
     '-vf',
     'scale=960:-2:in_range=full:out_range=tv,format=yuv420p',
-    ...h264Args(out, 'slow'),
+    ...h264Args(out, fps, 'slow'),
   ];
 }
 
@@ -189,7 +183,7 @@ export function nativeClipArgs(
     join(framesDir, 'f%05d.png'),
     '-vf',
     `scale=${size}:flags=neighbor:in_range=full:out_range=tv,format=yuv420p`,
-    ...h264Args(out),
+    ...h264Args(out, fps),
   ];
 }
 
