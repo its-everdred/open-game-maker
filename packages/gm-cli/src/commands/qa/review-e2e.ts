@@ -8,6 +8,10 @@ import { withBrowser } from '../../qa.js';
 import { reviewE2e } from '../../qa-review-e2e.js';
 import { readEnvFile } from '../publish/index.js';
 
+// Every run seeds and deletes fixtures on the host's one QA game, and starts by clearing what a dead run left, so two
+// runs at once (the deploy hook and a manual run) wipe each other's cards (#875). One run at a time per host.
+const LOCK_WAIT_MS = 30 * 60_000;
+
 function headSha(cwd: string): string {
   try {
     return execFileSync('git', ['-C', cwd, 'rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -59,7 +63,18 @@ export const command: GmCommand = {
     const sha = (flags.sha as string | undefined) ?? headSha(ctx.cwd);
     const out = resolve(ctx.cwd, (flags.out as string | undefined) ?? join('assets-local/review/app/qa-e2e', sha));
     let results: Awaited<ReturnType<typeof reviewE2e>>;
+    let lock: { release(): void } | undefined;
     try {
+      const { acquireSlot } = await import('@ogm/gm-verify');
+      const waitMs = Number(ctx.env?.OGM_QA_LOCK_WAIT_MS) || LOCK_WAIT_MS;
+      lock = await acquireSlot({
+        runtimeDir: join(ctx.home ?? homedir(), '.local', 'state', 'ogm', 'qa', 'review-e2e-lock'),
+        slots: 1,
+        waitMs,
+        pollMs: 1_000,
+      }).catch(() => {
+        throw new Error(`another review E2E still held the QA game after ${waitMs} ms`);
+      });
       results = await withBrowser(ctx, (browser) =>
         reviewE2e(browser, {
           origin,
@@ -78,6 +93,8 @@ export const command: GmCommand = {
     } catch (error) {
       ctx.err(`qa review-e2e: ${(error as Error).message}`);
       return done(EXIT.failed);
+    } finally {
+      lock?.release();
     }
     const ok = results.every((result) => result.ok);
     if (ctx.json) printJson(ctx, { ok, out: relative(ctx.cwd, out) || '.', results });
