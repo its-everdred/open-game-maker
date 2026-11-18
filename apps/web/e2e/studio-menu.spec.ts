@@ -311,20 +311,23 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
   await expect(page.getByRole('region', { name: 'Builds' }).getByText('Moon gate is ready')).toBeVisible();
 });
 
-test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
-  testInfo.setTimeout(90_000);
-  await installAuthRoutes(page);
-  await stubBrandArt(page);
-  await stubTown(page);
-  await page.goto('/');
+test.describe('title menu', () => {
+  // Context creation is part of the test timeout and can be slow on CI (#890).
+  test.describe.configure({ timeout: 90_000 });
+  test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
+    await installAuthRoutes(page);
+    await stubBrandArt(page);
+    await stubTown(page);
+    await page.goto('/');
 
-  await capturePhone(page, testInfo, 'title-menu-closed');
-  await page.getByRole('button', { name: 'Menu' }).click();
+    await capturePhone(page, testInfo, 'title-menu-closed');
+    await page.getByRole('button', { name: 'Menu' }).click();
 
-  await expect(page.getByRole('button', { name: /^(Mute|Unmute)$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible();
-  await expect(page.locator('.bug-fab')).toHaveCount(0);
-  await capturePhone(page, testInfo, 'title-menu-open');
+    await expect(page.getByRole('button', { name: /^(Mute|Unmute)$/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible();
+    await expect(page.locator('.bug-fab')).toHaveCount(0);
+    await capturePhone(page, testInfo, 'title-menu-open');
+  });
 });
 
 test('shows the active build ring and contextual build in the games menu', async ({ page }, testInfo) => {
