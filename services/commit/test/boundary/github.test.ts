@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BoundaryCheckPoster } from '../../src/boundary/check-run.js';
 import { buildDiffInput } from '../../src/boundary/inputs.js';
 import { runBoundaryPoll, startBoundaryPoller } from '../../src/boundary/poller.js';
-import { BoundaryApiError } from '../../src/boundary/api-client.js';
+import { BoundaryApiClient, BoundaryApiError } from '../../src/boundary/api-client.js';
 import { GitHubRequestError } from '../../src/github-request.js';
 import { registerBoundaryWebhook } from '../../src/boundary/webhook.js';
 import type { ActiveRepository } from '../../src/boundary/api-client.js';
@@ -23,6 +23,30 @@ const repository = {
 } as const satisfies ActiveRepository;
 const game = { owner: repository.owner, name: repository.name, visibility: repository.visibility } as const;
 const emptyLock = { version: 1, family: 'any', pov: 'iso', assets: [] };
+
+it('distinguishes an API 401 from a connection refusal in poll logs', async () => {
+  const { request } = fakeRequest(() => []);
+  const log = vi.fn();
+  const fetches: (typeof fetch)[] = [
+    async () => new Response('sensitive response', { status: 401 }),
+    async () => {
+      throw new TypeError('connection refused');
+    },
+  ];
+  for (const fetch of fetches) {
+    const api = new BoundaryApiClient({ baseUrl: 'http://127.0.0.1:3000', token: 'secret', fetch });
+    const poller = startBoundaryPoller({ api, app: appWith(request), check: vi.fn(), log });
+    try {
+      await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(fetch === fetches[0] ? 1 : 2));
+    } finally {
+      poller.stop();
+    }
+  }
+  expect(log.mock.calls).toEqual([
+    [{ event: 'boundary-poll-error', error: 'BoundaryApiError', reason: 'http', status: 401 }],
+    [{ event: 'boundary-poll-error', error: 'BoundaryApiError', reason: 'transport', status: undefined }],
+  ]);
+});
 
 it('logs the safe status when listing pulls fails', async () => {
   const { request } = fakeRequest(() => {
