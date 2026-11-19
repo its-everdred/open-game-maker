@@ -382,6 +382,22 @@ Sessions last 7 days: run it again when a capture shows Sign in. `--origin http:
 stack instead of `OGM_APP_ORIGIN`; `--out` writes elsewhere. Exit codes: 0 saved, 1 sign-in failed, 64 bad usage, 65 no
 address, origin or database.
 
+## Check new game creation on prod
+
+On the host after deploy, run `gm qa new-game-e2e --sha <deployed sha>` with the QA creator session from
+`ops/bin/ogm-qa-session`. The host needs ffmpeg, its user service manager, and a `gh` credential with write access to
+the configured instance repository. The command creates a game at each phone orientation, sends two text messages,
+finishes creation, and checks the private context, privacy-safe parent issue, and library progress. It saves stills,
+MP4s, a result, and private recovery state under `assets-local/review/app/new-game-e2e/<sha>/`.
+
+It removes the QA games and their associated repository, scope and issue artifacts, including earlier QA leftovers. Cleanup
+can wait up to 40 minutes for a game daemon or create operation to stop. The commit service fences each QA game while
+cleanup runs; a failed or interrupted create leaves a marker for inspection rather than assuming GitHub did nothing.
+If a run fails, preserve its recovery state and rerun with the same SHA; an ambiguous game or unexpected repository
+change stops cleanup for inspection. `--out` selects another
+evidence directory, and `--origin` and `--api` select the app and loopback API origins. The internal QA routes accept
+only the internal token.
+
 ## Check the review deck on prod
 
 `gm qa review-e2e` completes a review round and a three-option Command in the deployed app as the QA creator, so a

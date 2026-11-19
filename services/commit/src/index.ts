@@ -11,6 +11,7 @@ import { loadCommitConfig } from './config.js';
 import { RealBoundaryGate } from './publish-gate/gate.js';
 import { repoResolverForApi } from './repo-resolver.js';
 import { createCommitApp } from './server.js';
+import { QaCreateFence } from './qa-create-fence.js';
 import { DefaultTemplateSource, withGameTemplates } from './template-source.js';
 
 async function main(): Promise<void> {
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
     serviceToken: config.serviceToken,
     repos: repoResolverForApi(config),
     audit: new JsonlAuditWriter(config.dataDirectory),
+    qaCreateFence: new QaCreateFence(config.dataDirectory),
     installations: github,
     operations: {
       app: github,

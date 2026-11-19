@@ -13,12 +13,14 @@ import { registerBoundaryWebhook } from './boundary/webhook.js';
 import type { OperationContext, RepositoryResolver } from './ops/context.js';
 import { executeOperation } from './ops/registry.js';
 import type { CommitOp, CommitResult, GameRepository, GitHubInstallations } from './types.js';
+import type { QaCreateFence } from './qa-create-fence.js';
 
 type ServerDependencies = {
   serviceToken: string;
   operations: Omit<OperationContext, 'repos'>;
   repos: RepositoryResolver;
   audit: AuditWriter;
+  qaCreateFence?: QaCreateFence;
   installations?: GitHubInstallations;
   remoteAddress?: (context: Context) => string | undefined;
   execute?: (op: CommitOp, context: OperationContext) => Promise<CommitResult>;
@@ -98,6 +100,50 @@ export function createCommitApp(dependencies: ServerDependencies): Hono {
     return undefined;
   };
 
+  app.post('/internal/qa/create-fence/:id', async (context) => {
+    const refused = refuseCaller(context);
+    if (refused !== undefined) return refused;
+    if (!dependencies.qaCreateFence) return context.json({ error: 'fence_unavailable' }, 503);
+    const id = context.req.param('id');
+    const body = (await context.req.json().catch(() => null)) as { owner?: unknown } | null;
+    if (!/^g_[A-Za-z0-9_-]+$/u.test(id) || typeof body?.owner !== 'string' || !/^[a-z0-9-]{1,40}$/u.test(body.owner))
+      return context.json({ error: 'invalid_fence' }, 400);
+    try {
+      return context.json({ ready: await dependencies.qaCreateFence.acquire(id, body.owner) });
+    } catch {
+      return context.json({ error: 'fence_conflict' }, 409);
+    }
+  });
+
+  app.delete('/internal/qa/create-fence/:id', async (context) => {
+    const refused = refuseCaller(context);
+    if (refused !== undefined) return refused;
+    if (!dependencies.qaCreateFence) return context.json({ error: 'fence_unavailable' }, 503);
+    const id = context.req.param('id');
+    const body = (await context.req.json().catch(() => null)) as { owner?: unknown } | null;
+    if (!/^g_[A-Za-z0-9_-]+$/u.test(id) || typeof body?.owner !== 'string' || !/^[a-z0-9-]{1,40}$/u.test(body.owner))
+      return context.json({ error: 'invalid_fence' }, 400);
+    try {
+      await dependencies.qaCreateFence.release(id, body.owner);
+      return context.json({ released: true });
+    } catch {
+      return context.json({ error: 'fence_conflict' }, 409);
+    }
+  });
+
+  app.get('/internal/qa/create-audit/:id', async (context) => {
+    const refused = refuseCaller(context);
+    if (refused !== undefined) return refused;
+    if (!dependencies.qaCreateFence) return context.json({ error: 'fence_unavailable' }, 503);
+    const id = context.req.param('id');
+    if (!/^g_[A-Za-z0-9_-]+$/u.test(id)) return context.json({ error: 'invalid_game' }, 400);
+    try {
+      return context.json({ terminal: await dependencies.qaCreateFence.hasTerminalAudit(id) });
+    } catch {
+      return context.json({ error: 'audit_unavailable' }, 503);
+    }
+  });
+
   // The API resolves the account behind an installation id the browser brought back from GitHub (#280). A login is
   // only returned for an installation the user who authorized `code` controls, so learning an id proves nothing.
   app.post('/internal/installations/:id/ownership', async (context) => {
@@ -155,6 +201,12 @@ export function createCommitApp(dependencies: ServerDependencies): Hono {
       return context.json({ error: { code: 'invalid_op', issues: parsed.error.issues } }, 422);
     }
 
+    const endCreate =
+      parsed.data.kind === 'create_game' && dependencies.qaCreateFence
+        ? await dependencies.qaCreateFence.begin(parsed.data.gameId)
+        : undefined;
+    if (endCreate === null) return context.json({ error: 'create_fenced' }, 409);
+
     const operationContext: OperationContext = {
       ...dependencies.operations,
       repos: memoizedRepos(dependencies.repos),
@@ -179,6 +231,8 @@ export function createCommitApp(dependencies: ServerDependencies): Hono {
       actor: 'api',
     };
     await dependencies.audit.append(entry);
+    // A refused or failed remote operation may have taken effect despite a lost response. Keep its marker for inspection.
+    if (endCreate && failure === undefined && result?.ok === true) await endCreate();
     if (failure !== undefined) return context.json({ error: 'commit operation failed' }, 502);
     return context.json(result as CommitResult, 200);
   });
