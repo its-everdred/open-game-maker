@@ -141,4 +141,35 @@ describe('useCreateGame', () => {
     expect(fetch.mock.calls[1]?.[0]).toBe('/api/v1/games/g_1/provision');
     expect(fetch.mock.calls[1]?.[1]?.method).toBe('POST');
   });
+
+  it('updates the retained game title if choices change before a provisioning retry', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'repo_provisioning_failed', details: { gameId: 'g_1' } }), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockImplementation(
+        async () =>
+          new Response(JSON.stringify({ id: 'g_1' }), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const { result } = renderHook(() => useCreateGame());
+    await act(async () => {
+      await expect(
+        result.current({ vibe: { picks: ['cozy'] }, genre: { picks: ['adventure'] } }, true),
+      ).rejects.toThrow();
+    });
+    await act(async () => {
+      await result.current({ vibe: { picks: ['epic'] }, genre: { picks: ['racing'] } }, true);
+    });
+    expect(fetch.mock.calls[2]?.[0]).toBe('/api/v1/games/g_1');
+    expect(JSON.parse(fetch.mock.calls[2]![1]!.body as string)).toEqual({ title: 'Epic Racing', preserveSlug: true });
+    await act(async () => {
+      await result.current({ vibe: { picks: ['epic'] }, genre: { picks: ['puzzle'] } }, true);
+    });
+    expect(JSON.parse(fetch.mock.calls[3]![1]!.body as string)).toEqual({ title: 'Epic Puzzle', preserveSlug: true });
+  });
 });

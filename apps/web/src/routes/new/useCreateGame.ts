@@ -13,15 +13,22 @@ export function useCreateGame() {
     promise?: Promise<string>;
     desiredAllowAiGeneratedAssets?: boolean;
     syncedAllowAiGeneratedAssets?: boolean;
+    desiredTitle?: string;
+    syncedTitle?: string;
+    recoveringTitle?: boolean;
   }>({});
   return useCallback((choices: NewGameChoices, allowAiGeneratedAssets: boolean) => {
     const state = game.current;
+    const titleParts = [choiceLabels('vibe', choices.vibe).at(0), choiceLabels('genre', choices.genre).at(0)].filter(
+      (part): part is string => Boolean(part),
+    );
+    state.desiredTitle = titleParts.join(' ') || 'New game';
     state.desiredAllowAiGeneratedAssets = allowAiGeneratedAssets;
     if (state.promise === undefined) {
-      const titleParts = [choiceLabels('vibe', choices.vibe).at(0), choiceLabels('genre', choices.genre).at(0)].filter(
-        (part): part is string => Boolean(part),
-      );
-      if (state.provisioningId === undefined) state.syncedAllowAiGeneratedAssets = allowAiGeneratedAssets;
+      if (state.provisioningId === undefined) {
+        state.syncedAllowAiGeneratedAssets = allowAiGeneratedAssets;
+        state.syncedTitle = state.desiredTitle;
+      }
       const path =
         state.provisioningId === undefined ? '/games' : `/games/${encodeURIComponent(state.provisioningId)}/provision`;
       state.promise = api<GameResponse>(path, {
@@ -29,7 +36,7 @@ export function useCreateGame() {
         ...(state.provisioningId === undefined
           ? {
               json: {
-                title: titleParts.join(' ') || 'New game',
+                title: state.desiredTitle,
                 repoVisibility: getRepoVisibilityDefault(),
                 allowAiGeneratedAssets,
               },
@@ -43,6 +50,14 @@ export function useCreateGame() {
     }
 
     const synced = state.promise.then(async (id) => {
+      while (state.recoveringTitle && state.syncedTitle !== state.desiredTitle) {
+        const next = state.desiredTitle!;
+        await api<GameResponse>(`/games/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          json: { title: next, preserveSlug: true },
+        });
+        state.syncedTitle = next;
+      }
       while (state.syncedAllowAiGeneratedAssets !== state.desiredAllowAiGeneratedAssets) {
         const next = state.desiredAllowAiGeneratedAssets!;
         await api<GameResponse>(`/games/${encodeURIComponent(id)}`, {
@@ -69,6 +84,7 @@ export function useCreateGame() {
           typeof error.body.details.gameId === 'string'
         ) {
           state.provisioningId = error.body.details.gameId;
+          state.recoveringTitle = true;
         }
         state.promise = undefined;
         if (state.provisioningId === undefined) state.syncedAllowAiGeneratedAssets = undefined;
