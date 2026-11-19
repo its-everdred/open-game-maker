@@ -156,6 +156,7 @@ test('persists confirmed admin changes, retries failures, and refetches their vi
   expect((await delistResponse).status()).toBe(204);
   await expect.poll(() => requests.delists).toBe(1);
   await expect(page.getByRole('row').filter({ hasText: game.title })).toContainText('delisted');
+  await expect(page.getByRole('alertdialog')).not.toBeVisible({ timeout: 30_000 });
 
   const buildsBeforeFlag = requests.buildGets;
   requests.holdFlags = true;
@@ -163,7 +164,16 @@ test('persists confirmed admin changes, retries failures, and refetches their vi
   await activate(page.getByRole('button', { name: 'Confirm' }));
   await expect.poll(() => requests.flags).toBe(1);
   await expect(page.getByRole('button', { name: 'Saving…' })).toBeDisabled();
-  requests.releaseFlag?.();
+  if (!requests.releaseFlag) throw new Error('Flag request was not held');
+  const refreshes = Promise.all(
+    ['/api/v1/admin/builds', '/api/v1/admin/games', '/api/v1/admin/members'].map((path) =>
+      page.waitForResponse(
+        (response) => response.request().method() === 'GET' && new URL(response.url()).pathname === path,
+      ),
+    ),
+  );
+  requests.releaseFlag();
+  expect((await refreshes).every((response) => response.ok())).toBe(true);
   await expect(page.getByRole('alertdialog')).not.toBeVisible();
   await expect.poll(() => requests.buildGets).toBeGreaterThan(buildsBeforeFlag);
 });
