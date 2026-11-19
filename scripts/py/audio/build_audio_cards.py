@@ -647,7 +647,7 @@ def build(rows, sets, means, packs: Path, update_counts=True, limit=0):
 def validate(packs: Path, staged=(), only=None):
     cards = sorted(str(p) for p in packs.glob("*/cards/**/*.card.json") if matches_any(p.relative_to(packs).parts[0], only))
     colls = sorted(str(p) for p in packs.glob("*/collection.card.json") if matches_any(p.relative_to(packs).parts[0], only))
-    r = subprocess.run(["node", str(VALIDATOR), *colls, *cards, *(str(p) for p in staged)], capture_output=True, text=True)
+    r = subprocess.run(["node", str(VALIDATOR), "--paths-stdin"], input=json.dumps([*colls, *cards, *(str(p) for p in staged)]), capture_output=True, text=True)
     fails = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
     return r.returncode, len(cards), fails, r.stdout
 

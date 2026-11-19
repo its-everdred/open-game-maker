@@ -405,8 +405,9 @@ cards, and generate clips, a pack sheet, a medley, and compatibility suggestions
 the local `profantasy-cc3` collection.
 
 Collections must allow `vision-input`; `processing: local-only` is honored. A run never downloads model weights, and
-fails when the required CLIP or CLAP cache is absent. `--json` streams one record per changed card followed by a
-summary. Use `--only` when processing a single private pack, for example:
+fails when the required CLIP or CLAP cache is absent. A collection lock prevents simultaneous tag runs. If a run is
+interrupted and leaves `.gm-tag-lock` behind, remove that directory only after confirming no tag run is using the
+collection. `--json` streams one record per changed card followed by a summary. Use `--only` when processing a single private pack, for example:
 
 ```text
 gm packs tag --kind audio --only drive-barbarian-chiptune --workers 4 --json

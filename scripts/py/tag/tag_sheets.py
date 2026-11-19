@@ -226,13 +226,10 @@ def load_clip(model_class=None, processor_class=None):
     return model.eval(), processor
 
 
-def _probabilities(images: list[Path], prompts: list[str], model, processor, batch_size=16) -> np.ndarray:
+def _image_features(images: list[Path], model, processor, batch_size=16):
     import torch
     from PIL import Image
 
-    text_inputs = processor(text=prompts, return_tensors="pt", padding=True)
-    with torch.no_grad():
-        text = torch.nn.functional.normalize(model.get_text_features(**text_inputs), dim=-1)
     rows = []
     for start in range(0, len(images), batch_size):
         opened = []
@@ -242,12 +239,20 @@ def _probabilities(images: list[Path], prompts: list[str], model, processor, bat
                     opened.append(image.convert("RGB").copy())
             inputs = processor(images=opened, return_tensors="pt")
             with torch.no_grad():
-                features = torch.nn.functional.normalize(model.get_image_features(**inputs), dim=-1)
-            rows.append((features @ text.T).cpu().numpy())
+                rows.append(torch.nn.functional.normalize(model.get_image_features(**inputs), dim=-1).cpu())
         finally:
             for image in opened:
                 image.close()
-    logits = np.concatenate(rows, axis=0)
+    return torch.cat(rows, dim=0)
+
+
+def _probabilities(features, prompts: list[str], model, processor) -> np.ndarray:
+    import torch
+
+    text_inputs = processor(text=prompts, return_tensors="pt", padding=True)
+    with torch.no_grad():
+        text = torch.nn.functional.normalize(model.get_text_features(**text_inputs), dim=-1).cpu()
+    logits = (features @ text.T).numpy()
     logits -= logits.max(axis=1, keepdims=True)
     exp = np.exp(logits * 100)
     return exp / exp.sum(axis=1, keepdims=True)
@@ -256,11 +261,11 @@ def _probabilities(images: list[Path], prompts: list[str], model, processor, bat
 def score_rows(rows: list[dict], model, processor) -> list[dict[str, dict]]:
     groups = label_groups()
     result = [dict() for _ in rows]
+    features = _image_features([row["preview"] for row in rows], model, processor)
     for field, labels in groups.items():
         indices = [index for index, row in enumerate(rows) if field != "moods" or row["card"].get("kind") == "vfx"]
         if not indices:
             continue
-        images = [rows[index]["preview"] for index in indices]
         prompts = [PROMPTS[field].format(label=label.replace("-", " ")) for label in labels]
         seeds = []
         for index in indices:
@@ -270,7 +275,7 @@ def score_rows(rows: list[dict], model, processor) -> list[dict[str, dict]]:
             existing = card.get("describe", {}).get(field, []) if origin == "filename" else []
             existing = [existing] if isinstance(existing, str) else existing
             seeds.append([label for label in labels if label in words or label in existing])
-        ranked = rank_group(_probabilities(images, prompts, model, processor), labels, CAPS[field], seeds=seeds)
+        ranked = rank_group(_probabilities(features[indices], prompts, model, processor), labels, CAPS[field], seeds=seeds)
         for index, selection in zip(indices, ranked):
             result[index][field] = selection
     return result
@@ -316,7 +321,8 @@ def validate(packs: Path, staged: list[Path], only=None):
     collections = sorted(str(path) for path in packs.glob("*/collection.card.json") if selected(path))
     cards = sorted(str(path) for path in packs.glob("*/cards/**/*.card.json") if selected(path))
     result = subprocess.run(
-        ["node", str(VALIDATOR), *collections, *cards, *(str(path) for path in staged)],
+        ["node", str(VALIDATOR), "--paths-stdin"],
+        input=json.dumps([*collections, *cards, *(str(path) for path in staged)]),
         capture_output=True,
         text=True,
     )
@@ -343,7 +349,7 @@ def main():
 
     inputs = sorted({str(row["collection"]) for row in rows})
     inputs.extend(str(row["path"]) for row in rows)
-    checked = subprocess.run(["node", str(VALIDATOR), *inputs], capture_output=True, text=True)
+    checked = subprocess.run(["node", str(VALIDATOR), "--paths-stdin"], input=json.dumps(inputs), capture_output=True, text=True)
     if checked.returncode:
         print("card validation failed before visual analysis: " + checked.stdout[-3000:], file=sys.stderr)
         raise SystemExit(1)

@@ -49,7 +49,7 @@ def validate_inputs(packs: Path, only=None) -> None:
     paths = [str(pack / "collection.card.json") for pack in selected if (pack / "collection.card.json").exists()]
     paths += [str(path) for pack in selected for path in sorted((pack / "cards").rglob("*.card.json"))]
     if paths:
-        result = subprocess.run(["node", str(repo / "packages/contracts/bin/validate-cards.mjs"), *paths], capture_output=True, text=True)
+        result = subprocess.run(["node", str(repo / "packages/contracts/bin/validate-cards.mjs"), "--paths-stdin"], input=json.dumps(paths), capture_output=True, text=True)
         if result.returncode:
             raise ValueError("card validation failed before audio analysis: " + result.stdout[-3000:])
 

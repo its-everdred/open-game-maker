@@ -167,3 +167,17 @@ def test_restricted_alternate_format_blocks_preferred_format(tmp_path):
 
 def test_absent_processing_defaults_to_local_only():
     assert a.audio_rights.allows_vision({"uses": ["vision-input"]})
+
+
+def test_audio_jobs_work_with_a_symlinked_library(tmp_path):
+    library = tmp_path / "library"
+    pack = library / "packs" / "pack"
+    ext = pack / "v1" / "extracted"
+    ext.mkdir(parents=True)
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    (ext / "sound.wav").write_bytes(b"wav")
+    link = tmp_path / "assets-local"
+    link.symlink_to(library, target_is_directory=True)
+    [job] = a.audio_files(link / "packs")
+    assert a.sidecar_path(job["version_dir"], job["file"]) == pack / "v1" / "analysis" / "sound.analysis.json"

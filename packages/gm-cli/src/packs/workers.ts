@@ -22,7 +22,8 @@ export function effectiveWorkers(requested: number, logicalCores = availablePara
 }
 
 export function workerEnvironment(options: WorkerEnvironmentOptions): Record<string, string> {
-  const threads = String(Math.max(1, options.workers));
+  // The analysis stages launch a process pool, so each process gets one thread.
+  const threads = '1';
   return {
     PATH: `${dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin`,
     HOME: options.home ?? homedir(),
@@ -92,6 +93,7 @@ export async function runJsonWorker(options: RunJsonWorkerOptions): Promise<Work
     cwd: options.cwd,
     env: options.env,
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
   });
   child.stdout.setEncoding('utf8');
   let stdout = '';
@@ -104,8 +106,16 @@ export async function runJsonWorker(options: RunJsonWorkerOptions): Promise<Work
   const terminate = (error: unknown): void => {
     if (failure) return;
     failure = asError(error);
-    child.kill('SIGTERM');
-    killTimer = setTimeout(() => child.kill('SIGKILL'), 1_000);
+    const signalGroup = (signal: NodeJS.Signals): void => {
+      try {
+        if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    };
+    signalGroup('SIGTERM');
+    killTimer = setTimeout(() => signalGroup('SIGKILL'), 1_000);
     killTimer.unref();
   };
 

@@ -4,7 +4,14 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { discoverTagTargets, reconcileCounts, snapshotTargets, validateWorkerCards } from '../src/packs/tag.js';
+import {
+  discoverTagTargets,
+  lockTargets,
+  reconcileCounts,
+  restoreSnapshot,
+  snapshotTargets,
+  validateWorkerCards,
+} from '../src/packs/tag.js';
 import type { RunJsonWorkerOptions, WorkerRecord } from '../src/packs/workers.js';
 import { gm, library, tempDir } from './helpers.js';
 
@@ -120,6 +127,37 @@ describe('gm packs tag', () => {
     const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
     expect(targets).toHaveLength(1);
     expect(targets[0].cards).toEqual([]);
+  });
+
+  it('prevents simultaneous taggers from locking the same collection', async () => {
+    const assetsRoot = library();
+    const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
+    const unlock = await lockTargets(targets);
+    try {
+      await expect(lockTargets(targets)).rejects.toThrow('already being tagged');
+    } finally {
+      await unlock();
+    }
+    const unlockAgain = await lockTargets(targets);
+    await unlockAgain();
+  });
+
+  it('does not delete existing cards if restoring a snapshot fails', async () => {
+    const root = tempDir('gm-restore-');
+    const existing = join(root, 'existing.card.json');
+    const invalidDestination = join(root, 'directory.card.json');
+    await writeFile(existing, 'still here');
+    await mkdir(invalidDestination);
+    await expect(
+      restoreSnapshot({
+        roots: [root],
+        files: new Map([
+          [invalidDestination, Buffer.from('cannot rename over a directory')],
+          [existing, Buffer.from('original')],
+        ]),
+      }),
+    ).rejects.toThrow();
+    expect(await readFile(existing, 'utf8')).toBe('still here');
   });
 
   it('refuses rights-ineligible collections before spawning a worker', async () => {

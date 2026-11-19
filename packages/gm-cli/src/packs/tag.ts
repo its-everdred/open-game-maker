@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Dirent } from 'node:fs';
 import { access, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -124,10 +124,14 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
     }
     let audioSources = false;
     if (kind === 'audio' && cards.length === 0) {
-      const version = await readCurrentVersion(root, entry.name);
-      audioSources = (await filesUnder(join(root, version, 'extracted'), '')).some((path) =>
-        /\.(wav|ogg|mp3|flac|m4a|aif|aiff)$/i.test(path),
-      );
+      try {
+        const version = await readCurrentVersion(root, entry.name);
+        audioSources = (await filesUnder(join(root, version, 'extracted'), '')).some((path) =>
+          /\.(wav|ogg|mp3|flac|m4a|aif|aiff)$/i.test(path),
+        );
+      } catch {
+        // A collection without a usable pack manifest cannot supply new audio.
+      }
     }
     if (cards.length > 0 || audioSources) {
       targets.push({ id: collection.id, slug: entry.name, root, collectionPath, collection, cards });
@@ -146,15 +150,51 @@ export async function snapshotTargets(targets: readonly TagTarget[]): Promise<Sn
 }
 
 export async function restoreSnapshot(snapshot: Snapshot): Promise<void> {
+  // Keep the current card present until its saved replacement is durable enough to rename.
+  for (const [path, contents] of snapshot.files) {
+    await mkdir(dirname(path), { recursive: true });
+    const staged = `${path}.restore-${randomUUID()}`;
+    try {
+      await writeFile(staged, contents, { flag: 'wx' });
+      await rename(staged, path);
+    } finally {
+      await rm(staged, { force: true });
+    }
+    await rm(`${path}.part`, { force: true });
+  }
   for (const root of snapshot.roots) {
-    for (const path of await filesUnder(root, '.card.json')) await rm(path);
+    for (const path of await filesUnder(root, '.card.json')) {
+      if (!snapshot.files.has(path)) await rm(path);
+    }
     for (const path of await filesUnder(root, '.card.json.part')) await rm(path);
   }
-  for (const [path, contents] of snapshot.files) {
-    await rm(`${path}.part`, { force: true });
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, contents);
+}
+
+/** Exclusive collection locks prevent concurrent taggers from undoing each other's writes. */
+export async function lockTargets(targets: readonly TagTarget[]): Promise<() => Promise<void>> {
+  const acquired: string[] = [];
+  const release = async (): Promise<void> => {
+    for (const path of acquired.reverse()) await rm(path, { recursive: true, force: true });
+    acquired.length = 0;
+  };
+  try {
+    for (const target of [...targets].sort((a, b) => a.root.localeCompare(b.root))) {
+      const path = join(target.root, '.gm-tag-lock');
+      try {
+        await mkdir(path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+          throw new Error(`${target.slug} is already being tagged (lock: ${path})`);
+        }
+        throw error;
+      }
+      acquired.push(path);
+    }
+  } catch (error) {
+    await release();
+    throw error;
   }
+  return release;
 }
 
 export function assertWorkerRecord(record: WorkerRecord): void {

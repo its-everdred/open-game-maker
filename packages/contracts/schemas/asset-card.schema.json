@@ -303,7 +303,7 @@
             "type": "object",
             "required": ["path", "sha256", "bytes", "format"],
             "properties": {
-              "path": { "$ref": "#/$defs/assetPath", "description": "Path inside the collection's extracted folder." },
+              "path": { "type": "string", "description": "Path inside the collection's extracted folder." },
               "sha256": { "$ref": "#/$defs/sha256" },
               "bytes": { "type": "integer", "minimum": 0 },
               "format": { "type": "string", "pattern": "^[a-z0-9]+$" },

@@ -162,7 +162,11 @@ def rights_allow_map(rel: str) -> bool:
 
 
 def maps():
+    if not MAPS.resolve().is_relative_to(COLL_DIR.resolve()):
+        raise ValueError("map directory escapes its collection")
     for png in sorted(MAPS.rglob("*.png")):
+        if not png.resolve().is_relative_to(MAPS.resolve()):
+            raise ValueError(f"map source escapes its collection: {png}")
         rel = png.relative_to(MAPS).as_posix()
         meta = png.with_suffix(".json")
         if NOT_MAPS.search(rel) or not meta.exists() or not rights_allow_map(rel):

@@ -221,3 +221,19 @@ def test_validation_ignores_unselected_invalid_pack(tmp_path):
     (other / "collection.card.json").write_text("not json")
     result = t.validate(tmp_path, [], ["selected"])
     assert result[0] == 0, result[-1]
+
+
+def test_sheet_images_are_encoded_once_across_vocabulary_groups(monkeypatch):
+    calls = []
+    monkeypatch.setattr(t, "label_groups", lambda: {"roles": ["wall"], "materials": ["stone"]})
+    monkeypatch.setattr(t, "_image_features", lambda images, _model, _processor: calls.append(images) or np.ones((len(images), 2)))
+    monkeypatch.setattr(t, "_probabilities", lambda features, prompts, _model, _processor: np.ones((len(features), len(prompts))))
+    rows = [{"card": card(), "preview": Path("sheet.webp")}]
+    t.score_rows(rows, None, None)
+    assert calls == [[Path("sheet.webp")]]
+
+
+def test_validator_accepts_paths_on_stdin():
+    fixture = t.REPO / "packages/contracts/fixtures/cards/collection-kenney-mini-dungeon.json"
+    result = subprocess.run(["node", str(t.VALIDATOR), "--paths-stdin"], input=json.dumps([str(fixture)]), capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

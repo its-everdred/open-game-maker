@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getPriority } from 'node:os';
 
@@ -45,21 +45,21 @@ describe('pack workers', () => {
       assetsRoot: '/assets',
       eventsFile: '/events.jsonl',
       workers: 4,
-      home: '/home/test',
+      home: '/fixture-user',
     });
     expect(environment).toEqual({
       PATH: `${dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin`,
-      HOME: '/home/test',
+      HOME: '/fixture-user',
       OGM_ASSETS_ROOT: '/assets',
       GM_EVENTS_FILE: '/events.jsonl',
       HF_HUB_OFFLINE: '1',
       TRANSFORMERS_OFFLINE: '1',
       TOKENIZERS_PARALLELISM: 'false',
-      OGM_TORCH_THREADS: '4',
-      OMP_NUM_THREADS: '4',
-      MKL_NUM_THREADS: '4',
-      OPENBLAS_NUM_THREADS: '4',
-      NUMEXPR_NUM_THREADS: '4',
+      OGM_TORCH_THREADS: '1',
+      OMP_NUM_THREADS: '1',
+      MKL_NUM_THREADS: '1',
+      OPENBLAS_NUM_THREADS: '1',
+      NUMEXPR_NUM_THREADS: '1',
     });
     expect(environment).not.toHaveProperty('OPENAI_API_KEY');
     expect(environment).not.toHaveProperty('AWS_SECRET_ACCESS_KEY');
@@ -87,6 +87,34 @@ describe('pack workers', () => {
     expect(records).toEqual([{ file: 'one', status: 'ok', priority: Math.min(19, getPriority(0) + 10) }]);
     expect(result.stderr).toContain('worker summary');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'terminates descendants when worker output is invalid',
+    async () => {
+      const directory = tempDir('gm-worker-group-');
+      const worker = join(directory, 'worker.mjs');
+      const marker = join(directory, 'survived');
+      writeFileSync(
+        worker,
+        `import { spawn } from 'node:child_process';
+      const child = spawn(process.execPath, ['-e', 'setTimeout(() => require("fs").writeFileSync(process.argv[1], "alive"), 1200)', process.argv[2]], { stdio: 'inherit' });
+      child.on('spawn', () => console.log('not-json'));`,
+      );
+      await expect(
+        runJsonWorker({
+          label: 'test',
+          program: process.execPath,
+          args: [worker, marker],
+          cwd: directory,
+          env: workerEnvironment({ assetsRoot: directory, workers: 1, home: directory }),
+          onRecord: () => {},
+        }),
+      ).rejects.toThrow('malformed JSON');
+      await new Promise((resolve) => setTimeout(resolve, 1600));
+      expect(existsSync(marker)).toBe(false);
+    },
+    20_000,
+  );
 
   it('lets workers run the card validator through the same node as gm', async () => {
     // The Python workers validate every card with `node`; an nvm-only node is not on the system PATH.

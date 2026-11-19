@@ -92,7 +92,7 @@ def audio_files(packs: Path, only="*"):
             out.append(
                 {
                     "pack": pid,
-                    "version_dir": pj.parent / cur,
+                    "version_dir": ext.parent,
                     "file": f,
                     "music": is_music(pid) or P.music_evidence(subkinds.get(rel), hints),
                     "preview_prefix": prefix,

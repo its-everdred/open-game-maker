@@ -6,6 +6,7 @@ import { printJson, requireAssetsRoot } from '../../context.js';
 import {
   assertWorkerRecord,
   discoverTagTargets,
+  lockTargets,
   prepareVisualPreviews,
   reconcileCounts,
   restoreSnapshot,
@@ -126,50 +127,55 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
     return EXIT.usage;
   }
 
-  const snapshot = await snapshotTargets(targets);
-  const records: WorkerRecord[] = [];
-  let pages: string[] = [];
-  let renderers: string[] = [];
+  const unlock = await lockTargets(targets);
   try {
-    if (kind === 'model' || kind === 'sprite') {
-      ({ pages, renderers } = await prepareVisualPreviews({
-        assetsRoot,
-        targets,
-        kind,
-        limit,
-        software: ctx.config.verifySoftwareGl,
-      }));
-    }
-    const slugs = targets.map((target) => target.slug);
-    await executeStages({ ctx, assetsRoot, kind, slugs, workers, limit, records });
-    const cards = await validateWorkerCards(assetsRoot, targets, records, snapshot);
-    if (cards === 0) throw new Error('worker completed without reporting a card');
-    await reconcileCounts(targets, kind);
-
-    const summary = {
-      kind,
-      only,
-      collections: targets.length,
-      cards,
-      workers: { requested: requestedWorkers, effective: workers },
-      pages,
-      renderers: [...new Set(renderers)].sort(),
-    };
-    if (ctx.json) printJson(ctx, { summary });
-    else ctx.out(`${cards} ${kind} card(s) tagged across ${targets.length} collection(s); workers ${workers}`);
-    ctx.emit('packs.tag', summary);
-    return EXIT.ok;
-  } catch (error) {
+    const snapshot = await snapshotTargets(targets);
+    const records: WorkerRecord[] = [];
+    let pages: string[] = [];
+    let renderers: string[] = [];
     try {
-      await restoreSnapshot(snapshot);
-    } catch (restoreError) {
+      if (kind === 'model' || kind === 'sprite') {
+        ({ pages, renderers } = await prepareVisualPreviews({
+          assetsRoot,
+          targets,
+          kind,
+          limit,
+          software: ctx.config.verifySoftwareGl,
+        }));
+      }
+      const slugs = targets.map((target) => target.slug);
+      await executeStages({ ctx, assetsRoot, kind, slugs, workers, limit, records });
+      const cards = await validateWorkerCards(assetsRoot, targets, records, snapshot);
+      if (cards === 0) throw new Error('worker completed without reporting a card');
+      await reconcileCounts(targets, kind);
+
+      const summary = {
+        kind,
+        only,
+        collections: targets.length,
+        cards,
+        workers: { requested: requestedWorkers, effective: workers },
+        pages,
+        renderers: [...new Set(renderers)].sort(),
+      };
+      if (ctx.json) printJson(ctx, { summary });
+      else ctx.out(`${cards} ${kind} card(s) tagged across ${targets.length} collection(s); workers ${workers}`);
+      ctx.emit('packs.tag', summary);
+      return EXIT.ok;
+    } catch (error) {
+      try {
+        await restoreSnapshot(snapshot);
+      } catch (restoreError) {
+        throw new CommandError(
+          `tagging failed and card restoration also failed: ${String(error)}; restore: ${String(restoreError)}`,
+        );
+      }
       throw new CommandError(
-        `tagging failed and card restoration also failed: ${String(error)}; restore: ${String(restoreError)}`,
+        `tagging failed; prior cards restored: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    throw new CommandError(
-      `tagging failed; prior cards restored: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  } finally {
+    await unlock();
   }
 }
 
