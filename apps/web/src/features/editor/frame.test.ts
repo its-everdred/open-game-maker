@@ -249,7 +249,7 @@ describe('game frame adapter', () => {
       send: vi.fn(),
       restoreSave: vi.fn(
         () =>
-          new Promise((resolve) => {
+          new Promise<{ saveSchemaVersion: number; data: unknown }>((resolve) => {
             restored = resolve;
           }),
       ),
