@@ -127,7 +127,12 @@ describe('game detail', () => {
   });
 
   it('orders player tags first and uses the group icon for multiplayer', () => {
-    const tags = detailOf({ ...blobs, slug: 'other', tags: ['Puzzle', 'Multiplayer', 'Solo'], choices: undefined }).tags;
+    const tags = detailOf({
+      ...blobs,
+      slug: 'other',
+      tags: ['Puzzle', 'Multiplayer', 'Solo'],
+      choices: undefined,
+    }).tags;
     expect(tags.map(({ label }) => label)).toEqual(['Solo', 'Multiplayer', 'Puzzle']);
     expect(tags[1]?.key).toBe('party');
   });
