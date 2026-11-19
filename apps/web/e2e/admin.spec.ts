@@ -149,7 +149,11 @@ test('persists confirmed admin changes, retries failures, and refetches their vi
 
   await page.goto('/admin?test');
   await activate(page.getByRole('button', { name: 'Delist' }));
+  const delistResponse = page.waitForResponse(
+    (response) => response.url().endsWith(`/admin/games/${ids.game}/delist`) && response.request().method() === 'POST',
+  );
   await activate(page.getByRole('button', { name: 'Confirm' }));
+  expect((await delistResponse).status()).toBe(204);
   await expect.poll(() => requests.delists).toBe(1);
   await expect(page.getByRole('row').filter({ hasText: game.title })).toContainText('delisted');
 
