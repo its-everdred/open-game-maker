@@ -175,9 +175,10 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     const hooks = new SdkHooks(runtime, module.manifest, marks);
     runtime.attachHooks(hooks);
     host.test.register(hooks);
-    const thumbnails = module.manifest.saves
-      ? createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) })
-      : undefined;
+    const thumbnails =
+      module.manifest.saves && module.manifest.manualSaveSlots
+        ? createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) })
+        : undefined;
     if (thumbnails) runtime.addCleanup(() => thumbnails.dispose());
     const saveMachine = createSaveMachine({ instance, send, captureThumbnail: () => thumbnails?.current() });
     saveMachineState.current = saveMachine;

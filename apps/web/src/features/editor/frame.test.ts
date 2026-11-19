@@ -67,7 +67,7 @@ describe('game frame adapter', () => {
     expect(onSaveWrite).toHaveBeenCalledWith(save);
     controller.dispose();
   });
-  it('does not restore into a legacy game that cannot hold startup', async () => {
+  it('pauses a legacy game while restoring and resumes after the ordered restore', async () => {
     let options: GameFrameOptions | undefined;
     const restore = vi.fn().mockResolvedValue({ saveSchemaVersion: 1, data: {} });
     const error = vi.fn();
@@ -94,9 +94,17 @@ describe('game frame adapter', () => {
       onStartupRestoreError: error,
     });
     options?.onReady?.({ ...manifest, saves: true }, []);
-    await vi.waitFor(() => expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true }));
+    await vi.waitFor(() => expect(controller.state().bridgeState).toBe('ready'));
     expect(restore).toHaveBeenCalledOnce();
-    expect(frame.send).not.toHaveBeenCalledWith('save.restore', expect.anything());
+    expect(frame.send.mock.calls.map(([type]) => type)).toEqual([
+      'lifecycle.pause',
+      'design.apply',
+      'save.restore',
+      'lifecycle.resume',
+    ]);
+    expect(error).not.toHaveBeenCalled();
+    options?.onError?.({ code: 'save_unsupported', message: 'unsupported' });
+    expect(controller.state().startupSaveError).toBe(true);
     expect(error).toHaveBeenCalledOnce();
     controller.dispose();
   });
@@ -131,6 +139,73 @@ describe('game frame adapter', () => {
     await vi.waitFor(() => expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true }));
     expect(error).toHaveBeenCalledOnce();
     expect(frame.send).toHaveBeenCalledWith('lifecycle.resume', {});
+    controller.dispose();
+  });
+  it('drops buffered edit-mode writes when returning to play', () => {
+    const callbacks = new Map<string, (payload: never) => void>();
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn((type: string, callback: (payload: never) => void) => {
+        callbacks.set(type, callback);
+        return vi.fn();
+      }),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: () => frame,
+    });
+    controller.setMode('edit');
+    callbacks.get('save.write')?.({ saveSchemaVersion: 1, data: { edit: true } } as never);
+    controller.setMode('play');
+    const write = vi.fn();
+    controller.onSaveWrite(write);
+    expect(write).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+  it('re-enables saving only after a manual restore is acknowledged', async () => {
+    let options: GameFrameOptions | undefined;
+    let restored!: () => void;
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn((type: string, callback: () => void) => {
+        if (type === 'save.restored') restored = callback;
+        return vi.fn();
+      }),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: async () => {
+        throw new Error('offline');
+      },
+    });
+    options?.onReady?.(manifest, [], true);
+    await vi.waitFor(() => expect(controller.state().startupSaveError).toBe(true));
+    controller.restoreSave({ saveSchemaVersion: 1, data: {} });
+    expect(controller.state().startupSaveError).toBe(true);
+    restored();
+    expect(controller.state().startupSaveError).toBe(false);
     controller.dispose();
   });
   it('does not treat a rejected startup restore as successful', async () => {

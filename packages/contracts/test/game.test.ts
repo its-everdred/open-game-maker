@@ -113,6 +113,13 @@ describe('game contract', () => {
     expect(gameManifestSchema.safeParse({ ...manifest(), saveSchema: -1 }).success).toBe(false);
   });
 
+  it('accepts only a boolean manual-slot declaration', () => {
+    expect(gameManifestSchema.safeParse({ ...manifest(), manualSaveSlots: true }).success).toBe(true);
+    expect(gameJson({ ...manifest(), manualSaveSlots: true })).toBe(true);
+    expect(gameManifestSchema.safeParse({ ...manifest(), manualSaveSlots: 'yes' }).success).toBe(false);
+    expect(gameJson({ ...manifest(), manualSaveSlots: 'yes' })).toBe(false);
+  });
+
   it('rejects editor tools outside the host vocabulary', () => {
     const doc = { ...manifest(), tools: ['select', 'lasso'] };
     expect(gameManifestSchema.safeParse(doc).error?.issues[0]?.path).toEqual(['tools', 1]);

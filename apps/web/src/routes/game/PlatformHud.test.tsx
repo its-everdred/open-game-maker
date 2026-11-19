@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 
@@ -346,7 +346,10 @@ describe('PlatformHud', () => {
     );
     await openSettingsSection('Saves');
     expect(await screen.findByRole('button', { name: 'Load' })).toBeEnabled();
-    test.saveWrite({ saveSchemaVersion: 1, data: {} });
+    await act(async () => {
+      test.saveWrite({ saveSchemaVersion: 1, data: {} });
+      await Promise.resolve();
+    });
     expect(write).not.toHaveBeenCalled();
   });
 

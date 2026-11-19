@@ -121,6 +121,9 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   let pendingStartupRestore: { resolve(): void; reject(error: Error): void } | undefined;
   const startupWrites: SaveData<unknown>[] = [];
   let saveWriteSubscribers = 0;
+  let startupWriteWindow = true;
+  let currentMode = options.mode;
+  let legacyRestorePending = false;
   let roomMessageSequence = 0;
   const emitRoomMessage = (type: GameToHost['t'], payload: unknown) => {
     roomMessageSequence += 1;
@@ -232,12 +235,15 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       readyTimeoutMs: 10_000,
       onReady: (manifest, marks, startupHold) => {
         if (current.bridgeState === 'error') return;
+        const legacyHold = Boolean(options.startupRestore && !startupHold && manifest.saves);
+        if (legacyHold) frame.send('lifecycle.pause', {});
         // The games host forwards the existing game-ready event for legacy builds; new SDKs also send load.frame.
         expectsFirstFrame = true;
         frame.send('design.apply', { rev: options.design.rev, doc: options.design.doc, patches: [] });
         const finish = () => {
           if (disposed) return;
-          if (startupHold && (options.resumeAfterStartup?.() ?? true)) frame.send('lifecycle.resume', {});
+          if ((startupHold || legacyHold) && (options.resumeAfterStartup?.() ?? true))
+            frame.send('lifecycle.resume', {});
           current = {
             ...current,
             bridgeState: 'ready',
@@ -259,8 +265,13 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
         let restoring = true;
         const restore = Promise.resolve().then(async () => {
           const save = await options.startupRestore!(manifest);
-          if (!restoring || disposed || !save) return;
-          if (!startupHold) throw new Error('game cannot hold startup');
+          if (!restoring || disposed || currentMode !== 'play' || !save) return;
+          if (!startupHold) {
+            legacyRestorePending = true;
+            startupWrites.length = 0;
+            frame.send('save.restore', save);
+            return;
+          }
           await new Promise<void>((resolve, reject) => {
             pendingStartupRestore = { resolve, reject };
             frame.send('save.restore', save);
@@ -270,6 +281,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
           .catch(() => {
             if (!disposed) {
               current = { ...current, startupSaveError: true };
+              startupWrites.length = 0;
+              startupWriteWindow = false;
               options.onStartupRestoreError?.();
             }
           })
@@ -296,6 +309,15 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
             pendingStartupRestore = undefined;
             return;
           }
+          if (legacyRestorePending) {
+            legacyRestorePending = false;
+            current = { ...current, startupSaveError: true };
+            startupWrites.length = 0;
+            startupWriteWindow = false;
+            options.onStartupRestoreError?.();
+            publish();
+            return;
+          }
           for (const callback of saveLoadErrors) callback(failure.message);
           return;
         }
@@ -311,11 +333,21 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   }
 
   const stopStartupRestore = frame.on('save.restored', () => {
-    pendingStartupRestore?.resolve();
+    if (pendingStartupRestore) pendingStartupRestore.resolve();
+    else if (current.startupSaveError) {
+      current = { ...current, startupSaveError: false };
+      publish();
+    }
     pendingStartupRestore = undefined;
   });
   const stopStartupWrites = frame.on('save.write', (save) => {
-    if (saveWriteSubscribers === 0) {
+    const migration = (save as { reason?: string }).reason === 'migration';
+    if (
+      currentMode === 'play' &&
+      (startupWriteWindow || (current.startupSaveError && migration)) &&
+      saveWriteSubscribers === 0
+    ) {
+      if (legacyRestorePending && !migration) return;
       if (startupWrites.length === 4) startupWrites.shift();
       startupWrites.push(save);
     }
@@ -361,7 +393,15 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
 
   return {
     state: snapshot,
-    setMode: (mode) => frame.setMode(mode),
+    setMode: (mode) => {
+      currentMode = mode;
+      if (mode !== 'play') {
+        startupWrites.length = 0;
+        startupWriteWindow = false;
+        legacyRestorePending = false;
+      }
+      frame.setMode(mode);
+    },
     setSettings: (settings) => frame.setSettings(settings),
     applyDesign: (rev, doc, patches) => {
       frame.send('design.apply', { rev, doc, patches: [...patches] });
@@ -392,6 +432,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       frame.send('lifecycle.resume', {});
     },
     restoreSave: (save) => {
+      legacyRestorePending = false;
       frame.send('save.restore', save);
     },
     onSaveLoadError: (callback) => {
@@ -428,8 +469,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
           });
       }),
     onSaveWrite: (callback) => {
+      startupWriteWindow = false;
       saveWriteSubscribers += 1;
-      const stop = frame.on('save.write', callback);
+      const stop = frame.on('save.write', (save) => {
+        if (currentMode === 'play') callback(save);
+      });
       for (const save of startupWrites.splice(0)) callback(save);
       let active = true;
       return () => {

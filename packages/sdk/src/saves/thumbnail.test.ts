@@ -21,27 +21,13 @@ describe('save thumbnail', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/webp;base64,YWJj');
     expect(captureSaveThumbnail()).toBe('data:image/webp;base64,YWJj');
     expect(drawImage).toHaveBeenCalledWith(source, 0, 0, 160, 90);
-  });
-
-  it('does not block saving when the game canvas is tainted', () => {
-    const source = document.createElement('canvas');
-    source.width = 100;
-    source.height = 100;
-    document.body.append(source);
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({
       drawImage: () => {
         throw new Error('tainted');
       },
     } as unknown as CanvasRenderingContext2D);
     expect(captureSaveThumbnail()).toBeUndefined();
-  });
-
-  it('omits a uniform discarded drawing buffer', () => {
-    const source = document.createElement('canvas');
-    source.width = 100;
-    source.height = 100;
-    document.body.append(source);
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({
       drawImage: vi.fn(),
       getImageData: () => ({ data: new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 0, 0]) }),
     } as unknown as CanvasRenderingContext2D);
