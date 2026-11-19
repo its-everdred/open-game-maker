@@ -78,6 +78,7 @@ const host = vi.hoisted(() => {
 });
 
 vi.mock('../../features/editor/api', () => editorApi);
+vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: null }) }));
 const branchList = vi.hoisted(() => ({ value: undefined as Array<{ id: string; name: string }> | undefined }));
 vi.mock('../games/useBranches', () => ({ useBranches: () => ({ data: branchList.value }) }));
 vi.mock('../../features/editor/frame', async (importOriginal) => ({
