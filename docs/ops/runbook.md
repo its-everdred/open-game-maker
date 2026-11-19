@@ -167,12 +167,14 @@ ops/bin/ogm-voice-host ensure      # restart only when /healthz does not answer 
 ops/bin/ogm-voice-host health
 ```
 
+The start command creates a missing cleanup directory with mode `0700`; `check-env` reports a missing or insecure directory. Fix an existing directory with `chmod 700` before starting.
+
 One-time host settings (`check-env` lists whichever are still missing):
 
 - `voice-host.env`: `OGM_VOICE_TOKEN_SECRET` and `OGM_VOICE_INTERNAL_SECRET` copied from `api.env` (they must match),
   `OGM_API_INTERNAL_URL=http://127.0.0.1:<OGM_API_PORT>`, and for live voice `OGM_VOICE_PROVIDER=elevenlabs_agents`,
   `OGM_VOICE_LLM` (the agent's model), `OGM_VOICE_CLEANUP_ROOT` (a durable directory such as
-  `~/.local/state/ogm/voice-cleanup`) and `ELEVENLABS_AGENT_ID` (the host does not read `OGM_VOICE_AGENT_ID`).
+  `~/.local/state/ogm/voice-cleanup`, mode `0700`) and `ELEVENLABS_AGENT_ID` (the host does not read `OGM_VOICE_AGENT_ID`).
 - `api.env`: `OGM_VOICE_HOST_INTERNAL_URL=http://127.0.0.1:40401` and
   `OGM_VOICE_WS_URL=wss://<tailnet-host>:8443/ws/voice`; restart the API after.
 - Ingress: `ops/bin/ogm-ingress.sh` mounts `/ws/voice` on 8443 beside `/` and `/ws/rooms`.

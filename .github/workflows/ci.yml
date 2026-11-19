@@ -187,16 +187,6 @@ jobs:
         with:
           working_directory: services/voice-host
           cache: true
-      - name: Cache Mix dependencies and build
-        if: env.VOICE_CHANGED == 'true'
-        uses: actions/cache@v4
-        with:
-          path: |
-            services/voice-host/deps
-            services/voice-host/_build
-          key: voice-host-mix-${{ runner.os }}-${{ hashFiles('services/voice-host/mise.toml', 'services/voice-host/mix.lock') }}
-          restore-keys: |
-            voice-host-mix-${{ runner.os }}-
       - name: Fetch voice-host dependencies
         if: env.VOICE_CHANGED == 'true'
         working-directory: services/voice-host
