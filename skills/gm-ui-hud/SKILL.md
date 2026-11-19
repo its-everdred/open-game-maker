@@ -21,20 +21,7 @@ gameplay calls, so the same model drives the screen, tests, and spectators. Keep
 
 ## Layout
 
-Never scale an image non-uniformly. Use a 9-slice (`border-image` with the art's slice insets) or separate corners,
-edges, and centre for frames, buttons, and panels that must fit multiple sizes. For a new shape, generate a new asset
-at the slot's exact aspect ratio, state its pixel size in the image-generation prompt, save it under its own name,
-and mark it AI-generated as usual. Do not force an existing image into the new slot. Include the distortion gate's
-output in the verify checklist.
-
-For canvas or WebGL UI sprites, use the draft-only `@gm/sdk/debug` image-draw helpers: call `beginImageDraws()` at the
-start of each UI frame and `reportImageDraw({ id, file, source: { width, height }, drawn: { width, height } })` for
-each visible sprite. Draw dimensions are CSS pixels. The capture reads `window.__gm.imageDraws()`; world textures do
-not need reports. Call `beginImageDraws()` even on frames with no UI sprites so the gate can distinguish an empty frame
-from missing instrumentation. For WebGL UI, use a separate canvas with a unique DOM id, include that id as `canvasId`
-in each report, and draw sprites as quads; mark world-only canvases with
-`data-gm-world-canvas="true"`. Keep this instrumentation out of published builds.
-
+Follow [image distortion guidance](references/image-distortion.md) for UI art and canvas sprites.
 Read the `Viewport` from `HostApi.viewport.current()` on the `host` that `mount` receives, and follow
 `HostApi.viewport.onChange`; it carries size, `dpr`, orientation, and `safe` insets. Keep every HUD element inside the
 safe insets. Lay out against the manifest's `presentation.minLogical` reference size and scale uniformly from it;
@@ -83,7 +70,6 @@ a phone with the on-screen buttons showing, and asks at each step whether a butt
 is unchecked. Never claim every device.
 
 ## Reference
-
 Open `.claude/skills/vendor/gamedev/game-ui-ux/SKILL.md` for anchors, focus order, and event-driven HUD patterns, and
 `.claude/skills/vendor/phaser/scale-and-responsive/SKILL.md` or
 `.claude/skills/vendor/phaser/text-and-bitmaptext/SKILL.md` only for engine details. The host contract wins when a
