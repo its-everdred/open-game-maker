@@ -28,11 +28,11 @@ export function isSoftware(renderer: string): boolean {
   return SOFTWARE_RENDERER.test(renderer);
 }
 
-export function launch(software: boolean, disableGpuCompositing = false): Promise<Browser> {
+export function launch(software: boolean, disableGpuCompositing = false, handleSIGINT = true): Promise<Browser> {
   const args = software
     ? [...SOFTWARE_ARGS, ...(disableGpuCompositing ? ['--disable-gpu-compositing'] : [])]
     : GPU_ARGS;
-  return chromium.launch({ headless: true, args });
+  return chromium.launch({ headless: true, args, handleSIGINT });
 }
 
 /** The WebGL `UNMASKED_RENDERER_WEBGL` string of this page's GPU process. */

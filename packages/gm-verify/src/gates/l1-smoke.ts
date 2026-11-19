@@ -326,9 +326,10 @@ export async function runL1(root: string, options: RunL1Options = {}): Promise<G
     );
     watchdog.setStage('slot acquired');
     options.progress?.(`tick 0/${ticks} (slot acquired)`);
-    browser = await watchdog.wait(launch(options.software ?? false, true), (late) => {
+    browser = await watchdog.wait(launch(options.software ?? false, true, false), (late) => {
       void late.close();
     });
+    options.progress?.(`tick 0/${ticks} (browser launched)`);
     const opened = await watchdog.wait(
       openWithRetry(browser, url, options.readyTimeoutMs ?? READY_TIMEOUT_MS),
       (late) => {

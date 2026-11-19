@@ -103,7 +103,7 @@ describe('L1 deterministic browser smoke', () => {
       const result = await runL1(${JSON.stringify(STUB)}, {
         url: ${JSON.stringify(`${server.url}?stall=1`)}, outDir: ${JSON.stringify(join(root, 'shots'))},
         ticks: 60, software: true, slots: { runtimeDir: ${JSON.stringify(runtimeDir)}, slots: 1 },
-        progress: (line) => { if (line.includes('(slot acquired)')) console.log('ready'); }
+        progress: (line) => { if (line.includes('(browser launched)')) console.log('ready'); }
       });
       process.exitCode = result.ok ? 0 : 1;`;
       const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
