@@ -511,7 +511,7 @@ export async function kaiju(ctx) {
       const angle = n * Math.PI / (combat ? 12 : 6), radius = combat ? 5 + ring * 2 : ring * 1.5;
       const origin = combat ? [monster.x, monster.z] : centre, goal = [origin[0] + Math.cos(angle) * radius, origin[1] + Math.sin(angle) * radius];
       if (blocked(goal, crowdObstacles) || blocked(goal, avoid)) continue;
-      path = tryPath(route(from, goal, crowdObstacles, 1.5, maxVisited)); if (path) return path;
+      path = tryPath(route(from, goal, crowdObstacles, 1.5, Math.min(maxVisited, 150))); if (path) return path;
     }
     return null;
   };
