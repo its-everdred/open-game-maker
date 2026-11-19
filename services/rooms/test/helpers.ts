@@ -37,7 +37,8 @@ export async function startHarness(overrides: Partial<RoomsServiceConfig> = {}, 
   });
   await bundle.gameServer.listen(port, '127.0.0.1');
   const address = bundle.gameServer.transport.server?.address();
-  if (address === null || address === undefined || typeof address === 'string') throw new Error('test server did not bind');
+  if (address === null || address === undefined || typeof address === 'string')
+    throw new Error('test server did not bind');
   // ColyseusTestServer reads the requested port, which is zero for an ephemeral bind.
   Object.assign(bundle.gameServer, { port: address.port });
   const testServer = new ColyseusTestServer(bundle.gameServer);
