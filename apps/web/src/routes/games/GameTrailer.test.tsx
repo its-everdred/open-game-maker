@@ -161,7 +161,6 @@ it('marks the video only once it is playing', () => {
   expect(video).toHaveAttribute('data-playing');
 });
 
-
 it('ramps the menu and trailer gains in opposite directions on select and close', () => {
   vi.useFakeTimers();
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
@@ -202,7 +201,10 @@ it('keeps the first trailer audible while its replacement buffers', () => {
 
 it('restores the menu when a replacement trailer cannot play', async () => {
   vi.useFakeTimers();
-  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValueOnce().mockRejectedValueOnce(new Error('failed'));
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, 'play')
+    .mockResolvedValueOnce()
+    .mockRejectedValueOnce(new Error('failed'));
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   startTrailer({ trailerUrl: '/first-failure.mp4' });
   (play.mock.instances[0] as HTMLVideoElement).dispatchEvent(new Event('playing'));
@@ -238,7 +240,8 @@ it('restores an outgoing trailer when it is selected again while the next buffer
 
 it('fades to a previously blocked trailer after sound is enabled', async () => {
   sound = 'on';
-  const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, 'play')
     .mockRejectedValueOnce(new DOMException('no gesture', 'NotAllowedError'))
     .mockResolvedValue();
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});

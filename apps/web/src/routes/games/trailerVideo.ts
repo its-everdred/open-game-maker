@@ -27,11 +27,14 @@ function retire(url: string, video: HTMLVideoElement): void {
   const gain = gains.get(video);
   if (gain) ramp(gain, 0, fadeSeconds);
   preserve(video);
-  window.setTimeout(() => {
-    video.pause();
-    video.remove();
-    gain?.disconnect();
-  }, fadeSeconds * 1000 + 200);
+  window.setTimeout(
+    () => {
+      video.pause();
+      video.remove();
+      gain?.disconnect();
+    },
+    fadeSeconds * 1000 + 200,
+  );
 }
 
 function activate(url: string, video: HTMLVideoElement): void {
