@@ -454,7 +454,7 @@ export function GameScreen() {
                       const save = await getSave(gameId, 'auto');
                       return roomIdRef.current === undefined ? save : undefined;
                     },
-                    onStartupRestoreError: () => pushToast('Could not restore save'),
+                    onStartupRestoreError: () => pushToast('Could not restore save; saving is off'),
                     resumeAfterStartup: () => !menuOpenRef.current,
                   }
                 : {}),
@@ -820,6 +820,7 @@ export function GameScreen() {
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
             saves={frameState.manifest.saves}
             saveWritesDisabled={frameState.startupSaveError}
+            manualLoadDisabled={frameState.startupRecoveryUnavailable}
             manualSaveSlots={frameState.manifest.manualSaveSlots}
             saveSchema={frameState.manifest.saveSchema}
             migratesFrom={frameState.manifest.migratesFrom}

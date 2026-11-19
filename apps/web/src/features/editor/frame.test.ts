@@ -67,7 +67,7 @@ describe('game frame adapter', () => {
     expect(onSaveWrite).toHaveBeenCalledWith(save);
     controller.dispose();
   });
-  it('pauses a legacy game while restoring and resumes after the ordered restore', async () => {
+  it('protects an existing save when a legacy game cannot hold startup', async () => {
     let options: GameFrameOptions | undefined;
     const restore = vi.fn().mockResolvedValue({ saveSchemaVersion: 1, data: {} });
     const error = vi.fn();
@@ -94,18 +94,81 @@ describe('game frame adapter', () => {
       onStartupRestoreError: error,
     });
     options?.onReady?.({ ...manifest, saves: true }, []);
+    await vi.waitFor(() =>
+      expect(controller.state()).toMatchObject({
+        bridgeState: 'ready',
+        startupSaveError: true,
+        startupRecoveryUnavailable: true,
+      }),
+    );
+    expect(restore).toHaveBeenCalledOnce();
+    expect(frame.send).not.toHaveBeenCalledWith('save.restore', expect.anything());
+    expect(error).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+  it('keeps saving available for a legacy game with no existing save', async () => {
+    let options: GameFrameOptions | undefined;
+    const restore = vi.fn().mockResolvedValue(undefined);
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: restore,
+    });
+    options?.onReady?.({ ...manifest, saves: true }, []);
     await vi.waitFor(() => expect(controller.state().bridgeState).toBe('ready'));
     expect(restore).toHaveBeenCalledOnce();
-    expect(frame.send.mock.calls.map(([type]) => type)).toEqual([
-      'lifecycle.pause',
-      'design.apply',
-      'save.restore',
-      'lifecycle.resume',
-    ]);
-    expect(error).not.toHaveBeenCalled();
-    options?.onError?.({ code: 'save_unsupported', message: 'unsupported' });
-    expect(controller.state().startupSaveError).toBe(true);
-    expect(error).toHaveBeenCalledOnce();
+    expect(controller.state().startupSaveError).toBeUndefined();
+    controller.dispose();
+  });
+  it('disables legacy manual recovery when the startup lookup fails', async () => {
+    let options: GameFrameOptions | undefined;
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: async () => {
+        throw new Error('lookup failed');
+      },
+    });
+    options?.onReady?.({ ...manifest, saves: true }, []);
+    await vi.waitFor(() =>
+      expect(controller.state()).toMatchObject({
+        bridgeState: 'ready',
+        startupSaveError: true,
+        startupRecoveryUnavailable: true,
+      }),
+    );
     controller.dispose();
   });
   it('disables saving for the session when the startup load fails', async () => {

@@ -34,6 +34,8 @@ export type GameFrameState = {
   errorCode?: string;
   /** Do not write over an existing save after startup restore failed. */
   startupSaveError?: boolean;
+  /** Older builds cannot confirm a manual restore, so recovery requires a rebuilt game. */
+  startupRecoveryUnavailable?: boolean;
   firstFrame?: boolean;
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
 };
@@ -123,7 +125,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   let saveWriteSubscribers = 0;
   let startupWriteWindow = true;
   let currentMode = options.mode;
-  let legacyRestorePending = false;
   let roomMessageSequence = 0;
   const emitRoomMessage = (type: GameToHost['t'], payload: unknown) => {
     roomMessageSequence += 1;
@@ -235,15 +236,12 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       readyTimeoutMs: 10_000,
       onReady: (manifest, marks, startupHold) => {
         if (current.bridgeState === 'error') return;
-        const legacyHold = Boolean(options.startupRestore && !startupHold && manifest.saves);
-        if (legacyHold) frame.send('lifecycle.pause', {});
         // The games host forwards the existing game-ready event for legacy builds; new SDKs also send load.frame.
         expectsFirstFrame = true;
         frame.send('design.apply', { rev: options.design.rev, doc: options.design.doc, patches: [] });
         const finish = () => {
           if (disposed) return;
-          if ((startupHold || legacyHold) && (options.resumeAfterStartup?.() ?? true))
-            frame.send('lifecycle.resume', {});
+          if (startupHold && (options.resumeAfterStartup?.() ?? true)) frame.send('lifecycle.resume', {});
           current = {
             ...current,
             bridgeState: 'ready',
@@ -267,10 +265,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
           const save = await options.startupRestore!(manifest);
           if (!restoring || disposed || currentMode !== 'play' || !save) return;
           if (!startupHold) {
-            legacyRestorePending = true;
-            startupWrites.length = 0;
-            frame.send('save.restore', save);
-            return;
+            current = { ...current, startupRecoveryUnavailable: true };
+            throw new Error('game cannot hold startup');
           }
           await new Promise<void>((resolve, reject) => {
             pendingStartupRestore = { resolve, reject };
@@ -280,7 +276,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
         void Promise.race([restore, deadline])
           .catch(() => {
             if (!disposed) {
-              current = { ...current, startupSaveError: true };
+              current = {
+                ...current,
+                startupSaveError: true,
+                ...(!startupHold ? { startupRecoveryUnavailable: true } : {}),
+              };
               startupWrites.length = 0;
               startupWriteWindow = false;
               options.onStartupRestoreError?.();
@@ -307,15 +307,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
           if (pendingStartupRestore) {
             pendingStartupRestore.reject(new Error(failure.message));
             pendingStartupRestore = undefined;
-            return;
-          }
-          if (legacyRestorePending) {
-            legacyRestorePending = false;
-            current = { ...current, startupSaveError: true };
-            startupWrites.length = 0;
-            startupWriteWindow = false;
-            options.onStartupRestoreError?.();
-            publish();
             return;
           }
           for (const callback of saveLoadErrors) callback(failure.message);
@@ -347,7 +338,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       (startupWriteWindow || (current.startupSaveError && migration)) &&
       saveWriteSubscribers === 0
     ) {
-      if (legacyRestorePending && !migration) return;
       if (startupWrites.length === 4) startupWrites.shift();
       startupWrites.push(save);
     }
@@ -398,7 +388,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       if (mode !== 'play') {
         startupWrites.length = 0;
         startupWriteWindow = false;
-        legacyRestorePending = false;
       }
       frame.setMode(mode);
     },
@@ -432,7 +421,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       frame.send('lifecycle.resume', {});
     },
     restoreSave: (save) => {
-      legacyRestorePending = false;
       frame.send('save.restore', save);
     },
     onSaveLoadError: (callback) => {

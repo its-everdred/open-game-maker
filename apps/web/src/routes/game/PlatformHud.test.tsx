@@ -352,6 +352,29 @@ describe('PlatformHud', () => {
     });
     expect(write).not.toHaveBeenCalled();
   });
+  it('does not offer unconfirmed manual recovery on an older game build', async () => {
+    const test = frameHarness();
+    const list = vi
+      .fn()
+      .mockResolvedValue({ available: true, value: { slots: [{ slotId: 'auto', headRevision: 1, status: 'ok' }] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        saveWritesDisabled
+        manualLoadDisabled
+        saveApi={{ list, read: vi.fn(), write: vi.fn() }}
+        onResume={vi.fn()}
+      />,
+    );
+    await openSettingsSection('Saves');
+    expect(await screen.findByRole('button', { name: 'Update game to load' })).toBeDisabled();
+  });
 
   // A slot the running build cannot read must not offer Load: the SDK would refuse the restore and the host used to
   // swap the game for the Try again screen.

@@ -60,6 +60,7 @@ type PlatformHudProps = {
   manualSaveSlots?: boolean;
   /** A failed startup restore must not overwrite the existing automatic save. */
   saveWritesDisabled?: boolean;
+  manualLoadDisabled?: boolean;
   /** The running build's save schema; absent when the build did not report one. */
   saveSchema?: number;
   /** The one older schema the build still migrates; absent when it cannot migrate. */
@@ -153,6 +154,7 @@ export function PlatformHud({
   saves,
   manualSaveSlots = false,
   saveWritesDisabled = false,
+  manualLoadDisabled = false,
   saveSchema,
   migratesFrom,
   saveApi = defaultSaveApi,
@@ -405,10 +407,12 @@ export function PlatformHud({
                       <button
                         className="tap-secondary"
                         type="button"
-                        disabled={!saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))}
+                        disabled={
+                          manualLoadDisabled || !saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))
+                        }
                         onClick={() => void load()}
                       >
-                        Load
+                        {manualLoadDisabled ? 'Update game to load' : 'Load'}
                       </button>
                     </div>
                   </details>
