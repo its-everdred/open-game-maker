@@ -400,7 +400,16 @@ describe('GamesScreen', () => {
   it('commits keyboard selection before a subsequent Escape', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const router = createMemoryRouter(
-      [{ path: '/all', element: <GameMenuProvider><GamesScreen /></GameMenuProvider> }],
+      [
+        {
+          path: '/all',
+          element: (
+            <GameMenuProvider>
+              <GamesScreen />
+            </GameMenuProvider>
+          ),
+        },
+      ],
       { initialEntries: ['/all?test'] },
     );
     render(
