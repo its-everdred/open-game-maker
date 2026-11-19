@@ -28,13 +28,12 @@ the range in [the action-map card](references/cards/action-map.md), then choose 
 ## Every game, three devices
 
 The default is that every game plays on a phone with ordinary translucent on-screen buttons, and on a laptop with the
-keyboard and a connected gamepad. The host draws and styles the buttons; the game never does. Design the action list
+keyboard and a connected gamepad. The host normally draws and styles the buttons. Design the action list
 so all three reach every mechanic and every screen's way forward:
 
-- Phone: the host's overlay draws on-screen buttons only when the game declares a `stick` action; without one the
-  phone gets no buttons at all. It draws one stick, for the first `stick`, and at most five buttons; the first
+- Phone: the host draws up to two declared sticks and five buttons, including for games with no stick. The first
   declared button is the 64 px primary. Declare a `move` stick and keep button actions to five, most-used first.
-  The game-2d scaffold declares `move: 'axis'`; change it to `stick` and read its `x`, or the phone has no controls.
+  A game that already draws its own controls must declare `inputs.touch: 'self'` to suppress the host overlay.
 - Use `stick` or `button` for anything a player must reach: `axis` actions get no touch or gamepad default.
 - Keyboard: the default map binds WASD and arrows to `move`, Space to `jump`, and E or Enter to `use`. Give every
   other action a key: pass `{ keyboard: { KeyF: 'fire' } }` as the second argument to `defaultInputMapping`.
@@ -47,8 +46,8 @@ Never claim universal device support. Say which devices and viewports a journey 
 ## Device ownership
 
 The host owns gamepad discovery, standard mapping, connection changes, and rebinding. The host owns the touch overlay,
-including safe areas and 64 px primary targets. Games declare actions; they do not draw duplicate touch buttons or
-remember device bindings. Keyboard fallback and per-player device assignment are host settings.
+including safe areas and 64 px primary targets. Games declare actions and normally leave touch buttons to the host; existing games with their own controls
+set `inputs.touch` to `self`. Games do not remember device bindings. Keyboard fallback and per-player device assignment are host settings.
 
 ## Verify
 

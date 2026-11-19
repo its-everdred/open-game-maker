@@ -356,9 +356,12 @@ describe('createGameFrame', () => {
     frame.dispose();
   });
 
-  // Blobs (#640) declares a stick but draws its own buttons; the host must not stack a second set over them.
-  it('draws no touch controls unless the mapping asks for them', () => {
-    const readyWith = (inputMapping?: { touch: 'stick' }) => {
+  it('selects controls from the manifest while honoring self-drawn controls and explicit mappings', () => {
+    const readyWith = (
+      actions: Record<string, 'stick' | 'button'>,
+      touch?: 'self',
+      mapping?: 'tap' | 'stick' | 'two-stick',
+    ) => {
       const on = vi.spyOn(HostBridge.prototype, 'on');
       const frame = createGameFrame({
         container: document.createElement('div'),
@@ -366,23 +369,29 @@ describe('createGameFrame', () => {
         appOrigin: 'https://app.test',
         gameId: 'g',
         buildId: 'b',
-        build: 'draft' as const,
-        mode: 'play' as const,
+        build: 'draft',
+        mode: 'play',
         playerIndex: 0,
         capabilities: [],
-        role: () => 'owner' as const,
-        inputMapping,
+        role: () => 'owner',
+        inputMapping: mapping ? { touch: mapping } : undefined,
       });
       const onReady = on.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
       on.mockRestore();
-      onReady({ manifest: { inputs: { actions: { move: 'stick', rotateCCW: 'button' } } }, marks: [] });
+      onReady({ manifest: { inputs: { actions, touch } }, marks: [] });
       const layer = frame.iframe.nextElementSibling as HTMLElement;
-      const count = layer.childElementCount;
+      const result = {
+        sticks: layer.querySelectorAll('[data-stick]').length,
+        buttons: layer.querySelectorAll('button').length,
+      };
       frame.dispose();
-      return count;
+      return result;
     };
 
-    expect(readyWith()).toBe(0);
-    expect(readyWith({ touch: 'stick' })).toBe(2);
+    expect(readyWith({ jump: 'button' })).toEqual({ sticks: 0, buttons: 1 });
+    expect(readyWith({ move: 'stick', jump: 'button' })).toEqual({ sticks: 1, buttons: 1 });
+    expect(readyWith({ move: 'stick', look: 'stick', fire: 'button' })).toEqual({ sticks: 2, buttons: 1 });
+    expect(readyWith({ move: 'stick', jump: 'button' }, 'self')).toEqual({ sticks: 0, buttons: 0 });
+    expect(readyWith({ move: 'stick', jump: 'button' }, undefined, 'tap')).toEqual({ sticks: 0, buttons: 0 });
   });
 });

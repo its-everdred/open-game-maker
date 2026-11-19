@@ -68,8 +68,11 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await expect.poll(() => slow.evaluate(() => window.__fixture.params)).toMatchObject({ scenario: 'sandbox' });
   await expect.poll(() => slow.evaluate(() => window.__fixture.messages.includes('design.apply'))).toBe(true);
   if (testInfo.project.name === 'phone') {
-    // The deck asks for no touch mapping, so the host draws no controls over the game (the game draws its own).
-    await expect(page.locator('.review-deck-playable').locator('[data-stick], [data-action]')).toHaveCount(0);
+    // The host supplies controls for the fixture's declared actions.
+    const controls = page.locator('.review-deck-playable').locator('[data-stick], [data-action]');
+    await expect(controls).toHaveCount(2);
+    await expect(controls.first()).toBeVisible();
+    await expect(controls.last()).toBeVisible();
   } else {
     // On desktop the keys go to the game while it plays, so the arrows move the catcher instead of judging the card.
     await page.keyboard.down('ArrowLeft');

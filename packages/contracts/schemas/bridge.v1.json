@@ -3159,6 +3159,10 @@
                               "stick"
                             ]
                           }
+                        },
+                        "touch": {
+                          "type": "string",
+                          "const": "self"
                         }
                       },
                       "required": [

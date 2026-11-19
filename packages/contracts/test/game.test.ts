@@ -17,6 +17,14 @@ const control = {
 };
 
 describe('game contract', () => {
+  it('validates the self-drawn touch control opt-out', () => {
+    const inputs = { actions: { move: 'stick' }, touch: 'self' };
+    expect(gameManifestSchema.parse({ ...manifest(), inputs }).inputs.touch).toBe('self');
+    expect(gameJson({ ...manifest(), inputs })).toBe(true);
+    expect(gameManifestSchema.safeParse({ ...manifest(), inputs: { ...inputs, touch: 'other' } }).success).toBe(false);
+    expect(gameJson({ ...manifest(), inputs: { ...inputs, touch: 'other' } })).toBe(false);
+  });
+
   it('validates both optional loading image paths', () => {
     const loading = { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' };
     expect(gameManifestSchema.safeParse({ ...manifest(), loading }).success).toBe(true);
