@@ -95,6 +95,25 @@ describe('POST /internal/voice/transcript', () => {
       'I can do that.',
     ]);
   });
+
+  it('preserves a long opening turn without exceeding the job plan limit', async () => {
+    const { deps, request } = await setup();
+    const target: VoiceTarget = {
+      kind: 'edit',
+      game_id: ids.game,
+      creator_id: ids.creator,
+      session_id: '29000000-0000-4000-8000-000000000002',
+    };
+    const text = 'x'.repeat(5000);
+    expect((await request(target, 'creator', text)).status).toBe(200);
+    const job = deps.db
+      .select()
+      .from(schema.jobs)
+      .all()
+      .find((row) => row.idempotencyKey?.startsWith('voice-edit:'))!;
+    expect(JSON.parse(job.plan).summary).toHaveLength(4000);
+    expect(listSince(deps.sqlite, job.id, 0)[0]!.text).toBe(text);
+  });
   it('appends final creator and agent build turns exactly once without Aiur mirroring', async () => {
     const { deps, request } = await setup();
 

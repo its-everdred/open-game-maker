@@ -8,7 +8,7 @@ import type { OgmHost } from '../../app/testHook';
 import { useGameMenu, useGameMenuControls } from '../../app/GameMenu';
 import { useDock } from '../../features/build-chat/dock';
 import { editJobRequest } from '../../features/build-chat/edit';
-import { gameJobsQueryKey, myJobsQueryKey } from '../../features/build-chat/jobs';
+import { gameJobsQueryKey, isTerminal, myJobsQueryKey } from '../../features/build-chat/jobs';
 import {
   getDesignSnapshot,
   getGame,
@@ -56,6 +56,7 @@ import {
   deleteEntityIntent,
 } from '../../features/editor/transactions';
 import { api } from '../../lib/api/client';
+import { useSession } from '../../lib/api/session';
 import { pushToast } from '../../lib/notify/slice';
 import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
 import { RoomLayer } from '../../features/room/RoomLayer';
@@ -124,6 +125,7 @@ export function GameScreen() {
     enabled: gameId !== '',
     refetchInterval: 5_000,
   });
+  const { data: creatorSession } = useSession();
   const branches = useBranches(gameId === '' ? null : gameId);
   // Games open with the branch id in `v`; job admission only takes the canonical name of the main branch.
   const jobBranch = branches.data?.find(({ id }) => id === branch)?.name === 'main' ? 'main' : branch;
@@ -135,6 +137,7 @@ export function GameScreen() {
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const [editorPlaying, setEditorPlaying] = useState(true);
   const [conversationJobId, setConversationJobId] = useState<string>();
+  useEffect(() => setConversationJobId(undefined), [gameId, jobBranch]);
   useEffect(() => setEditorPlaying(true), [gameId]);
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
@@ -693,10 +696,19 @@ export function GameScreen() {
   });
 
   const conversationJob =
-    jobs.data?.jobs.find((job) => job.id === conversationJobId) ??
+    jobs.data?.jobs.find(
+      (job) => job.id === conversationJobId && job.creatorId === creatorSession?.user?.id && !isTerminal(job.state),
+    ) ??
     jobs.data?.jobs
-      .filter((job) => job.branchId === jobBranch)
+      .filter(
+        (job) => job.branchId === jobBranch && job.creatorId === creatorSession?.user?.id && !isTerminal(job.state),
+      )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const lastConversationJob = useRef<string | undefined>(undefined);
+  if (conversationJob) lastConversationJob.current = conversationJob.id;
+  const completedConversationJob = jobs.data?.jobs.find(
+    (job) => job.id === (conversationJobId ?? lastConversationJob.current) && isTerminal(job.state),
+  );
   const gameStage = (
     <div className="game-stage-area" data-frame-orientation={mode === 'edit' ? frameOrientation : undefined}>
       {mode === 'edit' && <EditFrameOrientation orientation={frameOrientation} onChange={setFrameOrientation} />}
@@ -949,6 +961,8 @@ export function GameScreen() {
               branchId={jobBranch}
               title={game.data?.title ?? ''}
               job={conversationJob}
+              admittedJobId={completedConversationJob ? undefined : conversationJobId}
+              completedJobId={completedConversationJob?.id}
               onAdmitted={setConversationJobId}
               reading={searchParams.get('composer') === 'stacked' ? 'stacked' : 'inline'}
             />

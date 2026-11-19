@@ -4,11 +4,12 @@ import type { VoiceTarget } from '@ogm/contracts';
 import { defineComposer, type AiurComposer as ComposerElement } from '@aiur/conversation';
 import { attachmentType, uploadChatAttachment } from './attachments';
 import type { Composer } from './Composer';
-import { connectDictation, probeVoice } from './voice';
+import { connectDictation, probeVoice, type VoiceAvailability } from './voice';
 
 type Props = Pick<ComponentProps<typeof Composer>, 'jobId' | 'voiceTarget' | 'postText' | 'startJob' | 'onPosted'> & {
   reading?: 'inline' | 'stacked';
   dictationTarget?: VoiceTarget;
+  wasAdmissionReused?: () => boolean;
 };
 
 /** Host adapters for the pinned upstream composer; no provider credentials enter the component. */
@@ -16,6 +17,7 @@ export function AiurComposer({
   jobId,
   voiceTarget,
   dictationTarget,
+  wasAdmissionReused,
   postText,
   startJob,
   onPosted,
@@ -23,11 +25,42 @@ export function AiurComposer({
 }: Props) {
   const ref = useRef<ComposerElement>(null);
   const voiceRef = useRef<VoiceClient | undefined>(undefined);
+  const dictationResult = useRef<Promise<string> | undefined>(undefined);
+  const cancelDictation = useRef<(() => void) | undefined>(undefined);
+  const voiceAvailability = useRef<VoiceAvailability>({ available: false });
   const pendingAdmission = useRef<{ text: string; jobId: string } | undefined>(undefined);
-  const callbacks = useRef({ postText, startJob, onPosted });
-  callbacks.current = { postText, startJob, onPosted };
+  const admissionInFlight = useRef(false);
+  const lastAdmittedJob = useRef<string | undefined>(undefined);
+  const lastVoiceSession = useRef<string | undefined>(undefined);
+  const callbacks = useRef({ postText, startJob, onPosted, wasAdmissionReused });
+  callbacks.current = { postText, startJob, onPosted, wasAdmissionReused };
   const [error, setError] = useState('');
-  useEffect(() => () => voiceRef.current?.end(), []);
+  useEffect(() => () => {
+    voiceRef.current?.end();
+    cancelDictation.current?.();
+  }, []);
+  useEffect(() => {
+    let active = true;
+    if (voiceTarget?.kind === 'edit' && lastVoiceSession.current !== voiceTarget.session_id) {
+      lastVoiceSession.current = voiceTarget.session_id;
+      lastAdmittedJob.current = undefined;
+    }
+    voiceAvailability.current = { available: false };
+    const refresh = () => {
+      if (voiceTarget)
+        void probeVoice(voiceTarget)
+          .then((value) => {
+            if (active) voiceAvailability.current = value;
+          })
+          .catch(() => {});
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 240_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [voiceTarget]);
   useEffect(() => {
     defineComposer();
     const element = ref.current;
@@ -51,7 +84,7 @@ export function AiurComposer({
       const mic = event
         .composedPath()
         .some((node) => node instanceof HTMLElement && node.getAttribute('part') === 'mic');
-      if (mic) element.toggleAttribute('data-recording', event.type === 'pointerdown' || event.type === 'keydown');
+      if (mic && (event.type === 'pointerdown' || event.type === 'keydown')) element.setAttribute('data-recording', '');
     };
     element.addEventListener('pointerdown', recording);
     element.addEventListener('pointerup', recording);
@@ -72,24 +105,35 @@ export function AiurComposer({
         ? {
             dictation: {
               start: async () => {
+                let resolveCancelled: () => void = () => {};
+                const result = new Promise<string>((resolve, reject) => {
+                  resolveCancelled = () => resolve('');
+                  const offTranscript = dictation.on('transcript', (value) => {
+                    if (value.kind !== 'final') return;
+                    offTranscript();
+                    offError();
+                    resolve(value.text);
+                  });
+                  const offError = dictation.on('error', (value) => {
+                    offTranscript();
+                    offError();
+                    reject(new Error(value.message));
+                  });
+                });
+                // The microphone or token can fail before the user releases the button.
+                void result.catch(() => {});
+                dictationResult.current = result;
+                cancelDictation.current = () => {
+                  dictation.cancel();
+                  resolveCancelled();
+                };
                 dictation.pressStart();
                 return {
-                  stop: () =>
-                    new Promise<string>((resolve, reject) => {
-                      const offTranscript = dictation.on('transcript', (value) => {
-                        if (value.kind !== 'final') return;
-                        offTranscript();
-                        offError();
-                        resolve(value.text);
-                      });
-                      const offError = dictation.on('error', (value) => {
-                        offTranscript();
-                        offError();
-                        reject(new Error(value.message));
-                      });
-                      dictation.pressEnd();
-                    }),
-                  cancel: () => dictation.cancel(),
+                  stop: () => {
+                    dictation.pressEnd();
+                    return result;
+                  },
+                  cancel: () => cancelDictation.current?.(),
                 };
               },
             },
@@ -99,11 +143,36 @@ export function AiurComposer({
         ? {
             voice: {
               start: async ({ onEnd }) => {
-                const available = await probeVoice(voiceTarget);
+                if (
+                  admissionInFlight.current ||
+                  (lastAdmittedJob.current &&
+                    voiceTarget.kind === 'edit' &&
+                    voiceTarget.job_id !== lastAdmittedJob.current)
+                )
+                  throw new Error('The conversation is starting');
+                const available = voiceAvailability.current;
                 if (!available.available) throw new Error('Voice is unavailable');
                 const voice = new VoiceClient({ url: available.url, token: available.token, target: voiceTarget });
                 voiceRef.current = voice;
-                voice.on('ended', onEnd);
+                voice.on('ended', () => {
+                  element.removeAttribute('data-recording');
+                  onEnd();
+                });
+                const offState = voice.on('state', (frame) => {
+                  const capabilities = (frame as unknown as { capabilities?: { text?: boolean } }).capabilities;
+                  if (!capabilities?.text) return;
+                  offState();
+                  void Promise.resolve(dictationResult.current)
+                    .catch(() => undefined)
+                    .then(async () => {
+                      // Let the upstream composer insert the final transcript before reading it.
+                      await Promise.resolve();
+                      const openingText = element.value.trim();
+                      if (!openingText || voiceRef.current !== voice) return;
+                      voice.sendText(openingText);
+                      if (element.value.trim() === openingText) element.value = '';
+                    });
+                });
                 await voice.startFromGesture();
                 return {
                   stop: async () => {
@@ -117,13 +186,22 @@ export function AiurComposer({
         : {}),
     };
     element.onSend = async (text, attachments) => {
-      const { startJob, postText, onPosted } = callbacks.current;
+      const { startJob, postText, onPosted, wasAdmissionReused } = callbacks.current;
       const instruction = text.trim();
-      const target = startJob
-        ? pendingAdmission.current?.text === instruction
-          ? pendingAdmission.current.jobId
-          : await startJob(instruction)
-        : jobId;
+      let target: string | undefined = jobId;
+      if (startJob) {
+        if (pendingAdmission.current?.text === instruction) {
+          target = pendingAdmission.current.jobId;
+        } else {
+          admissionInFlight.current = true;
+          try {
+            target = await startJob(instruction);
+            if (target) lastAdmittedJob.current = target;
+          } finally {
+            admissionInFlight.current = false;
+          }
+        }
+      }
       if (!target) throw new Error('Message not sent');
       if (startJob) pendingAdmission.current = { text: instruction, jobId: target };
       const uploaded = await Promise.all(
@@ -135,10 +213,11 @@ export function AiurComposer({
           return uploadChatAttachment(target, file, type);
         }),
       );
-      if (!startJob || uploaded.length) {
+      const separateText = !startJob || wasAdmissionReused?.() === true;
+      if ((separateText && text.trim()) || uploaded.length) {
         const posted = await postText(
           target,
-          startJob ? '' : text.trim(),
+          separateText ? text.trim() : '',
           uploaded.length ? uploaded.map(({ id }) => id) : undefined,
         );
         if (posted && typeof posted === 'object' && 'id' in posted)
@@ -157,7 +236,6 @@ export function AiurComposer({
       element.removeEventListener('keydown', recording);
       element.removeEventListener('keyup', recording);
       style.remove();
-      dictation?.cancel();
     };
   }, [jobId, voiceTarget, dictationTarget, reading]);
   return (

@@ -57,7 +57,7 @@ export async function appendVoiceTranscript(
   if (request.target.kind === 'edit' && request.actor === 'creator' && !jobFor(deps.db, request.target)) {
     const result = await deliverInstruction(deps, {
       target: request.target,
-      text: request.text,
+      text: request.text.slice(0, 4000),
       idempotency_key: `opening:${request.conversation_id}`,
       kind: 'instruct',
     });

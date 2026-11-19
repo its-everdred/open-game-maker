@@ -7,7 +7,7 @@ import { and, eq } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
 import { getChatRuntime } from '../build-chat/routes.js';
-import { getChatRow, insertChatRow } from '../build-chat/store.js';
+import { getChatRow, insertChatRow, markMirror } from '../build-chat/store.js';
 import { AdmissionRefused, admit } from '../jobs/admission.js';
 import {
   clearVoiceWaitingOn,
@@ -175,10 +175,10 @@ async function deliverEdit(
   if (inserted) {
     const runtime = getChatRuntime(deps);
     runtime.hub.publish(job.id);
-    void runtime.mirror.mirror(id).catch((error: unknown) => {
-      deps.log({ event: 'chat-mirror-error', jobId: job.id, error: (error as Error).name });
-    });
   }
+  if (!inserted && getChatRow(deps.sqlite, id)?.mirrorState === 'failed') markMirror(deps.sqlite, id, 'pending');
+  await getChatRuntime(deps).mirror.mirror(id);
+  if (getChatRow(deps.sqlite, id)?.mirrorState !== 'sent') throw new Error('edit instruction not delivered');
   return 'delivered';
 }
 

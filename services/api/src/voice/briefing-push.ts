@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { BriefingPush, VoiceTarget } from '@ogm/contracts';
 import { schema, type Db, type Sqlite } from '@ogm/db';
 import { and, asc, eq } from 'drizzle-orm';
@@ -52,9 +51,7 @@ export const targetKey = (target: VoiceTarget) =>
   `${target.kind}:${target.kind === 'scope' ? target.session_id : target.kind === 'build' ? target.job_id : `${target.game_id}:${target.creator_id}${target.kind === 'edit' ? `:${target.session_id}` : ''}`}`;
 
 export const editAdmissionKey = (target: Extract<VoiceTarget, { kind: 'edit' }>) =>
-  `voice-edit:${createHash('sha256')
-    .update(JSON.stringify([target.game_id, target.session_id]))
-    .digest('hex')}`;
+  `voice-edit:${target.game_id}:${target.session_id}`;
 
 export function localTime(at: string, zone: string): string {
   try {

@@ -60,6 +60,7 @@ export function Chat({
   const since = useRef(0);
   const admittingRef = useRef(false);
   const admissionKeyRef = useRef<{ text: string; key: string }>(undefined);
+  const admissionReused = useRef(false);
   const mountedRef = useRef(true);
   const budget = useQuery({
     queryKey: ['build-chat', 'edit-budget', target.gameId],
@@ -111,7 +112,14 @@ export function Chat({
     setSubmitting(true);
     setAdmissionError('');
     // One key per instruction, so a retry after a lost response finds the job the first request created.
-    if (admissionKeyRef.current?.text !== text) admissionKeyRef.current = { text, key: `edit:${crypto.randomUUID()}` };
+    if (admissionKeyRef.current?.text !== text)
+      admissionKeyRef.current = {
+        text,
+        key:
+          conversationVoiceTarget?.kind === 'edit'
+            ? `voice-edit:${conversationVoiceTarget.game_id}:${conversationVoiceTarget.session_id}`
+            : `edit:${crypto.randomUUID()}`,
+      };
     try {
       const result = await admitJob(editJobRequest(target, text, start, admissionKeyRef.current.key));
       if (result.kind === 'refused') {
@@ -120,6 +128,7 @@ export function Chat({
         return undefined;
       }
       admissionKeyRef.current = undefined;
+      admissionReused.current = result.reused === true && result.samePlan !== true;
       setRefusal(undefined);
       setWaitingForAdmin(false);
       void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
@@ -186,6 +195,7 @@ export function Chat({
           voiceTarget={voiceTarget}
           postText={postChatText}
           startJob={canPost ? undefined : (text) => admit(text, 'now')}
+          wasAdmissionReused={() => admissionReused.current}
           onPosted={addMessage}
         />
       ) : (
