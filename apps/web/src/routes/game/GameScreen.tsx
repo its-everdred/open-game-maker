@@ -18,8 +18,6 @@ import {
   getPreviewDesign,
   getScenerySource,
   getOptionalReapply,
-  getOptionalSaves,
-  getSave,
   listJobs,
   postAnalyticsEvent,
   NO_BUILD_ID,
@@ -27,7 +25,6 @@ import {
   type DesignSnapshot,
 } from '../../features/editor/api';
 import { inspectBuildChange, readyBuildSignal } from '../../features/editor/builds';
-import { saveSlotLoadable } from '../../features/editor/hud/saves';
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
 import { FocusZone } from '../../lib/input';
@@ -69,6 +66,7 @@ import { gameLoadActivity } from './load-analytics';
 import { PlatformHud } from './PlatformHud';
 import { roomFacts } from './room-facts';
 import { recordPlay } from './recordPlay';
+import { saveOptions } from './startup-save';
 import { UpdateIndicator } from './UpdateIndicator';
 import { gameExtras, type GameExtraProps } from './extras';
 import './game.css';
@@ -435,29 +433,7 @@ export function GameScreen() {
               buildId: activePreview?.accessId ?? snapshot.buildId,
               ...(activePreview ? { preview: true } : {}),
               mode,
-              ...(restoreOnStart
-                ? {
-                    startupRestore: async (manifest: import('@ogm/contracts/browser').GameManifest) => {
-                      if (!manifest.saves || roomIdRef.current !== undefined) return undefined;
-                      const query =
-                        manifest.saveSchema === undefined
-                          ? undefined
-                          : {
-                              schema: manifest.saveSchema,
-                              ...(manifest.migratesFrom === undefined ? {} : { migratesFrom: manifest.migratesFrom }),
-                            };
-                      const result = await getOptionalSaves(gameId, query);
-                      if (!result.available) throw new Error('saves unavailable');
-                      const slot = result.value.slots.find((candidate) => candidate.slotId === 'auto');
-                      if (!slot) return undefined;
-                      if (!saveSlotLoadable(slot)) throw new Error('save incompatible');
-                      const save = await getSave(gameId, 'auto');
-                      return roomIdRef.current === undefined ? save : undefined;
-                    },
-                    onStartupRestoreError: () => pushToast('Could not restore save; saving is off'),
-                    resumeAfterStartup: () => !menuOpenRef.current,
-                  }
-                : {}),
+              ...(restoreOnStart ? saveOptions(gameId, roomIdRef, menuOpenRef) : {}),
               design: activePreview ? previewDesign.data! : snapshot,
               build,
               onState: setFrameState,
