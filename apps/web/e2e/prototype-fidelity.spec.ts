@@ -10,7 +10,7 @@ import { prototypePaletteNormalizationCss } from './support/prototype-palette';
 import { attachComparison, prototypeThresholds } from './support/visual-compare';
 
 // eslint-disable-next-line no-restricted-properties
-const referenceOrigin = `http://127.0.0.1:${process.env.OGM_PROTOTYPE_E2E_PORT ?? '43176'}`;
+const referenceOrigin = `http://127.0.0.1:${process.env.OGM_WEB_BRIDGE_PORT ?? '10001'}`;
 const townStub = readFileSync(new URL('./fixtures/town-stub/index.html', import.meta.url), 'utf8');
 const neutralImage = Buffer.from(
   '<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="788"><rect width="1400" height="788" fill="#6b6570"/></svg>',
