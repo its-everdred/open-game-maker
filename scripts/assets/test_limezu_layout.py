@@ -9,6 +9,20 @@ import limezu_layout as layout
 
 
 class SizeVariants(unittest.TestCase):
+    def test_type_one_fence_matches_vendor_name_without_type_at_16px(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = [
+                '32x32/Single_Files_32x32/Fences_32x32/Wooden_Fence_Type_1_Yellow_Brown_1_32x32.png',
+                '16x16/Single_Files_16x16/Fences_16x16/Wooden_Fence_Yellow_Brown_1_16x16.png',
+                '48x48/Single_Files_48x48/Fences_48x48/Wooden_Fence_Type_1_Yellow_Brown_1_48x48.png',
+            ]
+            for name in paths:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            self.assertEqual(layout.size_variants(root, root / paths[0]), [root / paths[1], root / paths[2]])
+
     def test_matches_corresponding_files_without_confusing_duplicate_names(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -56,6 +70,30 @@ class SizeVariants(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
             self.assertEqual(layout.size_variants(root, canonical), [sibling])
+
+    def test_internal_extra_separator_does_not_hide_sibling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            canonical = root / '32x32/Props_32x32/Manger_Small__Full_32x32.png'
+            sibling = root / '16x16/Props_16x16/Manger_Small_Full_16x16.png'
+            for path in (canonical, sibling):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            self.assertEqual(layout.size_variants(root, canonical), [sibling])
+
+    def test_numbered_vendor_copy_matches_only_when_unambiguous(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            canonical = root / '32x32/Fences_32x32/Upper_32x32.png'
+            sibling = root / '16x16/Fences_16x16/Upper_16x16 (1).png'
+            for path in (canonical, sibling):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            self.assertEqual(layout.size_variants(root, canonical), [sibling])
+            duplicate = sibling.with_name('Upper_16x16.png')
+            duplicate.touch()
+            with self.assertRaisesRegex(ValueError, 'ambiguous'):
+                layout.size_variants(root, canonical)
 
 
 class CardGeneration(unittest.TestCase):

@@ -8,7 +8,11 @@ _SIZE = re.compile(r'(?i)(?:^|[_ -])(?:16x16|32x32|48x48)(?=$|[_ .-])')
 
 def key(path: Path) -> str:
     """Normalize size suffixes while retaining the complete category path."""
-    parts = [re.sub(r'_+(?=\.)', '', _SIZE.sub('', part)).strip('_ -').lower() for part in path.parts]
+    parts = []
+    for part in path.parts:
+        part = re.sub(r' \(1\)(?=\.)', '', part)
+        part = re.sub(r'_+', '_', _SIZE.sub('', part))
+        parts.append(re.sub(r'_+(?=\.)', '', part).strip('_ -').lower())
     return '/'.join('0_complete_tileset' if part == '0_complete_tileset_singles' else part for part in parts)
 
 
@@ -26,7 +30,14 @@ def size_variants(root: Path, canonical: Path, index=None) -> list[Path]:
     index = index if index is not None else variant_index(root)
     variants = []
     for size in ('16x16', '48x48'):
-        matches = index.get((size, key(relative)), [])
+        normalized = key(relative)
+        matches = index.get((size, normalized), [])
+        # Some 16 px type-1 wooden fences omit "Type_1" in the vendor filename.
+        if not matches and size == '16x16' and normalized.startswith('single_files/'):
+            folder, _, filename = normalized.rpartition('/')
+            if folder.endswith(('/fences', '/0_complete_tileset')) and filename.startswith('wooden_fence_type_1_'):
+                fallback = folder + '/' + filename.replace('wooden_fence_type_1_', 'wooden_fence_', 1)
+                matches = index.get((size, fallback), [])
         if len(matches) > 1:
             raise ValueError(f'ambiguous {size} variant for {relative}')
         variants.extend(matches)
