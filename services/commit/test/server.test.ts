@@ -113,6 +113,49 @@ describe('commit HTTP service', () => {
     expect(append).toHaveBeenCalledWith(expect.objectContaining({ result: 'refused', verdict }));
   });
 
+  it('refuses a concurrent retry while creation is still running', async () => {
+    let finish!: (value: CommitResult) => void;
+    const pending = new Promise<CommitResult>((resolve) => {
+      finish = resolve;
+    });
+    const { request } = fakeRequest(() => ({}));
+    const complete = contextWith(request);
+    const { repos, ...operations } = complete;
+    const execute = vi.fn(() => pending);
+    const app = createCommitApp({
+      serviceToken,
+      operations,
+      repos,
+      audit: { async append() {} },
+      remoteAddress: () => '127.0.0.1',
+      execute,
+    });
+    const init = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${serviceToken}` },
+      body: JSON.stringify({
+        kind: 'create_game',
+        gameId: 'game-1',
+        slug: 'game',
+        visibility: 'private',
+        templateRef: 'game-2d@1',
+      }),
+    };
+    const first = app.request('/internal/commit', init);
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+    const retry = app.request('/internal/commit', init);
+    const retryStatus = await Promise.race([
+      retry.then((response) => response.status),
+      new Promise<number>((resolve) => setTimeout(() => resolve(0), 500)),
+    ]);
+    expect(execute).toHaveBeenCalledOnce();
+    finish({ ok: true, sha: 'sha' });
+    expect((await first).status).toBe(200);
+    expect(retryStatus).toBe(409);
+    expect((await app.request('/internal/commit', init)).status).toBe(200);
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
   it('audits a failed operation before returning 502', async () => {
     const { app, append } = setup({ failure: new Error('upstream failed') });
     const response = await app.request('/internal/commit', releaseRequest(`Bearer ${serviceToken}`));

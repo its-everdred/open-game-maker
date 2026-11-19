@@ -86,6 +86,55 @@ describe('GitHub App auth', () => {
     });
   });
 
+  it('keeps rate limits scoped to the affected installation', async () => {
+    let aliceRequests = 0;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const target = typeof input === 'string' || input instanceof URL ? input : input.url;
+      const url = new URL(target);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+      if (url.pathname === '/app/installations')
+        return json([
+          { id: 1, account: { login: 'alice', type: 'User' } },
+          { id: 2, account: { login: 'studio', type: 'Organization' } },
+        ]);
+      if (url.pathname.endsWith('/access_tokens'))
+        return json(
+          {
+            token: `token-${url.pathname.split('/')[3]}`,
+            expires_at: new Date(Date.now() + 3600_000).toISOString(),
+            permissions: {},
+            repository_selection: 'all',
+          },
+          201,
+        );
+      if (url.pathname === '/repos/alice/game') {
+        aliceRequests += 1;
+        return new Response(JSON.stringify({ message: 'secondary rate limit' }), {
+          status: 403,
+          headers: { 'content-type': 'application/json', 'retry-after': '60' },
+        });
+      }
+      if (url.pathname === '/repos/studio/game') return json({ name: 'game' });
+      if (url.pathname === '/app') return json({ slug: 'ogm-app' });
+      throw new Error(`unexpected ${method} ${url.pathname}`);
+    };
+    const app = await createGitHubApp({ appId: '123', privateKeyPath: await privateKeyFile(), fetch: fetchImpl });
+    const alice = await app.forOwner('alice');
+    const studio = await app.forOwner('studio');
+    await expect(alice.request('GET /repos/{owner}/{repo}', { owner: 'alice', repo: 'game' })).rejects.toBeInstanceOf(
+      GitHubRateLimitError,
+    );
+    const aliceAgain = await app.forOwner('alice');
+    await expect(
+      aliceAgain.request('GET /repos/{owner}/{repo}', { owner: 'alice', repo: 'game' }),
+    ).rejects.toBeInstanceOf(GitHubRateLimitError);
+    expect(aliceRequests).toBe(1);
+    await expect(studio.request('GET /repos/{owner}/{repo}', { owner: 'studio', repo: 'game' })).resolves.toMatchObject(
+      { data: { name: 'game' } },
+    );
+    await expect(app.identity()).resolves.toMatchObject({ name: 'ogm-app[bot]' });
+  });
+
   it('names an owner without an installation but never a credential', async () => {
     const fetchImpl: typeof fetch = async () => json([]);
     const app = await createGitHubApp({

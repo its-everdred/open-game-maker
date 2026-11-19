@@ -7,12 +7,10 @@ import { contextWith, fakeRequest } from './helpers.js';
 
 describe('create_game with the game-repo template', () => {
   it('commits skill links as symlinks inside the game folder and creates the game label', async () => {
-    let blobs = 0;
     const { request, calls } = fakeRequest((call) => {
       if (call.route.endsWith('/git/ref/{ref}')) return { object: { sha: 'main-1' } };
       if (call.route.endsWith('/git/commits/{commit_sha}')) return { tree: { sha: 'base-tree' } };
       if (call.route.endsWith('/git/trees/{tree_sha}')) return { truncated: false, tree: [] };
-      if (call.route.endsWith('/git/blobs')) return { sha: `blob-${(blobs += 1)}` };
       if (call.route.endsWith('/git/trees')) return { sha: 'tree-1' };
       if (call.route.endsWith('/git/commits')) return { sha: 'commit-1' };
       if (call.route === 'POST /repos/{owner}/{repo}/pulls') return { number: 7, title: 'Add game castle-game' };
@@ -35,17 +33,13 @@ describe('create_game with the game-repo template', () => {
     const tree = calls.find((call) => call.route.endsWith('/git/trees'))!.parameters.tree as {
       path: string;
       mode: string;
-      sha: string;
+      content: string;
     }[];
-    const blobContent = (sha: string) => {
-      const index = Number(sha.slice('blob-'.length)) - 1;
-      const blob = calls.filter((call) => call.route.endsWith('/git/blobs'))[index]!;
-      return Buffer.from(blob.parameters.content as string, 'base64').toString('utf8');
-    };
+    expect(calls.filter((call) => call.route.endsWith('/git/blobs'))).toHaveLength(0);
     const folder = 'games/castle-game';
     const link = tree.find((entry) => entry.path === `${folder}/.codex/skills/gm-core`)!;
     expect(link.mode).toBe('120000');
-    expect(blobContent(link.sha)).toBe('../../.claude/skills/gm-core');
+    expect(link.content).toBe('../../.claude/skills/gm-core');
     expect(tree.find((entry) => entry.path === `${folder}/.agents/skills/gm-core`)!.mode).toBe('120000');
     expect(tree.find((entry) => entry.path === `${folder}/AGENTS.md`)!.mode).toBe('100644');
     // The workflow belongs to the instance repository, so it never lands inside a game's folder.

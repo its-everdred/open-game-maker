@@ -31,6 +31,8 @@ export class NullRepoProvisioner implements RepoProvisioner {
 
 // A game is a folder in the instance repository, so provisioning adds `games/<slug>/` on a branch and merges it as the
 // bot — the commit service creates no repository and needs no per-creator GitHub account.
+export class GitHubRateLimitError extends Error {}
+
 export class CommitServiceRepoProvisioner implements RepoProvisioner {
   readonly #baseUrl: string;
   readonly #token: string;
@@ -63,9 +65,15 @@ export class CommitServiceRepoProvisioner implements RepoProvisioner {
         visibility: game.visibility,
         templateRef: this.#templateRef,
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(20_000),
     });
-    const result = (await response.json().catch(() => null)) as { ok?: boolean } | null;
+    const result = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      verdict?: { reasons?: { detail?: string }[] };
+    } | null;
+    if (result?.ok === false && result.verdict?.reasons?.some((reason) => reason.detail === 'github rate limited')) {
+      throw new GitHubRateLimitError('GitHub is busy. Please try again later.');
+    }
     if (!response.ok || result?.ok !== true) throw new Error(`commit service refused create_game (${response.status})`);
     const { owner, name } = this.#instanceRepo;
     return { owner, repo: name, url: `https://github.com/${owner}/${name}`, path: gameFolder(game.slug) };

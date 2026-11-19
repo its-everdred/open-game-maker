@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from '../github-request.js';
 import type { BoundaryVerdict } from '@ogm/contracts';
 
 import type { BoundaryApi } from '../boundary/api-client.js';
@@ -117,6 +118,7 @@ export class RealBoundaryGate implements BoundaryGate {
         }),
       );
     } catch (error) {
+      if (error instanceof GitHubRateLimitError) throw error;
       return gateError(error);
     }
   }

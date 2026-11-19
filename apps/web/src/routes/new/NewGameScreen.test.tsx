@@ -185,6 +185,28 @@ describe('NewGameScreen', () => {
     expect(screen.getByRole('button', { name: 'Select SmallScaleInt' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('shows a rate limit message during creation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        if (String(input).endsWith('/api/v1/games'))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: 'repo_provisioning_failed',
+                message: 'GitHub is busy. Please try again later.',
+                details: { gameId: 'g_1' },
+              }),
+              { status: 502, headers: { 'content-type': 'application/json' } },
+            ),
+          );
+        return Promise.resolve(new Response('{}', { status: 404 }));
+      }),
+    );
+    renderScreen('/new?step=talk');
+    expect(await screen.findByRole('alert')).toHaveTextContent('GitHub is busy. Please try again later.');
+  });
+
   it('offers a working retry when game creation fails', async () => {
     let createCalls = 0;
     vi.stubGlobal(

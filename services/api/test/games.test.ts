@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { sweepPlaySessions } from '../src/analytics/retention.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
@@ -473,6 +473,57 @@ describe('games routes', () => {
     });
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: 'not_owner' });
+  });
+
+  it('returns the game ID when a slow commit service times out', async () => {
+    const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => originalTimeout(10));
+    try {
+      const deps = makeDeps();
+      seedFamily(deps);
+      deps.registry.repoProvisioner = new CommitServiceRepoProvisioner({
+        baseUrl: 'http://127.0.0.1:4301',
+        token: 'token',
+        instanceRepo: { owner: 'instance', name: 'games' },
+        fetch: async (_input, init) =>
+          new Promise((_resolve, reject) =>
+            init?.signal?.addEventListener('abort', () => reject(new Error('timed out'))),
+          ),
+      });
+      const { app } = await makeApp(deps);
+      const response = await createGame(app);
+      expect(timeout).toHaveBeenCalledWith(20_000);
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({
+        error: 'repo_provisioning_failed',
+        details: { gameId: expect.stringMatching(/^g_/) },
+      });
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it('returns a recoverable message when GitHub is rate limited', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.registry.repoProvisioner = new CommitServiceRepoProvisioner({
+      baseUrl: 'http://127.0.0.1:4301',
+      token: 'token',
+      instanceRepo: { owner: 'instance', name: 'games' },
+      fetch: async () =>
+        new Response(
+          JSON.stringify({ ok: false, verdict: { reasons: [{ code: 'denylist', detail: 'github rate limited' }] } }),
+          { status: 200 },
+        ),
+    });
+    const { app } = await makeApp(deps);
+    const response = await createGame(app);
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: 'repo_provisioning_failed',
+      message: 'GitHub is busy. Please try again later.',
+      details: { gameId: expect.stringMatching(/^g_/) },
+    });
   });
 
   it('keeps a failed provision row and lets its owner retry', async () => {

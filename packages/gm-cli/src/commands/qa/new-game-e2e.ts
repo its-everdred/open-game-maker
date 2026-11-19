@@ -19,6 +19,8 @@ import { withBrowser } from '../../qa.js';
 import { readEnvFile } from '../publish/index.js';
 
 const LEGACY_QA_GAMES = [
+  'g_46f6bd39-1167-4e4b-8381-ba7d80f31af1',
+  'g_e034df03-f865-417b-9b51-0b209987dc54',
   'g_dd2c5ea5-1d9b-4a03-bfee-d4adab6f0d4a',
   'g_291c020f-112e-4c5f-bb80-7c0098622fcb',
   'g_e5502ee0-f570-4f91-93dc-6a47db61abb8',

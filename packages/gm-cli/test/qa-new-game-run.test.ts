@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { readQaManifest } from '../src/qa-new-game-manifest.js';
+import { readQaManifest, saveQaManifest } from '../src/qa-new-game-manifest.js';
 import { runNewGameQa } from '../src/qa-new-game-run.js';
 
 describe('New Game QA recovery', () => {
@@ -93,6 +93,36 @@ describe('New Game QA recovery', () => {
       expect(result.ok).toBe(false);
       expect(cleanup).toHaveBeenCalledWith('g_new', 'run-1', expect.any(Function));
       expect((await readQaManifest(join(dir, 'state.json'), 'example/games'))?.games[0]?.cleaned).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reconciles explicitly identified legacy games from an interrupted run', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'new-game-qa-'));
+    try {
+      await saveQaManifest(join(dir, 'state.json'), {
+        version: 1,
+        repo: 'example/games',
+        run: 'run-1',
+        baseline: [],
+        games: [],
+        complete: false,
+      });
+      let games = ['g_old'];
+      const cleanup = vi.fn(async () => {
+        games = [];
+      });
+      const result = await runNewGameQa(
+        { out: dir, repo: 'example/games', run: 'run-2', legacyIds: ['g_old'] },
+        {
+          inventory: async () => games,
+          cleanup,
+          capture: async () => [],
+        },
+      );
+      expect(cleanup).toHaveBeenCalledWith('g_old', 'legacy-g_old', expect.any(Function));
+      expect(result.failures).not.toContain(expect.stringContaining('unidentified'));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

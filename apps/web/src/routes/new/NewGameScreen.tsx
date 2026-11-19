@@ -1,3 +1,4 @@
+import { ApiError } from '../../lib/api/client';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -105,8 +106,15 @@ export function NewGameScreen() {
       .then((id) => {
         if (current) setGameId(id);
       })
-      .catch(() => {
-        if (current) setCreateError('The game could not be created. Try again.');
+      .catch((error: unknown) => {
+        const body = error instanceof ApiError ? error.body : undefined;
+        const limited =
+          typeof body === 'object' &&
+          body !== null &&
+          'message' in body &&
+          body.message === 'GitHub is busy. Please try again later.';
+        if (current)
+          setCreateError(limited ? 'GitHub is busy. Please try again later.' : 'The game could not be created.');
       });
     return () => {
       current = false;
@@ -383,7 +391,7 @@ function TalkStep({
       </div>
       {createError ? (
         <p role="alert">
-          The game could not be created.{' '}
+          {createError}{' '}
           <button type="button" onClick={onRetry}>
             Try again
           </button>

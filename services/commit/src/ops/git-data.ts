@@ -10,18 +10,19 @@ export async function createTreeFromFiles(
   files: ContentFile[],
   baseTree?: string,
 ): Promise<string> {
-  const tree: { path: string; mode: NonNullable<ContentFile['mode']>; type: 'blob'; sha: string }[] = [];
-  for (const file of files) {
-    const path = normalizeCommitPath(file.path);
-    const blob = await request<{ sha: string }>('POST /repos/{owner}/{repo}/git/blobs', {
-      ...repo,
-      repo: repo.name,
-      content: Buffer.from(file.content, 'utf8').toString('base64'),
-      encoding: 'base64',
-    });
-    tree.push({ path, mode: file.mode ?? '100644', type: 'blob', sha: blob.data.sha });
-  }
-  return createTree(request, repo, tree, baseTree);
+  const tree = files.map((file) => ({
+    path: normalizeCommitPath(file.path),
+    mode: file.mode ?? '100644',
+    type: 'blob' as const,
+    content: file.content,
+  }));
+  const response = await request<{ sha: string }>('POST /repos/{owner}/{repo}/git/trees', {
+    owner: repo.owner,
+    repo: repo.name,
+    ...(baseTree === undefined ? {} : { base_tree: baseTree }),
+    tree,
+  });
+  return response.data.sha;
 }
 
 export type TreeEntry = { path: string; mode: string; type: 'blob' | 'commit'; sha: string | null };
@@ -41,7 +42,7 @@ export async function createTree(
     sha: entry.sha,
   }));
   const response = await request<{ sha: string }>('POST /repos/{owner}/{repo}/git/trees', {
-    ...repo,
+    owner: repo.owner,
     repo: repo.name,
     ...(baseTree === undefined ? {} : { base_tree: baseTree }),
     tree,
@@ -58,7 +59,7 @@ export async function createCommit(
   parents: string[] = [],
 ): Promise<string> {
   const response = await request<{ sha: string }>('POST /repos/{owner}/{repo}/git/commits', {
-    ...repo,
+    owner: repo.owner,
     repo: repo.name,
     message,
     tree,

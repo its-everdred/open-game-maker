@@ -76,6 +76,7 @@ export function createCommitApp(dependencies: ServerDependencies): Hono {
     throw new Error('OGM_COMMIT_SERVICE_TOKEN must be at least 32 bytes');
   }
   const app = new Hono();
+  const creating = new Set<string>();
   const startedAt = Date.now();
   const remoteAddress = dependencies.remoteAddress ?? ((context: Context) => getConnInfo(context).remote.address);
 
@@ -201,40 +202,47 @@ export function createCommitApp(dependencies: ServerDependencies): Hono {
       return context.json({ error: { code: 'invalid_op', issues: parsed.error.issues } }, 422);
     }
 
-    const endCreate =
-      parsed.data.kind === 'create_game' && dependencies.qaCreateFence
-        ? await dependencies.qaCreateFence.begin(parsed.data.gameId)
-        : undefined;
-    if (endCreate === null) return context.json({ error: 'create_fenced' }, 409);
-
-    const operationContext: OperationContext = {
-      ...dependencies.operations,
-      repos: memoizedRepos(dependencies.repos),
-    };
-    const execute = dependencies.execute ?? executeOperation;
-    let result: CommitResult | undefined;
-    let failure: unknown;
+    const createId = parsed.data.kind === 'create_game' ? parsed.data.gameId : undefined;
+    if (createId !== undefined && creating.has(createId)) return context.json({ error: 'create_in_progress' }, 409);
+    if (createId !== undefined) creating.add(createId);
     try {
-      result = await execute(parsed.data, operationContext);
-    } catch (error) {
-      failure = error;
-    }
+      const endCreate =
+        parsed.data.kind === 'create_game' && dependencies.qaCreateFence
+          ? await dependencies.qaCreateFence.begin(parsed.data.gameId)
+          : undefined;
+      if (endCreate === null) return context.json({ error: 'create_fenced' }, 409);
 
-    const entry: AuditEntry = {
-      at: (dependencies.now ?? (() => new Date()))().toISOString(),
-      op: parsed.data.kind,
-      gameId: gameIdOf(parsed.data),
-      repo: await repoNameFor(parsed.data, operationContext).catch(() => 'unresolved'),
-      result: failure === undefined ? (result?.ok === true ? 'allowed' : 'refused') : 'error',
-      ...(result?.ok === true ? { sha: result.sha } : {}),
-      ...(result?.ok === false ? { verdict: result.verdict } : {}),
-      actor: 'api',
-    };
-    await dependencies.audit.append(entry);
-    // A refused or failed remote operation may have taken effect despite a lost response. Keep its marker for inspection.
-    if (endCreate && failure === undefined && result?.ok === true) await endCreate();
-    if (failure !== undefined) return context.json({ error: 'commit operation failed' }, 502);
-    return context.json(result as CommitResult, 200);
+      const operationContext: OperationContext = {
+        ...dependencies.operations,
+        repos: memoizedRepos(dependencies.repos),
+      };
+      const execute = dependencies.execute ?? executeOperation;
+      let result: CommitResult | undefined;
+      let failure: unknown;
+      try {
+        result = await execute(parsed.data, operationContext);
+      } catch (error) {
+        failure = error;
+      }
+
+      const entry: AuditEntry = {
+        at: (dependencies.now ?? (() => new Date()))().toISOString(),
+        op: parsed.data.kind,
+        gameId: gameIdOf(parsed.data),
+        repo: await repoNameFor(parsed.data, operationContext).catch(() => 'unresolved'),
+        result: failure === undefined ? (result?.ok === true ? 'allowed' : 'refused') : 'error',
+        ...(result?.ok === true ? { sha: result.sha } : {}),
+        ...(result?.ok === false ? { verdict: result.verdict } : {}),
+        actor: 'api',
+      };
+      await dependencies.audit.append(entry);
+      // A refused or failed remote operation may have taken effect despite a lost response. Keep its marker for inspection.
+      if (endCreate && failure === undefined && result?.ok === true) await endCreate();
+      if (failure !== undefined) return context.json({ error: 'commit operation failed' }, 502);
+      return context.json(result as CommitResult, 200);
+    } finally {
+      if (createId !== undefined) creating.delete(createId);
+    }
   });
   return app;
 }
