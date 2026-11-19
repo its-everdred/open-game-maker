@@ -1,6 +1,6 @@
 """Shared sprite measurements for the SmallScaleInt style study and the rebuild scorer.
 
-Run with ~/.local/share/ogm/forge-venv/bin/python -I (PIL + numpy + scipy).
+Requires Pillow, NumPy and SciPy.
 All functions take RGBA uint8 arrays (H, W, 4). Nothing here writes to pack files.
 """
 import numpy as np
