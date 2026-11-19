@@ -58,6 +58,8 @@ Assumed: the `open-games` repo plus the hosted site.
 
 ## Executor host glue (temporary)
 
+**PC Executor** (Kevin's PC, `ssh everdred@100.89.62.105`; Khala channel GM as "PC"): runs core no-asset tickets under `tracker.github.label_prefix: pc` (hand over: drop `agent:*`, add `pc:queued` + `pc:todo`, post "PC takes #N"), plus aiur-team/aiur (prefix `agent`; Kevin's NUC aiur daemon 5c1b32aea9 stays off while it runs), aiur-team/archon and Kevin's other repos. No game assets on the PC: Open-Games and asset-heavy core stay on the NUC.
+
 This directory: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/` (scripts) and `executor/handoff.md` (state). Run them from there.
 
 - **Loops:** `host-steps.sh` (merge, publish, stills, audits, follow-up triage), `auto-update.sh` (stack, web deploy, aiur pin), `command-listener.sh` (wakes the Executor).
