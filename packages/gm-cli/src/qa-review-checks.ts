@@ -32,6 +32,29 @@ function mediaStates(root: Element): MediaState[] {
   });
 }
 
+export async function openTicketBuilds(page: Page, timeout = 20_000) {
+  await page.locator('.worker-tracker-button').click({ timeout });
+  await page.getByRole('region', { name: 'Builds' }).waitFor({ timeout });
+}
+
+export async function openRunningTicket(page: Page, title: string, timeout = 20_000) {
+  const panel = page.getByRole('region', { name: 'Builds' });
+  const row = panel.getByRole('button', { name: new RegExp(`^${title}`, 'u') });
+  await row.click({ timeout });
+  await row.locator('..').getByRole('button', { name: 'Details', exact: true }).click({ timeout });
+}
+
+export async function openClosedTicket(page: Page, title: string, timeout = 20_000) {
+  await page
+    .getByRole('region', { name: 'Builds' })
+    .getByRole('button', { name: 'Completed', exact: true })
+    .click({ timeout });
+  await page
+    .getByRole('dialog', { name: 'Completed' })
+    .getByRole('button', { name: new RegExp(`^${title}`, 'u') })
+    .click({ timeout });
+}
+
 /**
  * Open the Builds popover, filter to reviews, and select an item. The app's PR-CI spec
  * (apps/web/e2e/studio-menu.spec.ts) opens the deck through this same step, so a change to the path fails CI before it

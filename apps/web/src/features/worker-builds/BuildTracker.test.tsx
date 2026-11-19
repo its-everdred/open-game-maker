@@ -50,6 +50,23 @@ afterEach(() => {
 });
 
 describe('build tracker', () => {
+  it('dismisses the popover with its close button or a pointer outside', () => {
+    render(
+      <>
+        <button type="button">Outside</button>
+        <BuildTracker workers={[{ ticket: 'g:1', title: 'Running', percent: 20, etaSeconds: null }]} />
+      </>,
+    );
+    const hammer = screen.getByRole('button', { name: '1 build running' });
+    fireEvent.click(hammer);
+    fireEvent.pointerDown(screen.getByText('Running'));
+    expect(screen.getByRole('region', { name: 'Builds' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Close builds' }));
+    expect(screen.queryByRole('region', { name: 'Builds' })).toBeNull();
+    fireEvent.click(hammer);
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Outside' }));
+    expect(screen.queryByRole('region', { name: 'Builds' })).toBeNull();
+  });
   it('counts an update without placing its text over a running game', () => {
     class TestSource extends EventTarget {
       static instances: TestSource[] = [];

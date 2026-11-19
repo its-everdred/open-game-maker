@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
+import { openClosedTicket, openRunningTicket, openTicketBuilds } from '../../../packages/gm-cli/src/qa-review-checks';
 
 // Kevin opens the hammer, taps a running ticket and a closed one, and sees each one's summary, status, media and
 // timeline on his phone (#873). The API's ticket detail is mocked in the shape services/api answers.
@@ -51,24 +52,28 @@ test('opens a running and a closed ticket’s detail from the hammer', async ({ 
   await installAuthRoutes(page, { signedIn: true });
   await installApi(page);
   await page.goto('/all');
-  await page.getByRole('button', { name: '1 build running' }).click();
-  const row = page.getByRole('button', { name: /Forest backdrop/ });
-  await row.click();
-  await row.locator('..').getByRole('button', { name: 'Details', exact: true }).click();
-  let dialog = page.getByRole('dialog', { name: 'Forest backdrop' });
-  await expect(dialog.getByText('Painting the forest behind the blobs; the first stills are in.')).toBeVisible();
-  await expect(dialog.getByText('Capturing stills')).toBeVisible();
-  await expectMedia(dialog);
-  await fitsEverySize(page);
-  await dialog.getByRole('button', { name: 'Close' }).click();
-
-  await page.getByRole('button', { name: 'Completed' }).click();
-  await page.getByRole('button', { name: 'Blob trailer · Completed' }).click();
-  dialog = page.getByRole('dialog', { name: 'Blob trailer' });
-  await expect(dialog.getByText('#66 Merged')).toBeVisible();
-  await expect(dialog.getByText('make it loop')).toBeVisible();
-  await expectMedia(dialog);
-  await fitsEverySize(page);
+  for (const viewport of VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await openTicketBuilds(page);
+    const close = page.getByRole('button', { name: 'Close builds' });
+    await expect(close).toBeInViewport();
+    await openRunningTicket(page, 'Forest backdrop');
+    let dialog = page.getByRole('dialog', { name: 'Forest backdrop' });
+    await expect(dialog.getByText('Painting the forest behind the blobs; the first stills are in.')).toBeVisible();
+    await expect(dialog.getByText('Capturing stills')).toBeVisible();
+    await expectMedia(dialog);
+    await fits(page);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await openClosedTicket(page, 'Blob trailer');
+    dialog = page.getByRole('dialog', { name: 'Blob trailer' });
+    await expect(dialog.getByText('#66 Merged')).toBeVisible();
+    await expect(dialog.getByText('make it loop')).toBeVisible();
+    await expectMedia(dialog);
+    await fits(page);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await close.click();
+    await expect(page.getByRole('region', { name: 'Builds' })).toBeHidden();
+  }
 });
 
 async function expectMedia(dialog: ReturnType<Page['getByRole']>) {
@@ -78,14 +83,9 @@ async function expectMedia(dialog: ReturnType<Page['getByRole']>) {
   await expect(dialog.locator('audio')).toHaveAttribute('src', 'https://api.example.test/blobs/sha256/sound');
 }
 
-async function fitsEverySize(page: Page) {
-  for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport);
-    await page.waitForTimeout(150);
-    // Nothing in the detail scrolls sideways on a phone.
-    const body = page.locator('.ticket-detail-body');
-    expect(await body.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
-  }
+async function fits(page: Page) {
+  const body = page.locator('.ticket-detail-body');
+  expect(await body.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
 }
 
 async function installApi(page: Page) {
