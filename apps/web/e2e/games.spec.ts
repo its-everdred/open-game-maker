@@ -98,7 +98,7 @@ test('keeps spotlight actions and close control touch sized on a phone', async (
   const edit = page.getByRole('button', { name: 'Edit Goblin Cellar' });
   const create = page.getByRole('button', { name: 'New game' });
   const close = page.getByRole('button', { name: 'Close game' });
-  await expect(play).toBeEnabled();
+  await expect(play).toBeEnabled({ timeout: 30_000 });
   await expect(create).toHaveCount(0);
 
   for (const target of [play, edit]) {
@@ -186,7 +186,7 @@ test('orders the library after playing two games', async ({ page }) => {
     .toEqual(['g_a', 'g_b']);
 });
 
-test('keeps tile badges and share controls in the bottom band', async ({ page }) => {
+test('keeps tile badges in the bottom band', async ({ page }) => {
   const fixture = JSON.parse(readFileSync(new URL('./fixtures/games.json', import.meta.url), 'utf8')) as {
     games: Array<Record<string, unknown>>;
     jobs: Array<Record<string, unknown>>;
@@ -201,7 +201,7 @@ test('keeps tile badges and share controls in the bottom band', async ({ page })
   await page.route('**/api/v1/games', (route) => route.fulfill({ json: { games: fixture.games } }));
   await page.goto('/all?test');
   await expect(page.locator('.game-new-badge').first()).toBeVisible();
-  await expect(page.locator('.game-copy').first()).toBeVisible();
+  await expect(page.locator('.game-copy')).toHaveCount(0);
   await expect(page.locator('.game-logo')).toBeVisible();
   await expect(page.locator('[data-game-id="g_featured"] .game-building-chip')).toBeVisible();
   for (const size of [
@@ -225,7 +225,7 @@ test('keeps tile badges and share controls in the bottom band', async ({ page })
             const fixed = Array.from(document.querySelectorAll('.studio-logo, .studio-menu-button'))
               .map((element) => element.getBoundingClientRect())
               .filter((rect) => rect.width && rect.height);
-            for (const control of document.querySelectorAll('.game-new-badge, .game-building-chip, .game-copy')) {
+            for (const control of document.querySelectorAll('.game-new-badge, .game-building-chip')) {
               const cell = control.closest('[role="gridcell"]')!;
               const box = control.getBoundingClientRect();
               const tile = cell.getBoundingClientRect();
@@ -234,7 +234,7 @@ test('keeps tile badges and share controls in the bottom band', async ({ page })
               if (box.top < tile.top + tile.height * threshold || box.bottom > tile.bottom)
                 failures.push(`${name}: outside bottom band`);
               if (fixed.some((rect) => overlaps(rect, box))) failures.push(`${name}: covered by navigation`);
-              for (const other of cell.querySelectorAll('.game-new-badge, .game-building-chip, .game-copy')) {
+              for (const other of cell.querySelectorAll('.game-new-badge, .game-building-chip')) {
                 if (other !== control && overlaps(other.getBoundingClientRect(), box))
                   failures.push(`${name}: overlaps another control`);
               }

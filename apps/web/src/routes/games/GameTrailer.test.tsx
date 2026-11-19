@@ -87,6 +87,17 @@ it('plays with sound from the selecting tap and keeps that element', async () =>
   expect(play).toHaveBeenCalledOnce();
 });
 
+it('attaches a trailer before starting playback on mount', () => {
+  const attached: boolean[] = [];
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+    attached.push(this.parentElement?.classList.contains('game-trailer') ?? false);
+    return Promise.resolve();
+  });
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  render(<GameTrailer game={{ ...mergeShowcase([])[0]!, trailerUrl: '/trailer.mp4' }} />);
+  expect(attached).toEqual([true]);
+});
+
 it('falls back to muted when the browser refuses sound without a gesture', async () => {
   sound = 'on';
   const play = vi
