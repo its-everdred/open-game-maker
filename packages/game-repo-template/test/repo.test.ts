@@ -1,4 +1,5 @@
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -79,7 +80,14 @@ describe('renderRepoTemplate', () => {
     writeFileSync(join(root, 'templates/game-multiplayer/README.md'), 'multiplayer scaffold\n');
     writeFileSync(join(root, 'templates/game-multiplayer/src/run.sh'), '#!/bin/sh\n');
     chmodSync(join(root, 'templates/game-multiplayer/src/run.sh'), 0o755);
+    execFileSync('git', ['init', '-q', root]);
+    execFileSync('git', ['add', '.'], { cwd: root });
+    mkdirSync(join(root, 'templates/game-multiplayer/dist'), { recursive: true });
+    mkdirSync(join(root, 'templates/game-multiplayer/src/node_modules/pkg'), { recursive: true });
+    writeFileSync(join(root, 'templates/game-multiplayer/dist/bundle.js'), 'generated');
+    writeFileSync(join(root, 'templates/game-multiplayer/src/node_modules/pkg/index.js'), 'dependency');
     const { files } = renderRepoTemplate('game-multiplayer@1', ctx, root);
+    expect(files.some((file) => /(^|\/)(dist|node_modules)\//u.test(file.path))).toBe(false);
     expect(files.find((f) => f.path === 'package.json')!.content).toBe('{"name":"scaffold"}\n');
     expect(files.filter((f) => f.path === 'README.md')).toEqual([
       expect.objectContaining({ content: 'multiplayer scaffold\n' }),

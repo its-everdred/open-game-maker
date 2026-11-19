@@ -1,0 +1,13 @@
+[Unit]
+Description=OGM daily New Game smoke
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Slice=ogm.slice
+EnvironmentFile=-%h/.config/ogm/env/qa-hook.env
+ExecStart=@REPO@/ops/bin/ogm-qa-new-game-daily
+UMask=0077
+NoNewPrivileges=yes
+TimeoutStartSec=infinity

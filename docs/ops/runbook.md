@@ -435,6 +435,13 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    (`services/api/src/{review-rounds,commands,previews,qa,worker-progress,blobs,blob-proxy}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
    `~/.local/state/ogm/qa/review-e2e/<sha>.log`.
 
+   The hook also runs `gm qa new-game-e2e` when game templates, the game repository template, games API routes,
+   or commit service change. `ops/bin/ogm-host-setup.sh` installs and enables `ogm-qa-new-game.timer` for a daily
+   run; it uses the deployed checkout's HEAD and saves stills under `assets-local/review/app/new-game-e2e/<sha>/`.
+   The hook remembers the attention file passed by auto-update for the timer; alternatively set `OGM_QA_ATTENTION`
+   in `~/.config/ogm/env/qa-hook.env`. Check the timer and its journal with `systemctl --user status
+   ogm-qa-new-game.timer` and `journalctl --user -u ogm-qa-new-game.service`.
+
 The host routes behind it, `/internal/qa/session`, `/internal/qa/review-fixtures[/<run>]`,
 `/internal/qa/ticket-fixtures[/<run>]` and `/internal/qa/voice-fixtures[/<run>]`, take only the internal
 token in `x-ogm-internal`.

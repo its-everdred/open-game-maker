@@ -1,0 +1,9 @@
+[Unit]
+Description=OGM daily New Game smoke
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

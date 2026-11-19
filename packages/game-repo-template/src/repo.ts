@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { fill, isExecutable, listFiles, readTemplate, WORKSPACE_ROOT } from './files.js';
+import { fill, isExecutable, readTemplate, WORKSPACE_ROOT } from './files.js';
 import { LABELS, type TemplateLabel } from './labels.js';
 
 export type FileMode = '100644' | '100755' | '120000';
@@ -51,7 +52,13 @@ export function renderRepoTemplate(ref: string, ctx: TemplateCtx, root: string =
 // `templates/game-<engine>/` from the workspace when OGM-023/024/055 have landed, else a `gm new`-shaped placeholder.
 function scaffold(engine: Engine, root: string, values: Record<string, string>): TemplateFile[] {
   const dir = join(root, 'templates', `game-${engine}`);
-  const paths = listFiles(dir).filter((path) => !path.startsWith('node_modules/'));
+  const paths = existsSync(dir)
+    ? execFileSync('git', ['ls-files', '-z', '--cached', '--', '.'], { cwd: dir })
+        .toString()
+        .split('\0')
+        .filter(Boolean)
+        .sort()
+    : [];
   if (paths.length > 0) {
     return paths.map((path) => ({
       path,
