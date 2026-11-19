@@ -71,6 +71,24 @@ class DropReaders(unittest.TestCase):
             self.assertEqual(builder.run(root, only=pack.name)['failures'][pack.name], ['missing OGG for a.wav'])
             self.assertFalse((pack / 'collection.card.json').exists())
 
+    def test_duplicate_normalized_names_fail_without_install(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = io.BytesIO()
+            with wave.open(output, 'wb') as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(8000)
+                wav.writeframes(b'\0\0')
+            pack = fixtures.add_pack(root, 'caseportman-cute-cozy-ui-sfx', 'caseportman',
+                                     'caseportman-royalty-free', {
+                                         'WAV/a_b.wav': output.getvalue(), 'OGG/a_b.ogg': b'ogg',
+                                         'WAV/a-b.wav': output.getvalue(), 'OGG/a-b.ogg': b'ogg',
+                                     })
+            self.assertEqual(builder.run(root, only=pack.name)['failures'][pack.name],
+                             [f'duplicate item card path in {pack.name}'])
+            self.assertFalse((pack / 'collection.card.json').exists())
+
 
 if __name__ == '__main__':
     unittest.main()

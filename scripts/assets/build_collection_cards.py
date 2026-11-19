@@ -213,13 +213,26 @@ def card(pj: Path, tags: dict, table: dict, old: dict | None) -> dict:
     same_licence = old is not None and table.get(str(old.get("license", "")).lower(), {}).get("id") == row["id"]
     kept = [b for b in (old or {}).get("rights", {}).get("basis", [])
             if b["type"] == "decision" or (b["type"] == "interpretation" and same_licence)]
-    basis = basis_from_row(row, ref, day) + kept
+    basis = basis_from_row(row, ref, day)
+    # A pack-level confirmation remains valid only for the same evidence and
+    # unchanged licence ceiling; stale confirmations must never widen rights.
+    if same_licence and old.get('id') == f't1:{pid}@{ver}' and not row.get('confirmed') and row['id'] != 'NOASSERTION':
+        expected = basis[0]
+        fields = ('license', 'ref', 'uses', 'forbids', 'audience', 'redistribution', 'attribution')
+        confirmed = next((b for b in old.get('rights', {}).get('basis', [])
+                          if b.get('type') == 'license' and b.get('confirmed_by')
+                          and all(b.get(k) == expected.get(k) for k in fields)), None)
+        if confirmed:
+            basis = [copy.deepcopy(confirmed)]
+    basis += kept
     t = tags.get(pid)
     # An importer's card (Sidetrax) keeps its describe and collection info; a tags row or this tool's own card is rebuilt.
     keep_old = old is not None and t is None and not old["provenance"]["*"].get("tool", "").startswith("build_collection_cards")
+    confirmation = next((b for b in basis if b.get('type') == 'license' and b.get('confirmed_by')), None)
+    confirmation_note = (f", confirmed {confirmation['date']}" + ('' if row.get('confirmed') else ' (prior collection)')) if confirmation else ', unconfirmed'
     prov = {"*": {"by": "code", "tool": TOOL, "at": NOW, "input": "pack.json + extracted file extensions"},
             "rights": {"by": "license", "tool": TOOL, "at": NOW,
-                       "input": f"licence table {row['id']}" + (f", confirmed {row['confirmed']['on']}" if row.get("confirmed") else ", unconfirmed")}}
+                       "input": f"licence table {row['id']}" + confirmation_note}}
     if keep_old:
         describe = copy.deepcopy(old.get("describe", {}))
         info = old["collection_info"]
@@ -337,6 +350,9 @@ def run(root: Path, only: str = "*", dry_run: bool = False, table: dict | None =
                 cards = builder(pj.parent / built[pid]["collection_info"]["version"] / "extracted", built[pid])
                 if not cards:
                     raise ValueError(f'no recognized assets in {pid}')
+                paths = [smallscaleint.card_path(pj.parent, item) for item in cards]
+                if len(paths) != len(set(paths)):
+                    raise ValueError(f'duplicate item card path in {pid}')
                 items[pid] = preserve_item_locks(pj.parent, cards)
         except (KeyError, OSError, ValueError, json.JSONDecodeError) as e:
             errors[pid] = [str(e).strip('"')]
