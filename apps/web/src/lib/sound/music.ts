@@ -45,6 +45,7 @@ export function load(dir: 'music' | 'sfx', name: string): Promise<AudioBuffer | 
 
 // fetched and decoded at once (a suspended context can still decode), so the first tap plays it straight away
 export const titleReady: Promise<AudioBuffer | null> = load('music', MUSIC.title.file);
+void load('music', MUSIC.menu.file);
 
 function end(layer: Track, s: number): void {
   ramp(layer.g, 0, s);
@@ -60,22 +61,24 @@ function end(layer: Track, s: number): void {
 let track: Track | null = null;
 const introDone = new Set<string>(); // tracks whose intro has played: coming back to them starts at the loop
 
-async function playMusic(def: (typeof MUSIC)['title'] | null, fade: number): Promise<void> {
+let generation = 0;
+async function playMusic(def: (typeof MUSIC)['title'] | null, fade: number, request: number): Promise<void> {
   const name = def?.file;
   if (track?.name === name) return;
-  if (track) {
-    end(track, fade);
+  if (!def || !name) {
+    if (track) end(track, fade);
     track = null;
+    return;
   }
-  if (!def || !name) return;
-  const me: Track = (track = { name, g: node(musicBus, 0) });
   let buf = await load('music', name);
   let loop: [number, number] | null = def.loop;
   if (!buf) {
     buf = await load('music', def.fallback);
     loop = null;
   }
-  if (track !== me || !buf) return;
+  if (generation !== request || !buf) return;
+  const previous = track;
+  const me: Track = (track = { name, g: node(musicBus, 0) });
   const src = ctx.createBufferSource();
   src.buffer = buf;
   src.loop = true;
@@ -85,13 +88,22 @@ async function playMusic(def: (typeof MUSIC)['title'] | null, fade: number): Pro
   introDone.add(name);
   me.stop = () => src.stop();
   ramp(me.g, 1, fade);
+  if (previous) end(previous, fade);
 }
 
 let want: 'title' | 'menu' | 'off' = 'off';
 export function set(next: 'title' | 'menu' | 'off', fade = 1.6): void {
   want = next;
+  const request = ++generation;
   if (ctx.state !== 'running' && next !== 'off') return;
-  void playMusic(next === 'off' ? null : MUSIC[next], fade);
+  // Route cleanup and the next screen's effect run together; don't fade between them.
+  if (next === 'off') {
+    queueMicrotask(() => {
+      if (generation === request) void playMusic(null, fade, request);
+    });
+  } else {
+    void playMusic(MUSIC[next], fade, request);
+  }
 }
 
 export function cue(name: string, vol = 0.6): void {

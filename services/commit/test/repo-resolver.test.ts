@@ -29,7 +29,7 @@ describe('RepoResolver', () => {
     });
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://127.0.0.1:4300/internal/games/game%2F1/repo',
-      expect.objectContaining({ headers: { authorization: 'Bearer service-secret' } }),
+      expect.objectContaining({ headers: { authorization: 'Bearer service-secret', 'x-ogm-service': 'commit' } }),
     );
     expect(fetchImpl.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });

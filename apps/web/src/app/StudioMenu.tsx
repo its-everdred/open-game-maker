@@ -357,7 +357,6 @@ export function StudioMenu() {
       onMute={setMuted}
       sliderOpen={sheet === 'volume'}
       menuOpen={hasStudioHeader && open}
-      decisionCount={hasStudioHeader && !open ? menuBadge : 0}
       blocked={hasStudioHeader && blocked}
       building={hasStudioHeader && buildingJobs.length > 0}
       onMenu={

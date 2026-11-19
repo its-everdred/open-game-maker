@@ -20,6 +20,8 @@ MIX_ENV=prod mise exec -C services/voice-host -- mix release
 While the Scribe pin is an unmerged pull-request commit, fetch it into the local aiur checkout first: `git -C "$HOME/github/aiur" fetch origin <scribe-pin>`.
 
 The release is `_build/prod/rel/voice_host`. `ops/bin/ogm-run voice-host` starts it through the existing `ogm-voice-host.service` unit.
+The live stack runs detached processes rather than units; there `ops/bin/ogm-voice-host` builds, starts, checks and
+restarts it ([runbook](../../docs/ops/runbook.md#run-the-voice-host)).
 
 ## Configure
 

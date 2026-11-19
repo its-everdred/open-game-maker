@@ -54,6 +54,7 @@ const createBody = z
 const patchBody = z
   .object({
     title: z.string().trim().min(1).max(120).optional(),
+    preserveSlug: z.boolean().optional(),
     visibility: z.enum(['listed', 'private']).optional(),
     allowAiGeneratedAssets: z.boolean().optional(),
   })
@@ -68,6 +69,7 @@ const routes = new Hono<ApiBindings>()
     const principal = requirePrincipal(c, ['user']);
     requireAuthorization(authorize(actorFromPrincipal(principal), 'game.create', { familyId: principal.familyId }));
     const body = await parseBody(c, createBody);
+    if (!c.get('deps').registry.repoProvisioner) throw new HttpError(503, 'repo_provisioner_unavailable');
     // Creators never connect GitHub: the operator installed the App on the instance repository once.
     const game = createGameRow(c.get('deps').db, {
       familyId: principal.familyId,
@@ -212,13 +214,14 @@ const routes = new Hono<ApiBindings>()
     );
     const body = await parseBody(c, patchBody);
     const db = c.get('deps').db;
-    const title = body.title;
+    const { preserveSlug, ...changes } = body;
+    const title = changes.title;
     const slug =
-      title !== undefined && title !== game.title
+      title !== undefined && title !== game.title && !preserveSlug
         ? assignSlug(db, title, { gameId: game.id, slug: game.slug })
         : game.slug;
     db.update(schema.games)
-      .set({ ...body, slug })
+      .set({ ...changes, slug })
       .where(eq(schema.games.id, game.id))
       .run();
     return c.json(gameResponse(findGame(db, game.id)));

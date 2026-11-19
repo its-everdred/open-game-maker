@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { Job } from '@ogm/contracts';
 import { commandSource, targetPath, targetSource, type ReviewCommand, type ReviewTarget } from './review-command';
 import { MissingMedia } from './MissingMedia';
@@ -69,6 +69,16 @@ export function BuildTracker({
   onDismiss?(): void;
 }) {
   const [open, setOpen] = useState(false);
+  const trackerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: PointerEvent) => {
+      if (document.querySelector('[role="dialog"]')) return;
+      if (event.target instanceof Node && !trackerRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, [open]);
   const [acknowledged, setAcknowledged] = useState<readonly FinishedWorker[]>([]);
   const unreadUpdates = useNotify((state) => (state.updateOwner === creatorId ? state.unreadUpdates : 0));
   const hasUpdates = useNotify((state) => state.updateOwner === creatorId && state.updates.length > 0);
@@ -97,7 +107,7 @@ export function BuildTracker({
       ? `${pending} builds to review`
       : 'Completed builds';
   return (
-    <div className="worker-tracker">
+    <div className="worker-tracker" ref={trackerRef}>
       <button
         type="button"
         className="worker-tracker-button"
@@ -139,6 +149,7 @@ export function BuildTracker({
           jobs={jobs}
           finished={[...acknowledged, ...finished]}
           id={id}
+          onClose={() => setOpen(false)}
         />
       )}
     </div>
@@ -160,7 +171,8 @@ export function BuildPanel({
   jobs = [],
   finished = [],
   id,
-}: PanelProps & { id: string }) {
+  onClose,
+}: PanelProps & { id: string; onClose?(): void }) {
   const updates = useNotify((state) => (state.updateOwner === creatorId ? state.updates : EMPTY_UPDATES));
   const [modal, setModal] = useState<'review' | 'completed' | undefined>();
   const [filtered, setFiltered] = useState(false);
@@ -174,7 +186,14 @@ export function BuildPanel({
   const talk = detail && conversationOf(detail, jobs);
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
-      <h2>Builds</h2>
+      <div className="worker-tracker-heading">
+        <h2>Builds</h2>
+        {onClose && (
+          <button type="button" className="worker-tracker-close" aria-label="Close builds" onClick={onClose}>
+            ×
+          </button>
+        )}
+      </div>
       {finished.length > 0 && (
         <ul>
           {finished.map((item) => (
