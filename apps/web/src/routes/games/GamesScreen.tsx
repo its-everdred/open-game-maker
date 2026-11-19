@@ -94,7 +94,8 @@ export function GamesScreen() {
     captureTransition();
     const next = new URLSearchParams(searchParams);
     next.set('spotlight', game.id);
-    setSearchParams(next, { state: null });
+    // Commit selection before another key can close it using the previous location.
+    setSearchParams(next, { state: null, flushSync: true });
   };
 
   const close = () => {
@@ -187,8 +188,10 @@ export function GamesScreen() {
     };
   }, [sortedGames, selectedId, gamesQuery.isPending]);
 
-  gamesTestSnapshot.selected = selected?.id ?? null;
-  gamesTestSnapshot.tiles = sortedGames.map((game) => game.id);
+  useLayoutEffect(() => {
+    gamesTestSnapshot.selected = selected?.id ?? null;
+    gamesTestSnapshot.tiles = sortedGames.map((game) => game.id);
+  }, [selected?.id, sortedGames]);
   useEffect(() => {
     if (gamesApiRegistered || !window.__ogmHost) return;
     gamesApiRegistered = true;
