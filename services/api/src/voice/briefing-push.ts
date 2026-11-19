@@ -48,7 +48,10 @@ const SIZES = ['small', 'medium', 'large', 'huge'] as const;
 const PAUSED = 'Build paused at its reservation: ask an admin to raise it, or trim';
 
 export const targetKey = (target: VoiceTarget) =>
-  `${target.kind}:${target.kind === 'scope' ? target.session_id : target.kind === 'build' ? target.job_id : `${target.game_id}:${target.creator_id}`}`;
+  `${target.kind}:${target.kind === 'scope' ? target.session_id : target.kind === 'build' ? target.job_id : `${target.game_id}:${target.creator_id}${target.kind === 'edit' ? `:${target.session_id}` : ''}`}`;
+
+export const editAdmissionKey = (target: Extract<VoiceTarget, { kind: 'edit' }>) =>
+  `voice-edit:${target.game_id}:${target.session_id}`;
 
 export function localTime(at: string, zone: string): string {
   try {
@@ -107,6 +110,18 @@ export function jobFor(db: Db, target: VoiceTarget) {
   // A question session belongs to the game, not to one build.
   if (target.kind === 'questions') return undefined;
   if (target.kind === 'build') return db.select().from(schema.jobs).where(eq(schema.jobs.id, target.job_id)).get();
+  if (target.kind === 'edit')
+    return db
+      .select()
+      .from(schema.jobs)
+      .where(
+        and(
+          eq(schema.jobs.creatorId, target.creator_id),
+          eq(schema.jobs.gameId, target.game_id),
+          target.job_id ? eq(schema.jobs.id, target.job_id) : eq(schema.jobs.idempotencyKey, editAdmissionKey(target)),
+        ),
+      )
+      .get();
 
   const session = db
     .select()

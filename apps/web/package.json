@@ -18,6 +18,7 @@
     "test:browser": "vitest run e2e/render-gltf.test.ts e2e/thumbnail-scene.test.ts e2e/thumbnail-scene-3d.test.ts && playwright test"
   },
   "dependencies": {
+    "@aiur/conversation": "file:vendor/aiur-conversation",
     "@better-auth/passkey": "1.7.15",
     "@colyseus/sdk": "0.18.9",
     "@gm/host": "workspace:*",

@@ -53,6 +53,10 @@ defmodule OgmVoice.BriefingCacheTest do
     questions = %{"kind" => "questions", "game_id" => "g1", "creator_id" => "u1"}
     assert {:ok, %Briefing{}} = BriefingSource.brief(questions)
     assert %{id: "questions:g1:u1", kind: :questions} = BriefingSource.describe_target(questions)
+
+    edit = %{"kind" => "edit", "game_id" => "g1", "creator_id" => "u1", "session_id" => "s1"}
+    assert :ok = OgmVoice.Cache.put(%{@push | "target_key" => "edit:g1:u1:s1"})
+    assert %{id: "edit:g1:u1:s1", kind: :scope} = BriefingSource.describe_target(edit)
     assert {:error, :unavailable} = BriefingSource.brief(%{questions | "creator_id" => "u2"})
     assert {:error, :unavailable} = BriefingSource.brief(@target)
   end

@@ -26,7 +26,8 @@
     "./schemas/*": "./schemas/*"
   },
   "scripts": {
-    "build": "pnpm --filter @ogm/web run build:deps && tsc -b && node scripts/build-shell.mjs && node scripts/build-app-capture.mjs",
+    "build": "flock node_modules/.build.lock pnpm run build:unlocked",
+    "build:unlocked": "pnpm --filter @ogm/web run build:deps && tsc -b && node scripts/build-shell.mjs && node scripts/build-app-capture.mjs",
     "prepack": "pnpm build",
     "preemit": "pnpm build",
     "emit": "node scripts/emit-schema.mjs",

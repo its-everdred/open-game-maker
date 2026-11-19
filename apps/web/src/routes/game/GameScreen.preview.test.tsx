@@ -78,6 +78,7 @@ const host = vi.hoisted(() => {
 });
 
 vi.mock('../../features/editor/api', () => editorApi);
+vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: null }) }));
 const branchList = vi.hoisted(() => ({ value: undefined as Array<{ id: string; name: string }> | undefined }));
 vi.mock('../games/useBranches', () => ({ useBranches: () => ({ data: branchList.value }) }));
 vi.mock('../../features/editor/frame', async (importOriginal) => ({
@@ -476,62 +477,53 @@ describe('GameScreen previews', () => {
         },
       }),
     );
+    fireEvent.click(await screen.findByLabelText('Game editor'));
     const grass = await screen.findByRole('button', { name: 'Grass' });
     expect(screen.getByRole('button', { name: 'Light' })).toBeVisible();
     fireEvent.pointerDown(grass, { pointerId: 1 });
+    await waitFor(() => expect(host.controller.setMode).toHaveBeenLastCalledWith('edit'));
     const canvas = await screen.findByLabelText('Editor canvas');
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
     fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
     fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
     await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
     expect(fallbackAdmission.admitJob.mock.calls[0]?.[0].plan.summary).toContain('scenery-band:grass');
+    fireEvent.pointerDown(grass, { pointerId: 3 });
+    expect(host.controller.setMode).toHaveBeenLastCalledWith('edit');
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    await waitFor(() => expect(host.controller.setMode).toHaveBeenLastCalledWith('play'));
+    expect(screen.queryByLabelText('Editor canvas')).toBeNull();
   });
-  it.each(['t3:fixture/tree', 'scope:0'])(
-    'submits fallback item %s as a build request without a design transaction',
-    async (prefab) => {
-      editorApi.getFallbackPalette.mockResolvedValue({
-        mode: 'request',
-        palette: {
-          categories: [{ id: 'scenery', label: 'Scenery', kind: 'items' }],
-          items: [{ prefab, label: 'Tree', category: 'scenery' }],
+  it('does not show fallback tools for a game without an editor', async () => {
+    editorApi.getFallbackPalette.mockResolvedValue({
+      mode: 'request',
+      palette: {
+        categories: [{ id: 'scenery', label: 'Scenery', kind: 'items' }],
+        items: [{ prefab: 'tree', label: 'Tree', category: 'scenery' }],
+      },
+    });
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    act(() =>
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          id: 'game',
+          capabilities: [],
+          palette: { categories: [], items: [] },
+          tools: [],
+          gizmos: {},
+          presentation: { minLogical: { w: 100, h: 100 } },
+          dimension: '2d',
+          view: 'main',
+          saves: false,
         },
-      });
-      renderGame('/g/game?mode=edit');
-      await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
-      act(() =>
-        host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
-          bridgeState: 'ready',
-          dropped: 0,
-          manifest: {
-            id: 'game',
-            capabilities: [],
-            palette: { categories: [], items: [] },
-            tools: [],
-            gizmos: {},
-            presentation: { minLogical: { w: 100, h: 100 } },
-            dimension: '2d',
-            view: 'main',
-            saves: false,
-          },
-        }),
-      );
-      await waitFor(() => expect(editorApi.getFallbackPalette).toHaveBeenCalled());
-      const item = await screen.findByRole('button', { name: 'Tree' });
-      fireEvent.pointerDown(item, { pointerId: 1 });
-      const canvas = await screen.findByLabelText('Editor canvas');
-      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        width: 100,
-        height: 100,
-      } as DOMRect);
-      fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
-      fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
-      await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
-      expect(fallbackAdmission.admitJob.mock.calls[0]?.[0].plan.summary).toContain(prefab);
-      expect(editorApi.postTransaction).not.toHaveBeenCalled();
-    },
-  );
+      }),
+    );
+    await waitFor(() => expect(editorApi.getFallbackPalette).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Game editor')).toBeNull();
+  });
   it('loads matching scenery thumbnail sources without restarting a running build', async () => {
     let finish!: (value: unknown) => void;
     editorApi.getScenerySource.mockReturnValue(

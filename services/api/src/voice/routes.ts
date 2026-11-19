@@ -80,6 +80,9 @@ async function authorizedTarget(c: Context<ApiBindings>) {
     if (!session || session.gameId !== game.id || session.creatorId !== principal.userId) {
       throw new HttpError(403, 'scope_not_in_game');
     }
+  } else if (target.kind === 'edit' && target.job_id) {
+    const job = findJobRow(db, target.job_id);
+    if (job.gameId !== game.id || job.creatorId !== principal.userId) throw new HttpError(403, 'job_not_in_game');
   }
 
   return { principal, target };
@@ -130,7 +133,7 @@ routes.post('/internal/voice/transcript', async (c) => {
     throw new HttpError(401, 'unauthorized');
   }
   const request = await parseBody(c, VoiceTranscriptRequest);
-  const response = appendVoiceTranscript(deps, request);
+  const response = await appendVoiceTranscript(deps, request);
   if (response === null) throw new HttpError(404, 'voice_target_not_found');
   return c.json(response);
 });

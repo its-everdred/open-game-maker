@@ -51,6 +51,22 @@ async function setup() {
 }
 
 describe('POST /internal/voice/instruct', () => {
+  it('does not report delivery when an edit instruction remains pending', async () => {
+    const { deps, request } = await setup();
+    const target: VoiceTarget = {
+      kind: 'edit',
+      game_id: ids.game,
+      creator_id: ids.creator,
+      session_id: '29000000-0000-4000-8000-000000000003',
+      job_id: ids.running,
+    };
+    const response = await request(target, 'Make the door red');
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ status: 'failed' });
+    expect(listSince(deps.sqlite, ids.running, 0)).toEqual([
+      expect.objectContaining({ text: 'Make the door red', mirrorState: 'pending' }),
+    ]);
+  });
   it('posts a build instruction to Aiur and creator chat exactly once', async () => {
     const { deps, message, request } = await setup();
 

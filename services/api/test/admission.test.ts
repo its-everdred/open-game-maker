@@ -228,6 +228,13 @@ describe('job admission', () => {
       actor,
     );
     expect(second.jobId).toBe(first.jobId);
+    expect(second).toMatchObject({ reused: true, samePlan: true });
+    const other = await admit(
+      { db: deps.db, sqlite: deps.sqlite, events: deps.events, now: () => NOW, defaults },
+      { ...input, plan: { ...input.plan, summary: 'A different request' } },
+      actor,
+    );
+    expect(other).toMatchObject({ jobId: first.jobId, reused: true, samePlan: false });
     expect(second.state).toBe('admitted');
     expect(deps.db.select().from(schema.jobs).all()).toHaveLength(1);
     expect(changed).toHaveLength(1);

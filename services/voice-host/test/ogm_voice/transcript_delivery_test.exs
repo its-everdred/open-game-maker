@@ -5,6 +5,35 @@ defmodule OgmVoice.TranscriptDeliveryTest do
 
   @target %{"kind" => "build", "game_id" => "g1", "job_id" => "j1", "ticket" => "7", "creator_id" => "u1"}
 
+  test "holds an edit greeting until the creator turn creates its job" do
+    test = self()
+    name = unique_name()
+    target = %{"kind" => "edit", "game_id" => "g1", "creator_id" => "u1", "session_id" => "s1"}
+
+    start_supervised!(
+      {OgmVoice.TranscriptDelivery,
+       name: name,
+       api_url: "http://127.0.0.1:4300",
+       secret: fn -> "internal-secret" end,
+       subscribe: fn _, _, _ -> :ok end,
+       request: fn _, _, payload ->
+         send(test, {:delivered, payload})
+         {:ok, 200}
+       end}
+    )
+
+    assert :ok = OgmVoice.TranscriptDelivery.watch(name, VoiceInstance, "edit-conversation", target)
+
+    send(
+      name,
+      {:voice_conversation, "edit-conversation", %Events.AgentText{turn_id: "a1", text: "Hello", final?: true}}
+    )
+
+    send(name, {:voice_conversation, "edit-conversation", %Events.UserTranscript{text: "Add a bridge", final?: true}})
+    assert_receive {:delivered, %{"actor" => "creator", "text" => "Add a bridge"}}
+    assert_receive {:delivered, %{"actor" => "agent", "text" => "Hello"}}
+  end
+
   test "subscribes independently and delivers only final turns in order" do
     test = self()
     name = unique_name()

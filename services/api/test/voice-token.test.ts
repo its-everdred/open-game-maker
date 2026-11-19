@@ -137,6 +137,19 @@ const buildTarget = (gameId: string, creatorId = creator.userId, jobId = 'j-1') 
 });
 
 describe('POST /api/v1/voice/token', () => {
+  it('authorizes an edit session before a job exists and rejects another game’s job', async () => {
+    const { request, gameId } = await setup();
+    const target = {
+      kind: 'edit',
+      game_id: gameId,
+      creator_id: creator.userId,
+      session_id: '29000000-0000-4000-8000-000000000001',
+    };
+    expect((await request(creator, target)).status).toBe(200);
+    expect((await request(sibling, { ...target, creator_id: sibling.userId })).status).toBe(403);
+    expect((await request(creator, { ...target, job_id: 'j-other' })).status).toBe(403);
+    expect((await request(creator, { ...target, job_id: 'j-1' })).status).toBe(200);
+  });
   it('mints a vct1 token for the game owner, signed with the shared secret and valid for at most 300 s', async () => {
     const { request, gameId } = await setup();
     const before = Math.floor(Date.now() / 1000);

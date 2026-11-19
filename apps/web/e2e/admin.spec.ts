@@ -130,6 +130,8 @@ test('persists confirmed admin changes, retries failures, and refetches their vi
     email: 'new-member@example.com',
     capability: 'player',
   });
+  // The dialog closes only after the successful mutation has refetched invitations.
+  await expect(page.getByRole('alertdialog')).not.toBeVisible({ timeout: 15_000 });
   const inviteRow = page.getByRole('row').filter({ hasText: 'new-member@example.com' });
   await expect(inviteRow).toContainText('pending');
   await activate(inviteRow.getByRole('button', { name: 'Revoke' }));

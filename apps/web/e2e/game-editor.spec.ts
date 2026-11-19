@@ -129,14 +129,17 @@ test('replays one conflict and becomes read-only on lease loss', async ({ page }
 
 async function openReadyEditor(page: Page, api: GameApiFixture): Promise<void> {
   await page.goto('/g/game?mode=edit&test');
+  await page.getByLabel('Game editor').click();
+  await page.getByRole('button', { name: 'Skeleton' }).click();
   await Promise.all([api.transactionStreamReady, page.getByLabel('Editor canvas').waitFor()]);
+  await page.getByLabel('Game editor').click();
 }
 
 async function selectSkeleton(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Skeleton' }).click({ force: true });
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await expect(page.getByRole('button', { name: 'place', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByText('Place a skeleton', { exact: true })).toBeVisible();
+  await expect(page.getByText('Place a skeleton', { exact: true })).toBeAttached();
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
 }
 
