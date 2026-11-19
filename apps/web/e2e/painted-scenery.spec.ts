@@ -66,6 +66,7 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
     return route.fallback();
   });
   await page.goto('/g/game?mode=edit&test&v=draft');
+  await page.getByLabel('Game editor').click();
   await expect(page.getByLabel('Scene items')).toContainText('forest', { timeout: 30_000 });
   await expect(page.locator('.game-frame canvas')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('painted-before.png') });

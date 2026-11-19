@@ -133,7 +133,7 @@ export function GameScreen() {
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const [editorPlaying, setEditorPlaying] = useState(true);
   const { jobs, ...conversation } = useEditConversation(gameId, jobBranch);
-  useEffect(() => setEditorPlaying(true), [gameId]);
+  useEffect(() => setEditorPlaying(true), [gameId, mode]);
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
   const [pendingBuild, setPendingBuild] = useState<{ snapshot: DesignSnapshot; report: ReapplyReport }>();
@@ -931,21 +931,18 @@ export function GameScreen() {
           saved={savedLabel(editStartup ?? sessionView?.saved)}
         />
       ) : null}
-      {mode === 'edit' ? (
-        <GameEditWorkspace
-          game={gameStage}
-          conversation={{
-            gameId,
-            branchId: jobBranch,
-            title: game.data?.title ?? '',
-            ...conversation,
-            reading: searchParams.get('composer') === 'stacked' ? 'stacked' : 'inline',
-          }}
-          editor={editorChrome}
-        />
-      ) : (
-        gameStage
-      )}
+      <GameEditWorkspace
+        editing={mode === 'edit'}
+        game={gameStage}
+        conversation={{
+          gameId,
+          branchId: jobBranch,
+          title: game.data?.title ?? '',
+          ...conversation,
+          reading: searchParams.get('composer') === 'stacked' ? 'stacked' : 'inline',
+        }}
+        editor={editorChrome}
+      />
       {frameState.bridgeState === 'error' || designLoadFailed ? (
         <div className="screen-error" role="alert">
           <button

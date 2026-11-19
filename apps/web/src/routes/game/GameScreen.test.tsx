@@ -776,4 +776,14 @@ describe('GameScreen', () => {
       }),
     );
   });
+
+  it('keeps the mounted game container when returning from edit to play', async () => {
+    const { container } = renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    const frame = container.querySelector('.game-frame');
+    expect(frame).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Play$/ }));
+    await waitFor(() => expect(container.querySelector('.game-screen')).toHaveClass('is-playing'));
+    expect(container.querySelector('.game-frame')).toBe(frame);
+  });
 });

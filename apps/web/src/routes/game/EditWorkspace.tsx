@@ -8,15 +8,16 @@ type EditWorkspaceProps = {
   game: ReactNode;
   chat: ReactNode;
   editor?: ReactNode;
+  editing?: boolean;
 };
 
 /** Keep the game and conversation visible while optional game tools open over the game. */
-export function EditWorkspace({ game, chat, editor }: EditWorkspaceProps) {
+export function EditWorkspace({ game, chat, editor, editing = true }: EditWorkspaceProps) {
   return (
-    <div className="edit-workspace">
+    <div className={editing ? 'edit-workspace' : 'edit-workspace is-playing'}>
       <div className="edit-workspace-game">{game}</div>
-      <div className="edit-workspace-chat">{chat}</div>
-      {editor != null && (
+      {editing && <div className="edit-workspace-chat">{chat}</div>}
+      {editing && editor != null && (
         <details className="edit-workspace-editor">
           <summary aria-label="Game editor">✎</summary>
           <div className="edit-workspace-editor-content">{editor}</div>
@@ -30,12 +31,14 @@ export function GameEditWorkspace({
   game,
   editor,
   conversation,
+  editing,
 }: {
   game: ReactNode;
   editor?: ReactNode;
   conversation: ComponentProps<typeof EditConversation>;
+  editing: boolean;
 }) {
-  return <EditWorkspace game={game} editor={editor} chat={<EditConversation {...conversation} />} />;
+  return <EditWorkspace game={game} editor={editor} editing={editing} chat={<EditConversation {...conversation} />} />;
 }
 
 export function EditPlayBar({ disabled, onPlay, saved }: { disabled: boolean; onPlay(): void; saved: string }) {

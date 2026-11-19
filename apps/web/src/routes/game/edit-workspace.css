@@ -18,6 +18,11 @@
   min-height: 0;
 }
 
+.edit-workspace.is-playing,
+.edit-workspace.is-playing .edit-workspace-game {
+  display: contents;
+}
+
 .edit-workspace-chat {
   grid-area: chat;
   min-width: 0;
@@ -30,6 +35,7 @@
   z-index: 2;
   justify-self: end;
   align-self: start;
+  margin-top: calc(var(--safe-t) + 70px);
   max-width: 100%;
   max-height: 100%;
 }
