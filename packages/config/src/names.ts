@@ -169,6 +169,12 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     doc: 'instance owner user ID for operator game registration',
   },
   {
+    name: 'OGM_QA_INSTANCE_REPO',
+    unit: 'api',
+    kind: 'string',
+    doc: 'separate owner/repository for games created by the QA account',
+  },
+  {
     name: 'OGM_BUILDER_BOT_TOKEN',
     unit: 'api',
     kind: 'secret',

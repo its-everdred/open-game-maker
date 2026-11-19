@@ -1,5 +1,6 @@
 import { qaFolderRemovals, type QaFolderGit } from './qa-new-game-folder.js';
 import { QaGitHubError } from './qa-new-game-gh-request.js';
+import { sameQaRepo } from './qa-new-game-checks.js';
 
 export type GitHubRequest = (method: string, path: string, body?: unknown) => Promise<unknown>;
 type ObjectValue = Record<string, unknown>;
@@ -144,9 +145,9 @@ export function createQaFolderGit(
         pull.title !== `Remove QA game ${slug}` ||
         pull.body !== body ||
         head.ref !== branch ||
-        object(head.repo).full_name !== repo ||
+        !sameQaRepo(object(head.repo).full_name, repo) ||
         base.ref !== 'main' ||
-        object(base.repo).full_name !== repo ||
+        !sameQaRepo(object(base.repo).full_name, repo) ||
         typeof pull.changed_files !== 'number' ||
         !Number.isSafeInteger(pull.changed_files) ||
         pull.changed_files < 1 ||

@@ -49,7 +49,13 @@ export function newGameQaReport(db: Db, id: string) {
     jobs.map((job) => job.id),
   );
   return {
-    game: { id: game.id, slug: game.slug, path: game.githubPath, repoUrl: game.repoUrl },
+    game: {
+      id: game.id,
+      slug: game.slug,
+      path: game.githubPath,
+      repoUrl: game.repoUrl,
+      repository: game.githubOwner && game.githubRepo ? `${game.githubOwner}/${game.githubRepo}` : null,
+    },
     jobs,
     tickets,
     sessions: qaScopeSessions(db, id),
@@ -90,14 +96,15 @@ function ticketKeys(tickets: QaTicket[]): string[] {
 export function deleteQaNewGame(
   db: Db,
   id: string,
-  expected: { folder: string; jobs: string[]; tickets: QaTicket[]; sessions: QaSession[] },
-  repo: string,
+  expected: { folder: string; repo: string; jobs: string[]; tickets: QaTicket[]; sessions: QaSession[] },
+  instanceRepo: string,
 ): void {
   db.transaction((tx) => {
     if (isGameProvisioning(id)) throw new HttpError(409, 'qa_game_provisioning_active');
     const qa = readQaState(tx);
     const game = tx.select().from(schema.games).where(eq(schema.games.id, id)).get();
     if (!qa || !game) throw new HttpError(404, 'qa_game_not_found');
+    const repo = game.githubOwner && game.githubRepo ? `${game.githubOwner}/${game.githubRepo}` : instanceRepo;
     if (
       id === qa.gameId ||
       game.ownerId !== qa.userId ||
@@ -106,7 +113,8 @@ export function deleteQaNewGame(
     )
       throw new HttpError(409, 'qa_game_cleanup_mismatch');
     if (game.slug === null) throw new HttpError(409, 'qa_game_slug_missing');
-    if (game.repoUrl !== null && game.repoUrl !== `https://github.com/${repo}`)
+    if (repo.toLowerCase() !== expected.repo.toLowerCase()) throw new HttpError(409, 'qa_game_cleanup_mismatch');
+    if (game.repoUrl !== null && game.repoUrl.toLowerCase() !== `https://github.com/${repo}`.toLowerCase())
       throw new HttpError(409, 'qa_game_provisioning_unverified');
     if (game.githubPath !== `games/${game.slug}`) throw new HttpError(409, 'qa_game_slug_mismatch');
     const jobs = tx.select().from(schema.jobs).where(eq(schema.jobs.gameId, id)).all();
@@ -130,7 +138,7 @@ export function deleteQaNewGame(
       throw new HttpError(409, 'qa_game_has_active_or_unexpected_jobs');
     const daemon = tx.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).get();
     if (game.repoUrl === null && daemon) throw new HttpError(409, 'qa_game_provisioning_unverified');
-    if (daemon && (daemon.status !== 'stopped' || daemon.repo !== repo))
+    if (daemon && (daemon.status !== 'stopped' || daemon.repo.toLowerCase() !== repo.toLowerCase()))
       throw new HttpError(409, 'qa_game_daemon_active');
     if (daemon) tx.delete(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).run();
     tx.delete(schema.games).where(eq(schema.games.id, id)).run();

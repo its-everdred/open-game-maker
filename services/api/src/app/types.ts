@@ -24,8 +24,9 @@ export interface AppDeps {
     commitInternalUrl: string;
     commitServiceToken: string;
     gameTemplateRef: string;
-    // The instance repository every game lives in, parsed from OGM_INSTANCE_REPO.
+    // The main instance repository, parsed from OGM_INSTANCE_REPO.
     instanceRepo: { owner: string; name: string };
+    qaInstanceRepo?: { owner: string; name: string };
     coreRepo?: { owner: string; name: string };
     instanceOwnerId?: string;
     gamesRoot: string;

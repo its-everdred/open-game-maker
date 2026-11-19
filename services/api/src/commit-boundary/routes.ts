@@ -40,8 +40,7 @@ type RepositoryRow = {
   slug: string | null;
 };
 
-// Every game in the instance lives in the same repository and differs only by its folder. The registry holds the
-// folder and the current slug; the repository itself comes from the operator's OGM_INSTANCE_REPO.
+// The registry stores an assigned repository when present; older rows fall back to the instance repository.
 function registeredRepository(
   row: RepositoryRow | undefined,
   instanceRepo: { owner: string; name: string },

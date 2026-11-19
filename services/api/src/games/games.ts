@@ -9,6 +9,7 @@ import { HttpError } from '../app/errors.js';
 import { gameFolder } from '@ogm/contracts';
 import { assignSlug } from './slug.js';
 import { GitHubRateLimitError } from './repo-provisioner.js';
+import { readQaState } from '../qa/state.js';
 
 export type GameRow = typeof schema.games.$inferSelect;
 
@@ -86,6 +87,7 @@ export function createGameRow(
     title: string;
     repoVisibility: 'public' | 'private';
     allowAiGeneratedAssets?: boolean;
+    repository?: { owner: string; name: string };
   },
 ): GameRow {
   const id = `g_${randomUUID()}`;
@@ -99,6 +101,8 @@ export function createGameRow(
     // The registry records the folder the game's files live in. It stays fixed when the title (and slug) changes, so a
     // rename never moves the game's history.
     githubPath: gameFolder(slug),
+    githubOwner: input.repository?.owner,
+    githubRepo: input.repository?.name,
     visibility: 'private',
     repoVisibility: input.repoVisibility,
     allowAiGeneratedAssets: input.allowAiGeneratedAssets ?? true,
@@ -116,6 +120,15 @@ export function isGameProvisioning(id: string): boolean {
 
 export async function provisionGame(deps: AppDeps, game: GameRow): Promise<GameRow> {
   if (game.repoUrl) return game;
+  const qa = readQaState(deps.db);
+  const isQaCreator = qa?.userId === game.ownerId && qa.familyId === game.familyId;
+  if (isQaCreator) {
+    const repo = game.githubOwner && game.githubRepo ? `${game.githubOwner}/${game.githubRepo}`.toLowerCase() : '';
+    const instance = `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`.toLowerCase();
+    const qaRepo = deps.config.qaInstanceRepo;
+    const expected = qaRepo ? `${qaRepo.owner}/${qaRepo.name}`.toLowerCase() : '';
+    if (!repo || repo === instance || repo !== expected) throw new HttpError(503, 'qa_repository_not_configured');
+  }
   const provisioner = deps.registry.repoProvisioner;
   if (!provisioner) throw new HttpError(503, 'repo_provisioner_unavailable');
   const slug = game.slug;
@@ -128,6 +141,9 @@ export async function provisionGame(deps: AppDeps, game: GameRow): Promise<GameR
       title: game.title,
       slug,
       visibility: game.repoVisibility,
+      ...(isQaCreator && game.githubOwner && game.githubRepo
+        ? { repository: { owner: game.githubOwner, name: game.githubRepo } }
+        : {}),
     });
     deps.db
       .update(schema.games)

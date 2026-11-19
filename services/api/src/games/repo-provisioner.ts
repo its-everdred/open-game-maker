@@ -20,10 +20,12 @@ export class NullRepoProvisioner implements RepoProvisioner {
   async provision(game: ProvisionInput): Promise<ProvisionedRepo> {
     this.calls.push(game);
     const path = gameFolder(game.slug);
+    const owner = game.repository?.owner ?? this.#owner;
+    const repo = game.repository?.name ?? this.#repo;
     return {
-      owner: this.#owner,
-      repo: this.#repo,
-      url: `https://github.com/${this.#owner}/${this.#repo}`,
+      owner,
+      repo,
+      url: `https://github.com/${owner}/${repo}`,
       path,
     };
   }
@@ -75,7 +77,7 @@ export class CommitServiceRepoProvisioner implements RepoProvisioner {
       throw new GitHubRateLimitError('GitHub is busy. Please try again later.');
     }
     if (!response.ok || result?.ok !== true) throw new Error(`commit service refused create_game (${response.status})`);
-    const { owner, name } = this.#instanceRepo;
+    const { owner, name } = game.repository ?? this.#instanceRepo;
     return { owner, repo: name, url: `https://github.com/${owner}/${name}`, path: gameFolder(game.slug) };
   }
 }

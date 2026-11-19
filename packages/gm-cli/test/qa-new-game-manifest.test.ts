@@ -21,6 +21,7 @@ describe('New Game recovery manifest', () => {
       expect(await readQaManifest(path, 'example/games')).toEqual(state);
       expect(unknownQaGames(state, ['g_old', 'g_created', 'g_unknown'])).toEqual(['g_unknown']);
       await expect(readQaManifest(path, 'another/games')).rejects.toThrow(/repository/);
+      expect(await readQaManifest(path, 'another/games', 'example/games')).toEqual(state);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { cleanupFailure, parentFailure } from '../src/qa-new-game-checks.js';
+import { assertQaRepositories, cleanupFailure, parentFailure, qaCleanupRepository } from '../src/qa-new-game-checks.js';
+
+it('selects only the isolated or legacy repository for QA cleanup', () => {
+  expect(qaCleanupRepository('owner/qa', 'owner/qa', 'owner/games')).toBe('owner/qa');
+  expect(qaCleanupRepository(null, 'owner/qa', 'owner/games')).toBe('owner/games');
+  expect(() => qaCleanupRepository('other/repo', 'owner/qa', 'owner/games')).toThrow(/unexpected repository/);
+});
+
+it('refuses a different production repository before legacy cleanup', () => {
+  expect(() =>
+    assertQaRepositories({ repo: 'owner/QA', instanceRepo: 'owner/other' }, 'owner/qa', 'owner/games'),
+  ).toThrow(/repositories/);
+  expect(() =>
+    assertQaRepositories({ repo: 'owner/QA', instanceRepo: 'owner/Games' }, 'owner/qa', 'owner/games'),
+  ).not.toThrow();
+});
 
 describe('New Game parent verification', () => {
   const turns = ['QA private first turn', 'QA private second turn'];
@@ -72,6 +87,7 @@ describe('New Game cleanup safety', () => {
 
   it('refuses paths, repositories, or active jobs that cannot be safely cleaned up', () => {
     expect(cleanupFailure(report, 'example/games')).toBeNull();
+    expect(cleanupFailure(report, 'Example/Games')).toBeNull();
     expect(
       cleanupFailure(
         { ...report, tickets: [{ jobId: 'j_qa-123', key: 'scope', repo: 'example/games', issue: 42 }] },

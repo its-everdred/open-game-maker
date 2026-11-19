@@ -1,5 +1,6 @@
 import type { GitHubRequest } from './qa-new-game-folder-github.js';
 import { qaFolderRemovals } from './qa-new-game-folder.js';
+import { sameQaRepo } from './qa-new-game-checks.js';
 
 function object(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('invalid GitHub response');
@@ -43,8 +44,8 @@ export async function closeQaCreationPull(repo: string, folder: string, request:
     pull.title !== `Add game ${slug}` ||
     head.ref !== `game/${slug}` ||
     base.ref !== 'main' ||
-    object(head.repo).full_name !== repo ||
-    object(base.repo).full_name !== repo ||
+    !sameQaRepo(object(head.repo).full_name, repo) ||
+    !sameQaRepo(object(base.repo).full_name, repo) ||
     typeof head.sha !== 'string' ||
     !/^[a-f0-9]{40}$/u.test(head.sha) ||
     typeof pull.changed_files !== 'number' ||

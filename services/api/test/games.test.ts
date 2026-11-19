@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { sweepPlaySessions } from '../src/analytics/retention.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
+import { writeQaState } from '../src/qa/state.js';
 
 const now = '2026-11-01T00:00:00.000Z';
 const familyId = 'f-family';
@@ -67,6 +68,65 @@ async function createGame(
 }
 
 describe('games routes', () => {
+  it('isolates the QA creator before provisioning and refuses an unsafe repository', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    const provisioner = new NullRepoProvisioner();
+    deps.registry.repoProvisioner = provisioner;
+    writeQaState(deps.db, {
+      userId: creator.userId,
+      familyId,
+      email: creator.email,
+      gameId: 'g-qa',
+      decisions: [],
+      received: [],
+    });
+    const { app } = await makeApp(deps);
+    deps.registry.repoProvisioner = {
+      async provision(game) {
+        const response = await app.request(`/internal/games/${game.id}/repo`, {
+          headers: { authorization: 'Bearer internal-token-for-tests-0123456789', 'x-ogm-service': 'commit' },
+        });
+        expect(await response.json()).toMatchObject({ owner: 'instance', name: 'qa-games' });
+        return provisioner.provision(game);
+      },
+    };
+    expect((await createGame(app)).status).toBe(503);
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g_legacy-qa',
+        familyId,
+        ownerId: creator.userId,
+        title: 'Legacy QA',
+        slug: 'legacy-qa',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: now,
+      })
+      .run();
+    expect(
+      (
+        await app.request('/api/v1/games/g_legacy-qa/provision', {
+          method: 'POST',
+          headers: asUser(creator.userId),
+        })
+      ).status,
+    ).toBe(503);
+    deps.config.qaInstanceRepo = { owner: 'INSTANCE', name: 'GAMES' };
+    expect((await createGame(app)).status).toBe(503);
+    deps.config.qaInstanceRepo = { owner: 'instance', name: 'qa-games' };
+    const response = await createGame(app);
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ repo: { owner: 'instance', name: 'qa-games' } });
+    const game = deps.db
+      .select()
+      .from(schema.games)
+      .all()
+      .find((row) => row.githubRepo === 'qa-games');
+    expect(game).toMatchObject({ githubOwner: 'instance', githubRepo: 'qa-games' });
+    expect(provisioner.calls[0]).toMatchObject({ repository: { owner: 'instance', name: 'qa-games' } });
+  });
   it('records play per user and refuses unauthorized games', async () => {
     const deps = makeDeps();
     seedFamily(deps);
@@ -685,6 +745,20 @@ describe('CommitServiceRepoProvisioner', () => {
       slug: 'castle',
       visibility: 'public',
       templateRef: 'templates/custom@v2',
+    });
+    await expect(
+      provisioner.provision({
+        id: 'g-qa',
+        title: 'QA',
+        slug: 'qa',
+        visibility: 'private',
+        repository: { owner: 'instance', name: 'qa-games' },
+      }),
+    ).resolves.toEqual({
+      owner: 'instance',
+      repo: 'qa-games',
+      url: 'https://github.com/instance/qa-games',
+      path: 'games/qa',
     });
   });
 });

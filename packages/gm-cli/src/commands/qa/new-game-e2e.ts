@@ -8,6 +8,7 @@ import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
 import { NewGameQaApi } from '../../qa-new-game-api.js';
 import { cleanupQaGame } from '../../qa-new-game-cleanup.js';
+import { assertQaRepositories, qaCleanupRepository } from '../../qa-new-game-checks.js';
 import { hostQaCleanup } from '../../qa-new-game-cleanup-host.js';
 import { qaGitHubRequest } from '../../qa-new-game-gh-request.js';
 import { QaCreateFenceClient } from '../../qa-new-game-fence.js';
@@ -88,7 +89,8 @@ export const command: GmCommand = {
       ctx.err('qa new-game-e2e: invalid deployed SHA');
       return done(EXIT.failed);
     }
-    const repo = apiEnv.OGM_INSTANCE_REPO ?? '';
+    const instanceRepo = (apiEnv.OGM_INSTANCE_REPO ?? '').toLowerCase();
+    const repo = (apiEnv.OGM_QA_INSTANCE_REPO ?? '').toLowerCase();
     const origin = (flags.origin as string | undefined) ?? apiEnv.OGM_APP_ORIGIN ?? '';
     const apiUrl =
       (flags.api as string | undefined) ?? (apiEnv.OGM_API_PORT ? `http://127.0.0.1:${apiEnv.OGM_API_PORT}` : '');
@@ -98,7 +100,9 @@ export const command: GmCommand = {
       !qa.OGM_QA_SESSION_COOKIE ||
       !origin ||
       !apiUrl ||
-      !repo
+      !repo ||
+      !instanceRepo ||
+      repo.toLowerCase() === instanceRepo.toLowerCase()
     ) {
       ctx.err('qa new-game-e2e: missing API, repository, internal token or QA session configuration');
       return done(EXIT.failed);
@@ -152,19 +156,23 @@ export const command: GmCommand = {
       await fence.acquire(probe, run);
       await fence.release(probe, run);
       const result = await runNewGameQa(
-        { out, repo, run, legacyIds: LEGACY_QA_GAMES },
+        { out, repo, run, legacyRepo: instanceRepo, legacyIds: LEGACY_QA_GAMES },
         {
           inventory: async () => {
             const inventory = await api.games();
-            if (inventory.repo !== repo) throw new Error('configured repository does not match the selected API');
+            assertQaRepositories(inventory, repo, instanceRepo);
             return inventory.games.map((game) => game.id);
           },
           cleanup: async (id, cleanupRun, ready) => {
             await fence.acquire(id, cleanupRun);
+            const report = await api.report(id);
+            const cleanupRepo = qaCleanupRepository(report.game.repository, repo, instanceRepo);
             await cleanupQaGame(
               id,
-              repo,
-              hostQaCleanup(api, repo, cookie, cleanupRun, request, ctx.env, ready, (gameId) => fence.terminal(gameId)),
+              cleanupRepo,
+              hostQaCleanup(api, cleanupRepo, cookie, cleanupRun, request, ctx.env, ready, (gameId) =>
+                fence.terminal(gameId),
+              ),
             );
             await fence.release(id, cleanupRun);
           },

@@ -32,6 +32,7 @@ describe('New Game verification', () => {
       },
     ]);
     await expect(verifyNewGame(page, 'g_123', 'j_123', 'example/games', api, parents)).resolves.toBeUndefined();
+    await expect(verifyNewGame(page, 'g_123', 'j_123', 'Example/Games', api, parents)).resolves.toBeUndefined();
     expect(progress.waitFor).toHaveBeenCalled();
     parents.mockResolvedValueOnce([{ ...(await parents())[0]!, body: QA_TURNS[0] }]);
     await expect(verifyNewGame(page, 'g_123', 'j_123', 'example/games', api, parents)).rejects.toThrow();

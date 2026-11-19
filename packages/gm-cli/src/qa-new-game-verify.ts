@@ -26,9 +26,10 @@ export async function verifyNewGame(
   for (;;) {
     const report = await api.report(gameId);
     const job = report.jobs.find((item) => item.id === requestId && item.kind === 'new_game');
-    if (job?.repo === repo && job.issue !== null) {
+    if (job?.repo?.toLowerCase() === repo.toLowerCase() && job.issue !== null) {
       const context = await api.context(requestId);
-      if (context.parent?.repo !== repo) throw new Error('private context names the wrong repository');
+      if (context.parent?.repo.toLowerCase() !== repo.toLowerCase())
+        throw new Error('private context names the wrong repository');
       const failure = parentFailure(await parents(repo, requestId), context, gameId, QA_TURNS);
       if (failure) throw new Error(failure);
       return;
