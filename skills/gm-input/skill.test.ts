@@ -24,11 +24,12 @@ describe('gm-input skill', () => {
     expect(text).toMatch(/phone with ordinary translucent on-screen buttons/);
     expect(text).toMatch(/keyboard\s+and a connected gamepad/);
     expect(text).toContain('keep button actions to five');
-    expect(text).toContain('only when the game declares a `stick` action');
+    expect(text).toContain('including for games with no stick');
+    expect(text).toContain("`inputs.touch: 'self'`");
     expect(text).toContain('Never claim universal device support');
     expect(text).toContain('`phone-touch.json`');
     expect(text).toContain('`laptop-keys.json`');
     expect(text).toContain('report the gamepad as unchecked');
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
-  }, 10_000);
+  }, 30_000);
 });

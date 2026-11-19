@@ -189,7 +189,10 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     sdkSignalsFrame = firstFrameSignal === true;
     if (!sdkSignalsFrame && pendingObservedFrame) options.onLoad?.({ t: 'load.frame', payload: {} });
     gamepads.setMapping(options.inputMapping?.gamepad, manifest.inputs.actions);
-    overlay.setInputs(manifest.inputs, options.inputMapping?.touch ?? 'tap');
+    const sticks = Object.values(manifest.inputs.actions).filter((kind) => kind === 'stick').length;
+    const touch =
+      manifest.inputs.touch === 'self' ? 'tap' : (options.inputMapping?.touch ?? (sticks > 1 ? 'two-stick' : 'stick'));
+    overlay.setInputs(manifest.inputs, touch);
     viewport.sendNow();
     settings.resend();
     options.onReady?.(manifest, marks, startupHold === true);

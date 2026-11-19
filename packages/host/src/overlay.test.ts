@@ -29,6 +29,8 @@ describe('TouchOverlay', () => {
     const use = layer.querySelector<HTMLElement>('[data-action="use"]')!;
     expect(layer.style.pointerEvents).toBe('none');
     expect(layer.querySelector('[data-stick="move"]')).not.toBeNull();
+    expect(jump.style.backgroundColor).toBe('rgba(0, 0, 0, 0.35)');
+    expect(layer.querySelector<HTMLElement>('[data-stick="move"]')!.style.backgroundColor).toBe('rgba(0, 0, 0, 0.35)');
     expect(jump.style.width).toBe('64px');
     expect(use.style.width).toBe('44px');
     overlay.dispose();

@@ -9,7 +9,7 @@ export const manifest: GameManifest = {
   id: 'game-2d',
   sdk: '*',
   title: 'Grey-box Platformer',
-  inputs: { actions: { move: 'axis', jump: 'button' } },
+  inputs: { actions: { move: 'stick', jump: 'button' } },
   presentation: { orientation: 'landscape', minLogical: { w: 640, h: 480 }, fit: 'fixed' },
   view: 'side',
   dimension: '2d',

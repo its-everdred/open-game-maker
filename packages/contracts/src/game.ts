@@ -137,7 +137,11 @@ export const gameManifestSchema = z.looseObject({
     .regex(/^https?:\/\/[^/?#@]+$/u)
     .url()
     .optional(),
-  inputs: z.looseObject({ actions: z.record(z.string().min(1).max(32), z.enum(['button', 'axis', 'stick'])) }),
+  inputs: z.looseObject({
+    actions: z.record(z.string().min(1).max(32), z.enum(['button', 'axis', 'stick'])),
+    /** The game draws its own touch controls instead of using the host overlay. */
+    touch: z.literal('self').optional(),
+  }),
   presentation: z.looseObject({
     orientation: z.enum(['landscape', 'portrait', 'any']),
     minLogical: z.looseObject({ w: z.number().positive(), h: z.number().positive() }),
