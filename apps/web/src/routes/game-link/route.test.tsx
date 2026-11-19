@@ -111,27 +111,21 @@ beforeEach(() => {
   mockedApi.mockReset();
 });
 
-async function cleanupTest() {
+afterEach(() => {
   cleanup();
   resetReviewDrafts();
-  // Nanostores delays session atom cleanup after the last unsubscribe.
-  // Wait for it before Vitest tears down jsdom, including after navigation.
-  await vi.waitFor(
-    () => expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy(),
-    { timeout: 3_000 },
-  );
-}
-
-afterEach(cleanupTest);
+});
 
 describe('short game links', () => {
-  it('releases the session atom before the environment is torn down', async () => {
+  it('unsubscribes from the session atom', () => {
     const atom = authClient.$store.atoms.session;
     const unsubscribe = atom.listen(() => {});
     expect((atom as unknown as { active?: boolean }).active).toBe(true);
     unsubscribe();
-    await cleanupTest();
-    expect((atom as unknown as { active?: boolean }).active).toBeFalsy();
+  });
+
+  it('releases the session atom between tests', () => {
+    expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy();
   });
 
   it('opens the review the number names', async () => {
