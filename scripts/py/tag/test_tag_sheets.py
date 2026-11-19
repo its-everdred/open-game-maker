@@ -162,6 +162,10 @@ def test_eligible_cards_require_local_vision_rights_and_a_preview(tmp_path):
     assert len(t.eligible_cards(pack)) == 1
     assert len(t.eligible_cards(pack, "model")) == 1
     assert t.eligible_cards(pack, "sprite") == []
+    malformed = card()
+    malformed["rights"] = {}
+    (pack / "cards" / "malformed.card.json").write_text(json.dumps(malformed))
+    assert len(t.eligible_cards(pack, "model")) == 1
     fbx = card()
     fbx["source"]["files"][0]["format"] = "fbx"
     (pack / "cards" / "fbx.card.json").write_text(json.dumps(fbx))
@@ -189,3 +193,19 @@ def test_tagged_fixture_passes_schema_and_model_write_allowlist(tmp_path):
     result = subprocess.run(["node", str(t.VALIDATOR), str(out)], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ok   model-writes-allowlist" in result.stdout
+
+
+def test_filename_seed_is_retained_when_clip_prefers_another_label():
+    ranked = t.rank_group([[0.1, 0.9], [0.9, 0.1]], ["wall", "hero"], 1, seeds=[["wall"], []])
+    assert ranked[0]["values"] == ["wall"]
+
+
+def test_any_low_confidence_emitted_group_marks_the_card():
+    result = t.merge_card(card(), {"roles": {"values": ["wall"], "confidence": 0.4},
+                                   "materials": {"values": ["stone"], "confidence": 0.9}}, baseline_count=20)
+    assert "low-confidence" in result["flags"]
+
+
+def test_tall_floor_role_flags_conflict_with_measured_height():
+    result = t.merge_card(card(), {"roles": {"values": ["floor"], "confidence": 0.8}}, baseline_count=20)
+    assert "conflicts-with-measured" in result["flags"]

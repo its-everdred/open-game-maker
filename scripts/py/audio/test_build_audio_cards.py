@@ -177,7 +177,8 @@ def test_pack_derivatives_write_private_sheet_and_medley_to_collection(tmp_path,
         }
         for name in ("01", "02")
     ]
-    collection = {"rights": {"redistribution": "none"}}
+    collection = {"rights": {"redistribution": "free"}}
+    items[0]["_preview_prefix"] = "private/previews"
     medley_entries = []
 
     def fake_medley(entries, out):

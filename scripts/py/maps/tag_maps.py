@@ -145,11 +145,26 @@ LEVELS = {"cellar": {"cellar", "cellars", "basement"}, "ground": {"ground"}, "up
 LABEL_STOP = {"scale", "feet", "foot", "miles", "mile", "north", "south", "east", "west", "level", "map", "the", "and", "of"}
 
 
+def rights_allow_map(rel: str) -> bool:
+    try:
+        collection = json.loads((COLL_DIR / "collection.card.json").read_text())
+        grants = [collection.get("rights")]
+        path = COLL_DIR / "cards" / (kebab(Path(rel).with_suffix("").as_posix()) + ".card.json")
+        if path.exists():
+            card = json.loads(path.read_text())
+            if "rights" in card:
+                grants.append(card["rights"])
+        return all(isinstance(rights, dict) and "vision-input" in rights.get("uses", [])
+                   and rights.get("processing") in ("any", "local-only") for rights in grants)
+    except (OSError, json.JSONDecodeError, TypeError):
+        return False
+
+
 def maps():
     for png in sorted(MAPS.rglob("*.png")):
         rel = png.relative_to(MAPS).as_posix()
         meta = png.with_suffix(".json")
-        if NOT_MAPS.search(rel) or not meta.exists():
+        if NOT_MAPS.search(rel) or not meta.exists() or not rights_allow_map(rel):
             continue
         if json.loads(meta.read_text()).get("ok"):
             yield png
@@ -341,7 +356,8 @@ def cards(json_mode=False, limit=0):
     import torch
     from transformers import CLIPModel, CLIPProcessor
     torch.set_num_threads(int(os.environ.get("OGM_TORCH_THREADS", "3")))
-    rows = [json.loads(p.read_text()) for p in sorted(ANALYSIS.rglob("*.analysis.json"))]
+    rows = [row for p in sorted(ANALYSIS.rglob("*.analysis.json"))
+            if rights_allow_map((row := json.loads(p.read_text()))["map"])]
     m = CLIPModel.from_pretrained(CLIP_ID, local_files_only=True).eval()
     p = CLIPProcessor.from_pretrained(CLIP_ID, local_files_only=True)
     sets = {"map_type": (list(MAP_TYPES), list(MAP_TYPES.values())),

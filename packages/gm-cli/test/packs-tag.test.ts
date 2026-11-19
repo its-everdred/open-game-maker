@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 
@@ -107,6 +107,18 @@ describe('gm packs tag', () => {
       .map((line) => JSON.parse(line));
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ event: 'packs.tag', payload: { kind: 'audio', cards: 1 } });
+  });
+
+  it('discovers a newly imported audio pack with no cards', async () => {
+    const assetsRoot = library();
+    const root = join(assetsRoot, 'packs/kenney-music-loops');
+    await rm(join(root, 'cards'), { recursive: true });
+    const extracted = join(root, 'test-version/extracted');
+    await mkdir(extracted, { recursive: true });
+    await writeFile(join(extracted, 'track.wav'), 'audio');
+    const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
+    expect(targets).toHaveLength(1);
+    expect(targets[0].cards).toEqual([]);
   });
 
   it('refuses rights-ineligible collections before spawning a worker', async () => {

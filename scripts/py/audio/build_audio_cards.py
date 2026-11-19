@@ -20,6 +20,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import labels as L
 import name_tags
+import audio_rights
 import tag_previews as P
 from import_sidetrax import stem_key
 
@@ -197,6 +198,7 @@ def matches_any(name: str, only) -> bool:
 
 def load(packs: Path, only="*"):
     rows = []
+    policies = {}
     for sc in sorted(packs.glob("*/*/analysis/**/*.analysis.json")):
         if not matches_any(sc.relative_to(packs).parts[0], only):
             continue
@@ -204,6 +206,14 @@ def load(packs: Path, only="*"):
         d["_sidecar"] = sc
         rel = sc.relative_to(packs)
         d["_pack"], d["_ver"] = rel.parts[0], rel.parts[1]
+        pack = packs / d["_pack"]
+        if d["_pack"] not in policies:
+            policies[d["_pack"]] = (audio_rights.collection_rights(pack), audio_rights.source_cards(pack))
+        rights, cards = policies[d["_pack"]]
+        allowed, prefix = audio_rights.source_policy(rights, audio_rights.cards_for_stem(cards, d["file"]))
+        if not allowed:
+            continue
+        d["_preview_prefix"] = prefix
         rows.append(d)
     return rows
 
@@ -433,6 +443,8 @@ def build_pack_derivatives(pid: str, items: list[dict], collection: dict, packs:
     if not music or any("preview_tile" not in item for item in music):
         return False
     prefix = P.preview_prefix(collection.get("rights"))
+    if any(item.get("_preview_prefix") == "private/previews" for item in music):
+        prefix = "private/previews"
     combined_hash = hashlib.sha256("\0".join(item["sha256"] for item in music).encode()).hexdigest()
     tiles = [packs / pid / item["_ver"] / item["preview_tile"] for item in music]
     missing = [path for path in tiles if not path.is_file()]

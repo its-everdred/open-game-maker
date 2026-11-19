@@ -1,5 +1,6 @@
 """Tests for the map card rules added after Kevin's first swipe review; each encodes a judgment he made on a real card."""
 import sys
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -77,3 +78,14 @@ def test_existing_card_keeps_protected_and_locked_fields():
     assert result["source"] == previous["source"]
     assert result["describe"]["description"] == "human"
     assert result["provenance"]["describe.description"]["locked"] is True
+
+
+def test_map_rights_gate_analysis_and_preexisting_rows(tmp_path, monkeypatch):
+    monkeypatch.setattr(t, "COLL_DIR", tmp_path)
+    (tmp_path / "cards").mkdir()
+    (tmp_path / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"], "processing": "local-only"}}))
+    (tmp_path / "cards" / "denied.card.json").write_text(json.dumps({"rights": {"uses": [], "processing": "local-only"}}))
+    assert t.rights_allow_map("allowed.png")
+    assert not t.rights_allow_map("denied.png")
+    (tmp_path / "cards" / "denied.card.json").write_text(json.dumps({"rights": {}}))
+    assert not t.rights_allow_map("denied.png")

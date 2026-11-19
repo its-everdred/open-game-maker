@@ -120,7 +120,12 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
         // Existing invalid cards are not eligible inputs and remain untouched.
       }
     }
-    if (cards.length > 0) {
+    const audioSources =
+      kind === 'audio' &&
+      (await filesUnder(root, '')).some(
+        (path) => /\.(wav|ogg|mp3|flac|m4a|aif|aiff)$/i.test(path) && path.includes(`${sep}extracted${sep}`),
+      );
+    if (cards.length > 0 || audioSources) {
       targets.push({ id: collection.id, slug: entry.name, root, collectionPath, collection, cards });
     }
   }

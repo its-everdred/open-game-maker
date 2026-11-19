@@ -17,6 +17,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import name_tags
+import audio_rights
 import previews
 from card_coverage import project_run_hours
 
@@ -71,10 +72,8 @@ def audio_files(packs: Path, only="*"):
         cur = manifest["current"]
         ext = pj.parent / cur / "extracted"
         hints = P.normalize_hints(manifest.get("hints"))
-        try:
-            rights = json.loads((pj.parent / "collection.card.json").read_text()).get("rights")
-        except (OSError, json.JSONDecodeError):
-            rights = None
+        rights = audio_rights.collection_rights(pj.parent)
+        cards = audio_rights.source_cards(pj.parent)
         subkinds = _card_subkinds(pj.parent)
         seen = {}
         for f in sorted(ext.rglob("*")):
@@ -83,9 +82,11 @@ def audio_files(packs: Path, only="*"):
                 rank = [".ogg", ".wav", ".flac", ".aiff", ".aif", ".mp3", ".m4a"].index(f.suffix.lower())
                 if key not in seen or rank < seen[key][0]:
                     seen[key] = (rank, f)
-        prefix = P.preview_prefix(rights)
         for _, f in sorted(seen.values(), key=lambda x: str(x[1])):
             rel = f.relative_to(ext).as_posix()
+            allowed, prefix = audio_rights.source_policy(rights, audio_rights.cards_for_stem(cards, rel))
+            if not allowed:
+                continue
             out.append(
                 {
                     "pack": pid,

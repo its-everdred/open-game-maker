@@ -65,19 +65,22 @@ def label_groups(schema_path: Path = SCHEMA) -> dict[str, list[str]]:
     return {field: vocab[key]["enum"] for field, key in VOCAB_KEYS.items()}
 
 
-def rank_group(probabilities, labels: list[str], cap: int, threshold=1.5) -> list[dict]:
+def rank_group(probabilities, labels: list[str], cap: int, threshold=1.5, seeds=None) -> list[dict]:
     matrix = np.asarray(probabilities, dtype=float)
     if matrix.ndim != 2 or matrix.shape[1] != len(labels):
         raise ValueError("probability matrix does not match labels")
     baseline = np.maximum(matrix.mean(axis=0), 1e-9)
     output = []
-    for row in matrix:
+    for row_index, row in enumerate(matrix):
         candidates = []
+        row_seeds = set(seeds[row_index]) if seeds else set()
         for index, label in enumerate(labels):
             lift = float(row[index] / baseline[index])
+            if label in row_seeds:
+                lift = max(threshold, lift * 1.5)
             if lift >= threshold:
                 candidates.append((lift, float(row[index]), label))
-        candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        candidates.sort(key=lambda item: (item[2] not in row_seeds, -item[0], -item[1], item[2]))
         kept = candidates[:cap]
         confidence = max((min(1.0, lift / 3) for lift, _, _ in kept), default=0.0)
         output.append(
@@ -173,11 +176,19 @@ def merge_card(card: dict, selections: dict[str, dict], baseline_count: int, now
     if merged.get("status") != "reviewed":
         merged["status"] = "tagged" if core else "measured"
 
-    confidence = max(
-        (float(value.get("confidence", 0)) for field, value in selections.items() if field in applicable),
+    confidence = min(
+        (float(value.get("confidence", 0)) for field, value in selections.items()
+         if field in applicable and value.get("values")),
         default=0.0,
     )
     flags = list(merged.get("flags", []))
+    bounds = merged.get("geometry", {}).get("bounds_m", {})
+    minimum, maximum = bounds.get("min"), bounds.get("max")
+    if ("floor" in roles and isinstance(minimum, list) and isinstance(maximum, list)
+            and len(minimum) > 1 and len(maximum) > 1
+            and float(maximum[1]) - float(minimum[1]) >= 0.3
+            and "conflicts-with-measured" not in flags):
+        flags.append("conflicts-with-measured")
     owned_low = provenance.get("flags.low_confidence", {}).get("tool") == TOOL
     if confidence < 0.6:
         if "low-confidence" not in flags:
@@ -251,7 +262,15 @@ def score_rows(rows: list[dict], model, processor) -> list[dict[str, dict]]:
             continue
         images = [rows[index]["preview"] for index in indices]
         prompts = [PROMPTS[field].format(label=label.replace("-", " ")) for label in labels]
-        ranked = rank_group(_probabilities(images, prompts, model, processor), labels, CAPS[field])
+        seeds = []
+        for index in indices:
+            card = rows[index]["card"]
+            words = set(filename_objects(card))
+            origin = card.get("provenance", {}).get(f"describe.{field}", {}).get("by")
+            existing = card.get("describe", {}).get(field, []) if origin == "filename" else []
+            existing = [existing] if isinstance(existing, str) else existing
+            seeds.append([label for label in labels if label in words or label in existing])
+        ranked = rank_group(_probabilities(images, prompts, model, processor), labels, CAPS[field], seeds=seeds)
         for index, selection in zip(indices, ranked):
             result[index][field] = selection
     return result
@@ -276,7 +295,9 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
             primary = next((file for file in files if file.get("role") == "primary"), files[0] if files else {})
             if primary.get("format") != "glb":
                 continue
-        effective_rights = card.get("rights") or rights
+        effective_rights = card["rights"] if "rights" in card else rights
+        if not isinstance(effective_rights, dict):
+            continue
         if "vision-input" not in effective_rights.get("uses", []) or effective_rights.get("processing") not in ("any", "local-only"):
             continue
         preview = card.get("previews", {}).get("sheet") or card.get("previews", {}).get("thumb")
@@ -286,7 +307,7 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
                 preview_path.relative_to(assets_root.resolve())
             except ValueError:
                 continue
-            rows.append({"card": card, "path": path, "preview": preview_path})
+            rows.append({"card": card, "path": path, "preview": preview_path, "collection": pack / "collection.card.json"})
     return rows
 
 
@@ -319,6 +340,12 @@ def main():
         emit({"eligible": 0, "reason": "no local vision-input cards with previews"}, args.json, summary=True)
         raise SystemExit(2)
 
+    inputs = sorted({str(row["collection"]) for row in rows})
+    inputs.extend(str(row["path"]) for row in rows)
+    checked = subprocess.run(["node", str(VALIDATOR), *inputs], capture_output=True, text=True)
+    if checked.returncode:
+        print("card validation failed before visual analysis: " + checked.stdout[-3000:], file=sys.stderr)
+        raise SystemExit(1)
     model, processor = load_clip()
     selections = score_rows(rows, model, processor)
     selected = list(zip(rows, selections))[: args.limit or None]

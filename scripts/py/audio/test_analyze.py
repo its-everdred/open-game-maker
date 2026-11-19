@@ -54,6 +54,7 @@ class JobListTests(unittest.TestCase):
         pack = self.packs / "sonniss-gdc2026-part9-1of5" / "v1" / "extracted" / "weapons"
         pack.mkdir(parents=True)
         (self.packs / "sonniss-gdc2026-part9-1of5" / "pack.json").write_text(json.dumps({"current": "v1"}))
+        (self.packs / "sonniss-gdc2026-part9-1of5" / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"], "processing": "local-only", "redistribution": "free"}}))
         (pack / "Sword_Slice_01.wav").write_bytes(b"")
         (pack / "Sword_Slice_01.ogg").write_bytes(b"")  # one sound in two formats: the ogg is the one carded
 
@@ -89,7 +90,7 @@ def test_audio_jobs_use_card_and_manifest_evidence_with_rights_safe_prefix(tmp_p
     (extracted / "01.wav").write_bytes(b"wav")
     (pack / "cards").mkdir()
     (pack / "pack.json").write_text(json.dumps({"current": "v1", "hints": {"mood": "dark retro", "genre": "chiptune"}}))
-    (pack / "collection.card.json").write_text(json.dumps({"rights": {"redistribution": "none"}}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"], "processing": "local-only", "redistribution": "none"}}))
     (pack / "cards" / "01.card.json").write_text(
         json.dumps({"subkind": "sfx/other", "source": {"files": [{"path": "01.wav", "role": "primary"}]}})
     )
@@ -129,7 +130,36 @@ def test_audio_jobs_skip_packs_outside_the_repeated_only_list(tmp_path):
     for pid in ("kept", "refused"):
         (tmp_path / pid).mkdir()
         (tmp_path / pid / "pack.json").write_text(json.dumps({"current": "v1"}))
+        (tmp_path / pid / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"], "processing": "local-only", "redistribution": "free"}}))
         (tmp_path / pid / "v1" / "extracted").mkdir(parents=True)
         (tmp_path / pid / "v1" / "extracted" / "hit.wav").write_bytes(b"wav")
     assert {job["pack"] for job in a.audio_files(tmp_path, ["kept"])} == {"kept"}
     assert {job["pack"] for job in a.audio_files(tmp_path, None)} == {"kept", "refused"}
+
+
+def test_per_track_rights_gate_inference_and_narrow_preview_prefix(tmp_path):
+    pack = tmp_path / "pack"
+    ext = pack / "v1" / "extracted"
+    ext.mkdir(parents=True)
+    (pack / "cards").mkdir()
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"], "processing": "local-only", "redistribution": "free"}}))
+    for name, uses in (("denied", []), ("private", ["vision-input"])):
+        (ext / f"{name}.wav").write_bytes(b"wav")
+        (pack / "cards" / f"{name}.card.json").write_text(json.dumps({"source": {"files": [{"path": f"{name}.wav", "role": "primary"}]}, "rights": {"uses": uses, "processing": "local-only", "redistribution": "none"}}))
+    jobs = a.audio_files(tmp_path)
+    assert [job["file"].name for job in jobs] == ["private.wav"]
+    assert jobs[0]["preview_prefix"] == "private/previews"
+
+
+def test_restricted_alternate_format_blocks_preferred_format(tmp_path):
+    pack = tmp_path / "pack"
+    ext = pack / "v1" / "extracted"
+    ext.mkdir(parents=True)
+    (pack / "cards").mkdir()
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"], "processing": "local-only", "redistribution": "free"}}))
+    (ext / "song.wav").write_bytes(b"wav")
+    (ext / "song.ogg").write_bytes(b"ogg")
+    (pack / "cards" / "song.card.json").write_text(json.dumps({"source": {"files": [{"path": "song.wav"}]}, "rights": {"uses": [], "processing": "local-only", "redistribution": "none"}}))
+    assert a.audio_files(tmp_path) == []
