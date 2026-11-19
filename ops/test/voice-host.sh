@@ -44,10 +44,18 @@ touch "$scratch/stack/services/voice-host/mix.exs" "$scratch/stack/services/voic
 cat > "$scratch/bin/mise" <<'EOF'
 #!/usr/bin/env bash
 if [[ $1 == trust ]]; then [[ -f $2 ]] || exit 1; fi
+if [[ $* == 'exec -- mix deps.get'* ]]; then
+  [[ $* == 'exec -- mix deps.get --check-locked' ]] || exit 1
+  [[ ${FAIL_LOCK_CHECK:-0} == 0 ]] || exit 1
+fi
 exit 0
 EOF
 chmod +x "$scratch/bin/mise"
 (cd "$scratch" && PATH="$scratch/bin:$PATH" "$repo/ops/bin/ogm-voice-host" build --repo stack > /dev/null)
+if (cd "$scratch" && FAIL_LOCK_CHECK=1 PATH="$scratch/bin:$PATH" "$repo/ops/bin/ogm-voice-host" build --repo stack > /dev/null 2>&1); then
+  echo 'build should fail when the lock check fails' >&2
+  exit 1
+fi
 
 # The env as the host has it today: a key and a port, nothing the host needs to boot, and the API's URLs empty.
 cat > "$OGM_ENV_DIR/voice-host.env" << EOF

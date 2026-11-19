@@ -143,7 +143,7 @@ build() {
       mise trust mise.toml &&
       mise exec -- mix local.hex --force --if-missing &&
       mise exec -- mix local.rebar --force --if-missing &&
-      mise exec -- mix deps.get &&
+      mise exec -- mix deps.get --check-locked &&
       MIX_ENV=prod mise exec -- mix release --overwrite
   ) || die 'build failed'
   [[ -x $release ]] || die "build left no release at ${release#"$repo/"}"
