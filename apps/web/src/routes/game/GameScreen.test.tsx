@@ -475,7 +475,7 @@ describe('GameScreen', () => {
   it('shows loading while game metadata is pending', async () => {
     editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
     renderGame();
-    expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument());
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
   });
 
