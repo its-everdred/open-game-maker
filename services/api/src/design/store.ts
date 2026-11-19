@@ -138,12 +138,13 @@ export function findBranch(sqlite: Sqlite, gameId: string, branchId: string): Br
   return row ? branchFromRow(row) : undefined;
 }
 
+// The branches table must preserve insertion rowids when it is rebuilt.
 export function listBranches(sqlite: Sqlite, gameId: string): Branch[] {
   return sqlite
     .prepare<[string], BranchRow>(
       `SELECT * FROM branches
        WHERE game_id = ?
-       ORDER BY CASE WHEN name = 'main' THEN 0 ELSE 1 END, created_at ASC, id ASC`,
+       ORDER BY CASE WHEN name = 'main' THEN 0 ELSE 1 END, created_at ASC, rowid ASC`,
     )
     .all(gameId)
     .map(branchFromRow);
