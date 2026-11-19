@@ -219,6 +219,15 @@ describe('GameScreen', () => {
     vi.unstubAllGlobals();
   });
 
+  it('changes the edit game viewport orientation without leaving the route', () => {
+    const { container } = renderGame('/g/game?mode=edit');
+    const stage = container.querySelector('.game-stage-area');
+    expect(stage?.getAttribute('data-frame-orientation')).toBe('wide');
+    fireEvent.click(screen.getByRole('button', { name: 'Vertical game' }));
+    expect(stage?.getAttribute('data-frame-orientation')).toBe('vertical');
+    expect(container.querySelector('.game-stage .game-frame')).not.toBeNull();
+  });
+
   it('changes the AI asset preference from the edit menu', async () => {
     let allowed = true;
     editorApi.getGame.mockImplementation(async () => ({

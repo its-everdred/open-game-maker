@@ -63,6 +63,7 @@ import { useRoomRuntime } from '../../features/room/useRoomRuntime';
 import { useBranches } from '../games/useBranches';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
 import { LoadingLayer } from './LoadingLayer';
+import { EditFrameOrientation, useEditFrameOrientation } from './EditFrameOrientation';
 import { gameLoadActivity } from './load-analytics';
 import { useAwayPause } from './away-pause';
 import { PlatformHud } from './PlatformHud';
@@ -89,6 +90,7 @@ type GameTestState = {
 type TestHost = OgmHost & { game?: GameTestState };
 
 export function GameScreen() {
+  const { orientation: frameOrientation, setOrientation: setFrameOrientation } = useEditFrameOrientation();
   const queryClient = useQueryClient();
   const { gameId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -710,121 +712,125 @@ export function GameScreen() {
           </output>
         </>
       ) : null}
-      <div className="game-stage">
-        <div className="game-frame" ref={containerRef} />
-        {mode === 'play' && frameController !== undefined ? (
-          <DiagnosticsOverlay
-            enabled={searchParams.get('net') === '1'}
-            build={build}
-            read={() => frameController.netInfo()}
-            room={() => roomFacts(room.snapshot)}
-            transport={() => ({ rttMs: room.snapshot?.rttMs })}
-          />
-        ) : null}
-        {!designLoadFailed && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
-          <LoadingLayer
-            key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
-            game={game.data ?? { familyId: '', title: '' }}
-            load={frameState.load}
-            firstFrame={frameState.firstFrame}
-          />
-        ) : null}
-        {mode === 'edit' &&
-        frameRef.current !== undefined &&
-        editorManifest !== undefined &&
-        sessionStore !== undefined &&
-        canvasOptions !== undefined ? (
-          <GizmoOverlay
-            activePrefab={canvasOptions.prefab}
-            frame={frameRef.current}
-            manifest={editorManifest}
-            session={sessionStore}
-            snap={canvasOptions.snap}
-            onRequestPlacement={
-              requestOnly && (noBuild || canvasOptions.prefab !== undefined) ? requestFallbackPlacement : undefined
-            }
-            onRequestDelete={
-              noBuild && !sidePreview
-                ? (entity) =>
-                    submitEditRequest(
-                      editJobRequest(
-                        { gameId, branchId: jobBranch },
-                        `Remove ${describeRequestedEntity(entity)}.`,
-                        'now',
-                        `edit:${crypto.randomUUID()}`,
-                      ),
-                    )
-                : undefined
-            }
-            onRequestTransform={
-              noBuild && !sidePreview
-                ? (entity, gizmo, target) =>
-                    submitEditRequest(
-                      editJobRequest(
-                        { gameId, branchId: jobBranch },
-                        `Change ${describeRequestedEntity(entity)} using ${gizmo}: ${JSON.stringify(target)}.`,
-                        'now',
-                        `edit:${crypto.randomUUID()}`,
-                      ),
-                    )
-                : undefined
-            }
-            allowReadOnlyRequests={noBuild}
-          />
-        ) : null}
-        {hudShown &&
-        frameRef.current !== undefined &&
-        frameState.manifest !== undefined &&
-        activeSnapshot !== undefined ? (
-          <PlatformHud
-            key={`platform-hud-${gameId}`}
-            build={build}
-            frame={frameRef.current}
-            gameId={gameId}
-            actions={frameState.manifest.inputs.actions}
-            controlBindings={frameState.manifest.controlBindings}
-            controlReservedKeys={frameState.manifest.controlReservedKeys}
-            gameOptions={frameState.manifest.gameOptions}
-            open={menuOpen || room.snapshot?.matchPause !== undefined}
-            paused={roomId === undefined ? menuOpen : room.snapshot?.matchPause !== undefined}
-            pauseName={room.snapshot?.matchPause?.name}
-            resumeAt={room.snapshot?.matchPause?.resumeAt}
-            serverOffsetMs={room.snapshot?.serverOffsetMs}
-            saveContext={{ branch, buildId: activeSnapshot.buildId }}
-            saves={frameState.manifest.saves}
-            saveSchema={frameState.manifest.saveSchema}
-            migratesFrom={frameState.manifest.migratesFrom}
-            onLeave={() => void leaveRoom()}
-            onResume={() => {
-              if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });
-              setMenuOpen(false);
+      <div className="game-stage-area" data-frame-orientation={mode === 'edit' ? frameOrientation : undefined}>
+        {mode === 'edit' && <EditFrameOrientation orientation={frameOrientation} onChange={setFrameOrientation} />}
+        <div className="game-stage">
+          <div className="game-frame" ref={containerRef} />
+          {mode === 'play' && frameController !== undefined ? (
+            <DiagnosticsOverlay
+              enabled={searchParams.get('net') === '1'}
+              build={build}
+              read={() => frameController.netInfo()}
+              room={() => roomFacts(room.snapshot)}
+              transport={() => ({ rttMs: room.snapshot?.rttMs })}
+            />
+          ) : null}
+          {!designLoadFailed && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
+            <LoadingLayer
+              key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
+              game={game.data ?? { familyId: '', title: '' }}
+              load={frameState.load}
+              firstFrame={frameState.firstFrame}
+            />
+          ) : null}
+          {mode === 'edit' &&
+          frameRef.current !== undefined &&
+          editorManifest !== undefined &&
+          sessionStore !== undefined &&
+          canvasOptions !== undefined ? (
+            <GizmoOverlay
+              activePrefab={canvasOptions.prefab}
+              frame={frameRef.current}
+              manifest={editorManifest}
+              session={sessionStore}
+              snap={canvasOptions.snap}
+              onRequestPlacement={
+                requestOnly && (noBuild || canvasOptions.prefab !== undefined) ? requestFallbackPlacement : undefined
+              }
+              onRequestDelete={
+                noBuild && !sidePreview
+                  ? (entity) =>
+                      submitEditRequest(
+                        editJobRequest(
+                          { gameId, branchId: jobBranch },
+                          `Remove ${describeRequestedEntity(entity)}.`,
+                          'now',
+                          `edit:${crypto.randomUUID()}`,
+                        ),
+                      )
+                  : undefined
+              }
+              onRequestTransform={
+                noBuild && !sidePreview
+                  ? (entity, gizmo, target) =>
+                      submitEditRequest(
+                        editJobRequest(
+                          { gameId, branchId: jobBranch },
+                          `Change ${describeRequestedEntity(entity)} using ${gizmo}: ${JSON.stringify(target)}.`,
+                          'now',
+                          `edit:${crypto.randomUUID()}`,
+                        ),
+                      )
+                  : undefined
+              }
+              allowReadOnlyRequests={noBuild}
+            />
+          ) : null}
+          {hudShown &&
+          frameRef.current !== undefined &&
+          frameState.manifest !== undefined &&
+          activeSnapshot !== undefined ? (
+            <PlatformHud
+              key={`platform-hud-${gameId}`}
+              build={build}
+              frame={frameRef.current}
+              gameId={gameId}
+              actions={frameState.manifest.inputs.actions}
+              controlBindings={frameState.manifest.controlBindings}
+              controlReservedKeys={frameState.manifest.controlReservedKeys}
+              gameOptions={frameState.manifest.gameOptions}
+              open={menuOpen || room.snapshot?.matchPause !== undefined}
+              paused={roomId === undefined ? menuOpen : room.snapshot?.matchPause !== undefined}
+              pauseName={room.snapshot?.matchPause?.name}
+              resumeAt={room.snapshot?.matchPause?.resumeAt}
+              serverOffsetMs={room.snapshot?.serverOffsetMs}
+              saveContext={{ branch, buildId: activeSnapshot.buildId }}
+              saves={frameState.manifest.saves}
+              saveSchema={frameState.manifest.saveSchema}
+              migratesFrom={frameState.manifest.migratesFrom}
+              onLeave={() => void leaveRoom()}
+              onResume={() => {
+                if (roomId !== undefined && room.snapshot?.matchPause)
+                  room.session?.send({ t: 'match.resume.request' });
+                setMenuOpen(false);
+              }}
+            />
+          ) : null}
+          <GameExtras placement="hud" {...extraProps} />
+          {activeSnapshot ? (
+            <UpdateIndicator
+              key={gameId}
+              currentBuildId={activeSnapshot.buildId}
+              gameId={gameId}
+              onPublishedBuild={setPublishedBuildId}
+              onError={reportUpdateFailure}
+              onUpdate={() => window.location.reload()}
+            />
+          ) : null}
+          <GameExtras placement="overlay" {...extraProps} />
+          <RoomLayer
+            gameTitle={game.data?.title ?? ''}
+            lastSaveAt={lastSaveAt}
+            camera={watcherCamera}
+            onCamera={(cameraMode) => {
+              setWatcherCamera(cameraMode);
             }}
+            onLeave={() => void leaveRoom()}
+            onMode={setMode}
+            onSelection={(ids) => frameRef.current?.select(ids)}
+            snapshot={room.snapshot}
           />
-        ) : null}
-        <GameExtras placement="hud" {...extraProps} />
-        {activeSnapshot ? (
-          <UpdateIndicator
-            key={gameId}
-            currentBuildId={activeSnapshot.buildId}
-            gameId={gameId}
-            onPublishedBuild={setPublishedBuildId}
-            onError={reportUpdateFailure}
-            onUpdate={() => window.location.reload()}
-          />
-        ) : null}
-        <GameExtras placement="overlay" {...extraProps} />
-        <RoomLayer
-          gameTitle={game.data?.title ?? ''}
-          lastSaveAt={lastSaveAt}
-          camera={watcherCamera}
-          onCamera={(cameraMode) => {
-            setWatcherCamera(cameraMode);
-          }}
-          onLeave={() => void leaveRoom()}
-          onMode={setMode}
-          onSelection={(ids) => frameRef.current?.select(ids)}
-          snapshot={room.snapshot}
-        />
+        </div>
       </div>
       {mode === 'edit' && editorManifest !== undefined && sessionView !== undefined && sessionStore !== undefined ? (
         <EditorChrome

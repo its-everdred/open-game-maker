@@ -5,10 +5,13 @@ export type FrameOrientation = 'wide' | 'vertical';
 /** Follow the device until the creator explicitly chooses a game orientation. */
 export function useEditFrameOrientation() {
   const [override, setOverride] = useState<FrameOrientation>();
-  const [portraitDevice, setPortraitDevice] = useState(() => window.matchMedia('(orientation: portrait)').matches);
+  const [portraitDevice, setPortraitDevice] = useState(
+    () => window.matchMedia?.('(orientation: portrait)').matches ?? true,
+  );
 
   useEffect(() => {
-    const query = window.matchMedia('(orientation: portrait)');
+    const query = window.matchMedia?.('(orientation: portrait)');
+    if (!query) return;
     const update = () => setPortraitDevice(query.matches);
     update();
     query.addEventListener('change', update);
