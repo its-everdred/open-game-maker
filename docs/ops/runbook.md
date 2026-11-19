@@ -348,6 +348,27 @@ takes the gzipped archive with the commit in `x-gm-sha`. The upload writes a `fe
 settles — `done` for a published build, `failed` for a refused archive — so the release history reads like any other
 build's.
 
+### Verify a game-workspace publish
+
+An agent workspace does not have the host's internal token or signed-in QA session. For a ticket that needs a merged
+game published and played in the app, the operator runs the following on the API host after the merge:
+
+1. Run `gm publish <slug> --sha <merged-sha> --json` and retain its output. Confirm `state` is `done` and the returned
+   `sha` is the merged commit; record the `buildId` and `play` link with the ticket's evidence.
+2. Open the returned play link in a browser signed in as the QA account. In the browser's network panel, confirm the
+   loaded game files use `/g/<gameId>/<buildId>/` with the `buildId` returned by publish. The play link follows the
+   current build, which may have changed since the publish.
+3. Exercise the ticket's actual gameplay acceptance steps in that browser. Record the steps, results, observed build ID,
+   and a screen recording in a ticket- and build-specific directory under the shared `assets-local/review/` library.
+   Give the agent that evidence directory and the publish output to inspect.
+
+Keep the API token and QA storage state on the host; do not copy either into the workspace or evidence directory.
+If publishing, capture, or gameplay fails, record the failure rather than treating a local `dist/` build as a
+published app check.
+
+Do not use `gm run --frame app` as proof of the published artifact: its capture substitutes the local build for game
+files in the app frame.
+
 ## QA a game's newest build
 
 `ops/bin/ogm-qa` plays a registered game's newest build on the games origin like a player, with the four `gm qa`
