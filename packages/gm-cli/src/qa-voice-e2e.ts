@@ -42,7 +42,7 @@ export type VoiceTally = {
   errors: string[];
 };
 
-export type VoiceStep = { name: 'dictation' | 'two-way'; ok: boolean; failure?: string; detail?: string };
+export type VoiceStep = { name: 'dictation' | 'two-way'; ok: boolean; failure?: string; detail?: string; url?: string };
 
 export type VoiceCost = {
   characters: number | null;
@@ -269,6 +269,16 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       await page.screenshot({ path: file });
       stills.push(file);
     };
+    const failed = async (name: VoiceStep['name'], error: unknown) => {
+      const url = page.url();
+      let failure = error instanceof Error ? error.message : String(error);
+      try {
+        await still(`${name}-failure`);
+      } catch (captureError) {
+        failure += `\nScreenshot failed: ${String(captureError)}`;
+      }
+      steps.push({ name, ok: false, failure, url });
+    };
     const dialog = page
       .getByRole('dialog', { name: TITLE })
       .and(page.locator('.job-conversation-dialog:not(.ticket-detail-dialog)'));
@@ -294,11 +304,15 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       const text = await textbox.inputValue();
       await still('dictation');
       const failure = dictationFailure(text);
-      steps.push({ name: 'dictation', ok: failure === null, ...(failure ? { failure } : { detail: text }) });
+      steps.push({
+        name: 'dictation',
+        ok: failure === null,
+        ...(failure ? { failure, url: page.url() } : { detail: text }),
+      });
       // The words stay a draft: the run never sends them.
       await textbox.fill('');
     } catch (error) {
-      steps.push({ name: 'dictation', ok: false, failure: (error as Error).message.split('\n')[0] });
+      await failed('dictation', error);
     }
 
     try {
@@ -332,14 +346,15 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       }, 15_000);
       const tally = tallyFrames(frames);
       const failure = twoWayFailure(tally, playedSeconds, stored);
-      steps.push({
-        name: 'two-way',
-        ok: failure === null,
-        ...(failure ? { failure } : {}),
-        detail: `agent audio ${tally.agentAudioFrames} frames, ${playedSeconds.toFixed(1)} s played; stored ${stored.length} turns`,
-      });
+      if (failure) await failed('two-way', new StepFailed(failure));
+      else
+        steps.push({
+          name: 'two-way',
+          ok: true,
+          detail: `agent audio ${tally.agentAudioFrames} frames, ${playedSeconds.toFixed(1)} s played; stored ${stored.length} turns`,
+        });
     } catch (error) {
-      steps.push({ name: 'two-way', ok: false, failure: (error as Error).message.split('\n')[0] });
+      await failed('two-way', error);
     }
   } finally {
     // A step that failed mid-call still spent the minutes up to the hang-up that closing the page does.
