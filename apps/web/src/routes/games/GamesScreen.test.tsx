@@ -1,11 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, useLocation, type InitialEntry } from 'react-router';
+import { MemoryRouter, useLocation, useNavigate, type InitialEntry } from 'react-router';
 
 import { commandFixture } from '../../features/commands-inbox/fixtures';
 import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 import { GamesScreen } from './GamesScreen';
+import { startTrailer } from './trailerVideo';
+
+const session = vi.hoisted(() => ({ userId: undefined as string | undefined }));
+vi.mock('../../lib/api/session', () => ({
+  useSession: () => ({ data: session.userId ? { user: { id: session.userId } } : undefined }),
+}));
+vi.mock('../../lib/sound', () => ({ set: vi.fn(), getVolume: () => 1, status: () => 'on', onChange: () => () => {} }));
 
 const games = [
   {
@@ -88,8 +95,10 @@ function json(body: unknown, status = 200) {
 
 function LocationProbe() {
   const location = useLocation();
+  const navigate = useNavigate();
   return (
     <>
+      <button onClick={() => navigate(-1)}>Back</button>
       <output data-testid="location">{`${location.pathname}${location.search}`}</output>
       <output data-testid="location-state">{JSON.stringify(location.state ?? null)}</output>
     </>
@@ -141,6 +150,8 @@ function setGridColumns(columns: number) {
 }
 
 beforeEach(() => {
+  session.userId = undefined;
+  localStorage.clear();
   gamesResponse = games;
   jobsResponse = jobs;
   commandsResponse = [];
@@ -250,6 +261,48 @@ describe('GamesScreen', () => {
     expect(container.querySelectorAll('.game-tile')).toHaveLength(16);
   });
 
+  it('starts a selected trailer during the tile click and adopts that video', async () => {
+    gamesResponse = games.map((game) => (game.id === 'g_1' ? { ...game, trailerUrl: '/trailer.mp4' } : game));
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false);
+    renderGames('/all?test');
+    fireEvent.click(await screen.findByRole('button', { name: /^Midnight Crumbs:/ }));
+    expect(play).toHaveBeenCalledOnce();
+    const started = play.mock.instances[0];
+    await waitFor(() => expect(document.querySelector('.game-trailer-layer video')).toBe(started), AUTO_SELECT);
+  });
+
+  it('stops a queued trailer when browser Back removes the selection', async () => {
+    gamesResponse = games.map((game) => (game.id === 'g_1' ? { ...game, trailerUrl: '/trailer.mp4' } : game));
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    renderGames('/all?test');
+    fireEvent.click(await screen.findByRole('button', { name: /^Midnight Crumbs:/ }));
+    fireEvent.click(screen.getByText('Back'));
+    await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight'));
+    await waitFor(() => expect(pause).toHaveBeenCalled());
+  });
+
+  it('does not open a game via Enter while its new build is running', async () => {
+    jobsResponse = [{ ...jobs[0]!, gameId: 'g_2' }];
+    renderGames('/all?test');
+    const tile = await screen.findByRole('button', { name: /^Goblin Cellar:/ });
+    fireEvent.click(tile);
+    expect(await screen.findByRole('button', { name: 'Play Goblin Cellar' })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole('grid', { name: 'Your games' }), { key: 'Enter' });
+    expect(screen.getByTestId('location')).toHaveTextContent('/all');
+  });
+
+  it('stops a gesture-started trailer if the screen unmounts before the detail mounts', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const { unmount } = renderGames('/all?test');
+    startTrailer({ trailerUrl: '/trailer.mp4' });
+    unmount();
+    expect(pause).toHaveBeenCalled();
+  });
+
   it('expands the selected game inside its existing grid position and restores it on close', async () => {
     const { container } = renderGames('/all?test');
     const tile = await screen.findByRole('button', { name: /^Goblin Cellar:/ });
@@ -328,7 +381,7 @@ describe('GamesScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Midnight Crumbs' }, AUTO_SELECT)).toBeVisible();
     expect(container.querySelector('.games-spotlight-media .game-cover')).toBeVisible();
     expect(screen.queryByText(/Your library|My games|Selected game|Choose what happens next|Versions/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Close game' })).toHaveTextContent('×');
+    expect(screen.getByRole('button', { name: 'Close game' })).toContainHTML('<svg');
     expect(screen.queryByRole('listitem', { name: 'main' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play Midnight Crumbs' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit Midnight Crumbs' })).toBeDisabled();
@@ -390,6 +443,28 @@ describe('GamesScreen', () => {
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
   });
 
+  it('shows the saved library immediately while refreshing it', async () => {
+    session.userId = 'user-1';
+    localStorage.setItem('ogm.games.v1.user-1', JSON.stringify(games));
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/api/v1/games')) return new Promise<Response>(() => {});
+      return json({ jobs });
+    });
+    setGridColumns(20);
+    renderGames();
+    expect(screen.getAllByRole('button', { name: /Midnight Crumbs/ }).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Building 40%')).toBeVisible();
+    expect(screen.queryByRole('progressbar', { name: 'Loading' })).toBeNull();
+    expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
+  });
+
+  it('shows a wordless loading bar while the first library request is pending', () => {
+    vi.mocked(fetch).mockImplementation(async () => new Promise<Response>(() => {}));
+    renderGames();
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading your games…')).toBeNull();
+  });
+
   it('keeps cached tiles visible and offers retry when a refresh fails', async () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -398,7 +473,7 @@ describe('GamesScreen', () => {
       return json({ error: 'not_found' }, 404);
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(['games'], games);
+    client.setQueryData(['games', undefined], games);
 
     const { container } = renderGames('/all', client);
 

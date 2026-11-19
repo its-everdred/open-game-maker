@@ -1,5 +1,6 @@
 import type { Visibility } from '../types.js';
 import { fetchWithTimeout } from '../fetch-timeout.js';
+import { apiHeaders } from '../api-headers.js';
 
 export type ActiveRepository = {
   gameId: string;
@@ -37,10 +38,7 @@ export class BoundaryApiClient implements BoundaryApi {
   async #json(path: string): Promise<unknown> {
     try {
       const response = await this.#fetch(`${this.#baseUrl}${path}`, {
-        headers: {
-          authorization: `Bearer ${this.#token}`,
-          'x-ogm-service': 'commit',
-        },
+        headers: apiHeaders(this.#token),
       });
       if (!response.ok) throw new BoundaryApiError();
       return await response.json();

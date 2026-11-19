@@ -63,6 +63,7 @@ type PlatformHudProps = {
   saveWritesDisabled?: boolean;
   manualLoadDisabled?: boolean;
   setCloseLocked?(locked: boolean): void;
+  onSavePersisted?(save: SaveData<unknown>, restored?: boolean): void;
   /** The running build's save schema; absent when the build did not report one. */
   saveSchema?: number;
   /** The one older schema the build still migrates; absent when it cannot migrate. */
@@ -158,6 +159,7 @@ export function PlatformHud({
   saveWritesDisabled = false,
   manualLoadDisabled = false,
   setCloseLocked,
+  onSavePersisted,
   saveSchema,
   migratesFrom,
   saveApi = defaultSaveApi,
@@ -265,6 +267,7 @@ export function PlatformHud({
                   for (const slot of selected === 'auto' ? (['auto'] as const) : (['auto', selected] as const)) {
                     await storeSaveWrite(gameId, slot, payload, slotsRef.current ?? [], saveApi.write, context);
                   }
+                  onSavePersisted?.(payload);
                 } finally {
                   // A write whose response was lost may still have landed: reread the heads either way.
                   const result = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
@@ -287,7 +290,18 @@ export function PlatformHud({
       stopEvent();
       stopLoadError();
     };
-  }, [build, frame, gameId, migratesFrom, saveApi, saveSchema, savesAvailable, saveWritesDisabled, toast]);
+  }, [
+    build,
+    frame,
+    gameId,
+    migratesFrom,
+    onSavePersisted,
+    saveApi,
+    saveSchema,
+    savesAvailable,
+    saveWritesDisabled,
+    toast,
+  ]);
 
   useEffect(() => {
     if (visible) (page !== 'pause' ? backRef : resumeRef).current?.focus();
@@ -342,6 +356,7 @@ export function PlatformHud({
       const latest = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
       if (!latest.available) throw new Error('saves unavailable');
       await storeSaveWrite(gameId, 'auto', restored, latest.value.slots, saveApi.write, saveContextRef.current);
+      onSavePersisted?.(restored, true);
       const refreshed = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
       if (refreshed.available) {
         slotsRef.current = refreshed.value.slots;

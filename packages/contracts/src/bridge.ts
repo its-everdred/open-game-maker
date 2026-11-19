@@ -310,6 +310,8 @@ export const gameToHostSchema = z
         z.looseObject({ id: z.string(), offscreen: z.literal(true) }),
       ]),
     ),
+    /** Hides the host Pause control while false (the game shows its own menu); a reload or exit shows it again. */
+    envelope('host.pause.visible', z.looseObject({ visible: z.boolean() })),
     /** Host hotkeys while the iframe has focus. */
     envelope('input.rawKey', z.looseObject({ code: z.string().max(32), down: z.boolean() })),
     /** The host fills identity and slot. */

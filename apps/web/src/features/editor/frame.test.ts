@@ -17,6 +17,40 @@ afterEach(() => {
 });
 
 describe('game frame adapter', () => {
+  it('does not consume startup writes when an away observer subscribes first', () => {
+    const listeners = new Map<string, Set<(payload: never) => void>>();
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn((type: string, callback: (payload: never) => void) => {
+        const callbacks = listeners.get(type) ?? new Set();
+        callbacks.add(callback);
+        listeners.set(type, callbacks);
+        return () => callbacks.delete(callback);
+      }),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: () => frame,
+    });
+    const observe = vi.fn();
+    controller.observeSaveWrite!(observe);
+    const migrated = { saveSchemaVersion: 1, data: { migrated: true } };
+    for (const callback of listeners.get('save.write') ?? []) callback(migrated as never);
+    const persist = vi.fn();
+    controller.onSaveWrite(persist);
+    expect(observe).toHaveBeenCalledWith(migrated);
+    expect(persist).toHaveBeenCalledWith(migrated);
+    controller.dispose();
+  });
   it('restores a save before releasing an acknowledged startup hold', async () => {
     let options: GameFrameOptions | undefined;
     let resolveSave!: (save: { saveSchemaVersion: number; data: unknown }) => void;

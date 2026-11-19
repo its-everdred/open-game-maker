@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameCommand } from '@ogm/contracts';
 import type { EnergyView } from '@ogm/contracts/browser';
+import type { WorkerReview } from '../features/worker-builds/useWorkerReviews';
 
 import { useDeckDraft, useReviewDraft } from '../features/commands-inbox/drafts';
 import { GameMenuProvider, useGameMenuControls } from './GameMenu';
 import { StudioMenu } from './StudioMenu';
+import { pushUpdate, setUpdateOwner } from '../lib/notify/slice';
 
 function TestStudioMenu() {
   return (
@@ -74,18 +76,29 @@ function ThemedControls() {
   return null;
 }
 
+function GameMenuScreen({ hideButton }: { hideButton: boolean }) {
+  const controls = useMemo(() => ({ actions: [], extras: [], hideButton }), [hideButton]);
+  useGameMenuControls(controls);
+  return null;
+}
+
 const state = vi.hoisted(() => ({
   admin: { data: undefined as { platformRole: 'maintainer' | 'admin' | 'none' } | undefined },
   jobs: {
     jobs: [] as TestJob[],
     active: [] as TestJob[],
-    games: [] as Array<{ id: string; title: string; ownerId?: string }>,
+    games: [] as Array<{ id: string; title: string; ownerId?: string; live?: boolean }>,
   },
+  jobsLoading: false,
+  workerReviews: [] as WorkerReview[],
+  workerReviewsLoading: false,
   session: { data: null as { user: { id: string } } | null },
   decisions: [] as TestDecision[],
   reviewLoading: false,
   sessions: [] as Array<{ game_id: string; game_title: string; count: number }>,
   energy: { data: undefined as EnergyView | undefined },
+  threadAccess: false,
+  unreadReplies: 0,
   workers: [] as Array<{
     ticket: string;
     title: string;
@@ -106,10 +119,11 @@ const auth = vi.hoisted(() => ({ signOut: vi.fn() }));
 const report = vi.hoisted(() => ({ sendReport: vi.fn() }));
 const jobControls = vi.hoisted(() => ({ setJobPaused: vi.fn() }));
 const workerHooks = vi.hoisted(() => ({ observed: vi.fn() }));
+const thread = vi.hoisted(() => ({ openThread: vi.fn(), closeThread: vi.fn() }));
 
 vi.mock('../features/build-chat/jobs', () => ({
   isTerminal: (value: string) => ['done', 'failed', 'cancelled'].includes(value),
-  useMyJobs: () => state.jobs,
+  useMyJobs: () => ({ ...state.jobs, isLoading: state.jobsLoading }),
   setJobPaused: jobControls.setJobPaused,
 }));
 vi.mock('../features/worker-builds/useWorkers', () => ({
@@ -119,7 +133,7 @@ vi.mock('../features/worker-builds/useWorkers', () => ({
   },
 }));
 vi.mock('../features/worker-builds/useWorkerReviews', () => ({
-  useWorkerReviews: () => ({ reviews: [], error: false, loading: false }),
+  useWorkerReviews: () => ({ reviews: state.workerReviews, error: false, loading: state.workerReviewsLoading }),
 }));
 vi.mock('../features/worker-builds/usePastTickets', () => ({
   usePastTickets: () => ({ tickets: [], error: false, loading: false }),
@@ -147,6 +161,13 @@ vi.mock('../features/commands-inbox/QuestionSession', () => ({
     </div>
   ),
 }));
+vi.mock('../features/executor-thread/thread', () => ({
+  ...thread,
+  useThreadAccess: (creatorId: string | undefined) => Boolean(creatorId) && state.threadAccess,
+  useThreadPolling: () => undefined,
+  useUnreadReplies: (creatorId: string | undefined) => (creatorId ? state.unreadReplies : 0),
+}));
+vi.mock('../features/executor-thread/ExecutorThread', () => ({ ExecutorThread: () => null }));
 vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
 vi.mock('../features/bug-report/send', () => report);
@@ -225,12 +246,18 @@ afterEach(() => {
   cleanup();
   state.admin = { data: undefined };
   state.jobs = { jobs: [], active: [], games: [] };
+  state.jobsLoading = false;
+  state.workerReviews = [];
+  state.workerReviewsLoading = false;
   state.session = { data: null };
   state.decisions = [];
   state.reviewLoading = false;
   state.sessions = [];
   state.energy = { data: undefined };
   state.workers = [];
+  state.threadAccess = false;
+  state.unreadReplies = 0;
+  thread.openThread.mockReset();
   sound.setMuted.mockReset();
   sound.setVolume.mockReset();
   auth.signOut.mockReset();
@@ -251,6 +278,12 @@ describe('StudioMenu', () => {
     expect(workerHooks.observed).toHaveBeenLastCalledWith([{ id: 'mine', title: 'Mine', ownerId: 'user-1' }]);
   });
 
+  it('does not put the decision count on the sound control', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1'), decision('d2')];
+    renderMenu('/all');
+    expect(screen.getByRole('button', { name: 'Mute' }).querySelector('.studio-menu-badge')).toBeNull();
+  });
   it.each(['/all', '/all/', '/new', '/new/'])('keeps the sound control directly available on %s', (path) => {
     renderMenu(path);
     const volume = screen.getByRole('button', { name: 'Mute' });
@@ -320,6 +353,59 @@ describe('StudioMenu', () => {
     );
     expect(button.style.getPropertyValue('--play-menu-colour')).toBe('');
     expect(button.querySelector('path')?.getAttribute('d')).not.toBe('M96 64v128M160 64v128');
+  });
+  it('hides the Pause control on a game menu screen and brings it back in play and after the game leaves', () => {
+    const screenWith = (game: ReactElement | null) => (
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          {game}
+        </GameMenuProvider>
+      </MemoryRouter>
+    );
+    const view = render(screenWith(<GameMenuScreen hideButton />));
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    view.rerender(screenWith(<GameMenuScreen hideButton={false} />));
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
+    view.rerender(screenWith(<GameMenuScreen hideButton />));
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    view.rerender(screenWith(null));
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
+  });
+  it('shows the Pause control over a game menu when a decision blocks a build', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    const screenWith = () => (
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          <GameMenuScreen hideButton />
+        </GameMenuProvider>
+      </MemoryRouter>
+    );
+    state.decisions = [decision('d1')];
+    const view = render(screenWith());
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    view.unmount();
+    state.decisions = [decision('d1', { blocking: true })];
+    render(screenWith());
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
+  });
+  it('keeps the open menu closable when the game returns to its own menu', () => {
+    const screenWith = (hideButton: boolean) => (
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+          <GameMenuScreen hideButton={hideButton} />
+        </GameMenuProvider>
+      </MemoryRouter>
+    );
+    const view = render(screenWith(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    view.rerender(screenWith(true));
+    const pause = screen.getByRole('button', { name: 'Menu' });
+    expect(pause).toBeVisible();
+    fireEvent.click(pause);
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
   });
   it('opens the always-available controls on the title without signed-in links', () => {
     renderMenu('/');
@@ -605,6 +691,63 @@ describe('StudioMenu', () => {
     expect(screen.getByRole('button', { name: 'Menu' })).toHaveAttribute('data-blocking', 'true');
   });
 
+  // #854 Ask and Notify: the instance owner reaches the Executor from the menu; a reply only raises the count (#878).
+  it('offers the owner the Executor thread and counts unread replies on the badge, not as text', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.threadAccess = true;
+    state.unreadReplies = 2;
+    state.decisions = [decision('d1')];
+    renderMenu('/games');
+
+    expect(screen.getByText('3', { selector: '.studio-menu-badge' })).toBeVisible();
+    expect(document.getElementById('studio-menu-requests')).toHaveTextContent(
+      '1 decision needs your answer, 2 new replies',
+    );
+    expect(document.querySelector('.worker-tracker-toast')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask: 2 new' }));
+    expect(thread.openThread).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  // #854 Status: "is everything in prod?" answered per game at a glance, quiet games included.
+  it('shows every owned game with whether it is live, what waits on the creator and what is building', () => {
+    const job = runningJob({ id: 'job-status', gameId: 'game-blobs', plan: { title: 'Big Endless button' } });
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1', { summary: 'Which menu?' })];
+    state.jobs = {
+      jobs: [job],
+      active: [job],
+      games: [
+        { id: 'game-blobs', title: 'Blobs', ownerId: 'user-1', live: true },
+        { id: 'game-cellar', title: 'Goblin Cellar', ownerId: 'user-1', live: false },
+        { id: 'game-other', title: 'Not mine', ownerId: 'user-2', live: true },
+      ],
+    };
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Jobs: / }));
+
+    const blobs = screen.getByRole('group', { name: 'Blobs builds' });
+    expect(within(blobs).getByRole('link', { name: 'Live' })).toHaveAttribute('href', '/g/game-blobs');
+    expect(blobs).toHaveTextContent('Which menu?Waiting on you');
+    expect(blobs).toHaveTextContent('Big Endless button');
+    const cellar = screen.getByRole('group', { name: 'Goblin Cellar builds' });
+    expect(within(cellar).queryByRole('link', { name: 'Live' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Not mine builds' })).toBeNull();
+
+    fireEvent.click(within(blobs).getByRole('button', { name: /Which menu\?/u }));
+    expect(screen.getByRole('dialog', { name: 'Which menu?' })).toBeVisible();
+  });
+
+  it('offers no Executor thread to a creator the API refuses', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.queryByRole('button', { name: /^Ask/u })).not.toBeInTheDocument();
+  });
+
   it('shows no badge to a visitor who is not signed in', () => {
     state.decisions = [decision('d1')];
     renderMenu('/');
@@ -670,10 +813,10 @@ describe('StudioMenu', () => {
         <TestStudioMenu />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('button', { name: 'New review ready' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
   });
 
-  it('announces a game ticket newly waiting for review', async () => {
+  it('counts a game ticket newly waiting for review without overlay text', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.workers = [{ ticket: 'game:42', title: 'New build', percent: 50, etaSeconds: null, state: 'in-progress' }];
     const view = renderMenu('/games');
@@ -683,10 +826,43 @@ describe('StudioMenu', () => {
         <TestStudioMenu />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('button', { name: 'New review ready' })).toBeVisible();
+    expect(screen.queryByText('New build')).not.toBeInTheDocument();
+    expect(document.querySelector('.worker-tracker-count')).toHaveTextContent('1');
+    expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     expect(screen.queryByRole('button', { name: 'New review ready' })).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Menu' })).toBeVisible();
+  });
+
+  it('keeps the popover open when reviews finish loading after a hammer tap', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.jobsLoading = true;
+    setUpdateOwner('user-1');
+    pushUpdate('Build update');
+    const view = renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: /Completed builds/ }));
+    state.jobsLoading = false;
+    state.jobs.games = [{ id: 'game', title: 'Game', ownerId: 'user-1' }];
+    state.workerReviewsLoading = true;
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('dialog', { name: 'Needs Review' })).toBeNull();
+    state.workerReviewsLoading = false;
+    state.workerReviews = [
+      { kind: 'round', gameId: 'game', round: { id: 'r', ticket: '3', question: null, media: [] } },
+    ];
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('dialog', { name: 'Needs Review' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Build #3' }));
+    expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
   });
 
   it('closes a Builds review when the signed-in creator changes', () => {
@@ -694,6 +870,8 @@ describe('StudioMenu', () => {
     state.decisions = [decision('d1')];
     const view = renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Topic d1' }));
     expect(screen.getByRole('alert')).toBeVisible();
     state.session = { data: { user: { id: 'user-2' } } };
     state.decisions = [decision('d2')];
@@ -705,13 +883,31 @@ describe('StudioMenu', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it.each(['/g/game-blobs', '/g/showcase/blobs'])('keeps updates behind the hammer in %s', (path) => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    setUpdateOwner('user-1');
+    const view = renderMenu(path);
+    act(() => pushUpdate('Private build update'));
+    expect(screen.queryByText('Private build update')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Menu' }).querySelector('.studio-menu-badge')).toHaveTextContent('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: '0 builds running, 1 new update' }));
+    expect(screen.getByText('Private build update')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '0 builds running' }));
+    fireEvent.click(screen.getByRole('button', { name: '0 builds running' }));
+    expect(screen.getByText('Private build update')).toBeVisible();
+    view.unmount();
+    setUpdateOwner(undefined);
+  });
+
   it('keeps an open in-game review sheet mounted during a partial refresh', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.decisions = [decision('d1')];
     const view = renderMenu('/g/game-blobs');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(screen.getByRole('button', { name: '0 builds running' }));
-    fireEvent.click(screen.getByRole('button', { name: '1 Needs Review' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Topic d1' }));
     expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
     state.decisions = [];
     state.reviewLoading = true;

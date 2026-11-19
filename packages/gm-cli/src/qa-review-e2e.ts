@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { reviewOptionImageReady, reviewRoundMediaReady } from './qa-review-media.js';
 
-import { mediaFailures, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
+import { mediaFailures, openReviewDeck, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
 import { ticketDetailSteps } from './qa-ticket-detail-e2e.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
@@ -142,7 +142,6 @@ async function runViewport(
       }),
     );
     await ticketPage.close();
-    await internal(config, `/ticket-fixtures/${run}`, { method: 'DELETE' });
     const seeded = await internal(config, '/review-fixtures', {
       method: 'POST',
       body: JSON.stringify({
@@ -179,7 +178,13 @@ async function runViewport(
 
     await step('open the review deck', async () => {
       await page.goto(`${config.origin}/all`, { waitUntil: 'load', timeout: 60_000 });
-      await page.locator('.worker-tracker-button').click(timeout);
+      await openReviewDeck(
+        page,
+        timeout.timeout,
+        'QA review round',
+        ['QA review round', 'QA review'],
+        'QA running ticket',
+      );
       await dialog.getByText('QA review round').waitFor(timeout);
       await dialog.locator('video').first().waitFor(timeout);
       await dialog
@@ -208,7 +213,9 @@ async function runViewport(
     });
     await still('round-sent');
     await step('pick B on the Command with a note', async () => {
-      await dialog.getByRole('button', { name: 'Next' }).click(timeout);
+      await dialog.getByRole('button', { name: 'Close' }).click(timeout);
+      const list = page.getByRole('region', { name: 'Builds' });
+      await list.getByRole('button', { name: 'QA review', exact: true }).click(timeout);
       await dialog.getByText('QA: which one?').waitFor(timeout);
       await settleMedia(dialog);
       await still('command');

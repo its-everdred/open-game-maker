@@ -1,4 +1,10 @@
-import { mediaFailures, settleMedia } from './qa-review-checks.js';
+import {
+  mediaFailures,
+  openClosedTicket,
+  openRunningTicket,
+  openTicketBuilds,
+  settleMedia,
+} from './qa-review-checks.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
@@ -34,17 +40,16 @@ export async function detailFailures(dialog: Locator, where: string): Promise<st
 export async function ticketDetailSteps(page: Page, origin: string, still: (label: string) => Promise<void>) {
   const timeout = { timeout: 20_000 };
   await page.goto(`${origin}/all`, { waitUntil: 'load', timeout: 60_000 });
-  await page.locator('.worker-tracker-button').click(timeout);
+  await openTicketBuilds(page);
   const failures: string[] = [];
   for (const [title, label] of [
     [RUNNING_TITLE, 'ticket-running'],
     [CLOSED_TITLE, 'ticket-closed'],
   ] as const) {
     if (title === CLOSED_TITLE) {
-      await page.getByRole('button', { name: 'Completed', exact: true }).click(timeout);
-      await page.getByRole('button', { name: new RegExp(`^${CLOSED_TITLE}`, 'u') }).click(timeout);
+      await openClosedTicket(page, title);
     } else {
-      await page.getByRole('button', { name: new RegExp(`^${RUNNING_TITLE}`, 'u') }).click(timeout);
+      await openRunningTicket(page, title);
     }
     const dialog = page.getByRole('dialog', { name: title });
     await summary(dialog).waitFor(timeout);

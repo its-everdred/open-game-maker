@@ -3076,6 +3076,20 @@
                         "maxLength": 32
                       }
                     },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160
+                    },
+                    "tags": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
+                      }
+                    },
                     "logo": {
                       "type": "string",
                       "pattern": "^media\\/[a-zA-Z0-9_-]+\\.(png|webp|svg)$"
@@ -4221,6 +4235,48 @@
                   "additionalProperties": {}
                 }
               ]
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
+              "const": "host.pause.visible"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "visible": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "visible"
+              ],
+              "additionalProperties": {}
             },
             "replyTo": {
               "type": "string",

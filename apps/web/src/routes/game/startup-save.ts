@@ -1,13 +1,21 @@
 import type { GameManifest } from '@ogm/contracts/browser';
+import type { AwaySnapshot } from './away-pause';
 
 import { getOptionalSaves, getSave } from '../../features/editor/api';
 import { saveSlotLoadable } from '../../features/editor/hud/saves';
 import { pushToast } from '../../lib/notify/slice';
 
-export function saveOptions(gameId: string, room: { current: string | undefined }, menu: { current: boolean }) {
+export function saveOptions(
+  gameId: string,
+  room: { current: string | undefined },
+  menu: { current: boolean },
+  away?: AwaySnapshot,
+  awayHold?: { current: boolean },
+) {
   return {
     startupRestore: async (manifest: GameManifest) => {
       if (!manifest.saves || room.current !== undefined) return undefined;
+      if (away?.save) return away.save;
       const query =
         manifest.saveSchema === undefined
           ? undefined
@@ -24,6 +32,6 @@ export function saveOptions(gameId: string, room: { current: string | undefined 
       return room.current === undefined ? save : undefined;
     },
     onStartupRestoreError: () => pushToast('Could not restore save; saving is off'),
-    resumeAfterStartup: () => !menu.current,
+    resumeAfterStartup: () => !awayHold?.current && !menu.current && document.visibilityState !== 'hidden',
   };
 }

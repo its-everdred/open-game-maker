@@ -18,7 +18,8 @@
         "scope.agreed",
         "intake.report",
         "review.reminder",
-        "review.ready"
+        "review.ready",
+        "executor.notify"
       ]
     },
     "title": {

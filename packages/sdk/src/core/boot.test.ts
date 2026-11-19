@@ -58,6 +58,9 @@ describe('boot', () => {
   });
 
   it('holds simulation until the host resumes after startup', async () => {
+    const pauses: boolean[] = [];
+    const onPause = (event: Event) => pauses.push((event as CustomEvent<{ paused: boolean }>).detail.paused);
+    window.addEventListener('gm-pause', onPause);
     const { module } = createCounterGame();
     const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
     await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
@@ -73,6 +76,9 @@ describe('boot', () => {
     );
     const runtime = await pending;
     expect(runtime.clock.paused).toBe(true);
+    expect(pauses).toEqual([true]);
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    expect(pauses).toEqual([true]);
     expect(bridge.send).toHaveBeenCalledWith(
       expect.objectContaining({
         t: 'ready',
@@ -81,6 +87,8 @@ describe('boot', () => {
     );
     bridge.onMessage!(message('lifecycle.resume', {}));
     expect(runtime.clock.paused).toBe(false);
+    expect(pauses).toEqual([true, false]);
+    window.removeEventListener('gm-pause', onPause);
     runtime.dispose();
   });
 

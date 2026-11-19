@@ -38,7 +38,14 @@ export type GameFrameState = {
   startupRecoveryUnavailable?: boolean;
   firstFrame?: boolean;
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
+  /** The game's latest `host.pause.visible`; unset means visible, and a remount starts unset. */
+  hostPauseVisible?: boolean;
 };
+
+/** The game hides the host Pause control only in play, while its bridge is up; any failure shows it again. */
+export function hidesHostPause(mode: 'play' | 'edit', state: Pick<GameFrameState, 'bridgeState' | 'hostPauseVisible'>) {
+  return mode === 'play' && state.bridgeState === 'ready' && state.hostPauseVisible === false;
+}
 
 export type GameFrameController = {
   state(): GameFrameState;
@@ -65,6 +72,8 @@ export type GameFrameController = {
   onSaveLoadError(callback: (message: string) => void): () => void;
   sendRoomMessage(envelope: Envelope<string, unknown>): void;
   onSaveWrite(callback: (save: SaveData<unknown>) => void): () => void;
+  /** Observe live writes without consuming the startup replay reserved for persistence. */
+  observeSaveWrite?(callback: (save: SaveData<unknown>) => void): () => void;
   onEvent(callback: (kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown) => void): () => void;
   /**
    * `test.renderInfo`, or `undefined` when the game refused it (a published build answers `ok: false`) or did not answer
@@ -360,6 +369,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     frame.send('editor.validatePlacement', { prefab: request.prefab, pose: request.pose });
   };
   stopPlacement = frame.on('editor.placement', finishPlacement);
+  const stopHostPause = frame.on('host.pause.visible', ({ visible }) => {
+    if (disposed || current.hostPauseVisible === visible) return;
+    current = { ...current, hostPauseVisible: visible };
+    publish();
+  });
   const stopRoomMessages = (
     [
       'net.input',
@@ -477,6 +491,10 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
         stop();
       };
     },
+    observeSaveWrite: (callback) =>
+      frame.on('save.write', (save) => {
+        if (currentMode === 'play') callback(save);
+      }),
     onEvent: (callback) => frame.on('event', ({ kind, payload }) => callback(kind, payload)),
     dispose: () => {
       if (disposed) return;
@@ -488,6 +506,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       stopStartupRestore();
       stopStartupWrites();
       stopPlacement();
+      stopHostPause();
       for (const stop of stopRoomMessages) stop();
       if (activePlacement !== undefined) {
         clearTimeout(activePlacement.timer);

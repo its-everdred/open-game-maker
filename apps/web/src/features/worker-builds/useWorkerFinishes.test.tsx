@@ -25,6 +25,34 @@ describe('worker finishing state', () => {
     act(() => result.current.dismiss());
     expect(result.current.finished).toEqual([]);
   });
+  it('dismisses only completions opened for the current game', () => {
+    const workers = ['a', 'b'].map((game) => ({
+      ticket: `${game}:1`,
+      title: game,
+      percent: 50,
+      etaSeconds: null,
+      startedAt: '2026-11-01T00:00:00Z',
+    }));
+    const feeds = ['a', 'b'].map((gameId) => ({
+      gameId,
+      cursor: 1,
+      completed: [] as Array<{ ticket: string; seq: number; at: string }>,
+    }));
+    const { result, rerender } = renderHook(({ active, currentFeeds }) => useWorkerFinishes(active, currentFeeds), {
+      initialProps: { active: workers, currentFeeds: feeds },
+    });
+    rerender({
+      active: [],
+      currentFeeds: feeds.map((feed) => ({
+        ...feed,
+        cursor: 2,
+        completed: [{ ticket: '1', seq: 2, at: '2026-11-01T00:00:01Z' }],
+      })),
+    });
+    expect(result.current.finished).toHaveLength(2);
+    act(() => result.current.dismiss(['a:1']));
+    expect(result.current.finished).toEqual([{ ticket: 'b:1', title: 'b' }]);
+  });
   it('does not show one account’s completed worker after an account switch', () => {
     const worker = {
       ticket: 'game:12',

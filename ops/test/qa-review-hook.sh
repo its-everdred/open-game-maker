@@ -32,8 +32,10 @@ api=$(commit services/api/src/review-rounds/routes.ts)
 cat > "$scratch/gm" << 'GM'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$OGM_TEST_CALLS"
-printf 'exit=%s qa-review-e2e\n' "$OGM_TEST_RC"
-exit "$OGM_TEST_RC"
+rc=$OGM_TEST_RC
+[[ $2 == voice-e2e ]] && rc=${OGM_TEST_RC_VOICE:-$OGM_TEST_RC}
+printf 'exit=%s qa-%s\n' "$rc" "$2"
+exit "$rc"
 GM
 printf '#!/usr/bin/env bash\necho session >> "$OGM_TEST_CALLS"\n' > "$scratch/session"
 chmod +x "$scratch/gm" "$scratch/session"
@@ -50,7 +52,7 @@ assert_eq 64 "$rc" 'one commit is bad usage'
 # No review path changed: nothing runs.
 : > "$scratch/calls"
 OGM_TEST_RC=0 "$hook" "$base" "$other" --repo "$stack" --attention "$attention" > "$scratch/out"
-assert_grep 'no review change' "$scratch/out"
+assert_grep 'no review or voice change' "$scratch/out"
 assert_eq '' "$(cat "$scratch/calls")" 'an unrelated deploy runs nothing'
 
 # A review screen changed and the E2E passes: a fresh session, the E2E for the deployed SHA, no wake.
@@ -85,6 +87,64 @@ for path in apps/web/src/features/worker-builds/SwipeVerdict.tsx apps/web/src/fe
   OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" > /dev/null
   assert_grep 'qa review-e2e' "$scratch/calls"
 done
+
+# A voice path changed (#879): the voice E2E runs, after a fresh session, with its own stills folder.
+from=$(git -C "$stack" rev-parse HEAD)
+to=$(commit services/voice-host/lib/ogm_voice/transport.ex)
+short=$(git -C "$stack" rev-parse --short=12 "$to")
+: > "$scratch/calls"
+OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+assert_eq "session
+qa voice-e2e --sha $short --out $stack/assets-local/review/app/voice-e2e/$short" "$(cat "$scratch/calls")" 'voice deploy runs the voice E2E'
+assert_eq 'exit=0 qa-voice-e2e' "$(cat "$scratch/out")" 'passes the voice result line on'
+
+# Every voice path CI watches triggers it too: the hook and the voice host job read the same list.
+while read -r path; do
+  [[ $path == */ ]] && path=${path}x.ts
+  from=$(git -C "$stack" rev-parse HEAD)
+  to=$(commit "$path")
+  : > "$scratch/calls"
+  OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" > /dev/null
+  assert_grep 'qa voice-e2e' "$scratch/calls"
+done < "$repo/ops/voice-paths"
+
+# A deploy touching both runs both on one session; a failing voice run wakes the Executor with its own line.
+from=$(git -C "$stack" rev-parse HEAD)
+mkdir -p "$stack/packages/voice-client/src"
+printf '%s\n' "$RANDOM" >> "$stack/apps/web/src/routes/review/RoundReviews.tsx"
+printf '%s\n' "$RANDOM" >> "$stack/packages/voice-client/src/client.ts"
+git -C "$stack" add -A
+git -C "$stack" -c user.name=t -c user.email=t@example.test commit -qm both
+to=$(git -C "$stack" rev-parse HEAD)
+short=$(git -C "$stack" rev-parse --short=12 "$to")
+: > "$scratch/calls"
+: > "$attention"
+set +e
+OGM_TEST_RC=0 OGM_TEST_RC_VOICE=1 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a failing voice E2E exits 1'
+assert_eq "session
+qa review-e2e --sha $short --out $stack/assets-local/review/app/qa-e2e/$short
+qa voice-e2e --sha $short --out $stack/assets-local/review/app/voice-e2e/$short" "$(cat "$scratch/calls")" 'both runs, one session'
+assert_eq "exit=0 qa-review-e2e
+exit=1 qa-voice-e2e" "$(cat "$scratch/out")" 'both result lines'
+assert_eq 1 "$(wc -l < "$attention")" 'only the failing run wakes the Executor'
+assert_grep "qa-voice-e2e failed on $short (exit 1): $OGM_QA_ROOT/voice-e2e/$short.log" "$attention"
+
+# A run that hangs is cut off, fails, and wakes the Executor rather than holding the next deploy's check.
+printf '#!/usr/bin/env bash\nsleep 30\n' > "$scratch/hang"
+chmod +x "$scratch/hang"
+from=$(git -C "$stack" rev-parse HEAD)
+to=$(commit packages/voice-client/src/dictation.ts)
+: > "$attention"
+set +e
+OGM_QA_GM=$scratch/hang OGM_QA_TIMEOUT_SEC=1 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a hung E2E fails'
+assert_grep 'exit=124 qa-voice-e2e' "$scratch/out"
+assert_grep 'qa-voice-e2e failed on' "$attention"
 
 # The session cannot be minted: no E2E, exit 1, and the Executor is woken.
 from=$(git -C "$stack" rev-parse HEAD)
