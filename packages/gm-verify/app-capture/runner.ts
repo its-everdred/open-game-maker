@@ -147,7 +147,7 @@ try {
         await measure('menu');
         if (editArg === '1') {
           await page.getByRole('button', { name: 'Edit', exact: true }).tap();
-          await page.getByLabel('Editor canvas').waitFor({ timeout: 30_000 });
+          await page.locator('.edit-workspace').waitFor({ timeout: 30_000 });
           await page.waitForFunction(
             () => {
               const host = (window as unknown as { __ogmHost?: { game?: { bridgeState?: string; mode?: string } } })
