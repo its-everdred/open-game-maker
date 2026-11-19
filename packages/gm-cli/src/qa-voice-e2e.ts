@@ -253,6 +253,9 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
   const before = (await config.usage?.()) ?? null;
   const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2, hasTouch: true });
   try {
+    // The host resolves its Funnel name to a local Tailnet address. Headless Chromium cannot accept the local-network
+    // permission prompt, so grant it for this QA app origin as a user would when connecting to that address.
+    await context.grantPermissions(['local-network-access'], { origin: config.origin });
     // A dead run's build would list beside this one; the seed replaces it.
     await internal(config, '/voice-fixtures', { method: 'POST', body: JSON.stringify({ run }) });
     await context.addCookies([{ ...config.cookie, url: config.origin }]);
