@@ -2,6 +2,14 @@ type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
 type Locator = ReturnType<Page['locator']>;
 
+async function reviewStep<T>(name: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    throw new Error(`${name}: ${(error as Error).message}`, { cause: error });
+  }
+}
+
 // What Kevin sees, checked the way he would see it (#863): every picture drew, every clip can play, every sound has a
 // length. A check that passed on a screen of broken images (#859 on prod d5d08305e) is worse than none.
 
@@ -33,8 +41,8 @@ function mediaStates(root: Element): MediaState[] {
 }
 
 export async function openTicketBuilds(page: Page, timeout = 20_000) {
-  await page.locator('.worker-tracker-button').click({ timeout });
-  await page.getByRole('region', { name: 'Builds' }).waitFor({ timeout });
+  await reviewStep('click Builds button', () => page.locator('.worker-tracker-button').click({ timeout }));
+  await reviewStep('wait for Builds panel', () => page.getByRole('region', { name: 'Builds' }).waitFor({ timeout }));
 }
 
 export async function openRunningTicket(page: Page, title: string, timeout = 20_000) {
@@ -67,13 +75,15 @@ function reviewItemName(title: string): RegExp {
 
 /** Select a review row after the group has been expanded. */
 export async function openReviewItem(page: Page, title: string, timeout = 20_000): Promise<Locator> {
-  await page
-    .getByRole('region', { name: 'Builds' })
-    .locator('.worker-review-group-item')
-    .getByRole('button', { name: reviewItemName(title) })
-    .click({ timeout });
+  await reviewStep(`select review row ${title}`, () =>
+    page
+      .getByRole('region', { name: 'Builds' })
+      .locator('.worker-review-group-item')
+      .getByRole('button', { name: reviewItemName(title) })
+      .click({ timeout }),
+  );
   const dialog = page.getByRole('dialog', { name: 'Needs Review' });
-  await dialog.waitFor({ timeout });
+  await reviewStep('wait for review dialog', () => dialog.waitFor({ timeout }));
   return dialog;
 }
 
@@ -84,20 +94,28 @@ export async function openReviewDeck(
   expected?: string[],
   activeTitle?: string,
 ): Promise<Locator> {
-  await openTicketBuilds(page, timeout);
+  await reviewStep('open Builds', () => openTicketBuilds(page, timeout));
   const panel = page.getByRole('region', { name: 'Builds' });
-  if (activeTitle) await panel.getByRole('button', { name: new RegExp(`^${activeTitle}`, 'u') }).waitFor({ timeout });
-  await panel.getByRole('button', { name: /\d+ need review/i }).click({ timeout });
+  if (activeTitle)
+    await reviewStep(`wait for active build ${activeTitle}`, () =>
+      panel.getByRole('button', { name: new RegExp(`^${activeTitle}`, 'u') }).waitFor({ timeout }),
+    );
+  await reviewStep('expand review group', () =>
+    panel.getByRole('button', { name: /\d+ need review/i }).click({ timeout }),
+  );
   const group = panel.locator('.worker-review-group-item');
   const items = group.locator('button');
   if (expected) {
-    for (const name of expected) await group.getByRole('button', { name: reviewItemName(name) }).waitFor({ timeout });
+    for (const name of expected)
+      await reviewStep(`wait for review row ${name}`, () =>
+        group.getByRole('button', { name: reviewItemName(name) }).waitFor({ timeout }),
+      );
     if ((await items.count()) !== expected.length) throw new Error('filtered review list has an unexpected item count');
   }
   if (title) return openReviewItem(page, title, timeout);
-  await items.first().click({ timeout });
+  await reviewStep('select first review row', () => items.first().click({ timeout }));
   const dialog = page.getByRole('dialog', { name: 'Needs Review' });
-  await dialog.waitFor({ timeout });
+  await reviewStep('wait for review dialog', () => dialog.waitFor({ timeout }));
   return dialog;
 }
 
