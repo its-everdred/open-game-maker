@@ -55,6 +55,14 @@ export const LICENSES: LicenseRow[] = [
     confirmed: { by: 'kevin', on: '2026-10-30' },
   },
   {
+    id: 'LicenseRef-caseportman-royalty-free',
+    aliases: ['caseportman-royalty-free'],
+    ceiling: { uses: PIXEL_USES, audience: 'public', redistribution: 'in-build', attribution: null },
+    processing: 'local-only',
+    ref: 'license.txt',
+    note: 'Project use and edits permitted; standalone resale and redistribution prohibited. Awaiting Kevin confirmation.',
+  },
+  {
     id: 'LicenseRef-hattap-commercial',
     aliases: ['custom-commercial-ok'],
     ceiling: { uses: PIXEL_USES, audience: 'private', redistribution: 'in-build', attribution: null },
@@ -129,7 +137,7 @@ export const LICENSES: LicenseRow[] = [
   },
   {
     id: 'NOASSERTION',
-    aliases: [],
+    aliases: ['unknown-itch-free'],
     ceiling: { uses: ['vision-input'], audience: 'private', redistribution: 'none', attribution: null },
     processing: 'local-only',
     ref: 'none',

@@ -38,6 +38,19 @@
     }
   },
   {
+    "id": "LicenseRef-caseportman-royalty-free",
+    "aliases": ["caseportman-royalty-free"],
+    "ceiling": {
+      "uses": ["in-game", "placeholder", "style-reference", "vision-input"],
+      "audience": "public",
+      "redistribution": "in-build",
+      "attribution": null
+    },
+    "processing": "local-only",
+    "ref": "license.txt",
+    "note": "Project use and edits permitted; standalone resale and redistribution prohibited. Awaiting Kevin confirmation."
+  },
+  {
     "id": "LicenseRef-hattap-commercial",
     "aliases": ["custom-commercial-ok"],
     "ceiling": {
@@ -155,7 +168,7 @@
   },
   {
     "id": "NOASSERTION",
-    "aliases": [],
+    "aliases": ["unknown-itch-free"],
     "ceiling": {
       "uses": ["vision-input"],
       "audience": "private",

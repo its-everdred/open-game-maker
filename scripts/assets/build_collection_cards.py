@@ -26,6 +26,9 @@ sys.path.insert(0, str(HERE))
 import smallscaleint
 import smallscaleint_thumbnails
 import limezu_layout
+import tinyrpg_layout
+import ansimuz_fx
+import caseportman_sfx
 
 REPO = Path(__file__).resolve().parents[2]
 TAGS = Path(__file__).parent / "data" / "collection_tags.jsonl"
@@ -48,7 +51,16 @@ SKIP_NAMES = {"preview.png", "sample.png", "license.txt", "icon.png"}
 # Readers receive the extracted directory and collection card. Explicit pack
 # membership prevents a reader from replacing unrelated cards from that vendor.
 ITEM_BUILDERS = {
+    "ansimuz": {
+        "ansimuz-explosion-pack-1": ansimuz_fx.build_cards,
+        "ansimuz-explosion-tutorial": ansimuz_fx.build_cards,
+    },
+    "caseportman": {"caseportman-cute-cozy-ui-sfx": caseportman_sfx.build_cards},
     "limezu": {"limezu-modern-farm": limezu_layout.build_cards},
+    "tinyrpg": {
+        "tinyrpg-characters-01-soldier-orc": tinyrpg_layout.build_cards,
+        "tinyrpg-characters-02-demon-blood-monster": tinyrpg_layout.build_cards,
+    },
 }
 
 
