@@ -1,5 +1,5 @@
 import type { Room as ClientRoom } from '@colyseus/sdk';
-import { boot, ColyseusTestServer } from '@colyseus/testing';
+import { ColyseusTestServer } from '@colyseus/testing';
 import { LIMITS, type Role } from '@ogm/contracts';
 import { signGrant } from '@ogm/room-protocol';
 
@@ -15,14 +15,15 @@ export const defaultTimings: RoomTimings = {
   ownerReconnectSec: 0.2,
   playerReconnectSec: 0.2,
   seatReconnectSec: 0.2,
-  idleDisposeSec: 1,
+  // Most tests are not exercising idle disposal; leave time for a loaded runner to join.
+  idleDisposeSec: 30,
   callbackTimeoutMs: 100,
   callbackRetryMs: [5, 10, 20],
 };
 
 export type Harness = RoomsServerBundle & { testServer: ColyseusTestServer };
 
-export async function startHarness(overrides: Partial<RoomsServiceConfig> = {}, port?: number): Promise<Harness> {
+export async function startHarness(overrides: Partial<RoomsServiceConfig> = {}, port = 0): Promise<Harness> {
   const bundle = createRoomsServer({
     port: 2568,
     grantSecret: GRANT_SECRET,
@@ -34,12 +35,12 @@ export async function startHarness(overrides: Partial<RoomsServiceConfig> = {}, 
     endedFetch: async () => new Response(null, { status: 204 }),
     ...overrides,
   });
-  let testServer: ColyseusTestServer;
-  if (port === undefined) testServer = await boot(bundle.gameServer);
-  else {
-    await bundle.gameServer.listen(port, '127.0.0.1');
-    testServer = new ColyseusTestServer(bundle.gameServer);
-  }
+  await bundle.gameServer.listen(port, '127.0.0.1');
+  const address = bundle.gameServer.transport.server?.address();
+  if (address === null || address === undefined || typeof address === 'string') throw new Error('test server did not bind');
+  // ColyseusTestServer reads the requested port, which is zero for an ephemeral bind.
+  Object.assign(bundle.gameServer, { port: address.port });
+  const testServer = new ColyseusTestServer(bundle.gameServer);
   return { ...bundle, testServer };
 }
 
