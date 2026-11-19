@@ -14,6 +14,8 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.spec.ts',
   fullyParallel: true,
+  // Context setup shares the test timeout and can be slow on CI runners.
+  timeout: 60_000,
   use: {
     baseURL: previewOrigin,
     launchOptions: { args: launchArgs() },
