@@ -14,15 +14,16 @@ try {
   await page.goto(`http://127.0.0.1:${port}/index.html?capture&cam=menu&scene=all`, { waitUntil: 'domcontentloaded', timeout: 180000 });
   await page.waitForFunction(() => window.__ready && window.__crowdStep, null, { timeout: 300000 });
   const result = await page.evaluate(() => {
-    const failures = [], previous = new Map(), positions = new Map(), chargeStarts = new Map(), duration = window.__sounds?.per ?? 153;
+    const failures = [], previous = new Map(), positions = new Map(), chargeStarts = new Map(), charged = new Set(), duration = window.__sounds?.per ?? 153;
     for (let t = 0; t <= duration + .25; t += .25) {
       const crowd = window.__crowdStep(t);
       if (crowd?.length !== 25) { failures.push({ t, problem: `expected 25 people, found ${crowd?.length ?? 0}` }); break; }
       if (crowd.filter(person => person.stationaryFallback).length > 2) failures.push({ t, problem: 'too many stationary fallback defenders', people: crowd.filter(person => person.stationaryFallback).map(person => ({ i: person.i, reason: person.fallbackReason })) });
-      if (Math.abs(t - 14) < .001) for (const person of crowd.filter(person => person.spearman)) chargeStarts.set(person.i, person.position);
+      if (Math.abs(t - 29) < .001) for (const person of crowd.filter(person => person.spearman)) chargeStarts.set(person.i, person.position);
+      if (t >= 29 && t < 32) for (const person of crowd.filter(person => person.spearman && person.gait === 'sprint')) charged.add(person.i);
       if (Math.abs(t - 32) < .001) for (const person of crowd.filter(person => person.spearman)) {
         const start = chargeStarts.get(person.i);
-        if (!start || Math.hypot(person.position[0] - start[0], person.position[1] - start[1]) < 1) failures.push({ t, i: person.i, problem: 'defender did not charge' });
+        if (!start || !charged.has(person.i) || Math.hypot(person.position[0] - start[0], person.position[1] - start[1]) < 1) failures.push({ t, i: person.i, problem: 'defender did not charge' });
       }
       if (t >= 32.25 && t < 38.7) {
         const fighters = crowd.filter(person => person.spearman && person.clip === 'attack-melee-right');

@@ -517,14 +517,14 @@ export async function kaiju(ctx) {
   };
   for (let i = 0; i < 8; i++) {
     const a = i / 8 * Math.PI * 2 + [0, .16, -.12, .23, -.19, .08, -.25, .14][i], defender = posAt(35), homeRadius = [6.4, 8.2, 7.3, 9.1, 6.8, 8.6, 7.6, 9][i], ring = [defender.x + Math.cos(a) * (homeRadius - (i === 2 || i === 6 ? 2 : 0)), defender.z + Math.sin(a) * (homeRadius - (i === 2 || i === 6 ? 2 : 0))], home = [defender.x + Math.cos(a) * (homeRadius + (i === 2 || i === 6 ? 0 : 1.5)), defender.z + Math.sin(a) * (homeRadius + (i === 2 || i === 6 ? 0 : 1.5))], back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
-    const m = man([[0, ...home, 'idle'], [14 + i * .35, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [PER - 1, ...home, 'walk']], true); m.spearman = true;
+    const m = man([[0, ...home, 'idle'], [29.4 + i * .08, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [PER - 1, ...home, 'walk']], true); m.spearman = true;
     const legs = [], pending = Array.from({ length: m.plan.length }, () => []); let current = home, unplaceable = false;
     const peers = men.filter(other => other !== m && (other.spearman || other.fieldCrew));
     const firstPath = choosePath(home, home, [...reserved[0], ...reserved[1]], 0, 0, PER - .05, peers, true);
     if (!firstPath) { scene.remove(m.o); men.pop(); continue; }
     current = firstPath.at(-1); pending[0].push(current);
     const placeFallback = reason => {
-      const homePost = firstPath[0], depart = 14 + i * .35, returnStart = 70 + i * .5;
+      const homePost = firstPath[0], depart = 29.4 + i * .08, returnStart = 70 + i * .5;
       for (let radius = 3; radius <= 9; radius += 1.5) for (let n = 0; n < 12; n++) {
         const angle = (n + i) * Math.PI / 6, goal = [homePost[0] + Math.cos(angle) * radius, homePost[1] + Math.sin(angle) * radius];
         const monster = posAt(35);
@@ -535,10 +535,11 @@ export async function kaiju(ctx) {
         const length = out.slice(1).reduce((sum, p, j) => sum + Math.hypot(p[0] - out[j][0], p[1] - out[j][1]), 0);
         if (length < 1.5 || length > 12 || Math.hypot(out.at(-1)[0] - monster.x, out.at(-1)[1] - monster.z) > 10.5) continue;
         const duration = Math.max(1, length / 3), arrive = depart + duration, homeAt = returnStart + duration;
+        if (arrive > 32) continue;
         if (!separated(out, depart, arrive, returnStart, peers) || !separated(back, returnStart, homeAt, PER - .05, peers)) continue;
         const outbound = pathSampler(out), inbound = pathSampler(back);
         m.pos = t => t < depart ? homePost : t < arrive ? outbound((t - depart) / duration) : t < returnStart ? out.at(-1) : t < homeAt ? inbound((t - returnStart) / duration) : homePost;
-        m.clipAt = t => t >= 32 && t < 38.7 ? ['attack-melee-right', 32] : t >= 46 && t < LEAVE ? ['emote-yes', 46] : ['idle', 0];
+        m.clipAt = t => t >= depart && t < arrive ? ['sprint', depart] : t >= 32 && t < 38.7 ? ['attack-melee-right', 32] : t >= 46 && t < LEAVE ? ['emote-yes', 46] : ['idle', 0];
         m.wanderer = true; m.fallbackReason = reason; m.returnSafe = true;
         pending.forEach((points, k) => { points.length = 0; points.push(m.pos(m.plan[k][0])); reserved[k].push(...points); });
         return;
