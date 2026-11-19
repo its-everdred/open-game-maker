@@ -343,7 +343,7 @@ describe('GameScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
     await waitFor(() => expect(editorApi.acquireLease).toHaveBeenCalledWith('game', 'main', expect.any(String)));
-    expect(host.controller.setMode).toHaveBeenCalledWith('edit');
+    expect(host.controller.setMode).toHaveBeenCalledWith('play');
     expect(container.querySelector('.game-screen.is-editing')).toBeVisible();
     expect(container.querySelector('.play-bar')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();

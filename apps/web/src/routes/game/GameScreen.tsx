@@ -131,6 +131,8 @@ export function GameScreen() {
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
+  const [editorPlaying, setEditorPlaying] = useState(true);
+  useEffect(() => setEditorPlaying(true), [gameId]);
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
   const [pendingBuild, setPendingBuild] = useState<{ snapshot: DesignSnapshot; report: ReapplyReport }>();
@@ -428,7 +430,7 @@ export function GameScreen() {
               gameId,
               buildId: activePreview?.accessId ?? snapshot.buildId,
               ...(activePreview ? { preview: true } : {}),
-              mode,
+              mode: mode === 'edit' ? 'play' : mode,
               design: activePreview ? previewDesign.data! : snapshot,
               build,
               onState: setFrameState,
@@ -470,8 +472,8 @@ export function GameScreen() {
   ]);
 
   useEffect(() => {
-    frameRef.current?.setMode(mode);
-  }, [mode]);
+    frameController?.setMode(mode === 'edit' && editorPlaying ? 'play' : mode);
+  }, [frameController, mode, editorPlaying]);
 
   useEffect(() => {
     if (mode !== 'edit' || room.snapshot?.role !== 'peer' || room.snapshot.phase !== 'editing') return;
@@ -733,7 +735,7 @@ export function GameScreen() {
               firstFrame={frameState.firstFrame}
             />
           ) : null}
-          {mode === 'edit' &&
+          {mode === 'edit' && !editorPlaying &&
           frameRef.current !== undefined &&
           editorManifest !== undefined &&
           sessionStore !== undefined &&
@@ -858,7 +860,10 @@ export function GameScreen() {
               createIntent(state.doc, [command], command.op === 'invoke' ? command.command : command.control),
             );
           }}
-          onTool={(tool) => sessionStore.getState().setTool(tool)}
+          onTool={(tool) => {
+            setEditorPlaying((playing) => !playing && sessionView.tool === tool);
+            sessionStore.getState().setTool(tool);
+          }}
           onUndo={() => void sessionStore.getState().undo()}
           onRedo={() => void sessionStore.getState().redo()}
           onDelete={(entityId) => {

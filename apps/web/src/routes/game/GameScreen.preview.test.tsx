@@ -479,6 +479,7 @@ describe('GameScreen previews', () => {
     const grass = await screen.findByRole('button', { name: 'Grass' });
     expect(screen.getByRole('button', { name: 'Light' })).toBeVisible();
     fireEvent.pointerDown(grass, { pointerId: 1 });
+    await waitFor(() => expect(host.controller.setMode).toHaveBeenLastCalledWith('edit'));
     const canvas = await screen.findByLabelText('Editor canvas');
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
     fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
