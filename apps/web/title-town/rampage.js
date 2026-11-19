@@ -602,6 +602,16 @@ export async function kaiju(ctx) {
       return spans[i].sample((t - a[0] - delay) / (b[0] - a[0] - delay));
     };
   }
+  // Only strike while the moving monster remains within reach.
+  for (const m of men.filter(person => person.spearman)) {
+    const clipAt = m.clipAt;
+    m.clipAt = t => {
+      const clip = clipAt(t);
+      if (clip[0] !== 'attack-melee-right') return clip;
+      const p = m.pos(t), monster = posAt(t);
+      return Math.hypot(p[0] - monster.x, p[1] - monster.z) <= 11.9 ? clip : ['idle', clip[1]];
+    };
+  }
   // walking: the step cycle advances with the ground covered (no sliding feet); slower walkers take shorter strides, as
   // people do; heading turns at most 6 rad/s toward where he is going (or, standing, toward the monster)
   const DT = 1 / 20, NS = Math.ceil(PER / DT) + 2, CYC = { walk: [.54 * HS, .667], sprint: [.59 * HS, .5] };   // metres per cycle (two steps) at full stride, seconds per cycle
