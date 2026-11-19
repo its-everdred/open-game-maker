@@ -236,8 +236,8 @@ export function createCommitApp(dependencies: ServerDependencies): Hono {
         actor: 'api',
       };
       await dependencies.audit.append(entry);
-      // A refused or failed remote operation may have taken effect despite a lost response. Keep its marker for inspection.
-      if (endCreate && failure === undefined && result?.ok === true) await endCreate();
+      // A returned verdict is terminal; exceptions may have taken effect despite a lost response.
+      if (endCreate && failure === undefined && result !== undefined) await endCreate();
       if (failure !== undefined) return context.json({ error: 'commit operation failed' }, 502);
       return context.json(result as CommitResult, 200);
     } finally {

@@ -253,7 +253,9 @@ test('style detail fits its media and navigation into phone and desktop viewport
             `viewport ${viewport.width}x${viewport.height}: tracks=${JSON.stringify(trackBoxes)} layout=${JSON.stringify(layoutBoxes)} screen=${JSON.stringify(screenStyle)}`,
           ).toBeLessThanOrEqual(sheet!.top);
           expect(
-            styleArrowBoxes.every((box) => Math.abs(box.top + box.height / 2 - (diorama.top + diorama.height / 2)) <= 1),
+            styleArrowBoxes.every(
+              (box) => Math.abs(box.top + box.height / 2 - (diorama.top + diorama.height / 2)) <= 1,
+            ),
           ).toBe(true);
           expect(styleArrowBoxes.every((box) => box.left >= diorama!.left && box.right <= diorama!.right)).toBe(true);
           expect(styleArrowBoxes[0]!.left).toBeLessThan(diorama!.left + diorama!.width / 4);

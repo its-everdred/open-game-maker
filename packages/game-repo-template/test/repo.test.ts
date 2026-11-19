@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,75 +21,17 @@ function summary(files: ReturnType<typeof renderRepoTemplate>['files']) {
 }
 
 describe('renderRepoTemplate', () => {
-  it('preserves the vendored launcher executable mode in game repositories', () => {
-    const { files } = renderRepoTemplate('game-2d@1', ctx);
-    expect(
-      files.find((file) => file.path === '.claude/skills/vendor/impeccable/impeccable/scripts/impeccable')?.mode,
-    ).toBe('100755');
-  });
-
-  it('renders exactly the fixture file set for game-3d@1', () => {
-    expect(summary(renderRepoTemplate('game-3d@1', ctx, emptyRoot()).files)).toEqual(fixture);
-  });
-
-  it('links every Codex and .agents skill relatively to a rendered .claude/skills directory', () => {
-    const { files } = renderRepoTemplate('game-3d@1', ctx, emptyRoot());
-    const links = files.filter((f) => f.mode === '120000');
-    expect(links.map((f) => f.path).sort()).toEqual(['.agents/skills/gm-core', '.codex/skills/gm-core']);
-    for (const link of links) {
-      expect(link.content.startsWith('/')).toBe(false);
-      const resolved = join(link.path, '..', link.content);
-      expect(resolved).toMatch(/^\.claude\/skills\/gm-[a-z-]+$/);
-      expect(files.some((f) => f.path.startsWith(`${resolved}/`) && f.mode !== '120000')).toBe(true);
-    }
-  });
-
-  it('records the pack version in skills.lock and uses the workspace pack when OGM-091 ships one', () => {
-    const placeholder = renderRepoTemplate('game-2d@1', ctx, emptyRoot()).files.find((f) => f.path === 'skills.lock');
-    expect(JSON.parse(placeholder!.content)).toEqual({ pack: '0.0.0-placeholder', vendored: {} });
-
+  it('renders a small game without copied skills, even when installed dependencies exist', () => {
     const root = emptyRoot();
-    mkdirSync(join(root, 'skills/gm-core'), { recursive: true });
-    mkdirSync(join(root, 'skills/gm-repair'), { recursive: true });
-    writeFileSync(join(root, 'skills/gm-core/SKILL.md'), 'real core\n');
-    writeFileSync(join(root, 'skills/gm-repair/SKILL.md'), 'real repair\n');
-    writeFileSync(join(root, 'skills/skills.lock'), '{ "pack": "1.0.0", "vendored": {} }\n');
+    mkdirSync(join(root, 'skills/gm-core/node_modules/.bin'), { recursive: true });
+    writeFileSync(join(root, 'skills/gm-core/node_modules/.bin/gm'), 'installed dependency');
+    writeFileSync(join(root, 'skills/gm-core/SKILL.md'), 'name: gm-core');
+    writeFileSync(join(root, 'skills/skills.lock'), '{\"pack\":\"1.0.0\"}');
     const { files } = renderRepoTemplate('game-2d@1', ctx, root);
-    expect(JSON.parse(files.find((f) => f.path === 'skills.lock')!.content).pack).toBe('1.0.0');
-    expect(files.find((f) => f.path === '.claude/skills/gm-core/SKILL.md')!.content).toBe('real core\n');
-    expect(files.find((f) => f.path === '.codex/skills/gm-repair')).toMatchObject({ mode: '120000' });
-  });
-
-  it('renders the real workspace skill pack with a complete matching lock', () => {
-    const { files } = renderRepoTemplate('game-2d@1', ctx);
-    const lock = JSON.parse(files.find((file) => file.path === 'skills.lock')!.content) as {
-      v: number;
-      pack: string;
-      installedAt: string;
-      skills: Record<string, { sha256: string }>;
-      vendored: Record<string, string>;
-    };
-
-    expect(lock).toMatchObject({ v: 1, pack: '0.0.0', installedAt: '' });
-    expect(Object.keys(lock.skills)).toEqual(expect.arrayContaining(['gm-core/SKILL.md', 'gm-build/SKILL.md']));
-    expect(Object.keys(lock.vendored).length).toBeGreaterThan(0);
-    for (const [path, entry] of Object.entries(lock.skills)) {
-      const content = files.find((file) => file.path === `.claude/skills/${path}`)?.content;
-      expect(content, path).toBeTypeOf('string');
-      expect(createHash('sha256').update(content!).digest('hex'), path).toBe(entry.sha256);
-    }
-    expect(files.find((file) => file.path === '.codex/skills/gm-core')).toMatchObject({
-      content: '../../.claude/skills/gm-core',
-      mode: '120000',
-    });
-  });
-
-  it('lists vendored skills flat in .claude/skills so a top-level skill index finds them', () => {
-    const { files } = renderRepoTemplate('game-3d@1', ctx);
-    const link = files.find((file) => file.path === '.claude/skills/threejs-lighting');
-    expect(link).toMatchObject({ content: 'vendor/threejs/threejs-lighting', mode: '120000' });
-    expect(files.some((file) => file.path === '.claude/skills/vendor/threejs/threejs-lighting/SKILL.md')).toBe(true);
-    expect(files.find((file) => file.path === '.claude/skills/gm-core')).toBeUndefined();
+    expect(files.some((file) => /^(?:\.claude|\.codex|\.agents)\/skills(?:\/|$)/u.test(file.path))).toBe(false);
+    expect(files.some((file) => file.path.includes('node_modules'))).toBe(false);
+    expect(files.length).toBeLessThan(50);
+    expect(summary(renderRepoTemplate('game-3d@1', ctx, emptyRoot()).files)).toEqual(fixture);
   });
 
   it('names the ci job `required` and runs the commands AGENTS.md names', () => {
