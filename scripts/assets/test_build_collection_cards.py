@@ -78,10 +78,20 @@ class Library(unittest.TestCase):
         self.assertTrue(validator_ok(cards[0], pack / 'collection.card.json'))
         self.assertEqual(len(json.loads(cards[0].read_text())['source']['files']), 2)
 
+    def test_unrecognized_pack_contents_fail_without_replacing_existing_cards(self):
+        pack = add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {
+            'unexpected.png': png(32, 32),
+        })
+        report = bcc.run(self.root, only='limezu-modern-farm')
+        self.assertIn('limezu-modern-farm', report['failures'])
+        self.assertFalse((pack / 'collection.card.json').exists())
+
     def test_limezu_collection_records_compatible_collections(self):
         for peer in ('limezu-modern-interiors', 'limezu-modern-exteriors', 'limezu-modern-user-interface'):
             add_pack(self.root, peer, 'limezu', 'LimeZu-commercial', {'image.png': png(1, 1)})
-        add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {'image.png': png(1, 1)})
+        add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {
+            '32x32/Animals_32x32/Cow_32x32.png': png(32, 32),
+        })
         self.assertEqual(bcc.run(self.root, only='limezu-modern-farm')['failures'], {})
         card = card_of(self.root, 'limezu-modern-farm')
         self.assertEqual(card['describe']['set'], 'limezu-modern')

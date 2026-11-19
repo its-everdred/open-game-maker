@@ -331,8 +331,9 @@ def run(root: Path, only: str = "*", dry_run: bool = False, table: dict | None =
                 items[pid] = smallscaleint.build_cards(pj.parent, built[pid])
             elif builder := ITEM_BUILDERS.get(vendor_of[pid], {}).get(pid):
                 cards = builder(pj.parent / built[pid]["collection_info"]["version"] / "extracted", built[pid])
-                if cards:
-                    items[pid] = preserve_item_locks(pj.parent, cards)
+                if not cards:
+                    raise ValueError(f'no recognized assets in {pid}')
+                items[pid] = preserve_item_locks(pj.parent, cards)
         except (KeyError, OSError, ValueError, json.JSONDecodeError) as e:
             errors[pid] = [str(e).strip('"')]
     smallscale_items = {pid: cards for pid, cards in items.items() if pid in smallscaleint.PACKS}
