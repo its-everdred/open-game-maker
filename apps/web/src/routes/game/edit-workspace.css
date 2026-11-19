@@ -1,0 +1,67 @@
+.edit-workspace {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'chat game';
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  gap: 4px;
+}
+
+.edit-workspace-game {
+  grid-area: game;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.edit-workspace-chat {
+  grid-area: chat;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.edit-workspace-editor {
+  grid-area: game;
+  z-index: 2;
+  justify-self: end;
+  align-self: start;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.edit-workspace-editor > summary {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-card);
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.edit-workspace-editor > summary::-webkit-details-marker {
+  display: none;
+}
+
+.edit-workspace-editor-content {
+  max-height: min(70vh, 100%);
+  overflow: auto;
+  background: var(--surface-card);
+  color: var(--text);
+}
+
+@media (orientation: portrait) {
+  .edit-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'game' 'chat';
+  }
+}
