@@ -19,7 +19,11 @@ try {
       const crowd = window.__crowdStep(t);
       if (crowd?.length !== 25) { failures.push({ t, problem: `expected 25 people, found ${crowd?.length ?? 0}` }); break; }
       if (crowd.filter(person => person.stationaryFallback).length > 2) failures.push({ t, problem: 'too many stationary fallback defenders', people: crowd.filter(person => person.stationaryFallback).map(person => ({ i: person.i, reason: person.fallbackReason })) });
-      if (crowd.filter(person => person.wanderer).length > 3) failures.push({ t, problem: 'too many defenders diverted from the fight' });
+      if (Math.abs(t - 35) < .001) {
+        const fighters = crowd.filter(person => person.spearman && person.clip === 'attack-melee-right');
+        if (fighters.length !== 8 || fighters.some(person => Math.hypot(person.position[0] - person.monster[0], person.position[1] - person.monster[1]) > 12))
+          failures.push({ t, problem: 'attackers did not reach the monster', fighters: fighters.map(person => ({ i: person.i, distance: Math.hypot(person.position[0] - person.monster[0], person.position[1] - person.monster[1]) })), missing: crowd.filter(person => person.spearman && person.clip !== 'attack-melee-right').map(person => ({ i: person.i, reason: person.fallbackReason, wanderer: person.wanderer, clip: person.clip })) });
+      }
       const crew = crowd.filter(person => person.field);
       if (crew.length !== 4 || crew.some(person => !person.fieldRouteComplete)) failures.push({ t, problem: 'field crew route incomplete' });
       if ((t < 30 || (t >= 62 && t < 88)) && crew.some(person => !person.pushing || person.fieldDistance > person.fieldCrewLimit)) failures.push({ t, problem: 'field crew not pushing' });
@@ -40,7 +44,7 @@ try {
         if (Math.abs(a.height - b.height) < 2 && Math.hypot(a.position[0] - b.position[0], a.position[1] - b.position[1]) < .9)
           failures.push({ t, i: a.i, other: b.i, problem: 'people overlap' });
       }
-      if (failures.length >= 20) break;
+      if (failures.length) break;
     }
     const end = window.__crowdStep(duration - .001), beginning = window.__crowdStep(duration);
     for (let i = 0; i < end.length; i++)
@@ -49,7 +53,7 @@ try {
     if (!beginning.some(person => person.visible && person.inView)) failures.push({ t: 0, problem: 'no visible person in view' });
     return { duration, failures, marks: window.__marks };
   });
-  if (result.failures.length) throw new Error(JSON.stringify({ duration: result.duration, count: result.failures.length, first: result.failures.slice(0, 20) }));
+  if (result.failures.length) throw new Error(JSON.stringify({ duration: result.duration, count: result.failures.length, first: result.failures.slice(0, 20), marks: result.marks }));
   console.log(`Crowd check passed for ${result.duration} seconds and the loop boundary`, JSON.stringify(result.marks));
 } finally {
   await browser.close();

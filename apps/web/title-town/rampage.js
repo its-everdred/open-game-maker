@@ -447,8 +447,7 @@ export async function kaiju(ctx) {
     const y = m.y ?? Math.max(PLAIN, ground(...p));
     for (let k = 0; k < 6; k++) { const tf = 27 + k * 1.9 + i * .25; arrows.push({ t: tf, from: [p[0], y + 1.4, p[1]], fl: .8 }); } }
   // spearmen: out of the streets, at his feet, stabbing; they scatter when he reels, then cheer and give chase
-  const doors = D.filter(d => d.kind === 'house' && !d.hits.length && !d.shoved);
-  const crowdObstacles = [...obstacles, ...peopleBoxes([...staticPeople, ...groundPosts])], reserved = Array.from({ length: 9 }, () => []);
+  const crowdObstacles = Object.freeze([...obstacles, ...peopleBoxes([...staticPeople, ...groundPosts])].map(o => Object.freeze(o))), reserved = Array.from({ length: 9 }, () => []);
   const pathSampler = path => {
     const lengths = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1])), total = lengths.reduce((sum, n) => sum + n, 0);
     return fraction => {
@@ -468,13 +467,19 @@ export async function kaiju(ctx) {
   };
   const peerFrames = new WeakMap();
   const framesFor = person => {
-    if (!peerFrames.has(person)) peerFrames.set(person, Array.from({ length: Math.ceil(PER * 10) + 1 }, (_, i) => {
-      const p = person.pos(i / 10); return { p, y: person.y ?? Math.max(PLAIN, ground(...p)) };
-    }));
+    if (!peerFrames.has(person)) {
+      const frames = Array.from({ length: Math.ceil(PER * 10) + 1 }, (_, i) => {
+        const p = person.pos(i / 10); return { p, y: person.y ?? Math.max(PLAIN, ground(...p)) };
+      });
+      frames.bounds = frames.reduce((b, f) => [Math.min(b[0], f.p[0]), Math.min(b[1], f.p[1]), Math.max(b[2], f.p[0]), Math.max(b[3], f.p[1])], [Infinity, Infinity, -Infinity, -Infinity]);
+      peerFrames.set(person, frames);
+    }
     return peerFrames.get(person);
   };
   const firstConflict = (path, start, end, holdUntil, peers) => {
-    const sample = pathSampler(path), frames = peers.map(framesFor);
+    const sample = pathSampler(path), bounds = path.reduce((b, p) => [Math.min(b[0], p[0]), Math.min(b[1], p[1]), Math.max(b[2], p[0]), Math.max(b[3], p[1])], [Infinity, Infinity, -Infinity, -Infinity]);
+    const frames = peers.map(framesFor).filter(f => f.bounds[2] + 1.5 >= bounds[0] && f.bounds[0] - 1.5 <= bounds[2] && f.bounds[3] + 1.5 >= bounds[1] && f.bounds[1] - 1.5 <= bounds[3]);
+    if (!frames.length) return null;
     for (let t = start; t <= holdUntil + .001; t += .1) {
       const p = sample(end > start ? (t - start) / (end - start) : 1), y = Math.max(PLAIN, ground(...p));
       for (const frame of frames) { const other = frame[Math.min(frame.length - 1, Math.max(0, Math.round(t * 10)))], q = other.p;
@@ -483,8 +488,9 @@ export async function kaiju(ctx) {
     return null;
   };
   const separated = (...args) => !firstConflict(...args);
-  const choosePath = (from, target, occupied, start, end, holdUntil, peers, initial = false) => {
-    const avoid = peopleBoxes(occupied), first = route(from, target, crowdObstacles);
+  const choosePath = (from, target, occupied, start, end, holdUntil, peers, initial = false, combat = false) => {
+    const maxVisited = combat ? 5000 : 1000, monster = combat ? posAt(35) : null;
+    const avoid = peopleBoxes(occupied), first = route(from, target, crowdObstacles, 1.5, maxVisited);
     if (!first) return null;
     const centre = first.at(-1);
     const tryPath = candidate => {
@@ -492,31 +498,33 @@ export async function kaiju(ctx) {
       // The unsnapped end of a previous leg must connect safely to the grid.
       if (!initial && !clearSegment(from, candidate[0], crowdObstacles)) return null;
       const path = initial ? [candidate.at(-1)] : limitPath([from, ...candidate], Math.max(0, (end - start) * 6 - .5));
-      if (blocked(path.at(-1), avoid) || !separated(path, start, end, holdUntil, peers)) return null;
+      if ((combat && Math.hypot(path.at(-1)[0] - monster.x, path.at(-1)[1] - monster.z) > 10.5) || blocked(path.at(-1), avoid) || !separated(path, start, end, holdUntil, peers)) return null;
       // Break up grid alignment without giving up the checked segment or spacing.
       const last = path.at(-1), phase = hashN(from[0] + target[0], from[1] + target[1]) * Math.PI * 2;
       const shifted = [last[0] + Math.cos(phase) * .35, last[1] + Math.sin(phase) * .35];
       const varied = initial ? [shifted] : [...path, shifted];
-      if (clearSegment(last, shifted, crowdObstacles) && !blocked(shifted, avoid) && separated(varied, start, end, holdUntil, peers)) return varied;
+      if ((!combat || Math.hypot(shifted[0] - monster.x, shifted[1] - monster.z) <= 10.5) && clearSegment(last, shifted, crowdObstacles) && !blocked(shifted, avoid) && separated(varied, start, end, holdUntil, peers)) return varied;
       return path;
     };
     let path = tryPath(first); if (path) return path;
-    for (let ring = 1; ring <= 8; ring++) for (let n = 0; n < 12; n++) {
-      const angle = n * Math.PI / 6, goal = [centre[0] + Math.cos(angle) * ring * 1.5, centre[1] + Math.sin(angle) * ring * 1.5];
-      path = tryPath(route(from, goal, crowdObstacles)); if (path) return path;
+    for (let ring = 1; ring <= (combat ? 2 : 8); ring++) for (let n = 0; n < (combat ? 24 : 12); n++) {
+      const angle = n * Math.PI / (combat ? 12 : 6), radius = combat ? 5 + ring * 2 : ring * 1.5;
+      const origin = combat ? [monster.x, monster.z] : centre, goal = [origin[0] + Math.cos(angle) * radius, origin[1] + Math.sin(angle) * radius];
+      if (blocked(goal, crowdObstacles) || blocked(goal, avoid)) continue;
+      path = tryPath(route(from, goal, crowdObstacles, 1.5, maxVisited)); if (path) return path;
     }
     return null;
   };
   for (let i = 0; i < 8; i++) {
-    const a = i / 8 * Math.PI * 2, h0 = P(30 + (i % 3) * 3, -12 + i * 3), hd = doors.sort((p, q) => Math.hypot(p.x - h0[0], p.z - h0[1]) - Math.hypot(q.x - h0[0], q.z - h0[1]))[0], home = hd ? [hd.x + Math.cos(a) * (hd.r + 2), hd.z + Math.sin(a) * (hd.r + 2)] : h0, ring = [pts.c[0] + Math.cos(a) * 6.5, pts.c[1] + Math.sin(a) * 6.5], back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
-    const m = man([[0, ...home, 'idle'], [29.4 + i * .15, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [PER - 1, ...home, 'walk']], true); m.spearman = true;
+    const a = i / 8 * Math.PI * 2 + [0, .16, -.12, .23, -.19, .08, -.25, .14][i], defender = posAt(35), homeRadius = [6.4, 8.2, 7.3, 9.1, 6.8, 8.6, 7.6, 9][i], home = [defender.x + Math.cos(a) * homeRadius, defender.z + Math.sin(a) * homeRadius], ring = home, back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
+    const m = man([[0, ...home, 'idle'], [14 + i * .35, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [PER - 1, ...home, 'walk']], true); m.spearman = true;
     const legs = [], pending = Array.from({ length: m.plan.length }, () => []); let current = home, unplaceable = false;
     const peers = men.filter(other => other !== m && (other.spearman || other.fieldCrew));
     const firstPath = choosePath(home, home, [...reserved[0], ...reserved[1]], 0, 0, PER - .05, peers, true);
     if (!firstPath) { scene.remove(m.o); men.pop(); continue; }
     current = firstPath.at(-1); pending[0].push(current);
     const placeFallback = reason => {
-      const homePost = firstPath[0], depart = 20 + i * .6, returnStart = 70 + i * .5;
+      const homePost = firstPath[0], depart = 40.5 + i * .1, returnStart = 70 + i * .5;
       for (let radius = 3; radius <= 9; radius += 1.5) for (let n = 0; n < 12; n++) {
         const angle = (n + i) * Math.PI / 6, goal = [homePost[0] + Math.cos(angle) * radius, homePost[1] + Math.sin(angle) * radius];
         const raw = route(homePost, goal, crowdObstacles);
@@ -528,12 +536,12 @@ export async function kaiju(ctx) {
         if (!separated(out, depart, arrive, returnStart, peers) || !separated(back, returnStart, homeAt, PER - .05, peers)) continue;
         const outbound = pathSampler(out), inbound = pathSampler(back);
         m.pos = t => t < depart ? homePost : t < arrive ? outbound((t - depart) / duration) : t < returnStart ? out.at(-1) : t < homeAt ? inbound((t - returnStart) / duration) : homePost;
-        m.clipAt = t => t >= 40 + i * .2 && t < 41.5 + i * .2 ? ['emote-yes', 40 + i * .2] : ['idle', 0];
-        m.wanderer = true; m.returnSafe = true;
+        m.clipAt = t => t >= 32 && t < 38.7 ? ['attack-melee-right', 32] : t >= 46 && t < LEAVE ? ['emote-yes', 46] : ['idle', 0];
+        m.wanderer = true; m.fallbackReason = reason; m.returnSafe = true;
         pending.forEach((points, k) => { points.length = 0; points.push(m.pos(m.plan[k][0])); reserved[k].push(...points); });
         return;
       }
-      m.stationaryFallback = true; m.fallbackReason = reason; m.pos = () => homePost; m.clipAt = () => ['idle', 0]; m.returnSafe = true;
+      m.stationaryFallback = true; m.fallbackReason = reason; m.pos = () => homePost; m.clipAt = t => t >= 32 && t < 38.7 ? ['attack-melee-right', 32] : ['idle', 0]; m.returnSafe = true;
       pending.forEach((points, k) => { points.length = 0; points.push(homePost); reserved[k].push(...points); });
     };
     for (let j = 0; j < m.plan.length - 1; j++) {
@@ -548,7 +556,7 @@ export async function kaiju(ctx) {
       else {
         const occupied = [...reserved[j + 1]]; let holdUntil = m.plan[j + 1][0];
         for (let k = j + 2; k < m.plan.length && m.plan[k][1] === target[0] && m.plan[k][2] === target[1]; k++) { occupied.push(...reserved[k]); holdUntil = m.plan[k][0]; }
-        path = choosePath(current, target, occupied, m.plan[j][0], m.plan[j + 1][0], holdUntil, peers);
+        path = choosePath(current, target, occupied, m.plan[j][0], m.plan[j + 1][0], holdUntil, peers, false, j === 1);
       }
       if (!path) { m.fallbackReason = `leg ${j}`; unplaceable = true; break; }
       current = path[path.length - 1]; legs.push(path); pending[j + 1].push(current);
@@ -556,7 +564,7 @@ export async function kaiju(ctx) {
     if (unplaceable) { placeFallback(m.fallbackReason); continue; }
     const spans = legs.map(path => {
       const length = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1]));
-      return { path, length, total: length.reduce((sum, n) => sum + n, 0) };
+      return { path, length, total: length.reduce((sum, n) => sum + n, 0), sample: pathSampler(path) };
     });
     let returning = spans.at(-1); const maxReturn = PER - LEAVE - 1;
     let returnDelay = 0, returnDuration = Math.min(maxReturn, Math.max(.25, returning.total / 3.5)), foundReturn = false;
@@ -565,17 +573,17 @@ export async function kaiju(ctx) {
       const candidate = route(startPoint, homePoint, blockers, 1.5, 20000);
       if (candidate && Math.hypot(candidate.at(-1)[0] - homePoint[0], candidate.at(-1)[1] - homePoint[1]) < 1.5 && clearSegment(startPoint, candidate[0], blockers) && clearSegment(candidate.at(-1), homePoint, blockers)) options.push([startPoint, ...candidate, homePoint]);
     };
-    addDetour(crowdObstacles);
     for (let attempt = 0; attempt < 4 && !foundReturn && attempt < options.length; attempt++) {
       const path = options[attempt], length = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1])), total = length.reduce((sum, n) => sum + n, 0);
       const minReturn = Math.min(maxReturn, Math.max(.25, total / 3.5));
       searchReturn: for (let duration = minReturn; duration <= maxReturn + .001; duration += 4) for (let delay = 0; delay + duration <= maxReturn + .001; delay += 4) {
         const start = LEAVE + delay, end = start + duration;
         if (separated([path[0]], LEAVE, LEAVE, start, peers) && separated(path, start, end, PER - .05, peers)) {
-          returning = { path, length, total }; returnDelay = delay; returnDuration = duration; foundReturn = true; break searchReturn;
+          returning = { path, length, total, sample: pathSampler(path) }; returnDelay = delay; returnDuration = duration; foundReturn = true; break searchReturn;
         }
       }
       if (!foundReturn) {
+        if (attempt === 0) addDetour(crowdObstacles);
         const collision = firstConflict(path, LEAVE, LEAVE + minReturn, PER - .05, peers);
         if (collision && Math.hypot(collision[0] - startPoint[0], collision[1] - startPoint[1]) > 2 && Math.hypot(collision[0] - homePoint[0], collision[1] - homePoint[1]) > 2) {
           detours.push({ x: collision[0], z: collision[1], yaw: 0, halfX: 1.5, halfZ: 1.5 });
@@ -590,11 +598,8 @@ export async function kaiju(ctx) {
     m.plan[m.plan.length - 1][0] = LEAVE + returnDelay + returnDuration;
     m.pos = t => {
       let i = 0; while (i < m.plan.length - 2 && m.plan[i + 1][0] <= t) i++;
-      const a = m.plan[i], b = m.plan[i + 1], { path, length, total } = spans[i];
-      const delay = i === spans.length - 1 ? returnDelay : 0;
-      let d = total * clamp01((t - a[0] - delay) / (b[0] - a[0] - delay));
-      for (let j = 0; j < length.length; j++) { if (!length[j]) continue; if (d <= length[j]) return [lerp(path[j][0], path[j + 1][0], d / length[j]), lerp(path[j][1], path[j + 1][1], d / length[j])]; d -= length[j]; }
-      return path[path.length - 1];
+      const a = m.plan[i], b = m.plan[i + 1], delay = i === spans.length - 1 ? returnDelay : 0;
+      return spans[i].sample((t - a[0] - delay) / (b[0] - a[0] - delay));
     };
   }
   // walking: the step cycle advances with the ground covered (no sliding feet); slower walkers take shorter strides, as
@@ -613,9 +618,9 @@ export async function kaiju(ctx) {
     const propBoxes = [];
     for (const e of engines) { e.o.updateMatrixWorld(true); e.o.traverse(n => { if (n.isMesh && n.visible) { n.geometry.computeBoundingBox(); const scale = new THREE.Vector3().setFromMatrixScale(n.matrixWorld); propBoxes.push({ name: n.name, box: n.geometry.boundingBox, inverse: n.matrixWorld.clone().invert(), scale }); } }); }
     return men.map((m, i) => {
-    const position = m.pos(t), y = m.y ?? Math.max(PLAIN, ground(...position));
+    const position = [m.o.position.x, m.o.position.z], y = m.o.position.y;
     const screen = new THREE.Vector3(position[0], y + 1.35, position[1]).project(ctx.camera);
-    return { i, field: !!m.fieldCrew, spearman: !!m.spearman, stationaryFallback: !!m.stationaryFallback, wanderer: !!m.wanderer, fallbackReason: m.fallbackReason, gait: m.mov[Math.min(NS - 1, Math.floor(t / DT))], fieldRouteComplete, fieldCrewLimit, fieldDistance: Math.hypot(position[0] - field.o.position.x, position[1] - field.o.position.z), returnSafe: m.returnSafe, pushing: !!m.pushing?.(t), wall: !!m.wall, position, height: y, screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
+    return { i, field: !!m.fieldCrew, spearman: !!m.spearman, stationaryFallback: !!m.stationaryFallback, wanderer: !!m.wanderer, fallbackReason: m.fallbackReason, gait: m.mov[Math.min(NS - 1, Math.floor(t / DT))], fieldRouteComplete, fieldCrewLimit, fieldDistance: Math.hypot(position[0] - field.o.position.x, position[1] - field.o.position.z), returnSafe: m.returnSafe, pushing: !!m.pushing?.(t), wall: !!m.wall, position, height: y, clip: m.cur?.getClip().name, monster: [posAt(t).x, posAt(t).z], screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
       inView: Math.abs(screen.x) <= 1.05 && Math.abs(screen.y) <= 1.05 && screen.z >= -1 && screen.z <= 1,
       blocked: blocked(position, obstacles.filter(o => !m.wall || (o.model !== 'breach-wall' && o.top > m.y + .1))),
       prop: propBoxes.filter(({ box: b, inverse, scale }) => {

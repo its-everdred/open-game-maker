@@ -30,8 +30,9 @@ const obstacleIndexes = new WeakMap();
 
 export function route(start, end, obstacles, step = 1.5, maxVisited = 1000) {
   if (start.length !== 2 || end.length !== 2 || ![...start, ...end, step].every(Number.isFinite) || step <= 0) return null;
-  const signature = obstacles.map(o => [o.x, o.z, o.yaw, o.halfX, o.halfZ].join(',')).join(';');
   let index = obstacleIndexes.get(obstacles);
+  const immutable = Object.isFrozen(obstacles) && obstacles.every(Object.isFrozen);
+  const signature = immutable && index ? index.signature : obstacles.map(o => [o.x, o.z, o.yaw, o.halfX, o.halfZ].join(',')).join(';');
   if (!index || index.signature !== signature) {
     const prepared = obstacles.map(o => ({ ...o, cos: Math.cos(o.yaw), sin: Math.sin(o.yaw) }));
     const cells = new Map(), cellSize = 12, cellKey = (x, z) => `${x},${z}`;
@@ -69,8 +70,8 @@ export function route(start, end, obstacles, step = 1.5, maxVisited = 1000) {
     let candidates = obstacles;
     if (short) {
       const nearby = new Set();
-      for (let x = Math.floor(Math.min(from[0], to[0]) / cellSize) - 1; x <= Math.floor(Math.max(from[0], to[0]) / cellSize) + 1; x++)
-        for (let z = Math.floor(Math.min(from[1], to[1]) / cellSize) - 1; z <= Math.floor(Math.max(from[1], to[1]) / cellSize) + 1; z++)
+      for (let x = Math.floor(Math.min(from[0], to[0]) / cellSize); x <= Math.floor(Math.max(from[0], to[0]) / cellSize); x++)
+        for (let z = Math.floor(Math.min(from[1], to[1]) / cellSize); z <= Math.floor(Math.max(from[1], to[1]) / cellSize); z++)
           for (const o of cells.get(cellKey(x, z)) || []) nearby.add(o);
       candidates = [...nearby];
     }
