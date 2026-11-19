@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { ffmpeg, FfmpegMissingError, hasFfmpeg } from './capture.js';
+import { ffmpeg, FfmpegMissingError, hasFfmpeg, phoneH264Args } from './capture.js';
 import type { HookDriver } from './hooks.js';
 import type { TrailerInput } from './trailer-script.js';
 import { scriptedCanvasFrames, scriptedPageFrames } from './trailer-frames.js';
@@ -18,12 +18,7 @@ export function trailerVideoArgs(dir: string, fps: number, output: string): stri
     join(dir, 'f%05d.png'),
     '-vf',
     `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
-    '-c:v',
-    'libx264',
-    '-profile:v',
-    'main',
-    '-level:v',
-    '4.1',
+    ...phoneH264Args(fps),
     '-preset',
     'fast',
     '-threads',

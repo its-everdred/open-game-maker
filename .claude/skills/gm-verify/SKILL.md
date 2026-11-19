@@ -55,7 +55,9 @@ the deliverable gate are `python3 -I scripts/assets/set_critic.py`; detail is in
 - Each ready post names the skills used and links the score JSON when available; record each posted file with `python3 scripts/meta/skill-usage/artifacts.py --repo <repo> --ticket <number> --commit <sha> --post-id <comment-id> [--turn-id <turn-id>] --skill <skill> [--target <file>] [--score <json>] <file>`, then run `scripts/meta/skill-usage/collect.sh`.
 
 - `apps/web/title-town/tools/capture.mjs record` encodes H.264 `yuv420p`, 960 px wide, CRF 27, `+faststart` (a 2-minute clip is about 5-10 MB).
-  The Claude mobile app does not play WebM.
+  The Claude mobile app does not play WebM. Every MP4 sent to the creator is H.264 Main profile at level 4.1 or lower
+  with a constant frame rate (`-profile:v main -level:v 4.1 -r <fps>`); x264's default (High, level 6.2 on a 1080p
+  trailer) never played on his phone. Check with `ffprobe -show_entries stream=profile,level`.
 - Publish an artifact page: `apps/web/title-town/tools/clips_page.py <dir> "title" "intro" clip.mp4="Heading|one line" ...` builds it with
   poster frames; files over the per-call limit get re-encoded smaller, not dropped.
 - Sound: `apps/web/title-town/tools/mix_sound.mjs` lays a scene's cues under a recording; check the balance with an

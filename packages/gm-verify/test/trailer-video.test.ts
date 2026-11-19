@@ -13,7 +13,7 @@ const ffmpegAvailable = ['ffmpeg', 'ffprobe'].every(
 );
 
 it.skipIf(!ffmpegAvailable)(
-  'encodes the scripted canvas as the 1280×720 landscape trailer (requires ffmpeg)',
+  'encodes a 1280×720 phone-safe trailer at the requested frame rate (requires ffmpeg)',
   async () => {
     const dir = mkdtempSync(join(tmpdir(), 'trailer-video-'));
     const image = join(dir, 'frame.png');
@@ -38,7 +38,7 @@ it.skipIf(!ffmpegAvailable)(
         page: { clock: { runFor: async () => {} } },
         game: { evaluate: async () => {}, locator: () => ({ first: () => ({ evaluate: async () => data }) }) },
       } as unknown as HookDriver;
-      await recordTrailerVideo(hooks, { script: [], seconds: 1, fps: 1 }, output);
+      await recordTrailerVideo(hooks, { script: [], seconds: 1, fps: 10 }, output);
       const probe = JSON.parse(
         execFileSync(
           'ffprobe',
@@ -48,7 +48,7 @@ it.skipIf(!ffmpegAvailable)(
             '-select_streams',
             'v:0',
             '-show_entries',
-            'stream=width,height,codec_name,profile,level,pix_fmt',
+            'stream=width,height,codec_name,profile,level,pix_fmt,r_frame_rate',
             '-of',
             'json',
             output,
@@ -63,6 +63,7 @@ it.skipIf(!ffmpegAvailable)(
         profile: 'Main',
         level: 41,
         pix_fmt: 'yuv420p',
+        r_frame_rate: '10/1',
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });

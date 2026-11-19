@@ -45,6 +45,8 @@ Reversals (the later rule wins):
 - Review follow-up tickets became the same ticket until approved.
 - Blocking picks became non-blocking picks with media, shipping the recommendation meanwhile.
 - Three variations per step became five rendered options (A–E) when he dislikes a look.
+- Options bundling several screens (Blobs #688: each of A–E held the title, mode and character screens) became one
+  option set per screen. Kevin: "first multiple choice set should be per screen, no need to couple screens together".
 - Executor-only stills became the worker's own `gm look shell`, with host stills as a fallback.
 - A losing arm stopping after one or two tries became a scored plateau rule (best-so-far, then a technique change,
   then escalation).
