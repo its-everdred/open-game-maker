@@ -115,7 +115,7 @@ jobs:
     name: browser tests
     needs: changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -137,7 +137,7 @@ jobs:
           browser_package=$(grep -rls '"test:browser"' --include=package.json apps packages services skills templates 2>/dev/null | head -n 1)
           if [[ -n "$browser_package" ]]; then
             pnpm --dir "$(dirname "$browser_package")" exec playwright install --with-deps chromium
-            pnpm -r --if-present run test:browser
+            pnpm -r --workspace-concurrency=1 --if-present run test:browser
           else
             echo "no browser tests"
           fi

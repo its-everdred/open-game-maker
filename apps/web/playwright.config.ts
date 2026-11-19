@@ -23,10 +23,11 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `VITE_GAMES_ORIGIN=${bridgeOrigin} pnpm build && node e2e/support/stage-prototype-fixture.mjs && pnpm exec vite preview --host 127.0.0.1 --port ${previewPort} --strictPort`,
+      command: `pnpm exec vite preview --host 127.0.0.1 --port ${previewPort} --strictPort`,
       url: previewOrigin,
       reuseExistingServer: false,
       timeout: 180_000,
+      stdout: 'pipe',
     },
     {
       command: `OGM_WEB_BRIDGE_PORT=${bridgePort} node e2e/support/serve-bridge-game.ts`,

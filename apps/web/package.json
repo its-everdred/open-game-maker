@@ -13,8 +13,10 @@
     "pretypecheck": "pnpm run build:deps",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src e2e tools",
+    "prepare:browser": "VITE_GAMES_ORIGIN=http://127.0.0.1:${OGM_WEB_BRIDGE_PORT:-10001} pnpm build && node e2e/support/stage-prototype-fixture.mjs",
+    "pree2e": "pnpm run prepare:browser",
     "e2e": "playwright test",
-    "pretest:browser": "pnpm run build:deps",
+    "pretest:browser": "pnpm run prepare:browser",
     "test:browser": "vitest run e2e/render-gltf.test.ts e2e/thumbnail-scene.test.ts e2e/thumbnail-scene-3d.test.ts && playwright test"
   },
   "dependencies": {
