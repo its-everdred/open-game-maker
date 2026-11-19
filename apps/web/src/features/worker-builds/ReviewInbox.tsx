@@ -67,9 +67,11 @@ export function ReviewInbox({
   ];
   const missingPaths = [
     ...pendingReviews.flatMap((review) =>
-      review.kind === 'round' && !review.round.media.some((item) => item.role !== 'target') && !review.round.buildId
+      review.kind === 'round' &&
+      ((!review.round.media.some((item) => item.role !== 'target') && !review.round.buildId) ||
+        (Boolean(review.round.buildId) && !incomplete && !error))
         ? [
-            `/games/${encodeURIComponent(review.gameId)}/review-rounds/${encodeURIComponent(review.round.id)}/missing-media`,
+            `/games/${encodeURIComponent(review.gameId)}/review-rounds/${encodeURIComponent(review.round.id)}/missing-media${review.round.buildId ? '?kind=build' : ''}`,
           ]
         : [],
     ),
@@ -301,14 +303,21 @@ export function ReviewInbox({
             `/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media`,
           )
         ) : current.kind === 'round' ? (
-          <RoundCard
-            key={keyOf(current)}
-            gameId={current.gameId}
-            round={current.round}
-            onAnswered={done}
-            swipe
-            onPendingChange={setSending}
-          />
+          <div key={keyOf(current)}>
+            <RoundCard
+              gameId={current.gameId}
+              round={current.round}
+              onAnswered={done}
+              swipe
+              onPendingChange={setSending}
+            />
+            {current.round.buildId &&
+              !incomplete &&
+              !error &&
+              missingStatus(
+                `/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media?kind=build`,
+              )}
+          </div>
         ) : (
           <div key={keyOf(current)}>
             <PreviewCard

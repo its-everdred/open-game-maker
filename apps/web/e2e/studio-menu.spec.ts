@@ -247,16 +247,20 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   await dialog.getByRole('button', { name: 'Close' }).click();
   await openReviewItem(page, 'Choose');
   expect(await optionFailures(dialog, 3)).toEqual([]);
-  await dialog.getByLabel('Note (optional)').fill('Keep blue');
-  await dialog.getByRole('button', { name: 'View option B' }).click();
+  await swipe(false, dialog.locator('.worker-review-option img'));
+  await expect(dialog.getByRole('button', { name: 'View option B' })).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
-  await dialog.getByRole('button', { name: 'View option C' }).click();
+  await swipe(false, dialog.locator('.worker-review-option video'));
+  await expect(dialog.getByRole('button', { name: 'View option C' })).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => dialog.locator('audio').evaluate((audio) => audio.duration)).toBeGreaterThan(1);
   const optionStill = testInfo.outputPath('review-option-c.png');
   await page.screenshot({ path: optionStill });
   await testInfo.attach('review-option-c', { path: optionStill, contentType: 'image/png' });
   await dialog.getByRole('button', { name: 'View option B' }).click();
   await dialog.getByRole('button', { name: 'Pick B: B' }).click();
+  const choiceNote = page.getByRole('dialog', { name: 'Pick B: B' });
+  await choiceNote.getByLabel('Note (optional)').fill('Keep blue');
+  await choiceNote.getByRole('button', { name: 'Send choice' }).click();
   await expect.poll(() => choiceAnswer).toMatchObject({ option_id: 'b', review: { notes: 'Keep blue' } });
 });
 

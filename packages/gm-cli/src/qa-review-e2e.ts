@@ -240,7 +240,6 @@ async function runViewport(
           : ['the fixture seed did not say how many options the Command carries']),
       ];
       if (failures.length) throw new StepFailed(failures.join('; '));
-      await dialog.getByLabel('Note (optional)').fill(PICK_NOTE, timeout);
       await dialog.getByRole('button', { name: 'View option B' }).click(timeout);
       await step('wait for Command video', () => dialog.locator('video').first().waitFor(timeout));
       await step('wait for playable Command video', () =>
@@ -268,6 +267,9 @@ async function runViewport(
       await still('command-c');
       await dialog.getByRole('button', { name: 'View option B' }).click(timeout);
       await dialog.getByRole('button', { name: /^Pick B/ }).click(timeout);
+      const noteSheet = page.getByRole('dialog', { name: /^Pick B/ });
+      await noteSheet.getByLabel('Note (optional)').fill(PICK_NOTE, timeout);
+      await noteSheet.getByRole('button', { name: 'Send choice' }).click(timeout);
     });
     const report = await poll(
       async () => (await internal(config, `/review-fixtures/${run}`)) as Report,

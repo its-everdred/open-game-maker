@@ -9,6 +9,7 @@ import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
 import { reviewMediaUrl } from '../blobs/review-url.js';
+import { currentPreview, listPreviews } from '../previews/store.js';
 import { answerRound, getRound, latestRoundForTicket } from './store.js';
 import { bindReviewEpisode, markReviewAnswered, readReviewEpisode } from './answer-guard.js';
 
@@ -118,7 +119,18 @@ export default new Hono<ApiBindings>()
     if (latestRoundForTicket(deps.db, game.id, round.ticket)?.id !== round.id)
       throw new HttpError(409, 'review_round_superseded');
     const media = JSON.parse(round.media) as Media[];
-    if (
+    if (c.req.query('kind') === 'build') {
+      const build = media.find((item) => item.kind === 'build' && item.ref !== '');
+      if (!build) throw new HttpError(409, 'review_changed');
+      const previews = await listPreviews(deps, game.id);
+      if (
+        previews.some(
+          (preview) =>
+            preview.ticket === round.ticket && preview.buildId === build.ref && currentPreview(deps, preview),
+        )
+      )
+        throw new HttpError(409, 'media_present');
+    } else if (
       media.some(
         (item) =>
           (((['still', 'clip'].includes(item.kind) && item.role !== 'target') ||

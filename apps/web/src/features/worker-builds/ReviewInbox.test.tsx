@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { queryClient } from '../../app/query';
 import { ReviewInbox } from './ReviewInbox';
@@ -249,6 +249,27 @@ it('recovers an unavailable playable when its preview arrives', async () => {
   await waitFor(() => expect(screen.queryByText('The playable review is unavailable. Try again later.')).toBeNull());
 });
 
+it('asks the agent for a missing playable after preview loading finishes', async () => {
+  api.mockResolvedValue({ status: 'asked' });
+  const round = { id: 'a', ticket: '12', question: 'Try it?', media: [], buildId: 'b' };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} onClose={() => {}} reviews={[{ kind: 'round', gameId: 'g', round }]} incomplete />
+    </QueryClientProvider>,
+  );
+  expect(api).not.toHaveBeenCalled();
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} onClose={() => {}} reviews={[{ kind: 'round', gameId: 'g', round }]} />
+    </QueryClientProvider>,
+  );
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/games/g/review-rounds/a/missing-media?kind=build', expect.anything()),
+  );
+  expect(await screen.findByText('Asked the agent for media in the next round.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Looks good' })).toBeDisabled();
+});
+
 it('asks the worker and does not offer a verdict for a round without media', async () => {
   api.mockResolvedValue({ status: 'asked' });
   render(
@@ -412,9 +433,12 @@ it('keeps a command open while an answer is sending', async () => {
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'Pick A: A' }));
+  fireEvent.click(
+    within(screen.getByRole('dialog', { name: 'Pick A: A' })).getByRole('button', { name: 'Send choice' }),
+  );
   expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
-  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  fireEvent.keyDown(screen.getByRole('dialog', { name: 'Pick A: A' }), { key: 'Escape' });
   expect(close).not.toHaveBeenCalled();
   finish({ status: 'answered' });
   await screen.findByText(/Saved/);

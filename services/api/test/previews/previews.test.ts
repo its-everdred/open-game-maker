@@ -357,7 +357,41 @@ describe('review round previews', () => {
       .set({ media: JSON.stringify([{ kind: 'still', ref: `sha256:${'a'.repeat(64)}` }]) })
       .where(eq(schema.reviewRounds.id, 'missing-round'))
       .run();
-    expect((await app.request(path, { method: 'POST', headers: asUser(ids.user) })).status).toBe(409);
+    const available = await app.request(path, { method: 'POST', headers: asUser(ids.user) });
+    expect(available.status).toBe(409);
+    expect(await available.json()).toMatchObject({ error: 'media_present' });
+    expect(message).toHaveBeenCalledOnce();
+  });
+
+  it('asks for a missing playable but rejects a stale request when the preview exists', async () => {
+    const { deps, app, upload, message } = setup();
+    postRound(deps.db, {
+      id: 'missing-playable',
+      gameId: ids.game,
+      track: 'game',
+      phase: 'play',
+      category: 'gameplay',
+      round: 1,
+      ticket: '12',
+      sha: SHA,
+      media: JSON.stringify([
+        { kind: 'build', ref: 'preview-missing' },
+        { kind: 'still', ref: `sha256:${'a'.repeat(64)}` },
+      ]),
+      postedAt: '2026-11-14T00:00:00Z',
+    });
+    const path = `/api/v1/games/${ids.game}/review-rounds/missing-playable/missing-media?kind=build`;
+    expect((await app.request(path, { method: 'POST', headers: asUser(ids.user) })).status).toBe(200);
+    expect(message).toHaveBeenCalledOnce();
+    const preview = (await (await upload()).json()) as { buildId: string };
+    deps.db
+      .update(schema.reviewRounds)
+      .set({ media: JSON.stringify([{ kind: 'build', ref: preview.buildId }]) })
+      .where(eq(schema.reviewRounds.id, 'missing-playable'))
+      .run();
+    const available = await app.request(path, { method: 'POST', headers: asUser(ids.user) });
+    expect(available.status).toBe(409);
+    expect(await available.json()).toMatchObject({ error: 'media_present' });
     expect(message).toHaveBeenCalledOnce();
   });
 
