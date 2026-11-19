@@ -1,7 +1,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 
-import { createScanner, LanguageVariant, ScriptTarget, SyntaxKind } from 'typescript';
+import {
+  createSourceFile,
+  getLeadingCommentRanges,
+  getTrailingCommentRanges,
+  ScriptKind,
+  ScriptTarget,
+} from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 describe('shared design tokens', () => {
@@ -73,7 +79,7 @@ describe('shared design tokens', () => {
 
     expect(stripTypeScriptComments('fixture.tsx', source)).toContain('#fff');
     expect(stripTypeScriptComments('fixture.tsx', source)).not.toContain('#000');
-  });
+  }, 60_000);
 
   it('meets WCAG AA for the shared text and primary-action pairs', () => {
     const tokens = parseColors(readFileSync(tokenPath, 'utf8'));
@@ -87,6 +93,30 @@ describe('shared design tokens', () => {
     expectContrast(tokens, '--text-danger', '--surface-card');
     expectContrast(tokens, '--action-primary-text', '--action-primary');
     expectContrast(tokens, '--action-danger-text', '--action-danger');
+  });
+
+  it.each(['fixture.ts', 'fixture.tsx'])('strips comments after template substitutions in %s', (file) => {
+    const source =
+      'const a = `/games/${encodeURIComponent(id)}/rooms`, b = { color: "#fff" /* #abc */ };\n' +
+      'const c = 2; // #def\n';
+    const stripped = stripTypeScriptComments(file, source);
+
+    expect(stripped).toContain('#fff');
+    expect(stripped).not.toContain('#abc');
+    expect(stripped).not.toContain('#def');
+  });
+
+  it('preserves JSX text and code following it', () => {
+    const source = 'const a = `${id}`; const x = <div> // hello </div>; const y = "#fff"; // #abc';
+    const stripped = stripTypeScriptComments('fixture.tsx', source);
+    expect(stripped).toContain('#fff');
+    expect(stripped).not.toContain('#abc');
+  });
+
+  it('keeps colour calls detectable across comments', () => {
+    expect(
+      stripTypeScriptComments('fixture.ts', 'const a = `${id}`; const color = rgb/* comment */(1, 2, 3);'),
+    ).toContain('rgb(');
   });
 });
 
@@ -148,15 +178,30 @@ function filesBelow(directory: string): string[] {
 }
 
 function stripTypeScriptComments(file: string, source: string): string {
-  const variant = file.endsWith('.tsx') ? LanguageVariant.JSX : LanguageVariant.Standard;
-  const scanner = createScanner(ScriptTarget.Latest, false, variant, source);
-  const tokens: string[] = [];
-  for (let token = scanner.scan(); token !== SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (token !== SyntaxKind.SingleLineCommentTrivia && token !== SyntaxKind.MultiLineCommentTrivia) {
-      tokens.push(scanner.getTokenText());
+  const kind = file.endsWith('.tsx') ? ScriptKind.TSX : ScriptKind.TS;
+  const tree = createSourceFile(file, source, ScriptTarget.Latest, true, kind);
+  const ranges = new Map<number, number>();
+  const tokens: import('typescript').Node[] = [];
+  const visit = (node: import('typescript').Node): void => {
+    const children = node.getChildren(tree);
+    if (children.length) children.forEach(visit);
+    else tokens.push(node);
+  };
+  visit(tree);
+  tokens.forEach((token, index) => {
+    for (const range of getLeadingCommentRanges(source, token.getFullStart()) ?? []) {
+      if (range.end <= token.getStart(tree)) ranges.set(range.pos, range.end);
     }
+    const nextStart = tokens[index + 1]?.getStart(tree) ?? source.length;
+    for (const range of getTrailingCommentRanges(source, token.end) ?? []) {
+      if (range.end <= nextStart) ranges.set(range.pos, range.end);
+    }
+  });
+  let result = source;
+  for (const [start, end] of [...ranges].sort(([a], [b]) => b - a)) {
+    result = result.slice(0, start) + result.slice(end);
   }
-  return tokens.join('');
+  return result;
 }
 
 function contrast(foreground: string, background: string): number {

@@ -6,7 +6,7 @@ export default defineConfig({
   testDir: './tests',
   testMatch: '**/*.spec.ts',
   use: {
-    baseURL: 'http://127.0.0.1:43173',
+    baseURL: 'http://127.0.0.1:23173',
     launchOptions: {
       args: software
         ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']
@@ -18,7 +18,7 @@ export default defineConfig({
     // CI builds every workspace package just before browser tests; locally, rebuild the
     // template's workspace dependencies so a stale dist/ from another branch is not bundled.
     command: `${process.env.CI ? '' : "pnpm --filter '@gm/template-game-3d^...' run build && "}pnpm exec tsc --noEmit && pnpm exec vite build --mode test && pnpm preview`,
-    url: 'http://127.0.0.1:43173',
+    url: 'http://127.0.0.1:23173',
     reuseExistingServer: false,
     timeout: 300_000,
   },

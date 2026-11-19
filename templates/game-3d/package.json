@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build --mode published",
     "dev": "vite --host 127.0.0.1",
     "lint": "eslint src tests",
-    "preview": "vite preview --host 127.0.0.1 --port 43173",
+    "preview": "vite preview --host 127.0.0.1 --port 23173 --strictPort",
     "test": "vitest run",
     "test:browser": "playwright test",
     "typecheck": "tsc --noEmit"
