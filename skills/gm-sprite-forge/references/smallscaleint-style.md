@@ -1,0 +1,9 @@
+# SmallScaleInt measured style
+
+These observations describe the studied packs, not universal rules for pixel art. Measurements came from the 2026-11-19 sprite pipeline study. `study.py` is the research script; `measure_sheet.py` and its shared `spritemetrics.py` are in this skill. The research also used `blender_iso_rig.py` and `carve_hull.py` to verify the projection.
+
+- **Projection:** Ground A1 has a 128 × 64 px diamond in a 256 px image, with origin (128, 208). The orthographic camera is 60° from vertical and yaw 45°; the tile is 16 px thick. The tile silhouette was measured by `study.py` using `spritemetrics.py`; projection was checked with `blender_iso_rig.py` and `carve_hull.py`.
+- **Sheets:** Knight 64 uses 64 px cells in a 960 × 512 sheet; Goblin 01 uses 128 px cells in a 1920 × 1024 sheet. Both have 15 columns and 8 direction rows. Rows are E, SE, S, SW, W, NW, N, NE, matched against the named angle folders. Measured with `measure_sheet.py` and `study.py`.
+- **Characters:** Knight 64 Walk Shadowless has 27 sheet colours, binary alpha, a typical 14 × 22 px bounding box and foot y 42. Goblin 01 Walk has 374 sheet colours, a typical 29 × 34 px box and foot y 90. Measured with `measure_sheet.py` / `spritemetrics.py` and summarized by `study.py`.
+- **Palette and outline:** No palette quantisation or outline pass is indicated: 467 tileset south views contain 51,860 distinct colours, and rim/interior luminance ratios are approximately 0.8–1.05. The 64 px knight's small palette follows its size and materials. Measured with `study.py` / `spritemetrics.py`.
+- **Light and shadow:** Props use 3–4 stepped shading plateaus. Stone A12 has approximate luminance levels 130, 109 and 62; its contact shadow is black at alpha approximately 165 (range 128–200). Measured with `study.py` / `spritemetrics.py`. Near-black partial-alpha pixels are classified as shadows by `spritemetrics.py` and excluded from its object mask.
