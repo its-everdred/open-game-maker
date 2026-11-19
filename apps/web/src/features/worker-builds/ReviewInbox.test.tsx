@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { queryClient } from '../../app/query';
 import { ReviewInbox } from './ReviewInbox';
@@ -235,6 +235,8 @@ it('recovers an unavailable playable when its preview arrives', async () => {
       <ReviewInbox
         commands={[]}
         onClose={() => {}}
+        incomplete
+        error
         reviews={[
           {
             kind: 'preview',
@@ -247,6 +249,27 @@ it('recovers an unavailable playable when its preview arrives', async () => {
     </QueryClientProvider>,
   );
   await waitFor(() => expect(screen.queryByText('The playable review is unavailable. Try again later.')).toBeNull());
+});
+
+it('asks for a missing playable even if another query is unavailable', async () => {
+  api.mockResolvedValue({ status: 'asked' });
+  const round = { id: 'a', ticket: '12', question: 'Try it?', media: [], buildId: 'b' };
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox
+        commands={[]}
+        onClose={() => {}}
+        reviews={[{ kind: 'round', gameId: 'g', round }]}
+        incomplete
+        error
+      />
+    </QueryClientProvider>,
+  );
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/games/g/review-rounds/a/missing-media?kind=build', expect.anything()),
+  );
+  expect(await screen.findByText('Asked the agent for media in the next round.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Looks good' })).toBeDisabled();
 });
 
 it('asks the worker and does not offer a verdict for a round without media', async () => {
@@ -367,16 +390,21 @@ it('refreshes the version and options of the open command', () => {
     </QueryClientProvider>,
   );
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Keep my note' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Pick A: Old' }));
+  expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
   view.rerender(
     <QueryClientProvider client={queryClient}>
       <ReviewInbox
         commands={[{ ...command, version: 2, options: [{ ...command.options[0]!, label: 'New' }] }]}
         reviews={[]}
+        incomplete
+        error
         onClose={() => {}}
       />
     </QueryClientProvider>,
   );
   expect(screen.getByRole('button', { name: 'Pick A: New' })).toBeVisible();
+  expect(screen.queryByRole('dialog', { name: 'Pick A: Old' })).toBeNull();
   expect(screen.getByLabelText('Note (optional)')).toHaveValue('Keep my note');
 });
 
@@ -412,9 +440,15 @@ it('keeps a command open while an answer is sending', async () => {
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'Pick A: A' }));
+  const sheet = within(screen.getByRole('dialog', { name: 'Pick A: A' }));
+  const note = sheet.getByLabelText('Note (optional)');
+  note.focus();
+  fireEvent.keyDown(note, { key: 'Tab' });
+  expect(note).toHaveFocus();
+  fireEvent.click(sheet.getByRole('button', { name: 'Send choice' }));
   expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
-  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  fireEvent.keyDown(screen.getByRole('dialog', { name: 'Pick A: A' }), { key: 'Escape' });
   expect(close).not.toHaveBeenCalled();
   finish({ status: 'answered' });
   await screen.findByText(/Saved/);

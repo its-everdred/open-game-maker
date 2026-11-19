@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { commandPath, commandSource, type ReviewCommand } from './review-command';
 import { api } from '../../lib/api/client';
@@ -13,11 +13,13 @@ export function CommandReviewCard({
   onAnswered,
   ticketState,
   onSendingChange,
+  onPickingChange,
 }: {
   command: ReviewCommand;
   onAnswered(): void;
   ticketState?: string;
   onSendingChange?(sending: boolean): void;
+  onPickingChange?(picking: boolean): void;
 }) {
   const [note, setNote] = useState('');
   const [selectedOption, setSelectedOption] = useState(command.options[0]?.id ?? '');
@@ -25,12 +27,24 @@ export function CommandReviewCard({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
   const [zoom, setZoom] = useState<{ url: string; label: string }>();
+  const [picking, setPicking] = useState<{ id: string; label: string; version: number }>();
+  const drag = useRef<{ id: number; x: number; y: number } | undefined>(undefined);
+  const suppressImageClick = useRef(false);
   useEffect(() => {
     setSaved(false);
     setSelectedOption(command.options[0]?.id ?? '');
+    setPicking(undefined);
     setError(false);
   }, [command.version]);
   const selected = command.options.find((option) => option.id === selectedOption) ?? command.options[0];
+  useEffect(() => {
+    onSendingChange?.(sending);
+    return () => onSendingChange?.(false);
+  }, [onSendingChange, sending]);
+  useEffect(() => {
+    onPickingChange?.(Boolean(picking));
+    return () => onPickingChange?.(false);
+  }, [onPickingChange, picking]);
   const coreState = useQuery({
     queryKey: ['core-review-state', command.ticket],
     enabled: saved && 'source' in command && Boolean(command.ticket),
@@ -40,7 +54,6 @@ export function CommandReviewCard({
   });
   const send = async (optionId: string, change: boolean) => {
     setSending(true);
-    onSendingChange?.(true);
     setError(false);
     try {
       await api(`${commandPath(command)}/${encodeURIComponent(command.decision_id)}/answer`, {
@@ -59,13 +72,53 @@ export function CommandReviewCard({
         queryClient.invalidateQueries({ queryKey: gameCommandsQueryKey(commandSource(command)) }),
       ]);
       setSaved(true);
+      setPicking(undefined);
       onAnswered();
     } catch {
       setError(true);
     } finally {
       setSending(false);
-      onSendingChange?.(false);
     }
+  };
+  const startPaging = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.isPrimary === false) {
+      drag.current = undefined;
+      return;
+    }
+    if (sending || saved) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('audio, input, textarea, a, button:not(.worker-review-image), .review-deck-playable')) return;
+    const video = target.closest('video');
+    if (video && event.clientY >= video.getBoundingClientRect().bottom - 48) return;
+    suppressImageClick.current = false;
+    drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  };
+  const movePaging = (event: PointerEvent<HTMLDivElement>) => {
+    const start = drag.current;
+    if (!start || start.id !== event.pointerId) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < 8 || Math.abs(dx) <= Math.abs(dy)) return;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is optional in embedded browsers.
+    }
+  };
+  const endPaging = (event: PointerEvent<HTMLDivElement>) => {
+    const start = drag.current;
+    drag.current = undefined;
+    if (!start || start.id !== event.pointerId) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy)) return;
+    suppressImageClick.current = true;
+    window.setTimeout(() => {
+      suppressImageClick.current = false;
+    }, 0);
+    const index = command.options.findIndex((option) => option.id === selected?.id);
+    const next = command.options[Math.max(0, Math.min(command.options.length - 1, index + (dx < 0 ? 1 : -1)))];
+    if (next) setSelectedOption(next.id);
   };
   return (
     <section className="review-deck" aria-label={command.summary ?? command.title}>
@@ -94,7 +147,16 @@ export function CommandReviewCard({
           </button>
         ))}
       </div>
-      <div className="worker-review-options" aria-label="Current option">
+      <div
+        className="worker-review-options"
+        aria-label="Current option"
+        onPointerDown={startPaging}
+        onPointerMove={movePaging}
+        onPointerUp={endPaging}
+        onPointerCancel={() => {
+          drag.current = undefined;
+        }}
+      >
         {command.options.map(
           (option, index) =>
             option.id === selected?.id && (
@@ -117,7 +179,13 @@ export function CommandReviewCard({
                   <button
                     type="button"
                     className="worker-review-image"
-                    onClick={() => setZoom({ url: option.media!.url, label: option.label })}
+                    onClick={() => {
+                      if (suppressImageClick.current) {
+                        suppressImageClick.current = false;
+                        return;
+                      }
+                      setZoom({ url: option.media!.url, label: option.label });
+                    }}
                   >
                     <img src={option.media.url} alt={option.label} className="review-deck-media" />
                   </button>
@@ -131,7 +199,18 @@ export function CommandReviewCard({
                     aria-label={`${option.label} audio ${index + 2}`}
                   />
                 ))}
-                <button disabled={sending || saved} type="button" onClick={() => void send(option.id, false)}>
+                <button
+                  disabled={sending || saved}
+                  type="button"
+                  onClick={() => {
+                    setError(false);
+                    setPicking({
+                      id: option.id,
+                      label: `Pick ${String.fromCharCode(65 + index)}: ${withoutLinks(option.label)}`,
+                      version: command.version,
+                    });
+                  }}
+                >
                   Pick {String.fromCharCode(65 + index)}: {withoutLinks(option.label)}
                 </button>
               </div>
@@ -153,6 +232,43 @@ export function CommandReviewCard({
         </p>
       )}
       {error && <p role="alert">That answer did not send. Try again.</p>}
+      {picking && picking.version === command.version && (
+        <div onKeyDown={(event) => event.stopPropagation()}>
+          <Dialog
+            title={picking.label}
+            className="review-deck-reason"
+            backdropClassName="review-deck-reason-backdrop worker-review-sheet-backdrop"
+            onClose={() => {
+              if (!sending) setPicking(undefined);
+            }}
+          >
+            <label>
+              Note (optional)
+              <textarea
+                value={note}
+                disabled={sending}
+                maxLength={2000}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            </label>
+            {error && <p role="alert">That answer did not send. Try again.</p>}
+            <div className="review-deck-reason-actions">
+              <button
+                type="button"
+                disabled={sending}
+                onClick={() => {
+                  if (picking.version === command.version) void send(picking.id, false);
+                }}
+              >
+                Send choice
+              </button>
+              <button type="button" disabled={sending} onClick={() => setPicking(undefined)}>
+                Cancel
+              </button>
+            </div>
+          </Dialog>
+        </div>
+      )}
       {zoom && (
         <div
           onKeyDown={(event) => {

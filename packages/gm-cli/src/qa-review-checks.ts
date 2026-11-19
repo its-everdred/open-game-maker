@@ -41,7 +41,13 @@ function mediaStates(root: Element): MediaState[] {
 }
 
 export async function openTicketBuilds(page: Page, timeout = 20_000) {
-  await reviewStep('click Builds button', () => page.locator('.worker-tracker-button').click({ timeout }));
+  const button = page.locator('.worker-tracker-button');
+  // Builds is mounted after the signed-in creator's games and review data load. Keep the ordinary click timeout for
+  // hit-target failures, but allow the initial data load the same budget as the app navigation (#843).
+  await reviewStep('wait for Builds button', () =>
+    button.waitFor({ state: 'visible', timeout: Math.max(timeout, 60_000) }),
+  );
+  await reviewStep('click Builds button', () => button.click({ timeout }));
   await reviewStep('wait for Builds panel', () => page.getByRole('region', { name: 'Builds' }).waitFor({ timeout }));
 }
 

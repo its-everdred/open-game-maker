@@ -78,7 +78,8 @@ means another writer answered first and the returned status is the winner's.
 ## Builds review inbox
 
 The Builds badge opens the Builds popover. Its need-review button filters the list to the creator's game Commands, core Commands, and unanswered review rounds; select an item to open its review. Swipe a round right to approve or left to add a change note; the thumbs and undo buttons
-provide the same controls. Use the letter buttons to view each Command option before picking it or sending a note.
+provide the same controls. Swipe between Command options or use the letter buttons, then pick an option and optionally
+add a note before sending it.
 Core Commands are labeled Core and are visible only to the instance owner. The API connects to the local core daemon
 using `AIUR_API_URL` and `AIUR_API_TOKEN` from its environment. `OGM_INSTANCE_OWNER_ID` authorizes the owner and
 `OGM_CORE_BUMP_CORE_REPO` identifies the core tracker. The core source or its target list is unavailable when its required
@@ -92,6 +93,8 @@ round appears in the Builds list; expand its row to request missing media. The A
 review before requesting media. Its endpoints are `POST /games/:gameId/commands/:decisionId/missing-media`,
 `POST /games/:gameId/review-rounds/:id/missing-media`, and `POST /games/:gameId/tickets/:ticket/missing-review`
 under `/api/v1`; they require the game owner and reject a request when the review is already present.
+For a round whose referenced playable is unavailable, the inbox uses `?kind=build`; the API rechecks the matching
+preview before asking the agent.
 
 ## Track review rounds
 

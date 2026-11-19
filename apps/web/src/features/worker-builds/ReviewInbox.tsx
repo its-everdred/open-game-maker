@@ -48,6 +48,8 @@ export function ReviewInbox({
   const [current, setCurrent] = useState<WorkerReview | undefined>(initialReview);
   const [command, setCommand] = useState<ReviewCommand | undefined>(initialCommand);
   const [sending, setSending] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const busy = sending || picking;
   const [target, setTarget] = useState<ReviewTarget | undefined>(initialTarget);
   const pendingReviews = reviews.filter((review) => !answered.has(keyOf(review)));
   const pendingCommands = commands.filter((item) => !answered.has(commandKey(item)));
@@ -67,9 +69,11 @@ export function ReviewInbox({
   ];
   const missingPaths = [
     ...pendingReviews.flatMap((review) =>
-      review.kind === 'round' && !review.round.media.some((item) => item.role !== 'target') && !review.round.buildId
+      review.kind === 'round' &&
+      ((!review.round.media.some((item) => item.role !== 'target') && !review.round.buildId) ||
+        Boolean(review.round.buildId))
         ? [
-            `/games/${encodeURIComponent(review.gameId)}/review-rounds/${encodeURIComponent(review.round.id)}/missing-media`,
+            `/games/${encodeURIComponent(review.gameId)}/review-rounds/${encodeURIComponent(review.round.id)}/missing-media${review.round.buildId ? '?kind=build' : ''}`,
           ]
         : [],
     ),
@@ -107,14 +111,14 @@ export function ReviewInbox({
     <div className="worker-review-queue">
       <p aria-live="polite">{queue.length} left</p>
       {(queue.length > 1 || (activeKey && !queue.some((entry) => entry.key === activeKey))) && (
-        <button type="button" className="worker-review-next" disabled={sending} onClick={next}>
+        <button type="button" className="worker-review-next" disabled={busy} onClick={next}>
           Next
         </button>
       )}
     </div>
   );
   useEffect(() => {
-    if (incomplete || error || sending) return;
+    if (sending) return;
     if (current && !answered.has(keyOf(current))) {
       const ticket = current.kind === 'standalone-preview' ? current.preview.ticket : current.round.ticket;
       const replacement =
@@ -124,8 +128,9 @@ export function ReviewInbox({
             review.gameId === current.gameId &&
             (review.kind === 'standalone-preview' ? review.preview.ticket : review.round.ticket) === ticket,
         );
-      if (!replacement) show(queue[0]);
-      else if (
+      if (!replacement) {
+        if (!incomplete && !error) show(queue[0]);
+      } else if (
         replacement.kind !== current.kind ||
         (replacement.kind !== 'standalone-preview' &&
           current.kind !== 'standalone-preview' &&
@@ -137,8 +142,9 @@ export function ReviewInbox({
       const replacement = commands.find(
         (item) => commandSource(item) === commandSource(command) && item.decision_id === command.decision_id,
       );
-      if (!replacement) show(queue[0]);
-      else if (replacement !== command) setCommand(replacement);
+      if (!replacement) {
+        if (!incomplete && !error) show(queue[0]);
+      } else if (replacement !== command) setCommand(replacement);
     } else if (
       target &&
       !targets.some((item) => targetSource(item) === targetSource(target) && item.ticket === target.ticket)
@@ -154,7 +160,8 @@ export function ReviewInbox({
           entry.item.ticket === target.ticket
         );
       });
-      show(replacement ?? queue[0]);
+      if (replacement) show(replacement);
+      else if (!incomplete && !error) show(queue[0]);
     }
   });
   if (target) {
@@ -200,16 +207,10 @@ export function ReviewInbox({
         className="job-conversation-dialog decision-deck build-review-dialog"
         backdropClassName="job-conversation-backdrop"
         onClose={() => {
-          if (!sending) onClose();
+          if (!busy) onClose();
         }}
       >
-        <button
-          type="button"
-          className="job-conversation-close"
-          aria-label="Close"
-          disabled={sending}
-          onClick={onClose}
-        >
+        <button type="button" className="job-conversation-close" aria-label="Close" disabled={busy} onClick={onClose}>
           ×
         </button>
         <div className="decision-deck-body">
@@ -219,6 +220,7 @@ export function ReviewInbox({
             key={`${commandSource(command)}:${command.decision_id}`}
             command={command}
             onSendingChange={setSending}
+            onPickingChange={setPicking}
             ticketState={
               workers.find((worker) => worker.ticket === `${commandSource(command)}:${command.ticket}`)?.state
             }
@@ -301,14 +303,19 @@ export function ReviewInbox({
             `/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media`,
           )
         ) : current.kind === 'round' ? (
-          <RoundCard
-            key={keyOf(current)}
-            gameId={current.gameId}
-            round={current.round}
-            onAnswered={done}
-            swipe
-            onPendingChange={setSending}
-          />
+          <div key={keyOf(current)}>
+            <RoundCard
+              gameId={current.gameId}
+              round={current.round}
+              onAnswered={done}
+              swipe
+              onPendingChange={setSending}
+            />
+            {current.round.buildId &&
+              missingStatus(
+                `/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media?kind=build`,
+              )}
+          </div>
         ) : (
           <div key={keyOf(current)}>
             <PreviewCard
