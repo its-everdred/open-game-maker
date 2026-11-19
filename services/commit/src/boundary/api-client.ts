@@ -46,8 +46,8 @@ export class BoundaryApiClient implements BoundaryApi {
       if (!response.ok) throw new BoundaryApiError('http', response.status);
       try {
         return await response.json();
-      } catch {
-        throw new BoundaryApiError('invalid-response');
+      } catch (error) {
+        throw new BoundaryApiError(error instanceof SyntaxError ? 'invalid-response' : 'transport');
       }
     } catch (error) {
       if (error instanceof BoundaryApiError) throw error;
