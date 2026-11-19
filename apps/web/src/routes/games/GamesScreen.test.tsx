@@ -291,13 +291,13 @@ describe('GamesScreen', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/all');
   });
 
-  it('stops a gesture-started trailer if the screen unmounts before the detail mounts', () => {
+  it('stops a gesture-started trailer if the screen unmounts before the detail mounts', async () => {
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     const { unmount } = renderGames('/all?test');
     startTrailer({ trailerUrl: '/trailer.mp4' });
     unmount();
-    expect(pause).toHaveBeenCalled();
+    await waitFor(() => expect(pause).toHaveBeenCalled(), { timeout: 2000 });
   });
 
   it('expands the selected game inside its existing grid position and restores it on close', async () => {
