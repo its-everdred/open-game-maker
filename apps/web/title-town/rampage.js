@@ -9,7 +9,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { FX, reseed } from './fx.js';
-import { blocked, route } from './crowd-path.js';
+import { blocked, route, simplifyPath } from './crowd-path.js';
 
 export const PER = 104;
 const LEAVE = 58;   // when he is gone
@@ -317,8 +317,18 @@ export async function kaiju(ctx) {
   // where the field trebuchet is at any time: rolled at a steady walking pace (eased in and out over the first and last
   // 15% of each trip), turned to aim, and turned round to be pushed home
   const ramp = u => { u = clamp01(u); const e = .15, v = 1 / (1 - e); return u < e ? v * u * u / (2 * e) : u > 1 - e ? 1 - v * (1 - u) ** 2 / (2 * e) : v * (u - e / 2); };
+  let fieldPath = null, fieldRouteComplete = false, fieldCrewLimit = 0;
   const fieldAt = lt => { const mv = field.move, back = ramp((lt - mv.back0) / (mv.back1 - mv.back0)), k = ramp((lt - mv.t0) / (mv.t1 - mv.t0)) - back, kt = smooth((lt - mv.turn0) / (mv.turn1 - mv.turn0));
-    return { x: lerp(mv.from[0], mv.to[0], k), z: lerp(mv.from[1], mv.to[1], k), k, back, yaw: lt < mv.back0 - 1 ? lerp(mv.yaw0, mv.yaw1, kt) : lerp(mv.yaw1, mv.yaw0 + Math.PI, smooth(lt - mv.back0 + 1)) }; };
+    const sample = u => {
+      if (!fieldPath) return [lerp(mv.from[0], mv.to[0], u), lerp(mv.from[1], mv.to[1], u)];
+      let d = fieldPath.total * clamp01(u);
+      for (let i = 0; i < fieldPath.lengths.length; i++) { const len = fieldPath.lengths[i]; if (d <= len && len) return [lerp(fieldPath.points[i][0], fieldPath.points[i + 1][0], d / len), lerp(fieldPath.points[i][1], fieldPath.points[i + 1][1], d / len)]; d -= len; }
+      return fieldPath.points[fieldPath.points.length - 1];
+    };
+    const p = sample(k), before = sample(Math.max(0, k - .03)), after = sample(Math.min(1, k + .03));
+    const heading = Math.hypot(after[0] - before[0], after[1] - before[1]) > .01 ? alongX(after[0] - before[0], after[1] - before[1]) : mv.yaw0;
+    const yaw = lt < mv.back0 - 1 ? heading + wrapA(mv.yaw1 - heading) * kt : mv.yaw1 + wrapA(heading + Math.PI - mv.yaw1) * smooth(lt - mv.back0 + 1);
+    return { x: p[0], z: p[1], k, back, yaw }; };
   window.__look = [...engines.map(e => () => [e.o.position.x, e.o.position.y, e.o.position.z]), () => { const q = posAt(lastLt); return [q.x, PLAIN, q.z]; }];   // debug camera targets (city.js ?look=i; the last is the monster)
   const chest = (t) => { const p = posAt(t); return [p.x, Math.max(ground(p.x, p.z), 0) + H * .6, p.z]; };
   const missHouse = D.filter(d => d.kind === 'house' && !d.hits.length).sort((a, b) => Math.hypot(a.x - pts.c[0], a.z - pts.c[1]) - Math.hypot(b.x - pts.c[0], b.z - pts.c[1]))[0];
@@ -371,8 +381,8 @@ export async function kaiju(ctx) {
   obstacles.push({ model: 'breach-wall', top: PLAIN + wk.h * W.KW, x: W.x, z: W.z, yaw: W.yaw, halfX: wk.w * W.L / 2 + .8, halfZ: wk.d * W.KW / 2 + .8 });
   for (const e of engines) if (e !== field) {
     e.o.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(e.o);
-    obstacles.push({ model: 'siege', top: box.max.y, x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2, yaw: 0, halfX: (box.max.x - box.min.x) / 2 + 1, halfZ: (box.max.z - box.min.z) / 2 + 1 });
-    e.crewRadius = Math.hypot(Math.max(Math.abs(box.min.x - e.x), Math.abs(box.max.x - e.x)), Math.max(Math.abs(box.min.z - e.z), Math.abs(box.max.z - e.z))) + 2;
+    e.crewBox = { model: 'siege', top: box.max.y, x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2, yaw: 0, halfX: (box.max.x - box.min.x) / 2 + 1, halfZ: (box.max.z - box.min.z) / 2 + 1 };
+    obstacles.push(e.crewBox);
   }
   const men = [];
   const man = (plan, armed) => {   // plan: [[t, x, z, clip, yawTarget?], ...] — position eases between keys
@@ -390,34 +400,30 @@ export async function kaiju(ctx) {
   for (const e of engines) for (let i = 0; i < 3; i++) {
     if (e === field) continue;
     const off = (x, z, r, a) => [x + Math.cos(a) * r, z + Math.sin(a) * r], a0 = e.o.rotation.y + Math.PI / 2 + (i - 1) * .7;
-    const raw = off(e.x, e.z, e.crewRadius, a0), p = route(raw, raw, obstacles)?.[0] || raw; man([[0, p[0], p[1], 'idle'], [e.shots[0] - .4, p[0], p[1], 'interact-right'], [e.shots[0] + .3, p[0], p[1], 'emote-yes'], [e.shots[0] + 2, p[0], p[1], 'idle'], [LEAVE - 12, p[0], p[1], 'emote-yes']]);
+    const radius = Math.min((e.crewBox.halfX + .3) / Math.max(.001, Math.abs(Math.cos(a0))), (e.crewBox.halfZ + .3) / Math.max(.001, Math.abs(Math.sin(a0))));
+    const raw = off(e.crewBox.x, e.crewBox.z, radius, a0), p = route(raw, raw, obstacles)?.[0] || raw; man([[0, p[0], p[1], 'idle'], [e.shots[0] - .4, p[0], p[1], 'interact-right'], [e.shots[0] + .3, p[0], p[1], 'emote-yes'], [e.shots[0] + 2, p[0], p[1], 'idle'], [LEAVE - 12, p[0], p[1], 'emote-yes']]);
   }
-  { // The field crew walks alongside the moving trebuchet, clear of its swinging arm.
+  { // The crew stays at the frame while the entire machine follows a clear route.
     const r0 = field.o.rotation.y, p0 = field.o.position.clone(); field.o.rotation.y = 0; field.o.position.set(0, 0, 0); field.o.updateMatrixWorld(true);
     const fb = new THREE.Box3().setFromObject(field.o); field.o.rotation.y = r0; field.o.position.copy(p0); field.o.updateMatrixWorld(true);
+    fieldCrewLimit = Math.hypot(Math.max(Math.abs(fb.min.x), Math.abs(fb.max.x)), Math.max(Math.abs(fb.min.z), Math.abs(fb.max.z)) + 1.1) + .5;
+    const mv = field.move, clearance = Math.max(Math.abs(fb.min.z), Math.abs(fb.max.z)) + 1.5;
+    const expanded = obstacles.map(o => ({ ...o, halfX: o.halfX + clearance, halfZ: o.halfZ + clearance }));
+    const path = route(mv.from, mv.to, expanded, 1.5, 20000);
+    fieldRouteComplete = !!path && Math.hypot(path.at(-1)[0] - mv.to[0], path.at(-1)[1] - mv.to[1]) < 2 && Math.hypot(path[0][0] - mv.from[0], path[0][1] - mv.from[1]) < 2;
+    if (fieldRouteComplete) {
+      const points = [mv.from, ...path.slice(1, -1), mv.to], lengths = points.slice(1).map((p, i) => Math.hypot(p[0] - points[i][0], p[1] - points[i][1]));
+      fieldPath = { points, lengths, total: lengths.reduce((sum, n) => sum + n, 0) };
+    }
     const toW = (f, lx, lz) => [f.x + lx * Math.cos(f.yaw) + lz * Math.sin(f.yaw), f.z - lx * Math.sin(f.yaw) + lz * Math.cos(f.yaw)], mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
-    const mv = field.move, out0 = 33, out1 = 34.4, in0 = mv.back0, in1 = mv.back0 + 1.6, anchors = [];
+    const out0 = 33, out1 = 34.4, in0 = mv.back0, in1 = mv.back0 + 1.6;
     for (let i = 0; i < 4; i++) {
-      const s = i < 2 ? 1 : -1, lx = lerp(fb.min.x, fb.max.x, i % 2 ? .62 : .34), lz = s * (Math.hypot(Math.max(Math.abs(fb.min.x), Math.abs(fb.max.x)), Math.max(Math.abs(fb.min.z), Math.abs(fb.max.z))) + 2), far = lz + s * 2;
-      const push = t => { const f = fieldAt(t); return toW(t >= mv.back0 ? { ...f, yaw: f.yaw - Math.PI } : f, lx, lz); }, stand = toW(fieldAt(out1), lx, far);   // after it turns round, the same spot on the same side
-      const planned = t => t < out0 ? push(t) : t < out1 ? mix(push(t), stand, smooth((t - out0) / (out1 - out0))) : t < in0 ? stand : t < in1 ? mix(stand, push(t), smooth((t - in0) / (in1 - in0))) : push(t);
-      // If the moving formation crosses a tree or building, post that person
-      // beside the field instead of letting them pass through it.
-      let unsafe = false; for (let t = 0; t < PER; t += .1) if (blocked(planned(t), obstacles)) { unsafe = true; break; }
-      let anchor;
-      if (unsafe) {
-        const dx = mv.to[0] - mv.from[0], dz = mv.to[1] - mv.from[1], len = Math.hypot(dx, dz);
-        search: for (let r = 18; r <= 50; r += 2) for (let k = 0; k < 24; k++) {
-          const angle = (k + i * 3) * Math.PI / 12, p = [mv.to[0] + Math.cos(angle) * r, mv.to[1] + Math.sin(angle) * r];
-          const u = clamp01(((p[0] - mv.from[0]) * dx + (p[1] - mv.from[1]) * dz) / (len * len));
-          if (Math.hypot(p[0] - mv.from[0] - u * dx, p[1] - mv.from[1] - u * dz) > 15 && anchors.every(q => Math.hypot(p[0] - q[0], p[1] - q[1]) > 2.5) && !blocked(p, obstacles)) { anchor = p; break search; }
-        }
-        if (!anchor) continue;
-        anchors.push(anchor);
-      }
-      const m = man([[0, 0, 0, 'idle']]); m.stays = true; m.fieldCrew = true;
-      m.pos = anchor ? () => anchor : planned;
+      const side = i < 2 ? 1 : -1, lx = lerp(fb.min.x, fb.max.x, i % 2 ? .62 : .34), lz = side * ((side > 0 ? fb.max.z : -fb.min.z) + 1.1), far = side * (Math.max(fb.max.x, -fb.min.x) + 2);
+      const push = t => { const f = fieldAt(t); return toW(t >= mv.back0 ? { ...f, yaw: f.yaw - Math.PI } : f, lx, lz); }, stand = toW(fieldAt(out1), lx, far);
+      const m = man([[0, 0, 0, 'idle']]); m.fieldCrew = true;
+      m.pos = t => t < out0 ? push(t) : t < out1 ? mix(push(t), stand, smooth((t - out0) / (out1 - out0))) : t < in0 ? stand : t < in1 ? mix(stand, push(t), smooth((t - in0) / (in1 - in0))) : push(t);
       m.clipAt = t => t >= 36.1 && t < 38 ? ['emote-yes', 36.1] : t >= LEAVE && t < LEAVE + 1.4 ? ['emote-yes', LEAVE] : ['idle', 0];
+      m.pushing = t => t < out0 || t >= in1 - .3;
     }
   }
   // Archers remain at their posts, clear of the corner towers, throughout the loop.
@@ -440,11 +446,17 @@ export async function kaiju(ctx) {
   const doors = D.filter(d => d.kind === 'house' && !d.hits.length && !d.shoved);   // they come out of houses he leaves alone, and go back in
   for (let i = 0; i < 8; i++) {
     const a = i / 8 * Math.PI * 2, h0 = P(30 + (i % 3) * 3, -12 + i * 3), hd = doors.sort((p, q) => Math.hypot(p.x - h0[0], p.z - h0[1]) - Math.hypot(q.x - h0[0], q.z - h0[1]))[0], home = hd ? [hd.x + Math.cos(a) * (hd.r + 2), hd.z + Math.sin(a) * (hd.r + 2)] : h0, ring = [pts.c[0] + Math.cos(a) * 6.5, pts.c[1] + Math.sin(a) * 6.5], back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
-    const m = man([[0, ...home, 'idle'], [29.4 + i * .15, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [LEAVE + 7, ...home, 'sprint']], true);
+    const m = man([[0, ...home, 'idle'], [29.4 + i * .15, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [PER - 1, ...home, 'walk']], true);
     const legs = []; let current = home, unplaceable = false;
     for (let j = 0; j < m.plan.length - 1; j++) {
       const target = m.plan[j + 1].slice(1, 3);
-      const path = j === m.plan.length - 2 ? legs.slice().reverse().flatMap((leg, n) => leg.slice().reverse().slice(n ? 1 : 0)) : route(current, target, obstacles);
+      let path;
+      if (j === m.plan.length - 2) {
+        const first = legs[0][0];
+        const knownSafe = legs.slice().reverse().flatMap((leg, n) => leg.slice().reverse().slice(n ? 1 : 0));
+        path = simplifyPath(knownSafe, obstacles);
+        m.returnDirect = Math.hypot(path.at(-1)[0] - first[0], path.at(-1)[1] - first[1]) <= .01;
+      } else path = route(current, target, obstacles);
       if (!path) { scene.remove(m.o); men.pop(); unplaceable = true; break; }
       current = path[path.length - 1]; legs.push(path);
     }
@@ -453,6 +465,7 @@ export async function kaiju(ctx) {
       const length = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1]));
       return { path, length, total: length.reduce((sum, n) => sum + n, 0) };
     });
+    m.plan[m.plan.length - 1][0] = LEAVE + Math.min(PER - LEAVE - 1, Math.max(.25, spans.at(-1).total / 3.5));
     m.pos = t => {
       let i = 0; while (i < m.plan.length - 2 && m.plan[i + 1][0] <= t) i++;
       const a = m.plan[i], b = m.plan[i + 1], { path, length, total } = spans[i];
@@ -475,14 +488,17 @@ export async function kaiju(ctx) {
     return { p: m.o.position.toArray().map(v => +v.toFixed(2)), yaw: +y.toFixed(2), vis: m.o.visible, push: !!m.pushing, clip: m.cur?.getClip().name, armFwd: +(d.x * Math.sin(y) + d.z * Math.cos(y)).toFixed(2), armUp: +d.y.toFixed(2), leg: +(2 * Math.acos(Math.min(1, Math.abs(m.bones['leg-left'].quaternion.w)))).toFixed(2) }; });
   window.__crowdCheck = t => {
     const propBoxes = [];
-    for (const e of engines) { e.o.updateMatrixWorld(true); e.o.traverse(n => { if (n.isMesh && n.visible) propBoxes.push(new THREE.Box3().setFromObject(n)); }); }
+    for (const e of engines) { e.o.updateMatrixWorld(true); e.o.traverse(n => { if (n.isMesh && n.visible) { n.geometry.computeBoundingBox(); const scale = new THREE.Vector3().setFromMatrixScale(n.matrixWorld); propBoxes.push({ name: n.name, box: n.geometry.boundingBox, inverse: n.matrixWorld.clone().invert(), scale }); } }); }
     return men.map((m, i) => {
     const position = m.pos(t), y = m.y ?? Math.max(PLAIN, ground(...position));
     const screen = new THREE.Vector3(position[0], y + 1.35, position[1]).project(ctx.camera);
-    return { i, field: !!m.fieldCrew, wall: !!m.wall, position, screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
+    return { i, field: !!m.fieldCrew, fieldRouteComplete, fieldCrewLimit, fieldDistance: Math.hypot(position[0] - field.o.position.x, position[1] - field.o.position.z), returnDirect: m.returnDirect, pushing: !!m.pushing?.(t), wall: !!m.wall, position, screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
       inView: Math.abs(screen.x) <= 1.05 && Math.abs(screen.y) <= 1.05 && screen.z >= -1 && screen.z <= 1,
       blocked: blocked(position, obstacles.filter(o => !m.wall || (o.model !== 'breach-wall' && o.top > m.y + .1))),
-      prop: propBoxes.some(b => b.max.y > y + .1 && b.min.y < y + 2.7 && position[0] >= b.min.x - .5 && position[0] <= b.max.x + .5 && position[1] >= b.min.z - .5 && position[1] <= b.max.z + .5) };
+      prop: propBoxes.filter(({ box: b, inverse, scale }) => {
+        const foot = new THREE.Vector3(position[0], y + .1, position[1]).applyMatrix4(inverse), head = new THREE.Vector3(position[0], y + 2.7, position[1]).applyMatrix4(inverse);
+        return Math.max(foot.y, head.y) > b.min.y && Math.min(foot.y, head.y) < b.max.y && foot.x >= b.min.x - .5 / scale.x && foot.x <= b.max.x + .5 / scale.x && foot.z >= b.min.z - .5 / scale.z && foot.z <= b.max.z + .5 / scale.z;
+      }).map(({ name }) => ({ name })) };
     });
   };
   const arrowMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(.04, .04, 1.4, 4).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#5e4a44' }), arrows.length);

@@ -9,9 +9,26 @@ export function blocked(point, obstacles) {
   });
 }
 
+function intersects(from, to, o) {
+  const radius = o.halfX + o.halfZ;
+  if (o.x + radius < Math.min(from[0], to[0]) || o.x - radius > Math.max(from[0], to[0]) ||
+      o.z + radius < Math.min(from[1], to[1]) || o.z - radius > Math.max(from[1], to[1])) return false;
+  const c = o.cos ?? Math.cos(o.yaw), s = o.sin ?? Math.sin(o.yaw);
+  const local = v => [(v[0] - o.x) * c - (v[1] - o.z) * s, (v[0] - o.x) * s + (v[1] - o.z) * c];
+  const a = local(from), b = local(to); let lo = 0, hi = 1;
+  for (let axis = 0; axis < 2; axis++) {
+    const half = axis ? o.halfZ : o.halfX, delta = b[axis] - a[axis];
+    if (Math.abs(delta) < 1e-9) { if (Math.abs(a[axis]) > half) return false; continue; }
+    const t0 = (-half - a[axis]) / delta, t1 = (half - a[axis]) / delta;
+    lo = Math.max(lo, Math.min(t0, t1)); hi = Math.min(hi, Math.max(t0, t1));
+    if (lo > hi) return false;
+  }
+  return true;
+}
+
 const obstacleIndexes = new WeakMap();
 
-export function route(start, end, obstacles, step = 1.5) {
+export function route(start, end, obstacles, step = 1.5, maxVisited = 1000) {
   if (start.length !== 2 || end.length !== 2 || ![...start, ...end, step].every(Number.isFinite) || step <= 0) return null;
   const signature = obstacles.map(o => [o.x, o.z, o.yaw, o.halfX, o.halfZ].join(',')).join(';');
   let index = obstacleIndexes.get(obstacles);
@@ -57,21 +74,7 @@ export function route(start, end, obstacles, step = 1.5) {
           for (const o of cells.get(cellKey(x, z)) || []) nearby.add(o);
       candidates = [...nearby];
     }
-    const clear = !candidates.some(o => {
-      const radius = o.halfX + o.halfZ;
-      if (o.x + radius < Math.min(from[0], to[0]) || o.x - radius > Math.max(from[0], to[0]) ||
-          o.z + radius < Math.min(from[1], to[1]) || o.z - radius > Math.max(from[1], to[1])) return false;
-      const local = v => [(v[0] - o.x) * o.cos - (v[1] - o.z) * o.sin, (v[0] - o.x) * o.sin + (v[1] - o.z) * o.cos];
-      const a = local(from), b = local(to); let lo = 0, hi = 1;
-      for (let axis = 0; axis < 2; axis++) {
-        const half = axis ? o.halfZ : o.halfX, delta = b[axis] - a[axis];
-        if (Math.abs(delta) < 1e-9) { if (Math.abs(a[axis]) > half) return false; continue; }
-        const t0 = (-half - a[axis]) / delta, t1 = (half - a[axis]) / delta;
-        lo = Math.max(lo, Math.min(t0, t1)); hi = Math.min(hi, Math.max(t0, t1));
-        if (lo > hi) return false;
-      }
-      return true;
-    });
+    const clear = !candidates.some(o => intersects(from, to, o));
     if (short) index.edges.set(edge, clear);
     return clear;
   };
@@ -92,8 +95,17 @@ export function route(start, end, obstacles, step = 1.5) {
   const minX = Math.min(a[0], b[0]) - 30, maxX = Math.max(a[0], b[0]) + 30;
   const minZ = Math.min(a[1], b[1]) - 30, maxZ = Math.max(a[1], b[1]) + 30;
   let closest = startKey, distance = Math.hypot(a[0] - b[0], a[1] - b[1]), visited = 0;
-  const trace = end => { const path = []; let k = end; while (k) { const [x, z] = k.split(',').map(Number); path.push(point(x, z)); k = parent.get(k); } return path.reverse(); };
-  while (open.length && visited++ < 1000) {
+  const trace = end => {
+    const path = []; let k = end;
+    while (k) { const [x, z] = k.split(',').map(Number); path.push([x, z]); k = parent.get(k); }
+    path.reverse(); const reduced = [path[0]];
+    for (let i = 0; i < path.length - 1;) {
+      let j = path.length - 1; while (j > i + 1 && !clearLine(path[i], path[j])) j--;
+      reduced.push(path[j]); i = j;
+    }
+    return reduced.map(p => point(...p));
+  };
+  while (open.length && visited++ < maxVisited) {
     const cur = pop(), here = key(cur.x, cur.z);
     if (cur.g !== best.get(here)) continue;
     if (here === endKey) return trace(here);
@@ -110,4 +122,16 @@ export function route(start, end, obstacles, step = 1.5) {
     }
   }
   return trace(closest);
+}
+
+// Remove unnecessary bends from an already safe path, without crossing a blocker.
+export function simplifyPath(path, obstacles) {
+  const clear = (a, b) => !obstacles.some(o => intersects(a, b, o));
+  if (path.length < 2) return path.slice();
+  const out = [path[0]];
+  for (let i = 0; i < path.length - 1;) {
+    let j = path.length - 1; while (j > i + 1 && !clear(path[i], path[j])) j--;
+    out.push(path[j]); i = j;
+  }
+  return out;
 }

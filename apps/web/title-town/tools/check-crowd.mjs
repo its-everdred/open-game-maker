@@ -14,19 +14,28 @@ try {
   await page.goto(`http://127.0.0.1:${port}/index.html?capture&cam=menu&scene=all`, { waitUntil: 'domcontentloaded', timeout: 180000 });
   await page.waitForFunction(() => window.__ready && window.__crowdStep, null, { timeout: 300000 });
   const result = await page.evaluate(() => {
-    const failures = [], previous = new Map(), initial = new Map(), duration = window.__sounds?.per ?? 153;
+    const failures = [], previous = new Map(), duration = window.__sounds?.per ?? 153;
     for (let t = 0; t <= duration + .25; t += .25) {
       const crowd = window.__crowdStep(t);
       if (crowd?.length !== 25) { failures.push({ t, problem: `expected 25 people, found ${crowd?.length ?? 0}` }); break; }
+      const crew = crowd.filter(person => person.field);
+      if (crew.length !== 4 || crew.some(person => !person.fieldRouteComplete)) failures.push({ t, problem: 'field crew route incomplete' });
+      if ((t < 30 || (t >= 62 && t < 88)) && crew.some(person => !person.pushing || person.fieldDistance > person.fieldCrewLimit)) failures.push({ t, problem: 'field crew not pushing' });
       for (const person of crowd) {
+        if (person.returnDirect === false) failures.push({ t, i: person.i, problem: 'return route did not reach home directly' });
         if (!person.valid) failures.push({ t, i: person.i, problem: 'invalid position' });
-        if (t === 0) initial.set(person.i, person.position);
-        if (t === duration && initial.has(person.i) && Math.hypot(...person.position.map((v, j) => v - initial.get(person.i)[j])) > .01) failures.push({ t, i: person.i, problem: 'jumps at loop boundary' });
-        if (person.blocked || person.prop) failures.push({ t, i: person.i, problem: person.prop ? 'overlaps a prop' : 'overlaps a footprint' });
+        if (!person.visible) failures.push({ t, i: person.i, problem: 'unexpectedly hidden' });
+        if (person.blocked || person.prop.length) failures.push({ t, i: person.i, problem: person.prop.length ? 'overlaps a prop' : 'overlaps a footprint', position: person.position, prop: person.prop[0] });
         if (previous.get(person.i) === false && person.visible && person.inView) failures.push({ t, i: person.i, problem: 'appears in view' });
         previous.set(person.i, person.visible);
       }
+      if (failures.length >= 20) break;
     }
+    const end = window.__crowdStep(duration - .001), beginning = window.__crowdStep(duration);
+    for (let i = 0; i < end.length; i++)
+      if (Math.hypot(...end[i].position.map((v, j) => v - beginning[i].position[j])) > .05)
+        failures.push({ t: duration, i, problem: 'jumps at loop boundary' });
+    if (!beginning.some(person => person.visible && person.inView)) failures.push({ t: 0, problem: 'no visible person in view' });
     return { duration, failures, marks: window.__marks };
   });
   if (result.failures.length) throw new Error(JSON.stringify({ duration: result.duration, count: result.failures.length, first: result.failures.slice(0, 20) }));

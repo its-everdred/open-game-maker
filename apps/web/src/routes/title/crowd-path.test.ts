@@ -1,7 +1,46 @@
 import { describe, expect, it } from 'vitest';
-import { blocked, route } from '../../../title-town/crowd-path.js';
+import { blocked, route, simplifyPath } from '../../../title-town/crowd-path.js';
 
 describe('crowd paths', () => {
+  it('shortens a return journey without cutting through a building', () => {
+    const obstacles = [{ x: 0, z: 0, yaw: 0, halfX: 2, halfZ: 2 }];
+    const travelled = [
+      [-6, 0],
+      [-6, 4],
+      [-3, 5],
+      [0, 5],
+      [3, 5],
+      [6, 4],
+      [6, 0],
+    ];
+    const shortened = simplifyPath(travelled, obstacles);
+    expect(shortened.length).toBeLessThan(travelled.length);
+    expect(shortened[0]).toEqual(travelled[0]);
+    expect(shortened.at(-1)).toEqual(travelled.at(-1));
+    for (let i = 1; i < shortened.length; i++)
+      for (let t = 0; t <= 1; t += 0.01) {
+        expect(
+          blocked(
+            shortened[i - 1].map((v, j) => v + (shortened[i][j] - v) * t),
+            obstacles,
+          ),
+        ).toBe(false);
+      }
+    expect(
+      simplifyPath(
+        [
+          [0, 0],
+          [1, 1],
+          [2, 0],
+        ],
+        [],
+      ),
+    ).toEqual([
+      [0, 0],
+      [2, 0],
+    ]);
+  });
+
   it('rejects invalid coordinates instead of producing invalid positions', () => {
     expect(route([NaN, 0], [1, 2], [])).toBeNull();
   });
