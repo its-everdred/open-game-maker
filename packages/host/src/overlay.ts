@@ -142,6 +142,8 @@ export class TouchOverlay {
       width: `${STICK_SIZE}px`,
       height: `${STICK_SIZE}px`,
       borderRadius: '50%',
+      background: 'rgba(0, 0, 0, 0.35)',
+      border: '1px solid rgba(255, 255, 255, 0.6)',
       pointerEvents: 'auto',
       touchAction: 'none',
     });
@@ -151,6 +153,7 @@ export class TouchOverlay {
     nub.style.height = '44px';
     nub.style.margin = '28px';
     nub.style.borderRadius = '50%';
+    nub.style.background = 'rgba(255, 255, 255, 0.6)';
     stick.append(nub);
     let pointerId: number | undefined;
     let startX = 0;
@@ -219,7 +222,10 @@ export class TouchOverlay {
       display: 'grid',
       placeItems: 'center',
       padding: '0',
+      color: 'white',
       borderRadius: '50%',
+      background: 'rgba(0, 0, 0, 0.35)',
+      border: '1px solid rgba(255, 255, 255, 0.6)',
       pointerEvents: 'auto',
       touchAction: 'none',
     });

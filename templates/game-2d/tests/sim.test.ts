@@ -1,6 +1,7 @@
 import type { HostApi, Patch } from '@ogm/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
+import { manifest } from '../src/manifest.js';
 import { connectPhaserLifecycle, defaultDesign, game, getGameContext } from '../src/game.js';
 import { applyInput, createSimulation, serializeSimulation, stepSimulation } from '../src/state.js';
 
@@ -12,6 +13,15 @@ const moveFrame = {
 };
 
 describe('platformer simulation', () => {
+  it('declares a stick and responds to touch movement', () => {
+    expect(manifest.inputs.actions.move).toBe('stick');
+    const state = createSimulation(defaultDesign);
+    const initialX = state.players.get(0)!.pos.x;
+    applyInput(state, { ...moveFrame, source: 'touch', actions: { move: { x: 1, y: 0 } } });
+    stepSimulation(state, defaultDesign, 1 / 60);
+    expect(state.players.get(0)!.pos.x).toBeGreaterThan(initialX);
+  });
+
   it('steps 3,600 frames from plain input data', () => {
     const state = createSimulation(defaultDesign);
     const initialX = state.players.get(0)!.pos.x;
