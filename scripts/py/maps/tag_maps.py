@@ -150,10 +150,21 @@ LABEL_STOP = {"scale", "feet", "foot", "miles", "mile", "north", "south", "east"
 
 
 def map_rights():
-    collection = json.loads((COLL_DIR / "collection.card.json").read_text()).get("rights")
+    if COLL_DIR.parent.is_symlink() or COLL_DIR.is_symlink():
+        raise ValueError("collection directory symlinks are not allowed")
+    if (COLL_DIR / "collection.card.json").is_symlink():
+        raise ValueError("collection card symlinks are not allowed")
+    collection_card = json.loads((COLL_DIR / "collection.card.json").read_text())
+    collection = collection_card.get("rights")
     by_source = {}
+    if (COLL_DIR / "cards").is_symlink():
+        raise ValueError("card directory symlinks are not allowed")
     for path in sorted((COLL_DIR / "cards").rglob("*.card.json")):
+        if path.is_symlink():
+            raise ValueError(f"card symlink is not allowed: {path}")
         card = json.loads(path.read_text())
+        if card.get("collection") is not None and card.get("collection") != collection_card.get("id"):
+            raise ValueError(f"asset card belongs to a different collection: {path}")
         for source in card.get("source", {}).get("files", []):
             name = source.get("path")
             if isinstance(name, str):
@@ -593,7 +604,14 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
-    inputs = [str(COLL_DIR / "collection.card.json"), *(str(path) for path in sorted((COLL_DIR / "cards").rglob("*.card.json")))]
+    if (COLL_DIR / "collection.card.json").is_symlink():
+        raise ValueError("collection card symlinks are not allowed")
+    if (COLL_DIR / "cards").is_symlink():
+        raise ValueError("card directory symlinks are not allowed")
+    card_paths = sorted((COLL_DIR / "cards").rglob("*.card.json"))
+    if any(path.is_symlink() for path in card_paths):
+        raise ValueError("card symlinks are not allowed")
+    inputs = [str(COLL_DIR / "collection.card.json"), *(str(path) for path in card_paths)]
     result = subprocess.run(["node", str(SCHEMAS / "tools/validate.mjs"), str(SCHEMAS), *inputs], capture_output=True, text=True)
     if result.returncode:
         print("card validation failed before map analysis: " + (result.stderr or result.stdout)[-3000:], file=sys.stderr)

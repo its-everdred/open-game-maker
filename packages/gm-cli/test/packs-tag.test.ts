@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 
@@ -183,6 +183,37 @@ describe('gm packs tag', () => {
     } finally {
       await unlock();
     }
+  });
+
+  it('refuses a packs directory aliased outside the library', async () => {
+    const assetsRoot = tagLibrary();
+    await rm(join(assetsRoot, 'packs'), { recursive: true });
+    const outside = tempDir('gm-external-packs-');
+    await symlink(outside, join(assetsRoot, 'packs'));
+    await expect(discoverTagTargets(assetsRoot, 'audio')).rejects.toThrow('escapes library');
+  });
+
+  it('refuses aliased cards directories and cross-collection cards', async () => {
+    const assetsRoot = tagLibrary();
+    const root = join(assetsRoot, 'packs/kenney-music-loops');
+    const cards = join(root, 'cards');
+    const cardPath = join(cards, 'infinite-descent.card.json');
+    const card = JSON.parse(await readFile(cardPath, 'utf8')) as Record<string, unknown>;
+    card.collection = 't1:other@v1';
+    await writeFile(cardPath, JSON.stringify(card));
+    await expect(discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops')).rejects.toThrow('different collection');
+    await rm(cards, { recursive: true });
+    await symlink(join(assetsRoot, 'packs/kenney-mini-dungeon/cards'), cards);
+    await expect(discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops')).rejects.toThrow('directory symlinks');
+  });
+
+  it('refuses a symlinked card without replacing it', async () => {
+    const assetsRoot = tagLibrary();
+    const cards = join(assetsRoot, MUSIC);
+    const link = join(cards, 'alias.card.json');
+    await symlink(join(cards, 'infinite-descent.card.json'), link);
+    await expect(discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops')).rejects.toThrow('card symlinks');
+    expect(await readFile(link, 'utf8')).toContain('infinite-descent');
   });
 
   it('prevents simultaneous taggers from locking the same collection', async () => {

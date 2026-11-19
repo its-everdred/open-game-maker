@@ -307,7 +307,11 @@ def expected_sheet_key(card: dict, collection_rights: dict, restrictions=()) -> 
 
 
 def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
+    if pack.is_symlink():
+        raise ValueError("collection directory symlinks are not allowed")
     try:
+        if (pack / "collection.card.json").is_symlink():
+            raise ValueError("collection card symlinks are not allowed")
         collection = json.loads((pack / "collection.card.json").read_text())
     except (OSError, json.JSONDecodeError):
         return []
@@ -325,9 +329,16 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
         return []
     assets_root = pack.parents[1]
     rows = []
-    cards = [(path, json.loads(path.read_text())) for path in sorted((pack / "cards").rglob("*.card.json"))]
+    if (pack / "cards").is_symlink():
+        raise ValueError("card directory symlinks are not allowed")
+    paths = sorted((pack / "cards").rglob("*.card.json"))
+    if any(path.is_symlink() for path in paths):
+        raise ValueError("card symlinks are not allowed")
+    cards = [(path, json.loads(path.read_text())) for path in paths]
     by_source = {}
-    for _, item in cards:
+    for path, item in cards:
+        if item.get("collection") != collection.get("id"):
+            raise ValueError(f"asset card belongs to a different collection: {path}")
         for file in item.get("source", {}).get("files", []):
             name = file.get("path")
             if not isinstance(name, str) or not name or "\\" in name or name.startswith("/") or any(part in ("", ".", "..") for part in name.split("/")):
@@ -392,6 +403,8 @@ def main():
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    if args.packs.is_symlink():
+        raise ValueError("packs directory symlinks are not allowed")
 
     rows = []
     for pack in sorted(args.packs.iterdir() if args.packs.is_dir() else []):

@@ -116,7 +116,9 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
   const requestedWorkers = Number(flags.workers ?? 0);
   const workers = effectiveWorkers(requestedWorkers);
   const limit = Number(flags.limit ?? ctx.limit);
-  const discovery = await discoverTagTargets(assetsRoot, kind, only);
+  const discovery = await discoverTagTargets(assetsRoot, kind, only).catch((error: unknown) => {
+    throw new CommandError(error instanceof Error ? error.message : String(error));
+  });
   for (const refusal of discovery.refusals) ctx.err(refusal);
   let targets =
     kind === 'map' ? discovery.targets.filter((target) => target.slug === 'profantasy-cc3') : discovery.targets;
@@ -132,7 +134,9 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
   });
   try {
     const lockedRoots = new Set(targets.map((target) => target.root));
-    const refreshed = await discoverTagTargets(assetsRoot, kind, only);
+    const refreshed = await discoverTagTargets(assetsRoot, kind, only).catch((error: unknown) => {
+      throw new CommandError(error instanceof Error ? error.message : String(error));
+    });
     targets = refreshed.targets.filter((target) => lockedRoots.has(target.root));
     if (targets.length === 0) throw new CommandError('no eligible collections remain after acquiring locks');
     const snapshot = await snapshotTargets(targets);

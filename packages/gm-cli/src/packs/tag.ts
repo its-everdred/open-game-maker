@@ -38,7 +38,14 @@ function glob(pattern: string): RegExp {
 
 async function filesUnder(root: string, suffix: string): Promise<string[]> {
   try {
-    return (await readdir(root, { recursive: true, withFileTypes: true }))
+    if (suffix === '.card.json' && (await lstat(root)).isSymbolicLink()) {
+      throw new Error(`card directory symlinks are not allowed: ${root}`);
+    }
+    const entries = await readdir(root, { recursive: true, withFileTypes: true });
+    if (suffix === '.card.json' && entries.some((entry) => entry.isSymbolicLink() && entry.name.endsWith(suffix))) {
+      throw new Error(`card symlinks are not allowed: ${root}`);
+    }
+    return entries
       .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
       .map((entry) => join(entry.parentPath, entry.name))
       .sort();
@@ -82,6 +89,9 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
   const refusals: string[] = [];
   let entries: Dirent<string>[];
   try {
+    if ((await lstat(top)).isSymbolicLink() || !inside(await realpath(assetsRoot), await realpath(top))) {
+      throw new Error(`asset collection directory escapes library: ${top}`);
+    }
     entries = await readdir(top, { withFileTypes: true, encoding: 'utf8' });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { targets, refusals };
@@ -94,11 +104,14 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
     const collectionPath = join(root, 'collection.card.json');
     let collection: AssetCard;
     try {
+      if ((await lstat(collectionPath)).isSymbolicLink())
+        throw new Error(`collection card symlink is not allowed: ${collectionPath}`);
       const parsed = validateCard(JSON.parse(await readFile(collectionPath, 'utf8')) as unknown);
       if (!parsed.ok || parsed.card.card_type !== 'collection') continue;
       collection = parsed.card;
-    } catch {
-      continue;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
     }
     if (
       !collection.rights?.uses.includes('vision-input') ||
@@ -120,6 +133,8 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
         if (document && typeof document === 'object' && !('source' in document)) continue;
         throw new Error(`invalid asset card: ${path}`);
       }
+      if (parsed.card.collection !== collection.id)
+        throw new Error(`asset card belongs to a different collection: ${path}`);
       for (const source of parsed.card.source?.files ?? []) {
         if (
           !source.path ||

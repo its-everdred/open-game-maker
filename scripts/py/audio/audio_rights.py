@@ -7,19 +7,35 @@ from pathlib import Path
 
 
 def collection_rights(pack: Path) -> dict:
+    if pack.is_symlink():
+        raise ValueError("collection directory symlinks are not allowed")
     try:
+        if (pack / "collection.card.json").is_symlink():
+            raise ValueError("collection card symlinks are not allowed")
         return json.loads((pack / "collection.card.json").read_text()).get("rights") or {}
     except (OSError, json.JSONDecodeError):
         return {}
 
 
 def source_cards(pack: Path, extracted: Path | None = None) -> dict[str, list[dict]]:
+    if pack.is_symlink():
+        raise ValueError("collection directory symlinks are not allowed")
     result = {}
+    try:
+        collection_id = json.loads((pack / "collection.card.json").read_text()).get("id")
+    except (OSError, json.JSONDecodeError):
+        collection_id = None
+    if (pack / "cards").is_symlink():
+        raise ValueError("card directory symlinks are not allowed")
     for path in sorted((pack / "cards").rglob("*.card.json")):
+        if path.is_symlink():
+            raise ValueError(f"card symlink is not allowed: {path}")
         try:
             card = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"cannot determine source rights from {path}: {exc}") from exc
+        if card.get("collection") is not None and card.get("collection") != collection_id:
+            raise ValueError(f"asset card belongs to a different collection: {path}")
         for source in card.get("source", {}).get("files", []):
             if isinstance(source.get("path"), str):
                 name = source["path"]
@@ -54,11 +70,22 @@ def cards_for_stem(cards: dict[str, list[dict]], source: str) -> list[dict]:
 
 
 def validate_inputs(packs: Path, only=None) -> None:
+    if packs.is_symlink():
+        raise ValueError("packs directory symlinks are not allowed")
     repo = Path(__file__).resolve().parents[3]
     selected = [pack for pack in sorted(packs.iterdir()) if pack.is_dir()
                 and any(fnmatch.fnmatch(pack.name, pattern) for pattern in only or ["*"])] if packs.is_dir() else []
+    if any(pack.is_symlink() for pack in selected):
+        raise ValueError("collection directory symlinks are not allowed")
+    if any((pack / "collection.card.json").is_symlink() for pack in selected):
+        raise ValueError("collection card symlinks are not allowed")
     paths = [str(pack / "collection.card.json") for pack in selected if (pack / "collection.card.json").exists()]
-    paths += [str(path) for pack in selected for path in sorted((pack / "cards").rglob("*.card.json"))]
+    if any((pack / "cards").is_symlink() for pack in selected):
+        raise ValueError("card directory symlinks are not allowed")
+    cards = [path for pack in selected for path in sorted((pack / "cards").rglob("*.card.json"))]
+    if any(path.is_symlink() for path in cards):
+        raise ValueError("card symlinks are not allowed")
+    paths += [str(path) for path in cards]
     if paths:
         result = subprocess.run(["node", str(repo / "packages/contracts/bin/validate-cards.mjs"), "--paths-stdin"], input=json.dumps(paths), capture_output=True, text=True)
         if result.returncode:

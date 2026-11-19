@@ -196,3 +196,15 @@ def test_rights_index_rejects_restricted_source_alias(tmp_path):
     (pack / "cards" / "denied.card.json").write_text(json.dumps({"source": {"files": [{"path": "alias.wav"}]}, "rights": {"uses": []}}))
     with pytest.raises(ValueError, match="source alias"):
         a.audio_files(tmp_path)
+
+
+def test_audio_rights_refuses_symlinked_card(tmp_path):
+    import pytest
+    pack = tmp_path / "pack"
+    cards = pack / "cards"
+    cards.mkdir(parents=True)
+    real = cards / "real.json"
+    real.write_text(json.dumps({"source": {"files": []}}))
+    (cards / "alias.card.json").symlink_to(real)
+    with pytest.raises(ValueError, match="card symlink"):
+        a.audio_rights.source_cards(pack)

@@ -67,8 +67,12 @@ def matches_any(name: str, only) -> bool:
 def audio_files(packs: Path, only="*"):
     """(pack id, version dir, file) for every audio file, one format per stem (ogg preferred over wav/mp3 copies)."""
     out = []
+    if packs.is_symlink():
+        raise ValueError("packs directory symlinks are not allowed")
     for pj in sorted(packs.glob("*/pack.json")):
         pid = pj.parent.name
+        if pj.parent.is_symlink():
+            raise ValueError("collection directory symlinks are not allowed")
         if not matches_any(pid, only):
             continue
         manifest = json.loads(pj.read_text())

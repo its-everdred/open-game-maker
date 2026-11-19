@@ -259,7 +259,7 @@ def test_visual_rights_index_rejects_restricted_source_alias(tmp_path):
     extracted.mkdir(parents=True)
     (pack / "cards").mkdir()
     (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
-    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    (pack / "collection.card.json").write_text(json.dumps({"id": "t1:pack@v1", "rights": {"uses": ["vision-input"]}}))
     (extracted / "real.glb").write_bytes(b"glb")
     (extracted / "alias.glb").symlink_to(extracted / "real.glb")
     denied = card()
@@ -268,3 +268,12 @@ def test_visual_rights_index_rejects_restricted_source_alias(tmp_path):
     (pack / "cards" / "denied.card.json").write_text(json.dumps(denied))
     with pytest.raises(ValueError, match="source alias"):
         t.eligible_cards(pack, "model")
+
+
+def test_visual_worker_rejects_collection_directory_alias(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    with pytest.raises(ValueError, match="collection directory symlinks"):
+        t.eligible_cards(alias, "model")
