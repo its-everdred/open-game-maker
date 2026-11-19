@@ -87,14 +87,14 @@ async function poll<T>(read: () => Promise<T>, done: (value: T) => boolean, time
   }
 }
 
-async function swipe(page: Page, right: boolean): Promise<void> {
-  const media = page.getByRole('dialog', { name: 'Needs Review' }).locator('.review-deck-playable').first();
+async function swipe(page: Page, right: boolean, selector = '.review-deck-playable'): Promise<void> {
+  const media = page.getByRole('dialog', { name: 'Needs Review' }).locator(selector).first();
   await media.scrollIntoViewIfNeeded();
   const box = await media.boundingBox();
   if (!box) throw new StepFailed('the review card has no media to swipe');
   const touch = await page.context().newCDPSession(page);
   const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
+  const y = box.y + box.height / (selector === '.review-deck-playable' ? 2 : 4);
   try {
     await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
     for (let step = 1; step <= 5; step++) {
@@ -240,7 +240,8 @@ async function runViewport(
           : ['the fixture seed did not say how many options the Command carries']),
       ];
       if (failures.length) throw new StepFailed(failures.join('; '));
-      await dialog.getByRole('button', { name: 'View option B' }).click(timeout);
+      await swipe(page, false, '.worker-review-option img');
+      await dialog.getByRole('button', { name: 'View option B', pressed: true }).waitFor(timeout);
       await step('wait for Command video', () => dialog.locator('video').first().waitFor(timeout));
       await step('wait for playable Command video', () =>
         page.waitForFunction(
@@ -253,7 +254,8 @@ async function runViewport(
         ),
       );
       await still('command-b');
-      await dialog.getByRole('button', { name: 'View option C' }).click(timeout);
+      await swipe(page, false, '.worker-review-option video');
+      await dialog.getByRole('button', { name: 'View option C', pressed: true }).waitFor(timeout);
       await step('wait for Command audio', () =>
         page.waitForFunction(
           () => {

@@ -141,6 +141,10 @@ export default new Hono<ApiBindings>()
     )
       throw new HttpError(409, 'media_present');
     const client = await deps.aiurClientForGame(game.id);
+    const currentRound = getRound(deps.db, game.id, round.id);
+    if (!currentRound || currentRound.verdict !== null) throw new HttpError(404, 'review_round_not_found');
+    if (latestRoundForTicket(deps.db, game.id, round.ticket)?.id !== round.id)
+      throw new HttpError(409, 'review_round_superseded');
     const receipt = await client.message(
       round.ticket,
       'This creator review is missing media. Please add the media and resend it.',

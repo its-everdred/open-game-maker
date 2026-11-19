@@ -395,6 +395,42 @@ describe('review round previews', () => {
     expect(message).toHaveBeenCalledOnce();
   });
 
+  it('does not request media for a round superseded while finding its client', async () => {
+    const { deps, app, message } = setup();
+    const round = {
+      gameId: ids.game,
+      track: 'game',
+      phase: 'play',
+      category: 'gameplay',
+      ticket: '12',
+      sha: SHA,
+      media: JSON.stringify([{ kind: 'build', ref: 'missing' }]),
+    };
+    postRound(deps.db, { ...round, id: 'old-round', round: 1, postedAt: '2026-11-14T00:00:00Z' });
+    let release!: () => void;
+    let started!: () => void;
+    const clientStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const waitForClient = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    deps.aiurClientForGame = vi.fn(async () => {
+      started();
+      await waitForClient;
+      return { message } as never;
+    });
+    const response = app.request(`/api/v1/games/${ids.game}/review-rounds/old-round/missing-media?kind=build`, {
+      method: 'POST',
+      headers: asUser(ids.user),
+    });
+    await clientStarted;
+    postRound(deps.db, { ...round, id: 'new-round', round: 2, postedAt: '2026-11-14T00:01:00Z' });
+    release();
+    expect((await response).status).toBe(409);
+    expect(message).not.toHaveBeenCalled();
+  });
+
   it('shows an art round and records the owner verdict exactly once', async () => {
     const { deps, app } = setup();
     enableTracks(deps);
