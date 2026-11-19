@@ -86,7 +86,7 @@ interface PendingCorrection {
 }
 
 export class PerSeatMode {
-  readonly localSeat: number;
+  localSeat: number;
   private readonly rings: InputRings;
   private readonly clock = new ClockSync();
   private readonly gate: StartGate;
@@ -129,6 +129,11 @@ export class PerSeatMode {
 
   get mode(): 'per-seat' {
     return 'per-seat';
+  }
+
+  setLocalSeat(seat: number): void {
+    if (this.started && seat !== this.localSeat) throw new Error('local seat cannot change during an epoch');
+    this.localSeat = seat;
   }
 
   get tick(): number {
@@ -261,11 +266,15 @@ export class PerSeatMode {
 
   handleMessage(type: string, payload: unknown, from?: number): void {
     if (this.disposed) return;
+    if (type === 'net.clock') {
+      this.sampleClock(payload as ClockSample);
+      return;
+    }
     if (type === 'net.start') {
       this.start(payload as NetStart);
       return;
     }
-    if (type === 'net.start.cancel') {
+    if (type === 'net.start.cancel' || type === 'net.epoch.end') {
       this.gate.cancel();
       this.started = false;
       this.syncDiagnostics();
@@ -315,6 +324,10 @@ export class PerSeatMode {
   }
 
   private start(start: NetStart): void {
+    if (this.started && this.epoch === start.epoch) {
+      this.setSeats(start.seats);
+      return;
+    }
     this.epoch = start.epoch;
     this.seats = [...start.seats];
     this.streams = createStreams(start.seed, start.privateSeed ?? 0);

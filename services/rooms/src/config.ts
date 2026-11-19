@@ -4,6 +4,7 @@ import { roomTimings, type RoomTimings } from './lifecycle.js';
 
 const SPEC = {
   OGM_ROOMS_PORT: { kind: 'port' },
+  OGM_ROOMS_SEAT_RECONNECT_SEC: { kind: 'int', default: '30' },
   OGM_WS_TOKEN_SECRET: { kind: 'secret' },
   OGM_ROOMS_INTERNAL_SECRET: { kind: 'secret' },
   OGM_API_INTERNAL_URL: { kind: 'url' },
@@ -29,6 +30,9 @@ export function loadRoomsConfig(source?: Record<string, string | undefined>): Ro
   if (Buffer.byteLength(values.OGM_ROOMS_INTERNAL_SECRET, 'utf8') < 32) {
     throw new Error('OGM_ROOMS_INTERNAL_SECRET must be at least 32 bytes');
   }
+  if (values.OGM_ROOMS_SEAT_RECONNECT_SEC < 1 || values.OGM_ROOMS_SEAT_RECONNECT_SEC > 3600) {
+    throw new Error('OGM_ROOMS_SEAT_RECONNECT_SEC must be between 1 and 3600');
+  }
 
   return {
     port: values.OGM_ROOMS_PORT,
@@ -37,6 +41,6 @@ export function loadRoomsConfig(source?: Record<string, string | undefined>): Ro
     apiInternalUrl: values.OGM_API_INTERNAL_URL,
     gamesOrigin: values.OGM_GAMES_ORIGIN,
     version: '0.0.0',
-    timings: roomTimings(),
+    timings: roomTimings({ seatReconnectSec: values.OGM_ROOMS_SEAT_RECONNECT_SEC }),
   };
 }

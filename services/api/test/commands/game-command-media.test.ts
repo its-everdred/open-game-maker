@@ -1,12 +1,18 @@
-import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { constants } from 'node:fs';
+import { link, mkdtemp, mkdir, open, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { AiurClient, Decision, DecisionMedia, DecisionMediaFile } from '@ogm/aiur-client';
 import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { eq } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { aiurMediaTiming, MAX_AIUR_IMAGE_BYTES } from '../../src/commands/aiur-media.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
+import { insertChatRow } from '../../src/build-chat/store.js';
 
 // A registered game's Commands have no job, so their option media lives on the aiur host (#611). The Blobs staging
 // Command carried a picture per option and the deck showed text only. The inbox must turn each option's aiur media into
@@ -40,6 +46,7 @@ function seed() {
       slug: 'blobs',
       githubOwner: 'fixture',
       githubRepo: 'blobs',
+      githubPath: 'games/blobs',
       visibility: 'private',
       repoVisibility: 'private',
       createdAt: AT,
@@ -115,8 +122,9 @@ const stalled = (signal?: AbortSignal) =>
 const defaults = { ...aiurMediaTiming };
 afterEach(() => Object.assign(aiurMediaTiming, defaults));
 
-async function setup(options: Decision['options'], files: Record<string, File>) {
+async function setup(options: Decision['options'], files: Record<string, File>, creatorMarker = true, root?: string) {
   const deps = seed();
+  if (root) deps.config.builderWorkspacesRoot = root;
   const decisionMedia = vi.fn(
     async (_id: string, attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile> => {
       const file = files[attachmentId];
@@ -127,13 +135,13 @@ async function setup(options: Decision['options'], files: Record<string, File>) 
   deps.aiurClientForGame = async () =>
     ({
       baseUrl: 'http://127.0.0.1:4100',
-      decisions: async () => [decision(options)],
+      decisions: async () => [{ ...decision(options), ...(creatorMarker ? {} : { context: {} }) }],
       decisionMedia,
     }) as unknown as AiurClient;
   const { app } = await makeApp(deps);
   const read = async () => {
     const response = await app.request(`/api/v1/games/${ids.game}/commands`, { headers: asUser(ids.user) });
-    expect(response.status).toBe(200);
+    expect(response.status, await response.clone().text()).toBe(200);
     const body = (await response.json()) as {
       commands: Array<{ options: Array<{ id: string; label: string; media?: Record<string, unknown> }> }>;
     };
@@ -143,6 +151,270 @@ async function setup(options: Decision['options'], files: Record<string, File>) 
 }
 
 describe('a jobless Command’s option media', () => {
+  it('copies only files inside the owning ticket review directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ogm-media-'));
+    try {
+      const review = join(root, 'fixture', 'blobs', '12', 'review', '12');
+      await mkdir(review, { recursive: true });
+      const video = join(review, 'clip.mp4');
+      await writeFile(video, 'video bytes');
+      const secret = join(root, 'secret.mp4');
+      await writeFile(secret, 'secret');
+      const link = join(review, 'escape.mp4');
+      await symlink(secret, link);
+      const pathMedia = (value: string) => ({
+        kind: 'video',
+        mime_type: 'video/mp4',
+        locator: { kind: 'path', value },
+      });
+      const { read, deps } = await setup(
+        [
+          { id: 'a', label: 'Video', media: [pathMedia(video)] },
+          { id: 'b', label: 'Escape', media: [pathMedia(link)] },
+        ],
+        {},
+        true,
+        root,
+      );
+      const options = await read();
+      expect(options[0]!.media?.url).toContain('/api/v1/blobs/sha256/');
+      expect(options[1]!.media).toBeUndefined();
+      const url = new URL(options[0]!.media!.url as string);
+      const { app } = await makeApp(deps);
+      const response = await app.request(`${url.pathname}${url.search}`);
+      expect(await response.text()).toBe('video bytes');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it('reads fleet workspace media again after the decision version changes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ogm-fleet-media-'));
+    try {
+      const checkout = join(root, 'daemon');
+      const review = join(checkout, 'workspaces', 'fixture', 'blobs', '12', 'games', 'blobs', 'review', '12');
+      await mkdir(review, { recursive: true });
+      const video = join(review, 'clip.mp4');
+      await writeFile(video, 'first video');
+      const options = [
+        {
+          id: 'a',
+          label: 'Video',
+          media: [{ kind: 'video', mime_type: 'video/mp4', locator: { kind: 'path', value: video } }],
+        },
+        {
+          id: 'b',
+          label: 'Other',
+          media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/b.png' } }],
+        },
+      ];
+      const { deps, read } = await setup(options, {}, true, root);
+      deps.db
+        .update(schema.games)
+        .set({ githubOwner: 'Fixture', githubRepo: 'Blobs' })
+        .where(eq(schema.games.id, ids.game))
+        .run();
+      deps.db
+        .insert(schema.gameDaemons)
+        .values({
+          slug: 'blobs',
+          repo: 'fixture/blobs',
+          checkoutPath: checkout,
+          unit: 'fixture',
+          envFile: '/fixture',
+          port: 23456,
+          status: 'running',
+          createdAt: AT,
+        })
+        .run();
+      let version = 1;
+      deps.aiurClientForGame = async () =>
+        ({
+          baseUrl: 'http://127.0.0.1:4100',
+          decisions: async () => [{ ...decision(options), version }],
+        }) as unknown as AiurClient;
+      const first = (await read())[0]!.media!.url;
+      await writeFile(video, 'second video');
+      version = 2;
+      const second = (await read())[0]!.media!.url;
+      expect(new URL(second as string).pathname).not.toBe(new URL(first as string).pathname);
+      const secret = join(root, 'secret.mp4');
+      const linked = join(review, 'linked.mp4');
+      await writeFile(secret, 'private');
+      await link(secret, linked);
+      const { pathMedia } = await import('../../src/commands/path-media.js');
+      const namespaced = await pathMedia(
+        deps,
+        {
+          owner: 'fixture',
+          name: 'blobs',
+          ticket: '12',
+          workspaceRoot: join(checkout, 'workspaces', 'fixture', 'blobs'),
+          gamePath: 'games/blobs',
+        },
+        video,
+        'video/mp4',
+        100,
+      );
+      expect(await new Response(namespaced.body).text()).toBe('second video');
+      await expect(
+        pathMedia(
+          deps,
+          {
+            owner: 'fixture',
+            name: 'blobs',
+            ticket: '12',
+            workspaceRoot: join(checkout, 'workspaces'),
+            gamePath: 'games/blobs',
+          },
+          linked,
+          'video/mp4',
+          100,
+        ),
+      ).rejects.toThrow('invalid media file');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it('rejects a named pipe without waiting for a writer', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ogm-pipe-media-'));
+    try {
+      const review = join(root, 'fixture', 'blobs', '12', 'review', '12');
+      await mkdir(review, { recursive: true });
+      const pipe = join(review, 'pipe.mp4');
+      execFileSync('mkfifo', [pipe]);
+      const deps = seed();
+      deps.config.builderWorkspacesRoot = root;
+      const { pathMedia } = await import('../../src/commands/path-media.js');
+      const pending = pathMedia(deps, { owner: 'fixture', name: 'blobs', ticket: '12' }, pipe, 'video/mp4', 100).then(
+        () => 'accepted',
+        () => 'rejected',
+      );
+      const result = await Promise.race([
+        pending,
+        new Promise<string>((resolve) => setTimeout(() => resolve('blocked'), 2000)),
+      ]);
+      if (result === 'blocked') {
+        const writer = await open(pipe, constants.O_WRONLY | constants.O_NONBLOCK);
+        await pending;
+        await writer.close();
+      }
+      expect(result).toBe('rejected');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it('routes core Command attachments through the app origin', async () => {
+    const png = new Uint8Array(await readFile(PNG));
+    const options = [
+      { id: 'a', label: 'Portrait', media: [attachment('core-image', 'image', 'image/png')] },
+      {
+        id: 'b',
+        label: 'Alternative',
+        media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/b.png' } }],
+      },
+    ];
+    const deps = seed();
+    deps.config.instanceOwnerId = ids.user;
+    deps.registry.coreAiurClient = {
+      baseUrl: 'https://core.example.test',
+      decisions: async () => [decision(options)],
+      decisionMedia: async () => ({ mime: 'image/png', body: new Response(png).body! }),
+    } as unknown as AiurClient;
+    const { app } = await makeApp(deps);
+    const response = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { commands: { options: { media: { url: string } }[] }[] };
+    const url = new URL(body.commands[0]!.options[0]!.media.url);
+    expect(url.origin).toBe(deps.config.appOrigin);
+    expect(url.pathname).toMatch(/^\/api\/v1\/blobs\/sha256\//);
+    const image = await app.request(`${url.pathname}${url.search}`);
+    expect(image.status).toBe(200);
+    expect(new Uint8Array(await image.arrayBuffer())).toEqual(png);
+  });
+  it('retains all Aiur sounds for a matching job-linked Command but not for a different version', async () => {
+    const options = [
+      {
+        id: 'pip',
+        label: 'Pip',
+        media: [attachment('voice-1', 'audio', 'audio/mpeg'), attachment('voice-2', 'audio', 'audio/mpeg')],
+      },
+      { id: 'hum', label: 'Hum', media: [attachment('voice-3', 'audio', 'audio/mpeg')] },
+    ];
+    const files = Object.fromEntries(
+      ['voice-1', 'voice-2', 'voice-3'].map((id, index) => [
+        id,
+        { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 51 + index]) },
+      ]),
+    );
+    const { deps, read } = await setup(options, files, false);
+    const jobId = 'j_61100000-0000-4000-8000-000000000001';
+    deps.db
+      .insert(schema.jobs)
+      .values({
+        id: jobId,
+        gameId: ids.game,
+        branchId: 'main',
+        familyId: ids.family,
+        creatorId: ids.user,
+        kind: 'feature',
+        complexity: 2,
+        state: 'running',
+        start: 'now',
+        slot: 'edit',
+        plan: JSON.stringify({
+          title: 'Job',
+          summary: 'Review',
+          scope: { included: [], excluded: [] },
+          tickets: [{ key: 'T1', skills: [], dependsOn: [], acceptanceCriteria: [] }],
+        }),
+        reservation: JSON.stringify({ amountMicroUsd: 1, sizeClass: 'small', confidence: 'high' }),
+        hardCapMicroUsd: 1,
+        aiurIssueNumber: 12,
+        aiurRepo: 'fixture/blobs',
+        createdAt: AT,
+        updatedAt: AT,
+      })
+      .run();
+    insertChatRow(deps.sqlite, {
+      id: '01JBX2Q7M3K8V5N4R6T9W0YZAC',
+      jobId,
+      actor: 'agent',
+      kind: 'image',
+      media: { hash: `sha256:${'a'.repeat(64)}`, width: 320, height: 200 },
+    });
+    const addCommand = (id: string, version: number) =>
+      insertChatRow(deps.sqlite, {
+        id,
+        jobId,
+        at: AT,
+        actor: 'agent',
+        kind: 'command',
+        command: {
+          command_id: 'local',
+          decision_id: 'dec_blobs',
+          version,
+          question: 'Which?',
+          options: [
+            { id: 'pip', label: 'Pip', media_id: '01JBX2Q7M3K8V5N4R6T9W0YZAC' },
+            { id: 'hum', label: 'Hum' },
+          ],
+          blocking: true,
+          status: 'open',
+        },
+      });
+    addCommand('01JBX2Q7M3K8V5N4R6T9W0YZAB', 1);
+    const [pip] = (await read()) as Array<{ media?: unknown; audio?: unknown; audioClips?: unknown[] }>;
+    expect(pip!.media).toMatchObject({ width: 320 });
+    expect(pip!.audio).toBeDefined();
+    expect(pip!.audioClips).toHaveLength(1);
+    deps.sqlite
+      .prepare("UPDATE build_chat_messages SET command_json = json_set(command_json, '$.version', 2) WHERE id = ?")
+      .run('01JBX2Q7M3K8V5N4R6T9W0YZAB');
+    const [newer] = (await read()) as Array<{ media?: unknown; audio?: unknown; audioClips?: unknown[] }>;
+    expect(newer!.media).toMatchObject({ width: 320 });
+    expect(newer!.audio).toBeUndefined();
+    expect(newer!.audioClips).toBeUndefined();
+  });
   it('signs image, clip and sample media so the deck can show each option', async () => {
     const png = new Uint8Array(await readFile(PNG));
     const { read, deps } = await setup(
@@ -171,7 +443,7 @@ describe('a jobless Command’s option media', () => {
     const [flat, roll, hum] = options.map((option) => option.media);
     // Every URL is a signed blob URL, never the aiur host and never carrying its token.
     for (const media of [flat, roll, hum]) {
-      expect(media?.url).toContain('/blobs/');
+      expect(media?.url).toContain('https://app.example.test/api/v1/blobs/sha256/');
       expect(String(media?.url)).not.toContain('127.0.0.1:4100');
     }
     // A still aiur sent without a size is measured, so its card keeps the picture's shape.
@@ -199,6 +471,7 @@ describe('a jobless Command’s option media', () => {
           media: [
             attachment('med_pip_voice', 'audio', 'audio/mpeg', { duration_ms: 2500 }),
             attachment('med_pip', 'image', 'image/png'),
+            attachment('med_pip_voice_2', 'audio', 'audio/mpeg', { duration_ms: 1200 }),
           ],
         },
         { id: 'hum', label: 'Hum', media: [attachment('med_hum', 'audio', 'audio/mpeg', { duration_ms: 2000 })] },
@@ -206,15 +479,21 @@ describe('a jobless Command’s option media', () => {
       {
         med_pip: { mime: 'image/png', bytes: png },
         med_pip_voice: { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 51]) },
+        med_pip_voice_2: { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 52]) },
         med_hum: { mime: 'audio/mpeg', bytes: new Uint8Array([73, 68, 51]) },
       },
     );
 
-    const [pip, hum] = (await read()) as Array<{ media?: Record<string, unknown>; audio?: Record<string, unknown> }>;
+    const [pip, hum] = (await read()) as Array<{
+      media?: Record<string, unknown>;
+      audio?: Record<string, unknown>;
+      audioClips?: Record<string, unknown>[];
+    }>;
 
     expect(pip!.media).toMatchObject({ kind: 'image' });
     expect(pip!.audio).toMatchObject({ duration_ms: 2500 });
     expect(String(pip!.audio!.url)).toContain('/blobs/');
+    expect(pip!.audioClips).toMatchObject([{ duration_ms: 1200 }]);
     // A card whose only item is a sound already plays it as its media; it gets no second copy.
     expect(hum!.media).toMatchObject({ kind: 'audio' });
     expect(hum!).not.toHaveProperty('audio');

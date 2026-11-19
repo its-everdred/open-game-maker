@@ -57,6 +57,41 @@ describe('boot', () => {
     bridge.onMessage = undefined;
   });
 
+  it('holds simulation until the host resumes after startup', async () => {
+    const pauses: boolean[] = [];
+    const onPause = (event: Event) => pauses.push((event as CustomEvent<{ paused: boolean }>).detail.paused);
+    window.addEventListener('gm-pause', onPause);
+    const { module } = createCounterGame();
+    const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
+    await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+    bridge.onMessage!(
+      message('hello', {
+        protocol: 1,
+        capabilities: [],
+        mode: 'play',
+        build: 'draft',
+        playerIndex: 0,
+        startupHold: true,
+      }),
+    );
+    const runtime = await pending;
+    expect(runtime.clock.paused).toBe(true);
+    expect(pauses).toEqual([true]);
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    expect(pauses).toEqual([true]);
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        t: 'ready',
+        payload: expect.objectContaining({ startupHold: true }),
+      }),
+    );
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    expect(runtime.clock.paused).toBe(false);
+    expect(pauses).toEqual([true, false]);
+    window.removeEventListener('gm-pause', onPause);
+    runtime.dispose();
+  });
+
   it('does not start the live frame loop during test trailer capture', async () => {
     const startLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop');
     const state = window as Window & { __gmTrailerAudio?: unknown };
@@ -332,12 +367,18 @@ describe('boot', () => {
 
   it('migrates supported saves and rejects unsupported versions', async () => {
     const migrated = await start();
-    bridge.onMessage!(message('save.restore', { saveSchemaVersion: 0, data: { counter: 4 } }));
+    bridge.onMessage!(
+      message('save.restore', { saveSchemaVersion: 0, data: { counter: 4 }, thumbnail: 'data:image/webp;base64,YWJj' }),
+    );
     await vi.waitFor(() => expect(migrated.metrics.restoreCalls).toHaveLength(1));
     expect(migrated.metrics.restoreCalls[0]?.saveSchemaVersion).toBe(1);
     expect(bridge.send).toHaveBeenCalledWith(
-      expect.objectContaining({ t: 'save.write', payload: expect.objectContaining({ reason: 'migration' }) }),
+      expect.objectContaining({
+        t: 'save.write',
+        payload: expect.objectContaining({ reason: 'migration', thumbnail: 'data:image/webp;base64,YWJj' }),
+      }),
     );
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'save.restored' }));
 
     bridge.send.mockClear();
     const unsupported = await start({ migrate: false });
@@ -396,6 +437,176 @@ describe('boot', () => {
     runtime.host.events.emit('checkpoint', { reason: 'test' });
     expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'event' }));
     expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'save.write' }));
+  });
+
+  it('pauses and resumes the game lifecycle for network pauses', async () => {
+    const { runtime } = await start();
+    const pause = vi.spyOn(runtime.instance, 'pause');
+    const resume = vi.spyOn(runtime.instance, 'resume');
+    bridge.onMessage!(message('net.pause', {}));
+    expect(runtime.clock.paused).toBe(true);
+    expect(pause).toHaveBeenCalledOnce();
+    bridge.onMessage!(message('net.resume', {}));
+    expect(runtime.clock.paused).toBe(false);
+    expect(resume).toHaveBeenCalledOnce();
+    runtime.dispose();
+  });
+
+  it('keeps the game paused until both lifecycle and network pauses end', async () => {
+    const { runtime } = await start();
+    const pause = vi.spyOn(runtime.instance, 'pause');
+    const resume = vi.spyOn(runtime.instance, 'resume');
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    bridge.onMessage!(message('net.pause', {}));
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    expect(runtime.clock.paused).toBe(true);
+    expect(resume).not.toHaveBeenCalled();
+    bridge.onMessage!(message('net.resume', {}));
+    expect(runtime.clock.paused).toBe(false);
+    expect(pause).toHaveBeenCalledOnce();
+    expect(resume).toHaveBeenCalledOnce();
+    runtime.dispose();
+  });
+
+  it('stops two simulations at the same future pause tick despite delayed delivery', async () => {
+    const first = await start();
+    const sendFirst = bridge.onMessage!;
+    const second = await start();
+    const sendSecond = bridge.onMessage!;
+    const input = { playerIndex: 0, tick: 0, source: 'keyboard' as const, actions: { go: true } };
+    sendFirst(message('input.frame', input));
+    sendSecond(message('input.frame', input));
+    first.runtime.hooks.advanceTime(17);
+    second.runtime.hooks.advanceTime(17);
+    sendFirst(message('net.pause.prepare', { epoch: 'epoch', tick: 6 }));
+    sendFirst(message('lifecycle.pause', {}));
+    for (let i = 0; i < 4; i += 1) {
+      sendSecond(message('input.frame', input));
+      second.runtime.hooks.advanceTime(17);
+    }
+    sendSecond(message('net.pause.prepare', { epoch: 'epoch', tick: 6 }));
+    sendSecond(message('lifecycle.pause', {}));
+    for (let i = 0; i < 5; i += 1) {
+      sendFirst(message('input.frame', input));
+      first.runtime.hooks.advanceTime(17);
+    }
+    sendSecond(message('input.frame', input));
+    second.runtime.hooks.advanceTime(17);
+    expect(first.runtime.clock.tick).toBe(6);
+    expect(second.runtime.clock.tick).toBe(first.runtime.clock.tick);
+    expect(second.runtime.instance.serialize().data.counter).toBe(first.runtime.instance.serialize().data.counter);
+    expect(bridge.send.mock.calls.filter(([envelope]) => envelope.t === 'net.pause.ack')).toHaveLength(2);
+    first.runtime.dispose();
+    second.runtime.dispose();
+  });
+
+  it('reports a missed pause boundary instead of acknowledging a divergent tick', async () => {
+    const { runtime } = await start();
+    runtime.hooks.advanceTime(100);
+    bridge.onMessage!(message('net.pause.prepare', { epoch: 'epoch', tick: 1 }));
+    expect(runtime.clock.paused).toBe(true);
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({ t: 'net.pause.late', payload: { epoch: 'epoch', tick: 1 } }),
+    );
+    expect(bridge.send).not.toHaveBeenCalledWith(expect.objectContaining({ t: 'net.pause.ack' }));
+    runtime.dispose();
+  });
+
+  it('reports the actual simulation tick for a match pause probe', async () => {
+    const { runtime } = await start();
+    runtime.hooks.advanceTime(100);
+    bridge.onMessage!(message('net.pause.probe', { epoch: 'epoch' }));
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({ t: 'net.pause.position', payload: { epoch: 'epoch', tick: runtime.clock.tick } }),
+    );
+    runtime.dispose();
+  });
+
+  it('reaches the pause boundary if the overlay pause arrives before the preparation', async () => {
+    const { runtime } = await start();
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    bridge.onMessage!(message('net.pause.prepare', { epoch: 'epoch', tick: 2 }));
+    runtime.hooks.advanceTime(40);
+    expect(runtime.clock.tick).toBe(2);
+    expect(runtime.clock.paused).toBe(true);
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'net.pause.ack' }));
+    runtime.dispose();
+  });
+
+  it('does not replay host input received while paused', async () => {
+    const { runtime } = await start();
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    bridge.onMessage!(message('input.frame', { playerIndex: 0, tick: 0, source: 'keyboard', actions: { go: true } }));
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    runtime.hooks.advanceTime(17);
+    expect(runtime.instance.serialize().data.counter).toBe(0);
+    runtime.dispose();
+  });
+
+  it('defers network recovery until the game resumes', async () => {
+    const { runtime } = await start();
+    const handler = vi.spyOn(runtime as RuntimeImpl<unknown, unknown>, 'handleNet');
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    const recovery = { epoch: 'epoch', scope: 'shared' as const, tick: 1 };
+    bridge.onMessage!(message('net.recovery', recovery));
+    expect(handler).not.toHaveBeenCalledWith('net.recovery', recovery);
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    expect(handler).toHaveBeenCalledWith('net.recovery', recovery);
+    runtime.dispose();
+  });
+
+  it('does not advance network interpolation while the game is paused', async () => {
+    const { runtime } = await start();
+    const controller = Reflect.get(runtime, 'netController') as { render(): void };
+    const render = vi.spyOn(controller, 'render');
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    (runtime as RuntimeImpl<unknown, unknown>).render();
+    expect(render).not.toHaveBeenCalled();
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    (runtime as RuntimeImpl<unknown, unknown>).render();
+    expect(render).toHaveBeenCalledOnce();
+    runtime.dispose();
+  });
+
+  it('discards input queued immediately before a pause', async () => {
+    const { runtime } = await start();
+    bridge.onMessage!(message('input.frame', { playerIndex: 0, tick: 0, source: 'keyboard', actions: { go: true } }));
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    runtime.hooks.advanceTime(17);
+    expect(runtime.instance.serialize().data.counter).toBe(0);
+    runtime.dispose();
+  });
+
+  it('keeps a network pause until the shared resume time', async () => {
+    const { runtime } = await start();
+    vi.useFakeTimers();
+    try {
+      bridge.onMessage!(message('net.pause', {}));
+      bridge.onMessage!(message('net.resume', { at: Date.now() + 3000 }));
+      vi.advanceTimersByTime(2999);
+      expect(runtime.clock.paused).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(runtime.clock.paused).toBe(false);
+    } finally {
+      runtime.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a scheduled resume when the network pauses again', async () => {
+    const { runtime } = await start();
+    vi.useFakeTimers();
+    try {
+      bridge.onMessage!(message('net.pause', {}));
+      bridge.onMessage!(message('net.resume', { at: Date.now() + 3000 }));
+      bridge.onMessage!(message('net.pause', {}));
+      vi.advanceTimersByTime(3000);
+      expect(runtime.clock.paused).toBe(true);
+    } finally {
+      runtime.dispose();
+      vi.useRealTimers();
+    }
   });
 
   it('samples held canvas input on each fixed step and forwards raw host hotkeys', async () => {

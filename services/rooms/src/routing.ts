@@ -49,9 +49,16 @@ export function recipientsFor(input: RoutingInput): RoutingResult {
 
   switch (message.t) {
     case 'net.inputs':
-    case 'net.state':
     case 'net.checksum':
+      return { sessions: others(seated, senderSeat, senderSessionId) };
+    case 'net.state':
     case 'net.recovery':
+      if (message.to !== undefined) {
+        const target = seatAt(seats, message.to);
+        return target === undefined
+          ? { sessions: [], drop: 'SEAT_OUT_OF_RANGE' }
+          : { sessions: target.sessions.filter((id) => id !== senderSessionId) };
+      }
       return { sessions: others(seated, senderSeat, senderSessionId) };
     case 'net.signal': {
       const target = seatAt(seats, message.to);

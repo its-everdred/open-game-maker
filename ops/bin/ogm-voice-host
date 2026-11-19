@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+# OGM voice host on the live stack (#879): build its release, start it beside the Node services, check its health and
+# restart it when it is down. The stack runs services as detached processes, not systemd units, so this mirrors the
+# host's auto-update: env from ~/.config/ogm/env/voice-host.env, log in ~/ogm-stack.voice-host.log.
+#
+# usage: ogm-voice-host <check-env|build|start|stop|restart|health|ensure> [--repo <checkout>]
+#
+#   check-env  names every missing or mismatched setting in voice-host.env and api.env (names only, never values)
+#   build      fetches the Mix deps and builds the prod release in <repo>/services/voice-host
+#   start      check-env, then starts the release unless it already answers; waits for /healthz
+#   stop       stops the process listening on the internal port
+#   restart    stop, then start
+#   health     prints the /healthz answer; exit 1 when it does not answer
+#   ensure     health, or restart when it does not answer (the supervision a periodic pass calls)
+#
+# --repo defaults to this script's checkout. OGM_ENV_DIR overrides the env directory, OGM_VOICE_LOG the log file.
+# exit 0 ok; 1 the step failed; 64 bad usage.
+
+set -uo pipefail
+
+usage() {
+  printf 'usage: ogm-voice-host <check-env|build|start|stop|restart|health|ensure> [--repo <checkout>]\n' >&2
+  exit 64
+}
+
+action=
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+while (($#)); do
+  case $1 in
+    --repo)
+      [[ $# -ge 2 ]] || usage
+      repo=$2
+      shift 2
+      ;;
+    check-env | build | start | stop | restart | health | ensure)
+      [[ -z $action ]] || usage
+      action=$1
+      shift
+      ;;
+    *) usage ;;
+  esac
+done
+[[ -n $action ]] || usage
+
+env_dir=${OGM_ENV_DIR:-$HOME/.config/ogm/env}
+log=${OGM_VOICE_LOG:-$HOME/ogm-stack.voice-host.log}
+dir=$repo/services/voice-host
+release=$dir/_build/prod/rel/voice_host/bin/voice_host
+
+say() { printf 'ogm-voice-host: %s\n' "$*"; }
+die() {
+  printf 'ogm-voice-host: %s\n' "$*" >&2
+  exit 1
+}
+
+# Read one name out of a unit's env file without sourcing it into this shell: the files hold secrets.
+env_value() {
+  grep -E "^$2=" "$env_dir/$1.env" 2> /dev/null | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true
+}
+
+# The env file is shell syntax and is also sourced by the release; expand its path the same way.
+cleanup_root_value() (
+  unset OGM_VOICE_CLEANUP_ROOT
+  set -a
+  [[ -f $env_dir/voice-host.env ]] || return 0
+  . "$env_dir/voice-host.env" > /dev/null
+  printf '%s' "${OGM_VOICE_CLEANUP_ROOT:-}"
+)
+
+port=$(env_value voice-host OGM_VOICE_PORT)
+port=${port:-40400}
+internal=$(env_value voice-host OGM_VOICE_INTERNAL_PORT)
+internal=${internal:-40401}
+
+check_env() {
+  local problems=() provider name cleanup_root
+  [[ -f $env_dir/voice-host.env ]] || problems+=("$env_dir/voice-host.env is missing")
+  for name in OGM_VOICE_TOKEN_SECRET OGM_VOICE_INTERNAL_SECRET OGM_API_INTERNAL_URL; do
+    [[ -n $(env_value voice-host "$name") ]] || problems+=("voice-host.env: $name is empty")
+  done
+  provider=$(env_value voice-host OGM_VOICE_PROVIDER)
+  case ${provider:-fake} in
+    fake) ;;
+    elevenlabs_agents | openai_realtime)
+      # Dictation always transcribes through ElevenLabs Scribe; the OpenAI provider adds its own key.
+      names=(OGM_VOICE_LLM OGM_VOICE_CLEANUP_ROOT ELEVENLABS_API_KEY)
+      [[ $provider == elevenlabs_agents ]] && names+=(ELEVENLABS_AGENT_ID)
+      [[ $provider == openai_realtime ]] && names+=(OPENAI_API_KEY)
+      for name in "${names[@]}"; do
+        [[ -n $(env_value voice-host "$name") ]] || problems+=("voice-host.env: $name is empty (provider $provider)")
+      done
+      ;;
+    *) problems+=("voice-host.env: OGM_VOICE_PROVIDER is not fake, elevenlabs_agents or openai_realtime") ;;
+  esac
+  cleanup_root=$(cleanup_root_value)
+  if [[ -n $cleanup_root ]]; then
+    if [[ -L $cleanup_root ]]; then
+      problems+=("voice-host.env: OGM_VOICE_CLEANUP_ROOT must not be a symlink")
+    elif [[ ! -d $cleanup_root ]]; then
+      problems+=("voice-host.env: OGM_VOICE_CLEANUP_ROOT directory is missing")
+    elif [[ $(stat -Lc %a -- "$cleanup_root" 2> /dev/null) != 700 ]]; then
+      problems+=("voice-host.env: OGM_VOICE_CLEANUP_ROOT must have mode 0700")
+    fi
+  fi
+  # The API mints the tokens the host verifies and signs the calls the host answers: both secrets must be the same.
+  for name in OGM_VOICE_TOKEN_SECRET OGM_VOICE_INTERNAL_SECRET; do
+    [[ $(env_value api "$name") == "$(env_value voice-host "$name")" ]] || problems+=("$name differs between api.env and voice-host.env")
+  done
+  for name in OGM_VOICE_HOST_INTERNAL_URL OGM_VOICE_WS_URL; do
+    [[ -n $(env_value api "$name") ]] || problems+=("api.env: $name is empty")
+  done
+  [[ $(env_value api OGM_VOICE_HOST_INTERNAL_URL) == "http://127.0.0.1:$internal" ]] ||
+    problems+=("api.env: OGM_VOICE_HOST_INTERNAL_URL is not http://127.0.0.1:$internal")
+  if ((${#problems[@]})); then
+    printf 'ogm-voice-host: %s\n' "${problems[@]}" >&2
+    return 1
+  fi
+  say "env ok (provider ${provider:-fake}, ports $port and $internal)"
+}
+
+# Only an answer that names the voice host counts: another service on the port must not pass for it.
+healthz() {
+  local answer
+  answer=$(curl -fsS --max-time 5 "http://127.0.0.1:$internal/healthz" 2> /dev/null) || return 1
+  [[ $answer == *voice-host* ]] || return 1
+  printf '%s' "$answer"
+}
+
+listener_pid() {
+  ss -ltnpH "sport = :$internal" 2> /dev/null | grep -oE 'pid=[0-9]+' | head -n 1 | cut -d= -f2
+}
+
+# The release's command line names it; any other process on the port is left alone.
+ours() {
+  tr '\0' ' ' < "/proc/$1/cmdline" 2> /dev/null | grep -q voice_host
+}
+
+build() {
+  [[ -f $dir/mix.exs ]] || die "no voice host in $repo"
+  command -v mise > /dev/null 2>&1 || die 'mise is required to build the voice host'
+  (
+    cd "$dir" &&
+      mise trust mise.toml &&
+      mise exec -- mix local.hex --force --if-missing &&
+      mise exec -- mix local.rebar --force --if-missing &&
+      mise exec -- mix deps.get --check-locked &&
+      MIX_ENV=prod mise exec -- mix release --overwrite
+  ) || die 'build failed'
+  [[ -x $release ]] || die "build left no release at ${release#"$repo/"}"
+  say "built ${release#"$repo/"}"
+}
+
+stop() {
+  local pid i
+  pid=$(listener_pid)
+  [[ -n $pid ]] || {
+    say 'not running'
+    return 0
+  }
+  ours "$pid" || die "port $internal is held by pid $pid, which is not the voice host; stop it by hand"
+  kill "$pid" 2> /dev/null
+  for i in $(seq 1 30); do
+    [[ -z $(listener_pid) ]] && break
+    sleep 0.5
+  done
+  [[ -z $(listener_pid) ]] || die "pid $pid still holds port $internal"
+  say "stopped pid $pid"
+}
+
+start() {
+  local i answer cleanup_root
+  if answer=$(healthz); then
+    say "already running: $answer"
+    return 0
+  fi
+  cleanup_root=$(cleanup_root_value)
+  if [[ -n $cleanup_root && ! -e $cleanup_root ]]; then
+    mkdir -p -m 700 -- "$cleanup_root" || die 'could not create OGM_VOICE_CLEANUP_ROOT'
+  fi
+  check_env || die 'fix the env files first (docs/ops/runbook.md, "Run the voice host")'
+  [[ -x $release ]] || die "no release at ${release#"$repo/"}: run ogm-voice-host build"
+  # Source the env in the detached child without printing its values.
+  (
+    set -a
+    . "$env_dir/voice-host.env"
+    set +a
+    cd "$dir" && setsid nohup "$release" start >> "$log" 2>&1 < /dev/null &
+  )
+  for i in $(seq 1 60); do
+    if answer=$(healthz); then
+      say "running: $answer"
+      return 0
+    fi
+    sleep 0.5
+  done
+  die "no /healthz on port $internal after 30 s (see $log)"
+}
+
+case $action in
+  check-env) check_env || exit 1 ;;
+  build) build ;;
+  start) start ;;
+  stop) stop ;;
+  restart)
+    stop
+    start
+    ;;
+  health)
+    answer=$(healthz) || die "no /healthz on port $internal"
+    say "$answer"
+    ;;
+  ensure)
+    if answer=$(healthz); then
+      say "running: $answer"
+    else
+      say "down; restarting"
+      stop
+      start
+    fi
+    ;;
+esac

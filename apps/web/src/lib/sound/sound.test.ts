@@ -26,7 +26,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  fetchMock.mockClear();
+  fetchMock.mockReset();
+  fetchMock.mockImplementation(async () => audioResponse());
 });
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -125,6 +126,37 @@ describe('ext', () => {
 });
 
 describe('music fallback', () => {
+  it('keeps the title playing until the menu track is ready', async () => {
+    let release!: (response: Response) => void;
+    fetchMock.mockImplementation(async (url) =>
+      url.includes('camelot')
+        ? new Promise<Response>((resolve) => {
+            release = resolve;
+          })
+        : audioResponse(),
+    );
+    const { sound, ctx } = await loadSound();
+    sound.unlock();
+    sound.set('title', 0);
+    await flush();
+    const title = ctx.sources.at(-1)!;
+    const before = ctx.sources.length;
+    const titleGain = ctx.gains.at(-1)!;
+    titleGain.gain.setTargetAtTime.mockClear();
+    sound.set('off', 0);
+    sound.set('menu', 0);
+    await flush();
+    expect(title.stop).not.toHaveBeenCalled();
+    expect(titleGain.gain.setTargetAtTime).not.toHaveBeenCalledWith(0, expect.anything(), expect.anything());
+    expect(ctx.sources).toHaveLength(before);
+    release(audioResponse());
+    await flush();
+    expect(ctx.sources).toHaveLength(before + 1);
+    expect(ctx.sources.at(-1)!.loopStart).toBe(sound.MUSIC.menu.loop[0]);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(title.stop).toHaveBeenCalledOnce();
+  });
+
   it('stops the title track when leaving while audio is suspended', async () => {
     const { sound, ctx } = await loadSound();
     sound.unlock();
@@ -154,9 +186,10 @@ describe('music fallback', () => {
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/art/music/underground.mp3',
+      '/art/music/camelot.mp3',
       '/art/music/space-cadet.mp3',
     ]);
-    expect(ctx.decodeAudioData).toHaveBeenCalledOnce();
+    expect(ctx.decodeAudioData).toHaveBeenCalledTimes(2);
     expect(info).toHaveBeenCalledOnce();
     expect(info).toHaveBeenCalledWith('sound: licensed music unavailable; using built-in fallback');
     expect(warn).not.toHaveBeenCalled();
@@ -182,6 +215,16 @@ describe('music fallback', () => {
 });
 
 describe('mute and volume', () => {
+  it('notifies listeners when the volume changes without a mute change', async () => {
+    const { sound } = await loadSound();
+    const listener = vi.fn();
+    const unsubscribe = sound.onChange(listener);
+    sound.setVolume(0.25);
+    expect(listener).toHaveBeenCalled();
+    expect(sound.getVolume()).toBe(0.25);
+    unsubscribe();
+  });
+
   it('persists mute and unmutes when the volume is raised from silence', async () => {
     const { sound } = await loadSound();
 

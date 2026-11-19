@@ -101,12 +101,15 @@ defmodule OgmVoice.ConfigTest do
     env =
       Map.merge(@env, %{
         "OGM_VOICE_PROVIDER" => "elevenlabs_agents",
+        "ELEVENLABS_AGENT_ID" => "agent-test",
         "OGM_VOICE_LLM" => "gpt-4o-mini",
         "OGM_VOICE_CLEANUP_ROOT" => "/var/lib/ogm/voice-cleanup"
       })
 
     {:ok, vc} = VoiceConverse.Config.new(Config.voice_converse(Config.from_env!(env)))
     assert vc.provider == {VoiceConverse.Providers.ElevenLabsAgents, []}
+    assert vc.agent_id == "agent-test"
+    assert :ok = VoiceConverse.Config.check_session_start(vc)
 
     assert_raise Config.Error, ~r/OGM_VOICE_LLM is missing/, fn ->
       Config.from_env!(Map.put(@env, "OGM_VOICE_PROVIDER", "openai_realtime"))

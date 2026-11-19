@@ -6,8 +6,11 @@ import type { AppDeps } from '../app/types.js';
 import type { MediaSigner } from '../build-chat/store.js';
 import { isForCreator, isTextOnly } from '../job-commands/correlate.js';
 import { optionMediaFromAiur, type ResolvedOptionMedia } from './aiur-media.js';
-import { gameTicketFilter } from './scope.js';
+import { gameTicketFilter, hasOpenGameTickets } from './scope.js';
 import type { GameRow } from '../games/games.js';
+import { isQaGame } from '../qa/state.js';
+import { daemonRowForGame } from '../jobs/daemons.js';
+import { join } from 'node:path';
 
 // A game registered from a repository that already exists has its aiur tickets and no jobs, so its open Commands are
 // not in any job's Commands: they are read from the instance's own Decision API, whose scoped grant already limits
@@ -105,7 +108,10 @@ export async function gameCommandsFromAiur(
   jobTickets: ReadonlySet<string>,
   sign: MediaSigner,
   onUnavailable?: () => void,
+  linkedDecisions: ReadonlyMap<string, { version: number; ticket: string | null }> = new Map(),
 ): Promise<GameCommand[]> {
+  // An unlinked game has no daemon. The QA game deliberately uses its synthetic daemon without a repository.
+  if (!game.githubOwner && !game.githubRepo && !isQaGame(deps.db, game.id)) return [];
   let client: AiurClient;
   let decisions: Decision[];
   try {
@@ -113,6 +119,10 @@ export async function gameCommandsFromAiur(
     client = reader;
     decisions = await withinListTimeout((signal) => reader.decisions({}, signal));
   } catch (error) {
+    if (error instanceof HttpError && error.code === 'daemon_not_found') {
+      const hasTickets = await hasOpenGameTickets(deps, game).catch(() => true);
+      if (!hasTickets) return [];
+    }
     onUnavailable?.();
     if (error instanceof HttpError) return [];
     if (error instanceof AiurHttpError) {
@@ -122,14 +132,16 @@ export async function gameCommandsFromAiur(
     deps.log({ event: 'game_commands_unavailable', gameId: game.id, error: (error as Error).name });
     return [];
   }
-  // A job's Command is already in its build chat, so the game's own read leaves those to the job. An engineering or
-  // operations decision goes to the Executor, never to the creator. A Command the inbox would drop anyway is dropped
-  // before its media is copied.
+  // A job's Command stays in build chat; an exact ticket, id and version match may supply its Aiur media.
+  // Other engineering or operations decisions stay with the Executor. Drop unusable Commands before copying media.
+  const linked = (decision: Decision) =>
+    linkedDecisions.get(decision.decision_id)?.version === decision.version &&
+    linkedDecisions.get(decision.decision_id)?.ticket === decision.ticket.identifier;
   const candidates = decisions.filter(
     (decision) =>
-      !jobTickets.has(decision.ticket.identifier) &&
+      (!jobTickets.has(decision.ticket.identifier) || linked(decision)) &&
       isOpen(decision) &&
-      isForCreator(decision) &&
+      (isForCreator(decision) || linked(decision)) &&
       toGameCommand(decision) !== null,
   );
   if (!candidates.length) return [];
@@ -142,14 +154,43 @@ export async function gameCommandsFromAiur(
   }
   const open = candidates.filter(
     (decision) =>
-      !jobTickets.has(decision.ticket.identifier) &&
+      (!jobTickets.has(decision.ticket.identifier) || linked(decision)) &&
       allowed(decision.ticket.identifier) &&
       isOpen(decision) &&
-      isForCreator(decision) &&
+      (isForCreator(decision) || linked(decision)) &&
       toGameCommand(decision) !== null,
   );
+  const daemon = daemonRowForGame(deps.db, game.id);
+  const workspaceRoot =
+    daemon &&
+    game.githubOwner &&
+    game.githubRepo &&
+    daemon.repo.toLowerCase() === `${game.githubOwner}/${game.githubRepo}`.toLowerCase()
+      ? join(daemon.checkoutPath, 'workspaces')
+      : undefined;
+  const [mediaOwner, mediaRepo] =
+    workspaceRoot && daemon ? daemon.repo.split('/') : [game.githubOwner, game.githubRepo];
   const commands = await Promise.all(
-    open.map(async (decision) => toGameCommand(decision, await optionMediaFromAiur(deps, client, decision, sign))),
+    open.map(async (decision) =>
+      toGameCommand(
+        decision,
+        await optionMediaFromAiur(
+          deps,
+          client,
+          decision,
+          sign,
+          mediaOwner && mediaRepo
+            ? {
+                owner: mediaOwner,
+                name: mediaRepo,
+                ticket: decision.ticket.identifier,
+                ...(workspaceRoot ? { workspaceRoot } : {}),
+                ...(game.githubPath ? { gamePath: game.githubPath } : {}),
+              }
+            : undefined,
+        ),
+      ),
+    ),
   );
   return commands.filter((command) => command !== null);
 }

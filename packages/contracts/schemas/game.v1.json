@@ -26,9 +26,47 @@
         "maxLength": 32
       }
     },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "tags": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+      }
+    },
     "logo": {
       "type": "string",
       "pattern": "^media\\/[a-zA-Z0-9_-]+\\.(png|webp|svg)$"
+    },
+    "menus": {
+      "type": "object",
+      "properties": {
+        "selectors": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "routes": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "loading": {
       "type": "object",
@@ -438,6 +476,36 @@
         ]
       }
     },
+    "modes": {
+      "minItems": 1,
+      "maxItems": 12,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "tap": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "tap"
+        ],
+        "additionalProperties": {}
+      }
+    },
     "playMenuButton": {
       "type": "object",
       "properties": {
@@ -460,6 +528,9 @@
       "additionalProperties": {}
     },
     "saves": {
+      "type": "boolean"
+    },
+    "manualSaveSlots": {
       "type": "boolean"
     },
     "saveSchema": {

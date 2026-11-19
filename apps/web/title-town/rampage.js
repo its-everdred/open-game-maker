@@ -9,6 +9,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { FX, reseed } from './fx.js';
+import { blocked, clearSegment, route, simplifyPath } from './crowd-path.js';
 
 export const PER = 104;
 const LEAVE = 58;   // when he is gone
@@ -316,8 +317,18 @@ export async function kaiju(ctx) {
   // where the field trebuchet is at any time: rolled at a steady walking pace (eased in and out over the first and last
   // 15% of each trip), turned to aim, and turned round to be pushed home
   const ramp = u => { u = clamp01(u); const e = .15, v = 1 / (1 - e); return u < e ? v * u * u / (2 * e) : u > 1 - e ? 1 - v * (1 - u) ** 2 / (2 * e) : v * (u - e / 2); };
+  let fieldPath = null, fieldRouteComplete = false, fieldCrewLimit = 0;
   const fieldAt = lt => { const mv = field.move, back = ramp((lt - mv.back0) / (mv.back1 - mv.back0)), k = ramp((lt - mv.t0) / (mv.t1 - mv.t0)) - back, kt = smooth((lt - mv.turn0) / (mv.turn1 - mv.turn0));
-    return { x: lerp(mv.from[0], mv.to[0], k), z: lerp(mv.from[1], mv.to[1], k), k, back, yaw: lt < mv.back0 - 1 ? lerp(mv.yaw0, mv.yaw1, kt) : lerp(mv.yaw1, mv.yaw0 + Math.PI, smooth(lt - mv.back0 + 1)) }; };
+    const sample = u => {
+      if (!fieldPath) return mv.to;
+      let d = fieldPath.total * clamp01(u);
+      for (let i = 0; i < fieldPath.lengths.length; i++) { const len = fieldPath.lengths[i]; if (d <= len && len) return [lerp(fieldPath.points[i][0], fieldPath.points[i + 1][0], d / len), lerp(fieldPath.points[i][1], fieldPath.points[i + 1][1], d / len)]; d -= len; }
+      return fieldPath.points[fieldPath.points.length - 1];
+    };
+    const p = sample(k), before = sample(Math.max(0, k - .03)), after = sample(Math.min(1, k + .03));
+    const heading = Math.hypot(after[0] - before[0], after[1] - before[1]) > .01 ? alongX(after[0] - before[0], after[1] - before[1]) : mv.yaw0;
+    const yaw = lt < mv.back0 - 1 ? heading + wrapA(mv.yaw1 - heading) * kt : mv.yaw1 + wrapA(heading + Math.PI - mv.yaw1) * smooth(lt - mv.back0 + 1);
+    return { x: p[0], z: p[1], k, back, yaw }; };
   window.__look = [...engines.map(e => () => [e.o.position.x, e.o.position.y, e.o.position.z]), () => { const q = posAt(lastLt); return [q.x, PLAIN, q.z]; }];   // debug camera targets (city.js ?look=i; the last is the monster)
   const chest = (t) => { const p = posAt(t); return [p.x, Math.max(ground(p.x, p.z), 0) + H * .6, p.z]; };
   const missHouse = D.filter(d => d.kind === 'house' && !d.hits.length).sort((a, b) => Math.hypot(a.x - pts.c[0], a.z - pts.c[1]) - Math.hypot(b.x - pts.c[0], b.z - pts.c[1]))[0];
@@ -353,6 +364,26 @@ export async function kaiju(ctx) {
   // wall, spearmen charge his feet and stab, then cheer and chase him off
   const hk = await ctx.kenneyScene('minidungeon/character-human'), spear = await ctx.kenneyScene('minidungeon/weapon-spear');
   const hb = new THREE.Box3().setFromObject(hk.scene), HS = 2.7 / (hb.max.y - hb.min.y);   // a bit larger than life, so they read next to the monster
+  // All of the town's ground-level structures, including unclaimed houses and props,
+  // remain blockers even while the monster is breaking part of the town.
+  const structures = [...ctx.townPlacements.filter(({ entry }) => entry !== W.entry && entry.y <= Math.max(PLAIN, ground(entry.x, entry.z)) + 1),
+    ...ctx.townHouses.filter(h => !h.entry).map(h => ({ model: h.model, entry: { x: h.x, z: h.z, rot: h.rot, s: [h.s, h.s, h.s] } }))];
+  const obstacles = [];
+  for (const { model, entry: e } of structures) {
+    if (Math.hypot(e.x - bx, e.z - bz) > 120) continue;
+    const k = await ctx.kenney(model);
+    obstacles.push({ model, top: (e.y ?? PLAIN) + k.h * e.s[1], x: e.x, z: e.z, yaw: e.rot, halfX: k.w * e.s[0] / 2 + .8, halfZ: k.d * e.s[2] / 2 + .8 });
+  }
+  for (const [x, z, scale] of ctx.townTrees) if (Math.hypot(x - bx, z - bz) <= 120)
+    obstacles.push({ model: 'tree', top: Math.max(PLAIN, ground(x, z)) + 3.4 * scale, x, z, yaw: 0, halfX: 1.1 * scale + .8, halfZ: 1.1 * scale + .8 });
+  // The breach can be prevented by a tap, so ground routes treat the wall as
+  // solid throughout the loop, even when its central section is destroyed.
+  obstacles.push({ model: 'breach-wall', top: PLAIN + wk.h * W.KW, x: W.x, z: W.z, yaw: W.yaw, halfX: wk.w * W.L / 2 + .8, halfZ: wk.d * W.KW / 2 + .8 });
+  for (const e of engines) if (e !== field) {
+    e.o.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(e.o);
+    e.crewBox = { model: 'siege', top: box.max.y, x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2, yaw: 0, halfX: (box.max.x - box.min.x) / 2 + 1, halfZ: (box.max.z - box.min.z) / 2 + 1 };
+    obstacles.push(e.crewBox);
+  }
   const men = [];
   const man = (plan, armed) => {   // plan: [[t, x, z, clip, yawTarget?], ...] — position eases between keys
     const o = cloneSkinned(hk.scene); o.scale.setScalar(HS); scene.add(o); o.traverse(n => { n.frustumCulled = false; });   // its own skeleton (a plain clone stays bound to the original's, never posed); skinned bounds are stale, so no culling
@@ -365,40 +396,224 @@ export async function kaiju(ctx) {
     men.push(m); return m;
   };
   const face = (x, z, tx, tz) => Math.atan2(tx - x, tz - z);
+  // Fixed posts are reserved so separate crews never collapse onto one grid point.
+  const staticPeople = [];
+  const peopleBoxes = points => points.map(([x, z]) => ({ x, z, yaw: 0, halfX: 1.1, halfZ: 1.1 }));
   // crews: three at each engine (the field crew walks it across the fields)
   for (const e of engines) for (let i = 0; i < 3; i++) {
     if (e === field) continue;
     const off = (x, z, r, a) => [x + Math.cos(a) * r, z + Math.sin(a) * r], a0 = e.o.rotation.y + Math.PI / 2 + (i - 1) * .7;
-    const p = off(e.x, e.z, 3, a0); man([[0, p[0], p[1], 'idle'], [e.shots[0] - .4, p[0], p[1], 'interact-right'], [e.shots[0] + .3, p[0], p[1], 'emote-yes'], [e.shots[0] + 2, p[0], p[1], 'idle'], [LEAVE - 12, p[0], p[1], 'emote-yes']]);
+    const radius = Math.min((e.crewBox.halfX + .3) / Math.max(.001, Math.abs(Math.cos(a0))), (e.crewBox.halfZ + .3) / Math.max(.001, Math.abs(Math.sin(a0))));
+    const raw = off(e.crewBox.x, e.crewBox.z, radius, a0), p = route(raw, raw, [...obstacles, ...peopleBoxes(staticPeople)])?.[0];
+    if (!p) continue; staticPeople.push(p); man([[0, p[0], p[1], 'idle'], [e.shots[0] - .4, p[0], p[1], 'interact-right'], [e.shots[0] + .3, p[0], p[1], 'emote-yes'], [e.shots[0] + 2, p[0], p[1], 'idle'], [LEAVE - 12, p[0], p[1], 'emote-yes']]);
   }
-  { // the field crew: two at each side of the trebuchet, hands on its frame, walking it in; they step clear to watch it shoot
-    // (far enough out that it can swing round past them), then walk back in and push it home. Placed in its own frame.
+  { // The crew stays at the frame while the entire machine follows a clear route.
     const r0 = field.o.rotation.y, p0 = field.o.position.clone(); field.o.rotation.y = 0; field.o.position.set(0, 0, 0); field.o.updateMatrixWorld(true);
     const fb = new THREE.Box3().setFromObject(field.o); field.o.rotation.y = r0; field.o.position.copy(p0); field.o.updateMatrixWorld(true);
+    fieldCrewLimit = Math.hypot(Math.max(Math.abs(fb.min.x), Math.abs(fb.max.x)), Math.max(Math.abs(fb.min.z), Math.abs(fb.max.z)) + 1.1) + .5;
+    const mv = field.move, clearance = Math.max(Math.abs(fb.min.z), Math.abs(fb.max.z)) + 1.5;
+    const expanded = obstacles.map(o => ({ ...o, halfX: o.halfX + clearance, halfZ: o.halfZ + clearance }));
+    const path = route(mv.from, mv.to, expanded, 1.5, 20000);
+    fieldRouteComplete = !!path && Math.hypot(path.at(-1)[0] - mv.to[0], path.at(-1)[1] - mv.to[1]) < 2 && Math.hypot(path[0][0] - mv.from[0], path[0][1] - mv.from[1]) < 2 && clearSegment(mv.from, path[0], expanded) && clearSegment(path.at(-1), mv.to, expanded);
+    if (fieldRouteComplete) {
+      const points = [mv.from, ...path, mv.to], lengths = points.slice(1).map((p, i) => Math.hypot(p[0] - points[i][0], p[1] - points[i][1]));
+      fieldPath = { points, lengths, total: lengths.reduce((sum, n) => sum + n, 0) };
+    }
     const toW = (f, lx, lz) => [f.x + lx * Math.cos(f.yaw) + lz * Math.sin(f.yaw), f.z - lx * Math.sin(f.yaw) + lz * Math.cos(f.yaw)], mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
-    const mv = field.move, out0 = 33, out1 = 34.4, in0 = mv.back0, in1 = mv.back0 + 1.6;
+    const out0 = 33, out1 = 34.4, in0 = mv.back0, in1 = mv.back0 + 1.6;
     for (let i = 0; i < 4; i++) {
-      const s = i < 2 ? 1 : -1, lx = lerp(fb.min.x, fb.max.x, i % 2 ? .62 : .34), lz = s * ((s > 0 ? fb.max.z : -fb.min.z) + .5), far = s * (Math.max(fb.max.x, -fb.min.x) + 1.2);
-      const push = t => { const f = fieldAt(t); return toW(t >= mv.back0 ? { ...f, yaw: f.yaw - Math.PI } : f, lx, lz); }, stand = toW(fieldAt(out1), lx, far);   // after it turns round, the same spot on the same side
-      const m = man([[0, 0, 0, 'idle']]); m.stays = true;
+      const side = i < 2 ? 1 : -1, lx = lerp(fb.min.x, fb.max.x, [.18, .68, .38, .84][i]), lz = side * ((side > 0 ? fb.max.z : -fb.min.z) + [1.2, 1.8, 1.5, 1.1][i]), far = side * (Math.max(fb.max.x, -fb.min.x) + 2 + (i % 2) * .6);
+      const push = t => { const f = fieldAt(t); return toW(t >= mv.back0 ? { ...f, yaw: f.yaw - Math.PI } : f, lx, lz); }, stand = toW(fieldAt(out1), lx, far);
+      const m = man([[0, 0, 0, 'idle']]); m.fieldCrew = true;
       m.pos = t => t < out0 ? push(t) : t < out1 ? mix(push(t), stand, smooth((t - out0) / (out1 - out0))) : t < in0 ? stand : t < in1 ? mix(stand, push(t), smooth((t - in0) / (in1 - in0))) : push(t);
       m.clipAt = t => t >= 36.1 && t < 38 ? ['emote-yes', 36.1] : t >= LEAVE && t < LEAVE + 1.4 ? ['emote-yes', LEAVE] : ['idle', 0];
       m.pushing = t => t < out0 || t >= in1 - .3;
     }
   }
-  // archers on the wall either side of the breach: out of the corner towers at the wall's ends, and back in once he's gone
-  const arrows = [];
-  for (let i = 0; i < 4; i++) { const side = i < 2 ? -1 : 1, a = side * Math.min(9 + (i % 2) * 2.5, W.L / 2 - 1.5), at = a => [W.x + Math.cos(W.yaw) * a, W.z - Math.sin(W.yaw) * a];
-    const p = at(a), tw = at(side * W.L / 2), walk = Math.abs(W.L / 2 - Math.abs(a)) / 1.6, t0 = 25.6 - walk - (i % 2) * .8, t1 = LEAVE + 2 + i * .6;   /* at their posts before the first volley (26.5) */
-    const m = man([[t0, ...tw, 'idle'], [t0 + walk, ...p, 'idle'], [26.5, ...p, 'holding-both-shoot'], [41, ...p, 'emote-yes'], [LEAVE, ...p, 'idle'], [t1, ...p, 'idle'], [t1 + walk, ...tw, 'idle']]);
-    m.y = PLAIN + W.KW * 1.25; m.show = t0; m.hide = t1 + walk;
-    for (let k = 0; k < 6; k++) { const tf = 27 + k * 1.9 + i * .25; arrows.push({ t: tf, from: [p[0], m.y + 1.4, p[1]], fl: .8 }); } }
+  // Archers remain at their posts, clear of the corner towers, throughout the loop.
+  const arrows = [], posts = [], groundPosts = [];
+  for (let i = 0; i < 4; i++) { const side = i < 2 ? -1 : 1, a = side * Math.max(0, W.L / 2 - 5) * ((i % 2) ? 1 : .45), at = a => [W.x + Math.cos(W.yaw) * a, W.z - Math.sin(W.yaw) * a];
+    const candidates = Array.from({ length: Math.max(1, Math.floor((W.L - 4) * 2)) }, (_, n) => -W.L / 2 + 2 + n * .5).sort((x, y) => Math.abs(x - a) - Math.abs(y - a));
+    const post = candidates.find(n => Math.abs(n) >= 7.3 && posts.every(other => Math.abs(n - other) >= 1.8) && !blocked(at(n), obstacles.filter(o => o.model !== 'breach-wall' && o.top > PLAIN + W.KW * 1.25 + .1)));
+    let p;
+    if (post === undefined) {
+      const occupied = peopleBoxes([...staticPeople, ...groundPosts]);
+      const path = route(at(a), at(a), [...obstacles, ...occupied]);
+      if (!path) continue;
+      p = path[0]; groundPosts.push(p);
+    } else { posts.push(post); p = at(post); }
+    const m = man([[0, ...p, 'idle'], [26.5, ...p, 'holding-both-shoot'], [41, ...p, 'emote-yes'], [LEAVE, ...p, 'idle']]);
+    if (post !== undefined) { m.y = PLAIN + W.KW * 1.25; m.wall = true; }
+    const y = m.y ?? Math.max(PLAIN, ground(...p));
+    for (let k = 0; k < 6; k++) { const tf = 27 + k * 1.9 + i * .25; arrows.push({ t: tf, from: [p[0], y + 1.4, p[1]], fl: .8 }); } }
   // spearmen: out of the streets, at his feet, stabbing; they scatter when he reels, then cheer and give chase
-  const doors = D.filter(d => d.kind === 'house' && !d.hits.length && !d.shoved);   // they come out of houses he leaves alone, and go back in
+  const crowdObstacles = Object.freeze([...obstacles, ...peopleBoxes([...staticPeople, ...groundPosts])].map(o => Object.freeze(o))), reserved = Array.from({ length: 9 }, () => []);
+  const pathSampler = path => {
+    const lengths = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1])), total = lengths.reduce((sum, n) => sum + n, 0);
+    return fraction => {
+      let distance = total * clamp01(fraction);
+      for (let j = 0; j < lengths.length; j++) { if (!lengths[j]) continue; if (distance <= lengths[j]) return [lerp(path[j][0], path[j + 1][0], distance / lengths[j]), lerp(path[j][1], path[j + 1][1], distance / lengths[j])]; distance -= lengths[j]; }
+      return path.at(-1);
+    };
+  };
+  const limitPath = (path, maxLength) => {
+    const result = [path[0]]; let left = maxLength;
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1], b = path[i], length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (length > left) { if (left > 0) result.push([lerp(a[0], b[0], left / length), lerp(a[1], b[1], left / length)]); break; }
+      result.push(b); left -= length;
+    }
+    return result;
+  };
+  const peerFrames = new WeakMap();
+  const framesFor = person => {
+    if (!peerFrames.has(person)) {
+      const frames = Array.from({ length: Math.ceil(PER * 10) + 1 }, (_, i) => {
+        const p = person.pos(i / 10); return { p, y: person.y ?? Math.max(PLAIN, ground(...p)) };
+      });
+      frames.bounds = frames.reduce((b, f) => [Math.min(b[0], f.p[0]), Math.min(b[1], f.p[1]), Math.max(b[2], f.p[0]), Math.max(b[3], f.p[1])], [Infinity, Infinity, -Infinity, -Infinity]);
+      peerFrames.set(person, frames);
+    }
+    return peerFrames.get(person);
+  };
+  const firstConflict = (path, start, end, holdUntil, peers) => {
+    const sample = pathSampler(path), bounds = path.reduce((b, p) => [Math.min(b[0], p[0]), Math.min(b[1], p[1]), Math.max(b[2], p[0]), Math.max(b[3], p[1])], [Infinity, Infinity, -Infinity, -Infinity]);
+    const frames = peers.map(framesFor).filter(f => f.bounds[2] + 1.5 >= bounds[0] && f.bounds[0] - 1.5 <= bounds[2] && f.bounds[3] + 1.5 >= bounds[1] && f.bounds[1] - 1.5 <= bounds[3]);
+    if (!frames.length) return null;
+    for (let t = start; t <= holdUntil + .001; t += .1) {
+      const p = sample(end > start ? (t - start) / (end - start) : 1), y = Math.max(PLAIN, ground(...p));
+      for (const frame of frames) { const other = frame[Math.min(frame.length - 1, Math.max(0, Math.round(t * 10)))], q = other.p;
+        if (Math.abs(y - other.y) < 2 && Math.hypot(p[0] - q[0], p[1] - q[1]) < 1.5) return p; }
+    }
+    return null;
+  };
+  const separated = (...args) => !firstConflict(...args);
+  const choosePath = (from, target, occupied, start, end, holdUntil, peers, initial = false, combat = false) => {
+    const maxVisited = combat ? 500 : 100, monster = combat ? posAt(35) : null;
+    const avoid = peopleBoxes(occupied), first = route(from, target, crowdObstacles, 1.5, maxVisited);
+    if (!first) return null;
+    const centre = first.at(-1);
+    const tryPath = candidate => {
+      if (!candidate) return null;
+      // The unsnapped end of a previous leg must connect safely to the grid.
+      if (!initial && !clearSegment(from, candidate[0], crowdObstacles)) return null;
+      const path = initial ? [candidate.at(-1)] : limitPath([from, ...candidate], Math.max(0, (end - start) * 6 - .5));
+      if ((combat && Math.hypot(path.at(-1)[0] - monster.x, path.at(-1)[1] - monster.z) > 10.5) || blocked(path.at(-1), avoid) || !separated(path, start, end, holdUntil, peers)) return null;
+      // Break up grid alignment without giving up the checked segment or spacing.
+      const last = path.at(-1), phase = hashN(from[0] + target[0], from[1] + target[1]) * Math.PI * 2;
+      const shifted = [last[0] + Math.cos(phase) * .35, last[1] + Math.sin(phase) * .35];
+      const varied = initial ? [shifted] : [...path, shifted];
+      if ((!combat || Math.hypot(shifted[0] - monster.x, shifted[1] - monster.z) <= 10.5) && clearSegment(last, shifted, crowdObstacles) && !blocked(shifted, avoid) && separated(varied, start, end, holdUntil, peers)) return varied;
+      return path;
+    };
+    let path = tryPath(first); if (path) return path;
+    for (let ring = 1; ring <= (combat ? 2 : 8); ring++) for (let n = 0; n < (combat ? 24 : 12); n++) {
+      const angle = n * Math.PI / (combat ? 12 : 6), radius = combat ? 5 + ring * 2 : ring * 1.5;
+      const origin = combat ? [monster.x, monster.z] : centre, goal = [origin[0] + Math.cos(angle) * radius, origin[1] + Math.sin(angle) * radius];
+      if (blocked(goal, crowdObstacles) || blocked(goal, avoid)) continue;
+      path = tryPath(route(from, goal, crowdObstacles, 1.5, Math.min(maxVisited, 30))); if (path) return path;
+    }
+    return null;
+  };
   for (let i = 0; i < 8; i++) {
-    const a = i / 8 * Math.PI * 2, h0 = P(30 + (i % 3) * 3, -12 + i * 3), hd = doors.sort((p, q) => Math.hypot(p.x - h0[0], p.z - h0[1]) - Math.hypot(q.x - h0[0], q.z - h0[1]))[0], home = hd ? [hd.x, hd.z] : h0, ring = [pts.c[0] + Math.cos(a) * 6.5, pts.c[1] + Math.sin(a) * 6.5], back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
-    const m = man([[0, ...home, 'idle'], [29.4 + i * .15, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P(-2, -2 + (i - 4) * 1.5), 'emote-yes'], [LEAVE, ...P(-2, -2 + (i - 4) * 1.5), 'idle'], [LEAVE + 7, ...home, 'sprint']], true);
-    m.show = 29.4 + i * .15; m.hide = LEAVE + 7;
+    const a = i / 8 * Math.PI * 2 + [0, .16, -.12, .23, -.19, .08, -.25, .14][i], defender = posAt(35), homeRadius = [6.4, 8.2, 7.3, 9.1, 6.8, 8.6, 7.6, 9][i], ring = [defender.x + Math.cos(a) * (homeRadius - (i === 2 || i === 6 ? 2 : 0)), defender.z + Math.sin(a) * (homeRadius - (i === 2 || i === 6 ? 2 : 0))], home = [defender.x + Math.cos(a) * (homeRadius + (i === 2 || i === 6 ? 0 : 1.5)), defender.z + Math.sin(a) * (homeRadius + (i === 2 || i === 6 ? 0 : 1.5))], back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
+    const m = man([[0, ...home, 'idle'], [29.4 + i * .08, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [PER - 1, ...home, 'walk']], true); m.spearman = true;
+    const legs = [], pending = Array.from({ length: m.plan.length }, () => []); let current = home, unplaceable = false;
+    const peers = men.filter(other => other !== m && (other.spearman || other.fieldCrew));
+    const firstPath = choosePath(home, home, [...reserved[0], ...reserved[1]], 0, 0, PER - .05, peers, true);
+    if (!firstPath) { scene.remove(m.o); men.pop(); continue; }
+    current = firstPath.at(-1); pending[0].push(current);
+    const placeFallback = reason => {
+      const homePost = firstPath[0], depart = 29.4 + i * .08, returnStart = 70 + i * .5;
+      for (let radius = 3; radius <= 9; radius += 1.5) for (let n = 0; n < 12; n++) {
+        const angle = (n + i) * Math.PI / 6, goal = [homePost[0] + Math.cos(angle) * radius, homePost[1] + Math.sin(angle) * radius];
+        const monster = posAt(35);
+        if (Math.hypot(goal[0] - monster.x, goal[1] - monster.z) > 10.5) continue;
+        const raw = route(homePost, goal, crowdObstacles);
+        if (!raw || !clearSegment(homePost, raw[0], crowdObstacles)) continue;
+        const out = simplifyPath([homePost, ...raw], crowdObstacles), back = out.slice().reverse();
+        const length = out.slice(1).reduce((sum, p, j) => sum + Math.hypot(p[0] - out[j][0], p[1] - out[j][1]), 0);
+        if (length < 1.5 || length > 12 || Math.hypot(out.at(-1)[0] - monster.x, out.at(-1)[1] - monster.z) > 10.5) continue;
+        const duration = Math.max(1, length / 3), arrive = depart + duration, homeAt = returnStart + duration;
+        if (arrive > 32) continue;
+        if (!separated(out, depart, arrive, returnStart, peers) || !separated(back, returnStart, homeAt, PER - .05, peers)) continue;
+        const outbound = pathSampler(out), inbound = pathSampler(back);
+        m.pos = t => t < depart ? homePost : t < arrive ? outbound((t - depart) / duration) : t < returnStart ? out.at(-1) : t < homeAt ? inbound((t - returnStart) / duration) : homePost;
+        m.clipAt = t => t >= depart && t < arrive ? ['sprint', depart] : t >= 32 && t < 38.7 ? ['attack-melee-right', 32] : t >= 46 && t < LEAVE ? ['emote-yes', 46] : ['idle', 0];
+        m.wanderer = true; m.fallbackReason = reason; m.returnSafe = true;
+        pending.forEach((points, k) => { points.length = 0; points.push(m.pos(m.plan[k][0])); reserved[k].push(...points); });
+        return;
+      }
+      m.stationaryFallback = true; m.fallbackReason = reason; m.pos = () => homePost; m.clipAt = t => t >= 32 && t < 38.7 ? ['attack-melee-right', 32] : ['idle', 0]; m.returnSafe = true;
+      pending.forEach((points, k) => { points.length = 0; points.push(homePost); reserved[k].push(...points); });
+    };
+    for (let j = 0; j < m.plan.length - 1; j++) {
+      const target = m.plan[j + 1].slice(1, 3);
+      let path;
+      if (j === m.plan.length - 2) {
+        const first = legs[0][0];
+        const knownSafe = legs.slice().reverse().flatMap((leg, n) => leg.slice().reverse().slice(n ? 1 : 0));
+        path = simplifyPath(knownSafe, crowdObstacles);
+
+      } else if (m.plan[j][1] === target[0] && m.plan[j][2] === target[1]) path = [current];
+      else {
+        const occupied = [...reserved[j + 1]]; let holdUntil = m.plan[j + 1][0];
+        for (let k = j + 2; k < m.plan.length && m.plan[k][1] === target[0] && m.plan[k][2] === target[1]; k++) { occupied.push(...reserved[k]); holdUntil = m.plan[k][0]; }
+        path = choosePath(current, target, occupied, m.plan[j][0], m.plan[j + 1][0], holdUntil, peers, false, j === 1);
+      }
+      if (!path) { m.fallbackReason = `leg ${j}`; unplaceable = true; break; }
+      current = path[path.length - 1]; legs.push(path); pending[j + 1].push(current);
+    }
+    if (unplaceable) { placeFallback(m.fallbackReason); continue; }
+    const spans = legs.map(path => {
+      const length = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1]));
+      return { path, length, total: length.reduce((sum, n) => sum + n, 0), sample: pathSampler(path) };
+    });
+    let returning = spans.at(-1); const maxReturn = PER - LEAVE - 1;
+    let returnDelay = 0, returnDuration = Math.min(maxReturn, Math.max(.25, returning.total / 3.5)), foundReturn = false;
+    const startPoint = returning.path[0], homePoint = returning.path.at(-1), options = [returning.path], detours = [];
+    const addDetour = blockers => {
+      const candidate = route(startPoint, homePoint, blockers, 1.5, 20000);
+      if (candidate && Math.hypot(candidate.at(-1)[0] - homePoint[0], candidate.at(-1)[1] - homePoint[1]) < 1.5 && clearSegment(startPoint, candidate[0], blockers) && clearSegment(candidate.at(-1), homePoint, blockers)) options.push([startPoint, ...candidate, homePoint]);
+    };
+    for (let attempt = 0; attempt < 4 && !foundReturn && attempt < options.length; attempt++) {
+      const path = options[attempt], length = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1])), total = length.reduce((sum, n) => sum + n, 0);
+      const minReturn = Math.min(maxReturn, Math.max(.25, total / 3.5));
+      searchReturn: for (let duration = minReturn; duration <= maxReturn + .001; duration += 4) for (let delay = 0; delay + duration <= maxReturn + .001; delay += 4) {
+        const start = LEAVE + delay, end = start + duration;
+        if (separated([path[0]], LEAVE, LEAVE, start, peers) && separated(path, start, end, PER - .05, peers)) {
+          returning = { path, length, total, sample: pathSampler(path) }; returnDelay = delay; returnDuration = duration; foundReturn = true; break searchReturn;
+        }
+      }
+      if (!foundReturn) {
+        if (attempt === 0) addDetour(crowdObstacles);
+        const collision = firstConflict(path, LEAVE, LEAVE + minReturn, PER - .05, peers);
+        if (collision && Math.hypot(collision[0] - startPoint[0], collision[1] - startPoint[1]) > 2 && Math.hypot(collision[0] - homePoint[0], collision[1] - homePoint[1]) > 2) {
+          detours.push({ x: collision[0], z: collision[1], yaw: 0, halfX: 1.5, halfZ: 1.5 });
+          addDetour([...crowdObstacles, ...detours]);
+        }
+      }
+    }
+    if (!foundReturn) { placeFallback('return'); continue; }
+    pending.forEach((points, k) => reserved[k].push(...points));
+    spans[spans.length - 1] = returning;
+    m.returnSafe = foundReturn && Math.hypot(returning.path.at(-1)[0] - homePoint[0], returning.path.at(-1)[1] - homePoint[1]) <= .01 && returning.path.slice(1).every((p, j) => clearSegment(returning.path[j], p, crowdObstacles));
+    m.plan[m.plan.length - 1][0] = LEAVE + returnDelay + returnDuration;
+    m.pos = t => {
+      let i = 0; while (i < m.plan.length - 2 && m.plan[i + 1][0] <= t) i++;
+      const a = m.plan[i], b = m.plan[i + 1], delay = i === spans.length - 1 ? returnDelay : 0;
+      return spans[i].sample((t - a[0] - delay) / (b[0] - a[0] - delay));
+    };
+  }
+  // Only strike while the moving monster remains within reach.
+  for (const m of men.filter(person => person.spearman)) {
+    const clipAt = m.clipAt;
+    m.clipAt = t => {
+      const clip = clipAt(t);
+      if (clip[0] !== 'attack-melee-right') return clip;
+      const p = m.pos(t), monster = posAt(t);
+      return Math.hypot(p[0] - monster.x, p[1] - monster.z) <= 11.9 ? clip : ['idle', clip[1]];
+    };
   }
   // walking: the step cycle advances with the ground covered (no sliding feet); slower walkers take shorter strides, as
   // people do; heading turns at most 6 rad/s toward where he is going (or, standing, toward the monster)
@@ -412,6 +627,21 @@ export async function kaiju(ctx) {
   const ID = new THREE.Quaternion(), AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0);
   window.__men = () => men.map(m => { const q = new THREE.Quaternion(), d = new THREE.Vector3(-1, 0, 0).applyQuaternion(m.bones['arm-right'].getWorldQuaternion(q)), y = m.o.rotation.y;   // debug: heading, where the right arm points (fwd/up), leg swing
     return { p: m.o.position.toArray().map(v => +v.toFixed(2)), yaw: +y.toFixed(2), vis: m.o.visible, push: !!m.pushing, clip: m.cur?.getClip().name, armFwd: +(d.x * Math.sin(y) + d.z * Math.cos(y)).toFixed(2), armUp: +d.y.toFixed(2), leg: +(2 * Math.acos(Math.min(1, Math.abs(m.bones['leg-left'].quaternion.w)))).toFixed(2) }; });
+  window.__crowdCheck = t => {
+    const propBoxes = [];
+    for (const e of engines) { e.o.updateMatrixWorld(true); e.o.traverse(n => { if (n.isMesh && n.visible) { n.geometry.computeBoundingBox(); const scale = new THREE.Vector3().setFromMatrixScale(n.matrixWorld); propBoxes.push({ name: n.name, field: e === field, box: n.geometry.boundingBox, inverse: n.matrixWorld.clone().invert(), scale }); } }); }
+    return men.map((m, i) => {
+    const position = [m.o.position.x, m.o.position.z], y = m.o.position.y;
+    const screen = new THREE.Vector3(position[0], y + 1.35, position[1]).project(ctx.camera);
+    return { i, field: !!m.fieldCrew, spearman: !!m.spearman, stationaryFallback: !!m.stationaryFallback, wanderer: !!m.wanderer, fallbackReason: m.fallbackReason, gait: m.mov[Math.min(NS - 1, Math.floor(t / DT))], fieldRouteComplete, fieldCrewLimit, fieldDistance: Math.hypot(position[0] - field.o.position.x, position[1] - field.o.position.z), returnSafe: m.returnSafe, pushing: !!m.pushing?.(t), wall: !!m.wall, position, height: y, clip: m.cur?.getClip().name, monster: [posAt(t).x, posAt(t).z], screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
+      fieldMeshCount: propBoxes.filter(b => b.field).length, inView: Math.abs(screen.x) <= 1.05 && Math.abs(screen.y) <= 1.05 && screen.z >= -1 && screen.z <= 1,
+      blocked: blocked(position, obstacles.filter(o => !m.wall || (o.model !== 'breach-wall' && o.top > m.y + .1))),
+      prop: propBoxes.filter(({ box: b, inverse, scale }) => {
+        const foot = new THREE.Vector3(position[0], y + .1, position[1]).applyMatrix4(inverse), head = new THREE.Vector3(position[0], y + 2.7, position[1]).applyMatrix4(inverse);
+        return Math.max(foot.y, head.y) > b.min.y && Math.min(foot.y, head.y) < b.max.y && foot.x >= b.min.x - .5 / scale.x && foot.x <= b.max.x + .5 / scale.x && foot.z >= b.min.z - .5 / scale.z && foot.z <= b.max.z + .5 / scale.z;
+      }).map(({ name, field }) => ({ name, field })) };
+    });
+  };
   const arrowMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(.04, .04, 1.4, 4).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#5e4a44' }), arrows.length);
   arrowMesh.frustumCulled = false; scene.add(arrowMesh);
   for (const ar of arrows) ar.to = chest(ar.t + ar.fl);
@@ -524,7 +754,7 @@ export async function kaiju(ctx) {
         field.o.traverse(n => { if (n.name === 'wheel') n.rotation.z = -(f.k + 2 * f.back) * 12; }); }
       for (const m of men) {
         const i = Math.min(NS - 2, Math.floor(lt / DT)), f = lt / DT - i, [x, z] = m.pos(lt), gait = m.mov[i], [clip, since] = m.clipAt(lt), B = m.bones;
-        m.o.visible = m.show !== undefined ? lt >= m.show && lt < m.hide : m.stays || lt < LEAVE + 4; m.o.position.set(x, m.y ?? Math.max(PLAIN, ground(x, z)), z);
+        m.o.visible = true; m.o.position.set(x, m.y ?? Math.max(PLAIN, ground(x, z)), z);
         m.o.rotation.y = m.yaw[i] + wrapA(m.yaw[i + 1] - m.yaw[i]) * f;
         const act = m.acts[gait || (clip === 'sprint' || clip === 'walk' ? 'idle' : clip)] || m.acts.idle;
         if (m.cur !== act) { m.mixer.stopAllAction(); act.reset().play(); m.cur = act; }

@@ -42,6 +42,7 @@ const sdkExports = {
     settings: { onChange: 1 } satisfies Record<keyof HostApi['settings'], 1>,
     haptics: { pulse: 1 } satisfies Record<keyof HostApi['haptics'], 1>,
     test: 1,
+    setHostPauseVisible: 1,
   } satisfies Record<keyof HostApi, unknown>,
   GameInstance: {
     pause: 1,
@@ -58,6 +59,7 @@ const sdkExports = {
     setSelection: 1,
     setCamera: 1,
     net: 1,
+    qa: 1,
   } satisfies Record<keyof GameInstance<unknown, unknown>, 1>,
 };
 

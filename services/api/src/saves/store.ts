@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 
+import { SaveSlotSchema } from '@ogm/contracts';
 import type { SaveRevision, SaveSlot } from '@ogm/contracts';
 import type { Sqlite } from '@ogm/db';
 
@@ -52,7 +54,21 @@ export type StoredSaveSlot = {
   label?: string;
   headRevision: number;
   headSchema: number;
+  savedAt: string;
+  thumbnail?: string;
 };
+
+function saveThumbnail(payload: Buffer): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(gunzipSync(payload, { maxOutputLength: 8 * 1024 * 1024 }).toString('utf8'));
+    const thumbnail =
+      typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>).thumbnail : undefined;
+    const result = SaveSlotSchema.shape.thumbnail.safeParse(thumbnail);
+    return result.success ? result.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export class StaleRevision extends Error {
   constructor(readonly headRevision: number) {
@@ -213,10 +229,12 @@ export function listSaveSlots(sqlite: Sqlite, userId: string, gameId: string): S
         label: string | null;
         head_revision: number;
         head_schema: number;
+        saved_at: string;
+        payload: Buffer;
       }
     >(
       `SELECT s.user_id, s.game_id, s.slot_id, s.kind, s.label, s.head_revision,
-              r.save_schema_version AS head_schema
+              r.save_schema_version AS head_schema, r.created_at AS saved_at, r.payload
        FROM save_slots s
        JOIN save_revisions r ON r.user_id = s.user_id AND r.game_id = s.game_id
          AND r.slot_id = s.slot_id AND r.revision = s.head_revision
@@ -232,6 +250,8 @@ export function listSaveSlots(sqlite: Sqlite, userId: string, gameId: string): S
       label: row.label ?? undefined,
       headRevision: row.head_revision,
       headSchema: row.head_schema,
+      savedAt: row.saved_at,
+      thumbnail: saveThumbnail(row.payload),
     }));
 }
 

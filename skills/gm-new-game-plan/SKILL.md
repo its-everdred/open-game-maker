@@ -23,11 +23,10 @@ this section adds what is specific to games.
    (input, player, world/map, entities, UI, audio, saves, progression), their interfaces and the seams where tickets
    meet. Prefer existing SDK modules, pack adapters and `packages/` code; note likely shared pieces, but do not promote
    anything that has not been built and proven yet.
-2. **Flow diagram before any screen ticket.** Map the core, session and meta loops and the full navigation graph
+2. **Flow diagram before any screen ticket.** File a flow diagram child ticket (`role:game-design`) in every game plan. Map the core, session and meta loops and the full navigation graph
    (every screen, transition, back path and multiplayer addition), each screen node carrying its target image, and
    get the creator's answers on its open choices: `references/flow-diagram.md`, template `references/flow-template.md`.
-   Screen and gameplay tickets cite their node; until it is approved they may be cut but wait on its approval Command
-   (stage 1 concept tickets do not).
+   Screen and gameplay tickets cite their node; use provisional decisions while the non-blocking approval Command is pending.
 3. **Skeleton ticket first.** One small ticket creates the folder, the template, the system stubs with their
    interfaces, data formats and test hooks, so every later ticket edits its own files.
 4. **Cut tickets by ownership.** Each ticket owns a clear set of files and one outcome a player can see or a test can
@@ -36,18 +35,15 @@ this section adds what is specific to games.
    count: as many as the game needs, each completable by one agent in a few hours.
 5. **Shallow dependencies.** Aim for depth 2–3: skeleton → parallel systems and content → integration and polish.
    Depend on interfaces, not on finished features. Avoid two tickets editing the same file.
-6. **A prototype ladder, not a one-shot build.** Every game climbs five stages per feature, in order, each ending in a
-   creator review Command with media: 1 concepts, 2 dioramas, 3 rendered gameplay clips, 4 video to real gameplay,
-   5 gameplay iterations (`references/prototype-ladder.md`). Write the plan from `references/build-order-template.md`
-   into `games/<name>/design/ladder.md` (worked example `references/examples/blobs-ladder.md`) and check it with
-   `scripts/check-ladder.ts`. One ticket per stage per feature, stamped with that stage's roles; stage n+1 is gated on
-   stage n's review for that feature, and a rejection loops back within the stage. Each stage's approved output is the
-   next one's acceptance target. Stage 1 tickets are priority 1.
-7. **Questions as tickets' blockers.** A ticket that needs an open decision depends on that Command; everything else
-   starts now. Content tickets that need a creative choice (music direction, character look) open their own option
-   Commands with samples (see the design skill's question protocol). A gameplay-feel question (speed, chain pause,
-   controls) gives each option a playable slice (`gm decide --playable <id>=<scenario query>`), never a link, and the
-   question is one short line.
+6. **One ticket per feature.** Each creator-request ticket climbs `phase:mock` (`model:low`),
+   `phase:prototype` (`model:medium`), `phase:build` (`model:xhigh`) and `phase:polish` (`model:high`)
+   on the same issue. Approval changes the phase and effort labels in place; rejection stays on that rung.
+   Never file Review, Continue or Verify follow-ups. The five activities in `references/prototype-ladder.md`
+   describe evidence within these rungs, not separate tickets. Use `references/build-order-template.md`,
+   `references/examples/blobs-ladder.md` and `scripts/check-ladder.ts` for the plan.
+7. **Non-blocking picks.** Give every option its media and ship the recommended provisional choice while the
+   creator decides. Silence is not approval. For feel, supply playable slices (`gm decide --playable
+   <id>=<scenario query>`); incorporate later answers on the same ticket.
 
 ## Always audio from stage 1
 
@@ -63,7 +59,7 @@ Every game plan files three media tickets in the Build Order and records their n
 
 - **Thumbnail** (`role:visual`): composed scene key art showing the game's own play pieces as they look in the game (for Blobs, only blobs and blocks), never generic fantasy characters or people unless they are the game's actual play pieces. Art only: never draw the logo, title or any text into it; the shell overlays the manifest `logo` centred on top. Keep the centre open (roughly the middle 50% of the width and 45% of the height: calm sky, light or ground, no faces or key props), with the play pieces and action framing it from the edges and corners. Never use a gameplay screenshot; gameplay belongs in the trailer. Block it on the logo and graphics/look tickets.
 - **Loading image** (`role:visual`): supply art-only `public/media/loading-portrait.png` (at least 1440×2560, 9:16) and `public/media/loading-landscape.png` (at least 2560×1440, 16:9), declared as `loading.portrait` and `loading.landscape` in `gm.manifest.json` with paths relative to `public/`. Keep the subject within the centre 70%; leave the top 25% calm for the shell logo and bottom 20% calm for its progress bar. Block it on the graphics/look tickets.
-- **Trailer** (`role:visual`, `role:audio`): plan and capture the gameplay montage using [`references/game-media.md`](references/game-media.md). Block it on the gameplay tickets.
+- **Trailer** (`role:visual`, `role:audio`): one 16:9 landscape trailer of gameplay only (no menus), planned and captured using [`references/game-media.md`](references/game-media.md) and passing `gm trailer --check`. Block it on the gameplay tickets.
 
 A ticket changing art direction, logo, board or scene look, core gameplay, or adding a variety (such as a mode or multiplayer change) files the appropriate thumbnail, loading image or trailer refresh; the Executor's merge step may file it instead. Keep all three current with the published game. Follow `references/game-media.md` for capture and delivery.
 
@@ -110,8 +106,8 @@ tickets rewritten for a weaker implementer). Game specifics on top of it:
   implementation tickets; library and asset tickets are already research and get no extra spike.
 - Research docs go to `games/<name>/docs/research/<ticket>.md` and woven specs to `games/<name>/docs/spec/<area>.md`;
   private detail stays in the game's private context and is referenced, never copied.
-- Ladder stage tickets are deep-dived when the decision they build on exists, not before (`references/prototype-ladder.md`,
-  Tickets); stage 1 tickets are researched up front.
+- Feature tickets are deep-dived when the decision they build on exists (`references/prototype-ladder.md`);
+  mock work is researched up front.
 - Give each research agent the game skills its lane needs (a biome ticket gets the set and asset skills, a combat ticket
   gets input and effects skills), and the rest by name only.
 
@@ -119,7 +115,7 @@ tickets rewritten for a weaker implementer). Game specifics on top of it:
 
 - Apply provisional defaults to open Commands after about five minutes; record them as decisions (origin: default).
 - When a decision changes (a late answer), find the affected tickets and merged code, then re-plan: edit open tickets,
-  add rework tickets, revert only what the change requires, and message running agents with `aiur-main message`.
+  rework the affected feature tickets in place, revert only what the change requires, and message running agents with `aiur-main message`.
   Answers that reach beyond the asking ticket, the pair-confirm pattern and the premise sweep:
   `references/answer-routing.md`.
 - Schedule with the instance's normal limits and queue; small edits to other games may jump ahead of a large build.

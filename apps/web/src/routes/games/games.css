@@ -18,7 +18,7 @@
   align-items: center;
   gap: 40px;
   min-height: 0;
-  padding: 84px max(12px, var(--safe-r)) 56px max(48px, var(--safe-l));
+  padding: 84px max(12px, var(--safe-r)) 56px max(96px, calc(var(--safe-l) + 80px));
   overflow: hidden;
 }
 
@@ -34,6 +34,7 @@
 .games-spotlight-copy {
   display: grid;
   min-width: 0;
+  container-type: inline-size;
   gap: 16px;
   align-content: center;
 }
@@ -44,7 +45,7 @@
   padding-bottom: 16px;
   margin: 0;
   color: var(--games-hi);
-  font: 700 clamp(36px, 4.4vw, 64px) / 1.05 var(--display);
+  font: 700 clamp(36px, min(4.4vw, 13cqi), 64px) / 1.05 var(--display);
   overflow-wrap: anywhere;
   text-shadow: 0 4px 24px var(--shadow-color);
 }
@@ -143,8 +144,8 @@
 
 .games-spotlight-actions .games-edit {
   border-color: var(--border);
-  background: var(--action-secondary);
-  color: var(--action-secondary-text);
+  background: var(--yellow-b);
+  color: var(--dark);
   box-shadow: var(--pop-sm);
 }
 
@@ -159,18 +160,28 @@
   position: absolute;
   z-index: 3;
   top: 88px;
-  right: max(24px, var(--safe-r));
+  left: max(16px, var(--safe-l));
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 50px;
+  height: 50px;
   padding: 0;
   place-items: center;
   border-radius: 50%;
   border-color: var(--border);
   background: var(--action-secondary);
   color: var(--games-hi);
-  font-size: 1rem;
   transition: transform 0.3s var(--games-ease);
+}
+
+.games-close .icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+}
+
+.games-close .icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .games-close:hover {
@@ -220,10 +231,21 @@
   opacity: 1;
 }
 
+.game-trailer {
+  display: contents;
+}
+
+/* The cached cover shows through until the trailer's first frame plays. */
 .game-trailer-layer video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.3s var(--games-ease);
+}
+
+.game-trailer-layer video[data-playing] {
+  opacity: 1;
 }
 
 .game-trailer-layer.is-closing {
@@ -261,46 +283,6 @@
 .games-grid [role='gridcell'] {
   position: relative;
   min-width: 0;
-}
-
-/* One icon control per game: the shareable `/play/<slug>` link, copied to the clipboard (ticket 513). */
-.game-copy {
-  position: absolute;
-  z-index: 4;
-  top: 16px;
-  right: 16px;
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border: 0;
-  border-radius: 999px;
-  background: var(--surface-deep);
-  color: var(--games-hi);
-  cursor: pointer;
-  transition:
-    opacity 0.3s var(--games-ease),
-    transform 0.3s var(--games-ease);
-}
-
-.game-copy:hover,
-.game-copy:focus-visible,
-.game-copy[data-copied='true'] {
-  transform: translateY(-2px);
-}
-
-.game-copy[data-copied='true'] {
-  color: var(--action-primary);
-}
-
-.game-copy .icon {
-  width: 18px;
-  height: 18px;
-}
-
-/* The building chip sits below the copy control so both stay legible on one tile. */
-.games-grid [role='gridcell'] .game-building-chip {
-  top: 60px;
 }
 
 .games-grid [role='gridcell'].is-selected {
@@ -413,14 +395,18 @@
 .game-new-badge {
   position: absolute;
   z-index: 3;
-  top: 16px;
+  bottom: 12px;
   padding: 4px 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .game-building-chip {
-  right: 16px;
+  right: 60px;
+  max-width: calc(100% - 160px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .game-new-badge {
@@ -430,15 +416,84 @@
 .game-tile-meta {
   position: absolute;
   z-index: 3;
-  right: 24px;
-  bottom: 16px;
+  right: 60px;
+  bottom: 12px;
   left: 24px;
   display: flex;
   align-items: end;
   justify-content: space-between;
   gap: 8px;
-  transform: translateY(28px);
   transition: transform 0.5s var(--games-ease);
+}
+
+/* Badges share the lower row with the title and icons. */
+.game-cover:has(.game-new-badge) .game-tile-meta {
+  left: 76px;
+  display: grid;
+  gap: 12px;
+}
+.game-cover:has(.game-new-badge) .game-tile-meta strong {
+  margin-left: -52px;
+}
+.game-cover:has(.game-new-badge):not(:has(.game-tag-icons)) .game-tile-meta strong {
+  margin-left: 0;
+}
+.showcase-tile:has(.game-new-badge) .game-tile-meta {
+  right: 16px;
+  left: 24px;
+  gap: 4px;
+}
+.showcase-tile .game-new-badge {
+  right: 16px;
+  bottom: 40px;
+  left: auto;
+}
+.showcase-tile:has(.game-new-badge) .game-tile-meta strong {
+  max-width: calc(100% - 104px);
+  margin-left: 0;
+}
+
+/* A build chip needs a row of its own; lift the metadata and leave the logo clear. */
+.game-cover:has(.game-building-chip) .game-tile-meta {
+  right: 24px;
+  bottom: 52px;
+  left: 24px;
+}
+.game-cover:has(.game-building-chip) .game-tile-meta strong {
+  margin-left: 0;
+}
+.showcase-tile:has(.game-building-chip) .game-new-badge {
+  right: auto;
+  bottom: 12px;
+  left: 16px;
+}
+.showcase-tile:has(.game-building-chip) .game-building-chip {
+  right: 16px;
+  max-width: calc(100% - 150px);
+}
+.showcase-tile:has(.game-building-chip) .game-tile-meta strong {
+  max-width: 100%;
+}
+.game-cover:has(.game-logo):has(.game-building-chip) .game-logo {
+  top: 40%;
+  max-height: 30%;
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .showcase-tile:has(.game-building-chip) .game-tile-meta {
+    bottom: 48px;
+  }
+  .showcase-tile:has(.game-building-chip) .game-tile-meta strong {
+    font-size: 16px;
+  }
+  .game-tile:has(.game-building-chip) .game-tag-icons > span {
+    width: 24px;
+    height: 24px;
+  }
+  .game-cover:has(.game-logo):has(.game-building-chip) .game-logo {
+    top: 24%;
+    max-height: 20%;
+  }
 }
 
 .game-tile-meta strong {
@@ -555,7 +610,7 @@
   opacity: 1;
 }
 
-.showcase-tags {
+.games-detail-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 16px 12px;
@@ -563,16 +618,16 @@
   padding: 0;
   list-style: none;
 }
-.showcase-tags li {
+.games-detail-tags li {
   display: grid;
   justify-items: center;
   gap: 8px;
-  width: 64px;
+  min-width: 64px;
   color: var(--text-muted);
   font: 700 12px/16px var(--body);
   text-align: center;
 }
-.showcase-tags li > span {
+.games-detail-tags li > span {
   display: grid;
   place-items: center;
   width: 48px;
@@ -582,56 +637,52 @@
   background: color-mix(in srgb, var(--tag-color) 16%, transparent);
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tag-color) 45%, transparent);
 }
-.showcase-tags .icon {
+.games-detail-tags .icon {
   width: 58%;
   height: 58%;
 }
-.showcase-stats {
+.games-detail-stats {
   display: grid;
-  grid-template-columns: repeat(4, auto);
-  justify-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  min-width: 0;
   gap: 8px 32px;
   margin: 0;
   padding: 16px 0;
   border-block: 1px solid var(--rule);
 }
-.showcase-stats dt {
+.games-detail-stats dt {
   color: var(--text-muted);
   font: 700 12px/16px var(--body);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.showcase-stats dd {
+.games-detail-stats dd {
   margin: 4px 0 0;
   font: 700 20px/28px var(--display);
   white-space: nowrap;
 }
-.showcase-stats dd span {
+.games-detail-stats dd span {
   color: var(--yellow-b);
 }
-.showcase-spotlight .games-edit {
-  background: var(--yellow-b);
-  color: var(--dark);
-}
 @media (max-width: 600px) {
-  .showcase-tags {
+  .games-detail-tags {
     gap: 8px 4px;
   }
-  .showcase-tags li {
-    width: 44px;
+  .games-detail-tags li {
+    min-width: 60px;
     font-size: 10px;
   }
-  .showcase-tags li > span {
+  .games-detail-tags li > span {
     width: 36px;
     height: 36px;
   }
-  .showcase-stats {
+  .games-detail-stats {
     gap: 8px 14px;
   }
-  .showcase-stats dt {
+  .games-detail-stats dt {
     font-size: 9px;
   }
-  .showcase-stats dd {
+  .games-detail-stats dd {
     font-size: 14px;
   }
 }
@@ -646,7 +697,7 @@
   justify-content: space-between;
   gap: 8px;
 }
-.showcase-tile .game-tag-icons > span {
+.game-tag-icons > span {
   display: grid;
   place-items: center;
   width: 28px;
@@ -656,7 +707,7 @@
   background: color-mix(in srgb, var(--tag-color) 36%, transparent);
   box-shadow: inset 0 0 0 1px var(--tag-color);
 }
-.showcase-tile .game-tag-icons .icon {
+.game-tag-icons > span .icon {
   width: 65%;
   height: 65%;
   padding: 0;
@@ -672,26 +723,26 @@
 .showcase-tile .game-cover::after {
   background: var(--showcase-shade);
 }
-.showcase-stars {
+.games-detail-stars {
   display: flex;
   align-items: center;
   gap: 2px;
 }
-.showcase-stars svg {
+.games-detail-stars svg {
   width: 20px;
   height: 20px;
 }
-.showcase-stars small {
+.games-detail-stars small {
   margin-left: 8px;
   color: var(--text-muted);
   font: 700 14px var(--display);
 }
-.showcase-spotlight .games-spotlight-media[data-splat='true'] {
+.games-spotlight-media[data-splat='true'] {
   clip-path: none;
   mask-size: 100% 100%;
   mask-repeat: no-repeat;
 }
-.showcase-spotlight .games-spotlight-media .game-cover::after {
+.games-spotlight-media .game-cover::after {
   display: none;
 }
 .showcase-ambient {
@@ -735,19 +786,7 @@
 .games-spotlight-media video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-}
-
-.game-trailer-portrait {
-  display: none;
-}
-@media (orientation: portrait) {
-  .game-trailer-portrait {
-    display: block;
-  }
-  .game-trailer-landscape {
-    display: none;
-  }
+  object-fit: cover;
 }
 
 /* A declared logo replaces the title and stays clear of the navigation. */
@@ -762,6 +801,44 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
-.spotlight-icons {
-  opacity: 1;
+
+.games-edit .icon {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+}
+
+.games-loading {
+  width: min(320px, calc(100% - 24px));
+  height: 12px;
+  overflow: hidden;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 35%, transparent);
+  margin: 40svh auto 0;
+}
+
+.games-loading span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+  animation: games-loading 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes games-loading {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(150%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .games-loading span {
+    animation: none;
+  }
 }

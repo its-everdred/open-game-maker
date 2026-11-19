@@ -163,7 +163,14 @@ export class RuntimeImpl<D, S> implements Runtime<D, S> {
   }
 
   acceptHostFrame(frame: ActionFrame): void {
+    if (this.clock.paused) return;
     this.pendingHostFrames.push(frame);
+  }
+
+  discardPendingInput(): void {
+    this.pendingHostFrames.length = 0;
+    this.clock.discardInput();
+    this.inputMerger?.discardTransient();
   }
 
   setLocalPlayerIndex(playerIndex: number): void {
@@ -195,6 +202,7 @@ export class RuntimeImpl<D, S> implements Runtime<D, S> {
   }
 
   inject(frame: ActionFrame): void {
+    if (this.clock.paused) return;
     this.clock.inject(frame);
   }
 
@@ -208,7 +216,7 @@ export class RuntimeImpl<D, S> implements Runtime<D, S> {
 
   render(dt = this.clock.dt): void {
     this.netController?.gate();
-    this.netController?.render();
+    if (!this.clock.paused) this.netController?.render();
     for (const listener of this.frameListeners) listener(dt);
   }
 

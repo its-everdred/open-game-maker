@@ -14,21 +14,12 @@ const exists = async (path: string) =>
 
 const MAX_LEGACY_MANIFEST_BYTES = 1024 * 1024;
 
-async function manifestMedia(directory: string): Promise<{
-  logo?: string;
-  genres?: string[];
-  images?: Record<string, DisplayImage>;
-  loading?: { portrait: string; landscape: string };
-}> {
+async function readDisplayFile(path: string): Promise<Record<string, unknown> | undefined> {
   try {
-    const file = await open(join(directory, '.ogm-display.json'), 'r').catch(() =>
-      open(join(directory, 'manifest.json'), 'r'),
-    );
-    let bytes: Buffer;
+    const file = await open(path, 'r');
     try {
       const size = (await file.stat()).size;
-      if (size > MAX_LEGACY_MANIFEST_BYTES) return {};
-      // One extra byte detects a file that grows between stat and read.
+      if (size > MAX_LEGACY_MANIFEST_BYTES) return undefined;
       const buffer = Buffer.alloc(size + 1);
       let length = 0;
       while (length < buffer.length) {
@@ -36,19 +27,47 @@ async function manifestMedia(directory: string): Promise<{
         if (result.bytesRead === 0) break;
         length += result.bytesRead;
       }
-      if (length > size) return {};
-      bytes = buffer.subarray(0, length);
+      if (length > size) return undefined;
+      const value: unknown = JSON.parse(buffer.subarray(0, length).toString('utf8'));
+      return value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : undefined;
     } finally {
       await file.close();
     }
-    const manifest = JSON.parse(bytes.toString('utf8')) as {
+  } catch {
+    return undefined;
+  }
+}
+
+async function manifestMedia(directory: string): Promise<{
+  logo?: string;
+  genres?: string[];
+  description?: string;
+  tags?: string[];
+  images?: Record<string, DisplayImage>;
+  loading?: { portrait: string; landscape: string };
+}> {
+  try {
+    const sidecar = await readDisplayFile(join(directory, '.ogm-display.json'));
+    const source =
+      !sidecar || sidecar.description === undefined || sidecar.tags === undefined
+        ? await readDisplayFile(join(directory, 'manifest.json'))
+        : undefined;
+    const manifest = { ...source, ...sidecar } as {
       logo?: unknown;
       genres?: unknown;
+      description?: unknown;
+      tags?: unknown;
       images?: Record<string, DisplayImage>;
       loading?: unknown;
     };
     const logo = manifest.logo;
-    const genres = manifest.genres;
+    const { genres, description, tags } = manifest;
+    const names = (value: unknown, max: number): value is string[] =>
+      Array.isArray(value) &&
+      value.length <= max &&
+      value.every((name) => typeof name === 'string' && name.length > 0 && name.length <= 32);
     const loading = manifest.loading as Record<string, unknown> | null | undefined;
     const validLoading = async (path: unknown): Promise<boolean> =>
       typeof path === 'string' && /^media\/[a-zA-Z0-9_-]+\.png$/u.test(path) && (await exists(join(directory, path)));
@@ -63,11 +82,11 @@ async function manifestMedia(directory: string): Promise<{
         ? { logo }
         : {}),
       ...(manifest.images && typeof manifest.images === 'object' ? { images: manifest.images } : {}),
-      ...(Array.isArray(genres) &&
-      genres.length <= 4 &&
-      genres.every((g) => typeof g === 'string' && g.length > 0 && g.length <= 32)
-        ? { genres: genres as string[] }
+      ...(names(genres, 4) ? { genres } : {}),
+      ...(typeof description === 'string' && description.length > 0 && description.length <= 160
+        ? { description }
         : {}),
+      ...(names(tags, 8) ? { tags } : {}),
     };
   } catch {
     return {};
@@ -90,9 +109,10 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
         loadingUrls?: { portrait: string; landscape: string };
         loadingImages?: { portrait: DisplayImage; landscape: DisplayImage };
         choices?: { genre: string[] };
+        tagline?: string;
+        tags?: string[];
         coverUrl?: string;
         trailerUrl?: string;
-        portraitTrailerUrl?: string;
         coverImage?: DisplayImage;
         logoImage?: DisplayImage;
       },
@@ -110,10 +130,9 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
             return [gameId, {}] as const;
           }
           if (!(await exists(join(directory, '.complete')))) return [gameId, {}] as const;
-          const [cover, landscape, portrait, manifest] = await Promise.all([
+          const [cover, trailer, manifest] = await Promise.all([
             exists(join(directory, 'media/thumbnail.png')),
             exists(join(directory, 'media/trailer-landscape.mp4')),
-            exists(join(directory, 'media/trailer-portrait.mp4')),
             manifestMedia(directory),
           ]);
           const origin = deps.config.gamesOrigin.replace(/\/$/, '');
@@ -183,9 +202,10 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                 ? { loadingImages: { portrait: loadingPortrait, landscape: loadingLandscape } }
                 : {}),
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
+              ...(manifest.description ? { tagline: manifest.description } : {}),
+              ...(manifest.tags ? { tags: manifest.tags } : {}),
               ...(cover ? { coverUrl: `${base}/thumbnail.png` } : {}),
-              ...(landscape ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
-              ...(portrait ? { portraitTrailerUrl: `${base}/trailer-portrait.mp4` } : {}),
+              ...(trailer ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
             },
           ] as const;
         }),

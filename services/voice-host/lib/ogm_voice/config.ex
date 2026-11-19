@@ -36,6 +36,7 @@ defmodule OgmVoice.Config do
   ]
   defstruct @enforce_keys ++
               [
+                agent_id: nil,
                 narration_enabled: false,
                 cleanup_root: nil,
                 dictation_transcriber: VoiceTranscribe.Scribe,
@@ -48,6 +49,7 @@ defmodule OgmVoice.Config do
           internal_port: :inet.port_number(),
           provider: String.t(),
           llm: String.t(),
+          agent_id: String.t() | nil,
           max_sessions: pos_integer(),
           api_internal_url: String.t(),
           render_dir: Path.t(),
@@ -86,6 +88,7 @@ defmodule OgmVoice.Config do
       internal_port: port!(env, "OGM_VOICE_INTERNAL_PORT", "40401"),
       provider: provider,
       llm: llm,
+      agent_id: get(env, "ELEVENLABS_AGENT_ID", nil),
       cleanup_root: cleanup_root,
       max_sessions: positive!(env, "OGM_VOICE_MAX_SESSIONS", "2"),
       api_internal_url: url!(env, "OGM_API_INTERNAL_URL"),
@@ -103,6 +106,7 @@ defmodule OgmVoice.Config do
       name: @instance,
       provider: Map.fetch!(@providers, config.provider),
       llm: config.llm,
+      agent_id: config.agent_id,
       cloud_disclosure_accepted: true,
       transcript: :none,
       provider_cleanup: not is_nil(config.cleanup_root),

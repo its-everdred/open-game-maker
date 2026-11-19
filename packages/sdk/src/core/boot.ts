@@ -6,8 +6,11 @@ import { openGameBridge } from '@ogm/iframe-bridge';
 import { EventRing } from './events.js';
 import { SdkHostApi, type SendEnvelope } from './host-api.js';
 import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
+import { GM_PAUSED_FLAG, GM_PAUSE_EVENT } from '../audio/unlock.js';
 import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
+import { createSaveThumbnailCache } from '../saves/thumbnail.js';
+import { installQa } from './qa.js';
 import { dispatchTest } from '../test/dispatch.js';
 import { SdkHooks } from '../test/hooks.js';
 
@@ -26,6 +29,13 @@ function canonicalOrigin(origin: string): string {
 function originFromDocument(): string {
   if (!document.referrer) throw new Error('boot requires hostOrigin when document.referrer is empty');
   return canonicalOrigin(document.referrer);
+}
+
+/** Tells the game's audio that the host paused or resumed play, so it stays quiet until the player resumes. */
+function announcePause(paused: boolean): void {
+  if (typeof window === 'undefined') return;
+  Reflect.set(window, GM_PAUSED_FLAG, paused);
+  window.dispatchEvent(new CustomEvent(GM_PAUSE_EVENT, { detail: { paused } }));
 }
 
 function markNow(): number {
@@ -59,6 +69,12 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
   const runtimeState: { current?: RuntimeImpl<D, S> } = {};
   const saveMachineState: { current?: SaveMachine<S> } = {};
   let eventCursor = 0;
+  let lifecyclePaused = false;
+  let networkPaused = false;
+  let networkProbing = false;
+  const deferredRecoveries: Array<Extract<HostToGame, { t: 'net.recovery' }>['payload']> = [];
+  let cancelPausePreparation: (() => void) | undefined;
+  let networkResumeTimer: ReturnType<typeof setTimeout> | undefined;
   let nextId = 0;
   let resolveHello!: (hello: Extract<HostToGame, { t: 'hello' }>) => void;
   let rejectHello!: (error: unknown) => void;
@@ -138,8 +154,13 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       () => bridge.close(),
     );
     runtime.attachSender(send);
+    runtime.addCleanup(installQa(instance));
     runtime.setLocalPlayerIndex(hello.payload.playerIndex);
     runtimeState.current = runtime;
+    runtime.addCleanup(() => {
+      cancelPausePreparation?.();
+      if (networkResumeTimer !== undefined) clearTimeout(networkResumeTimer);
+    });
     runtime.installNet(
       createNetController({
         manifest: module.manifest,
@@ -150,16 +171,24 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
         syncPlayers: (players) => runtime.setPlayers(players),
         setLocalPlayerIndex: (playerIndex) => runtime.setLocalPlayerIndex(playerIndex),
         recordEvent: (kind, payload) => events.push(++eventCursor, kind, payload),
-        now: markNow,
+        // Network timestamps are Unix-based; simulation time remains on the fixed clock.
+        now: () => performance.timeOrigin + performance.now(),
         pauseClock: () => runtime.clock.pause(),
-        resumeClock: () => runtime.clock.resume(),
+        resumeClock: () => {
+          if (!lifecyclePaused && !networkPaused) runtime.clock.resume();
+        },
         resetClock: (tick) => runtime.clock.reset(tick),
       }),
     );
     const hooks = new SdkHooks(runtime, module.manifest, marks);
     runtime.attachHooks(hooks);
     host.test.register(hooks);
-    const saveMachine = createSaveMachine({ instance, send });
+    const thumbnails =
+      module.manifest.saves && module.manifest.manualSaveSlots
+        ? createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) })
+        : undefined;
+    if (thumbnails) runtime.addCleanup(() => thumbnails.dispose());
+    const saveMachine = createSaveMachine({ instance, send, captureThumbnail: () => thumbnails?.current() });
     saveMachineState.current = saveMachine;
     runtime.addCleanup(() => saveMachine.dispose());
     runtime.onStep(() => saveMachine.markDirty());
@@ -167,6 +196,14 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       saveMachine.markDirty();
       saveMachine.checkpoint();
     });
+
+    // Hold before announcing readiness, so no simulation step can race an initial restore.
+    if (hello.payload.startupHold) {
+      lifecyclePaused = true;
+      announcePause(true);
+      runtime.clock.pause();
+      instance.pause();
+    }
 
     // Inline literal check: a bundler that defines __GM_BUILD__ as 'published' drops the adapter chunk.
     if (!(typeof __GM_BUILD__ !== 'undefined' && __GM_BUILD__ === 'published') && build !== 'published') {
@@ -198,6 +235,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       manifest: readyManifest(module.manifest, instance),
       marks,
       firstFrameSignal: true,
+      ...(hello.payload.startupHold ? { startupHold: true } : {}),
     });
     // A game may draw during mount. Check only after its startup continuation can mark itself unready.
     if (!options.headless && typeof requestAnimationFrame === 'function') {
@@ -244,14 +282,24 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
         case 'hello':
           return;
         case 'lifecycle.pause':
+          if (lifecyclePaused) return;
+          lifecyclePaused = true;
+          announcePause(true);
+          if (networkPaused || cancelPausePreparation) return;
           saveMachineState.current?.pause();
+          active.discardPendingInput();
           active.clock.pause();
           active.instance.pause();
           events.push(++eventCursor, 'pause');
           return;
         case 'lifecycle.resume':
+          if (lifecyclePaused) announcePause(false);
+          lifecyclePaused = false;
+          if (networkPaused) return;
+          active.discardPendingInput();
           active.instance.resume();
           active.clock.resume();
+          for (const recovery of deferredRecoveries.splice(0)) active.handleNet('net.recovery', recovery);
           events.push(++eventCursor, 'resume');
           return;
         case 'lifecycle.dispose':
@@ -343,11 +391,15 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
               return;
             }
             save = active.instance.migrate(save);
+            if (!save.thumbnail && envelope.payload.thumbnail)
+              save = { ...save, thumbnail: envelope.payload.thumbnail };
           }
           active.instance.restore(save as SaveData<S>);
+          saveMachineState.current?.restored(save as SaveData<S>);
           if (envelope.payload.saveSchemaVersion !== currentVersion) {
             saveMachineState.current?.migrated(save as SaveData<S>);
           }
+          send('save.restored', { save }, envelope.id);
           return;
         }
         case 'net.players':
@@ -360,24 +412,107 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
         case 'net.primary':
         case 'net.start':
         case 'net.start.cancel':
-        case 'net.tick':
+        case 'net.epoch.end':
+        case 'net.clock':
         case 'net.state':
         case 'net.inputs':
         case 'net.checksum':
-        case 'net.recovery':
+        case 'net.recovery.request':
         case 'net.seat':
         case 'net.transport':
           /* Netcode v2 inbound: routing stays N3's, and the SDK consumes the names a per-seat match needs. */
           active.handleNet(envelope.t, envelope.payload);
           return;
-        case 'net.pause':
-          active.clock.pause();
+        case 'net.recovery':
+          if (active.clock.paused) {
+            const pending = deferredRecoveries.findIndex(
+              (item) => item.scope === envelope.payload.scope && item.seat === envelope.payload.seat,
+            );
+            if (pending < 0) deferredRecoveries.push(envelope.payload);
+            else if (deferredRecoveries[pending]!.tick <= envelope.payload.tick)
+              deferredRecoveries[pending] = envelope.payload;
+          } else active.handleNet(envelope.t, envelope.payload);
+          return;
+        case 'net.tick':
+          if (!networkPaused && !networkProbing && !cancelPausePreparation)
+            active.handleNet(envelope.t, envelope.payload);
+          return;
+        case 'net.pause.probe':
+          networkProbing = true;
+          send('net.pause.position', { epoch: envelope.payload.epoch, tick: active.clock.tick });
+          return;
+        case 'net.pause': {
+          networkProbing = false;
+          if (networkResumeTimer !== undefined) clearTimeout(networkResumeTimer);
+          networkResumeTimer = undefined;
+          const wasPreparing = cancelPausePreparation !== undefined;
+          cancelPausePreparation?.();
+          cancelPausePreparation = undefined;
+          if (!networkPaused && (!lifecyclePaused || wasPreparing)) {
+            saveMachineState.current?.pause();
+            active.discardPendingInput();
+            active.clock.pause();
+            active.instance.pause();
+          }
+          networkPaused = true;
           active.handleNet(envelope.t, envelope.payload);
           return;
-        case 'net.resume':
-          active.clock.resume();
-          active.handleNet(envelope.t, envelope.payload);
+        }
+        case 'net.pause.prepare': {
+          networkProbing = false;
+          if (networkResumeTimer !== undefined) clearTimeout(networkResumeTimer);
+          networkResumeTimer = undefined;
+          cancelPausePreparation?.();
+          cancelPausePreparation = undefined;
+          const { epoch, tick } = envelope.payload;
+          const stop = () => {
+            cancelPausePreparation?.();
+            cancelPausePreparation = undefined;
+            saveMachineState.current?.pause();
+            active.discardPendingInput();
+            active.clock.pause();
+            active.instance.pause();
+            networkPaused = true;
+            active.handleNet('net.pause', { epoch, tick });
+            send(active.clock.tick === tick ? 'net.pause.ack' : 'net.pause.late', { epoch, tick });
+          };
+          if (active.clock.tick >= tick) {
+            stop();
+            return;
+          }
+          cancelPausePreparation = active.clock.onStep(() => {
+            if (active.clock.tick >= tick) stop();
+          });
+          if (lifecyclePaused && !networkPaused && active.clock.paused) {
+            active.instance.resume();
+            active.clock.resume();
+          }
           return;
+        }
+        case 'net.resume': {
+          networkProbing = false;
+          cancelPausePreparation?.();
+          cancelPausePreparation = undefined;
+          if (networkResumeTimer !== undefined) clearTimeout(networkResumeTimer);
+          const release = () => {
+            networkResumeTimer = undefined;
+            if (networkPaused && !lifecyclePaused) {
+              active.discardPendingInput();
+              active.instance.resume();
+              active.clock.resume();
+            }
+            networkPaused = false;
+            active.handleNet(envelope.t, envelope.payload);
+            if (!lifecyclePaused) {
+              for (const recovery of deferredRecoveries.splice(0)) active.handleNet('net.recovery', recovery);
+            }
+          };
+          const at = envelope.payload.at;
+          const delay = typeof at === 'number' && Number.isFinite(at) ? Math.max(0, at - active.net.now().serverMs) : 0;
+          if (delay > 0) networkResumeTimer = setTimeout(release, delay);
+          else release();
+          return;
+        }
         case 'phase':
           events.push(++eventCursor, 'phase', envelope.payload);
           return;

@@ -10,7 +10,7 @@ OGM pins Aiur's `voice_converse` package for provider connections, normalized ev
 
 ## Build
 
-The Mix project pins both Aiur packages at the commits in `mix.exs` (`@aiur_pin` for `voice_converse`, `@aiur_transcribe_pin` for the Scribe transcriber, mirrored in `mix.lock`). On the OGM host, use the local aiur checkout so dependency resolution does not need GitHub access:
+The Mix project pins both Aiur packages at the commits in `mix.exs` (`@aiur_pin` for both packages, mirrored in `mix.lock`). On the OGM host, use the local aiur checkout so dependency resolution does not need GitHub access:
 
 ```sh
 OGM_AIUR_GIT=$HOME/github/aiur HEX_OFFLINE=1 mise exec -C services/voice-host -- mix deps.get
@@ -20,6 +20,8 @@ MIX_ENV=prod mise exec -C services/voice-host -- mix release
 While the Scribe pin is an unmerged pull-request commit, fetch it into the local aiur checkout first: `git -C "$HOME/github/aiur" fetch origin <scribe-pin>`.
 
 The release is `_build/prod/rel/voice_host`. `ops/bin/ogm-run voice-host` starts it through the existing `ogm-voice-host.service` unit.
+The live stack runs detached processes rather than units; there `ops/bin/ogm-voice-host` builds, starts, checks and
+restarts it ([runbook](../../docs/ops/runbook.md#run-the-voice-host)).
 
 ## Configure
 
@@ -31,7 +33,7 @@ pnpm --filter @ogm/config exec ogm-env-init api
 pnpm --filter @ogm/config exec ogm-env-init voice-host
 ```
 
-Set `OGM_API_INTERNAL_URL` to the loopback API base URL and `OGM_VOICE_WS_URL` to the public `/ws/voice` URL. The voice host defaults to `OGM_VOICE_PROVIDER=fake`, which needs no provider key and spends nothing. To enable ElevenLabs after accepting its charges, set `OGM_VOICE_PROVIDER=elevenlabs_agents`, `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `OGM_VOICE_LLM`, and an absolute durable `OGM_VOICE_CLEANUP_ROOT` in `voice-host.env`. Keep every env file mode `0600`; the key and agent id never reach the browser. Until the pinned `voice_converse` carries hosted-agent selection, the ElevenLabs adapter opens the account's default agent, so set that default to this game's agent and expect `ELEVENLABS_AGENT_ID` to take effect once the pin is bumped.
+Set `OGM_API_INTERNAL_URL` to the loopback API base URL and `OGM_VOICE_WS_URL` to the public `/ws/voice` URL. The voice host defaults to `OGM_VOICE_PROVIDER=fake`, which needs no provider key and spends nothing. To enable ElevenLabs after accepting its charges, set `OGM_VOICE_PROVIDER=elevenlabs_agents`, `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `OGM_VOICE_LLM`, and an absolute durable `OGM_VOICE_CLEANUP_ROOT` directory with mode `0700` in `voice-host.env`. Keep every env file mode `0600`; the key and agent id never reach the browser. The adapter opens the agent named by `ELEVENLABS_AGENT_ID`.
 
 One-way dictation consumes ElevenLabs transcription credits while its press-to-talk session is active. Two-way voice consumes conversational-AI credits until the call ends. Batch narration consumes text-to-speech credits only when separately enabled below. The host requests `record_voice: false`, keeps no audio or provider transcript, and stores only bounded final text through the API's normal chat history. The cleanup root holds provider-conversation cleanup work, not transcript text, so it must survive service restarts.
 

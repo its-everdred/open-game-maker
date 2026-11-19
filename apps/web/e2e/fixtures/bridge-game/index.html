@@ -39,6 +39,7 @@
         ...(replyTo ? { replyTo } : {}),
       });
       const send = (t, payload, replyTo) => port?.postMessage(JSON.stringify(envelope(t, payload, replyTo)));
+      fixture.send = send;
       const receive = (message) => {
         fixture.messages.push(message);
         if (message.t === 'hello' && !ready) {

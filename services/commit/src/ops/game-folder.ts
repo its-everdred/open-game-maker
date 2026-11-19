@@ -33,10 +33,11 @@ export async function readGameFolder(options: {
 }): Promise<{ entries: FolderEntry[]; truncated: boolean }> {
   const commit = await options.request<{ tree: { sha: string } }>(
     'GET /repos/{owner}/{repo}/git/commits/{commit_sha}',
-    { ...options.repository, commit_sha: options.sha },
+    { ...options.repository, repo: options.repository.name, commit_sha: options.sha },
   );
   const tree = await options.request<Tree>('GET /repos/{owner}/{repo}/git/trees/{tree_sha}', {
     ...options.repository,
+    repo: options.repository.name,
     tree_sha: commit.data.tree.sha,
     recursive: '1',
   });

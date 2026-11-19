@@ -28,6 +28,18 @@ import {
   type TicketUsage,
   type UsageAccounts,
 } from './schemas.js';
+import { TicketDetailSchema, type TicketDetail } from './ticket-detail.js';
+import {
+  ExecutorThreadInfoSchema,
+  ExecutorThreadMessageSchema,
+  ExecutorThreadPageSchema,
+  ExecutorThreadUploadSchema,
+  type ExecutorThreadInfo,
+  type ExecutorThreadMessage,
+  type ExecutorThreadPage,
+  type ExecutorThreadSend,
+  type ExecutorThreadUpload,
+} from './executor-thread.js';
 
 export type AiurDaemon = {
   baseUrl: string;
@@ -106,6 +118,16 @@ export interface AiurClient {
   decide(id: string, answer: DecisionAnswer): Promise<Decision>;
   answerAsCreator(id: string, answer: CreatorAnswer): Promise<void>;
   decisionMedia(id: string, attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile>;
+  ticketDetail(id: string, signal?: AbortSignal): Promise<TicketDetail>;
+  // One media file of a ticket's detail, by the signed URL the detail listed. Only that ticket's media route on this
+  // daemon is fetched; any other URL is refused.
+  ticketDetailMedia(id: string, url: string, signal?: AbortSignal): Promise<DecisionMediaFile>;
+  executorThread(signal?: AbortSignal): Promise<ExecutorThreadInfo>;
+  executorThreadMessages(after: number, limit: number, signal?: AbortSignal): Promise<ExecutorThreadPage>;
+  // 409 `executor_unavailable` only when aiur cannot queue the message at all (read-only, no Executor delivery).
+  sendExecutorThreadMessage(message: ExecutorThreadSend, signal?: AbortSignal): Promise<ExecutorThreadMessage>;
+  uploadExecutorThreadFile(file: Blob, name: string, signal?: AbortSignal): Promise<ExecutorThreadUpload>;
+  executorThreadAttachment(attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile>;
   healthz(): Promise<boolean>;
 }
 
@@ -115,6 +137,8 @@ export type AiurClientOptions = {
 
 type RequestOptions = {
   body?: unknown;
+  // A multipart body, sent as is; `body` must be unset.
+  form?: FormData;
   write?: boolean;
   supervisor?: boolean;
   // A Command scope grant to send instead of the daemon's own tokens.
@@ -157,7 +181,7 @@ export function createAiurClient(
       response = await fetchImpl(`${baseUrl}${path}`, {
         method,
         headers,
-        body: request.body === undefined ? undefined : JSON.stringify(request.body),
+        body: request.form ?? (request.body === undefined ? undefined : JSON.stringify(request.body)),
         signal: request.signal,
       });
       body = request.raw && response.ok ? undefined : await responseBody(response);
@@ -404,6 +428,51 @@ export function createAiurClient(
         'GET',
         `/api/v1/decisions/${encodeURIComponent(id)}/media/${encodeURIComponent(attachmentId)}`,
         { supervisor: true, write: true, raw: true, signal },
+      );
+      if (response.body === null) throw new AiurUnavailableError(baseUrl, new Error('empty media response'));
+      return { mime: response.headers.get('content-type') ?? 'application/octet-stream', body: response.body };
+    },
+    async ticketDetail(id, signal) {
+      const { body } = await fetchResponse('GET', `/api/v1/tickets/${encodeURIComponent(id)}/detail`, { signal });
+      return parseContract(TicketDetailSchema, body);
+    },
+    async ticketDetailMedia(id, url, signal) {
+      const route = `/api/v1/tickets/${encodeURIComponent(id)}/media/`;
+      const path = url.startsWith(baseUrl) ? url.slice(baseUrl.length) : url;
+      if (!path.startsWith(route) || !/^[\w-]+(?:\?[^#]*)?$/u.test(path.slice(route.length)))
+        throw new AiurConfigError('ticket media URL is not this ticket on this daemon');
+      const { response } = await fetchResponse('GET', path, { raw: true, signal });
+      if (response.body === null) throw new AiurUnavailableError(baseUrl, new Error('empty media response'));
+      return { mime: response.headers.get('content-type') ?? 'application/octet-stream', body: response.body };
+    },
+    async executorThread(signal) {
+      const { body } = await fetchResponse('GET', '/api/v1/executor/thread', { signal });
+      return parseContract(ExecutorThreadInfoSchema, body);
+    },
+    async executorThreadMessages(after, limit, signal) {
+      const query = new URLSearchParams({ after: String(after), limit: String(limit) });
+      const { body } = await fetchResponse('GET', `/api/v1/executor/thread/messages?${query.toString()}`, { signal });
+      return parseContract(ExecutorThreadPageSchema, body);
+    },
+    async sendExecutorThreadMessage(message, signal) {
+      const { body } = await fetchResponse('POST', '/api/v1/executor/thread/messages', {
+        body: message,
+        write: true,
+        signal,
+      });
+      return parseContract(ExecutorThreadMessageSchema, (body as { message?: unknown } | undefined)?.message);
+    },
+    async uploadExecutorThreadFile(file, name, signal) {
+      const form = new FormData();
+      form.set('file', file, name);
+      const { body } = await fetchResponse('POST', '/api/v1/executor/thread/uploads', { form, write: true, signal });
+      return parseContract(ExecutorThreadUploadSchema, body);
+    },
+    async executorThreadAttachment(attachmentId, signal) {
+      const { response } = await fetchResponse(
+        'GET',
+        `/api/v1/executor/thread/attachments/${encodeURIComponent(attachmentId)}`,
+        { raw: true, signal },
       );
       if (response.body === null) throw new AiurUnavailableError(baseUrl, new Error('empty media response'));
       return { mime: response.headers.get('content-type') ?? 'application/octet-stream', body: response.body };

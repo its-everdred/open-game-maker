@@ -107,6 +107,12 @@ export function createGameRow(
   return findGame(db, row.id);
 }
 
+const provisioningGames = new Map<string, number>();
+
+export function isGameProvisioning(id: string): boolean {
+  return provisioningGames.has(id);
+}
+
 export async function provisionGame(deps: AppDeps, game: GameRow): Promise<GameRow> {
   if (game.repoUrl) return game;
   const provisioner = deps.registry.repoProvisioner;
@@ -114,6 +120,7 @@ export async function provisionGame(deps: AppDeps, game: GameRow): Promise<GameR
   const slug = game.slug;
   if (slug === null) throw new HttpError(409, 'game_slug_missing');
 
+  provisioningGames.set(game.id, (provisioningGames.get(game.id) ?? 0) + 1);
   try {
     const repo = await provisioner.provision({
       id: game.id,
@@ -131,5 +138,9 @@ export async function provisionGame(deps: AppDeps, game: GameRow): Promise<GameR
     if (error instanceof HttpError) throw error;
     deps.log({ event: 'repo-provision-failed', gameId: game.id, error: (error as Error).message });
     throw new HttpError(502, 'repo_provisioning_failed', undefined, { gameId: game.id });
+  } finally {
+    const remaining = (provisioningGames.get(game.id) ?? 1) - 1;
+    if (remaining === 0) provisioningGames.delete(game.id);
+    else provisioningGames.set(game.id, remaining);
   }
 }

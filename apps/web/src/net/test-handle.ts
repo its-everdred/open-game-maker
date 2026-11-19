@@ -51,6 +51,7 @@ function roomState(store: RoomStoreApi): object {
     draft,
     ended,
     rttMs,
+    matchPause,
   } = store.getState();
   return {
     status,
@@ -67,5 +68,6 @@ function roomState(store: RoomStoreApi): object {
     draft,
     ended,
     rttMs,
+    matchPause,
   };
 }

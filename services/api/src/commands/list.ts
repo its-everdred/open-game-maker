@@ -4,12 +4,12 @@ import { GameCommand, type CreatorCommandsPage, type Principal } from '@ogm/cont
 
 import { actorFromPrincipal } from '../accounts/families.js';
 import type { AppDeps } from '../app/types.js';
-import { getChatRuntime } from '../build-chat/routes.js';
 import { getChatRow, listCommands, parseCommand, toMessage, type MediaSigner } from '../build-chat/store.js';
 import { hasGameGrant, listGames, type GameRow } from '../games/games.js';
 import { listJobs } from '../jobs/repo.js';
 import { reviewNumbers } from '../reviews/numbers.js';
 import { gameCommandsFromAiur } from './aiur.js';
+import { reviewMediaUrl } from '../blobs/review-url.js';
 import { isCreatorCommand } from './audience.js';
 
 type UserPrincipal = Extract<Principal, { kind: 'user' }>;
@@ -27,7 +27,7 @@ export async function listGameCommands(
   game: GameRow,
   onUnavailable?: () => void,
 ): Promise<GameCommand[]> {
-  const { sign } = getChatRuntime(deps);
+  const sign: MediaSigner = (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash);
   const commands: GameCommand[] = [];
   const jobs = listJobs(deps.db, game.id);
   const jobTickets = new Set(
@@ -77,11 +77,35 @@ export async function listGameCommands(
     }
   }
 
-  // A registered game's Commands belong to no job. A decision already listed from a job's Command stays the
-  // job's, so one Command never appears twice.
-  const listed = new Set(commands.map((command) => command.decision_id));
-  for (const command of await gameCommandsFromAiur(deps, game, jobTickets, sign, onUnavailable)) {
-    if (!listed.has(command.decision_id)) commands.push(command);
+  // A linked job Command keeps its local identity and presentation; matching Aiur media fills its option details.
+  const listed = new Map(
+    commands.map((command) => [command.decision_id, { version: command.version, ticket: command.ticket }]),
+  );
+  for (const command of await gameCommandsFromAiur(deps, game, jobTickets, sign, onUnavailable, listed)) {
+    const index = commands.findIndex(
+      (item) =>
+        item.decision_id === command.decision_id && item.version === command.version && item.ticket === command.ticket,
+    );
+    if (index < 0) {
+      if (!listed.has(command.decision_id)) commands.push(command);
+    } else {
+      const local = commands[index]!;
+      commands[index] = {
+        ...local,
+        options: local.options.map((option) => {
+          const remote = command.options.find((candidate) => candidate.id === option.id);
+          const remoteSound =
+            option.media && remote?.media?.kind === 'audio' && option.media.url !== remote.media.url
+              ? remote.media
+              : undefined;
+          return {
+            ...remote,
+            ...option,
+            ...(remoteSound && !option.audio && !remote?.audio ? { audio: remoteSound } : {}),
+          };
+        }),
+      };
+    }
   }
 
   // Each Command keeps the short number it got the first time it was listed; new ones are numbered oldest first.

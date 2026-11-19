@@ -36,7 +36,11 @@ export function renderRepoTemplate(ref: string, ctx: TemplateCtx, root: string =
       : []),
     { path: '.gitignore', content: readTemplate('gitignore') },
     { path: 'skills.lock', content: pack.lock },
-    ...pack.files.map((file) => ({ path: `.claude/skills/${file.path}`, content: file.content })),
+    ...pack.files.map((file) => ({
+      path: `.claude/skills/${file.path}`,
+      content: file.content,
+      ...(file.mode ? { mode: file.mode } : {}),
+    })),
     ...pack.discovery.flatMap(({ name, target }) => [
       { path: `.codex/skills/${name}`, content: `../../.claude/skills/${target}`, mode: '120000' as const },
       { path: `.agents/skills/${name}`, content: `../../.claude/skills/${target}`, mode: '120000' as const },

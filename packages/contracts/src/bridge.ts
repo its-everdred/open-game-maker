@@ -5,6 +5,7 @@ import { gameManifestSchema, poseSchema, targetRefSchema } from './game.js';
 import { actionFrameSchema, insetsSchema, MAX_PLAYERS } from './input.js';
 import {
   authorityModeSchema,
+  netEventPayloadSchema,
   netChecksumPayloadSchema,
   netInputsPayloadSchema,
   netRecoveryPayloadSchema,
@@ -69,7 +70,15 @@ const empty = z.looseObject({});
 const netData = z.string().max(NET_DATA_MAX_CHARS);
 const netSnapshot = z.looseObject({ seq: z.number().int().min(0), tick: z.number().int().min(0), data: netData });
 const netEvent = z.looseObject({ seq: z.number().int().min(0), data: netData });
-const save = z.looseObject({ saveSchemaVersion: z.number().int().min(0), data: z.unknown() });
+const save = z.looseObject({
+  saveSchemaVersion: z.number().int().min(0),
+  data: z.unknown(),
+  thumbnail: z
+    .string()
+    .max(32768)
+    .regex(/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/u)
+    .optional(),
+});
 const playMode = z.enum(['play', 'edit']);
 const testMs = z.looseObject({ ms: z.number().min(0) });
 const cameraCommand = z.looseObject({ mode: z.enum(['follow', 'free']), target: z.string().min(1).optional() });
@@ -87,6 +96,7 @@ export const hostToGameSchema = z
         capabilities: z.array(z.string()),
         mode: z.enum(['play', 'edit', 'test']),
         build: z.enum(['draft', 'test', 'published']),
+        startupHold: z.boolean().optional(),
         playerIndex: z
           .number()
           .int()
@@ -181,7 +191,7 @@ export const hostToGameSchema = z
     ),
     /** Peers only. */
     envelope('net.snapshot', netSnapshot),
-    envelope('net.event', netEvent),
+    envelope('net.event', z.union([netEventPayloadSchema, netEvent])),
     /*
      * Netcode v2 (N2 adds the names so both sides type-check; `bridge-forwarding.ts` keeps its v1 cases and drops
      * these until N3 wires room routing).
@@ -199,14 +209,31 @@ export const hostToGameSchema = z
       }),
     ),
     envelope('net.start', netStartSchema),
-    envelope('net.start.cancel', z.looseObject({ epoch: z.string().min(1).max(64) })),
+    envelope(
+      'net.start.cancel',
+      z.looseObject({
+        epoch: z.string().min(1).max(64).optional(),
+        reason: z.enum(['seat-offline', 'not-ready']).optional(),
+      }),
+    ),
+    envelope(
+      'net.epoch.end',
+      z.looseObject({ epoch: z.string().min(1).max(64), tick: z.number().int().nonnegative() }),
+    ),
     envelope('net.tick', z.looseObject({ tick: z.number().int().min(0), serverMs: z.number() })),
+    envelope(
+      'net.clock',
+      z.looseObject({ clientMs: z.number(), serverMs: z.number(), rttMs: z.number().nonnegative() }),
+    ),
     envelope('net.pause', empty),
+    envelope('net.pause.prepare', z.looseObject({ epoch: z.string().min(1), tick: z.number().int().nonnegative() })),
+    envelope('net.pause.probe', z.looseObject({ epoch: z.string().min(1) })),
     envelope('net.resume', empty),
     envelope('net.state', netStatePayloadSchema),
     envelope('net.inputs', netInputsPayloadSchema),
     envelope('net.checksum', netChecksumPayloadSchema),
     envelope('net.recovery', netRecoveryPayloadSchema),
+    envelope('net.recovery.request', netRecoveryRequestPayloadSchema),
     envelope('net.seat', netSeatSchema),
     envelope('net.transport', z.looseObject({ transport: z.enum(['ws-relay', 'webrtc-mesh', 'webrtc-star']) })),
     envelope('phase', z.looseObject({ phase: phaseSchema })),
@@ -243,6 +270,7 @@ export const gameToHostSchema = z
         manifest: gameManifestSchema,
         marks: z.array(z.tuple([z.string(), z.number()])),
         firstFrameSignal: z.boolean().optional(),
+        startupHold: z.boolean().optional(),
       }),
     ),
     envelope('load.frame', z.looseObject({})),
@@ -282,10 +310,13 @@ export const gameToHostSchema = z
         z.looseObject({ id: z.string(), offscreen: z.literal(true) }),
       ]),
     ),
+    /** Hides the host Pause control while false (the game shows its own menu); a reload or exit shows it again. */
+    envelope('host.pause.visible', z.looseObject({ visible: z.boolean() })),
     /** Host hotkeys while the iframe has focus. */
     envelope('input.rawKey', z.looseObject({ code: z.string().max(32), down: z.boolean() })),
     /** The host fills identity and slot. */
     envelope('save.write', save),
+    envelope('save.restored', z.looseObject({ save: save.optional() })),
     envelope(
       'event',
       z.looseObject({ kind: z.enum(['achievement', 'analytics', 'checkpoint']), payload: z.unknown() }),
@@ -302,14 +333,18 @@ export const gameToHostSchema = z
     envelope('net.input', z.looseObject({ f: inputFrameSchema })),
     /** Host: the authoritative snapshot. */
     envelope('net.snapshot', netSnapshot),
-    envelope('net.event', netEvent),
+    envelope('net.event', z.union([netEventPayloadSchema, netEvent])),
     /* Netcode v2 (see above). */
     envelope('net.inputs', netInputsPayloadSchema),
     envelope('net.state', netStatePayloadSchema),
     envelope('net.checksum', netChecksumPayloadSchema),
     envelope('net.recovery.request', netRecoveryRequestPayloadSchema),
+    envelope('net.recovery', netRecoveryPayloadSchema),
     envelope('net.ready', z.looseObject({ ready: z.boolean(), seat: z.number().int().min(0).optional() })),
     envelope('net.start.request', empty),
+    envelope('net.pause.ack', z.looseObject({ epoch: z.string().min(1), tick: z.number().int().nonnegative() })),
+    envelope('net.pause.late', z.looseObject({ epoch: z.string().min(1), tick: z.number().int().nonnegative() })),
+    envelope('net.pause.position', z.looseObject({ epoch: z.string().min(1), tick: z.number().int().nonnegative() })),
     envelope('net.signal', z.looseObject({ data: z.string().max(Math.ceil(4096 / 3) * 4) })),
     envelope(
       'test.result',

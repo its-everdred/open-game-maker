@@ -34,10 +34,11 @@ export type GameSummary = {
   loadingImages?: { portrait: DisplayImage; landscape: DisplayImage };
   coverUrl?: string | null;
   trailerUrl?: string | null;
-  portraitTrailerUrl?: string | null;
   publishedReleaseId?: string | null;
   tagline?: string;
   tags?: string[];
+  /** Play-data stats; a stat the game has no data for is absent. */
+  stats?: { plays?: number; version?: string };
   choices?: { genre?: string[]; vibe?: string[] };
 };
 

@@ -34,8 +34,10 @@ import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
 import { createReviewSync } from './review-rounds/runner.js';
 import { recordReconcileHeartbeat } from './review-rounds/heartbeat.js';
+import { createReadyReviewNotifier, startReadyReviewNotifier } from './review-rounds/ready-notifications.js';
 import { reviewClientForGame } from './review-rounds/daemon.js';
 import { getNotifyRuntime } from './notify/routes.js';
+import { createExecutorNotifier } from './executor-thread/notify.js';
 import { createReviewIssues } from './review-rounds/issues.js';
 import { createWaitTickets } from './decision-waits/tickets.js';
 import { createTicketTitleReader, createWorkpadReader } from './worker-progress/workpad.js';
@@ -45,6 +47,7 @@ import { createReviewEpisodeReader } from './worker-progress/review-episode.js';
 import { createTicketConversationReader } from './worker-progress/conversation.js';
 import { startBriefingPush } from './voice/briefing-push.js';
 import { questionSession } from './voice/question-session.js';
+import { createQaAiurClient, withQaAiur } from './qa/aiur.js';
 
 const log = (line: LogLine) => console.log(JSON.stringify({ service: 'api', ...line }));
 
@@ -67,6 +70,8 @@ const fleet = createFleet({
   readTokenStatus: (daemon, missing) => recordDaemonReadTokenStatus(deps, daemon, missing),
 });
 const daemonDirectory = createDaemonDirectory(db, fleet);
+// The QA game (#859) answers to a recording aiur boundary instead of a daemon.
+const qaAiur = createQaAiurClient(db, () => deps.blobStore);
 const issues = createIssuesClient({ token: env.OGM_INTAKE_GITHUB_TOKEN });
 
 const deps: AppDeps = {
@@ -115,7 +120,7 @@ const deps: AppDeps = {
   }),
   events: createAppEvents(log),
   registry: createRegistry(),
-  aiurClientForGame: daemonDirectory.clientForGame,
+  aiurClientForGame: withQaAiur(db, qaAiur, daemonDirectory.clientForGame),
   version: readGitVersion(),
   startedAtMs: Date.now(),
   log,
@@ -200,7 +205,7 @@ const decisionWaits = createDecisionWaitPoller({
     db,
     sqlite,
     publishReminder: (notification) => getNotifyRuntime(deps).deliverStored(notification),
-    clientForGame: reviewClientForGame(db, fleet),
+    clientForGame: withQaAiur(db, qaAiur, reviewClientForGame(db, fleet)),
     issues: createReviewIssues(env.OGM_INTAKE_GITHUB_TOKEN),
     log,
   }),
@@ -242,6 +247,21 @@ const feed = startFeedConsumers({
 
 const app = createApp(deps);
 for (const { prefix, file } of (await scanRoutes(app, { deps })).mounted) log({ event: 'mounted', prefix, file });
+const reviewNotifications = startReadyReviewNotifier(
+  createReadyReviewNotifier(deps, {
+    deliver: (notification) => getNotifyRuntime(deps).deliverStored(notification, { retryFailures: true }),
+  }),
+  Math.max(30_000, env.OGM_COMMAND_POLL_MS),
+  log,
+);
+const executorNotify = createExecutorNotifier(deps, {
+  deliver: (notification) => getNotifyRuntime(deps).deliverStored(notification),
+});
+setInterval(() => {
+  void executorNotify().catch((error: unknown) =>
+    log({ event: 'executor_notify_error', error: (error as Error).name }),
+  );
+}, 30_000).unref();
 // Give the first scheduled pass one interval to start before the independent monitor checks it.
 recordReconcileHeartbeat(db, Date.now());
 decisionWaits.start(env.OGM_COMMAND_POLL_MS);
@@ -255,7 +275,10 @@ process.once('SIGTERM', () => {
   stopEstimateRefinement();
   stopBuildSweep();
   decisionWaits.stop();
+  reviewNotifications.stop();
   stopBriefingPush();
   usageReconciler.stop();
-  void Promise.all([feed.stop(), usageReconciler.idle()]).finally(() => server.close(() => sqlite.close()));
+  void Promise.all([feed.stop(), usageReconciler.idle(), reviewNotifications.idle()]).finally(() =>
+    server.close(() => sqlite.close()),
+  );
 });

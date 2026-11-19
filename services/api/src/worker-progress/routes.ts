@@ -20,13 +20,25 @@ import { requirePrincipal } from '../app/principal.js';
 import { listWorkers } from './list.js';
 import { recentCompletions } from './completions.js';
 import { belongsToGame, ticketScope } from './scope.js';
+import { isQaGame } from '../qa/state.js';
+import { qaCompleted, qaWorkers } from '../qa/tickets.js';
+import { AiurHttpError } from '@ogm/aiur-client';
+import type { BlobHash } from '@ogm/blob-store';
+import { reviewMediaUrl } from '../blobs/review-url.js';
+import { ownsTicket, ticketDetailView } from './detail.js';
 
 export const prefix = '/api/v1';
 const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) => {
   const game = authorizedGame(c, 'game.edit');
   const deps = c.get('deps');
   const history = game.slug ? recentCompletions(deps.db, game.slug) : { cursor: 0, completed: [] };
+  // The QA game (#859) has no repository and no workers.
+  if (isQaGame(deps.db, game.id))
+    return c.json({ workers: qaWorkers(deps), daemonUnavailable: false, trackerStale: false, ...history });
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
+  // A game without a linked repository has no daemon or tracker tickets yet.
+  if (!game.githubOwner && !game.githubRepo)
+    return c.json({ workers: [], daemonUnavailable: false, trackerStale: false, ...history });
   if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
   // Fail closed if the tracker is unavailable: a shared daemon may contain another game's tickets.
@@ -55,8 +67,13 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   const workers = await deps
     .aiurClientForGame(game.id)
     .then((client) => listWorkers(client))
-    .catch(() => {
-      daemonUnavailable = true;
+    .catch((error: unknown) => {
+      daemonUnavailable = !(
+        error instanceof HttpError &&
+        error.code === 'daemon_not_found' &&
+        !snapshot.stale &&
+        tickets.length === 0
+      );
       return [];
     });
   const unobserved = workers.filter((worker) => !observed.has(worker.ticket) && !scope.owned.has(worker.ticket));
@@ -190,6 +207,7 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
 routes.get('/games/:gameId/tickets/completed', async (c) => {
   const game = authorizedGame(c, 'game.edit');
   const deps = c.get('deps');
+  if (isQaGame(deps.db, game.id)) return c.json({ tickets: qaCompleted(deps), stale: false });
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
   if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_history_unavailable');
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
@@ -225,5 +243,28 @@ routes.get('/games/:gameId/tickets/:ticket/conversation', async (c) => {
   return c.json({
     messages: await deps.registry.ticketConversation(repo, ticketId, [...scope.slugs], scope.owned.has(ticketId)),
   });
+});
+routes.get('/games/:gameId/tickets/:ticket/detail', async (c) => {
+  const game = authorizedGame(c, 'game.edit');
+  const deps = c.get('deps');
+  const ticket = c.req.param('ticket');
+  if (!/^[\w-]{1,64}$/u.test(ticket)) throw new HttpError(404, 'ticket_not_found');
+  if (!isQaGame(deps.db, game.id)) {
+    const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
+    if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
+    const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
+    const owned = await ownsTicket(deps, repo, scope, ticket).catch(() => {
+      throw new HttpError(503, 'ticket_scope_unavailable');
+    });
+    if (!owned) throw new HttpError(404, 'ticket_not_found');
+  }
+  const client = await deps.aiurClientForGame(game.id);
+  const read = await client.ticketDetail(ticket, AbortSignal.timeout(10_000)).catch((error: unknown) => {
+    if (error instanceof AiurHttpError && error.status === 404) throw new HttpError(404, 'ticket_not_found');
+    throw new HttpError(503, 'ticket_detail_unavailable');
+  });
+  // Through the app origin like review media: a phone on the public app cannot load the blob host's own address (#875).
+  const sign = (hash: BlobHash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash);
+  return c.json(await ticketDetailView(deps, client, ticket, sign, read));
 });
 export default routes;

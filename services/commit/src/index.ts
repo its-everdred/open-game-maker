@@ -9,19 +9,21 @@ import { BoundaryChecker } from './boundary/checker.js';
 import { startBoundaryPoller } from './boundary/poller.js';
 import { loadCommitConfig } from './config.js';
 import { RealBoundaryGate } from './publish-gate/gate.js';
-import { RepoResolver } from './repo-resolver.js';
+import { repoResolverForApi } from './repo-resolver.js';
 import { createCommitApp } from './server.js';
+import { QaCreateFence } from './qa-create-fence.js';
 import { DefaultTemplateSource, withGameTemplates } from './template-source.js';
 
 async function main(): Promise<void> {
   const config = loadCommitConfig();
+  const log = (entry: Record<string, unknown>) => console.log(JSON.stringify(entry));
   const github = await createGitHubApp({
+    log,
     appId: config.githubAppId,
     privateKeyPath: config.githubPrivateKeyPath,
     clientId: config.githubClientId,
     clientSecret: config.githubClientSecret,
   });
-  const log = (entry: Record<string, unknown>) => console.log(JSON.stringify(entry));
   if (config.githubClientId === undefined || config.githubClientSecret === undefined) {
     // Without these the App cannot prove who controls an installation, so GitHub connections are refused.
     log({
@@ -39,8 +41,9 @@ async function main(): Promise<void> {
   };
   const app = createCommitApp({
     serviceToken: config.serviceToken,
-    repos: new RepoResolver(config.apiInternalUrl, config.serviceToken),
+    repos: repoResolverForApi(config),
     audit: new JsonlAuditWriter(config.dataDirectory),
+    qaCreateFence: new QaCreateFence(config.dataDirectory),
     installations: github,
     operations: {
       app: github,

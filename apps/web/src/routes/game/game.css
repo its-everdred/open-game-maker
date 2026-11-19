@@ -450,6 +450,26 @@
   color: var(--dark);
 }
 
+.save-slots button:has(img) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.save-slots img {
+  width: 120px;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.save-slots time {
+  display: block;
+  font-size: 0.8em;
+}
+
 .platform-settings label {
   display: flex;
   align-items: center;

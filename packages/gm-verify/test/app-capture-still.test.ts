@@ -8,13 +8,13 @@ describe('shell still capture', () => {
     await expect(captureStill({ screenshot } as unknown as Page, 'out.png', 'play at 390x844', 10_000)).rejects.toThrow(
       new ScreenshotTimeout('shell capture: play at 390x844 screenshot timed out after 10 seconds'),
     );
-    expect(screenshot).toHaveBeenCalledWith({ path: 'out.png', timeout: 10_000 });
+    expect(screenshot).toHaveBeenCalledWith({ path: 'out.png', timeout: 10_000, caret: 'initial' });
   });
 
   it('probes a frame without writing a file', async () => {
     const screenshot = vi.fn().mockResolvedValue(Buffer.from('frame'));
     await captureStill({ screenshot } as unknown as Page, undefined, 'first frame', 5_000);
-    expect(screenshot).toHaveBeenCalledWith({ timeout: 5_000 });
+    expect(screenshot).toHaveBeenCalledWith({ timeout: 5_000, caret: 'initial' });
   });
 
   it('does not treat other screenshot errors as timeouts', async () => {

@@ -14,7 +14,7 @@ import type {
 } from '@ogm/contracts/browser';
 import { hostToGameSchema, SDK_PROTOCOL } from '@ogm/contracts/browser';
 
-type FrameLike = Pick<GameFrame, 'dispose' | 'on' | 'send' | 'setMode' | 'setSettings'> & {
+type FrameLike = Pick<GameFrame, 'dispose' | 'on' | 'send' | 'setMode' | 'setSettings' | 'restoreSave'> & {
   bridge: Pick<GameFrame['bridge'], 'dropped'>;
   /** Optional so a test double need not answer diagnostics; `netInfo()` reports `undefined` when it cannot ask. */
   request?: GameFrame['request'];
@@ -32,9 +32,20 @@ export type GameFrameState = {
   manifest?: GameManifest;
   error?: string;
   errorCode?: string;
+  /** Do not write over an existing save after startup restore failed. */
+  startupSaveError?: boolean;
+  /** Older builds cannot confirm a manual restore, so recovery requires a rebuilt game. */
+  startupRecoveryUnavailable?: boolean;
   firstFrame?: boolean;
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
+  /** The game's latest `host.pause.visible`; unset means visible, and a remount starts unset. */
+  hostPauseVisible?: boolean;
 };
+
+/** The game hides the host Pause control only in play, while its bridge is up; any failure shows it again. */
+export function hidesHostPause(mode: 'play' | 'edit', state: Pick<GameFrameState, 'bridgeState' | 'hostPauseVisible'>) {
+  return mode === 'play' && state.bridgeState === 'ready' && state.hostPauseVisible === false;
+}
 
 export type GameFrameController = {
   state(): GameFrameState;
@@ -53,13 +64,16 @@ export type GameFrameController = {
   ): () => void;
   pause(): void;
   resume(): void;
-  restoreSave(save: SaveData<unknown>): void;
+  restoreSave(save: SaveData<unknown>): Promise<SaveData<unknown>>;
+  confirmSaveRecovery(): void;
   /**
    * A `save.restore` the running build refused, as a failed Load rather than a frame error. The game keeps running.
    */
   onSaveLoadError(callback: (message: string) => void): () => void;
   sendRoomMessage(envelope: Envelope<string, unknown>): void;
   onSaveWrite(callback: (save: SaveData<unknown>) => void): () => void;
+  /** Observe live writes without consuming the startup replay reserved for persistence. */
+  observeSaveWrite?(callback: (save: SaveData<unknown>) => void): () => void;
   onEvent(callback: (kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown) => void): () => void;
   /**
    * `test.renderInfo`, or `undefined` when the game refused it (a published build answers `ok: false`) or did not answer
@@ -80,6 +94,10 @@ export type MountGameFrameOptions = {
   build?: 'draft' | 'test' | 'published';
   /** Query parameters the game boots with: a review deck's playable scenario (#608). */
   params?: Readonly<Record<string, string>>;
+  /** Load an initial save while a compatible SDK holds simulation. */
+  startupRestore?(manifest: GameManifest): Promise<SaveData<unknown> | undefined>;
+  onStartupRestoreError?(): void;
+  resumeAfterStartup?(): boolean;
   create?(options: GameFrameOptions): FrameLike;
   onState?(state: GameFrameState): void;
   onSaveWrite?(payload: { saveSchemaVersion: number; data: unknown }): void;
@@ -112,6 +130,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   let activePlacement: (PlacementRequest & { timer: ReturnType<typeof setTimeout>; settled: boolean }) | undefined;
   let stopPlacement: () => void = () => undefined;
   const saveLoadErrors = new Set<(message: string) => void>();
+  let pendingStartupRestore: { resolve(): void; reject(error: Error): void } | undefined;
+  const startupWrites: SaveData<unknown>[] = [];
+  let saveWriteSubscribers = 0;
+  let startupWriteWindow = true;
+  let currentMode = options.mode;
   let roomMessageSequence = 0;
   const emitRoomMessage = (type: GameToHost['t'], payload: unknown) => {
     roomMessageSequence += 1;
@@ -216,24 +239,69 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       build: options.build ?? 'draft',
       ...(options.params === undefined ? {} : { params: options.params }),
       mode: options.mode,
+      ...(options.startupRestore ? { startupHold: true } : {}),
       playerIndex: 0,
       capabilities: [],
       role: () => 'owner',
       readyTimeoutMs: 10_000,
-      onReady: (manifest, marks) => {
+      onReady: (manifest, marks, startupHold) => {
         if (current.bridgeState === 'error') return;
         // The games host forwards the existing game-ready event for legacy builds; new SDKs also send load.frame.
         expectsFirstFrame = true;
-        current = {
-          ...current,
-          bridgeState: 'ready',
-          manifest,
-          load: loadObserved ? current.load : { phase: 'ready', loaded: 0, total: 0, done: true },
-        };
-        armFirstFrameTimer();
         frame.send('design.apply', { rev: options.design.rev, doc: options.design.doc, patches: [] });
-        emitRoomMessage('ready', { protocol: SDK_PROTOCOL, manifest, marks });
-        publish();
+        const finish = () => {
+          if (disposed) return;
+          if (startupHold && (options.resumeAfterStartup?.() ?? true)) frame.send('lifecycle.resume', {});
+          current = {
+            ...current,
+            bridgeState: 'ready',
+            manifest,
+            load: loadObserved ? current.load : { phase: 'ready', loaded: 0, total: 0, done: true },
+          };
+          armFirstFrameTimer();
+          emitRoomMessage('ready', { protocol: SDK_PROTOCOL, manifest, marks });
+          publish();
+        };
+        if (!options.startupRestore) {
+          finish();
+          return;
+        }
+        let timer: ReturnType<typeof setTimeout>;
+        const deadline = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('save restore timed out')), 10_000);
+        });
+        let restoring = true;
+        const restore = Promise.resolve().then(async () => {
+          const save = await options.startupRestore!(manifest);
+          if (!restoring || disposed || currentMode !== 'play' || !save) return;
+          if (!startupHold) {
+            current = { ...current, startupRecoveryUnavailable: true };
+            throw new Error('game cannot hold startup');
+          }
+          await new Promise<void>((resolve, reject) => {
+            pendingStartupRestore = { resolve, reject };
+            frame.send('save.restore', save);
+          });
+        });
+        void Promise.race([restore, deadline])
+          .catch(() => {
+            if (!disposed) {
+              current = {
+                ...current,
+                startupSaveError: true,
+                ...(!startupHold ? { startupRecoveryUnavailable: true } : {}),
+              };
+              startupWrites.length = 0;
+              startupWriteWindow = false;
+              options.onStartupRestoreError?.();
+            }
+          })
+          .finally(() => {
+            restoring = false;
+            clearTimeout(timer);
+            pendingStartupRestore = undefined;
+            finish();
+          });
       },
       onLoad: handleLoad,
       onSaveWrite: options.onSaveWrite,
@@ -246,6 +314,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
          * broken frame: report it to the pause dialog and leave the game running.
          */
         if (failure.code === 'save_unsupported') {
+          if (pendingStartupRestore) {
+            pendingStartupRestore.reject(new Error(failure.message));
+            pendingStartupRestore = undefined;
+            return;
+          }
           for (const callback of saveLoadErrors) callback(failure.message);
           return;
         }
@@ -260,6 +333,21 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     throw error;
   }
 
+  const stopStartupRestore = frame.on('save.restored', () => {
+    if (pendingStartupRestore) pendingStartupRestore.resolve();
+    pendingStartupRestore = undefined;
+  });
+  const stopStartupWrites = frame.on('save.write', (save) => {
+    const migration = (save as { reason?: string }).reason === 'migration';
+    if (
+      currentMode === 'play' &&
+      (startupWriteWindow || (current.startupSaveError && migration)) &&
+      saveWriteSubscribers === 0
+    ) {
+      if (startupWrites.length === 4) startupWrites.shift();
+      startupWrites.push(save);
+    }
+  });
   const finishPlacement = (result: PlacementResult) => {
     const request = activePlacement;
     if (request === undefined) return;
@@ -281,13 +369,39 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     frame.send('editor.validatePlacement', { prefab: request.prefab, pose: request.pose });
   };
   stopPlacement = frame.on('editor.placement', finishPlacement);
-  const stopRoomMessages = (['net.input', 'net.snapshot', 'net.event'] as const).map((type) =>
-    frame.on(type, (payload) => emitRoomMessage(type, payload)),
-  );
+  const stopHostPause = frame.on('host.pause.visible', ({ visible }) => {
+    if (disposed || current.hostPauseVisible === visible) return;
+    current = { ...current, hostPauseVisible: visible };
+    publish();
+  });
+  const stopRoomMessages = (
+    [
+      'net.input',
+      'net.snapshot',
+      'net.event',
+      'net.inputs',
+      'net.state',
+      'net.checksum',
+      'net.recovery.request',
+      'net.recovery',
+      'net.ready',
+      'net.start.request',
+      'net.pause.ack',
+      'net.pause.late',
+      'net.pause.position',
+    ] as const
+  ).map((type) => frame.on(type, (payload) => emitRoomMessage(type, payload)));
 
   return {
     state: snapshot,
-    setMode: (mode) => frame.setMode(mode),
+    setMode: (mode) => {
+      currentMode = mode;
+      if (mode !== 'play') {
+        startupWrites.length = 0;
+        startupWriteWindow = false;
+      }
+      frame.setMode(mode);
+    },
     setSettings: (settings) => frame.setSettings(settings),
     applyDesign: (rev, doc, patches) => {
       frame.send('design.apply', { rev, doc, patches: [...patches] });
@@ -317,8 +431,17 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     resume: () => {
       frame.send('lifecycle.resume', {});
     },
-    restoreSave: (save) => {
-      frame.send('save.restore', save);
+    restoreSave: async (save) => {
+      if (!frame.restoreSave) throw new Error('Save restore unavailable');
+      const restored = await frame.restoreSave(save);
+      startupWrites.length = 0;
+      return restored;
+    },
+    confirmSaveRecovery: () => {
+      if (current.startupSaveError) {
+        current = { ...current, startupSaveError: false };
+        publish();
+      }
     },
     onSaveLoadError: (callback) => {
       saveLoadErrors.add(callback);
@@ -353,7 +476,25 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
             resolve(undefined);
           });
       }),
-    onSaveWrite: (callback) => frame.on('save.write', callback),
+    onSaveWrite: (callback) => {
+      startupWriteWindow = false;
+      saveWriteSubscribers += 1;
+      const stop = frame.on('save.write', (save) => {
+        if (currentMode === 'play') callback(save);
+      });
+      for (const save of startupWrites.splice(0)) callback(save);
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        saveWriteSubscribers -= 1;
+        stop();
+      };
+    },
+    observeSaveWrite: (callback) =>
+      frame.on('save.write', (save) => {
+        if (currentMode === 'play') callback(save);
+      }),
     onEvent: (callback) => frame.on('event', ({ kind, payload }) => callback(kind, payload)),
     dispose: () => {
       if (disposed) return;
@@ -362,7 +503,10 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       clearFirstFrameTimer();
       saveLoadErrors.clear();
       window.removeEventListener('message', observeOrigin);
+      stopStartupRestore();
+      stopStartupWrites();
       stopPlacement();
+      stopHostPause();
       for (const stop of stopRoomMessages) stop();
       if (activePlacement !== undefined) {
         clearTimeout(activePlacement.timer);

@@ -8,7 +8,7 @@ import { api, ApiError } from '../../lib/api/client';
 import { useSession } from '../../lib/api/session';
 import { subscribeNotification } from '../../lib/notify';
 
-type GameSummary = { id: string; ownerId: string; title?: string; slug?: string | null };
+type GameSummary = { id: string; ownerId: string; title?: string; slug?: string | null; live?: boolean };
 type JobsData = { jobs: Job[]; games: GameSummary[] };
 const EMPTY_JOBS: Job[] = [];
 const EMPTY_GAMES: GameSummary[] = [];
@@ -67,7 +67,7 @@ export async function setJobPaused(jobId: string, paused: boolean): Promise<void
 }
 
 export function refreshJobsForNotification(
-  kind: 'build.done' | 'job.started' | 'intake.report' | 'review.reminder',
+  kind: 'build.done' | 'job.started' | 'intake.report' | 'review.reminder' | 'review.ready',
 ): void {
   if (kind === 'build.done' || kind === 'job.started') {
     void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });

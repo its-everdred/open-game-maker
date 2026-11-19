@@ -40,3 +40,27 @@ it('does not repeat the text title in the placeholder behind a logo', () => {
   expect(screen.queryByText('Blobs')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Blobs' })).toBeInTheDocument();
 });
+
+it('uses the genre icons on a real game tile rather than player tags', () => {
+  const game = {
+    id: 'g',
+    familyId: 'f',
+    ownerId: 'o',
+    repo: null,
+    title: 'Blobs',
+    slug: 'blobs',
+    createdAt: '',
+    tags: ['Solo', 'Multiplayer', 'Cozy'],
+    choices: { genre: ['puzzle'] },
+  };
+  render(<Tile game={game} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />);
+  expect(screen.getByLabelText('puzzle, Cozy')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Solo, Multiplayer')).toBeNull();
+  cleanup();
+  const unknown = { id: 'g', familyId: 'f', ownerId: 'o', repo: null, title: 'Game', createdAt: '', tags: ['Zany'] };
+  const { container } = render(
+    <Tile game={unknown} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />,
+  );
+  expect(screen.getByLabelText('Zany')).toBeInTheDocument();
+  expect(container.querySelector('.game-tag-icons svg')).not.toBeNull();
+});

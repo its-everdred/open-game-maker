@@ -1,0 +1,16 @@
+services/voice-host/
+packages/voice-client/
+packages/contracts/src/voice.ts
+services/api/src/voice/
+apps/web/src/features/build-chat/voice.ts
+apps/web/src/features/build-chat/Chat.tsx
+apps/web/src/features/build-chat/Composer.tsx
+apps/web/src/features/commands-inbox/decision-voice.tsx
+apps/web/src/features/commands-inbox/QuestionSession.tsx
+packages/gm-cli/src/qa-voice-e2e.ts
+packages/gm-cli/src/commands/qa/voice-e2e.ts
+services/api/src/qa/voice.ts
+services/api/src/qa/routes.ts
+packages/gm-cli/qa/voice-e2e/
+ops/bin/ogm-voice-host
+ops/voice-paths

@@ -86,7 +86,7 @@ export function GameCell({
       {createPortal(
         <>
           <Cover game={game} hero={selected} />
-          {game.trailerUrl && showTrailer && (
+          {game.trailerUrl && selected && showTrailer && (
             <span className={`game-trailer-layer${selected ? '' : ' is-closing'}`}>
               <GameTrailer game={game} transparentPoster />
             </span>

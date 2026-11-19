@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { registerTestApi } from '../../app/testHook';
-import { CopyLink } from './CopyLink';
+import { set as setMusic } from '../../lib/sound';
 import { GameCell } from './GameCell';
 import {
   cancelGlides,
@@ -14,9 +14,8 @@ import {
   type CoverRect,
   type TileRects,
 } from './flip';
-import { Spotlight } from './Spotlight';
-import { ShowcaseSpotlight } from './ShowcaseSpotlight';
-import { ShowcaseMenuControls } from './ShowcaseMenuControls';
+import { GameDetail } from './GameDetail';
+import { startTrailer, stopOtherTrailers, stopTrailers } from './trailerVideo';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
 import { TransitionGrid } from './TransitionGrid';
@@ -69,6 +68,19 @@ export function GamesScreen() {
   const initialViewChosen = useRef(false);
   const fitsThumbnailRow = gridCapacity !== null && sortedGames.length <= gridCapacity;
 
+  useEffect(() => {
+    setMusic('menu');
+    return () => setMusic('off');
+  }, []);
+  useEffect(() => () => stopTrailers(), []);
+  useEffect(() => stopOtherTrailers(selected?.trailerUrl), [selected?.trailerUrl]);
+
+  const branch = branches.find((item) => item.name === 'main') ?? branches[0];
+  const canOpen = Boolean(
+    (selected?.id.startsWith('showcase:') && selected.showcase?.id !== 'goblin-cellar') ||
+    (selected && target && branch?.latestBuildId && activeJobs.get(selected.id)?.kind !== 'new_game'),
+  );
+
   const captureTransition = () => {
     pendingRects.current = measureTiles(gridRef.current);
     pendingCovers.current = measureCovers(gridRef.current);
@@ -77,6 +89,7 @@ export function GamesScreen() {
   const select = (index: number) => {
     const game = sortedGames[index];
     if (!game) return;
+    startTrailer(game);
     initialViewChosen.current = true;
     captureTransition();
     const next = new URLSearchParams(searchParams);
@@ -85,6 +98,7 @@ export function GamesScreen() {
   };
 
   const close = () => {
+    stopTrailers();
     initialViewChosen.current = true;
     const returningTo = selected?.id;
     captureTransition();
@@ -94,11 +108,9 @@ export function GamesScreen() {
     pendingFocusId.current = returningTo ?? null;
   };
 
-  const open = (index: number, mode: 'play' | 'edit' = 'play', branchId?: string) => {
+  const open = (index: number, mode: 'play' | 'edit' = 'play') => {
     const game = sortedGames[index];
-    const branch =
-      branches.find((item) => item.id === branchId) ?? branches.find((item) => item.name === 'main') ?? branches[0];
-    if (!game || game.id !== selected?.id) return;
+    if (!game || game.id !== selected?.id || !canOpen) return;
     if (game.id.startsWith('showcase:') && game.showcase && game.showcase.id !== 'goblin-cellar') {
       navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
       return;
@@ -118,7 +130,7 @@ export function GamesScreen() {
   });
 
   useEffect(() => {
-    if (initialViewChosen.current || gamesQuery.isPending || jobsQuery.isPending) return;
+    if (initialViewChosen.current || gamesQuery.isPending || gamesQuery.isFetching || jobsQuery.isPending) return;
     if (sortedGames.length === 0) return;
     if (gridCapacity === null) return;
 
@@ -130,6 +142,7 @@ export function GamesScreen() {
   }, [
     fitsThumbnailRow,
     gamesQuery.isPending,
+    gamesQuery.isFetching,
     gridCapacity,
     jobsQuery.isPending,
     searchParams,
@@ -185,12 +198,15 @@ export function GamesScreen() {
     });
   }, []);
 
-  if (gamesQuery.isPending) return <p className="games-status">Loading your games…</p>;
+  if (gamesQuery.isPending)
+    return (
+      <div className="games-loading" role="progressbar" aria-label="Loading">
+        <span />
+      </div>
+    );
 
   return (
     <div className={`games-screen${fitsThumbnailRow ? ' games-single-row' : ''}`}>
-      {selected?.showcase && !selected.id.startsWith('showcase:') && <ShowcaseMenuControls game={selected} />}
-
       {gamesQuery.isError && games.length === 0 ? (
         <RetryLine onRetry={() => void gamesQuery.refetch()} />
       ) : (
@@ -230,35 +246,19 @@ export function GamesScreen() {
                             select(index);
                           }}
                         />
-                        {!game.showcase && <CopyLink id={game.id} slug={game.slug} title={game.title} />}
                       </>
                     }
                     spotlight={
                       game.id === selected?.id && selected ? (
-                        selected.showcase ? (
-                          <ShowcaseSpotlight
-                            game={selected}
-                            sharedCover
-                            canOpen={Boolean(
-                              (selected.id.startsWith('showcase:') && selected.showcase.id !== 'goblin-cellar') ||
-                              (target &&
-                                (branches.find((branch) => branch.name === 'main') ?? branches[0])?.latestBuildId),
-                            )}
-                            onPlay={() => open(selectedIndex ?? -1, 'play')}
-                            onEdit={() => open(selectedIndex ?? -1, 'edit')}
-                            onClose={close}
-                          />
-                        ) : (
-                          <Spotlight
-                            game={selected}
-                            sharedCover
-                            branches={branches}
-                            job={activeJobs.get(selected.id)}
-                            onPlay={(branchId) => open(selectedIndex ?? -1, 'play', branchId)}
-                            onEdit={(branchId) => open(selectedIndex ?? -1, 'edit', branchId)}
-                            onClose={close}
-                          />
-                        )
+                        <GameDetail
+                          game={selected}
+                          sharedCover
+                          job={activeJobs.get(selected.id)}
+                          canOpen={canOpen}
+                          onPlay={() => open(selectedIndex ?? -1, 'play')}
+                          onEdit={() => open(selectedIndex ?? -1, 'edit')}
+                          onClose={close}
+                        />
                       ) : null
                     }
                   />
@@ -269,13 +269,15 @@ export function GamesScreen() {
         </>
       )}
 
-      <button type="button" className="tap-primary games-new" aria-label="New game" onClick={() => navigate('/new')}>
-        <span className="plus" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <path d="M8 2.5v11M2.5 8h11" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
-          </svg>
-        </span>
-      </button>
+      {!selected && (
+        <button type="button" className="tap-primary games-new" aria-label="New game" onClick={() => navigate('/new')}>
+          <span className="plus" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path d="M8 2.5v11M2.5 8h11" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
+            </svg>
+          </span>
+        </button>
+      )}
     </div>
   );
 }

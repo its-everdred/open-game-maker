@@ -8,7 +8,7 @@ const send = vi.fn().mockResolvedValue({ status: 'answered' });
 vi.mock('../../lib/api/client', () => ({ api: (...args: unknown[]) => send(...args) }));
 afterEach(() => {
   cleanup();
-  send.mockClear();
+  send.mockReset().mockResolvedValue({ status: 'answered' });
   queryClient.clear();
 });
 
@@ -22,6 +22,30 @@ it('offers playback for an audio mock', () => {
     </QueryClientProvider>,
   );
   expect(screen.getByLabelText('Review audio').getAttribute('src')).toBe('/cue.wav');
+});
+
+it('shows a named concept target beside the submitted image', () => {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews
+        gameId="game"
+        rounds={[
+          {
+            id: 'round',
+            ticket: '42',
+            question: null,
+            media: [
+              { kind: 'still', url: '/concept.png', role: 'target' },
+              { kind: 'still', url: '/work.png' },
+            ],
+          },
+        ]}
+      />
+    </QueryClientProvider>,
+  );
+  const compare = screen.getByLabelText('Concept target and review');
+  expect(compare.querySelector('img[alt="Concept target"]')).toHaveAttribute('src', '/concept.png');
+  expect(compare.querySelector('img[alt="Review"]')).toHaveAttribute('src', '/work.png');
 });
 
 it('shows the capture and sends the creator notes without trimming', async () => {
@@ -41,6 +65,9 @@ it('shows the capture and sends the creator notes without trimming', async () =>
     </QueryClientProvider>,
   );
   expect(document.querySelector('video')?.getAttribute('src')).toBe('/capture.mp4');
+  expect(document.querySelector('video')).toHaveProperty('muted', true);
+  expect(document.querySelector('video')).toHaveProperty('loop', true);
+  expect(document.querySelector('video')).toHaveProperty('autoplay', true);
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: '  Keep\nthis.  ' } });
   fireEvent.click(screen.getByText('Needs work'));
   await waitFor(() =>
@@ -49,4 +76,21 @@ it('shows the capture and sends the creator notes without trimming', async () =>
       json: { verdict: 'needs_work', note: '  Keep\nthis.  ' },
     }),
   );
+});
+
+it('reports that the agent was sent the verdict only after the reconciler confirms delivery', async () => {
+  send.mockImplementation(async (path: string) =>
+    path.endsWith('/status')
+      ? { status: 'sent', newRound: true, nextPhase: { phase: 'build', ticket: '42' } }
+      : { status: 'answered' },
+  );
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews gameId="game" rounds={[{ id: 'round', ticket: '42', question: null, media: [] }]} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByText('Needs work'));
+  expect(
+    await screen.findByText('Saved · sent to agent · New round ready · Next phase: build (ticket 42)'),
+  ).toBeVisible();
 });

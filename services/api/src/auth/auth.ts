@@ -47,6 +47,18 @@ export interface Auth {
       headers: Headers;
     }): Promise<{ user: { id: string; name: string; email: string }; session: { id: string } } | null>;
   };
+  // The QA account (#859) is created and signed in on the host, with no mail round trip.
+  $context: Promise<{
+    secret: string;
+    authCookies: { sessionToken: { name: string } };
+    internalAdapter: {
+      createUser(
+        user: { email: string; name: string; emailVerified: boolean },
+        source: { method: string },
+      ): Promise<{ id: string }>;
+      createSession(userId: string): Promise<{ token: string; expiresAt: Date } | null>;
+    };
+  }>;
 }
 
 export function createAuth(deps: {

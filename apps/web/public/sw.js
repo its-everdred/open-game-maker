@@ -76,6 +76,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title ?? 'Open Game Maker', {
       body: payload.body,
+      ...(payload.id ? { tag: payload.id } : {}),
       data: { url: payload.url ?? '/' },
     }),
   );

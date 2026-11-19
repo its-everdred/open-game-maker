@@ -6,7 +6,8 @@ import { createRoomStore } from './room-store';
 
 /**
  * The ping cadence that feeds the relay transport's round trip estimator (#498 §4.4): 1 Hz while a match is playing,
- * 5 s otherwise. Reverting `RoomClient` to a fixed 5 s interval fails both cases.
+ * 5 s otherwise. Reverting `RoomClient` to a fixed 5 s interval fails both cases. One ping goes out on welcome so the
+ * server clock offset is known before a match-resume countdown has to be scheduled against it.
  */
 
 const pin = { gameId: 'game-1', branchId: 'main', buildId: 'build-1' };
@@ -103,13 +104,19 @@ describe('RoomClient ping cadence', () => {
     vi.restoreAllMocks();
   });
 
+  it('pings on welcome so the clock offset is known before any countdown', async () => {
+    const room = new FakeRoom();
+    await connected(room);
+    expect(pings(room)).toBe(1);
+  });
+
   it('pings every 5 s while the room is editing', async () => {
     const room = new FakeRoom();
     await connected(room);
     await vi.advanceTimersByTimeAsync(4_999);
-    expect(pings(room)).toBe(0);
-    await vi.advanceTimersByTimeAsync(1);
     expect(pings(room)).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(pings(room)).toBe(2);
   });
 
   it('pings once a second while a match is playing', async () => {
@@ -117,15 +124,15 @@ describe('RoomClient ping cadence', () => {
     await connected(room);
     room.onStateChange.emit({ ...state, phase: 'playing' });
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(pings(room)).toBe(1);
+    expect(pings(room)).toBe(2);
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(pings(room)).toBe(3);
+    expect(pings(room)).toBe(4);
   });
 
   it('takes the cadence from an injected option', async () => {
     const room = new FakeRoom();
     await connected(room, { pingIntervalMs: () => 250 });
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(pings(room)).toBe(4);
+    expect(pings(room)).toBe(5);
   });
 });

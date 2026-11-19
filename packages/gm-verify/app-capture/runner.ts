@@ -4,14 +4,12 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import type { DesignDoc } from '@ogm/contracts/browser';
-import { installAuthRoutes } from '../../../apps/web/e2e/fixtures/auth-routes';
-import { buildId, installGameApi } from '../../../apps/web/e2e/support/mock-game-api';
-import { captureFile, captureUrlFile } from '../../../apps/web/e2e/support/shell-capture-files';
-import { gameHeaders } from '../../../services/games-host/src/headers';
+import { captureFile } from '../../../apps/web/e2e/support/shell-capture-files';
 import { serveStatic } from '../src/server';
 import { GPU_ARGS, SOFTWARE_ARGS } from '../src/browser';
 import { encodeMp4 } from '../src/qa/media';
 
+import { gameFrame, openShell } from './open-shell';
 import { captureStill, ScreenshotTimeout } from './still';
 import { inspectPlayArea } from './play-area-dom';
 import { fixedAspectMinimumFill, matchesPlayAreaAspect, measurePlayArea } from '../src/play-area';
@@ -29,7 +27,6 @@ const title = typeof manifest.title === 'string' ? manifest.title : 'Local game'
 const web = fileURLToPath(new URL('./web/', import.meta.url));
 console.error('shell capture: starting app server');
 const server = await serveStatic(web);
-const build = buildId;
 // Only the browser fixture invokes the runner directly with this final argument; the CLI never does.
 const fast = testFastArg === '--test-fast' || testFastArg === '--test-all-fast';
 const settleMs = fast ? 1_000 : 14_000;
@@ -60,54 +57,19 @@ try {
       args: softwareArg === '1' ? [...SOFTWARE_ARGS, '--disable-gpu-compositing'] : GPU_ARGS,
     });
     try {
-      const context = await browser.newContext({
-        viewport: { width, height },
+      const { context, page, errors } = await openShell(browser, {
+        game: { dist },
+        server,
+        web,
+        design,
+        title,
+        width,
+        height,
         deviceScaleFactor: fast ? 1 : 2,
-        isMobile: true,
-        hasTouch: true,
-        serviceWorkers: 'block',
-        ...(videoArg === '1' ? { recordVideo: { dir: out, size: { width, height } } } : {}),
+        initScript: trackShadowRoots,
+        ...(videoArg === '1' ? { videoDir: out } : {}),
       });
       try {
-        await context.addInitScript(trackShadowRoots);
-        const page = await context.newPage();
-        const errors: string[] = [];
-        page.on('pageerror', (error) => errors.push(error.message));
-        await installAuthRoutes(page, { signedIn: true });
-        await installGameApi(page, design, title);
-        // The real web build expects this games origin; intercept it without opening a listener.
-        await page.route('http://127.0.0.1:10000/**', async (route) => {
-          const path = new URL(route.request().url()).pathname;
-          const suffix = path.includes(`/${build}/`) ? path.split(`/${build}/`)[1]! : path.slice(1);
-          const file = captureUrlFile(dist, suffix || 'index.html');
-          if (!file) {
-            errors.push(`game resource missing: ${path}`);
-            return route.abort();
-          }
-          await route.fulfill({ path: file, headers: gameHeaders(new URL(server.url).origin) });
-        });
-        await page.route(`${server.url}g/game**`, (route) =>
-          route.fulfill({ path: resolve(web, 'index.html'), contentType: 'text/html' }),
-        );
-        const entry = page.waitForResponse((response) => response.url().includes(`/${build}/index.html`), {
-          timeout: 30_000,
-        });
-        await page.goto(new URL('g/game?test=1', server.url).href);
-        console.error(`shell capture: waiting for game entry at ${size}`);
-        const response = await entry;
-        if (!response.ok()) throw new Error(`game entry failed: ${response.status()}`);
-        await page.locator('.game-frame iframe').waitFor({ state: 'visible', timeout: 30_000 });
-        const state = await page.waitForFunction(
-          () => {
-            const host = (window as unknown as { __ogmHost?: { game?: { bridgeState?: string } } }).__ogmHost;
-            const status = host?.game?.bridgeState;
-            return status === 'ready' || status === 'error' ? status : false;
-          },
-          null,
-          { timeout: 30_000 },
-        );
-        if ((await state.jsonValue()) !== 'ready') throw new Error('game bridge did not become ready');
-        console.error(`shell capture: game ready at ${size}`);
         if (softwareArg !== '1') await captureStill(page, undefined, `first frame at ${size}`, 5_000);
         await page.waitForTimeout(settleMs);
         const check = () => {
@@ -117,7 +79,7 @@ try {
         const measureImages = async (screen: string, still?: string) => {
           for (let attempt = 0; attempt < 3; attempt++) {
             const frames = page.frames();
-            const frame = frames.find((item) => item.url().includes(`/${build}/index.html`));
+            const frame = gameFrame(page);
             if (!frame) throw new Error(`game frame missing at ${size}`);
             await Promise.all(
               frames.map((item) =>
@@ -203,7 +165,7 @@ try {
         const measure = async (screen: string) => {
           if (!limits?.skip) {
             try {
-              const frame = page.frames().find((item) => item.url().includes(`/${build}/index.html`));
+              const frame = gameFrame(page);
               if (!frame) throw new Error(`game frame missing at ${size}`);
               const geometry = await frame.evaluate(inspectPlayArea, null);
               if (geometry.inactive !== undefined) {

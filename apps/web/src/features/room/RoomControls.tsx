@@ -1,4 +1,5 @@
 import { api } from '../../lib/api/client';
+import type { AuthorityMode } from '@ogm/contracts/browser';
 import { pushToast } from '../../lib/notify/slice';
 import { InviteButton, type CreatedRoom } from './InviteButton';
 import { RoomBadge } from './RoomBadge';
@@ -8,6 +9,7 @@ type RoomControlProps = {
   branchId: string;
   buildId?: string;
   gameId: string;
+  authorityMode?: AuthorityMode;
   onRoomCreated?: (room: CreatedRoom) => void;
   onRoomLeave?: () => void | Promise<void>;
   roomSession?: RoomSession;
@@ -18,6 +20,7 @@ export function InviteRoomControl({
   branchId,
   buildId,
   gameId,
+  authorityMode,
   onRoomCreated,
   roomSession,
   roomSnapshot,
@@ -29,6 +32,7 @@ export function InviteRoomControl({
       branchId={branchId}
       buildId={buildId}
       gameId={gameId}
+      authorityMode={authorityMode}
       maxPlayers={roomSnapshot?.maxPlayers}
       onRoomCreated={onRoomCreated}
       roomId={activeRoomId}

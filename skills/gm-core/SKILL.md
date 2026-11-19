@@ -6,7 +6,6 @@ description: Load first in every Game Maker build. Routes the work, keeps the br
 # Game Maker core
 
 ## The job
-
 Build the game in `gm scope`. The scope owns the WHAT: theme, art, names, palette, and mechanics. Templates, skills,
 pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in the build chat instead. Loading artwork: declare `loading.portrait` and `loading.landscape` PNG paths under `media/` in `gm.manifest.json`, with 9:16 (at least 1440×2560) and 16:9 (at least 2560×1440) art in `public/media/`. Keep the subject in the centre 70%, the top 25% calm for the shell logo, and the bottom 20% calm for progress. Run `gm check`. For asynchronous startup, set `runtime.hooks.ready = false` before starting work and `true` only after the first frame renders.
 
@@ -43,6 +42,8 @@ missing or unreadable, or a card's files will not load, stop asset work and tell
 workpad) the path and the error. Never present procedural stand-ins, primitives or placeholders as options for a
 creator's choice; a choice shown with stand-ins is not a choice.
 
+Set `IMPECCABLE_BIN="$HOME/.impeccable/bin/0.1.25/impeccable"` and `DO_NOT_TRACK=1` in the worker environment; if unavailable, the skill continues in degraded mode. For DOM/CSS UI (shell, menus, HUD overlays, review pages), load [impeccable](../vendor/impeccable/impeccable/SKILL.md) and use critique, audit, polish, layout, typeset or adapt; GM rules win: keep the prototype palette, avoid needless text, never stretch images or cover the board, and target Kevin’s concept. In-canvas art keeps its own skills; Catalog rolls and card images are allowed with tracking off; workers must not use live, generate, login or health, or re-enable tracking or update checks.
+
 ## Build loop
 
 **Ask, don't assume.** At any stage (a prototype, a failed review, a spec gap), before deciding anything a player would
@@ -54,7 +55,6 @@ Build the choice. After every `gm run`, send exactly one still or clip with `gm 
 `gm check`, `gm test`, and `gm run` are green and the PR's checklist is answered from the evidence sheet; look first.
 
 ## Energy
-
 Run `gm energy` at the start. `save` means a cheaper model, lower effort, and optional work deferred. `best` means the
 strongest model and effort. `balanced` is in between. When Energy is `limited` or `critical`, propose any scope cut as a
 `gm decide` question; never cut scope silently. The preference never lowers a quality gate. When Energy is `unknown` or

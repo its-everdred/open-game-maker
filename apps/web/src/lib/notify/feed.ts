@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 
 import { api, sse } from '../api/client';
-import { pushToast } from './slice';
+import { pushUpdate, setUpdateOwner } from './slice';
 
 // One SSE connection for the whole app, shared by every screen that shows the feed. EventSource reconnects by itself
 // after a dropped connection; a stream that never opens (OGM-016 not merged, signed out) gets at most five open
 // attempts (four retries) with backoff and is then left closed.
-const EVENTS = ['build.done', 'job.started', 'intake.report', 'review.reminder'] as const;
+const EVENTS = ['build.done', 'job.started', 'intake.report', 'review.reminder', 'review.ready'] as const;
 type NotificationKind = (typeof EVENTS)[number];
 type NotificationListener = (kind: NotificationKind, event: MessageEvent<string>) => void;
 const MAX_FAILED_OPENS = 5;
@@ -18,7 +18,7 @@ let failedOpens = 0;
 const listeners = new Map<NotificationListener, number>();
 const seenReminders = new Set<string>();
 
-function showReminder(message: MessageEvent<string>): void {
+function showReview(message: MessageEvent<string>, kind: 'review.reminder' | 'review.ready'): void {
   let id: unknown;
   try {
     id = (JSON.parse(message.data) as { id?: unknown }).id;
@@ -32,8 +32,8 @@ function showReminder(message: MessageEvent<string>): void {
       seenReminders.delete(id as string),
     );
   }
-  pushToast(toastText(message));
-  for (const listener of listeners.keys()) listener('review.reminder', message);
+  pushUpdate(updateText(message));
+  for (const listener of listeners.keys()) listener(kind, message);
 }
 
 export function subscribeNotification(listener: NotificationListener): () => void {
@@ -48,38 +48,44 @@ export function subscribeNotification(listener: NotificationListener): () => voi
   };
 }
 
-export function useNotificationFeed(): void {
+export function useNotificationFeed(owner?: string): void {
   useEffect(() => {
-    if (users++ === 0) open();
+    if (users++ === 0) {
+      setUpdateOwner(owner);
+      seenReminders.clear();
+      open();
+    }
     return () => {
       if (--users === 0) close();
     };
-  }, []);
+  }, [owner]);
 }
 
 function open(): void {
   const es = (source = sse('/notifications/stream'));
   es.onopen = () => {
     failedOpens = 0;
-    void api<Array<{ id: string; kind: string; title: string; body: string }>>(
-      '/notifications?unread=1&kind=review.reminder&limit=100',
-    )
-      .then((items) => {
-        if (source !== es) return;
-        for (const item of items)
-          if (item.kind === 'review.reminder')
-            showReminder(new MessageEvent('review.reminder', { data: JSON.stringify(item) }));
-      })
-      .catch(() => {});
+    for (const kind of ['review.reminder', 'review.ready'] as const) {
+      void api<Array<{ id: string; kind: string; title: string; body: string }>>(
+        `/notifications?unread=1&kind=${kind}&limit=100`,
+      )
+        .then((items) => {
+          if (source !== es) return;
+          for (const item of items)
+            if (item.kind === kind) showReview(new MessageEvent(kind, { data: JSON.stringify(item) }), kind);
+        })
+        .catch(() => {});
+    }
   };
   for (const name of EVENTS) {
     es.addEventListener(name, (event) => {
+      if (source !== es) return;
       const message = event as MessageEvent<string>;
-      if (name === 'review.reminder') {
-        showReminder(message);
+      if (name === 'review.reminder' || name === 'review.ready') {
+        showReview(message, name);
         return;
       }
-      pushToast(toastText(message));
+      pushUpdate(updateText(message));
       for (const listener of listeners.keys()) listener(name, message);
     });
   }
@@ -103,15 +109,15 @@ function close(): void {
   failedOpens = 0;
 }
 
-function toastText(e: MessageEvent<string>): string {
+function updateText(event: MessageEvent<string>): string {
   try {
-    const data = JSON.parse(e.data) as { title?: unknown; body?: unknown };
-    const title = typeof data.title === 'string' ? data.title : undefined;
-    const body = typeof data.body === 'string' ? data.body : undefined;
-    const text = [title, body].filter((value): value is string => Boolean(value)).join(' — ');
+    const data = JSON.parse(event.data) as { title?: unknown; body?: unknown };
+    const text = [data.title, data.body]
+      .filter((value): value is string => typeof value === 'string' && Boolean(value))
+      .join(' — ');
     if (text) return text;
   } catch {
-    /* plain text payload */
+    // Plain text payload.
   }
-  return e.data;
+  return event.data;
 }

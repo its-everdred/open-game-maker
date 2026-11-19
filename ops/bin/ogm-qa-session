@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# OGM QA session: create the QA creator account on this host if it is missing (a maker in a family of its own that owns
+# one private game, never a person's account) and mint a fresh session for it, so the Executor and workers can drive the
+# signed-in app (`gm qa review-e2e`) without anyone's sign-in.
+#
+# usage: ogm-qa-session [--email <address>] [--out <env file>]
+#
+#   --email  the QA address (default: OGM_QA_EMAIL in qa.env, else qa@<app host>)
+#   --out    where the session is kept (default: ~/.config/ogm/env/qa.env, mode 600)
+#
+# The env file holds OGM_QA_EMAIL, OGM_QA_GAME_ID, OGM_QA_SESSION_COOKIE_NAME, OGM_QA_SESSION_COOKIE and
+# OGM_QA_SESSION_EXPIRES. Sessions last 7 days; run this again before then. Prints the account, its game and the key
+# names it wrote, never the cookie.
+#
+# exit 0 saved; 1 the API refused or failed; 64 bad usage; 65 no internal token or API port.
+
+set -uo pipefail
+
+usage() {
+  printf 'usage: ogm-qa-session [--email <address>] [--out <env file>]\n' >&2
+  exit 64
+}
+
+email=
+out=
+while (($#)); do
+  case $1 in
+    --email | --out)
+      [[ $# -ge 2 ]] || usage
+      declare "${1#--}=$2"
+      shift 2
+      ;;
+    *) usage ;;
+  esac
+done
+
+fail() {
+  printf 'ogm-qa-session: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+env_dir=${OGM_ENV_DIR:-$HOME/.config/ogm/env}
+out=${out:-$env_dir/qa.env}
+# Read one name out of an env file without sourcing it: the files also hold secrets.
+env_value() {
+  grep -E "^$2=" "$1" 2> /dev/null | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true
+}
+
+token=${OGM_INTERNAL_TOKEN:-$(env_value "$env_dir/api.env" OGM_INTERNAL_TOKEN)}
+port=${OGM_API_PORT:-$(env_value "$env_dir/api.env" OGM_API_PORT)}
+origin=${OGM_APP_ORIGIN:-$(env_value "$env_dir/api.env" OGM_APP_ORIGIN)}
+[[ -n $token ]] || fail "no OGM_INTERNAL_TOKEN in $env_dir/api.env" 65
+[[ -n $port ]] || fail "no OGM_API_PORT in $env_dir/api.env" 65
+email=${email:-$(env_value "$out" OGM_QA_EMAIL)}
+if [[ -z $email ]]; then
+  host=${origin#*://}
+  host=${host%%/*}
+  host=${host%%:*}
+  [[ -n $host ]] || fail "no QA address: pass --email or set OGM_APP_ORIGIN in $env_dir/api.env" 65
+  email=qa@$host
+fi
+
+umask 077
+mkdir -p "$(dirname -- "$out")" || fail "cannot create $(dirname -- "$out")" 65
+QA_EMAIL=$email QA_TOKEN=$token QA_URL="http://127.0.0.1:$port/internal/qa/session" QA_OUT=$out \
+  node --input-type=module - << 'NODE' || exit 1
+import { chmodSync, renameSync, writeFileSync } from 'node:fs';
+
+const { QA_EMAIL: email, QA_TOKEN: token, QA_URL: url, QA_OUT: out } = process.env;
+const response = await fetch(url, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', 'x-ogm-internal': token },
+  body: JSON.stringify({ email }),
+}).catch((error) => {
+  console.error(`ogm-qa-session: the API did not answer (${error.cause?.code ?? error.name})`);
+  process.exit(1);
+});
+const body = await response.json().catch(() => ({}));
+if (!response.ok) {
+  console.error(`ogm-qa-session: the API refused (${response.status} ${body.error?.code ?? ''})`);
+  process.exit(1);
+}
+const lines = [
+  `OGM_QA_EMAIL=${body.email}`,
+  `OGM_QA_GAME_ID=${body.gameId}`,
+  `OGM_QA_SESSION_COOKIE_NAME=${body.cookie.name}`,
+  `OGM_QA_SESSION_COOKIE=${body.cookie.value}`,
+  `OGM_QA_SESSION_EXPIRES=${body.expiresAt}`,
+];
+const temp = `${out}.tmp-${process.pid}`;
+writeFileSync(temp, `${lines.join('\n')}\n`, { mode: 0o600 });
+chmodSync(temp, 0o600);
+renameSync(temp, out);
+console.log(`${body.email} signed in; game ${body.gameId}; session until ${body.expiresAt}`);
+console.log(`wrote ${out}: ${lines.map((line) => line.split('=')[0]).join(' ')}`);
+NODE

@@ -11,7 +11,7 @@ import { completeBuildCache } from '../builds/cache-plan.js';
 import { BadArchive, untarGz } from '../builds/untar.js';
 import { scanBuild } from '../gameplay/paid-integrations.js';
 import { paidApisDuringGameplay } from '../gameplay/policy.js';
-import { answerRound, getRound, roundForBuild, submitRound } from '../review-rounds/store.js';
+import { answerRound, getRound, latestRoundForTicket, roundForBuild, submitRound } from '../review-rounds/store.js';
 
 export type Preview = {
   gameId: string;
@@ -25,6 +25,14 @@ export type Preview = {
   accessExpiresAt: string;
   pendingMessage?: string;
 };
+
+/** A newer review round supersedes an older standalone preview of the same ticket. */
+export function currentPreview(deps: AppDeps, preview: Preview): boolean {
+  const latest = latestRoundForTicket(deps.db, preview.gameId, preview.ticket);
+  const round = roundForBuild(deps.db, preview.gameId, preview.ticket, preview.buildId);
+  if (round) return round.verdict === null && latest?.id === round.id;
+  return !latest || Date.parse(latest.postedAt) < Date.parse(preview.createdAt);
+}
 
 const ticketPattern = /^[1-9]\d{0,15}$/u;
 const root = (deps: AppDeps, gameId: string) => join(deps.config.gamesRoot, '.previews', gameId);
@@ -84,7 +92,8 @@ export async function createPreview(
     const previous = await readPreview(join(directory, `${ticket}.json`));
     if (previous) {
       const round = roundForBuild(deps.db, gameId, ticket, previous.buildId);
-      if (round && round.verdict === null) throw new BadArchive('review_round_open');
+      if (round && round.verdict === null && latestRoundForTicket(deps.db, gameId, ticket)?.id === round.id)
+        throw new BadArchive('review_round_open');
     }
     let installed = false;
     try {
@@ -253,18 +262,22 @@ export async function answerPreview(
     const file = join(root(deps, gameId), `${ticket}.json`);
     const preview = await readPreview(file);
     if (!preview || preview.answered || preview.buildId !== buildId) return false;
+    if (!currentPreview(deps, preview)) return false;
     if (preview.pendingMessage !== undefined && preview.pendingMessage !== message) return false;
     const round = roundForBuild(deps.db, gameId, ticket, buildId);
-    if (
-      round &&
-      !answerRound(deps.db, gameId, round.id, {
-        verdict: verdict === 'looks right' ? 'approved' : 'needs_work',
-        notes: note ?? null,
-        source: 'preview',
-        at: new Date().toISOString(),
-      })
-    )
-      return false;
+    if (round) {
+      const accepted = deps.db.transaction(
+        (tx) =>
+          latestRoundForTicket(tx, gameId, ticket)?.id === round.id &&
+          answerRound(tx, gameId, round.id, {
+            verdict: verdict === 'looks right' ? 'approved' : 'needs_work',
+            notes: note ?? null,
+            source: 'preview',
+            at: new Date().toISOString(),
+          }),
+      );
+      if (!accepted) return false;
+    }
     if (round) {
       // The durable ledger is the outbox for track rounds; the reconciler owns their delivery.
       await writePreview(file, { ...preview, ...access(), pendingMessage: message, answered: true });

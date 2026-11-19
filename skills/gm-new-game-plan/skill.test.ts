@@ -69,9 +69,7 @@ describe('five-stage prototype ladder', () => {
     expect(plan).toContain('`references/build-order-template.md`');
     expect(plan).toContain('`references/examples/blobs-ladder.md`');
     expect(plan).toContain('`scripts/check-ladder.ts`');
-    expect(plan).toContain(
-      '1 concepts, 2 dioramas, 3 rendered gameplay clips, 4 video to real gameplay, 5 gameplay iterations',
-    );
+    expect(plan).toContain('`phase:mock` (`model:low`)');
     const stages = 'concepts, dioramas, rendered gameplay clips, real gameplay, iterations';
     expect(read('../gm-new-game-design/SKILL.md')).toContain(stages);
     expect(read('../gm-new-game-design/references/spec-template.md')).toContain(stages);

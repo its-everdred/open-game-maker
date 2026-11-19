@@ -68,6 +68,8 @@ function rows(section: Section): Row[] {
 
 const isPlaceholder = (cell: string): boolean => /^`?<[^>]*>`?$/.test(cell);
 
+const knownRoles = new Set(['visual', '3d', 'gameplay', 'audio', 'qa', 'multiplayer', 'game-design', 'assets']);
+
 /** Problems with a ladder plan; empty when it holds the five stages in order, each complete. */
 export function checkLadder(markdown: string): string[] {
   const all = sections(markdown);
@@ -79,12 +81,26 @@ export function checkLadder(markdown: string): string[] {
   if (!roster) problems.push('no "## Features" table');
   else if (rosterRows.length === 0 || rosterRows.some((row) => !row.Feature || !row['Flow node']))
     problems.push('Features: fill in one row per feature, each with its flow node');
+  let gameLabel: string | undefined;
+  const validLabels = (value: string | undefined, required: string[] = []): boolean => {
+    const labels = (value ?? '').split(',').map((label) => label.trim());
+    const games = labels.filter((label) => /^game:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(label));
+    const roles = labels.filter((label) => label.startsWith('role:') && knownRoles.has(label.slice(5)));
+    if (games.length !== 1 || roles.length === 0 || labels.length !== games.length + roles.length ||
+        new Set(labels).size !== labels.length || !required.every((role) => roles.includes(role))) return false;
+    gameLabel ??= games[0];
+    return gameLabel === games[0];
+  };
+  const ladderRoles = [...new Set(STAGES.flatMap((stage) => stage.roles.split(', ')))];
+  if (rosterRows.some((row) => !validLabels(row.Labels, ladderRoles)))
+    problems.push('Features: each ticket needs consistent game and all ladder role labels');
   if (new Set(features).size !== features.length) problems.push('Features: a feature is listed twice');
 
   const media = all.find((section) => section.heading === 'Game media');
   const mediaRows = media ? rows(media) : [];
   for (const [asset, roles] of [
     ['Thumbnail', 'role:visual'],
+    ['Loading image', 'role:visual'],
     ['Trailer', 'role:visual, role:audio'],
   ] as const) {
     const matches = mediaRows.filter((row) => row.Asset === asset);
@@ -92,11 +108,18 @@ export function checkLadder(markdown: string): string[] {
     else {
       const row = matches[0]!;
       if (!row.Ticket || isPlaceholder(row.Ticket)) problems.push(`Game media: ${asset} needs a ticket`);
-      if (row.Roles !== roles) problems.push(`Game media: ${asset} roles must be ${roles}`);
+      if (!validLabels(row.Roles, roles.split(', '))) problems.push(`Game media: ${asset} roles must be ${roles}`);
       if (!row['Blocked by'] || isPlaceholder(row['Blocked by'])) problems.push(`Game media: ${asset} needs blockers`);
     }
   }
 
+  const standard = all.find((section) => section.heading === 'Standard tickets');
+  const flow = standard ? rows(standard).filter((row) => row.Asset === 'Flow diagram') : [];
+  if (flow.length !== 1 || !flow[0]?.Ticket || isPlaceholder(flow[0].Ticket) ||
+      !validLabels(flow[0].Roles, ['role:game-design']) || !flow[0]['Blocked by'] || isPlaceholder(flow[0]['Blocked by']))
+    problems.push('Standard tickets: flow diagram needs one ticket, role:game-design and blockers');
+
+  const tickets = new Map<string, string>();
   const stageSections = all.filter((section) => /^[1-5]\. /.test(section.heading));
   const expected = STAGES.map((stage, index) => `${index + 1}. ${stage.title}`);
   const actual = stageSections.map((section) => section.heading);
@@ -119,9 +142,15 @@ export function checkLadder(markdown: string): string[] {
       if (names.indexOf(name) !== names.lastIndexOf(name))
         problems.push(`${section.heading}: "${name}" has more than one row`);
     }
-    for (const row of listed)
+    for (const row of listed) {
       if (!row.Ticket || isPlaceholder(row.Ticket)) problems.push(`${section.heading}: "${row.Feature}" has no ticket`);
+      else if (tickets.has(row.Feature ?? '') && tickets.get(row.Feature ?? '') !== row.Ticket)
+        problems.push(`${section.heading}: "${row.Feature}" must use the same feature ticket`);
+      else tickets.set(row.Feature ?? '', row.Ticket);
+    }
   });
+  if (new Set(tickets.values()).size !== tickets.size)
+    problems.push('Features: each feature needs its own ticket');
   for (const section of all)
     for (const row of rows(section))
       if (Object.values(row).some(isPlaceholder)) problems.push(`${section.heading}: replace every <placeholder>`);

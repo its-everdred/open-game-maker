@@ -1,5 +1,5 @@
 import type { Room as ClientRoom } from '@colyseus/sdk';
-import { boot, type ColyseusTestServer } from '@colyseus/testing';
+import { boot, ColyseusTestServer } from '@colyseus/testing';
 import { LIMITS, type Role } from '@ogm/contracts';
 import { signGrant } from '@ogm/room-protocol';
 
@@ -22,7 +22,7 @@ export const defaultTimings: RoomTimings = {
 
 export type Harness = RoomsServerBundle & { testServer: ColyseusTestServer };
 
-export async function startHarness(overrides: Partial<RoomsServiceConfig> = {}): Promise<Harness> {
+export async function startHarness(overrides: Partial<RoomsServiceConfig> = {}, port?: number): Promise<Harness> {
   const bundle = createRoomsServer({
     port: 2568,
     grantSecret: GRANT_SECRET,
@@ -34,7 +34,12 @@ export async function startHarness(overrides: Partial<RoomsServiceConfig> = {}):
     endedFetch: async () => new Response(null, { status: 204 }),
     ...overrides,
   });
-  const testServer = await boot(bundle.gameServer);
+  let testServer: ColyseusTestServer;
+  if (port === undefined) testServer = await boot(bundle.gameServer);
+  else {
+    await bundle.gameServer.listen(port, '127.0.0.1');
+    testServer = new ColyseusTestServer(bundle.gameServer);
+  }
   return { ...bundle, testServer };
 }
 

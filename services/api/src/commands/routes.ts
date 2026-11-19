@@ -59,14 +59,16 @@ export default new Hono<ApiBindings>()
     const deps = c.get('deps');
     const command = (await listGameCommands(deps, game)).find((item) => item.decision_id === c.req.param('decisionId'));
     if (!command || !command.ticket) throw new HttpError(404, 'command_not_found');
-    if (command.options.every((option) => option.media || option.audio || option.playable))
+    if (command.options.every((option) => option.media || option.audio || option.audioClips?.length || option.playable))
       throw new HttpError(409, 'media_present');
     const client = await deps.aiurClientForGame(game.id);
     const decision = await client.decision(command.decision_id);
     // A declared attachment may still be copying to the blob store. Do not report it as absent.
     const stored = command.job_id ? findCommand(deps.sqlite, command.job_id, command.command_id) : null;
     const original = stored ? parseCommand(stored) : null;
-    const missing = command.options.filter((option) => !option.media && !option.audio && !option.playable);
+    const missing = command.options.filter(
+      (option) => !option.media && !option.audio && !option.audioClips?.length && !option.playable,
+    );
     const undeclared = missing.filter(
       (option) => !original?.options.some((item) => item.id === option.id && (item.media_id || item.playable)),
     );

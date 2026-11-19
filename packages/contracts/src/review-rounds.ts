@@ -48,7 +48,9 @@ export const ReviewTrack = z
 export type ReviewTrack = z.infer<typeof ReviewTrack>;
 
 export const ReviewMedia = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('still'), ref: z.string().min(1).max(512) }).strict(),
+  z
+    .object({ kind: z.literal('still'), ref: z.string().min(1).max(512), role: z.literal('target').optional() })
+    .strict(),
   z.object({ kind: z.literal('clip'), ref: z.string().min(1).max(512), hasAudio: z.boolean() }).strict(),
   z.object({ kind: z.literal('build'), ref: z.string().min(1).max(512) }).strict(),
   z.object({ kind: z.literal('audio'), ref: z.string().min(1).max(512) }).strict(),
@@ -68,7 +70,12 @@ export const ReviewSubmission = z
   })
   .strict()
   .superRefine((round, ctx) => {
-    if (round.category === 'art' && !round.media.some((media) => media.kind === 'still' || media.kind === 'clip'))
+    if (round.media.filter((media) => media.kind === 'still' && media.role === 'target').length > 1)
+      ctx.addIssue({ code: 'custom', message: 'only one concept target is allowed', path: ['media'] });
+    if (
+      round.category === 'art' &&
+      !round.media.some((media) => (media.kind === 'still' && media.role !== 'target') || media.kind === 'clip')
+    )
       ctx.addIssue({ code: 'custom', message: 'art requires a still or capture clip', path: ['media'] });
     if (
       round.category === 'sound' &&
@@ -88,7 +95,8 @@ export const ReviewSubmission = z
       if (
         !round.media.some(
           (media) =>
-            media.kind === 'build' || (round.phase === 'mock' && (media.kind === 'still' || media.kind === 'clip')),
+            media.kind === 'build' ||
+            (round.phase === 'mock' && ((media.kind === 'still' && media.role !== 'target') || media.kind === 'clip')),
         )
       )
         ctx.addIssue({ code: 'custom', message: 'gameplay requires a preview build', path: ['media'] });

@@ -27,6 +27,7 @@ if (!Number.isFinite(volume)) volume = 1;
 
 export const master = node(ctx.destination, muted ? 0 : volume);
 export const musicBus = node(master, 0.5);
+export const trailerBus = node(master, 1);
 export const sfxBus = node(master, 0.6);
 
 export type SoundStatus = 'off' | 'on' | 'tap';
@@ -69,7 +70,10 @@ export function setVolume(v: number): void {
   volume = Math.max(0, Math.min(1, v));
   writeStored(VOLUME_KEY, String(volume));
   if (muted && volume > 0) setMuted(false);
-  else ramp(master, muted ? 0 : volume, 0.05);
+  else {
+    ramp(master, muted ? 0 : volume, 0.05);
+    notify();
+  }
 }
 
 for (const ev of ['pointerup', 'touchend', 'keydown', 'click']) {

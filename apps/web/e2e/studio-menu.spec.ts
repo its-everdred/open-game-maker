@@ -1,7 +1,9 @@
 import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test';
 import { Buffer } from 'node:buffer';
 import { readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
+import { openReviewDeck, optionFailures, swipeDeckFailures } from '../../../packages/gm-cli/src/qa-review-checks';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { installGameApi } from './support/mock-game-api';
@@ -81,6 +83,177 @@ const energyView = {
 
 test.use({ serviceWorkers: 'block' });
 
+test('reviews a queue with swipe, undo, notes and an option pick', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await stubBrandArt(page);
+  await installGamesMenuApi(page);
+  let roundAnswer: unknown;
+  let choiceAnswer: unknown;
+  let asked = 0;
+  const fixtures = resolve(import.meta.dirname, '../../../packages/gm-cli/qa/review-e2e');
+  const mediaFiles = [
+    { file: 'still.png', mime: 'image/png', kind: 'image' },
+    { file: 'clip.mp4', mime: 'video/mp4', kind: 'video' },
+    { file: 'sound.mp3', mime: 'audio/mpeg', kind: 'audio' },
+  ];
+  for (const { file, mime } of mediaFiles) {
+    await page.route(`**/qa-media/${file}`, (route) =>
+      route.fulfill({ path: resolve(fixtures, file), contentType: mime }),
+    );
+  }
+  const options = ['A', 'B', 'C'].map((label, index) => ({
+    id: label.toLowerCase(),
+    label,
+    media: { url: `/qa-media/${mediaFiles[index]!.file}`, kind: mediaFiles[index]!.kind, width: 100, height: 100 },
+  }));
+  await page.route(/\/api\/v1\/me\/commands(?:\?.*)?$/, (route) =>
+    json(route, {
+      commands: [
+        {
+          game_id: gameId,
+          game_title: 'Moon Vault',
+          job_id: null,
+          ticket: '43',
+          title: 'Choose',
+          command_id: 'c',
+          decision_id: 'd',
+          version: 1,
+          question: 'Which?',
+          options,
+          blocking: true,
+          opened_at: '2026-11-13T00:00:00Z',
+        },
+      ],
+      sessions: [],
+    }),
+  );
+  await page.route(/\/api\/v1\/games\/[^/]+\/review-rounds\?/, (route) =>
+    json(route, {
+      rounds: [
+        {
+          id: 'r1',
+          ticket: '41',
+          question: 'Review?',
+          media: [
+            { kind: 'still', url: '/qa-media/still.png', role: 'target' },
+            { kind: 'still', url: '/qa-media/still.png' },
+            { kind: 'clip', url: '/qa-media/clip.mp4' },
+            { kind: 'audio', url: '/qa-media/sound.mp3' },
+          ],
+        },
+        { id: 'r2', ticket: '42', question: 'Missing?', media: [] },
+      ],
+    }),
+  );
+  await page.route(/\/api\/v1\/games\/[^/]+\/previews$/, (route) => json(route, { previews: [] }));
+  await page.route(/\/review-rounds\/r2\/missing-media$/, (route) => {
+    asked++;
+    return json(route, { status: 'asked' });
+  });
+  await page.route(/\/review-rounds\/r1\/answer$/, (route) => {
+    roundAnswer = route.request().postDataJSON();
+    return json(route, { status: 'answered' });
+  });
+  await page.route(/\/review-rounds\/r1\/status$/, (route) =>
+    json(route, { status: roundAnswer ? 'sent' : 'pending' }),
+  );
+  await page.route(/\/commands\/d\/answer$/, (route) => {
+    choiceAnswer = route.request().postDataJSON();
+    return json(route, { status: 'answered' });
+  });
+  await page.goto('/all');
+  // The prod review E2E's own step (#891): if this path changes, the prod run would break, so CI fails here first.
+  const dialog = await openReviewDeck(page);
+  await expect(dialog.getByText('3 left')).toBeVisible();
+  await expect(dialog.getByLabel('Concept target and review')).toBeVisible();
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+    { width: 820, height: 1180 },
+    { width: 1180, height: 820 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(dialog.getByRole('button', { name: 'Looks good' })).toBeInViewport();
+    await expect(dialog.getByRole('button', { name: 'Needs changes' })).toBeInViewport();
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog.locator('video')).toHaveAttribute('loop');
+  await expect(dialog.locator('audio')).toHaveCount(1);
+  await expect
+    .poll(() => dialog.locator('img[alt="Review"]').evaluate((image) => (image as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => dialog.locator('audio').evaluate((audio) => audio.duration)).toBeGreaterThan(1);
+  expect(await swipeDeckFailures(page, dialog)).toEqual([]);
+  const roundStill = testInfo.outputPath('review-round.png');
+  await page.screenshot({ path: roundStill });
+  await testInfo.attach('review-round', { path: roundStill, contentType: 'image/png' });
+  await expect.poll(() => asked).toBe(1);
+  const media = dialog.locator('.review-deck-playable').first();
+  const touch = await page.context().newCDPSession(page);
+  const scroller = dialog.locator('.worker-review-swipe');
+  const startBox = (await media.boundingBox())!;
+  const startX = startBox.x + startBox.width / 2;
+  const startY = startBox.y + startBox.height * 0.8;
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y: startY }] });
+  for (let step = 1; step <= 5; step++) {
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: startX, y: startY - 25 * step }],
+    });
+    await page.waitForTimeout(20);
+  }
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await scroller.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  const swipe = async (right: boolean, target = media) => {
+    await target.scrollIntoViewIfNeeded();
+    const box = (await target.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let step = 1; step <= 5; step++) {
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: x + (right ? 22 : -22) * step, y }],
+      });
+    }
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  };
+  await swipe(true, dialog.locator('video'));
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await scroller.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await swipe(true);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  expect(roundAnswer).toBeUndefined();
+  await swipe(false);
+  await page.getByLabel('Note (optional)').fill('More contrast');
+  await page.getByRole('button', { name: 'Send changes' }).click();
+  await expect.poll(() => roundAnswer, { timeout: 10_000 }).toEqual({ verdict: 'needs_work', note: 'More contrast' });
+  await expect(dialog.getByRole('status').filter({ hasText: 'sent to agent' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await expect(dialog.getByText('Asked the agent for media in the next round.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  expect(await optionFailures(dialog, 3)).toEqual([]);
+  await dialog.getByLabel('Note (optional)').fill('Keep blue');
+  await dialog.getByRole('button', { name: 'View option B' }).click();
+  await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
+  await dialog.getByRole('button', { name: 'View option C' }).click();
+  await expect.poll(() => dialog.locator('audio').evaluate((audio) => audio.duration)).toBeGreaterThan(1);
+  const optionStill = testInfo.outputPath('review-option-c.png');
+  await page.screenshot({ path: optionStill });
+  await testInfo.attach('review-option-c', { path: optionStill, contentType: 'image/png' });
+  await dialog.getByRole('button', { name: 'View option B' }).click();
+  await dialog.getByRole('button', { name: 'Pick B: B' }).click();
+  await expect.poll(() => choiceAnswer).toMatchObject({ option_id: 'b', review: { notes: 'Keep blue' } });
+});
+
 test('keeps sound clickable while the library menu is expanded', async ({ page }) => {
   await installAuthRoutes(page, { signedIn: true });
   await installGamesMenuApi(page);
@@ -110,7 +283,16 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
       json: {
         workers: complete
           ? []
-          : [{ ticket: '211', title: 'Moon gate', percent, etaSeconds: 10, startedAt: '2026-11-01T00:00:00Z' }],
+          : [
+              {
+                ticket: '211',
+                title: 'Moon gate',
+                percent,
+                etaSeconds: 10,
+                phase: 'Building',
+                startedAt: '2026-11-01T00:00:00Z',
+              },
+            ],
         cursor: complete ? 11 : 10,
         completed: complete ? [{ ticket: '211', seq: 11, at: '2026-11-01T00:00:01Z' }] : [],
       },
@@ -125,29 +307,40 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
   await expect(page.getByText('40%', { exact: true })).toBeVisible();
   percent = 80;
   await expect(page.getByText('80%', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Moon gate', { exact: true })).toBeVisible();
+  const row = page.getByRole('button', { name: /Moon gate/ });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText('Building', { exact: true })).toBeVisible();
   await capturePhone(page, testInfo, 'worker-builds-expanded');
+  await page.getByRole('button', { name: '1 build running' }).click();
   complete = true;
-  await expect(page.getByRole('status').filter({ hasText: 'Moon gate is ready' })).toBeVisible({ timeout: 15_000 });
-  await capturePhone(page, testInfo, 'worker-builds-finished');
-  await page.getByRole('button', { name: 'Completed builds' }).click();
+  // A finished build only bumps the hammer's badge: its text waits behind a tap instead of covering the screen.
+  const tracker = page.getByRole('button', { name: 'Completed builds' });
+  await expect(tracker.locator('.worker-tracker-count')).toHaveText('1', { timeout: 15_000 });
   await expect(page.getByText('Moon gate is ready')).toHaveCount(0);
+  await capturePhone(page, testInfo, 'worker-builds-finished');
+  await tracker.click();
+  await expect(page.getByRole('region', { name: 'Builds' }).getByText('Moon gate is ready')).toBeVisible();
 });
 
-test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
-  testInfo.setTimeout(90_000);
-  await installAuthRoutes(page);
-  await stubBrandArt(page);
-  await stubTown(page);
-  await page.goto('/');
+test.describe('title menu', () => {
+  // Context creation is part of the test timeout and can be slow on CI (#890).
+  test.describe.configure({ timeout: 90_000 });
+  test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
+    await installAuthRoutes(page);
+    await stubBrandArt(page);
+    await stubTown(page);
+    await page.goto('/');
 
-  await capturePhone(page, testInfo, 'title-menu-closed');
-  await page.getByRole('button', { name: 'Menu' }).click();
+    await capturePhone(page, testInfo, 'title-menu-closed');
+    await page.getByRole('button', { name: 'Menu' }).click();
 
-  await expect(page.getByRole('button', { name: /^(Mute|Unmute)$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible();
-  await expect(page.locator('.bug-fab')).toHaveCount(0);
-  await capturePhone(page, testInfo, 'title-menu-open');
+    await expect(page.getByRole('button', { name: /^(Mute|Unmute)$/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible();
+    await expect(page.locator('.bug-fab')).toHaveCount(0);
+    await capturePhone(page, testInfo, 'title-menu-open');
+  });
 });
 
 test('shows the active build ring and contextual build in the games menu', async ({ page }, testInfo) => {
@@ -160,7 +353,7 @@ test('shows the active build ring and contextual build in the games menu', async
   const trigger = page.locator('.studio-library-volume button');
   await expect(trigger).toHaveAttribute('data-building', 'true');
   await expect(page.locator('.studio-menu-control [role="status"]')).toHaveText('Building Moon Vault');
-  await expect(page.locator('.studio-menu-badge')).toHaveText('2');
+  await expect(trigger.locator('.studio-menu-badge')).toHaveCount(0);
   await capturePhone(page, testInfo, 'games-menu-building');
 
   await trigger.click({ button: 'right' });
@@ -180,7 +373,7 @@ test('shows the active build ring and contextual build in the games menu', async
   await capturePhone(page, testInfo, 'games-menu-conversation');
 });
 
-// Kevin (2026-11-08): sign in, see how many decisions are open on the top-right button, and click through each one.
+// Open decisions remain available in the menu without a count on the sound control.
 test('counts the open decisions and walks through each one from the menu', async ({ page }, testInfo) => {
   testInfo.setTimeout(90_000);
   await installAuthRoutes(page, { signedIn: true });
@@ -189,7 +382,7 @@ test('counts the open decisions and walks through each one from the menu', async
   await page.goto('/all');
 
   const trigger = page.locator('.studio-library-volume button');
-  await expect(page.locator('.studio-menu-badge')).toHaveText('3');
+  await expect(trigger.locator('.studio-menu-badge')).toHaveCount(0);
   await expect(trigger).toHaveAttribute('data-blocking', 'true');
   await capturePhone(page, testInfo, 'decisions-badge');
 
@@ -283,6 +476,8 @@ for (const mode of ['play', 'edit'] as const) {
     await installGameApi(page);
     await page.goto(`/g/game?mode=${mode}`);
     await page.getByRole('button', { name: 'Menu' }).click();
+    if (mode === 'play')
+      await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
     await expect(page.getByRole('link', { name: 'Versions' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Publish' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Rollback' })).toBeVisible();

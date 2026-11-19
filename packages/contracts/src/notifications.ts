@@ -8,6 +8,9 @@ export const NotificationKind = z.enum([
   'scope.agreed',
   'intake.report',
   'review.reminder',
+  'review.ready',
+  // A notice the Executor publishes for the instance owner (#854): review ready, live, stalled.
+  'executor.notify',
 ]);
 export const Notification = z.object({
   id: Id,

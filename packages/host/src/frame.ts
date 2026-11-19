@@ -33,12 +33,14 @@ export interface GameFrameOptions {
   /** Extra query parameters the game reads at boot, such as a review deck's scenario (`speed=slow`). */
   params?: Readonly<Record<string, string>>;
   mode: 'play' | 'edit' | 'test';
+  /** Hold simulation until the host finishes restoring the saved game. */
+  startupHold?: boolean;
   playerIndex: number;
   tier?: Tier;
   capabilities: string[];
   inputMapping?: Partial<RigInputMapping>;
   role: () => Role;
-  onReady?: (manifest: GameManifest, marks: [string, number][]) => void;
+  onReady?: (manifest: GameManifest, marks: [string, number][], startupHold?: boolean) => void;
   onSaveWrite?: (payload: { saveSchemaVersion: number; data: unknown }) => void;
   onEvent?: (kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown) => void;
   onLoad?: (event: GameLoadEvent) => void;
@@ -56,6 +58,7 @@ export interface GameFrame {
   viewport: ViewportTracker;
   send<T extends HostType>(type: T, payload: HostPayload<T>): void;
   request<T extends Extract<HostType, `test.${string}`>>(type: T, payload: HostPayload<T>): Promise<unknown>;
+  restoreSave?(payload: HostPayload<'save.restore'>): Promise<HostPayload<'save.restore'>>;
   project(x: number, y: number, prefab?: string): Promise<[number, number, number] | null>;
   pick(x: number, y: number): ReturnType<HostBridge['pick']>;
   on<T extends GameType>(type: T, callback: (payload: GamePayload<T>) => void): () => void;
@@ -147,6 +150,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
       protocol: SDK_PROTOCOL,
       capabilities: [...new Set([...options.capabilities, 'haptics'])],
       mode: options.mode,
+      ...(options.startupHold ? { startupHold: true } : {}),
       build: options.build,
       playerIndex: options.playerIndex,
       tier: options.tier,
@@ -181,14 +185,14 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   const haptics = new HapticsController();
   const settings = new SettingsController((value) => bridge.send('settings', value));
 
-  bridge.on('ready', ({ manifest, marks, firstFrameSignal }) => {
+  bridge.on('ready', ({ manifest, marks, firstFrameSignal, startupHold }) => {
     sdkSignalsFrame = firstFrameSignal === true;
     if (!sdkSignalsFrame && pendingObservedFrame) options.onLoad?.({ t: 'load.frame', payload: {} });
     gamepads.setMapping(options.inputMapping?.gamepad, manifest.inputs.actions);
     overlay.setInputs(manifest.inputs, options.inputMapping?.touch ?? 'tap');
     viewport.sendNow();
     settings.resend();
-    options.onReady?.(manifest, marks);
+    options.onReady?.(manifest, marks, startupHold === true);
   });
   bridge.on('haptics.pulse', ({ pattern }) => haptics.pulse(pattern));
   bridge.on('save.write', (payload) => options.onSaveWrite?.(payload));
@@ -213,6 +217,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     viewport,
     send: bridge.send.bind(bridge) as GameFrame['send'],
     request: bridge.request.bind(bridge) as GameFrame['request'],
+    restoreSave: bridge.restoreSave.bind(bridge),
     project: bridge.project.bind(bridge),
     pick: bridge.pick.bind(bridge),
     on: bridge.on.bind(bridge) as GameFrame['on'],

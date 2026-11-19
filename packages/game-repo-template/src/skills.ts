@@ -2,13 +2,13 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { listFiles, TEMPLATES, WORKSPACE_ROOT } from './files.js';
+import { isExecutable, listFiles, TEMPLATES, WORKSPACE_ROOT } from './files.js';
 
 export type SkillPack = {
   version: string;
   lock: string;
   // Paths relative to `.claude/skills/`, e.g. `gm-core/SKILL.md`.
-  files: { path: string; content: string }[];
+  files: { path: string; content: string; mode?: '100755' }[];
   discovery: { name: string; target: string }[];
 };
 
@@ -49,7 +49,11 @@ function workspaceSkillPack(root: string, dir: string): SkillPack {
   const files = roots.flatMap((name) =>
     listFiles(join(dir, name)).map((path) => {
       const content = readFileSync(join(dir, name, path), 'utf8');
-      return { path: `${name}/${path}`, content };
+      return {
+        path: `${name}/${path}`,
+        content,
+        ...(isExecutable(join(dir, name, path)) ? { mode: '100755' as const } : {}),
+      };
     }),
   );
   const version = packVersion(root, dir);

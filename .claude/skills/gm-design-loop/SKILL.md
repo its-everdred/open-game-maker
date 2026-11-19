@@ -20,6 +20,8 @@ or the documented stall procedure applies. Include the score JSON and side-by-si
    Building a model procedurally is the last resort, and you say so.
 3. **Options before the final build.** For a big or visible decision (a scene, a style, a character, a layout) make
    2-5 quick variations (A/B/C) and recommend one. Small changes skip this.
+   - One choice per screen: a round that mocks several screens (title, mode select, character select) gives each
+     screen its own A/B/C set. Never bundle screens into one option.
    - One step at a time: the creator signs off a scene before the next starts. Don't build several at once.
 4. **Build.** Every moving thing runs on its own loop with its own period. Keep a capture mode (time set from
    outside) so recordings are exact.

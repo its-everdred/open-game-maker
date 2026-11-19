@@ -12,6 +12,11 @@ export function sweepAnalytics(sqlite: Sqlite, retentionDays: number, now = new 
   return sqlite.prepare('DELETE FROM activity_events WHERE ts < ?').run(cutoff).changes;
 }
 
+export function sweepPlaySessions(sqlite: Sqlite, now = new Date()): number {
+  const cutoff = new Date(now.getTime() - DAY_MS).toISOString();
+  return sqlite.prepare('DELETE FROM game_play_sessions WHERE created_at < ?').run(cutoff).changes;
+}
+
 export function startAnalyticsRetention(input: {
   sqlite: Sqlite;
   retentionDays: number;
@@ -20,6 +25,7 @@ export function startAnalyticsRetention(input: {
 }): () => void {
   const run = () => {
     try {
+      sweepPlaySessions(input.sqlite, input.now?.() ?? new Date());
       input.log({
         event: 'analytics_retention',
         deleted: sweepAnalytics(input.sqlite, input.retentionDays, input.now?.() ?? new Date()),

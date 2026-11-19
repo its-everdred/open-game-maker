@@ -69,6 +69,26 @@ describe('game contract', () => {
       expect(gameJson({ ...manifest(), playMenuButton })).toBe(false);
     }
   });
+  it('lists playable modes with a tap path each, so the playtest can reach every one', () => {
+    const modes = [
+      { id: 'blobs', label: 'Blobs', tap: 'Play>Endless>Blobs>Play' },
+      { id: 'both', label: 'Both', tap: 'Play>Endless>Both>Play' },
+    ];
+    expect(gameManifestSchema.parse({ ...manifest(), modes }).modes).toEqual(modes);
+    expect(gameJson({ ...manifest(), modes })).toBe(true);
+    for (const bad of [
+      [],
+      [{ id: 'a', label: 'A', tap: 'Play>>Go' }],
+      [
+        { id: 'a', label: 'A', tap: 'Play' },
+        { id: 'a', label: 'B', tap: 'Go' },
+      ],
+      [{ id: 'Bad id', label: 'A', tap: 'Play' }],
+    ]) {
+      expect(gameManifestSchema.safeParse({ ...manifest(), modes: bad }).success).toBe(false);
+    }
+  });
+
   it('accepts the golden manifest in both Zod and the emitted JSON Schema', () => {
     expect(gameManifestSchema.safeParse(manifest()).success).toBe(true);
     expect(gameJson(manifest())).toBe(true);
@@ -91,6 +111,13 @@ describe('game contract', () => {
     expect(gameManifestSchema.safeParse(facts).success).toBe(true);
     expect(gameJson(facts)).toBe(true);
     expect(gameManifestSchema.safeParse({ ...manifest(), saveSchema: -1 }).success).toBe(false);
+  });
+
+  it('accepts only a boolean manual-slot declaration', () => {
+    expect(gameManifestSchema.safeParse({ ...manifest(), manualSaveSlots: true }).success).toBe(true);
+    expect(gameJson({ ...manifest(), manualSaveSlots: true })).toBe(true);
+    expect(gameManifestSchema.safeParse({ ...manifest(), manualSaveSlots: 'yes' }).success).toBe(false);
+    expect(gameJson({ ...manifest(), manualSaveSlots: 'yes' })).toBe(false);
   });
 
   it('rejects editor tools outside the host vocabulary', () => {

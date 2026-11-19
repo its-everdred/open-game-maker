@@ -67,6 +67,10 @@ export class FixedClock implements Clock {
     this.pendingFrames.push(frame);
   }
 
+  discardInput(): void {
+    this.pendingFrames.length = 0;
+  }
+
   onStep(listener: StepListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

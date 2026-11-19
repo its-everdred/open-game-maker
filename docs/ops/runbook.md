@@ -151,6 +151,43 @@ that is, and no mail is sent to it.
 See [ingress.md](ingress.md): `ops/bin/ogm-ingress.sh` mounts 8443 and 10000 on Tailscale, after Kevin's operator hand
 step.
 
+## Run the voice host
+
+The live stack runs its services as detached processes started by the Executor's auto-update, not as the systemd
+units above, so the voice host has its own control script that follows the same pattern: env from
+`~/.config/ogm/env/voice-host.env`, log in `~/ogm-stack.voice-host.log`, the browser socket on `OGM_VOICE_PORT`
+(40400) and `/healthz` plus the API's internal calls on `OGM_VOICE_INTERNAL_PORT` (40401), both on `127.0.0.1`.
+
+```
+ops/bin/ogm-voice-host check-env   # names every missing or mismatched setting, never a value
+ops/bin/ogm-voice-host build       # Mix deps + prod release in services/voice-host (needs mise and GitHub)
+ops/bin/ogm-voice-host start       # check-env, start, wait for /healthz
+ops/bin/ogm-voice-host restart     # after each build
+ops/bin/ogm-voice-host ensure      # restart only when /healthz does not answer as the voice host
+ops/bin/ogm-voice-host health
+```
+
+The start command creates a missing cleanup directory with mode `0700`; `check-env` reports a missing or insecure directory. Fix an existing directory with `chmod 700` before starting.
+
+One-time host settings (`check-env` lists whichever are still missing):
+
+- `voice-host.env`: `OGM_VOICE_TOKEN_SECRET` and `OGM_VOICE_INTERNAL_SECRET` copied from `api.env` (they must match),
+  `OGM_API_INTERNAL_URL=http://127.0.0.1:<OGM_API_PORT>`, and for live voice `OGM_VOICE_PROVIDER=elevenlabs_agents`,
+  `OGM_VOICE_LLM` (the agent's model), `OGM_VOICE_CLEANUP_ROOT` (a durable directory such as
+  `~/.local/state/ogm/voice-cleanup`, mode `0700`) and `ELEVENLABS_AGENT_ID` (the host does not read `OGM_VOICE_AGENT_ID`).
+- `api.env`: `OGM_VOICE_HOST_INTERNAL_URL=http://127.0.0.1:40401` and
+  `OGM_VOICE_WS_URL=wss://<tailnet-host>:8443/ws/voice`; restart the API after.
+- Ingress: `ops/bin/ogm-ingress.sh` mounts `/ws/voice` on 8443 beside `/` and `/ws/rooms`.
+
+Auto-update wiring, in the Executor's `auto-update.sh` (`$STACK` is the stack checkout):
+
+- In `update_ogm`, after the `pnpm -r ... build` succeeds:
+  `(cd "$STACK" && ops/bin/ogm-voice-host build > "$HOME/ogm-stack.voice-build.log" 2>&1) || log "ogm: voice host build FAILED (~/ogm-stack.voice-build.log)"`
+- At the end of `restart_services`:
+  `"$STACK/ops/bin/ogm-voice-host" restart >> "$HOME/ogm-stack.voice-host.log" 2>&1 || log "ogm: service voice-host DOWN after restart (~/ogm-stack.voice-host.log)"`
+- In the main loop, once per pass:
+  `"$STACK/ops/bin/ogm-voice-host" ensure >> "$HOME/ogm-stack.voice-host.log" 2>&1 || log "ogm: voice-host down and restart failed"`
+
 ## Backup
 
 `ogm-backup.timer` runs `ops/backup/backup.sh` nightly at 03:30 (`Persistent=true`, so a missed run happens at the next
@@ -324,7 +361,8 @@ ops/bin/ogm-qa blobs --build <buildId>    # a specific build
 
 It reads the internal token like `ogm-publish` and the games origin from `OGM_GAMES_ORIGIN` (`games.env`), asks the
 facts route for the newest build, then runs `gm qa open`, `gm qa drive` for each solo journey and `gm qa room` for each
-room journey in `<game>/qa/journeys/`, `gm qa look` and `gm qa look --report` from the game's folder in its registered
+room journey in `<game>/qa/journeys/`, `gm qa playtest . --all-modes` (every mode in `gm.manifest.json`, results in
+`playtest/`), `gm qa look` and `gm qa look --report` from the game's folder in its registered
 checkout. The run lands in `~/.local/state/ogm/qa/<slug>/<buildId>/` (`OGM_QA_ROOT` moves it). Answer
 `look/answers.json` there after opening the stills, then `gm qa look --report --out <run>` again. Exit codes: 0 the
 report passed, 1 a step failed or a look is unanswered, 64 bad usage, 65 no game, build, origin or token.
@@ -345,6 +383,85 @@ family like any player, and its state lives outside git at `~/.config/ogm/qa/sto
 Sessions last 7 days: run it again when a capture shows Sign in. `--origin http://127.0.0.1:5173` signs in to the local
 stack instead of `OGM_APP_ORIGIN`; `--out` writes elsewhere. Exit codes: 0 saved, 1 sign-in failed, 64 bad usage, 65 no
 address, origin or database.
+
+## Check new game creation on prod
+
+On the host after deploy, run `gm qa new-game-e2e --sha <deployed sha>` with the QA creator session from
+`ops/bin/ogm-qa-session`. The host needs ffmpeg, its user service manager, and a `gh` credential with write access to
+the configured instance repository. The command creates a game at each phone orientation, sends two text messages,
+finishes creation, and checks the private context, privacy-safe parent issue, and library progress. It saves stills,
+MP4s, a result, and private recovery state under `assets-local/review/app/new-game-e2e/<sha>/`.
+
+It removes the QA games and their associated repository, scope and issue artifacts, including earlier QA leftovers. Cleanup
+can wait up to 40 minutes for a game daemon or create operation to stop. The commit service fences each QA game while
+cleanup runs; a failed or interrupted create leaves a marker for inspection rather than assuming GitHub did nothing.
+If a run fails, preserve its recovery state and rerun with the same SHA; an ambiguous game or unexpected repository
+change stops cleanup for inspection. `--out` selects another
+evidence directory, and `--origin` and `--api` select the app and loopback API origins. The internal QA routes accept
+only the internal token.
+
+## Check the review deck on prod
+
+`gm qa review-e2e` completes a review round and a three-option Command in the deployed app as the QA creator, so a
+review change is checked without anyone's sign-in. The QA creator is its own account: a maker in a family of its own
+that owns one private game (`QA Review`), never a person's account, and unlike the family member `ogm-qa-signin`
+signs in. The QA game has no repository and no aiur instance: its rounds and Commands are seeded on the host, and what
+the app sends to aiur for it is recorded on the host instead of starting an agent.
+
+1. `ops/bin/ogm-qa-session` creates the QA account the first time (`qa@<app host>` unless `--email` names another
+   address no one signs in with) and mints a 7-day session into `~/.config/ogm/env/qa.env` (mode 600). It prints the
+   account, the game and the key names it wrote, never the cookie.
+2. `gm qa review-e2e --sha <deployed sha>`, at 390×844, 844×390, 820×1180 and 1180×820: seeds a round (picture, clip,
+   sound) and a Command (A picture, B clip, C sound), verifies the image decodes and the video and audio load, swipes
+   the round right, undoes, swipes it left with a note, views B and C, picks B with a note, and checks that both
+   verdicts reached the QA game's aiur boundary and that the deck showed no error.
+   Before swiping and before picking it fails the size on what the creator would see broken: a picture with no pixels
+   (`naturalWidth` 0), a clip that has not played a frame within 10 s or has an error (a looping clip drops to
+   `readyState` 1 for a moment at each loop, so `readyState` alone is not the test), a sound with no length, fewer options
+   than the Command carries or one inaccessible or without its media, and a round with no draggable card or no
+   "Looks good" and "Needs changes" controls; the failure names each element, and the still is saved first.
+   First, at each size, it seeds a running and a closed ticket on the QA game (each with a summary, a picture, a clip,
+   a sound and a quoted verdict), opens the hammer, taps the running ticket and then the closed one under Completed,
+   and fails the size when a detail lacks its summary, its three media or the quote, scrolls sideways, or has media
+   that did not load; one still per ticket.
+   One run at a time per QA env dir (`~/.config/ogm/env`): a second run waits up to 30 minutes for the first,
+   because each run clears the QA game's fixtures and would wipe the other's cards.
+   It deletes its fixtures, saves stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
+   `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box and
+   `--break-media` answers the review picture with a 404, each to prove a broken deck fails the run.
+3. After a deploy, auto-update calls `ops/bin/ogm-qa-review-hook <have> <want> --attention <file>`. It runs both
+   steps when the deploy changed the review deck (`apps/web/src/**review**`,
+   `apps/web/src/features/{worker-builds,commands-inbox}/`, `apps/web/src/app/StudioMenu*`) or the review API
+   (`services/api/src/{review-rounds,commands,previews,qa,worker-progress,blobs,blob-proxy}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
+   `~/.local/state/ogm/qa/review-e2e/<sha>.log`.
+
+The host routes behind it, `/internal/qa/session`, `/internal/qa/review-fixtures[/<run>]`,
+`/internal/qa/ticket-fixtures[/<run>]` and `/internal/qa/voice-fixtures[/<run>]`, take only the internal
+token in `x-ogm-internal`.
+
+## Check voice on prod
+
+`gm qa voice-e2e --sha <deployed sha>` checks one-way and two-way voice in the deployed app as the QA creator, at
+390×844. It seeds a build named `QA voice` on the QA game (filed and released, so it takes no job slot and no daemon
+runs it), opens its chat from the menu's builds sheet, and replaces the microphone with recorded speech
+(`packages/gm-cli/qa/voice-e2e/`, 3.2 s in all):
+
+1. One-way: holds "Hold to talk" while "Make the sky blue." plays, and passes when the message box shows the clip's
+   words. The words are cleared, never sent.
+2. Two-way: taps "Start voice chat", plays "Hello, can you hear me?" once the session is listening, and passes when the
+   agent's audio streams back over the socket, the app plays it, and the creator's spoken turn is stored in the build's
+   chat. It hangs up as soon as the reply arrives.
+
+One run at a time per QA env dir: a second run waits up to 10 minutes, because each run replaces the voice build. It
+deletes the build and its chat, saves a still per step and `voice-e2e.json` (steps, socket tally, cost) in
+`assets-local/review/app/voice-e2e/<sha>/`, prints `cost elevenlabs characters=<n> minutes=<m> audio_sent_s=<s>
+call_s=<s>` (characters are the account's usage before and after, so another session at the same time counts too;
+`unknown` without `ELEVENLABS_API_KEY`) and ends with `exit=<n> qa-voice-e2e`. Each run spends ElevenLabs
+transcription and conversational-AI credits, so it runs only when voice code changes: `ogm-qa-review-hook` runs it after
+a deploy that touches a path in `ops/voice-paths` (the list CI's voice host job also reads), logs to
+`~/.local/state/ogm/qa/voice-e2e/<sha>.log`, cuts off a run that takes longer than `OGM_QA_TIMEOUT_SEC` (3600), and
+appends a `qa-voice-e2e failed` line to the attention file when it
+fails. Run `ops/bin/ogm-voice-host build` and `restart` before it when the voice host changed.
 
 ## Prove the instance monorepo flow
 

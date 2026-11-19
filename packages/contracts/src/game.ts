@@ -98,6 +98,14 @@ export const controlDeclSchema = z.looseObject({
 });
 export type ControlDecl = z.infer<typeof controlDeclSchema>;
 
+/** Menu, pause and countdown screens a trailer must not show, besides elements marked `data-gm-menu`. */
+export const gameMenusSchema = z.strictObject({
+  /** CSS selectors of menu elements; a visible match marks the frame as a menu. */
+  selectors: z.array(z.string().min(1).max(256)).max(32).optional(),
+  /** `location.pathname` or `location.hash` values that are menu screens. */
+  routes: z.array(z.string().min(1).max(256)).max(32).optional(),
+});
+
 /** A4 §6 `core.manifest` fields plus the B7 §3 minimum additions. */
 export const gameManifestSchema = z.looseObject({
   id: z.string().min(1).max(64),
@@ -106,11 +114,16 @@ export const gameManifestSchema = z.looseObject({
   title,
   /** Genre names displayed as icons in the games library. */
   genres: z.array(z.string().min(1).max(32)).max(4).optional(),
+  /** One line shown under the title on the game's detail view. */
+  description: z.string().min(1).max(160).optional(),
+  /** Extra tag names (vibe, art, world, players) shown as chips on the detail view. */
+  tags: z.array(z.string().min(1).max(32)).max(8).optional(),
   /** Build-relative logo image under media/, displayed over game artwork. */
   logo: z
     .string()
     .regex(/^media\/[a-zA-Z0-9_-]+\.(png|webp|svg)$/u)
     .optional(),
+  menus: gameMenusSchema.optional(),
   /** Build-relative source images used while this game loads. */
   loading: z
     .looseObject({
@@ -211,11 +224,30 @@ export const gameManifestSchema = z.looseObject({
       'Option IDs must be unique',
     )
     .optional(),
+  /** Playable modes and the exact game text tapped, `>`-separated, to start each; `gm qa playtest` plays every one. */
+  modes: z
+    .array(
+      z.looseObject({
+        id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
+        label,
+        tap: z
+          .string()
+          .min(1)
+          .max(200)
+          .refine((tap) => tap.split('>').every((text) => text.trim() !== ''), 'Tap path has an empty step'),
+      }),
+    )
+    .min(1)
+    .max(12)
+    .refine((modes) => new Set(modes.map((mode) => mode.id)).size === modes.length, 'Mode IDs must be unique')
+    .optional(),
   /** Appearance of the shell menu button while playing this game. */
   playMenuButton: z
     .looseObject({ colour: z.string().regex(/^#[0-9a-fA-F]{6}$/u), icon: z.enum(['pause', 'menu']) })
     .optional(),
   saves: z.boolean(),
+  /** Enables player-selected manual save slots in addition to the automatic save. */
+  manualSaveSlots: z.boolean().optional(),
   /**
    * The save schema version this build writes and, when the game migrates, the one older version it still reads.
    * The SDK fills both from the mounted instance in its `ready` handshake, so a build's `manifest.json` need not
@@ -233,7 +265,7 @@ export const gameManifestSchema = z.looseObject({
 });
 export type GameManifest = z.infer<typeof gameManifestSchema>;
 
-export type SaveData<S> = { saveSchemaVersion: number; data: S };
+export type SaveData<S> = { saveSchemaVersion: number; data: S; thumbnail?: string };
 export type PlacementResult = { ok: true } | { ok: false; reason: string };
 
 export interface GameModule<D, S> {
@@ -263,8 +295,17 @@ export interface GameInstance<D, S> {
   setSelection?(ids: string[]): void;
   /** Bridge `editor.camera`; throws for an unknown `target`. */
   setCamera?(mode: 'follow' | 'free', target?: string): void;
+  /** Game-state checks `gm qa playtest` reads while the bot plays; see `QaInvariant`. */
+  qa?: { invariants(): QaInvariant[] };
   /** Required by every template (E04-15). */
   net: MultiplayerHooks;
+}
+
+/** One game-state rule, such as "one piece per cell"; `ok: false` fails the playtest with `detail`. */
+export interface QaInvariant {
+  name: string;
+  ok: boolean;
+  detail?: string;
 }
 
 /**
@@ -359,6 +400,8 @@ export interface HostApi {
   haptics: { pulse(pattern: 'light' | 'medium' | 'heavy' | number[]): void };
   settings: { onChange(cb: (s: PlayerSettings) => void): () => void };
   test: { register(hooks: GmTestHooks): void };
+  /** Hide the host Pause control on the game's own menu screens; it shows by default and again after a reload. */
+  setHostPauseVisible?(visible: boolean): void;
 }
 
 export const gameSchemas = {

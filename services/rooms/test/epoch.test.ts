@@ -28,6 +28,12 @@ describe('epoch', () => {
     expect(tickAt(resumed, startAt + 10_000)).toBe(90);
   });
 
+  it('continues advancing until a scheduled pause boundary', () => {
+    const clock = { startAt, pausedAt: startAt + 1_000 };
+    expect(tickAt(clock, startAt + 500)).toBe(30);
+    expect(tickAt(clock, startAt + 2_000)).toBe(60);
+  });
+
   it('mints a lead ahead of now, a seed and a primary seat', () => {
     const minted = mintEpoch({ now: startAt, primarySeat: 2, seed: 7 });
     expect(minted.startAt).toBe(startAt + LIMITS_V2.startLeadMs);

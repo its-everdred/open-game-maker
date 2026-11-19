@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { AuthorityMode } from '@ogm/contracts/browser';
 
 import { InviteRoomControl, RoomMembersControl } from '../../features/room/RoomControls';
 import type { CreatedRoom } from '../../features/room/InviteButton';
@@ -10,6 +11,7 @@ export type GameExtraProps = {
   branchId: string;
   buildId?: string;
   mode: 'play' | 'edit';
+  authorityMode?: AuthorityMode;
   onNavigate?: () => void;
   onRoomCreated?: (room: CreatedRoom) => void;
   onRoomLeave?: () => void | Promise<void>;

@@ -77,6 +77,16 @@ describe('renderInstanceTemplate', () => {
     }
   });
 
+  it('gates a pull request that changes a game trailer with gm trailer --check', () => {
+    const workflow = parse(file('.github/workflows/ci.yml')) as {
+      jobs: { required: { steps: Array<{ name?: string; if?: string; run?: string }> } };
+    };
+    const step = workflow.jobs.required.steps.find((candidate) => candidate.name === 'Check changed trailers');
+    expect(step?.if).toBe("github.event_name == 'pull_request'");
+    expect(step?.run).toContain(`git diff --name-only --diff-filter=d "$base" HEAD -- 'games/*/**/trailer*.mp4'`);
+    expect(step?.run).toContain('pnpm exec gm trailer "$(cut -d/ -f2 <<<"$dir")" --check --dir "$dir"');
+  });
+
   it('is deterministic', () => {
     expect(renderInstanceTemplate()).toEqual(renderInstanceTemplate());
   });

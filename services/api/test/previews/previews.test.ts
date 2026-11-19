@@ -13,8 +13,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import previewRoutes from '../../src/previews/routes.js';
 import roundRoutes from '../../src/review-rounds/routes.js';
-import { previewDirectory } from '../../src/previews/store.js';
+import { answerPreview, previewDirectory } from '../../src/previews/store.js';
 import { getRound, postRound } from '../../src/review-rounds/store.js';
+import { createReviewSync } from '../../src/review-rounds/runner.js';
+import type { AiurClient } from '@ogm/aiur-client';
 import { scanPreviewRelay } from '../../src/previews/relay.js';
 import { previewTicketVerifier } from '../../src/previews/ticket.js';
 import { daemonRowForGame } from '../../src/jobs/daemons.js';
@@ -86,6 +88,203 @@ function enableTracks(deps: ReturnType<typeof setup>['deps']) {
 }
 
 describe('review round previews', () => {
+  it('records creator notes and reports delivery after the reconciler sends them to the worker', async () => {
+    const { deps, app } = setup();
+    postRound(deps.db, {
+      id: 'reconcile-round',
+      gameId: ids.game,
+      track: 'art',
+      phase: 'concept',
+      category: 'art',
+      round: 1,
+      ticket: '12',
+      sha: SHA,
+      media: '[]',
+      postedAt: '2026-11-14T00:00:00Z',
+    });
+    const base = `http://example.test/api/v1/games/${ids.game}/review-rounds/reconcile-round`;
+    const status = async () =>
+      (await (await app.request(`${base}/status`, { headers: asUser(ids.user) })).json()) as { status: string };
+    expect((await status()).status).toBe('open');
+    expect(
+      (
+        await app.request(`${base}/answer`, {
+          method: 'POST',
+          headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+          body: JSON.stringify({ verdict: 'needs_work', note: 'More contrast' }),
+        })
+      ).status,
+    ).toBe(200);
+    expect(getRound(deps.db, ids.game, 'reconcile-round')?.notes).toBe('More contrast');
+    expect((await status()).status).toBe('pending');
+    let message: string | null = null;
+    const rework = vi.fn(async (_ticket: string, reason: string) => {
+      message = reason;
+    });
+    const client = {
+      rework,
+      ticketTranscript: async () => ({ events: message ? [{ body: message, turn_id: null }] : [], nextCursor: null }),
+      issue: async () =>
+        message
+          ? {
+              status: 'running',
+              running: { session_id: 'run-1', started_at: '2026-11-14T01:00:01Z' },
+              queue: { depth: 0 },
+            }
+          : { status: 'idle', running: null, queue: { depth: 0 } },
+    } as unknown as AiurClient;
+    const sync = createReviewSync({
+      db: deps.db,
+      clientForGame: async () => client,
+      log: () => {},
+      issues: { legacyStarted: vi.fn(), integrated: vi.fn(), setFidelity: vi.fn(), close: vi.fn(), cancel: vi.fn() },
+      now: () => Date.parse('2026-11-14T01:01:00Z'),
+    });
+    await sync();
+    expect(rework).toHaveBeenCalledOnce();
+    expect(message).toContain('More contrast');
+    expect((await status()).status).toBe('sent');
+    deps.db
+      .insert(schema.reviewPhaseOwners)
+      .values({
+        gameId: ids.game,
+        track: 'art',
+        phase: 'build',
+        ticket: '12',
+        sourceRoundId: 'reconcile-round',
+      })
+      .run();
+    postRound(deps.db, {
+      id: 'next-round',
+      gameId: ids.game,
+      track: 'art',
+      phase: 'build',
+      category: 'art',
+      round: 1,
+      ticket: '12',
+      sha: SHA,
+      media: '[]',
+      postedAt: '2026-11-15T00:00:00Z',
+    });
+    expect(await status()).toMatchObject({
+      status: 'sent',
+      nextPhase: { phase: 'build', ticket: '12' },
+      newRound: true,
+    });
+  });
+  it('hides and rejects a preview whose review round has been superseded', async () => {
+    const { deps, upload, list, answer, message } = setup();
+    const preview = (await (await upload()).json()) as { buildId: string };
+    const row = { gameId: ids.game, round: 1, ticket: '12', sha: SHA, postedAt: '2026-11-14T00:00:00Z' };
+    postRound(deps.db, {
+      ...row,
+      id: 'old-preview',
+      track: 'game',
+      phase: 'build',
+      category: 'gameplay',
+      media: JSON.stringify([{ kind: 'build', ref: preview.buildId }]),
+    });
+    postRound(deps.db, {
+      ...row,
+      id: 'new-art',
+      track: 'art',
+      phase: 'build',
+      category: 'art',
+      media: '[]',
+      postedAt: '2026-11-15T00:00:00Z',
+    });
+    expect(((await (await list()).json()) as { previews: unknown[] }).previews).toEqual([]);
+    expect((await answer(preview.buildId)).status).toBe(409);
+    expect(await answerPreview(deps, ids.game, '12', preview.buildId, 'old review', 'looks right', undefined)).toBe(
+      false,
+    );
+    expect(getRound(deps.db, ids.game, 'old-preview')?.verdict).toBeNull();
+    expect(message).not.toHaveBeenCalled();
+    expect((await upload()).status).toBe(201);
+  });
+  it('hides and rejects a standalone preview when a newer round exists', async () => {
+    const { deps, upload, list, answer, message } = setup();
+    await upload();
+    const preview = ((await (await list()).json()) as { previews: { buildId: string; createdAt: string }[] })
+      .previews[0]!;
+    postRound(deps.db, {
+      gameId: ids.game,
+      round: 1,
+      ticket: '12',
+      sha: SHA,
+      postedAt: new Date(Date.parse(preview.createdAt) + 1000).toISOString(),
+      id: 'new-art',
+      track: 'art',
+      phase: 'build',
+      category: 'art',
+      media: '[]',
+    });
+    expect(((await (await list()).json()) as { previews: unknown[] }).previews).toEqual([]);
+    expect((await answer(preview.buildId)).status).toBe(409);
+    expect(await answerPreview(deps, ids.game, '12', preview.buildId, 'old review', 'looks right', undefined)).toBe(
+      false,
+    );
+    expect(message).not.toHaveBeenCalled();
+  });
+  it('lists only the latest round per ticket, even when the latest has already been answered', async () => {
+    const { deps, app } = setup();
+    const row = {
+      gameId: ids.game,
+      track: 'art',
+      category: 'art' as const,
+      round: 1,
+      sha: SHA,
+      media: '[]',
+      postedAt: '2026-11-14T00:00:00Z',
+    };
+    postRound(deps.db, { ...row, id: 'old', phase: 'mock', ticket: '12' });
+    postRound(deps.db, { ...row, id: 'new', phase: 'build', ticket: '12' });
+    postRound(deps.db, { ...row, id: 'other', phase: 'mock', ticket: '13', track: 'other' });
+    postRound(deps.db, {
+      ...row,
+      id: 'old-format',
+      phase: 'mock',
+      ticket: '14',
+      track: 'third',
+      postedAt: '2026-11-14T00:00:00Z',
+    });
+    postRound(deps.db, {
+      ...row,
+      id: 'new-format',
+      phase: 'build',
+      ticket: '14',
+      track: 'third',
+      postedAt: '2026-11-14T00:00:00.001Z',
+    });
+    const list = async () =>
+      (
+        await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
+          headers: asUser(ids.user),
+        })
+      ).json();
+    expect(await list()).toMatchObject({ rounds: [{ id: 'new' }, { id: 'other' }, { id: 'new-format' }] });
+    const oldAnswer = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/old/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ verdict: 'approved' }),
+    });
+    expect(oldAnswer.status).toBe(409);
+    expect(getRound(deps.db, ids.game, 'old')?.verdict).toBeNull();
+    expect(
+      (
+        await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/old/missing-media`, {
+          method: 'POST',
+          headers: asUser(ids.user),
+        })
+      ).status,
+    ).toBe(409);
+    deps.db
+      .update(schema.reviewRounds)
+      .set({ verdict: 'approved', verdictAt: row.postedAt, verdictSource: 'command' })
+      .where(eq(schema.reviewRounds.id, 'new'))
+      .run();
+    expect(await list()).toMatchObject({ rounds: [{ id: 'other' }, { id: 'new-format' }] });
+  });
   it('does not expose unverified audio attached to a legacy sound round', async () => {
     const { deps, app } = setup();
     postRound(deps.db, {
@@ -180,7 +379,10 @@ describe('review round previews', () => {
         category: 'art',
         ticket: '12',
         sha: SHA,
-        media: [{ kind: 'still', ref: image.hash }],
+        media: [
+          { kind: 'still', ref: image.hash },
+          { kind: 'still', ref: image.hash, role: 'target' },
+        ],
       }),
     });
     expect(posted.status).toBe(201);
@@ -188,7 +390,17 @@ describe('review round previews', () => {
     const list = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
       headers: asUser(ids.user),
     });
-    expect(await list.json()).toMatchObject({ rounds: [{ id, media: [{ kind: 'still', url: expect.any(String) }] }] });
+    expect(await list.json()).toMatchObject({
+      rounds: [
+        {
+          id,
+          media: [
+            { kind: 'still', url: expect.any(String) },
+            { kind: 'still', role: 'target', url: expect.any(String) },
+          ],
+        },
+      ],
+    });
     const answer = (verdict: string) =>
       app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/${id}/answer`, {
         method: 'POST',
@@ -235,7 +447,14 @@ describe('review round previews', () => {
     const list = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
       headers: asUser(ids.user),
     });
-    expect(await list.json()).toMatchObject({ rounds: [{ id, media: [{ kind: 'still', url: expect.any(String) }] }] });
+    expect(await list.json()).toMatchObject({
+      rounds: [
+        {
+          id,
+          media: [{ kind: 'still', url: expect.stringContaining('https://app.example.test/api/v1/blobs/sha256/') }],
+        },
+      ],
+    });
     const answer = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/${id}/answer`, {
       method: 'POST',
       headers: { ...asUser(ids.user), 'content-type': 'application/json' },

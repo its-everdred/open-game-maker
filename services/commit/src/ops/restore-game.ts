@@ -45,11 +45,13 @@ export async function restoreGame(
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const head = await github.request<{ object: { sha: string } }>('GET /repos/{owner}/{repo}/git/ref/{ref}', {
       ...repository,
+      repo: repository.name,
       ref: 'heads/main',
     });
     const base = head.data.object.sha;
     const baseCommit = await github.request<CommitData>('GET /repos/{owner}/{repo}/git/commits/{commit_sha}', {
       ...repository,
+      repo: repository.name,
       commit_sha: base,
     });
     const current = await readGameFolder({ request: github.request, repository, sha: base, gamePath: folder });
@@ -71,6 +73,7 @@ export async function restoreGame(
       const sha = await createCommit(github.request, repository, `restore: ${op.gameId}`, tree, identity, [base]);
       await github.request('PATCH /repos/{owner}/{repo}/git/refs/{ref}', {
         ...repository,
+        repo: repository.name,
         ref: 'heads/main',
         sha,
         force: false,

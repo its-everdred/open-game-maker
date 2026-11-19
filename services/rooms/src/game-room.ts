@@ -5,6 +5,7 @@ import {
   LIMITS_V2,
   PROTOCOL_VERSION,
   PROTOCOL_VERSION_V1,
+  SIM_TICK_HZ,
   PresenceSchema as ContractPresenceSchema,
   RoomClientMessageSchema,
   type NetClientMessage,
@@ -45,6 +46,10 @@ import {
 } from './state.js';
 
 const liveRooms = new Map<string, GameRoom>();
+/** How long a probed seat may stay silent before the pause falls back to the room's tick (no SDK answers slower). */
+const MATCH_PROBE_TIMEOUT_MS = 2_000;
+/** How far short of a prepared boundary a joining seat starts, so it reaches the boundary by running forward. */
+const PREPARED_JOIN_MARGIN_MS = 1_000;
 
 export type RuntimeOptions = {
   grantSecret: string;
@@ -104,6 +109,11 @@ const RATE_LIMITS = {
   'net.end.request': LIMITS_V2.endRequestPerSec,
   'net.signal': LIMITS_V2.signalPerSec,
   'net.seat.request': LIMITS_V2.seatRequestPerSec,
+  'net.pause.ack': 2,
+  'net.pause.late': 2,
+  'net.pause.position': 2,
+  'match.pause.request': 2,
+  'match.resume.request': 2,
 } satisfies Record<RoomClientMessage['t'], number>;
 
 function rejection(code: object, status: number): never {
@@ -136,6 +146,15 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   private startLeadMs: number = LIMITS_V2.startLeadMs;
   private readonly rejoinTimers = new Map<number, { clear(): void }>();
   private tickTimer?: { clear(): void };
+  private matchResumeTimer?: { clear(): void };
+  private matchProbeTimer?: { clear(): void };
+  private readonly matchPauseAcks = new Set<string>();
+  private readonly matchPausePositions = new Map<string, number>();
+  private matchProbeAt = 0;
+  private readonly matchLateUsers = new Set<string>();
+  private matchPauseTick = 0;
+  private matchResumeRequested = false;
+  private matchUsesBarrier = false;
   /** Routing refusals by `DropCode`, beside `droppedCounts` (which counts by message type). */
   readonly seatDrops: Record<string, number> = Object.create(null) as Record<string, number>;
 
@@ -186,6 +205,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
       rejection({ code: 'RULESET_MISMATCH', expected }, 409);
     }
     const held = seatOfUser(this.state, grant.sub);
+    if (held && this.matchLateUsers.has(grant.sub)) rejection({ code: 'SEAT_TAKEN', seat: held.seat }, 409);
     if (held?.forfeited === true) rejection({ code: 'SEAT_TAKEN', seat: held.seat }, 409);
     if (options.seat !== undefined && held?.seat !== options.seat) {
       rejection({ code: 'SEAT_TAKEN', seat: options.seat }, 409);
@@ -294,6 +314,18 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
+    const seat = this.isV2 ? this.seatFor(client) : undefined;
+    if (
+      this.matchUsesBarrier &&
+      this.state.pausedAt !== 0 &&
+      seat !== undefined &&
+      !this.matchPauseAcks.has(client.sessionId) &&
+      !this.clients.some((peer) => peer.sessionId !== client.sessionId && clientGrant(peer).sub === seat.userId)
+    ) {
+      this.matchLateUsers.add(seat.userId);
+    }
+    this.matchPauseAcks.delete(client.sessionId);
+    this.matchPausePositions.delete(client.sessionId);
     const grant = clientGrant(client);
     const forced = this.forcedLeaves.get(client.sessionId);
     this.forcedLeaves.delete(client.sessionId);
@@ -316,6 +348,8 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   onDispose(): void {
     this.cancelIdleTimer();
     this.clearTickTimer();
+    this.matchResumeTimer?.clear();
+    this.matchProbeTimer?.clear();
     for (const timer of this.rejoinTimers.values()) timer.clear();
     this.rejoinTimers.clear();
     liveRooms.delete(this.roomId);
@@ -345,6 +379,8 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   }
 
   private handleMessage(client: Client, message: RoomClientMessage): void {
+    if (message.t === 'match.pause.request') return this.pauseMatch(client);
+    if (message.t === 'match.resume.request') return this.requestMatchResume(client);
     if (message.t.startsWith('net.')) return this.handleNetMessage(client, message as NetClientMessage);
     switch (message.t) {
       case 'input': {
@@ -446,6 +482,23 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
         return this.finishEpoch(client, message.epoch);
       case 'net.seat.request':
         return this.moveSeat(client, message.seat);
+      case 'net.pause.ack':
+        return this.acknowledgeMatchPause(client, message.epoch, message.tick);
+      case 'net.pause.position':
+        return this.recordMatchPosition(client, message.epoch, message.tick);
+      case 'net.pause.late':
+        if (
+          this.state.matchPausedBy &&
+          message.epoch === this.state.epoch &&
+          message.tick === this.matchPauseTick &&
+          this.seatFor(client)
+        ) {
+          this.matchLateUsers.add(clientGrant(client).sub);
+          for (const peer of this.clients) {
+            if (clientGrant(peer).sub === clientGrant(client).sub) peer.leave(4004);
+          }
+        }
+        return;
       default:
         return this.relay(client, message);
     }
@@ -491,7 +544,31 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
         state: roomStateJson<RoomStateV2>(this.state),
       });
       if (this.state.epoch === '') return;
-      client.send('net.start', this.startPayload(seat?.seat));
+      const preparedPause = this.matchUsesBarrier && this.state.pausedAt !== 0;
+      client.send('net.start', this.startPayload(seat?.seat, preparedPause));
+      if (preparedPause && seat !== undefined && this.state.matchResumeAt === 0) this.armMatchAckTimeout();
+      if (this.matchUsesBarrier && this.state.pausedAt === 0) {
+        if (seat !== undefined) this.probeMatchPositions();
+        else client.send('net.pause.probe', { epoch: this.state.epoch });
+      } else if (this.state.pausedAt !== 0) {
+        if (this.matchUsesBarrier)
+          client.send('net.pause.prepare', { epoch: this.state.epoch, tick: this.matchPauseTick });
+        else
+          client.send('net.pause', {
+            epoch: this.state.epoch,
+            tick: tickAt(this.state, Date.now()),
+            startAt: this.state.startAt,
+          });
+      }
+      if (this.matchUsesBarrier && this.state.matchResumeAt > 0) {
+        const at = this.state.matchResumeAt;
+        client.send('net.resume', {
+          epoch: this.state.epoch,
+          tick: this.matchPauseTick,
+          startAt: resumeAt(this.state, at).startAt,
+          at,
+        });
+      }
       client.send('net.tick', {
         epoch: this.state.epoch,
         serverTime: Date.now(),
@@ -499,6 +576,10 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
       });
     }, 0);
 
+    if (seat !== undefined) {
+      this.requestResumeIfPauserForfeited();
+      this.resumeMatchWhenPrepared();
+    }
     this.resumeIfReady();
   }
 
@@ -536,6 +617,21 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
 
   /** The 30-second window. Expiring forfeits the seat and, if it was the primary, re-elects one. */
   private openRejoinWindow(seat: SeatState): void {
+    if (this.state.matchResumeAt !== 0) {
+      this.matchResumeTimer?.clear();
+      this.matchResumeTimer = undefined;
+      this.state.matchResumeAt = 0;
+      this.matchResumeRequested = false;
+      if (this.matchUsesBarrier) {
+        this.broadcast('net.pause', {
+          epoch: this.state.epoch,
+          tick: this.matchPauseTick,
+          startAt: this.state.startAt,
+        });
+        this.armMatchAckTimeout();
+      }
+      this.broadcast('match.pause', { by: this.state.matchPausedBy, name: this.state.matchPauseName });
+    }
     this.cancelRejoinTimer(seat.seat);
     const timer = this.clock.setTimeout(() => {
       this.rejoinTimers.delete(seat.seat);
@@ -549,6 +645,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   }
 
   private pauseForWindow(): void {
+    if (this.matchUsesBarrier) return;
     if (!this.pauseOnDisconnect || this.state.pausedAt !== 0 || this.state.epoch === '') return;
     const now = Date.now();
     const clock = pauseAt({ startAt: this.state.startAt, pausedAt: this.state.pausedAt }, now);
@@ -556,7 +653,198 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
     this.broadcast('net.pause', { epoch: this.state.epoch, tick: tickAt(clock, now), startAt: this.state.startAt });
   }
 
+  private pauseMatch(client: Client): void {
+    if (!this.isV2 || this.state.phase !== 'playing' || this.state.matchPausedBy !== '' || this.state.pausedAt !== 0)
+      return;
+    const seat = this.seatFor(client);
+    if (seat === undefined || seat.forfeited) return;
+    if (this.state.epoch !== '' && Date.now() < this.state.startAt) {
+      this.clock.setTimeout(() => {
+        if (this.clients.includes(client)) this.pauseMatch(client);
+      }, this.state.startAt - Date.now());
+      return;
+    }
+    this.state.matchPausedBy = seat.userId;
+    this.state.matchPauseName = seat.name;
+    this.matchPauseAcks.clear();
+    this.matchPausePositions.clear();
+    this.matchResumeRequested = false;
+    this.matchUsesBarrier = this.state.epoch !== '' && this.authorityMode === 'per-seat';
+    if (this.state.epoch !== '' && this.state.pausedAt === 0) {
+      const now = Date.now();
+      if (this.matchUsesBarrier) {
+        this.probeMatchPositions();
+      } else {
+        this.state.pausedAt = now;
+        this.broadcast('net.pause', {
+          epoch: this.state.epoch,
+          tick: tickAt(this.state, now),
+          startAt: this.state.startAt,
+        });
+      }
+    }
+    this.broadcast('match.pause', { by: seat.userId, name: seat.name });
+  }
+
+  /** Asks every seat for its tick again, so the boundary lead covers only the time since this probe. */
+  private probeMatchPositions(): void {
+    this.matchPausePositions.clear();
+    this.matchProbeAt = Date.now();
+    this.broadcast('net.pause.probe', { epoch: this.state.epoch });
+    this.matchProbeTimer?.clear();
+    this.matchProbeTimer = this.clock.setTimeout(() => {
+      this.matchProbeTimer = undefined;
+      this.fallBackFromSilentProbe();
+    }, MATCH_PROBE_TIMEOUT_MS);
+  }
+
+  /**
+   * An SDK answers a probe as the message arrives, so a connected seat that stays silent runs an SDK built before
+   * the barrier (Blobs ships one). The match then pauses the way those builds understand: at the room's tick, now.
+   */
+  private fallBackFromSilentProbe(): void {
+    if (!this.matchUsesBarrier || !this.state.matchPausedBy || this.state.pausedAt !== 0) return;
+    const silent = this.clients.some((peer) => {
+      const peerSeat = this.seatFor(peer);
+      return peerSeat !== undefined && !peerSeat.forfeited && !this.matchPausePositions.has(peer.sessionId);
+    });
+    if (!silent) return;
+    this.matchUsesBarrier = false;
+    this.matchPausePositions.clear();
+    const now = Date.now();
+    this.state.pausedAt = now;
+    this.broadcast('net.pause', {
+      epoch: this.state.epoch,
+      tick: tickAt(this.state, now),
+      startAt: this.state.startAt,
+    });
+    this.resumeMatchWhenPrepared();
+  }
+
+  /** A seat that has not reached the prepared boundary in time is treated as late: it leaves and its window runs. */
+  private armMatchAckTimeout(): void {
+    this.matchProbeTimer?.clear();
+    this.matchProbeTimer = this.clock.setTimeout(() => {
+      this.matchProbeTimer = undefined;
+      if (!this.matchUsesBarrier || !this.state.matchPausedBy || this.state.pausedAt === 0) return;
+      for (const peer of this.clients) {
+        const peerSeat = this.seatFor(peer);
+        if (peerSeat === undefined || peerSeat.forfeited || this.matchPauseAcks.has(peer.sessionId)) continue;
+        this.matchLateUsers.add(peerSeat.userId);
+        peer.leave(4004);
+      }
+      this.armMatchAckTimeout();
+    }, this.timings.seatReconnectSec * 1_000);
+  }
+
+  private recordMatchPosition(client: Client, epoch: string, tick: number): void {
+    if (!this.matchUsesBarrier || !this.state.matchPausedBy || this.state.pausedAt !== 0 || epoch !== this.state.epoch)
+      return;
+    const seat = this.seatFor(client);
+    if (!seat || seat.forfeited) return;
+    const maxRoomTick = tickAt(this.state, Date.now()) + SIM_TICK_HZ;
+    this.matchPausePositions.set(client.sessionId, Math.min(tick, maxRoomTick));
+    this.prepareMatchWhenPositionsReady();
+  }
+
+  private prepareMatchWhenPositionsReady(): void {
+    if (!this.matchUsesBarrier || !this.state.matchPausedBy || this.state.pausedAt !== 0) return;
+    const players = this.clients.filter((peer) => {
+      const peerSeat = this.seatFor(peer);
+      return peerSeat !== undefined && !peerSeat.forfeited;
+    });
+    if (players.length === 0) return;
+    if (players.some((peer) => !this.matchPausePositions.has(peer.sessionId))) return;
+    if ([...this.state.seats].some((row) => row.userId !== '' && !row.connected && !row.forfeited)) return;
+    const leadTicks = Math.max(12, Math.ceil(((Date.now() - this.matchProbeAt) * SIM_TICK_HZ) / 1000) + 6);
+    this.matchPauseTick = Math.max(...players.map((peer) => this.matchPausePositions.get(peer.sessionId)!)) + leadTicks;
+    this.state.pausedAt = this.state.startAt + Math.ceil((this.matchPauseTick * 1000) / SIM_TICK_HZ);
+    this.armMatchAckTimeout();
+    this.broadcast('net.pause.prepare', { epoch: this.state.epoch, tick: this.matchPauseTick });
+  }
+
+  private requestMatchResume(client: Client): void {
+    const seat = this.seatFor(client);
+    if (
+      !this.isV2 ||
+      seat === undefined ||
+      seat.forfeited ||
+      this.state.matchPausedBy === '' ||
+      this.state.matchResumeAt !== 0
+    )
+      return;
+    const occupied = [...this.state.seats].filter((row) => row.userId !== '' && !row.forfeited);
+    if (occupied.some((row) => !row.connected)) return;
+    const pauserSeated = occupied.some((row) => row.userId === this.state.matchPausedBy);
+    if (seat.userId !== this.state.matchPausedBy && occupied.length !== 2 && pauserSeated) return;
+    this.matchResumeRequested = true;
+    this.prepareMatchWhenPositionsReady();
+    this.resumeMatchWhenPrepared();
+  }
+
+  private acknowledgeMatchPause(client: Client, epoch: string, tick: number): void {
+    const seat = this.seatFor(client);
+    if (
+      !this.state.matchPausedBy ||
+      epoch !== this.state.epoch ||
+      tick !== this.matchPauseTick ||
+      !seat ||
+      seat.forfeited
+    )
+      return;
+    this.matchPauseAcks.add(client.sessionId);
+    this.resumeMatchWhenPrepared();
+  }
+
+  private resumeMatchWhenPrepared(): void {
+    if (!this.matchResumeRequested || this.state.matchResumeAt !== 0 || !this.state.matchPausedBy) return;
+    if (this.matchUsesBarrier && this.state.pausedAt === 0) return;
+    if ([...this.state.seats].some((seat) => seat.userId !== '' && !seat.connected && !seat.forfeited)) return;
+    if (
+      this.matchUsesBarrier &&
+      this.clients.some((client) => {
+        const seat = this.seatFor(client);
+        return seat !== undefined && !seat.forfeited && !this.matchPauseAcks.has(client.sessionId);
+      })
+    )
+      return;
+    this.scheduleMatchResume();
+  }
+
+  private scheduleMatchResume(): void {
+    this.matchProbeTimer?.clear();
+    this.matchProbeTimer = undefined;
+    const at = Date.now() + 3_000;
+    this.state.matchResumeAt = at;
+    this.broadcast('match.resume', { at });
+    const barrierClock = this.matchUsesBarrier ? resumeAt(this.state, at) : undefined;
+    if (barrierClock) {
+      this.broadcast('net.resume', {
+        epoch: this.state.epoch,
+        tick: this.matchPauseTick,
+        startAt: barrierClock.startAt,
+        at,
+      });
+    }
+    this.matchResumeTimer = this.clock.setTimeout(() => {
+      this.matchResumeTimer = undefined;
+      this.state.matchPausedBy = '';
+      this.state.matchPauseName = '';
+      this.state.matchResumeAt = 0;
+      this.matchResumeRequested = false;
+      this.matchPauseAcks.clear();
+      this.matchLateUsers.clear();
+      this.matchUsesBarrier = false;
+      if (barrierClock) {
+        this.state.startAt = barrierClock.startAt;
+        this.state.pausedAt = 0;
+      } else this.resumeIfReady();
+      this.broadcast('match.resumed', {});
+    }, 3_000);
+  }
+
   private resumeIfReady(): void {
+    if (this.state.matchPausedBy !== '') return;
     if (this.state.epoch === '' || this.state.pausedAt === 0) return;
     if ([...this.state.seats].some((seat) => seat.userId !== '' && !seat.connected && !seat.forfeited)) return;
     const now = Date.now();
@@ -579,6 +867,9 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
       }
     }
     this.broadcastSeats();
+    this.requestResumeIfPauserForfeited();
+    this.prepareMatchWhenPositionsReady();
+    this.resumeMatchWhenPrepared();
     this.resumeIfReady();
   }
 
@@ -606,11 +897,30 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
     this.startTickTimer();
   }
 
-  private startPayload(seat: number | undefined): object {
+  /** Once the pauser has forfeited, nobody may be left holding the pause: the countdown starts when every seat is back. */
+  private requestResumeIfPauserForfeited(): void {
+    if (this.state.matchPausedBy === '' || this.state.matchResumeAt !== 0) return;
+    const seats = [...this.state.seats];
+    if (seats.some((row) => row.userId === this.state.matchPausedBy && !row.forfeited)) return;
+    if (seats.some((row) => row.userId !== '' && !row.connected && !row.forfeited)) return;
+    this.matchResumeRequested = true;
+  }
+
+  /**
+   * `beforePause` places a seat joining a prepared pause short of the boundary, so it runs up to that tick and
+   * acknowledges it like the others instead of starting past it and being sent away as late. During the resume
+   * countdown it gets the resumed clock, which reaches the boundary exactly when every other seat resumes.
+   */
+  private startPayload(seat: number | undefined, beforePause = false): object {
+    let startAt = this.state.startAt;
+    if (beforePause && this.state.matchResumeAt > 0) startAt = resumeAt(this.state, this.state.matchResumeAt).startAt;
+    else if (beforePause) {
+      startAt = resumeAt(this.state, Math.max(Date.now(), this.state.pausedAt)).startAt + PREPARED_JOIN_MARGIN_MS;
+    }
     return {
       epoch: this.state.epoch,
       mode: this.authorityMode,
-      startAt: this.state.startAt,
+      startAt,
       seed: this.state.seed,
       primarySeat: this.state.primarySeat,
       seats: seatsSnapshot(this.state),
@@ -620,6 +930,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
 
   private cancelStart(reason: 'seat-offline' | 'not-ready'): void {
     if (this.state.epoch === '') return;
+    this.clearMatchPause();
     this.state.epoch = '';
     this.state.startAt = 0;
     this.state.pausedAt = 0;
@@ -641,6 +952,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
       return this.drop(client, 'net.end.request', 'NO_EPOCH');
     }
     const tick = tickAt(this.state, Date.now());
+    this.clearMatchPause();
     this.broadcast('net.epoch.end', { epoch, tick });
     this.state.epoch = '';
     this.state.startAt = 0;
@@ -675,7 +987,9 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   /** Validates the envelope, re-stamps the sender's seat from the grant and routes. Never parses `data`. */
   private relay(client: Client, message: NetClientMessage): void {
     const epoch = 'epoch' in message ? message.epoch : undefined;
-    if (this.state.epoch === '' || epoch !== this.state.epoch) return this.drop(client, message.t, 'NO_EPOCH');
+    const lobbyEvent = message.t === 'net.event' && epoch === 'lobby' && this.state.epoch === '';
+    if (!lobbyEvent && (this.state.epoch === '' || epoch !== this.state.epoch))
+      return this.drop(client, message.t, 'NO_EPOCH');
     const seat = this.seatFor(client);
     if (seat === undefined) return this.drop(client, message.t, 'SPECTATOR_NOT_SEATED');
 
@@ -837,8 +1151,43 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   }
 
   private setPhase(phase: GameRoomState['phase']): void {
+    if (phase !== 'playing') this.clearMatchPause();
     this.state.phase = phase;
     this.state.phaseAt = Date.now();
+  }
+
+  private clearMatchPause(): void {
+    this.matchProbeTimer?.clear();
+    this.matchProbeTimer = undefined;
+    this.matchResumeTimer?.clear();
+    this.matchResumeTimer = undefined;
+    if (
+      this.state.matchPausedBy !== '' &&
+      this.state.epoch !== '' &&
+      this.state.pausedAt === 0 &&
+      this.matchUsesBarrier
+    ) {
+      this.broadcast('net.resume', {
+        epoch: this.state.epoch,
+        tick: tickAt(this.state, Date.now()),
+        startAt: this.state.startAt,
+      });
+    } else if (this.state.matchPausedBy !== '' && this.state.epoch !== '' && this.state.pausedAt !== 0) {
+      const now = Date.now();
+      const clock = resumeAt(this.state, Math.max(now, this.state.pausedAt));
+      this.state.startAt = clock.startAt;
+      this.state.pausedAt = 0;
+      this.broadcast('net.resume', { epoch: this.state.epoch, tick: tickAt(clock, now), startAt: clock.startAt });
+    }
+    if (this.state.matchPausedBy !== '') this.broadcast('match.resumed', {});
+    this.state.matchPausedBy = '';
+    this.state.matchPauseName = '';
+    this.state.matchResumeAt = 0;
+    this.matchResumeRequested = false;
+    this.matchPauseAcks.clear();
+    this.matchPausePositions.clear();
+    this.matchLateUsers.clear();
+    this.matchUsesBarrier = false;
   }
 
   private isGamesUrl(value: string): boolean {

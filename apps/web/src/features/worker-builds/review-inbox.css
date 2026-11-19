@@ -1,0 +1,114 @@
+/* Use the established review deck's glass, controls and drag affordances. */
+.build-review-dialog.decision-deck {
+  height: min(100%, 820px);
+}
+.build-review-dialog .decision-deck-body {
+  align-content: start;
+}
+.worker-review-queue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font: 700 14px var(--display);
+}
+.worker-review-queue p {
+  margin: 0;
+}
+.worker-review-next,
+.worker-review-change,
+.worker-review-option > button:not(.worker-review-image) {
+  min-height: var(--tap-secondary);
+  padding: 0 18px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 700 14px var(--display);
+}
+.worker-review-stage {
+  display: block;
+  container-type: normal;
+}
+.worker-review-swipe {
+  display: block;
+  height: auto;
+  max-height: min(52svh, 520px);
+  overflow-y: auto;
+  padding: 10px;
+  cursor: grab;
+}
+.worker-review-swipe p {
+  margin: 10px 4px 2px;
+  font: 700 15px var(--display);
+}
+.worker-review-swipe .review-deck-playable {
+  margin-bottom: 8px;
+  max-height: 30svh;
+}
+.worker-review-swipe .worker-review-media {
+  touch-action: pan-y pinch-zoom;
+}
+.worker-vote-like {
+  opacity: var(--vote-like, 0);
+}
+.worker-vote-dislike {
+  opacity: var(--vote-dislike, 0);
+}
+.build-review-dialog .review-deck-actions {
+  background: transparent;
+}
+.build-review-dialog .review-deck-thumb,
+.build-review-dialog .review-deck-undo,
+.worker-review-page {
+  border: 1.5px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  background: color-mix(in srgb, var(--glass-edge) 14%, var(--glass-fill));
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    var(--pop-sm);
+}
+.build-review-dialog .review-deck-thumb[aria-label='Looks good'] {
+  color: var(--aqua-b);
+}
+.build-review-dialog .review-deck-thumb[aria-label='Needs changes'] {
+  color: var(--red-b);
+}
+.build-review-dialog .review-deck-undo:disabled {
+  opacity: 0.45;
+}
+.worker-review-option-pages {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.worker-review-page {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font: 700 15px var(--display);
+}
+.worker-review-page[aria-pressed='true'] {
+  background: var(--green-b);
+  color: var(--dark);
+}
+.worker-review-option.review-deck-card {
+  height: auto;
+  cursor: default;
+  touch-action: pan-y pinch-zoom;
+}
+.worker-review-option > button:not(.worker-review-image) {
+  background: var(--green-b);
+  color: var(--dark);
+}
+.build-review-dialog textarea {
+  width: 100%;
+  min-height: var(--tap-secondary);
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--night);
+  color: var(--ink);
+  font: 600 15px var(--body);
+}

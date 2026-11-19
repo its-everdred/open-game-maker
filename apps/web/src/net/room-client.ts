@@ -1,10 +1,13 @@
 import { Client as ColyseusClient } from '@colyseus/sdk';
 import {
-  ClientMessageSchema,
+  RoomClientMessageSchema,
+  RoomServerMessageSchema,
+  RoomStateV2Schema,
   JoinRejectionSchema,
   LIMITS,
   PROTOCOL_VERSION,
-  type ClientMessage,
+  type RoomClientMessage,
+  type NetServerMessage,
   type JoinOptions,
   type Phase,
   type RoomPin,
@@ -67,18 +70,22 @@ export class RoomClient {
   private readonly now: () => number;
   private readonly pingInterval: (phase?: Phase) => number;
   private readonly listeners = new Set<ServerMessageListener>();
+  private readonly netListeners = new Set<(message: NetServerMessage) => void>();
   private readonly receivedMessages: ServerMessage[] = [];
-  private readonly warned = new Set<ClientMessage['t']>();
+  private readonly warned = new Set<RoomClientMessage['t']>();
   private room?: RoomTransport;
   private credentials?: JoinRoom;
   private roomCleanup: Array<() => void> = [];
   private grantTimer?: ReturnType<typeof setTimeout>;
   private pingTimer?: ReturnType<typeof setTimeout>;
+  private matchResumeTimer?: ReturnType<typeof setTimeout>;
+  private bestPingRtt?: number;
   private pingPhaseUnsubscribe?: () => void;
   private refreshInFlight?: { operationId: number; promise: Promise<boolean> };
   private consentedLeave = false;
   private reconnectingOperationId?: number;
   private welcomed = false;
+  private seatsFingerprint = '';
   private operationId = 0;
 
   constructor(options: RoomClientOptions) {
@@ -93,6 +100,7 @@ export class RoomClient {
 
   async join(input: JoinRoom): Promise<void> {
     const operationId = ++this.operationId;
+    this.bestPingRtt = undefined;
     const previousRoom = this.room;
     this.consentedLeave = true;
     this.clearTimers();
@@ -106,9 +114,9 @@ export class RoomClient {
     await this.joinCurrent(false, operationId);
   }
 
-  send(message: ClientMessage): void {
+  send(message: RoomClientMessage): void {
     if (this.room === undefined) return;
-    const parsed = ClientMessageSchema.safeParse(message);
+    const parsed = RoomClientMessageSchema.safeParse(message);
     if (!parsed.success || exceedsClientLimit(message)) {
       this.warnOnce(message.t);
       return;
@@ -120,6 +128,11 @@ export class RoomClient {
   subscribe(listener: ServerMessageListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  subscribeNet(listener: (message: NetServerMessage) => void): () => void {
+    this.netListeners.add(listener);
+    return () => this.netListeners.delete(listener);
   }
 
   received(): ServerMessage[] {
@@ -197,14 +210,19 @@ export class RoomClient {
             },
             false,
           );
+          this.syncMatchState(toJson(raw));
           return;
         }
       }
       this.store.getState().sync(state);
+      this.syncMatchState(toJson(raw));
     };
     const onLeave = () => {
       if (!this.isAttached(room, operationId) || this.consentedLeave || this.store.getState().status === 'ended')
         return;
+      this.cancelMatchResume();
+      const pause = this.store.getState().matchPause;
+      if (pause) this.store.setState({ matchPause: { ...pause, resumeAt: 0 } });
       void this.reconnect(room.reconnectionToken, operationId);
     };
     room.onStateChange(onState);
@@ -226,10 +244,36 @@ export class RoomClient {
       payload !== null && typeof payload === 'object'
         ? { t: type, ...(payload as Record<string, unknown>) }
         : { t: type };
+    const parsed = RoomServerMessageSchema.safeParse(candidate);
+    if (parsed.success) {
+      const message = parsed.data;
+      if (message.t === 'match.pause') {
+        this.cancelMatchResume();
+        this.store.setState({ matchPause: { by: message.by, name: message.name, resumeAt: 0 } });
+        return;
+      }
+      if (message.t === 'match.resume') {
+        const current = this.store.getState().matchPause;
+        if (current !== undefined) this.store.setState({ matchPause: { ...current, resumeAt: message.at } });
+        if (current !== undefined) this.scheduleMatchResume(message.at);
+        return;
+      }
+      if (message.t === 'match.resumed') {
+        this.cancelMatchResume();
+        this.store.setState({ matchPause: undefined });
+        return;
+      }
+      if (message.t.startsWith('net.')) {
+        if (!this.welcomed) return;
+        for (const listener of this.netListeners) listener(message as NetServerMessage);
+        return;
+      }
+    }
     /* Accepts a protocol-1 or protocol-2 frame and hands the editor the v1 view of it. */
     const message = serverMessageV1(candidate);
     if (message === undefined) return;
     this.acceptMessage(message, true);
+    if (parsed.success && parsed.data.t === 'welcome') this.syncMatchState(parsed.data.state);
   }
 
   private acceptMessage(message: ServerMessage, record: boolean): void {
@@ -246,7 +290,15 @@ export class RoomClient {
         this.startPing();
         break;
       case 'pong':
-        this.store.getState().setRtt(Math.max(0, this.now() - message.c));
+        {
+          const now = this.now();
+          const rtt = Math.max(0, now - message.c);
+          this.store.getState().setRtt(rtt);
+          if (this.bestPingRtt === undefined || rtt < this.bestPingRtt) {
+            this.bestPingRtt = rtt;
+            this.store.setState({ serverOffsetMs: message.s - (message.c + rtt / 2) });
+          }
+        }
         break;
       case 'ended':
         this.store.getState().end(message.reason);
@@ -256,6 +308,40 @@ export class RoomClient {
         break;
     }
     for (const listener of this.listeners) listener(message);
+  }
+
+  private syncMatchState(raw: unknown): void {
+    const parsed = RoomStateV2Schema.safeParse(raw);
+    if (!parsed.success) return;
+    const { matchPausedBy, matchPauseName, matchResumeAt } = parsed.data;
+    this.store.setState({
+      matchPause: matchPausedBy
+        ? { by: matchPausedBy, name: matchPauseName || matchPausedBy, resumeAt: matchResumeAt ?? 0 }
+        : undefined,
+    });
+    if (matchPausedBy && matchResumeAt) this.scheduleMatchResume(matchResumeAt);
+    else this.cancelMatchResume();
+    const { seats, spectators, epoch } = parsed.data;
+    const fingerprint = JSON.stringify({ seats, spectators, epoch });
+    if (fingerprint !== this.seatsFingerprint) {
+      this.seatsFingerprint = fingerprint;
+      const message: NetServerMessage = { t: 'net.seats', seats, spectators, epoch };
+      for (const listener of this.netListeners) listener(message);
+    }
+  }
+
+  private scheduleMatchResume(at: number): void {
+    this.cancelMatchResume();
+    const delay = Math.max(0, at - (this.now() + (this.store.getState().serverOffsetMs ?? 0)));
+    this.matchResumeTimer = setTimeout(() => {
+      this.matchResumeTimer = undefined;
+      if (this.store.getState().matchPause?.resumeAt === at) this.store.setState({ matchPause: undefined });
+    }, delay);
+  }
+
+  private cancelMatchResume(): void {
+    if (this.matchResumeTimer !== undefined) clearTimeout(this.matchResumeTimer);
+    this.matchResumeTimer = undefined;
   }
 
   private async reconnect(token: string, operationId: number): Promise<void> {
@@ -324,6 +410,7 @@ export class RoomClient {
 
   private startPing(): void {
     if (this.pingTimer !== undefined) return;
+    this.send({ t: 'ping', c: this.now() });
     this.schedulePing();
     this.pingPhaseUnsubscribe = this.store.subscribe((next, previous) => {
       if (next.phase !== previous.phase) this.schedulePing();
@@ -345,6 +432,7 @@ export class RoomClient {
   }
 
   private clearTimers(): void {
+    this.cancelMatchResume();
     if (this.grantTimer !== undefined) clearTimeout(this.grantTimer);
     if (this.pingTimer !== undefined) clearTimeout(this.pingTimer);
     this.grantTimer = undefined;
@@ -353,7 +441,7 @@ export class RoomClient {
     this.pingPhaseUnsubscribe = undefined;
   }
 
-  private warnOnce(type: ClientMessage['t']): void {
+  private warnOnce(type: RoomClientMessage['t']): void {
     if (this.warned.has(type)) return;
     this.warned.add(type);
     console.warn(`Dropped oversized or invalid room ${type} message`);
@@ -387,7 +475,7 @@ function parseJoinRejection(error: unknown) {
   return { code: 'GRANT_INVALID' as const };
 }
 
-function exceedsClientLimit(message: ClientMessage): boolean {
+function exceedsClientLimit(message: RoomClientMessage): boolean {
   switch (message.t) {
     case 'input':
       return encoder.encode(JSON.stringify(message.f)).byteLength > LIMITS.inputBytes;

@@ -1,8 +1,9 @@
-import { ffmpeg } from '../capture.js';
+import { ffmpeg, phoneH264Args } from '../capture.js';
 
 /** Every pane is scaled to this height before panes sit side by side, so a phone and a desktop line up. */
 export const PANE_HEIGHT = 720;
-const H264 = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast', '-crf', '27', '-movflags', '+faststart'];
+/** Playwright records its WebM at 25 fps; the MP4 keeps that as a constant rate. */
+const H264 = [...phoneH264Args(25), '-preset', 'fast', '-crf', '27', '-movflags', '+faststart'];
 
 /** Recordings are at most this wide: what the MP4 needs, and Playwright's encoder keeps up with a loaded host. */
 export const RECORD_MAX_WIDTH = 960;

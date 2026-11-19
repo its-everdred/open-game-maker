@@ -8,7 +8,8 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
-import { answerRound, getRound } from './store.js';
+import { reviewMediaUrl } from '../blobs/review-url.js';
+import { answerRound, getRound, latestRoundForTicket } from './store.js';
 import { bindReviewEpisode, markReviewAnswered, readReviewEpisode } from './answer-guard.js';
 
 export const prefix = '/api/v1';
@@ -16,7 +17,7 @@ const Answer = z
   .object({ verdict: z.enum(['approved', 'needs_work']), note: z.string().max(3900).optional() })
   .strict();
 
-type Media = { kind: string; ref: string };
+type Media = { kind: string; ref: string; role?: 'target' };
 export default new Hono<ApiBindings>()
   .get('/games/:gameId/review-rounds', async (c) => {
     const game = authorizedGame(c, 'game.edit');
@@ -29,6 +30,13 @@ export default new Hono<ApiBindings>()
         and(
           eq(schema.reviewRounds.gameId, game.id),
           isNull(schema.reviewRounds.verdict),
+          sql`NOT EXISTS (
+            SELECT 1 FROM review_rounds AS newer
+            WHERE newer.game_id = ${schema.reviewRounds.gameId}
+              AND newer.ticket = ${schema.reviewRounds.ticket}
+              AND (julianday(newer.posted_at) > julianday(${schema.reviewRounds.postedAt})
+                OR (julianday(newer.posted_at) = julianday(${schema.reviewRounds.postedAt}) AND newer.rowid > review_rounds.rowid))
+          )`,
           includeGameplay
             ? undefined
             : or(
@@ -57,7 +65,8 @@ export default new Hono<ApiBindings>()
             )
             .map(async (item) => ({
               kind: item.kind,
-              url: (await deps.blobStore.signedGet(item.ref as BlobHash, new Date(Date.now() + 3600000))).url,
+              ...(item.role === 'target' ? { role: item.role } : {}),
+              url: await reviewMediaUrl(deps.blobStore, deps.config.appOrigin, item.ref as BlobHash),
             })),
         );
         return {
@@ -73,17 +82,47 @@ export default new Hono<ApiBindings>()
     );
     return c.json({ rounds: result });
   })
+  .get('/games/:gameId/review-rounds/:id/status', async (c) => {
+    const game = authorizedGame(c, 'game.edit');
+    if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
+    const deps = c.get('deps');
+    const round = getRound(deps.db, game.id, c.req.param('id'));
+    if (!round) throw new HttpError(404, 'review_round_not_found');
+    const intent = deps.db
+      .select()
+      .from(schema.reviewDispatchIntents)
+      .where(eq(schema.reviewDispatchIntents.roundId, round.id))
+      .get();
+    const nextPhase = deps.db
+      .select()
+      .from(schema.reviewPhaseOwners)
+      .where(and(eq(schema.reviewPhaseOwners.gameId, game.id), eq(schema.reviewPhaseOwners.sourceRoundId, round.id)))
+      .get();
+    const latest = latestRoundForTicket(deps.db, game.id, round.ticket);
+    return c.json({
+      status: !round.verdict
+        ? 'open'
+        : intent?.state === 'delivered' || intent?.state === 'consumed'
+          ? 'sent'
+          : 'pending',
+      ...(nextPhase ? { nextPhase: { phase: nextPhase.phase, ticket: nextPhase.ticket } } : {}),
+      ...(latest && latest.id !== round.id && latest.verdict === null ? { newRound: true } : {}),
+    });
+  })
   .post('/games/:gameId/review-rounds/:id/missing-media', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
     if (!round || round.verdict !== null) throw new HttpError(404, 'review_round_not_found');
+    if (latestRoundForTicket(deps.db, game.id, round.ticket)?.id !== round.id)
+      throw new HttpError(409, 'review_round_superseded');
     const media = JSON.parse(round.media) as Media[];
     if (
       media.some(
         (item) =>
-          ((['still', 'clip'].includes(item.kind) || (item.kind === 'audio' && round.audioVerified)) &&
+          (((['still', 'clip'].includes(item.kind) && item.role !== 'target') ||
+            (item.kind === 'audio' && round.audioVerified)) &&
             /^sha256:[0-9a-f]{64}$/u.test(item.ref)) ||
           (item.kind === 'build' && item.ref !== ''),
       )
@@ -112,6 +151,8 @@ export default new Hono<ApiBindings>()
       throw new HttpError(404, 'review_round_not_found');
     let guard: string | undefined;
     const ok = deps.db.transaction((tx) => {
+      if (latestRoundForTicket(tx, game.id, round.ticket)?.id !== round.id)
+        throw new HttpError(409, 'review_round_superseded');
       const answered = answerRound(tx, game.id, round.id, {
         verdict: answer.verdict,
         notes: answer.note ?? null,

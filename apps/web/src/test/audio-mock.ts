@@ -38,6 +38,7 @@ export class FakeAudioContext extends EventTarget {
     this.gains.push(g);
     return g;
   };
+  createMediaElementSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
   createBufferSource = () => {
     const s = source();
     this.sources.push(s);
