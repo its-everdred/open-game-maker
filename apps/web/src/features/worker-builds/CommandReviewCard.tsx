@@ -13,11 +13,13 @@ export function CommandReviewCard({
   onAnswered,
   ticketState,
   onSendingChange,
+  onPickingChange,
 }: {
   command: ReviewCommand;
   onAnswered(): void;
   ticketState?: string;
   onSendingChange?(sending: boolean): void;
+  onPickingChange?(picking: boolean): void;
 }) {
   const [note, setNote] = useState('');
   const [selectedOption, setSelectedOption] = useState(command.options[0]?.id ?? '');
@@ -25,7 +27,7 @@ export function CommandReviewCard({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
   const [zoom, setZoom] = useState<{ url: string; label: string }>();
-  const [picking, setPicking] = useState<{ id: string; label: string }>();
+  const [picking, setPicking] = useState<{ id: string; label: string; version: number }>();
   const drag = useRef<{ id: number; x: number; y: number } | undefined>(undefined);
   const suppressImageClick = useRef(false);
   useEffect(() => {
@@ -36,9 +38,13 @@ export function CommandReviewCard({
   }, [command.version]);
   const selected = command.options.find((option) => option.id === selectedOption) ?? command.options[0];
   useEffect(() => {
-    onSendingChange?.(sending || Boolean(picking));
+    onSendingChange?.(sending);
     return () => onSendingChange?.(false);
-  }, [onSendingChange, picking, sending]);
+  }, [onSendingChange, sending]);
+  useEffect(() => {
+    onPickingChange?.(Boolean(picking));
+    return () => onPickingChange?.(false);
+  }, [onPickingChange, picking]);
   const coreState = useQuery({
     queryKey: ['core-review-state', command.ticket],
     enabled: saved && 'source' in command && Boolean(command.ticket),
@@ -201,6 +207,7 @@ export function CommandReviewCard({
                     setPicking({
                       id: option.id,
                       label: `Pick ${String.fromCharCode(65 + index)}: ${withoutLinks(option.label)}`,
+                      version: command.version,
                     });
                   }}
                 >
@@ -225,7 +232,7 @@ export function CommandReviewCard({
         </p>
       )}
       {error && <p role="alert">That answer did not send. Try again.</p>}
-      {picking && (
+      {picking && picking.version === command.version && (
         <div onKeyDown={(event) => event.stopPropagation()}>
           <Dialog
             title={picking.label}
@@ -246,7 +253,13 @@ export function CommandReviewCard({
             </label>
             {error && <p role="alert">That answer did not send. Try again.</p>}
             <div className="review-deck-reason-actions">
-              <button type="button" disabled={sending} onClick={() => void send(picking.id, false)}>
+              <button
+                type="button"
+                disabled={sending}
+                onClick={() => {
+                  if (picking.version === command.version) void send(picking.id, false);
+                }}
+              >
                 Send choice
               </button>
               <button type="button" disabled={sending} onClick={() => setPicking(undefined)}>

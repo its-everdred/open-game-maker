@@ -235,6 +235,8 @@ it('recovers an unavailable playable when its preview arrives', async () => {
       <ReviewInbox
         commands={[]}
         onClose={() => {}}
+        incomplete
+        error
         reviews={[
           {
             kind: 'preview',
@@ -249,18 +251,18 @@ it('recovers an unavailable playable when its preview arrives', async () => {
   await waitFor(() => expect(screen.queryByText('The playable review is unavailable. Try again later.')).toBeNull());
 });
 
-it('asks the agent for a missing playable after preview loading finishes', async () => {
+it('asks for a missing playable even if another query is unavailable', async () => {
   api.mockResolvedValue({ status: 'asked' });
   const round = { id: 'a', ticket: '12', question: 'Try it?', media: [], buildId: 'b' };
-  const view = render(
+  render(
     <QueryClientProvider client={queryClient}>
-      <ReviewInbox commands={[]} onClose={() => {}} reviews={[{ kind: 'round', gameId: 'g', round }]} incomplete />
-    </QueryClientProvider>,
-  );
-  expect(api).not.toHaveBeenCalled();
-  view.rerender(
-    <QueryClientProvider client={queryClient}>
-      <ReviewInbox commands={[]} onClose={() => {}} reviews={[{ kind: 'round', gameId: 'g', round }]} />
+      <ReviewInbox
+        commands={[]}
+        onClose={() => {}}
+        reviews={[{ kind: 'round', gameId: 'g', round }]}
+        incomplete
+        error
+      />
     </QueryClientProvider>,
   );
   await waitFor(() =>
@@ -388,16 +390,21 @@ it('refreshes the version and options of the open command', () => {
     </QueryClientProvider>,
   );
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Keep my note' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Pick A: Old' }));
+  expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
   view.rerender(
     <QueryClientProvider client={queryClient}>
       <ReviewInbox
         commands={[{ ...command, version: 2, options: [{ ...command.options[0]!, label: 'New' }] }]}
         reviews={[]}
+        incomplete
+        error
         onClose={() => {}}
       />
     </QueryClientProvider>,
   );
   expect(screen.getByRole('button', { name: 'Pick A: New' })).toBeVisible();
+  expect(screen.queryByRole('dialog', { name: 'Pick A: Old' })).toBeNull();
   expect(screen.getByLabelText('Note (optional)')).toHaveValue('Keep my note');
 });
 
