@@ -818,7 +818,9 @@ export function GameScreen() {
             resumeAt={room.snapshot?.matchPause?.resumeAt}
             serverOffsetMs={room.snapshot?.serverOffsetMs}
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
-            saves={frameState.manifest.saves && !frameState.startupSaveError}
+            saves={frameState.manifest.saves}
+            saveWritesDisabled={frameState.startupSaveError}
+            manualSaveSlots={frameState.manifest.manualSaveSlots}
             saveSchema={frameState.manifest.saveSchema}
             migratesFrom={frameState.manifest.migratesFrom}
             onLeave={() => void leaveRoom()}

@@ -8,6 +8,7 @@ import { SdkHostApi, type SendEnvelope } from './host-api.js';
 import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
 import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
+import { createSaveThumbnailCache } from '../saves/thumbnail.js';
 import { installQa } from './qa.js';
 import { dispatchTest } from '../test/dispatch.js';
 import { SdkHooks } from '../test/hooks.js';
@@ -174,7 +175,11 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     const hooks = new SdkHooks(runtime, module.manifest, marks);
     runtime.attachHooks(hooks);
     host.test.register(hooks);
-    const saveMachine = createSaveMachine({ instance, send });
+    const thumbnails = module.manifest.saves
+      ? createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) })
+      : undefined;
+    if (thumbnails) runtime.addCleanup(() => thumbnails.dispose());
+    const saveMachine = createSaveMachine({ instance, send, captureThumbnail: () => thumbnails?.current() });
     saveMachineState.current = saveMachine;
     runtime.addCleanup(() => saveMachine.dispose());
     runtime.onStep(() => saveMachine.markDirty());
@@ -374,12 +379,15 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
               return;
             }
             save = active.instance.migrate(save);
+            if (!save.thumbnail && envelope.payload.thumbnail)
+              save = { ...save, thumbnail: envelope.payload.thumbnail };
           }
           active.instance.restore(save as SaveData<S>);
           saveMachineState.current?.restored(save as SaveData<S>);
           if (envelope.payload.saveSchemaVersion !== currentVersion) {
             saveMachineState.current?.migrated(save as SaveData<S>);
           }
+          send('save.restored', {}, envelope.id);
           return;
         }
         case 'net.players':

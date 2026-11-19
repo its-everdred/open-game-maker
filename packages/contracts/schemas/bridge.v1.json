@@ -57,6 +57,9 @@
                     "published"
                   ]
                 },
+                "startupHold": {
+                  "type": "boolean"
+                },
                 "playerIndex": {
                   "type": "integer",
                   "minimum": 0,
@@ -904,7 +907,12 @@
                   "minimum": 0,
                   "maximum": 9007199254740991
                 },
-                "data": {}
+                "data": {},
+                "thumbnail": {
+                  "type": "string",
+                  "maxLength": 32768,
+                  "pattern": "^data:image\\/webp;base64,[A-Za-z0-9+/]+={0,2}$"
+                }
               },
               "required": [
                 "saveSchemaVersion",
@@ -3558,6 +3566,9 @@
                     "saves": {
                       "type": "boolean"
                     },
+                    "manualSaveSlots": {
+                      "type": "boolean"
+                    },
                     "saveSchema": {
                       "type": "integer",
                       "minimum": 0,
@@ -3682,6 +3693,9 @@
                   }
                 },
                 "firstFrameSignal": {
+                  "type": "boolean"
+                },
+                "startupHold": {
                   "type": "boolean"
                 }
               },
@@ -4293,12 +4307,52 @@
                   "minimum": 0,
                   "maximum": 9007199254740991
                 },
-                "data": {}
+                "data": {},
+                "thumbnail": {
+                  "type": "string",
+                  "maxLength": 32768,
+                  "pattern": "^data:image\\/webp;base64,[A-Za-z0-9+/]+={0,2}$"
+                }
               },
               "required": [
                 "saveSchemaVersion",
                 "data"
               ],
+              "additionalProperties": {}
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
+              "const": "save.restored"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {},
               "additionalProperties": {}
             },
             "replyTo": {

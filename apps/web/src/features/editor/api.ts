@@ -232,7 +232,11 @@ export async function putSave(
       'x-save-build': context.buildId,
       'x-save-reason': saveReason(payload),
     },
-    body: await gzipJson({ saveSchemaVersion: payload.saveSchemaVersion, data: payload.data }),
+    body: await gzipJson({
+      saveSchemaVersion: payload.saveSchemaVersion,
+      data: payload.data,
+      thumbnail: payload.thumbnail,
+    }),
   });
 }
 

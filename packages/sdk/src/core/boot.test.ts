@@ -359,12 +359,18 @@ describe('boot', () => {
 
   it('migrates supported saves and rejects unsupported versions', async () => {
     const migrated = await start();
-    bridge.onMessage!(message('save.restore', { saveSchemaVersion: 0, data: { counter: 4 } }));
+    bridge.onMessage!(
+      message('save.restore', { saveSchemaVersion: 0, data: { counter: 4 }, thumbnail: 'data:image/webp;base64,YWJj' }),
+    );
     await vi.waitFor(() => expect(migrated.metrics.restoreCalls).toHaveLength(1));
     expect(migrated.metrics.restoreCalls[0]?.saveSchemaVersion).toBe(1);
     expect(bridge.send).toHaveBeenCalledWith(
-      expect.objectContaining({ t: 'save.write', payload: expect.objectContaining({ reason: 'migration' }) }),
+      expect.objectContaining({
+        t: 'save.write',
+        payload: expect.objectContaining({ reason: 'migration', thumbnail: 'data:image/webp;base64,YWJj' }),
+      }),
     );
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'save.restored' }));
 
     bridge.send.mockClear();
     const unsupported = await start({ migrate: false });

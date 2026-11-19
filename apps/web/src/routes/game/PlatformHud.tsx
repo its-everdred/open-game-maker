@@ -57,6 +57,9 @@ type PlatformHudProps = {
   serverOffsetMs?: number;
   saveContext: SaveContext;
   saves: boolean;
+  manualSaveSlots?: boolean;
+  /** A failed startup restore must not overwrite the existing automatic save. */
+  saveWritesDisabled?: boolean;
   /** The running build's save schema; absent when the build did not report one. */
   saveSchema?: number;
   /** The one older schema the build still migrates; absent when it cannot migrate. */
@@ -148,6 +151,8 @@ export function PlatformHud({
   serverOffsetMs = 0,
   saveContext,
   saves,
+  manualSaveSlots = false,
+  saveWritesDisabled = false,
   saveSchema,
   migratesFrom,
   saveApi = defaultSaveApi,
@@ -193,6 +198,10 @@ export function PlatformHud({
   saveContextRef.current = saveContext;
 
   useEffect(() => {
+    if (!manualSaveSlots) setSelectedSlot('auto');
+  }, [manualSaveSlots]);
+
+  useEffect(() => {
     if (!saves) {
       setSavesAvailable(false);
       setSlots(undefined);
@@ -233,32 +242,31 @@ export function PlatformHud({
 
   useEffect(() => {
     let active = true;
-    const stopSave = frame.onSaveWrite((payload) => {
-      if (!savesAvailable) return;
-      saveQueueRef.current = saveQueueRef.current
-        .then(async () => {
-          try {
-            await storeSaveWrite(
-              gameId,
-              selectedSlotRef.current,
-              payload,
-              slotsRef.current ?? [],
-              saveApi.write,
-              saveContextRef.current,
-            );
-          } finally {
-            // A write whose response was lost may still have landed: reread the heads either way.
-            const result = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
-            if (active) {
-              setSavesAvailable(result.available);
-              const nextSlots = result.available ? result.value.slots : undefined;
-              slotsRef.current = nextSlots;
-              setSlots(nextSlots);
-            }
-          }
-        })
-        .catch(() => toast('Save failed'));
-    });
+    const stopSave =
+      savesAvailable && !saveWritesDisabled
+        ? frame.onSaveWrite((payload) => {
+            const selected = selectedSlotRef.current;
+            const context = saveContextRef.current;
+            saveQueueRef.current = saveQueueRef.current
+              .then(async () => {
+                try {
+                  for (const slot of selected === 'auto' ? (['auto'] as const) : (['auto', selected] as const)) {
+                    await storeSaveWrite(gameId, slot, payload, slotsRef.current ?? [], saveApi.write, context);
+                  }
+                } finally {
+                  // A write whose response was lost may still have landed: reread the heads either way.
+                  const result = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
+                  if (active) {
+                    setSavesAvailable(result.available);
+                    const nextSlots = result.available ? result.value.slots : undefined;
+                    slotsRef.current = nextSlots;
+                    setSlots(nextSlots);
+                  }
+                }
+              })
+              .catch(() => toast('Save failed'));
+          })
+        : () => undefined;
     const stopEvent = frame.onEvent((kind, payload) => handleGameEvent(kind, payload, build, toast));
     const stopLoadError = frame.onSaveLoadError(() => toast('Load failed'));
     return () => {
@@ -267,7 +275,7 @@ export function PlatformHud({
       stopEvent();
       stopLoadError();
     };
-  }, [build, frame, gameId, migratesFrom, saveApi, saveSchema, savesAvailable, toast]);
+  }, [build, frame, gameId, migratesFrom, saveApi, saveSchema, savesAvailable, saveWritesDisabled, toast]);
 
   useEffect(() => {
     if (visible) (page !== 'pause' ? backRef : resumeRef).current?.focus();
@@ -372,7 +380,7 @@ export function PlatformHud({
                   setCreditsOpen(false);
                 }}
               >
-                {savesAvailable && slots !== undefined ? (
+                {manualSaveSlots && savesAvailable && slots !== undefined ? (
                   <details>
                     <summary>
                       <Icon name="publish" />
@@ -387,6 +395,7 @@ export function PlatformHud({
                           aria-pressed={selectedSlot === id}
                           onClick={() => setSelectedSlot(id)}
                         >
+                          {slot?.thumbnail ? <img src={slot.thumbnail} alt="" /> : null}
                           {slot?.label ?? saveSlotLabel(id)}
                           {slot?.savedAt ? (
                             <time dateTime={slot.savedAt}> {new Date(slot.savedAt).toLocaleString()}</time>

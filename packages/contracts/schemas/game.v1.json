@@ -516,6 +516,9 @@
     "saves": {
       "type": "boolean"
     },
+    "manualSaveSlots": {
+      "type": "boolean"
+    },
     "saveSchema": {
       "type": "integer",
       "minimum": 0,

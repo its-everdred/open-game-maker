@@ -242,6 +242,8 @@ export const gameManifestSchema = z.looseObject({
     .looseObject({ colour: z.string().regex(/^#[0-9a-fA-F]{6}$/u), icon: z.enum(['pause', 'menu']) })
     .optional(),
   saves: z.boolean(),
+  /** Enables player-selected manual save slots in addition to the automatic save. */
+  manualSaveSlots: z.boolean().optional(),
   /**
    * The save schema version this build writes and, when the game migrates, the one older version it still reads.
    * The SDK fills both from the mounted instance in its `ready` handshake, so a build's `manifest.json` need not
@@ -259,7 +261,7 @@ export const gameManifestSchema = z.looseObject({
 });
 export type GameManifest = z.infer<typeof gameManifestSchema>;
 
-export type SaveData<S> = { saveSchemaVersion: number; data: S };
+export type SaveData<S> = { saveSchemaVersion: number; data: S; thumbnail?: string };
 export type PlacementResult = { ok: true } | { ok: false; reason: string };
 
 export interface GameModule<D, S> {

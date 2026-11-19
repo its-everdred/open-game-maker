@@ -20,10 +20,16 @@ describe('game frame adapter', () => {
   it('restores a save before releasing an acknowledged startup hold', async () => {
     let options: GameFrameOptions | undefined;
     let resolveSave!: (save: { saveSchemaVersion: number; data: unknown }) => void;
+    let restored!: () => void;
+    let startupWrite!: (value: { saveSchemaVersion: number; data: unknown }) => void;
     const save = { saveSchemaVersion: 1, data: { room: 'crypt' } };
     const frame = {
       bridge: { dropped: 0 },
-      on: vi.fn(() => vi.fn()),
+      on: vi.fn((type: string, callback: (payload: never) => void) => {
+        if (type === 'save.restored') restored = () => callback(undefined as never);
+        if (type === 'save.write') startupWrite = (value) => callback(value as never);
+        return vi.fn();
+      }),
       setMode: vi.fn(),
       setSettings: vi.fn(),
       send: vi.fn(),
@@ -50,13 +56,20 @@ describe('game frame adapter', () => {
     expect(controller.state().bridgeState).toBe('connecting');
     await vi.waitFor(() => expect(resolveSave).toBeTypeOf('function'));
     resolveSave(save);
+    await vi.waitFor(() => expect(frame.send).toHaveBeenCalledWith('save.restore', save));
+    expect(controller.state().bridgeState).toBe('connecting');
+    startupWrite(save);
+    restored();
     await vi.waitFor(() => expect(controller.state().bridgeState).toBe('ready'));
     expect(frame.send.mock.calls.map(([type]) => type)).toEqual(['design.apply', 'save.restore', 'lifecycle.resume']);
+    const onSaveWrite = vi.fn();
+    controller.onSaveWrite(onSaveWrite);
+    expect(onSaveWrite).toHaveBeenCalledWith(save);
     controller.dispose();
   });
-  it('does not restore into a legacy game that cannot hold startup', () => {
+  it('does not restore into a legacy game that cannot hold startup', async () => {
     let options: GameFrameOptions | undefined;
-    const restore = vi.fn();
+    const restore = vi.fn().mockResolvedValue({ saveSchemaVersion: 1, data: {} });
     const error = vi.fn();
     const frame = {
       bridge: { dropped: 0 },
@@ -81,9 +94,10 @@ describe('game frame adapter', () => {
       onStartupRestoreError: error,
     });
     options?.onReady?.({ ...manifest, saves: true }, []);
-    expect(restore).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true }));
+    expect(restore).toHaveBeenCalledOnce();
+    expect(frame.send).not.toHaveBeenCalledWith('save.restore', expect.anything());
     expect(error).toHaveBeenCalledOnce();
-    expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true });
     controller.dispose();
   });
   it('disables saving for the session when the startup load fails', async () => {
@@ -117,6 +131,38 @@ describe('game frame adapter', () => {
     await vi.waitFor(() => expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true }));
     expect(error).toHaveBeenCalledOnce();
     expect(frame.send).toHaveBeenCalledWith('lifecycle.resume', {});
+    controller.dispose();
+  });
+  it('does not treat a rejected startup restore as successful', async () => {
+    let options: GameFrameOptions | undefined;
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const error = vi.fn();
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: async () => ({ saveSchemaVersion: 1, data: {} }),
+      onStartupRestoreError: error,
+    });
+    options?.onReady?.(manifest, [], true);
+    await vi.waitFor(() => expect(frame.send).toHaveBeenCalledWith('save.restore', expect.anything()));
+    options?.onError?.({ code: 'save_unsupported', message: 'unsupported' });
+    await vi.waitFor(() => expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true }));
+    expect(error).toHaveBeenCalledOnce();
     controller.dispose();
   });
   it('mounts through @gm/host, forwards mode, and counts rejected origins', async () => {

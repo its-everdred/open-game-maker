@@ -118,6 +118,9 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   let activePlacement: (PlacementRequest & { timer: ReturnType<typeof setTimeout>; settled: boolean }) | undefined;
   let stopPlacement: () => void = () => undefined;
   const saveLoadErrors = new Set<(message: string) => void>();
+  let pendingStartupRestore: { resolve(): void; reject(error: Error): void } | undefined;
+  const startupWrites: SaveData<unknown>[] = [];
+  let saveWriteSubscribers = 0;
   let roomMessageSequence = 0;
   const emitRoomMessage = (type: GameToHost['t'], payload: unknown) => {
     roomMessageSequence += 1;
@@ -245,11 +248,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
           emitRoomMessage('ready', { protocol: SDK_PROTOCOL, manifest, marks });
           publish();
         };
-        if (!options.startupRestore || !startupHold) {
-          if (options.startupRestore && manifest.saves && !startupHold) {
-            current = { ...current, startupSaveError: true };
-            options.onStartupRestoreError?.();
-          }
+        if (!options.startupRestore) {
           finish();
           return;
         }
@@ -257,10 +256,17 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
         const deadline = new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error('save restore timed out')), 10_000);
         });
-        void Promise.race([Promise.resolve().then(() => options.startupRestore!(manifest)), deadline])
-          .then((save) => {
-            if (!disposed && save) frame.send('save.restore', save);
-          })
+        let restoring = true;
+        const restore = Promise.resolve().then(async () => {
+          const save = await options.startupRestore!(manifest);
+          if (!restoring || disposed || !save) return;
+          if (!startupHold) throw new Error('game cannot hold startup');
+          await new Promise<void>((resolve, reject) => {
+            pendingStartupRestore = { resolve, reject };
+            frame.send('save.restore', save);
+          });
+        });
+        void Promise.race([restore, deadline])
           .catch(() => {
             if (!disposed) {
               current = { ...current, startupSaveError: true };
@@ -268,7 +274,9 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
             }
           })
           .finally(() => {
+            restoring = false;
             clearTimeout(timer);
+            pendingStartupRestore = undefined;
             finish();
           });
       },
@@ -283,10 +291,10 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
          * broken frame: report it to the pause dialog and leave the game running.
          */
         if (failure.code === 'save_unsupported') {
-          if (options.startupRestore) {
-            current = { ...current, startupSaveError: true };
-            options.onStartupRestoreError?.();
-            publish();
+          if (pendingStartupRestore) {
+            pendingStartupRestore.reject(new Error(failure.message));
+            pendingStartupRestore = undefined;
+            return;
           }
           for (const callback of saveLoadErrors) callback(failure.message);
           return;
@@ -302,6 +310,16 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     throw error;
   }
 
+  const stopStartupRestore = frame.on('save.restored', () => {
+    pendingStartupRestore?.resolve();
+    pendingStartupRestore = undefined;
+  });
+  const stopStartupWrites = frame.on('save.write', (save) => {
+    if (saveWriteSubscribers === 0) {
+      if (startupWrites.length === 4) startupWrites.shift();
+      startupWrites.push(save);
+    }
+  });
   const finishPlacement = (result: PlacementResult) => {
     const request = activePlacement;
     if (request === undefined) return;
@@ -409,7 +427,18 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
             resolve(undefined);
           });
       }),
-    onSaveWrite: (callback) => frame.on('save.write', callback),
+    onSaveWrite: (callback) => {
+      saveWriteSubscribers += 1;
+      const stop = frame.on('save.write', callback);
+      for (const save of startupWrites.splice(0)) callback(save);
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        saveWriteSubscribers -= 1;
+        stop();
+      };
+    },
     onEvent: (callback) => frame.on('event', ({ kind, payload }) => callback(kind, payload)),
     dispose: () => {
       if (disposed) return;
@@ -418,6 +447,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       clearFirstFrameTimer();
       saveLoadErrors.clear();
       window.removeEventListener('message', observeOrigin);
+      stopStartupRestore();
+      stopStartupWrites();
       stopPlacement();
       for (const stop of stopRoomMessages) stop();
       if (activePlacement !== undefined) {

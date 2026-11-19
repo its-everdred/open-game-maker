@@ -304,6 +304,52 @@ describe('PlatformHud', () => {
     expect(screen.queryByRole('group', { name: 'Save slots' })).not.toBeInTheDocument();
   });
 
+  it('keeps manual slots hidden when the game did not declare them', async () => {
+    const test = frameHarness();
+    const list = vi.fn().mockResolvedValue({ available: true, value: { slots: [] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        saveApi={{ list, read: vi.fn(), write: vi.fn() }}
+        onResume={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.queryByText('Saves')).not.toBeInTheDocument();
+  });
+
+  it('keeps manual loads available but prevents writes after startup restore fails', async () => {
+    const test = frameHarness();
+    const write = vi.fn();
+    const list = vi
+      .fn()
+      .mockResolvedValue({ available: true, value: { slots: [{ slotId: 'auto', headRevision: 1, status: 'ok' }] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        saveWritesDisabled
+        saveApi={{ list, read: vi.fn(), write }}
+        onResume={vi.fn()}
+      />,
+    );
+    await openSettingsSection('Saves');
+    expect(await screen.findByRole('button', { name: 'Load' })).toBeEnabled();
+    test.saveWrite({ saveSchemaVersion: 1, data: {} });
+    expect(write).not.toHaveBeenCalled();
+  });
+
   // A slot the running build cannot read must not offer Load: the SDK would refuse the restore and the host used to
   // swap the game for the Try again screen.
   it('offers Load only for a slot this build reads or migrates', async () => {
@@ -323,6 +369,7 @@ describe('PlatformHud', () => {
         paused
         saveContext={saveContext}
         saves
+        manualSaveSlots
         saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read, write: vi.fn() }}
         onResume={vi.fn()}
       />,
@@ -400,6 +447,7 @@ describe('PlatformHud', () => {
         paused
         saveContext={saveContext}
         saves
+        manualSaveSlots
         saveApi={saveApi}
         toast={toast}
         onResume={onResume}
@@ -418,7 +466,14 @@ describe('PlatformHud', () => {
 
   it('renders all contract slots and writes game saves into the selected host slot', async () => {
     const test = frameHarness();
-    const slots = [{ slotId: 'auto', headRevision: 4, savedAt: '2026-11-01T16:00:00.000Z' }] as SaveSlot[];
+    const slots = [
+      {
+        slotId: 'auto',
+        headRevision: 4,
+        savedAt: '2026-11-01T16:00:00.000Z',
+        thumbnail: 'data:image/webp;base64,YWJj',
+      },
+    ] as SaveSlot[];
     const write = vi.fn().mockResolvedValue(undefined);
     render(
       <PlatformHud
@@ -428,6 +483,7 @@ describe('PlatformHud', () => {
         paused
         saveContext={saveContext}
         saves
+        manualSaveSlots
         saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read: vi.fn(), write }}
         onResume={vi.fn()}
       />,
@@ -436,12 +492,17 @@ describe('PlatformHud', () => {
     await openSettingsSection('Saves');
     expect(await screen.findByRole('button', { name: /Auto save/ })).toBeVisible();
     expect(document.querySelector('time')).toHaveAttribute('datetime', '2026-11-01T16:00:00.000Z');
+    expect(screen.getByRole('button', { name: /Auto save/ }).querySelector('img')).toHaveAttribute(
+      'src',
+      'data:image/webp;base64,YWJj',
+    );
     expect(screen.getByRole('button', { name: 'Save slot 1' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 2' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 3' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Save slot 3' }));
     test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 2 } });
 
+    await waitFor(() => expect(write).toHaveBeenCalledWith('game', 'auto', expect.anything(), 4, saveContext));
     await waitFor(() =>
       expect(write).toHaveBeenCalledWith(
         'game',
@@ -451,6 +512,42 @@ describe('PlatformHud', () => {
         saveContext,
       ),
     );
+  });
+
+  it('writes to the slot selected when the save event arrived', async () => {
+    const test = frameHarness();
+    let finishAuto!: () => void;
+    const write = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishAuto = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const list = vi.fn().mockResolvedValue({ available: true, value: { slots: [] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        saveApi={{ list, read: vi.fn(), write }}
+        onResume={vi.fn()}
+      />,
+    );
+    await openSettingsSection('Saves');
+    fireEvent.click(await screen.findByRole('button', { name: 'Save slot 1' }));
+    test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 1 } });
+    await waitFor(() => expect(write).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: 'Save slot 2' }));
+    finishAuto();
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    expect(write.mock.calls[1]?.[1]).toBe('1');
   });
 
   it('refreshes the slot revision before a second save write', async () => {
@@ -474,7 +571,7 @@ describe('PlatformHud', () => {
       />,
     );
     await waitFor(() => expect(list).toHaveBeenCalledOnce());
-    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledTimes(1));
 
     test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 1 } });
     await waitFor(() => expect(write).toHaveBeenNthCalledWith(1, 'game', 'auto', expect.anything(), 4, saveContext));
@@ -506,7 +603,7 @@ describe('PlatformHud', () => {
       />,
     );
     await waitFor(() => expect(list).toHaveBeenCalledOnce());
-    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledTimes(1));
 
     test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 1 } });
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Save failed'));
