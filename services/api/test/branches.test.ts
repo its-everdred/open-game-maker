@@ -3,7 +3,7 @@ import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
 import { createVersionCounts } from '../src/branches/version-counts.js';
-import { appendTransaction, ensureMainBranch, resolveBranch } from '../src/design/store.js';
+import { appendTransaction, ensureMainBranch, insertBranch, listBranches, resolveBranch } from '../src/design/store.js';
 import { asUser, installUsers, INTERNAL_TOKEN, makeApp, makeDeps, type TestUser } from './helpers.js';
 
 const now = '2026-11-01T16:00:00.000Z';
@@ -117,6 +117,15 @@ function systemTransaction(
 }
 
 describe('branch routes', () => {
+  it('lists branches with equal creation times in insertion order', async () => {
+    const { deps, main } = await setup();
+    for (const [id, name] of [['z-branch', 'First'], ['a-branch', 'Second']] as const) {
+      insertBranch(deps.sqlite, { ...main, id, name, gitRef: `branch/${id}`, createdAt: now });
+    }
+
+    expect(listBranches(deps.sqlite, ids.game).map((branch) => branch.name)).toEqual(['main', 'First', 'Second']);
+  });
+
   it('creates at the parent head and excludes later parent transactions from child replay', async () => {
     const { app, deps, main } = await setup();
     systemTransaction(deps.sqlite, main, 1, 'parent before fork');
