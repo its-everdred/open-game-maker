@@ -124,9 +124,14 @@ export function route(start, end, obstacles, step = 1.5, maxVisited = 1000) {
   return trace(closest);
 }
 
+// Test an entire world-space segment, including both endpoints.
+export function clearSegment(from, to, obstacles) {
+  return !obstacles.some(o => intersects(from, to, o));
+}
+
 // Remove unnecessary bends from an already safe path, without crossing a blocker.
 export function simplifyPath(path, obstacles) {
-  const clear = (a, b) => !obstacles.some(o => intersects(a, b, o));
+  const clear = (a, b) => clearSegment(a, b, obstacles);
   if (path.length < 2) return path.slice();
   const out = [path[0]];
   for (let i = 0; i < path.length - 1;) {

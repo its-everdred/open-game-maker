@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { blocked, route, simplifyPath } from '../../../title-town/crowd-path.js';
+import { blocked, clearSegment, route, simplifyPath } from '../../../title-town/crowd-path.js';
 
 describe('crowd paths', () => {
+  it('rejects an unchecked route endpoint that crosses a footprint', () => {
+    const obstacles = [{ x: 0, z: 0, yaw: 0, halfX: 1, halfZ: 1 }];
+    expect(clearSegment([-2, 0], [-1.1, 0], obstacles)).toBe(true);
+    expect(clearSegment([-1.1, 0], [-0.5, 0], obstacles)).toBe(false);
+  });
+
   it('shortens a return journey without cutting through a building', () => {
     const obstacles = [{ x: 0, z: 0, yaw: 0, halfX: 2, halfZ: 2 }];
     const travelled = [

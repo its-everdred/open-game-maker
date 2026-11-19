@@ -9,7 +9,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { FX, reseed } from './fx.js';
-import { blocked, route, simplifyPath } from './crowd-path.js';
+import { blocked, clearSegment, route, simplifyPath } from './crowd-path.js';
 
 export const PER = 104;
 const LEAVE = 58;   // when he is gone
@@ -320,7 +320,7 @@ export async function kaiju(ctx) {
   let fieldPath = null, fieldRouteComplete = false, fieldCrewLimit = 0;
   const fieldAt = lt => { const mv = field.move, back = ramp((lt - mv.back0) / (mv.back1 - mv.back0)), k = ramp((lt - mv.t0) / (mv.t1 - mv.t0)) - back, kt = smooth((lt - mv.turn0) / (mv.turn1 - mv.turn0));
     const sample = u => {
-      if (!fieldPath) return [lerp(mv.from[0], mv.to[0], u), lerp(mv.from[1], mv.to[1], u)];
+      if (!fieldPath) return mv.to;
       let d = fieldPath.total * clamp01(u);
       for (let i = 0; i < fieldPath.lengths.length; i++) { const len = fieldPath.lengths[i]; if (d <= len && len) return [lerp(fieldPath.points[i][0], fieldPath.points[i + 1][0], d / len), lerp(fieldPath.points[i][1], fieldPath.points[i + 1][1], d / len)]; d -= len; }
       return fieldPath.points[fieldPath.points.length - 1];
@@ -396,12 +396,16 @@ export async function kaiju(ctx) {
     men.push(m); return m;
   };
   const face = (x, z, tx, tz) => Math.atan2(tx - x, tz - z);
+  // Fixed posts are reserved so separate crews never collapse onto one grid point.
+  const staticPeople = [];
+  const peopleBoxes = points => points.map(([x, z]) => ({ x, z, yaw: 0, halfX: 1.1, halfZ: 1.1 }));
   // crews: three at each engine (the field crew walks it across the fields)
   for (const e of engines) for (let i = 0; i < 3; i++) {
     if (e === field) continue;
     const off = (x, z, r, a) => [x + Math.cos(a) * r, z + Math.sin(a) * r], a0 = e.o.rotation.y + Math.PI / 2 + (i - 1) * .7;
     const radius = Math.min((e.crewBox.halfX + .3) / Math.max(.001, Math.abs(Math.cos(a0))), (e.crewBox.halfZ + .3) / Math.max(.001, Math.abs(Math.sin(a0))));
-    const raw = off(e.crewBox.x, e.crewBox.z, radius, a0), p = route(raw, raw, obstacles)?.[0] || raw; man([[0, p[0], p[1], 'idle'], [e.shots[0] - .4, p[0], p[1], 'interact-right'], [e.shots[0] + .3, p[0], p[1], 'emote-yes'], [e.shots[0] + 2, p[0], p[1], 'idle'], [LEAVE - 12, p[0], p[1], 'emote-yes']]);
+    const raw = off(e.crewBox.x, e.crewBox.z, radius, a0), p = route(raw, raw, [...obstacles, ...peopleBoxes(staticPeople)])?.[0];
+    if (!p) continue; staticPeople.push(p); man([[0, p[0], p[1], 'idle'], [e.shots[0] - .4, p[0], p[1], 'interact-right'], [e.shots[0] + .3, p[0], p[1], 'emote-yes'], [e.shots[0] + 2, p[0], p[1], 'idle'], [LEAVE - 12, p[0], p[1], 'emote-yes']]);
   }
   { // The crew stays at the frame while the entire machine follows a clear route.
     const r0 = field.o.rotation.y, p0 = field.o.position.clone(); field.o.rotation.y = 0; field.o.position.set(0, 0, 0); field.o.updateMatrixWorld(true);
@@ -410,9 +414,9 @@ export async function kaiju(ctx) {
     const mv = field.move, clearance = Math.max(Math.abs(fb.min.z), Math.abs(fb.max.z)) + 1.5;
     const expanded = obstacles.map(o => ({ ...o, halfX: o.halfX + clearance, halfZ: o.halfZ + clearance }));
     const path = route(mv.from, mv.to, expanded, 1.5, 20000);
-    fieldRouteComplete = !!path && Math.hypot(path.at(-1)[0] - mv.to[0], path.at(-1)[1] - mv.to[1]) < 2 && Math.hypot(path[0][0] - mv.from[0], path[0][1] - mv.from[1]) < 2;
+    fieldRouteComplete = !!path && Math.hypot(path.at(-1)[0] - mv.to[0], path.at(-1)[1] - mv.to[1]) < 2 && Math.hypot(path[0][0] - mv.from[0], path[0][1] - mv.from[1]) < 2 && clearSegment(mv.from, path[0], expanded) && clearSegment(path.at(-1), mv.to, expanded);
     if (fieldRouteComplete) {
-      const points = [mv.from, ...path.slice(1, -1), mv.to], lengths = points.slice(1).map((p, i) => Math.hypot(p[0] - points[i][0], p[1] - points[i][1]));
+      const points = [mv.from, ...path, mv.to], lengths = points.slice(1).map((p, i) => Math.hypot(p[0] - points[i][0], p[1] - points[i][1]));
       fieldPath = { points, lengths, total: lengths.reduce((sum, n) => sum + n, 0) };
     }
     const toW = (f, lx, lz) => [f.x + lx * Math.cos(f.yaw) + lz * Math.sin(f.yaw), f.z - lx * Math.sin(f.yaw) + lz * Math.cos(f.yaw)], mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
@@ -433,7 +437,7 @@ export async function kaiju(ctx) {
     const post = candidates.find(n => Math.abs(n) >= 7.3 && posts.every(other => Math.abs(n - other) >= 1.8) && !blocked(at(n), obstacles.filter(o => o.model !== 'breach-wall' && o.top > PLAIN + W.KW * 1.25 + .1)));
     let p;
     if (post === undefined) {
-      const occupied = groundPosts.map(([x, z]) => ({ x, z, yaw: 0, halfX: 1.2, halfZ: 1.2 }));
+      const occupied = peopleBoxes([...staticPeople, ...groundPosts]);
       const path = route(at(a), at(a), [...obstacles, ...occupied]);
       if (!path) continue;
       p = path[0]; groundPosts.push(p);
@@ -443,33 +447,152 @@ export async function kaiju(ctx) {
     const y = m.y ?? Math.max(PLAIN, ground(...p));
     for (let k = 0; k < 6; k++) { const tf = 27 + k * 1.9 + i * .25; arrows.push({ t: tf, from: [p[0], y + 1.4, p[1]], fl: .8 }); } }
   // spearmen: out of the streets, at his feet, stabbing; they scatter when he reels, then cheer and give chase
-  const doors = D.filter(d => d.kind === 'house' && !d.hits.length && !d.shoved);   // they come out of houses he leaves alone, and go back in
+  const doors = D.filter(d => d.kind === 'house' && !d.hits.length && !d.shoved);
+  const crowdObstacles = [...obstacles, ...peopleBoxes([...staticPeople, ...groundPosts])], reserved = Array.from({ length: 9 }, () => []);
+  const pathSampler = path => {
+    const lengths = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1])), total = lengths.reduce((sum, n) => sum + n, 0);
+    return fraction => {
+      let distance = total * clamp01(fraction);
+      for (let j = 0; j < lengths.length; j++) { if (!lengths[j]) continue; if (distance <= lengths[j]) return [lerp(path[j][0], path[j + 1][0], distance / lengths[j]), lerp(path[j][1], path[j + 1][1], distance / lengths[j])]; distance -= lengths[j]; }
+      return path.at(-1);
+    };
+  };
+  const limitPath = (path, maxLength) => {
+    const result = [path[0]]; let left = maxLength;
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1], b = path[i], length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (length > left) { if (left > 0) result.push([lerp(a[0], b[0], left / length), lerp(a[1], b[1], left / length)]); break; }
+      result.push(b); left -= length;
+    }
+    return result;
+  };
+  const peerFrames = new WeakMap();
+  const framesFor = person => {
+    if (!peerFrames.has(person)) peerFrames.set(person, Array.from({ length: Math.ceil(PER * 10) + 1 }, (_, i) => {
+      const p = person.pos(i / 10); return { p, y: person.y ?? Math.max(PLAIN, ground(...p)) };
+    }));
+    return peerFrames.get(person);
+  };
+  const firstConflict = (path, start, end, holdUntil, peers) => {
+    const sample = pathSampler(path), frames = peers.map(framesFor);
+    for (let t = start; t <= holdUntil + .001; t += .1) {
+      const p = sample(end > start ? (t - start) / (end - start) : 1), y = Math.max(PLAIN, ground(...p));
+      for (const frame of frames) { const other = frame[Math.min(frame.length - 1, Math.max(0, Math.round(t * 10)))], q = other.p;
+        if (Math.abs(y - other.y) < 2 && Math.hypot(p[0] - q[0], p[1] - q[1]) < 1.5) return p; }
+    }
+    return null;
+  };
+  const separated = (...args) => !firstConflict(...args);
+  const choosePath = (from, target, occupied, start, end, holdUntil, peers, initial = false) => {
+    const avoid = peopleBoxes(occupied), first = route(from, target, crowdObstacles);
+    if (!first) return null;
+    const centre = first.at(-1);
+    const tryPath = candidate => {
+      if (!candidate) return null;
+      // The unsnapped end of a previous leg must connect safely to the grid.
+      if (!initial && !clearSegment(from, candidate[0], crowdObstacles)) return null;
+      const path = initial ? [candidate.at(-1)] : limitPath([from, ...candidate], Math.max(0, (end - start) * 6 - .5));
+      if (blocked(path.at(-1), avoid) || !separated(path, start, end, holdUntil, peers)) return null;
+      // Break up grid alignment without giving up the checked segment or spacing.
+      const last = path.at(-1), phase = hashN(from[0] + target[0], from[1] + target[1]) * Math.PI * 2;
+      const shifted = [last[0] + Math.cos(phase) * .35, last[1] + Math.sin(phase) * .35];
+      const varied = initial ? [shifted] : [...path, shifted];
+      if (clearSegment(last, shifted, crowdObstacles) && !blocked(shifted, avoid) && separated(varied, start, end, holdUntil, peers)) return varied;
+      return path;
+    };
+    let path = tryPath(first); if (path) return path;
+    for (let ring = 1; ring <= 8; ring++) for (let n = 0; n < 12; n++) {
+      const angle = n * Math.PI / 6, goal = [centre[0] + Math.cos(angle) * ring * 1.5, centre[1] + Math.sin(angle) * ring * 1.5];
+      path = tryPath(route(from, goal, crowdObstacles)); if (path) return path;
+    }
+    return null;
+  };
   for (let i = 0; i < 8; i++) {
     const a = i / 8 * Math.PI * 2, h0 = P(30 + (i % 3) * 3, -12 + i * 3), hd = doors.sort((p, q) => Math.hypot(p.x - h0[0], p.z - h0[1]) - Math.hypot(q.x - h0[0], q.z - h0[1]))[0], home = hd ? [hd.x + Math.cos(a) * (hd.r + 2), hd.z + Math.sin(a) * (hd.r + 2)] : h0, ring = [pts.c[0] + Math.cos(a) * 6.5, pts.c[1] + Math.sin(a) * 6.5], back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
-    const m = man([[0, ...home, 'idle'], [29.4 + i * .15, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [PER - 1, ...home, 'walk']], true);
-    const legs = []; let current = home, unplaceable = false;
+    const m = man([[0, ...home, 'idle'], [29.4 + i * .15, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [PER - 1, ...home, 'walk']], true); m.spearman = true;
+    const legs = [], pending = Array.from({ length: m.plan.length }, () => []); let current = home, unplaceable = false;
+    const peers = men.filter(other => other !== m && (other.spearman || other.fieldCrew));
+    const firstPath = choosePath(home, home, [...reserved[0], ...reserved[1]], 0, 0, PER - .05, peers, true);
+    if (!firstPath) { scene.remove(m.o); men.pop(); continue; }
+    current = firstPath.at(-1); pending[0].push(current);
+    const placeFallback = reason => {
+      const homePost = firstPath[0], depart = 20 + i * .6, returnStart = 70 + i * .5;
+      for (let radius = 3; radius <= 9; radius += 1.5) for (let n = 0; n < 12; n++) {
+        const angle = (n + i) * Math.PI / 6, goal = [homePost[0] + Math.cos(angle) * radius, homePost[1] + Math.sin(angle) * radius];
+        const raw = route(homePost, goal, crowdObstacles);
+        if (!raw || !clearSegment(homePost, raw[0], crowdObstacles)) continue;
+        const out = simplifyPath([homePost, ...raw], crowdObstacles), back = out.slice().reverse();
+        const length = out.slice(1).reduce((sum, p, j) => sum + Math.hypot(p[0] - out[j][0], p[1] - out[j][1]), 0);
+        if (length < 1.5 || length > 12) continue;
+        const duration = Math.max(1, length / 3), arrive = depart + duration, homeAt = returnStart + duration;
+        if (!separated(out, depart, arrive, returnStart, peers) || !separated(back, returnStart, homeAt, PER - .05, peers)) continue;
+        const outbound = pathSampler(out), inbound = pathSampler(back);
+        m.pos = t => t < depart ? homePost : t < arrive ? outbound((t - depart) / duration) : t < returnStart ? out.at(-1) : t < homeAt ? inbound((t - returnStart) / duration) : homePost;
+        m.clipAt = t => t >= 40 + i * .2 && t < 41.5 + i * .2 ? ['emote-yes', 40 + i * .2] : ['idle', 0];
+        m.wanderer = true; m.returnSafe = true;
+        pending.forEach((points, k) => { points.length = 0; points.push(m.pos(m.plan[k][0])); reserved[k].push(...points); });
+        return;
+      }
+      m.stationaryFallback = true; m.fallbackReason = reason; m.pos = () => homePost; m.clipAt = () => ['idle', 0]; m.returnSafe = true;
+      pending.forEach((points, k) => { points.length = 0; points.push(homePost); reserved[k].push(...points); });
+    };
     for (let j = 0; j < m.plan.length - 1; j++) {
       const target = m.plan[j + 1].slice(1, 3);
       let path;
       if (j === m.plan.length - 2) {
         const first = legs[0][0];
         const knownSafe = legs.slice().reverse().flatMap((leg, n) => leg.slice().reverse().slice(n ? 1 : 0));
-        path = simplifyPath(knownSafe, obstacles);
-        m.returnDirect = Math.hypot(path.at(-1)[0] - first[0], path.at(-1)[1] - first[1]) <= .01;
-      } else path = route(current, target, obstacles);
-      if (!path) { scene.remove(m.o); men.pop(); unplaceable = true; break; }
-      current = path[path.length - 1]; legs.push(path);
+        path = simplifyPath(knownSafe, crowdObstacles);
+
+      } else if (m.plan[j][1] === target[0] && m.plan[j][2] === target[1]) path = [current];
+      else {
+        const occupied = [...reserved[j + 1]]; let holdUntil = m.plan[j + 1][0];
+        for (let k = j + 2; k < m.plan.length && m.plan[k][1] === target[0] && m.plan[k][2] === target[1]; k++) { occupied.push(...reserved[k]); holdUntil = m.plan[k][0]; }
+        path = choosePath(current, target, occupied, m.plan[j][0], m.plan[j + 1][0], holdUntil, peers);
+      }
+      if (!path) { m.fallbackReason = `leg ${j}`; unplaceable = true; break; }
+      current = path[path.length - 1]; legs.push(path); pending[j + 1].push(current);
     }
-    if (unplaceable) continue;
+    if (unplaceable) { placeFallback(m.fallbackReason); continue; }
     const spans = legs.map(path => {
       const length = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1]));
       return { path, length, total: length.reduce((sum, n) => sum + n, 0) };
     });
-    m.plan[m.plan.length - 1][0] = LEAVE + Math.min(PER - LEAVE - 1, Math.max(.25, spans.at(-1).total / 3.5));
+    let returning = spans.at(-1); const maxReturn = PER - LEAVE - 1;
+    let returnDelay = 0, returnDuration = Math.min(maxReturn, Math.max(.25, returning.total / 3.5)), foundReturn = false;
+    const startPoint = returning.path[0], homePoint = returning.path.at(-1), options = [returning.path], detours = [];
+    const addDetour = blockers => {
+      const candidate = route(startPoint, homePoint, blockers, 1.5, 20000);
+      if (candidate && Math.hypot(candidate.at(-1)[0] - homePoint[0], candidate.at(-1)[1] - homePoint[1]) < 1.5 && clearSegment(startPoint, candidate[0], blockers) && clearSegment(candidate.at(-1), homePoint, blockers)) options.push([startPoint, ...candidate, homePoint]);
+    };
+    addDetour(crowdObstacles);
+    for (let attempt = 0; attempt < 4 && !foundReturn && attempt < options.length; attempt++) {
+      const path = options[attempt], length = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1])), total = length.reduce((sum, n) => sum + n, 0);
+      const minReturn = Math.min(maxReturn, Math.max(.25, total / 3.5));
+      searchReturn: for (let duration = minReturn; duration <= maxReturn + .001; duration += 4) for (let delay = 0; delay + duration <= maxReturn + .001; delay += 4) {
+        const start = LEAVE + delay, end = start + duration;
+        if (separated([path[0]], LEAVE, LEAVE, start, peers) && separated(path, start, end, PER - .05, peers)) {
+          returning = { path, length, total }; returnDelay = delay; returnDuration = duration; foundReturn = true; break searchReturn;
+        }
+      }
+      if (!foundReturn) {
+        const collision = firstConflict(path, LEAVE, LEAVE + minReturn, PER - .05, peers);
+        if (collision && Math.hypot(collision[0] - startPoint[0], collision[1] - startPoint[1]) > 2 && Math.hypot(collision[0] - homePoint[0], collision[1] - homePoint[1]) > 2) {
+          detours.push({ x: collision[0], z: collision[1], yaw: 0, halfX: 1.5, halfZ: 1.5 });
+          addDetour([...crowdObstacles, ...detours]);
+        }
+      }
+    }
+    if (!foundReturn) { placeFallback('return'); continue; }
+    pending.forEach((points, k) => reserved[k].push(...points));
+    spans[spans.length - 1] = returning;
+    m.returnSafe = foundReturn && Math.hypot(returning.path.at(-1)[0] - homePoint[0], returning.path.at(-1)[1] - homePoint[1]) <= .01 && returning.path.slice(1).every((p, j) => clearSegment(returning.path[j], p, crowdObstacles));
+    m.plan[m.plan.length - 1][0] = LEAVE + returnDelay + returnDuration;
     m.pos = t => {
       let i = 0; while (i < m.plan.length - 2 && m.plan[i + 1][0] <= t) i++;
       const a = m.plan[i], b = m.plan[i + 1], { path, length, total } = spans[i];
-      let d = total * clamp01((t - a[0]) / (b[0] - a[0]));
+      const delay = i === spans.length - 1 ? returnDelay : 0;
+      let d = total * clamp01((t - a[0] - delay) / (b[0] - a[0] - delay));
       for (let j = 0; j < length.length; j++) { if (!length[j]) continue; if (d <= length[j]) return [lerp(path[j][0], path[j + 1][0], d / length[j]), lerp(path[j][1], path[j + 1][1], d / length[j])]; d -= length[j]; }
       return path[path.length - 1];
     };
@@ -492,7 +615,7 @@ export async function kaiju(ctx) {
     return men.map((m, i) => {
     const position = m.pos(t), y = m.y ?? Math.max(PLAIN, ground(...position));
     const screen = new THREE.Vector3(position[0], y + 1.35, position[1]).project(ctx.camera);
-    return { i, field: !!m.fieldCrew, fieldRouteComplete, fieldCrewLimit, fieldDistance: Math.hypot(position[0] - field.o.position.x, position[1] - field.o.position.z), returnDirect: m.returnDirect, pushing: !!m.pushing?.(t), wall: !!m.wall, position, screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
+    return { i, field: !!m.fieldCrew, spearman: !!m.spearman, stationaryFallback: !!m.stationaryFallback, wanderer: !!m.wanderer, fallbackReason: m.fallbackReason, gait: m.mov[Math.min(NS - 1, Math.floor(t / DT))], fieldRouteComplete, fieldCrewLimit, fieldDistance: Math.hypot(position[0] - field.o.position.x, position[1] - field.o.position.z), returnSafe: m.returnSafe, pushing: !!m.pushing?.(t), wall: !!m.wall, position, height: y, screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
       inView: Math.abs(screen.x) <= 1.05 && Math.abs(screen.y) <= 1.05 && screen.z >= -1 && screen.z <= 1,
       blocked: blocked(position, obstacles.filter(o => !m.wall || (o.model !== 'breach-wall' && o.top > m.y + .1))),
       prop: propBoxes.filter(({ box: b, inverse, scale }) => {
