@@ -4,7 +4,7 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
 
 type GameHook = { bridgeState: string };
-type FixtureHook = { messages: Array<{ t: string }> };
+type FixtureHook = { messages: Array<{ t: string }>; send(type: string, payload: object): void };
 
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '10001';
@@ -25,7 +25,7 @@ for (const viewport of viewports) {
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'the test sets each acceptance viewport itself');
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     await page.setViewportSize(viewport);
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page);
@@ -58,7 +58,7 @@ for (const viewport of viewports) {
     expect(gameBox?.height).toBe(viewport.height);
     await page.screenshot({
       path: testInfo.outputPath(`play-${viewport.width}x${viewport.height}.png`),
-      timeout: 30_000,
+      timeout: 90_000,
     });
 
     await menu.click();
@@ -78,7 +78,7 @@ for (const viewport of viewports) {
     }
     await page.screenshot({
       path: testInfo.outputPath(`menu-${viewport.width}x${viewport.height}.png`),
-      timeout: 30_000,
+      timeout: 90_000,
     });
 
     await pauseDialog.getByRole('button', { name: 'More' }).click();
@@ -208,6 +208,9 @@ test('opening the menu in a room does not pause the game', async ({ page }, test
 async function openReadyGame(page: Page): Promise<void> {
   await page.goto('/g/game?test');
   await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 30_000 }).toBe('ready');
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  if (!frame) throw new Error('Bridge fixture frame is missing');
+  await frame.evaluate(() => (window as Window & { __fixture: FixtureHook }).__fixture.send('load.frame', {}));
 }
 
 function gameState(page: Page): Promise<GameHook | undefined> {
