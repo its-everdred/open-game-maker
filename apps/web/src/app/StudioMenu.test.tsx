@@ -861,7 +861,7 @@ describe('StudioMenu', () => {
     );
     expect(screen.queryByRole('dialog', { name: 'Needs Review' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Build #3' }));
+    fireEvent.click(screen.getByRole('button', { name: /Build #3/ }));
     expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
   });
 
@@ -871,7 +871,7 @@ describe('StudioMenu', () => {
     const view = renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
     fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Topic d1' }));
+    fireEvent.click(screen.getByRole('button', { name: /Topic d1/ }));
     expect(screen.getByRole('alert')).toBeVisible();
     state.session = { data: { user: { id: 'user-2' } } };
     state.decisions = [decision('d2')];
@@ -907,7 +907,7 @@ describe('StudioMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(screen.getByRole('button', { name: '0 builds running' }));
     fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Topic d1' }));
+    fireEvent.click(screen.getByRole('button', { name: /Topic d1/ }));
     expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
     state.decisions = [];
     state.reviewLoading = true;
@@ -927,7 +927,7 @@ describe('StudioMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(screen.getByRole('button', { name: 'Decisions: 1' }));
     fireEvent.click(screen.getByRole('button', { name: 'Topic d1, Blobs' }));
-    expect(screen.getByRole('dialog', { name: 'Topic d1' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: /Topic d1/ })).toBeVisible();
 
     state.session = { data: { user: { id: 'user-2' } } };
     view.rerender(
@@ -936,7 +936,7 @@ describe('StudioMenu', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByRole('dialog', { name: 'Topic d1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Topic d1/ })).not.toBeInTheDocument();
 
     // Nor does it come back when the first creator signs in again.
     state.session = { data: { user: { id: 'user-1' } } };
@@ -945,7 +945,7 @@ describe('StudioMenu', () => {
         <TestStudioMenu />
       </MemoryRouter>,
     );
-    expect(screen.queryByRole('dialog', { name: 'Topic d1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Topic d1/ })).not.toBeInTheDocument();
   });
 
   it('groups jobs by game and distinguishes paused, parked, and playable work', () => {
@@ -1180,7 +1180,7 @@ describe('StudioMenu', () => {
     row.focus();
     fireEvent.click(row);
 
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Topic d1' })).getByRole('button', { name: 'Close' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Topic d1/ })).getByRole('button', { name: 'Close' }));
 
     expect(trigger).toHaveFocus();
   });

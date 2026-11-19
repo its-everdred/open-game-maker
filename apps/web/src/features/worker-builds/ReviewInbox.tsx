@@ -30,6 +30,7 @@ export function ReviewInbox({
   incomplete = false,
   initialReview,
   initialCommand,
+  initialTarget,
 }: {
   reviews: readonly WorkerReview[];
   commands: readonly ReviewCommand[];
@@ -40,13 +41,14 @@ export function ReviewInbox({
   incomplete?: boolean;
   initialReview?: WorkerReview;
   initialCommand?: ReviewCommand;
+  initialTarget?: ReviewTarget;
 }) {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
   const [answeredTickets, setAnsweredTickets] = useState<ReadonlySet<string>>(() => new Set());
   const [current, setCurrent] = useState<WorkerReview | undefined>(initialReview);
   const [command, setCommand] = useState<ReviewCommand | undefined>(initialCommand);
   const [sending, setSending] = useState(false);
-  const [target, setTarget] = useState<(typeof targets)[number] | undefined>();
+  const [target, setTarget] = useState<ReviewTarget | undefined>(initialTarget);
   const pendingReviews = reviews.filter((review) => !answered.has(keyOf(review)));
   const pendingCommands = commands.filter((item) => !answered.has(commandKey(item)));
   const pendingTargets = targets.filter((item) => !answeredTickets.has(`${targetSource(item)}:${item.ticket}`));
@@ -141,7 +143,18 @@ export function ReviewInbox({
       target &&
       !targets.some((item) => targetSource(item) === targetSource(target) && item.ticket === target.ticket)
     ) {
-      show(queue[0]);
+      const replacement = queue.find((entry) => {
+        if (entry.kind === 'review') {
+          const ticket = entry.item.kind === 'standalone-preview' ? entry.item.preview.ticket : entry.item.round.ticket;
+          return entry.item.gameId === targetSource(target) && ticket === target.ticket;
+        }
+        return (
+          entry.kind === 'command' &&
+          commandSource(entry.item) === targetSource(target) &&
+          entry.item.ticket === target.ticket
+        );
+      });
+      show(replacement ?? queue[0]);
     }
   });
   if (target) {
