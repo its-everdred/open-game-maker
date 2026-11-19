@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BoundaryCheckPoster } from '../../src/boundary/check-run.js';
 import { buildDiffInput } from '../../src/boundary/inputs.js';
-import { runBoundaryPoll } from '../../src/boundary/poller.js';
+import { runBoundaryPoll, startBoundaryPoller } from '../../src/boundary/poller.js';
+import { BoundaryApiError } from '../../src/boundary/api-client.js';
 import { GitHubRequestError } from '../../src/github-request.js';
 import { registerBoundaryWebhook } from '../../src/boundary/webhook.js';
 import type { ActiveRepository } from '../../src/boundary/api-client.js';
@@ -22,6 +23,52 @@ const repository = {
 } as const satisfies ActiveRepository;
 const game = { owner: repository.owner, name: repository.name, visibility: repository.visibility } as const;
 const emptyLock = { version: 1, family: 'any', pov: 'iso', assets: [] };
+
+it('logs the safe status when listing pulls fails', async () => {
+  const { request } = fakeRequest(() => {
+    throw new GitHubRequestError('sensitive', 403);
+  });
+  const log = vi.fn();
+  await runBoundaryPoll({
+    api: { activeRepositories: async () => [{ ...repository, gameId: 'g1' }] },
+    app: appWith(request),
+    check: vi.fn(),
+    log,
+  });
+  expect(log).toHaveBeenCalledWith({
+    event: 'boundary-poll-error',
+    repo: 'alice/instance',
+    error: 'GitHubRequestError',
+    status: 403,
+  });
+});
+
+it('logs the safe status when the active repository API fails', async () => {
+  const { request } = fakeRequest(() => []);
+  const log = vi.fn();
+  const poller = startBoundaryPoller({
+    api: {
+      activeRepositories: async () => {
+        throw new BoundaryApiError('http', 503);
+      },
+    },
+    app: appWith(request),
+    check: vi.fn(),
+    log,
+  });
+  try {
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith({
+        event: 'boundary-poll-error',
+        error: 'BoundaryApiError',
+        reason: 'http',
+        status: 503,
+      }),
+    );
+  } finally {
+    poller.stop();
+  }
+});
 
 it('continues checking other pulls after one fails and reports its safe status', async () => {
   const { request } = fakeRequest(() =>
