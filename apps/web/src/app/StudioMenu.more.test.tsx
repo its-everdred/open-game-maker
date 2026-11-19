@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -66,12 +66,19 @@ function PlayControls() {
 
 /** Stands in for the pause panel: opens the menu like the pause button, and can show its More page. */
 function PausePanel() {
-  const { setOpen, setMoreHost } = useGameMenu();
+  const { open, setOpen, setMoreHost, setPausePanelVisible } = useGameMenu();
+  useEffect(() => {
+    setPausePanelVisible(open);
+    return () => setPausePanelVisible(false);
+  }, [open, setPausePanelVisible]);
   const [more, setMore] = useState(false);
   return (
     <div className="platform-pause-dialog" data-studio-menu-boundary>
       <button type="button" onClick={() => setOpen(true)}>
         Pause
+      </button>
+      <button type="button" onClick={() => setOpen(false)}>
+        Resume
       </button>
       <button type="button" onClick={() => setMore((current) => !current)}>
         Toggle more
@@ -102,12 +109,37 @@ function circleNames() {
 afterEach(cleanup);
 
 describe('StudioMenu inside the pause panel', () => {
+  it('returns focus to the trigger after the pause panel closes', async () => {
+    renderGame();
+    await screen.findByRole('button', { name: 'Menu' });
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus());
+  });
+  it.each(['/g/game-1?mode=edit', '/g/showcase/example'])(
+    'keeps the trigger available without a pause panel at %s',
+    async (path) => {
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <GameMenuProvider>
+            <StudioMenu />
+            <PlayControls />
+          </GameMenuProvider>
+        </MemoryRouter>,
+      );
+      const trigger = await screen.findByRole('button', { name: 'Menu' });
+      fireEvent.click(trigger);
+      expect(trigger).toBeVisible();
+    },
+  );
   // Kevin, 2026-11-18: the studio circles sprayed over the game's pause panel. On the panel's More page they must
   // render inside it, without repeating what the panel already shows (Leave, Edit, Sound).
   it('moves the tray into the More page and drops the circles the pause panel already offers', async () => {
     renderGame();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Menu' })).toHaveAttribute('data-game-play', 'true'));
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
     expect(circleNames()).toEqual(expect.arrayContaining(['Games', 'Edit', 'Mute']));
 
     fireEvent.click(screen.getByRole('button', { name: 'Toggle more' }));

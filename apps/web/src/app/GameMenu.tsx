@@ -33,10 +33,12 @@ type GameMenuState = {
   open: boolean;
   /** The pause panel's More page; while set, the studio tray renders inside it instead of over the game. */
   moreHost: HTMLElement | null;
+  pausePanelVisible: boolean;
   setControls: Dispatch<SetStateAction<GameMenuControls | undefined>>;
   setOpen: Dispatch<SetStateAction<boolean>>;
   setMoreHost: Dispatch<SetStateAction<HTMLElement | null>>;
   setCloseLocked(locked: boolean): void;
+  setPausePanelVisible: Dispatch<SetStateAction<boolean>>;
 };
 
 const GameMenuContext = createContext<GameMenuState | undefined>(undefined);
@@ -53,11 +55,26 @@ export function GameMenuProvider({ children }: { children: ReactNode }) {
     setOpenState(next);
   }, []);
   const [moreHost, setMoreHost] = useState<HTMLElement | null>(null);
+  const [pausePanelVisible, setPausePanelVisible] = useState(false);
   const value = useMemo(
-    () => ({ controls, open, moreHost, setControls, setOpen, setMoreHost, setCloseLocked }),
-    [controls, open, moreHost, setOpen, setCloseLocked],
+    () => ({
+      controls,
+      open,
+      moreHost,
+      pausePanelVisible,
+      setControls,
+      setOpen,
+      setMoreHost,
+      setCloseLocked,
+      setPausePanelVisible,
+    }),
+    [controls, open, moreHost, pausePanelVisible, setOpen, setCloseLocked],
   );
   return <GameMenuContext.Provider value={value}>{children}</GameMenuContext.Provider>;
+}
+
+export function useOptionalGameMenu(): GameMenuState | undefined {
+  return useContext(GameMenuContext);
 }
 
 export function useGameMenu(): GameMenuState {

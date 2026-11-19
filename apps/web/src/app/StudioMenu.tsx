@@ -71,7 +71,7 @@ export function StudioMenu() {
     return host;
   });
   const location = useLocation();
-  const { controls, open, setOpen, moreHost } = useGameMenu();
+  const { controls, open, setOpen, moreHost, pausePanelVisible } = useGameMenu();
   // Before paint, so the tray never shows a frame in the place it just left.
   useLayoutEffect(() => {
     (moreHost ?? traySlot.current)?.appendChild(trayHost);
@@ -183,14 +183,17 @@ export function StudioMenu() {
 
   useEffect(() => {
     if (wasOpen.current && !open) {
-      const soundTrigger = hasStudioHeader
-        ? root.current?.querySelector<HTMLButtonElement>('.studio-library-volume button')
-        : null;
-      (soundTrigger ?? trigger.current)?.focus();
       setSheet(undefined);
+      if (!pausePanelVisible) {
+        const soundTrigger = hasStudioHeader
+          ? root.current?.querySelector<HTMLButtonElement>('.studio-library-volume button')
+          : null;
+        (soundTrigger ?? trigger.current)?.focus();
+        wasOpen.current = false;
+      }
     }
-    wasOpen.current = open;
-  }, [hasStudioHeader, open, sheet]);
+    if (open) wasOpen.current = true;
+  }, [hasStudioHeader, open, sheet, pausePanelVisible]);
 
   useEffect(() => {
     if (deck && deck.creatorId !== creatorId) setDeck(undefined);
@@ -597,7 +600,7 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
-        hidden={hasStudioHeader}
+        hidden={hasStudioHeader || pausePanelVisible}
         style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}

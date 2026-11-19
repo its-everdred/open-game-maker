@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type {
   CreditsDocument,
@@ -29,6 +29,7 @@ import {
 import { loadSettings, saveSettings } from '../../features/editor/hud/settings';
 import { pushToast } from '../../lib/notify/slice';
 import { Icon } from '../../components/Icon';
+import { useOptionalGameMenu } from '../../app/GameMenu';
 import { CreditsList } from '../settings/CreditsList';
 import { getCredits } from '../settings/credits';
 import { SharedSettings } from './SharedSettings';
@@ -170,6 +171,11 @@ export function PlatformHud({
   onResume,
 }: PlatformHudProps) {
   const visible = open ?? paused;
+  const setPausePanelVisible = useOptionalGameMenu()?.setPausePanelVisible;
+  useLayoutEffect(() => {
+    setPausePanelVisible?.(visible);
+    return () => setPausePanelVisible?.(false);
+  }, [setPausePanelVisible, visible]);
   const [slots, setSlots] = useState<SaveSlot[]>();
   const [savesAvailable, setSavesAvailable] = useState(false);
   const [loadingSave, setLoadingSave] = useState(false);
