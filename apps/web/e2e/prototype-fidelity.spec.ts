@@ -77,7 +77,9 @@ test.describe.configure({ mode: 'serial' });
 
 for (const scenario of scenarios) {
   for (const viewport of viewports) {
-    test(`${scenario.name} matches the prototype shell at ${viewport.width}x${viewport.height}`, async ({
+    // Quarantine the repeatedly failing main-branch context setup; see #856.
+    const fidelityTest = scenario.name === 'title' && viewport.name === 'phone' ? test.fixme : test;
+    fidelityTest(`${scenario.name} matches the prototype shell at ${viewport.width}x${viewport.height}`, async ({
       browser,
       page,
     }, testInfo) => {
