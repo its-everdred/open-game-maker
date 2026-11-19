@@ -9,6 +9,7 @@ import {
   optionFailures,
   swipeDeckFailures,
 } from '../../../packages/gm-cli/src/qa-review-checks';
+import { swipeReviewMedia } from '../../../packages/gm-cli/src/qa-review-touch';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { installGameApi } from './support/mock-game-api';
@@ -210,34 +211,21 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
     await page.waitForTimeout(20);
   }
   await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await touch.detach();
   await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await scroller.evaluate((element) => {
     element.scrollTop = 0;
   });
-  const swipe = async (right: boolean, target = media) => {
-    await target.scrollIntoViewIfNeeded();
-    const box = (await target.boundingBox())!;
-    const x = box.x + box.width / 2;
-    const y = box.y + box.height / 2;
-    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
-    for (let step = 1; step <= 5; step++) {
-      await touch.send('Input.dispatchTouchEvent', {
-        type: 'touchMove',
-        touchPoints: [{ x: x + (right ? 22 : -22) * step, y }],
-      });
-    }
-    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  };
-  await swipe(true, dialog.locator('video'));
+  await swipeReviewMedia(page, true, '.worker-review-swipe video');
   await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
   await page.getByRole('button', { name: 'Undo' }).click();
   await scroller.evaluate((element) => {
     element.scrollTop = 0;
   });
-  await swipe(true);
+  await swipeReviewMedia(page, true);
   await page.getByRole('button', { name: 'Undo' }).click();
   expect(roundAnswer).toBeUndefined();
-  await swipe(false);
+  await swipeReviewMedia(page, false);
   await page.getByLabel('Note (optional)').fill('More contrast');
   await page.getByRole('button', { name: 'Send changes' }).click();
   await expect.poll(() => roundAnswer, { timeout: 10_000 }).toEqual({ verdict: 'needs_work', note: 'More contrast' });
@@ -247,10 +235,24 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   await dialog.getByRole('button', { name: 'Close' }).click();
   await openReviewItem(page, 'Choose');
   expect(await optionFailures(dialog, 3)).toEqual([]);
-  await swipe(false, dialog.locator('.worker-review-option img'));
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+    { width: 820, height: 1180 },
+    { width: 1180, height: 820 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await swipeReviewMedia(page, false, '.worker-review-option img');
+    await expect(dialog.getByRole('button', { name: 'View option B' })).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
+    await swipeReviewMedia(page, true, '.worker-review-option video');
+    await expect(dialog.getByRole('button', { name: 'View option A' })).toHaveAttribute('aria-pressed', 'true');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await swipeReviewMedia(page, false, '.worker-review-option img');
   await expect(dialog.getByRole('button', { name: 'View option B' })).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => dialog.locator('video').evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
-  await swipe(false, dialog.locator('.worker-review-option video'));
+  await swipeReviewMedia(page, false, '.worker-review-option video');
   await expect(dialog.getByRole('button', { name: 'View option C' })).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => dialog.locator('audio').evaluate((audio) => audio.duration)).toBeGreaterThan(1);
   const optionStill = testInfo.outputPath('review-option-c.png');
