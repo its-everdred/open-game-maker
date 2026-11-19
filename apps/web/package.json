@@ -7,7 +7,7 @@
     "prebuild": "pnpm run build:deps",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 43170",
+    "preview": "vite preview --host 127.0.0.1 --port 23170",
     "pretest": "pnpm run build:deps",
     "test": "vitest run --exclude e2e/render-gltf.test.ts --exclude e2e/thumbnail-scene.test.ts --exclude e2e/thumbnail-scene-3d.test.ts",
     "pretypecheck": "pnpm run build:deps",

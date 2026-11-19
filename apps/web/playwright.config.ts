@@ -2,9 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 import { launchArgs } from './e2e/support/gpu';
 
-// Keep CI's stable default while allowing concurrent local agent runs to choose an unused 4317x port.
+// Keep CI's stable default while allowing concurrent local agent runs to choose an unused port.
 // eslint-disable-next-line no-restricted-properties
-const previewPort = process.env.OGM_WEB_E2E_PORT ?? '43170';
+const previewPort = process.env.OGM_WEB_E2E_PORT ?? '23170';
 const previewOrigin = `http://127.0.0.1:${previewPort}`;
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '10001';
