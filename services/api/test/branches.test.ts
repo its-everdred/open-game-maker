@@ -119,7 +119,10 @@ function systemTransaction(
 describe('branch routes', () => {
   it('lists branches with equal creation times in insertion order', async () => {
     const { deps, main } = await setup();
-    for (const [id, name] of [['z-branch', 'First'], ['a-branch', 'Second']] as const) {
+    for (const [id, name] of [
+      ['z-branch', 'First'],
+      ['a-branch', 'Second'],
+    ] as const) {
       insertBranch(deps.sqlite, { ...main, id, name, gitRef: `branch/${id}`, createdAt: now });
     }
 
