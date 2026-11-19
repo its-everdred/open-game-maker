@@ -161,11 +161,14 @@ test('judges the 6-card voice deck and answers once every card has a vote', asyn
 
   // A tap on the card plays the sample again, and never opens the full-screen viewer a still opens.
   await audio.evaluate((element) => (element as HTMLAudioElement).pause());
+  await audio.evaluate((element) => {
+    element.addEventListener('play', () => element.setAttribute('data-replayed', 'true'), { once: true });
+  });
   await deck
     .locator('.review-deck-card')
     .first()
     .click({ position: { x: 40, y: 40 } });
-  await expect(audio.evaluate((element) => element.paused)).resolves.toBe(false);
+  await expect(audio).toHaveAttribute('data-replayed', 'true');
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // Like the first, dislike the second with the creator's words, then judge the rest.
