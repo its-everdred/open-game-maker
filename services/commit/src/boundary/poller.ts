@@ -2,6 +2,8 @@ import type { GitHubApp, Repository } from '../types.js';
 import { mapConcurrent } from '../concurrency.js';
 import type { ActiveRepository, BoundaryApi } from './api-client.js';
 import type { PullSnapshot } from './inputs.js';
+import { BoundaryApiError } from './api-client.js';
+import { GitHubRequestError } from '../github-request.js';
 
 export type BoundaryCheckRequest = {
   repository: Repository;
@@ -14,6 +16,14 @@ export type BoundaryCheck = (request: BoundaryCheckRequest) => Promise<void>;
 type Log = (line: Record<string, unknown>) => void;
 type Pull = { number: number; draft: boolean; head: { sha: string } };
 const POLL_CONCURRENCY = 4;
+
+function errorDetails(error: unknown): Record<string, unknown> {
+  return {
+    error: error instanceof Error ? error.name : 'UnknownError',
+    ...(error instanceof BoundaryApiError ? { reason: error.reason, status: error.status } : {}),
+    ...(error instanceof GitHubRequestError ? { status: error.status } : {}),
+  };
+}
 
 async function openPulls(app: GitHubApp, repository: Repository): Promise<Pull[]> {
   const github = await app.forOwner(repository.owner);
@@ -59,18 +69,27 @@ export async function runBoundaryPoll(options: {
   await mapConcurrent(groups, POLL_CONCURRENCY, async ({ repository, games }) => {
     try {
       const pulls = await openPulls(options.app, repository);
-      await mapConcurrent(pulls, POLL_CONCURRENCY, async (pull) =>
-        options.check({
-          repository,
-          pull: { number: pull.number, draft: pull.draft, headSha: pull.head.sha },
-          games,
-        }),
-      );
+      await mapConcurrent(pulls, POLL_CONCURRENCY, async (pull) => {
+        try {
+          await options.check({
+            repository,
+            pull: { number: pull.number, draft: pull.draft, headSha: pull.head.sha },
+            games,
+          });
+        } catch (error) {
+          options.log({
+            event: 'boundary-poll-error',
+            repo: `${repository.owner}/${repository.name}`,
+            pull: pull.number,
+            ...errorDetails(error),
+          });
+        }
+      });
     } catch (error) {
       options.log({
         event: 'boundary-poll-error',
         repo: `${repository.owner}/${repository.name}`,
-        error: error instanceof Error ? error.name : 'UnknownError',
+        ...errorDetails(error),
       });
     }
   });
@@ -92,7 +111,7 @@ export function startBoundaryPoller(options: {
     } catch (error) {
       options.log({
         event: 'boundary-poll-error',
-        error: error instanceof Error ? error.name : 'UnknownError',
+        ...errorDetails(error),
       });
     } finally {
       running = false;

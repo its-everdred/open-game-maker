@@ -18,7 +18,10 @@ export interface BoundaryApi {
 }
 
 export class BoundaryApiError extends Error {
-  constructor() {
+  constructor(
+    readonly reason: 'http' | 'transport' | 'invalid-response' = 'invalid-response',
+    readonly status?: number,
+  ) {
     super('boundary API request failed');
     this.name = 'BoundaryApiError';
   }
@@ -40,10 +43,15 @@ export class BoundaryApiClient implements BoundaryApi {
       const response = await this.#fetch(`${this.#baseUrl}${path}`, {
         headers: apiHeaders(this.#token),
       });
-      if (!response.ok) throw new BoundaryApiError();
-      return await response.json();
-    } catch {
-      throw new BoundaryApiError();
+      if (!response.ok) throw new BoundaryApiError('http', response.status);
+      try {
+        return await response.json();
+      } catch {
+        throw new BoundaryApiError('invalid-response');
+      }
+    } catch (error) {
+      if (error instanceof BoundaryApiError) throw error;
+      throw new BoundaryApiError('transport');
     }
   }
 
