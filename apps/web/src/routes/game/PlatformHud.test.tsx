@@ -569,6 +569,7 @@ describe('PlatformHud', () => {
     );
     await openSettingsSection('Saves');
     fireEvent.click(await screen.findByRole('button', { name: 'Save slot 1' }));
+    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledOnce());
     test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 1 } });
     await waitFor(() => expect(write).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole('button', { name: 'Save slot 2' }));
@@ -595,6 +596,16 @@ describe('PlatformHud', () => {
       { slotId: 'auto', headRevision: 1, status: 'ok' },
       { slotId: '1', headRevision: 1, status: 'ok' },
     ] as SaveSlot[];
+    let finishList!: (result: { available: true; value: { slots: SaveSlot[] } }) => void;
+    const list = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishList = resolve;
+          }),
+      )
+      .mockResolvedValue({ available: true, value: { slots } });
     const read = vi.fn().mockResolvedValue(loaded);
     const onResume = vi.fn();
     const setCloseLocked = vi.fn();
@@ -615,11 +626,15 @@ describe('PlatformHud', () => {
         saves
         manualSaveSlots
         setCloseLocked={setCloseLocked}
-        saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read, write }}
+        saveApi={{ list, read, write }}
         onResume={onResume}
       />,
     );
-    await openSettingsSection('Saves');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(test.frame.onSaveWrite).not.toHaveBeenCalled();
+    await act(async () => finishList({ available: true, value: { slots } }));
+    fireEvent.click(await screen.findByText('Saves'));
+    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledOnce());
     test.saveWrite(old);
     await waitFor(() => expect(write).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole('button', { name: /Save slot 1/ }));
@@ -635,6 +650,7 @@ describe('PlatformHud', () => {
     await waitFor(() => expect(onResume).toHaveBeenCalledOnce());
     expect(setCloseLocked).toHaveBeenLastCalledWith(false);
     await waitFor(() => expect(write.mock.calls.filter((call) => call[1] === 'auto').at(-1)?.[2]).toEqual(loaded));
+    await waitFor(() => expect(write.mock.calls.some((call) => call[1] === '1')).toBe(true));
     expect(write.mock.calls.some((call) => call[1] === '2')).toBe(false);
   });
 
