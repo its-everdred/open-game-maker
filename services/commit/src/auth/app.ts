@@ -50,6 +50,8 @@ export type GitHubAppConfig = {
 
 export async function createGitHubApp(config: GitHubAppConfig): Promise<GitHubApp & GitHubInstallations> {
   const privateKey = await readPrivateKey(config.privateKeyPath);
+  const cooldown = { until: 0 };
+  const installationCooldowns = new Map<number, { until: number }>();
   const now = config.now ?? Date.now;
   const boundedFetch = fetchWithTimeout(config.fetch ?? fetch, config.timeoutMs);
   const oauth =
@@ -58,7 +60,7 @@ export async function createGitHubApp(config: GitHubAppConfig): Promise<GitHubAp
       : null;
   const rawRequest = octokitRequest.defaults({ request: { fetch: boundedFetch } });
   const request = Object.assign(
-    withSafeGitHubRequests(rawRequest as unknown as GitHubRequest, undefined, undefined, config.log),
+    withSafeGitHubRequests(rawRequest as unknown as GitHubRequest, undefined, undefined, config.log, cooldown),
     {
       endpoint: rawRequest.endpoint,
       defaults: rawRequest.defaults,
@@ -77,6 +79,7 @@ export async function createGitHubApp(config: GitHubAppConfig): Promise<GitHubAp
     undefined,
     undefined,
     config.log,
+    cooldown,
   );
   const installations = new Map<string, CachedInstallation>();
   const tokens = new Map<number, CachedToken>();
@@ -164,9 +167,14 @@ export async function createGitHubApp(config: GitHubAppConfig): Promise<GitHubAp
         throttle: { enabled: false },
       });
       const request = client.request.bind(client) as unknown as GitHubRequest;
+      let installationCooldown = installationCooldowns.get(installation.id);
+      if (installationCooldown === undefined) {
+        installationCooldown = { until: 0 };
+        installationCooldowns.set(installation.id, installationCooldown);
+      }
       return {
         accountType: installation.accountType,
-        request: withSafeGitHubRequests(request, undefined, undefined, config.log),
+        request: withSafeGitHubRequests(request, undefined, undefined, config.log, installationCooldown),
       };
     },
     async identity(): Promise<GitHubIdentity> {

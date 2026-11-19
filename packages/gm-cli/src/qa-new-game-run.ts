@@ -40,7 +40,7 @@ export async function runNewGameQa(
   }
   async function cleanupRecorded(current: QaManifest): Promise<boolean> {
     const ids = await inventory();
-    const unknown = unknownQaGames(current, ids);
+    const unknown = unknownQaGames(current, ids).filter((id) => !config.legacyIds?.includes(id));
     if (unknown.length) {
       failures.push(`unidentified QA games require inspection: ${unknown.join(', ')}`);
       return false;

@@ -60,7 +60,7 @@ describe('fold_design', () => {
     expect(calls.filter((call) => call.route.endsWith('/git/ref/{ref}'))).toHaveLength(1);
     expect(calls.at(-1)?.parameters).toMatchObject({ ref: 'heads/main', force: false });
     expect(calls.find((call) => call.route.endsWith('/git/trees'))?.parameters).toMatchObject({
-      tree: [{ path: `${FOLDER}/design/entities.json`, mode: '100644', type: 'blob', sha: 'blob-1' }],
+      tree: [{ path: `${FOLDER}/design/entities.json`, mode: '100644', type: 'blob', content: '{}' }],
     });
     expect(evaluate).toHaveBeenNthCalledWith(1, {
       kind: 'fold_design',

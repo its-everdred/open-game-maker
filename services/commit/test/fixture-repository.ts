@@ -14,7 +14,7 @@ import type { GitHubIdentity, GitHubRequest } from '../src/types.js';
  */
 
 export type FixtureBlob = { content: string; encoding: 'base64' };
-export type FixtureTreeEntry = { path: string; mode: string; type: 'blob' | 'commit'; sha: string };
+export type FixtureTreeEntry = { path: string; mode: string; type: 'blob' | 'commit'; sha: string; content?: string };
 export type FixtureCommit = {
   sha: string;
   message: string;
@@ -275,7 +275,12 @@ export class FixtureRepository {
   #applyTree(base: unknown, entries: FixtureTreeEntry[]): string {
     const tree: Tree = base === undefined ? new Map() : new Map(this.#treeOf(text(base)));
     for (const entry of entries) {
-      if (entry.sha === null) tree.delete(entry.path);
+      if (entry.content !== undefined) {
+        const content = Buffer.from(entry.content, 'utf8').toString('base64');
+        const sha = sha1(content);
+        this.#blobs.set(sha, { content, encoding: 'base64' });
+        tree.set(entry.path, { path: entry.path, mode: entry.mode, type: entry.type, sha });
+      } else if (entry.sha === null) tree.delete(entry.path);
       else tree.set(entry.path, { ...entry, sha: entry.sha });
     }
     return this.#storeTree(tree);

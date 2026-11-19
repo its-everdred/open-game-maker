@@ -13,8 +13,11 @@ describe('withSafeGitHubRequests', () => {
       .fn<GitHubRequest>()
       .mockRejectedValueOnce(failure(429, { 'retry-after': '2' }))
       .mockResolvedValueOnce({ data: { ok: true } });
-    const delay = vi.fn(async () => undefined);
-    const safe = withSafeGitHubRequests(request, delay);
+    let now = 0;
+    const delay = vi.fn(async (ms: number) => {
+      now += ms;
+    });
+    const safe = withSafeGitHubRequests(request, delay, () => now);
     await expect(safe('GET /app')).resolves.toEqual({ data: { ok: true } });
     expect(delay).toHaveBeenCalledWith(2_000);
     expect(request).toHaveBeenCalledTimes(2);
@@ -27,10 +30,13 @@ describe('withSafeGitHubRequests', () => {
         'x-ratelimit-reset': '101',
       }),
     );
+    let now = 100_000;
     const safe = withSafeGitHubRequests(
       request,
-      async () => undefined,
-      () => 100_000,
+      async (ms) => {
+        now += ms;
+      },
+      () => now,
     );
     await expect(safe('GET /app')).rejects.toBeInstanceOf(GitHubRateLimitError);
     expect(request).toHaveBeenCalledTimes(2);
@@ -58,6 +64,85 @@ describe('withSafeGitHubRequests', () => {
     error.response.data.message = 'token secret-installation-token';
     await expect(safe('GET /app')).rejects.toBeInstanceOf(GitHubRequestError);
     expect(JSON.stringify(log.mock.calls)).not.toContain('secret-installation-token');
+  });
+
+  it('identifies secondary limits and reports long backoff without blocking the caller', async () => {
+    const error = Object.assign(failure(403), {
+      response: {
+        headers: { 'retry-after': '60', 'x-ratelimit-remaining': '3270', authorization: 'secret' },
+        data: { message: 'You have exceeded a secondary rate limit. Please wait.' },
+      },
+    });
+    const request = vi.fn<GitHubRequest>().mockRejectedValue(error);
+    const delay = vi.fn(async () => undefined);
+    const log = vi.fn();
+    await expect(
+      withSafeGitHubRequests(request, delay, Date.now, log)('POST /repos/{owner}/{repo}/git/trees'),
+    ).rejects.toBeInstanceOf(GitHubRateLimitError);
+    expect(request).toHaveBeenCalledOnce();
+    expect(delay).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'GitHub secondary rate limit',
+        rateLimit: { 'retry-after': '60', 'x-ratelimit-remaining': '3270' },
+      }),
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain('secret');
+  });
+
+  it('does not retry if another request extends the cooldown during backoff', async () => {
+    let now = 1000;
+    const cooldown = { until: 0 };
+    const request = vi.fn<GitHubRequest>().mockRejectedValue(failure(429, { 'retry-after': '1' }));
+    const delay = async (ms: number) => {
+      now += ms;
+      cooldown.until = now + 60_000;
+    };
+    await expect(
+      withSafeGitHubRequests(request, delay, () => now, undefined, cooldown)('GET /app'),
+    ).rejects.toBeInstanceOf(GitHubRateLimitError);
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it('honors a long cooldown across request wrappers', async () => {
+    let now = 1000;
+    const cooldown = { until: 0 };
+    const error = Object.assign(failure(403), {
+      response: { headers: { 'retry-after': '60' }, data: { message: 'secondary rate limit' } },
+    });
+    const request = vi.fn<GitHubRequest>().mockRejectedValueOnce(error).mockResolvedValue({ data: {} });
+    const delay = async (ms: number) => {
+      now += ms;
+    };
+    const first = withSafeGitHubRequests(request, delay, () => now, undefined, cooldown);
+    const second = withSafeGitHubRequests(request, delay, () => now, undefined, cooldown);
+    await expect(first('POST /repos/{owner}/{repo}/git/trees')).rejects.toBeInstanceOf(GitHubRateLimitError);
+    await expect(second('POST /repos/{owner}/{repo}/git/trees')).rejects.toBeInstanceOf(GitHubRateLimitError);
+    expect(request).toHaveBeenCalledOnce();
+    now += 60_000;
+    await expect(second('POST /repos/{owner}/{repo}/git/trees')).resolves.toEqual({ data: {} });
+  });
+
+  it('logs only recognized validation codes for tree errors', async () => {
+    const error = Object.assign(failure(422), {
+      response: {
+        headers: {},
+        data: { message: 'Validation Failed', errors: [{ code: 'invalid', field: 'secret' }, { code: 'secret' }] },
+      },
+    });
+    const log = vi.fn();
+    await expect(
+      withSafeGitHubRequests(
+        vi.fn<GitHubRequest>().mockRejectedValue(error),
+        undefined,
+        undefined,
+        log,
+      )('POST /repos/{owner}/{repo}/git/trees'),
+    ).rejects.toBeInstanceOf(GitHubRequestError);
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Validation Failed', validationCodes: ['invalid'] }),
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain('secret');
   });
 
   it('redacts the upstream message and response data', async () => {

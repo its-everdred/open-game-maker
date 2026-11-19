@@ -6,6 +6,7 @@ import type { AssetsLock, LockEntry } from '@ogm/contracts';
 
 import type { BoundaryApi } from '../../src/boundary/api-client.js';
 import type { BlocklistLoader } from '../../src/boundary/blocklist.js';
+import { GitHubRateLimitError } from '../../src/github-request.js';
 import { RealBoundaryGate } from '../../src/publish-gate/gate.js';
 import type { GitHubApp, GitHubRequest, Repository } from '../../src/types.js';
 import { contextWith, fakeRequest } from '../helpers.js';
@@ -59,6 +60,14 @@ function treeRequest(lockfile: AssetsLock): GitHubRequest {
 }
 
 describe('RealBoundaryGate', () => {
+  it('propagates rate limits so callers can report a retryable failure', async () => {
+    const request = vi.fn<GitHubRequest>().mockRejectedValue(new GitHubRateLimitError());
+    const gate = new RealBoundaryGate(dependencies(request));
+    await expect(
+      gate.evaluate({ kind: 'create_game', gameId: 'game-1', repository, sha: 'sha', targetVisibility: 'private' }),
+    ).rejects.toBeInstanceOf(GitHubRateLimitError);
+  });
+
   it('refuses making a Synty tree public and names the asset', async () => {
     const asset: LockEntry = {
       id: 't1:synty-polygon-dungeon/barrel@1.0',

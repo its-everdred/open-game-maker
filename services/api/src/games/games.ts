@@ -8,6 +8,7 @@ import type { AppDeps } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
 import { gameFolder } from '@ogm/contracts';
 import { assignSlug } from './slug.js';
+import { GitHubRateLimitError } from './repo-provisioner.js';
 
 export type GameRow = typeof schema.games.$inferSelect;
 
@@ -136,6 +137,9 @@ export async function provisionGame(deps: AppDeps, game: GameRow): Promise<GameR
     return findGame(deps.db, game.id);
   } catch (error) {
     if (error instanceof HttpError) throw error;
+    if (error instanceof GitHubRateLimitError) {
+      throw new HttpError(502, 'repo_provisioning_failed', error.message, { gameId: game.id });
+    }
     deps.log({ event: 'repo-provision-failed', gameId: game.id, error: (error as Error).message });
     throw new HttpError(502, 'repo_provisioning_failed', undefined, { gameId: game.id });
   } finally {
