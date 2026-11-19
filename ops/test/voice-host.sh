@@ -38,6 +38,17 @@ exec node -e '
 EOF
 chmod +x "$rel/voice_host"
 
+# Build trusts the service config from inside the service directory, including for a relative --repo.
+mkdir -p "$scratch/bin" "$scratch/stack/services/voice-host"
+touch "$scratch/stack/services/voice-host/mix.exs" "$scratch/stack/services/voice-host/mise.toml"
+cat > "$scratch/bin/mise" <<'EOF'
+#!/usr/bin/env bash
+if [[ $1 == trust ]]; then [[ -f $2 ]] || exit 1; fi
+exit 0
+EOF
+chmod +x "$scratch/bin/mise"
+(cd "$scratch" && PATH="$scratch/bin:$PATH" "$repo/ops/bin/ogm-voice-host" build --repo stack > /dev/null)
+
 # The env as the host has it today: a key and a port, nothing the host needs to boot, and the API's URLs empty.
 cat > "$OGM_ENV_DIR/voice-host.env" << EOF
 ELEVENLABS_API_KEY=key-must-not-print
@@ -88,6 +99,21 @@ OGM_VOICE_CLEANUP_ROOT=$scratch/cleanup
 ELEVENLABS_AGENT_ID=agent-test
 EOF
 sed -i "s#^OGM_VOICE_HOST_INTERNAL_URL=.*#OGM_VOICE_HOST_INTERNAL_URL=http://127.0.0.1:$internal#; s#^OGM_VOICE_WS_URL=.*#OGM_VOICE_WS_URL=wss://<tailnet-host>:8443/ws/voice#" "$OGM_ENV_DIR/api.env"
+mkdir -m 755 "$scratch/cleanup"
+if vh check-env > /dev/null 2> "$scratch/mode.err"; then fail 'insecure cleanup mode must fail'; fi
+assert_grep 'OGM_VOICE_CLEANUP_ROOT must have mode 0700' "$scratch/mode.err"
+chmod 700 "$scratch/cleanup"
+mv "$scratch/cleanup" "$scratch/real-cleanup"
+ln -s "$scratch/real-cleanup" "$scratch/cleanup"
+if vh check-env > /dev/null 2> "$scratch/link.err"; then fail 'cleanup symlink must fail'; fi
+assert_grep 'OGM_VOICE_CLEANUP_ROOT must not be a symlink' "$scratch/link.err"
+rm "$scratch/cleanup"
+rmdir "$scratch/real-cleanup"
+vh start > "$scratch/created.out"
+assert_eq 700 "$(stat -c %a "$scratch/cleanup")" 'start creates a private cleanup directory'
+vh stop > /dev/null
+export TEST_CLEANUP_PARENT=$scratch
+sed -i 's|^OGM_VOICE_CLEANUP_ROOT=.*|OGM_VOICE_CLEANUP_ROOT=$TEST_CLEANUP_PARENT/cleanup|' "$OGM_ENV_DIR/voice-host.env"
 vh check-env > "$scratch/check2.out"
 assert_grep "env ok (provider elevenlabs_agents, ports $port and $internal)" "$scratch/check2.out"
 

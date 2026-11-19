@@ -58,13 +58,22 @@ env_value() {
   grep -E "^$2=" "$env_dir/$1.env" 2> /dev/null | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true
 }
 
+# The env file is shell syntax and is also sourced by the release; expand its path the same way.
+cleanup_root_value() (
+  unset OGM_VOICE_CLEANUP_ROOT
+  set -a
+  [[ -f $env_dir/voice-host.env ]] || return 0
+  . "$env_dir/voice-host.env" > /dev/null
+  printf '%s' "${OGM_VOICE_CLEANUP_ROOT:-}"
+)
+
 port=$(env_value voice-host OGM_VOICE_PORT)
 port=${port:-40400}
 internal=$(env_value voice-host OGM_VOICE_INTERNAL_PORT)
 internal=${internal:-40401}
 
 check_env() {
-  local problems=() provider name
+  local problems=() provider name cleanup_root
   [[ -f $env_dir/voice-host.env ]] || problems+=("$env_dir/voice-host.env is missing")
   for name in OGM_VOICE_TOKEN_SECRET OGM_VOICE_INTERNAL_SECRET OGM_API_INTERNAL_URL; do
     [[ -n $(env_value voice-host "$name") ]] || problems+=("voice-host.env: $name is empty")
@@ -83,6 +92,16 @@ check_env() {
       ;;
     *) problems+=("voice-host.env: OGM_VOICE_PROVIDER is not fake, elevenlabs_agents or openai_realtime") ;;
   esac
+  cleanup_root=$(cleanup_root_value)
+  if [[ -n $cleanup_root ]]; then
+    if [[ -L $cleanup_root ]]; then
+      problems+=("voice-host.env: OGM_VOICE_CLEANUP_ROOT must not be a symlink")
+    elif [[ ! -d $cleanup_root ]]; then
+      problems+=("voice-host.env: OGM_VOICE_CLEANUP_ROOT directory is missing")
+    elif [[ $(stat -Lc %a -- "$cleanup_root" 2> /dev/null) != 700 ]]; then
+      problems+=("voice-host.env: OGM_VOICE_CLEANUP_ROOT must have mode 0700")
+    fi
+  fi
   # The API mints the tokens the host verifies and signs the calls the host answers: both secrets must be the same.
   for name in OGM_VOICE_TOKEN_SECRET OGM_VOICE_INTERNAL_SECRET; do
     [[ $(env_value api "$name") == "$(env_value voice-host "$name")" ]] || problems+=("$name differs between api.env and voice-host.env")
@@ -121,6 +140,7 @@ build() {
   command -v mise > /dev/null 2>&1 || die 'mise is required to build the voice host'
   (
     cd "$dir" &&
+      mise trust mise.toml &&
       mise exec -- mix local.hex --force --if-missing &&
       mise exec -- mix local.rebar --force --if-missing &&
       mise exec -- mix deps.get &&
@@ -148,14 +168,18 @@ stop() {
 }
 
 start() {
-  local i answer
+  local i answer cleanup_root
   if answer=$(healthz); then
     say "already running: $answer"
     return 0
   fi
+  cleanup_root=$(cleanup_root_value)
+  if [[ -n $cleanup_root && ! -e $cleanup_root ]]; then
+    mkdir -p -m 700 -- "$cleanup_root" || die 'could not create OGM_VOICE_CLEANUP_ROOT'
+  fi
   check_env || die 'fix the env files first (docs/ops/runbook.md, "Run the voice host")'
   [[ -x $release ]] || die "no release at ${release#"$repo/"}: run ogm-voice-host build"
-  # The env file is sourced only inside the detached child, so its values never reach this shell's output.
+  # Source the env in the detached child without printing its values.
   (
     set -a
     . "$env_dir/voice-host.env"
