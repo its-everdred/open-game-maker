@@ -702,7 +702,7 @@ export function GameScreen() {
               type="button"
               aria-label="Play"
               disabled={room.snapshot?.role === 'peer'}
-              onClick={() => requestMode('play')}
+              onClick={() => (editorPlaying ? requestMode('play') : setEditorPlaying(true))}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M7 3v18l14-9z" />
@@ -861,7 +861,7 @@ export function GameScreen() {
             );
           }}
           onTool={(tool) => {
-            setEditorPlaying((playing) => !playing && sessionView.tool === tool);
+            setEditorPlaying(false);
             sessionStore.getState().setTool(tool);
           }}
           onUndo={() => void sessionStore.getState().undo()}

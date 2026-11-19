@@ -486,6 +486,11 @@ describe('GameScreen previews', () => {
     fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
     await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
     expect(fallbackAdmission.admitJob.mock.calls[0]?.[0].plan.summary).toContain('scenery-band:grass');
+    fireEvent.pointerDown(grass, { pointerId: 3 });
+    expect(host.controller.setMode).toHaveBeenLastCalledWith('edit');
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    await waitFor(() => expect(host.controller.setMode).toHaveBeenLastCalledWith('play'));
+    expect(screen.queryByLabelText('Editor canvas')).toBeNull();
   });
   it.each(['t3:fixture/tree', 'scope:0'])(
     'submits fallback item %s as a build request without a design transaction',
