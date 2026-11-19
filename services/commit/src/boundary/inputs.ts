@@ -53,6 +53,7 @@ async function fetchBlob(
 ): Promise<BoundaryFile> {
   const response = await request<Blob>('GET /repos/{owner}/{repo}/git/blobs/{file_sha}', {
     ...repository,
+    repo: repository.name,
     file_sha: sha,
   });
   const raw = decodeBase64(response.data.content, response.data.encoding);
@@ -76,6 +77,7 @@ export async function pullChangedFiles(
   for (let page = 1; ; page += 1) {
     const response = await request<PullFile[]>('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
       ...repository,
+      repo: repository.name,
       pull_number: prNumber,
       per_page: 100,
       page,
@@ -90,6 +92,7 @@ async function readLockfile(request: GitHubRequest, repository: Repository, ref:
   try {
     response = await request<Content>('GET /repos/{owner}/{repo}/contents/{path}', {
       ...repository,
+      repo: repository.name,
       path: 'assets.lock.json',
       ref,
     });
@@ -138,7 +141,7 @@ export async function buildDiffInput(options: {
   let pull = options.pull;
   if (pull === undefined) {
     const response = await options.request<Pull>('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
-      ...options.repository,
+      ...options.repository, repo: options.repository.name,
       pull_number: options.prNumber,
     });
     pull = {
@@ -193,11 +196,11 @@ export async function buildTreeInput(options: {
   gamePath?: string;
 }): Promise<BoundaryInput> {
   const commit = await options.request<GitCommit>('GET /repos/{owner}/{repo}/git/commits/{commit_sha}', {
-    ...options.repository,
+    ...options.repository, repo: options.repository.name,
     commit_sha: options.sha,
   });
   const response = await options.request<Tree>('GET /repos/{owner}/{repo}/git/trees/{tree_sha}', {
-    ...options.repository,
+    ...options.repository, repo: options.repository.name,
     tree_sha: commit.data.tree.sha,
     recursive: '1',
   });
@@ -309,6 +312,7 @@ export function buildInlineTreeInput(options: {
 export async function mainHead(request: GitHubRequest, repository: Repository): Promise<string> {
   const response = await request<{ object: { sha: string } }>('GET /repos/{owner}/{repo}/git/ref/{ref}', {
     ...repository,
+    repo: repository.name,
     ref: 'heads/main',
   });
   return response.data.object.sha;

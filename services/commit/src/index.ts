@@ -16,13 +16,14 @@ import { DefaultTemplateSource, withGameTemplates } from './template-source.js';
 
 async function main(): Promise<void> {
   const config = loadCommitConfig();
+  const log = (entry: Record<string, unknown>) => console.log(JSON.stringify(entry));
   const github = await createGitHubApp({
+    log,
     appId: config.githubAppId,
     privateKeyPath: config.githubPrivateKeyPath,
     clientId: config.githubClientId,
     clientSecret: config.githubClientSecret,
   });
-  const log = (entry: Record<string, unknown>) => console.log(JSON.stringify(entry));
   if (config.githubClientId === undefined || config.githubClientSecret === undefined) {
     // Without these the App cannot prove who controls an installation, so GitHub connections are refused.
     log({

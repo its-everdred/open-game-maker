@@ -56,12 +56,14 @@ export async function foldDesign(op: ExtractCommitOp<'fold_design'>, context: Op
     try {
       const parent = await github.request<CommitData>('GET /repos/{owner}/{repo}/git/commits/{commit_sha}', {
         ...repository,
+        repo: repository.name,
         commit_sha: base,
       });
       const tree = await createTreeFromFiles(github.request, repository, files, parent.data.tree.sha);
       const sha = await createCommit(github.request, repository, `design: fold ${op.gameId}`, tree, identity, [base]);
       await github.request('PATCH /repos/{owner}/{repo}/git/refs/{ref}', {
         ...repository,
+        repo: repository.name,
         ref: 'heads/main',
         sha,
         force: false,

@@ -53,6 +53,7 @@ export class BoundaryCheckPoster {
     if (this.#posted.has(key)) return true;
     const response = await request<CheckRuns>('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
       ...repository,
+      repo: repository.name,
       ref: headSha,
       check_name: 'ogm/boundary',
       per_page: 1,
@@ -90,6 +91,7 @@ export class BoundaryCheckPoster {
         if (await this.exists(request, repository, headSha)) return;
         await request('POST /repos/{owner}/{repo}/check-runs', {
           ...repository,
+          repo: repository.name,
           name: 'ogm/boundary',
           head_sha: headSha,
           status: 'completed',
