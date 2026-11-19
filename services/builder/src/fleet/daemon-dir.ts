@@ -1,4 +1,5 @@
-import { lstat, mkdir, readlink, symlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readlink, realpath, rename, stat, symlink, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { renderDaemonFiles } from '@ogm/game-repo-template';
@@ -71,17 +72,16 @@ export async function materialize(
 export async function materializeCodexHome(input: RenderInput, authPath: string): Promise<void> {
   const codexHome = input.codexHome;
   if (!codexHome) throw new Error('per-daemon codexHome is required');
-  await requireFile(authPath, 'shared Codex auth');
+  const resolvedAuth = await requireFile(authPath, 'shared Codex auth');
   await writeAtomic(join(codexHome, 'config.toml'), renderCodexProfile(input), 0o600);
-  await linkSharedAuth(codexHome, authPath);
+  await linkSharedAuth(codexHome, resolvedAuth);
 }
 
 async function linkSharedAuth(codexHome: string, authPath: string): Promise<void> {
   const link = join(codexHome, 'auth.json');
+  let current: string;
   try {
-    const current = await readlink(link);
-    if (current === authPath) return;
-    throw new Error(`Codex auth link points to ${current}; expected ${authPath}`);
+    current = await readlink(link);
   } catch (error) {
     if (isNodeError(error) && error.code === 'ENOENT') {
       await symlink(authPath, link);
@@ -92,11 +92,32 @@ async function linkSharedAuth(codexHome: string, authPath: string): Promise<void
     }
     throw error;
   }
+  if (current === authPath) return;
+  const resolved = await realpath(link).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === 'ENOENT') return undefined;
+    throw error;
+  });
+  if (resolved !== authPath) throw new Error(`Codex auth link points to ${current}; expected ${authPath}`);
+  const temporary = `${link}.${randomUUID()}`;
+  await symlink(authPath, temporary);
+  try {
+    await rename(temporary, link);
+  } finally {
+    await unlink(temporary).catch((error: unknown) => {
+      if (!isNodeError(error) || error.code !== 'ENOENT') throw error;
+    });
+  }
 }
 
-async function requireFile(path: string, label: string): Promise<void> {
+async function requireFile(path: string, label: string): Promise<string> {
   try {
-    if (!(await lstat(path)).isFile()) throw new Error(`${label} is not a file: ${path}`);
+    const resolved = await realpath(path);
+    const target = await stat(resolved);
+    if (!target.isFile()) throw new Error(`${label} is not a file: ${path}`);
+    if ((target.mode & 0o7777) !== 0o600) throw new Error(`${label} must have mode 0600: ${path}`);
+    if (typeof process.getuid !== 'function' || target.uid !== process.getuid())
+      throw new Error(`${label} must be owned by the current user: ${path}`);
+    return resolved;
   } catch (error) {
     if (isNodeError(error) && error.code === 'ENOENT')
       throw new Error(`${label} is missing: ${path}`, { cause: error });
