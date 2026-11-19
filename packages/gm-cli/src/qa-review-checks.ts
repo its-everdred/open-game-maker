@@ -60,6 +60,11 @@ export async function openClosedTicket(page: Page, title: string, timeout = 20_0
  * (apps/web/e2e/studio-menu.spec.ts) opens the deck through this same step, so a change to the path fails CI before it
  * reaches the prod E2E (#891).
  */
+function reviewItemName(title: string): RegExp {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped}(?:, Needs review,.*)?$`, 'u');
+}
+
 export async function openReviewDeck(
   page: Page,
   timeout = 20_000,
@@ -71,12 +76,13 @@ export async function openReviewDeck(
   const panel = page.getByRole('region', { name: 'Builds' });
   if (activeTitle) await panel.getByRole('button', { name: new RegExp(`^${activeTitle}`, 'u') }).waitFor({ timeout });
   await panel.getByRole('button', { name: /\d+ need review/i }).click({ timeout });
-  const items = panel.locator('.worker-tracker-list button');
+  const group = panel.locator('.worker-review-group-item');
+  const items = group.locator('button');
   if (expected) {
-    for (const name of expected) await panel.getByRole('button', { name, exact: true }).waitFor({ timeout });
+    for (const name of expected) await group.getByRole('button', { name: reviewItemName(name) }).waitFor({ timeout });
     if ((await items.count()) !== expected.length) throw new Error('filtered review list has an unexpected item count');
   }
-  await (title ? panel.getByRole('button', { name: title, exact: true }) : items.first()).click({ timeout });
+  await (title ? group.getByRole('button', { name: reviewItemName(title) }) : items.first()).click({ timeout });
   const dialog = page.getByRole('dialog', { name: 'Needs Review' });
   await dialog.waitFor({ timeout });
   return dialog;

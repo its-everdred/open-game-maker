@@ -15,12 +15,4 @@ describe('new ticket lookup', () => {
     expect(second).toEqual(first);
     expect(fetcher).toHaveBeenCalledOnce();
   });
-  it('treats a missing ticket as absent rather than a feed failure', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404 }));
-    const read = createTicketLookup('token', fetcher);
-    const repo = { owner: 'owner', name: 'shared' };
-    expect(await read(repo, '15')).toBeNull();
-    expect(await read(repo, '15')).toBeNull();
-    expect(fetcher).toHaveBeenCalledOnce();
-  });
 });

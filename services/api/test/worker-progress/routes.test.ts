@@ -1,5 +1,6 @@
 import { schema } from '@ogm/db';
 import type { AiurClient } from '@ogm/aiur-client';
+import { eq } from 'drizzle-orm';
 import { HttpError } from '../../src/app/errors.js';
 import { postRound } from '../../src/review-rounds/store.js';
 import { markReviewAnswered, observeReviewState } from '../../src/review-rounds/answer-guard.js';
@@ -296,6 +297,60 @@ describe('worker progress route', () => {
     }));
     const newWorker = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
     expect((await newWorker.json()).workers.map((worker: { ticket: string }) => worker.ticket)).toEqual(['13', '12']);
+    deps.db
+      .insert(schema.jobs)
+      .values({
+        id: 'j_stale',
+        gameId: game,
+        branchId: 'main',
+        familyId: family,
+        creatorId: user,
+        kind: 'new_game',
+        complexity: 1,
+        state: 'done',
+        start: 'now',
+        slot: 'new_game',
+        plan: '{}',
+        reservation: '{}',
+        hardCapMicroUsd: 0,
+        aiurRepo: 'owner/shared',
+        aiurIssueNumber: 15,
+        createdAt: at,
+        updatedAt: at,
+      })
+      .run();
+    state.mockResolvedValue({ running: [{ issue_identifier: '15', title: 'New game', runtime_seconds: 0 }] });
+    deps.registry.trackerTicket = vi.fn().mockResolvedValue(null);
+    const staleWorker = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect((await staleWorker.json()).workers.map((worker: { ticket: string }) => worker.ticket)).not.toContain('15');
+    expect(deps.registry.trackerTicket).toHaveBeenCalledWith({ owner: 'owner', name: 'shared' }, '15');
+    deps.registry.trackerTickets = vi.fn().mockResolvedValue({
+      stale: true,
+      tickets: [
+        {
+          ticket: '15',
+          title: 'New game',
+          labels: [],
+          closedAt: null,
+          updatedAt: at,
+          outcome: 'Closed',
+          url: 'https://example.test/15',
+        },
+      ],
+    });
+    const staleSnapshot = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect((await staleSnapshot.json()).workers).toEqual([]);
+    deps.registry.trackerTicket = vi.fn().mockRejectedValue(new Error('Ticket lookup failed (404)'));
+    const lookupFailure = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect((await lookupFailure.json()).daemonUnavailable).toBe(true);
+    deps.registry.trackerTickets = tracker;
+    deps.db.update(schema.jobs).set({ state: 'running' }).where(eq(schema.jobs.id, 'j_stale')).run();
+    deps.aiurClientForGame = async () => {
+      throw new HttpError(409, 'daemon_not_found');
+    };
+    const missingActiveDaemon = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect((await missingActiveDaemon.json()).daemonUnavailable).toBe(true);
+    deps.db.delete(schema.jobs).where(eq(schema.jobs.id, 'j_stale')).run();
     const message = vi.fn().mockResolvedValue({ request_id: 'r' });
     const decisions = vi.fn().mockResolvedValue([]);
     deps.aiurClientForGame = async () => ({ decisions, message }) as unknown as AiurClient;

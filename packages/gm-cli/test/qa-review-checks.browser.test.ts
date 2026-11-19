@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { mediaFailures, optionFailures, settleMedia, swipeDeckFailures } from '../src/qa-review-checks.js';
+import {
+  mediaFailures,
+  openReviewDeck,
+  optionFailures,
+  settleMedia,
+  swipeDeckFailures,
+} from '../src/qa-review-checks.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 
@@ -179,4 +185,31 @@ describe('the review E2E checks what the creator sees', () => {
       'the round has no "Needs changes" control',
     ]);
   });
+});
+
+describe('opening the inline review group', () => {
+  it('selects punctuated titles and counts only review items', async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.setContent(`<button class="worker-tracker-button">Builds</button>
+        <section role="region" aria-label="Builds">
+          <button>2 need review</button>
+          <div class="worker-tracker-list">
+            <div class="worker-review-group-item"><button aria-label="Castle [A]+, Needs review, 50%">Castle [A]+</button></div>
+            <div class="worker-review-group-item"><button aria-label="Other, Needs review, progress unavailable">Other</button></div>
+            <button>Castle [A]+</button><button>Completed</button>
+          </div>
+        </section><div role="dialog" aria-label="Needs Review" hidden></div>
+        <script>document.querySelector('[aria-label^="Castle"]').addEventListener('click', () => {
+          document.querySelector('[role="dialog"]').hidden = false;
+        });</script>`);
+      await expect(openReviewDeck(page, 60000, 'Castle [A]+', ['Castle [A]+'])).rejects.toThrow(
+        'filtered review list has an unexpected item count',
+      );
+      await expect(openReviewDeck(page, 60000, 'Castle [A]+', ['Castle [A]+', 'Other'])).resolves.toBeTruthy();
+    } finally {
+      await context.close();
+    }
+  }, 180_000);
 });

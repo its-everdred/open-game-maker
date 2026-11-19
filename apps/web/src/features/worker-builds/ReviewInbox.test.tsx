@@ -451,3 +451,28 @@ it('does not report a just-answered ticket as missing while its state catches up
   expect(screen.queryByRole('button', { name: 'Review again' })).toBeNull();
   expect(api).not.toHaveBeenCalledWith('/games/g/tickets/12/missing-review', expect.anything());
 }, 10000);
+
+it('opens the selected missing-review target and advances when it is replaced', async () => {
+  api.mockImplementation(() => new Promise(() => {}));
+  const target = { gameId: 'g', ticket: '42', title: 'Missing castle' };
+  const review = {
+    kind: 'round' as const,
+    gameId: 'g',
+    round: { id: 'r', ticket: '13', question: 'Other review', media: [{ kind: 'still' as const, url: '/still.png' }] },
+  };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} reviews={[review]} targets={[target]} initialTarget={target} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('Missing castle')).toBeVisible();
+  expect(screen.queryByText('Other review')).toBeNull();
+  const matching = { ...review, round: { ...review.round, id: 'match', ticket: '42', question: 'Castle review' } };
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} reviews={[review, matching]} targets={[]} initialTarget={target} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByText('Castle review');
+  expect(screen.queryByText('Missing castle')).toBeNull();
+});

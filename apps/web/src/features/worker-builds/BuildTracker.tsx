@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Job } from '@ogm/contracts';
-import { commandSource, targetPath, targetSource, type ReviewCommand, type ReviewTarget } from './review-command';
-import { MissingMedia } from './MissingMedia';
+import { commandSource, targetSource, type ReviewCommand, type ReviewTarget } from './review-command';
 import { Icon } from '../../components/Icon';
 import { MenuRing } from '../../components/MenuCircle';
 import { Dialog } from '../../components/Dialog';
@@ -218,7 +217,7 @@ export function BuildPanel({
           aria-expanded={filtered}
           onClick={() => setFiltered(!filtered)}
         >
-          Needs review · {reviewCount}
+          {reviewCount} need review
         </button>
       )}
       <ul className="worker-tracker-list">
@@ -230,10 +229,15 @@ export function BuildPanel({
               (review.kind === 'standalone-preview' ? `Build #${ticket}` : review.round.question || `Build #${ticket}`);
             return (
               <li
+                className="worker-review-group-item"
                 key={`${review.gameId}:${review.kind}:${review.kind === 'standalone-preview' ? review.preview.buildId : review.round.id}`}
               >
                 <button
                   type="button"
+                  aria-label={reviewRowLabel(
+                    title,
+                    workers.find((worker) => worker.ticket === `${review.gameId}:${ticket}`),
+                  )}
                   onClick={() => {
                     setSelectedReview(review);
                     setSelectedCommand(undefined);
@@ -252,9 +256,13 @@ export function BuildPanel({
           })}
         {filtered &&
           commands.map((command) => (
-            <li key={`${commandSource(command)}:${command.decision_id}`}>
+            <li className="worker-review-group-item" key={`${commandSource(command)}:${command.decision_id}`}>
               <button
                 type="button"
+                aria-label={reviewRowLabel(
+                  command.summary || command.title,
+                  workers.find((worker) => worker.ticket === `${commandSource(command)}:${command.ticket}`),
+                )}
                 onClick={() => {
                   setSelectedCommand(command);
                   setSelectedReview(undefined);
@@ -272,9 +280,13 @@ export function BuildPanel({
           ))}
         {filtered &&
           [...missingTargets, ...coreTargets].map((target) => (
-            <li key={`${targetSource(target)}:${target.ticket}`}>
+            <li className="worker-review-group-item" key={`${targetSource(target)}:${target.ticket}`}>
               <button
                 type="button"
+                aria-label={reviewRowLabel(
+                  target.title,
+                  workers.find((worker) => worker.ticket === `${targetSource(target)}:${target.ticket}`),
+                )}
                 onClick={() => {
                   setSelectedTarget(target);
                   setSelectedReview(undefined);
@@ -299,10 +311,6 @@ export function BuildPanel({
                 expanded={expandedWorker === worker.ticket}
                 onToggle={() => setExpandedWorker(expandedWorker === worker.ticket ? undefined : worker.ticket)}
               />
-              {expandedWorker === worker.ticket &&
-                missingTargets
-                  .filter((target) => `${target.gameId}:${target.ticket}` === worker.ticket)
-                  .map((target) => <MissingMedia key={worker.ticket} path={targetPath(target)} />)}
               {expandedWorker === worker.ticket && splitTicket(worker.ticket) && (
                 <button
                   type="button"
@@ -310,6 +318,9 @@ export function BuildPanel({
                 >
                   Details
                 </button>
+              )}
+              {expandedWorker === worker.ticket && !splitTicket(worker.ticket) && (
+                <small>{worker.percent == null ? 'Progress unavailable' : `${worker.percent}% complete`}</small>
               )}
               <ProgressBar
                 worker={worker}
@@ -344,9 +355,17 @@ export function BuildPanel({
           commands={commands}
           initialReview={selectedReview}
           initialCommand={selectedCommand}
+          initialTarget={selectedTarget}
           error={reviewError}
           incomplete={reviewLoading || workerError}
-          targets={selectedTarget ? [selectedTarget] : []}
+          targets={
+            selectedTarget
+              ? [...missingTargets, ...coreTargets].filter(
+                  (target) =>
+                    targetSource(target) === targetSource(selectedTarget) && target.ticket === selectedTarget.ticket,
+                )
+              : []
+          }
           onClose={() => setModal(undefined)}
         />
       )}
@@ -418,22 +437,10 @@ function splitTicket(ticket: string): { gameId: string; ticket: string } | undef
 }
 
 function WorkerRow({ worker, expanded, onToggle }: { worker: WorkerBuild; expanded: boolean; onToggle(): void }) {
-  const row = (
-    <>
-      <strong>{worker.title}</strong>
-      <span>
-        {waitingLabel(worker.state) ??
-          (worker.percent === 100 ? 'Finishing' : worker.percent == null ? '' : `${worker.percent}%`)}
-      </span>
-    </>
-  );
-  const target = splitTicket(worker.ticket);
-  return target ? (
+  return (
     <button type="button" className="worker-tracker-row" aria-expanded={expanded} onClick={onToggle}>
-      {row}
+      <strong>{worker.title}</strong>
     </button>
-  ) : (
-    <div>{row}</div>
   );
 }
 
@@ -495,4 +502,8 @@ function ProgressBar({ worker, label }: { worker?: WorkerBuild; label: string })
       <span className="worker-tracker-bar-label">{label}</span>
     </span>
   );
+}
+
+function reviewRowLabel(title: string, worker?: WorkerBuild): string {
+  return `${title}, Needs review, ${worker?.percent == null ? 'progress unavailable' : `${worker.percent}%`}`;
 }
