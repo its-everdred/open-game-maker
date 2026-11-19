@@ -79,10 +79,9 @@ for (const scenario of scenarios) {
   for (const viewport of viewports) {
     // Quarantine the repeatedly failing main-branch context setup; see #856.
     const fidelityTest = scenario.name === 'title' && viewport.name === 'phone' ? test.fixme : test;
-    fidelityTest(`${scenario.name} ${scenario.name === 'editor' ? 'uses the selected workspace' : 'matches the prototype shell'} at ${viewport.width}x${viewport.height}`, async ({
-      browser,
-      page,
-    }, testInfo) => {
+    const description = scenario.name === 'editor' ? 'uses the selected workspace' : 'matches the prototype shell';
+    const title = `${scenario.name} ${description} at ${viewport.width}x${viewport.height}`;
+    fidelityTest(title, async ({ browser, page }, testInfo) => {
       test.skip(testInfo.project.name !== 'desktop', 'the test sets both exact acceptance viewports itself');
       test.setTimeout(60_000);
       const referenceContext = await browser.newContext({
