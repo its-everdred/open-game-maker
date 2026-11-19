@@ -104,10 +104,7 @@ export function voiceFixtureReport(deps: AppDeps, run: string) {
 // Removes the voice builds a run left (every run's when none is named) and their chat rows.
 export function deleteVoiceFixtures(deps: AppDeps, run?: string) {
   const state = requireQa(deps);
-  if (
-    run === undefined ||
-    state.tickets?.some((ticket) => ticket.identifier === String(QA_VOICE_ISSUE))
-  ) {
+  if (run === undefined || state.tickets?.some((ticket) => ticket.identifier === String(QA_VOICE_ISSUE))) {
     const active = deps.db
       .select({ id: schema.jobs.id })
       .from(schema.jobs)

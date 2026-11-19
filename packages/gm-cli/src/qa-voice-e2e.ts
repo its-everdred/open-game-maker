@@ -226,13 +226,16 @@ async function until(check: () => boolean | Promise<boolean>, timeoutMs: number)
   }
 }
 
-async function openChat(page: Page, origin: string): Promise<void> {
+export async function openChat(page: Page, origin: string, title = TITLE): Promise<void> {
   const timeout = { timeout: 20_000 };
   await page.goto(`${origin}/all`, { waitUntil: 'load', timeout: 60_000 });
   await openTicketBuilds(page);
-  await openRunningTicket(page, TITLE);
-  await page.getByRole('dialog', { name: TITLE }).getByRole('button', { name: 'Conversation' }).click(timeout);
-  await page.getByRole('dialog', { name: TITLE }).waitFor(timeout);
+  await openRunningTicket(page, title);
+  await page.getByRole('dialog', { name: title }).getByRole('button', { name: 'Conversation' }).click(timeout);
+  await page
+    .getByRole('dialog', { name: title })
+    .and(page.locator('.job-conversation-dialog:not(.ticket-detail-dialog)'))
+    .waitFor(timeout);
 }
 
 export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promise<VoiceE2eResult> {
@@ -266,7 +269,9 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       await page.screenshot({ path: file });
       stills.push(file);
     };
-    const dialog = page.getByRole('dialog', { name: TITLE });
+    const dialog = page
+      .getByRole('dialog', { name: TITLE })
+      .and(page.locator('.job-conversation-dialog:not(.ticket-detail-dialog)'));
 
     try {
       await openChat(page, config.origin);
