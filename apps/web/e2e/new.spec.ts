@@ -195,16 +195,6 @@ test('style detail fits its media and navigation into phone and desktop viewport
       await expect(controls).toHaveCount(5);
       await expect(tracks).toHaveCount(2);
       await expect(stopRow).toHaveCount(1);
-      await expect
-        .poll(
-          () =>
-            tracks.first().evaluate((element) => {
-              const box = element.getBoundingClientRect();
-              return box.bottom <= window.innerHeight && box.right <= window.innerWidth;
-            }),
-          { message: `style media settled at ${viewport.width}x${viewport.height}` },
-        )
-        .toBe(true);
       const boxesFor = (elements: Element[]) =>
         elements.map((element) => {
           const box = element.getBoundingClientRect();
@@ -225,6 +215,17 @@ test('style detail fits its media and navigation into phone and desktop viewport
               box.right <= window.innerWidth,
           };
         });
+      await expect
+        .poll(
+          () =>
+            controls
+              .or(tracks)
+              .or(stopRow)
+              .evaluateAll(boxesFor)
+              .then((boxes) => ({ count: boxes.length, outside: boxes.filter(({ inViewport }) => !inViewport) })),
+          { message: `style layout settled at ${viewport.width}x${viewport.height}` },
+        )
+        .toEqual({ count: 8, outside: [] });
       const [controlBoxes, trackBoxes, stopRowBoxes, layoutBoxes] = await Promise.all([
         controls.evaluateAll(boxesFor),
         tracks.evaluateAll(boxesFor),
