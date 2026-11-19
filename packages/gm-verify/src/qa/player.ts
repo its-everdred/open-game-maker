@@ -6,7 +6,7 @@ import { describeStep, fill, type ExpectStep, type Step } from './journey.js';
 import { frame, isBlank, isChanged, pixelStats } from './pixels.js';
 
 const POLL_MS = 100;
-const INPUT = new Set<Step['do']>(['goto', 'click', 'tap', 'press', 'swipe']);
+const INPUT = new Set<Step['do']>(['goto', 'click', 'tap', 'press', 'pad', 'swipe']);
 
 export type StepResult = {
   index: number;
@@ -141,6 +141,44 @@ export class Player {
             await this.page.waitForTimeout(step.holdMs);
             await this.page.keyboard.up(step.key);
           }
+          break;
+        case 'pad':
+          await this.page.evaluate(({ buttons, axes }) => {
+            if (buttons.length === 0 && navigator.getGamepads()[0]?.id !== 'QA standard gamepad') {
+              throw new Error('pad needs a button on its first step to claim the controller');
+            }
+            const pad = {
+              id: 'QA standard gamepad',
+              index: 0,
+              connected: true,
+              mapping: 'standard',
+              timestamp: performance.now(),
+              axes: Array.from({ length: 4 }, (_, i) => axes[i] ?? 0),
+              buttons: Array.from({ length: 17 }, (_, i) => ({
+                pressed: buttons.includes(i),
+                touched: buttons.includes(i),
+                value: buttons.includes(i) ? 1 : 0,
+              })),
+              vibrationActuator: null,
+            };
+            Object.defineProperty(navigator, 'getGamepads', {
+              configurable: true,
+              value: () => [pad, null, null, null],
+            });
+          }, step);
+          try {
+            await this.page.waitForTimeout(step.holdMs);
+          } finally {
+            await this.page.evaluate(() => {
+              const pad = navigator.getGamepads()[0];
+              if (pad) {
+                (pad.axes as number[]).fill(0);
+                for (const button of pad.buttons) Object.assign(button, { pressed: false, touched: false, value: 0 });
+              }
+            });
+          }
+          // Let the host observe neutral before the next step can press the same button again.
+          await this.page.waitForTimeout(50);
           break;
         case 'swipe':
           await this.swipe(step.from, step.to, step.ms);

@@ -48,6 +48,7 @@ sizes. `{name}` is a value a `read` step saved; room journeys also have `{client
 | `{"do":"click","text":"Play"}` / `"selector"` | mouse click on visible text or a CSS selector |
 | `{"do":"tap","text":"Play"}` / `"at":[0.5,0.8]` | touch tap on a phone, click on a desktop |
 | `{"do":"press","key":"ArrowLeft","holdMs":80,"times":2}` | real key down and up |
+| `{"do":"pad","buttons":[0],"axes":[-1,0],"holdMs":150}` | hold standard gamepad button indices and axes, then release; the first pad step needs a button to claim the controller; `holdMs` is at least 50 |
 | `{"do":"swipe","from":[0.6,0.4],"to":[0.3,0.4],"ms":200}` | a CDP touch swipe |
 | `{"do":"expect","text":"GO","pixels":"changed","region":[x,y,w,h],"timeoutMs":10000,"look":"..."}` | waits; fails when not met |
 | `{"do":"read","as":"code","selector":".code"}` / `"url":true` | saves text or the page URL for later steps |
@@ -60,7 +61,7 @@ piece land where the buttons sent it?"), answered from its still.
 
 Blobs' journeys (`solo-cpu`, `online-2p`, `phone-touch`, `laptop-keys`, `hud-clear`) are in `journeys/blobs/` beside
 this skill: the examples to copy, and the set to keep in `games/blobs/qa/journeys/`. `laptop-keys` and `phone-touch`
-prove gm-input's devices and `hud-clear` proves gm-ui-hud's clear corners. No step drives a gamepad: list it unchecked.
+exercise gm-input devices and `hud-clear` proves gm-ui-hud's clear corners. The gamepad is injected, not a physical device.
 
 ## Before reporting
 

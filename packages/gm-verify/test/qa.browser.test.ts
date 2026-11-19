@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { build } from 'esbuild';
 import type { Browser } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -9,6 +10,7 @@ import { launch } from '../src/browser.js';
 import { hasFfmpeg } from '../src/capture.js';
 import { driveJourney } from '../src/qa/drive.js';
 import { roomJourneySchema, soloJourneySchema } from '../src/qa/journey.js';
+import { Player } from '../src/qa/player.js';
 import { qaOpen } from '../src/qa/open.js';
 import { qaRoom } from '../src/qa/room.js';
 import { serveQaGame } from './qa-fixture-server.js';
@@ -107,6 +109,46 @@ describe('gm qa drive', () => {
       expect(existsSync(join(dir, 'keys', 'journey.mp4'))).toBe(true);
       expect(existsSync(join(dir, 'keys', 'journey.gif'))).toBe(true);
     } else expect(result.unchecked[0]).toMatch(/^clip/);
+  });
+
+  it('holds and releases a standard gamepad for a polling game', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(server.url);
+      const bundle = await build({
+        stdin: {
+          contents: `import { GamepadPoller } from '../host/src/gamepad.ts';
+            const poller = new GamepadPoller();
+            poller.setMapping(undefined, { move: 'stick', jump: 'button' });
+            window.samples = [];
+            poller.onFrame(frame => window.samples.push(frame.actions));
+            poller.start();`,
+          resolveDir: process.cwd(),
+          loader: 'ts',
+        },
+        bundle: true,
+        write: false,
+        format: 'iife',
+      });
+      await page.addScriptTag({ content: bundle.outputFiles[0]!.text });
+      const player = new Player(page, out(), { label: 'pad', touch: false });
+      const step = soloJourneySchema.parse({
+        name: 'pad',
+        steps: [{ do: 'pad', buttons: [0], axes: [-1], holdMs: 150 }],
+      }).steps[0]!;
+      expect((await player.run(step, 0)).ok).toBe(true);
+      const axisStep = soloJourneySchema.parse({
+        name: 'axis',
+        steps: [{ do: 'pad', axes: [1], holdMs: 150 }],
+      }).steps[0]!;
+      expect((await player.run(axisStep, 1)).ok).toBe(true);
+      const samples = await page.evaluate(() => (window as unknown as { samples: unknown[] }).samples);
+      expect(samples).toContainEqual({ move: { x: -1, y: 0 }, jump: true });
+      expect(samples).toContainEqual({ move: { x: 0, y: 0 }, jump: false });
+      expect(samples).toContainEqual({ move: { x: 1, y: 0 }, jump: false });
+    } finally {
+      await page.close();
+    }
   });
 
   it('drives a phone with touch: taps a button and swipes the board through CDP touch events', async () => {
