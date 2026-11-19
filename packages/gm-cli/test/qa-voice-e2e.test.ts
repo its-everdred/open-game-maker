@@ -33,6 +33,7 @@ it.each([false, true])('records each voice failure even when screenshot capture 
     },
   };
   const context = {
+    grantPermissions: vi.fn(async () => {}),
     addCookies: async () => {},
     addInitScript: async () => {},
     newPage: async () => page,
@@ -50,6 +51,9 @@ it.each([false, true])('records each voice failure even when screenshot capture 
     cookie: { name: 'session', value: 'test' },
     out,
     stamp: 'run-1',
+  });
+  expect(context.grantPermissions).toHaveBeenCalledWith(['local-network-access'], {
+    origin: 'https://app.example.test',
   });
   expect(result.stills).toHaveLength(captureFails ? 0 : 2);
   for (const step of result.steps) {
