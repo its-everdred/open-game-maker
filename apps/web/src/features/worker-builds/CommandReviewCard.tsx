@@ -226,11 +226,7 @@ export function CommandReviewCard({
       )}
       {error && <p role="alert">That answer did not send. Try again.</p>}
       {picking && (
-        <div
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') event.stopPropagation();
-          }}
-        >
+        <div onKeyDown={(event) => event.stopPropagation()}>
           <Dialog
             title={picking.label}
             className="review-deck-reason"

@@ -433,9 +433,12 @@ it('keeps a command open while an answer is sending', async () => {
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'Pick A: A' }));
-  fireEvent.click(
-    within(screen.getByRole('dialog', { name: 'Pick A: A' })).getByRole('button', { name: 'Send choice' }),
-  );
+  const sheet = within(screen.getByRole('dialog', { name: 'Pick A: A' }));
+  const note = sheet.getByLabelText('Note (optional)');
+  note.focus();
+  fireEvent.keyDown(note, { key: 'Tab' });
+  expect(note).toHaveFocus();
+  fireEvent.click(sheet.getByRole('button', { name: 'Send choice' }));
   expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole('dialog', { name: 'Pick A: A' }), { key: 'Escape' });
