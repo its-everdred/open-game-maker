@@ -8,7 +8,7 @@
     "pretypecheck": "pnpm --filter @ogm/gm-cli build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "pnpm --filter @ogm/gm-cli build",
-    "test": "vitest run",
+    "test": "vitest run --exclude 'dist/**'",
     "lint": "eslint skill.test.ts scripts"
   },
   "devDependencies": {

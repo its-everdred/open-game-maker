@@ -26,13 +26,7 @@ import {
 } from '../../core-release-set.js';
 import { isEmptyDirectory } from '../../filesystem.js';
 import { AGENTS_MD } from '../../skills/agents-md.js';
-import {
-  gmCliVersion,
-  locatePackAdapterPackage,
-  locateSkillPack,
-  locateTemplates,
-  syncSkillPack,
-} from '../../skills/pack.js';
+import { gmCliVersion, locatePackAdapterPackage, locateSkillPack, locateTemplates } from '../../skills/pack.js';
 
 const TEMPLATES = new Set(['game-2d', 'game-3d', 'game-multiplayer']);
 const GAME_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -207,7 +201,7 @@ export const command: GmCommand = {
   example: 'new game-2d my-game --family isometric-2d --set smallscaleint --pov side',
   flags: {
     family: { type: 'string', help: 'record the chosen style-family id' },
-    set: { type: 'string', help: 'pin one registered style-set adapter and skill' },
+    set: { type: 'string', help: 'pin one registered style-set adapter' },
     pov: { type: 'string', help: 'record the chosen point-of-view id' },
   },
   async run(ctx, args, flags) {
@@ -234,7 +228,12 @@ export const command: GmCommand = {
     const set = typeof flags.set === 'string' ? flags.set : undefined;
     const pov = typeof flags.pov === 'string' ? flags.pov : undefined;
     validateStyle(family, set);
-    const packDir = locateSkillPack(ctx.cwd, ctx.skillsDir);
+    if (set && !existsSync(join(locateSkillPack(ctx.cwd, ctx.skillsDir), `gm-set-${set}`, 'SKILL.md'))) {
+      throw new UsageError(
+        `style set "${set}" has no installed skill`,
+        'choose a set supported by this Game Maker installation',
+      );
+    }
 
     mkdirSync(dirname(destination), { recursive: true });
     let core: CoreScaffold;
@@ -263,7 +262,6 @@ export const command: GmCommand = {
           pinAdapter(staging, set, adapterVersion(ctx.cwd, set));
         }
       }
-      syncSkillPack({ repoDir: staging, packDir, set });
       writeFileSync(join(staging, 'AGENTS.md'), AGENTS_MD);
       writeFileSync(
         join(staging, 'gm.lock.json'),

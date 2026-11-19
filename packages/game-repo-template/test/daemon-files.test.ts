@@ -90,7 +90,13 @@ describe('after_create hook', () => {
     }
     if (stalePack)
       for (const dir of ['.claude', '.codex', '.agents']) rmSync(join(work, dir), { recursive: true, force: true });
+    if (!stalePack) {
+      mkdirSync(join(work, '.claude/skills/gm-core'), { recursive: true });
+      writeFileSync(join(work, '.claude/skills/gm-core/SKILL.md'), 'name: gm-core\n');
+      writeFileSync(join(work, 'skills.lock'), JSON.stringify({ pack: '0.0.0-placeholder' }));
+    }
     if (conflicting) {
+      mkdirSync(join(work, '.codex/skills'), { recursive: true });
       rmSync(join(work, '.codex/skills/gm-prototype'), { force: true });
       execFileSync('ln', ['-s', '../../attacker', join(work, '.codex/skills/gm-prototype')]);
     }

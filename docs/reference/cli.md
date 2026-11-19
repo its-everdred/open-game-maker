@@ -20,14 +20,14 @@ gm new <game-2d|game-3d|game-multiplayer> <slug> [--family <id>] [--set <id>] [-
 
 Run the command inside an initialized instance repository. It creates `games/<slug>/`, gives the game a unique
 `@game/<slug>` workspace package name, copies the scaffold-only engine template, records the creation choices in
-`gm.lock.json`, writes `AGENTS.md`, and installs the committed skill layout and `skills.lock`. It does not install
+`gm.lock.json` and writes `AGENTS.md`. Skills are supplied by the platform to workers. It does not install
 packages or add game entities. Install afterward from the instance repository with `pnpm install --offline`; that
 refreshes the instance `pnpm-lock.yaml`, so commit the result because CI installs with `--frozen-lockfile`.
 
 `--family` must name a family id from `packages/asset-cards/data/style-families.json`, the registry `gm assets search`
 reads. A set id (for example `limezu-modern`) is refused with its family named; sets stay nested under their family.
 `--set` must name a set in that registry and, when `--family` is present, belong to the chosen family. It records the
-set in `gm.lock.json`, pins the exact `@gm/pack-<set>` version, and installs only that set's `gm-set-<set>` skill.
+set in `gm.lock.json` and pins the exact `@gm/pack-<set>` version.
 
 ## Preview an unmerged build
 

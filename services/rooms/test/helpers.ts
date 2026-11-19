@@ -15,7 +15,7 @@ export const defaultTimings: RoomTimings = {
   ownerReconnectSec: 0.2,
   playerReconnectSec: 0.2,
   seatReconnectSec: 0.2,
-  // Most tests are not exercising idle disposal; leave time for a loaded runner to join.
+  // Connection setup can take longer under a concurrent workspace test run.
   idleDisposeSec: 30,
   callbackTimeoutMs: 100,
   callbackRetryMs: [5, 10, 20],
