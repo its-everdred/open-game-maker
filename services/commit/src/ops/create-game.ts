@@ -173,11 +173,13 @@ async function copyBlob(
 ): Promise<string> {
   if (sameRepository(sourceRepository, destinationRepository)) return sha;
   const blob = await source<{ content: string; encoding: string }>('GET /repos/{owner}/{repo}/git/blobs/{file_sha}', {
-    ...sourceRepository, repo: sourceRepository.name,
+    ...sourceRepository,
+    repo: sourceRepository.name,
     file_sha: sha,
   });
   const created = await destination<{ sha: string }>('POST /repos/{owner}/{repo}/git/blobs', {
-    ...destinationRepository, repo: destinationRepository.name,
+    ...destinationRepository,
+    repo: destinationRepository.name,
     content: blob.data.content,
     encoding: blob.data.encoding,
   });

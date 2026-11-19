@@ -141,7 +141,8 @@ export async function buildDiffInput(options: {
   let pull = options.pull;
   if (pull === undefined) {
     const response = await options.request<Pull>('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
-      ...options.repository, repo: options.repository.name,
+      ...options.repository,
+      repo: options.repository.name,
       pull_number: options.prNumber,
     });
     pull = {
@@ -196,11 +197,13 @@ export async function buildTreeInput(options: {
   gamePath?: string;
 }): Promise<BoundaryInput> {
   const commit = await options.request<GitCommit>('GET /repos/{owner}/{repo}/git/commits/{commit_sha}', {
-    ...options.repository, repo: options.repository.name,
+    ...options.repository,
+    repo: options.repository.name,
     commit_sha: options.sha,
   });
   const response = await options.request<Tree>('GET /repos/{owner}/{repo}/git/trees/{tree_sha}', {
-    ...options.repository, repo: options.repository.name,
+    ...options.repository,
+    repo: options.repository.name,
     tree_sha: commit.data.tree.sha,
     recursive: '1',
   });
