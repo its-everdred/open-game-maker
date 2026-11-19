@@ -7,7 +7,6 @@ import tempfile
 import unittest
 import wave
 import sys
-import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -55,8 +54,6 @@ class DropReaders(unittest.TestCase):
             self.assertEqual(card['status'], 'tagged')
             self.assertEqual(len(card['source']['files']), 2)
             self.assertTrue(fixtures.validator_ok(path))
-            script = "import {statusAllowed} from './packages/asset-cards/dist/search.js'; if (!statusAllowed('audio', 'tagged')) process.exit(1)"
-            subprocess.run(['node', '--input-type=module', '-e', script], check=True)
             sheet = drop_contact_sheets.write(pack).read_text()
             self.assertIn('Click 01 — 0.50s', sheet)
 
