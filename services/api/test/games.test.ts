@@ -1,8 +1,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { schema } from '@ogm/db';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
+import { sweepPlaySessions } from '../src/analytics/retention.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 
@@ -193,6 +195,15 @@ describe('games routes', () => {
         loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
       }),
     );
+    writeFileSync(
+      join(directory, 'manifest.json'),
+      JSON.stringify({ description: 'Published description', tags: ['Cozy'] }),
+    );
+    expect(await list()).toMatchObject({
+      tagline: 'Published description',
+      tags: ['Cozy'],
+      logoUrl: expect.any(String),
+    });
     expect(
       (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
     ).toBe(200);
@@ -207,6 +218,8 @@ describe('games routes', () => {
       JSON.stringify({
         logo: 'media/logo.png',
         genres: ['puzzle'],
+        description: 'Match colour blobs and drop blocks in a forest duel.',
+        tags: ['Versus', 'Cozy'],
         loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
         images: {
           'media/thumbnail.png': { width: 640, height: 360, sources },
@@ -241,6 +254,8 @@ describe('games routes', () => {
     expect(await list()).toMatchObject({
       lastPlayedAt: expect.any(String),
       choices: { genre: ['puzzle'] },
+      tagline: 'Match colour blobs and drop blocks in a forest duel.',
+      tags: ['Versus', 'Cozy'],
       logoUrl: `https://games.example.test/g/${id}/build1/media/logo.png`,
       coverUrl: `https://games.example.test/g/${id}/build1/media/thumbnail.png`,
       loadingUrls: {
@@ -268,6 +283,127 @@ describe('games routes', () => {
       expect(game).not.toHaveProperty('coverImage');
       expect(game.coverUrl).toBe(`https://games.example.test/g/${id}/build1/media/thumbnail.png`);
     }
+  });
+
+  it('lists plays and the published version as detail stats', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const { app } = await makeApp(deps);
+    const { id } = (await (await createGame(app)).json()) as { id: string };
+    const stats = async () =>
+      (
+        (await (await app.request('/api/v1/games', { headers: asUser(creator.userId) })).json()) as {
+          games: Array<Record<string, unknown>>;
+        }
+      ).games[0]!.stats;
+    // A game nobody has played or published shows no stat cells rather than zeros.
+    expect(await stats()).toEqual({});
+    deps.db
+      .insert(schema.branches)
+      .values({
+        id: 'branch-stats',
+        gameId: id,
+        name: 'main',
+        gitRef: 'main',
+        status: 'active',
+        createdBy: creator.userId,
+        createdAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.builds)
+      .values({
+        id: 'build-stats',
+        gameId: id,
+        branchId: 'branch-stats',
+        gitSha: 'a'.repeat(40),
+        sdkVersion: '1.0.0',
+        saveSchemaVersion: 1,
+        achievementCatalogHash: 'b'.repeat(64),
+        status: 'tested',
+        artifact: 'present',
+        artifactPath: '/artifacts/build-stats',
+        createdAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.overrideSnapshots)
+      .values({
+        id: 'snap-stats',
+        gameId: id,
+        branchId: 'branch-stats',
+        buildId: 'build-stats',
+        headRev: 0,
+        sha256: 'c'.repeat(64),
+        entriesJson: '[]',
+        entityOpsJson: '[]',
+        foldSha: 'd'.repeat(40),
+        createdAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.releases)
+      .values({
+        id: 'rel-stats',
+        gameId: id,
+        seq: 2,
+        version: '2.1.0',
+        buildId: 'build-stats',
+        snapshotId: 'snap-stats',
+        gitTag: `gm/${id}/v2.1.0`,
+        kind: 'publish',
+        changelogJson: '{"summary":"Updates","items":[]}',
+        publishedBy: creator.userId,
+        publishedAt: now,
+      })
+      .run();
+    deps.db.update(schema.games).set({ publishedReleaseId: 'rel-stats' }).where(eq(schema.games.id, id)).run();
+    const playId = '258db497-0012-41aa-8c12-c69c3a29b503';
+    const play = (id: string) =>
+      app.request(`/api/v1/games/${id}/play`, {
+        method: 'POST',
+        headers: { ...asUser(creator.userId), 'x-ogm-play-id': playId },
+      });
+    expect((await play(id)).status).toBe(200);
+    expect((await play(id)).status).toBe(200);
+    expect(await stats()).toEqual({ plays: 1, version: '2.1.0' });
+    const current = new Date().toISOString();
+    deps.db
+      .insert(schema.gamePlaySessions)
+      .values(
+        Array.from({ length: 99 }, (_, i) => ({
+          gameId: id,
+          id: `other-${i}`,
+          userId: creator.userId,
+          createdAt: current,
+        })),
+      )
+      .run();
+    expect(
+      (
+        await app.request(`/api/v1/games/${id}/play`, {
+          method: 'POST',
+          headers: { ...asUser(creator.userId), 'x-ogm-play-id': '258db497-0012-41aa-8c12-c69c3a29b504' },
+        })
+      ).status,
+    ).toBe(200);
+    expect(await stats()).toEqual({ plays: 1, version: '2.1.0' });
+    deps.db.update(schema.gamePlaySessions).set({ createdAt: '2000-01-01T00:00:00.000Z' }).run();
+    expect(sweepPlaySessions(deps.sqlite)).toBe(100);
+    expect(await stats()).toEqual({ plays: 1, version: '2.1.0' });
+    expect(
+      (
+        await app.request(`/api/v1/games/${id}/play`, {
+          method: 'POST',
+          headers: { ...asUser(creator.userId), 'x-ogm-play-id': '258db497-0012-41aa-8c12-c69c3a29b505' },
+        })
+      ).status,
+    ).toBe(200);
+    expect(await stats()).toEqual({ plays: 2, version: '2.1.0' });
+
+    const detail = await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) });
+    expect(((await detail.json()) as { stats: unknown }).stats).toEqual({ plays: 2, version: '2.1.0' });
   });
 
   it('refuses game creation by a player before provisioning', async () => {

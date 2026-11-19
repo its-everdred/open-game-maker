@@ -143,6 +143,8 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
           logo: manifest.data.logo,
           loading: manifest.data.loading,
           genres: manifest.data.genres,
+          description: manifest.data.description,
+          tags: manifest.data.tags,
           pending: true,
         }),
       );
@@ -181,7 +183,13 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
   }
 }
 
-type DisplayManifest = { logo?: string; loading?: { portrait: string; landscape: string }; genres?: string[] };
+type DisplayManifest = {
+  logo?: string;
+  loading?: { portrait: string; landscape: string };
+  genres?: string[];
+  description?: string;
+  tags?: string[];
+};
 const deriving = new Set<string>();
 
 function scheduleDisplayImages(
@@ -248,7 +256,14 @@ async function writeDisplayImages(target: string, manifest: DisplayManifest): Pr
   try {
     await writeFile(
       temporary,
-      JSON.stringify({ logo: manifest.logo, loading: manifest.loading, genres: manifest.genres, images }),
+      JSON.stringify({
+        logo: manifest.logo,
+        loading: manifest.loading,
+        genres: manifest.genres,
+        description: manifest.description,
+        tags: manifest.tags,
+        images,
+      }),
     );
     await rename(temporary, join(target, '.ogm-display.json'));
   } finally {

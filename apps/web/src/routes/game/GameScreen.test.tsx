@@ -81,7 +81,10 @@ const host = vi.hoisted(() => {
 vi.mock('../../features/editor/api', () => editorApi);
 const branchList = vi.hoisted(() => ({ value: undefined as Array<{ id: string; name: string }> | undefined }));
 vi.mock('../games/useBranches', () => ({ useBranches: () => ({ data: branchList.value }) }));
-vi.mock('../../features/editor/frame', () => host);
+vi.mock('../../features/editor/frame', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/editor/frame')>()),
+  ...host,
+}));
 const preview = vi.hoisted(() => ({ mountSceneryPreview: vi.fn() }));
 vi.mock('../../features/editor/scenery-preview', () => preview);
 const fallbackAdmission = vi.hoisted(() => ({ admitJob: vi.fn() }));

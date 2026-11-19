@@ -41,6 +41,7 @@ jobs:
         run: |
           browser_paths=(
             apps/web/
+            packages/gm-cli/src/qa-review-checks.ts
             packages/sdk/
             packages/contracts/
             packages/design-log/
@@ -114,7 +115,7 @@ jobs:
     name: browser tests
     needs: changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -144,7 +145,7 @@ jobs:
   ops:
     name: ops shell tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 6
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -157,6 +158,7 @@ jobs:
       - name: Install Chromium
         run: pnpm --dir packages/gm-verify exec playwright install --with-deps chromium
       - name: Ops shell tests (ops/test/*.sh, added by OGM-002/006/008)
+        timeout-minutes: 6
         run: |
           shopt -s nullglob; rc=0
           for t in ops/test/*.sh; do echo "== $t"; bash "$t" || rc=1; done

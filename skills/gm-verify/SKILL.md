@@ -5,7 +5,7 @@ description: Use before showing a creator any visual game change. Run determinis
 
 # Verify a game
 
-Never report a visual result you have not looked at. Code, logs, and a passing command are not visual evidence.
+Never report a visual result you have not looked at. Code, logs, and a passing command are not visual evidence. For a custom rigged machine, see `vendor/anymachine/SKILL.md` for overlap sweeps and GLB re-import checks.
 
 ## Gates first
 

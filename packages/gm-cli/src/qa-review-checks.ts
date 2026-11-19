@@ -32,6 +32,33 @@ function mediaStates(root: Element): MediaState[] {
   });
 }
 
+/**
+ * Open the Builds popover, filter to reviews, and select an item. The app's PR-CI spec
+ * (apps/web/e2e/studio-menu.spec.ts) opens the deck through this same step, so a change to the path fails CI before it
+ * reaches the prod E2E (#891).
+ */
+export async function openReviewDeck(
+  page: Page,
+  timeout = 20_000,
+  title?: string,
+  expected?: string[],
+  activeTitle?: string,
+): Promise<Locator> {
+  await page.locator('.worker-tracker-button').click({ timeout });
+  const panel = page.getByRole('region', { name: 'Builds' });
+  if (activeTitle) await panel.getByRole('button', { name: new RegExp(`^${activeTitle}`, 'u') }).waitFor({ timeout });
+  await panel.getByRole('button', { name: /\d+ need review/i }).click({ timeout });
+  const items = panel.locator('.worker-tracker-list button');
+  if (expected) {
+    for (const name of expected) await panel.getByRole('button', { name, exact: true }).waitFor({ timeout });
+    if ((await items.count()) !== expected.length) throw new Error('filtered review list has an unexpected item count');
+  }
+  await (title ? panel.getByRole('button', { name: title, exact: true }) : items.first()).click({ timeout });
+  const dialog = page.getByRole('dialog', { name: 'Needs Review' });
+  await dialog.waitFor({ timeout });
+  return dialog;
+}
+
 /** Waits up to `timeoutMs` for the media under `root` to load; returns once it has or the time is up. */
 export async function settleMedia(root: Locator, timeoutMs = MEDIA_TIMEOUT_MS): Promise<void> {
   const until = Date.now() + timeoutMs;

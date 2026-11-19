@@ -28,6 +28,8 @@ export function ReviewInbox({
   workers = [],
   error = false,
   incomplete = false,
+  initialReview,
+  initialCommand,
 }: {
   reviews: readonly WorkerReview[];
   commands: readonly ReviewCommand[];
@@ -36,11 +38,13 @@ export function ReviewInbox({
   workers?: readonly WorkerBuild[];
   error?: boolean;
   incomplete?: boolean;
+  initialReview?: WorkerReview;
+  initialCommand?: ReviewCommand;
 }) {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
   const [answeredTickets, setAnsweredTickets] = useState<ReadonlySet<string>>(() => new Set());
-  const [current, setCurrent] = useState<WorkerReview | undefined>();
-  const [command, setCommand] = useState<ReviewCommand | undefined>();
+  const [current, setCurrent] = useState<WorkerReview | undefined>(initialReview);
+  const [command, setCommand] = useState<ReviewCommand | undefined>(initialCommand);
   const [sending, setSending] = useState(false);
   const [target, setTarget] = useState<(typeof targets)[number] | undefined>();
   const pendingReviews = reviews.filter((review) => !answered.has(keyOf(review)));
@@ -111,11 +115,13 @@ export function ReviewInbox({
     if (incomplete || error || sending) return;
     if (current && !answered.has(keyOf(current))) {
       const ticket = current.kind === 'standalone-preview' ? current.preview.ticket : current.round.ticket;
-      const replacement = reviews.find(
-        (review) =>
-          review.gameId === current.gameId &&
-          (review.kind === 'standalone-preview' ? review.preview.ticket : review.round.ticket) === ticket,
-      );
+      const replacement =
+        reviews.find((review) => keyOf(review) === keyOf(current)) ??
+        reviews.find(
+          (review) =>
+            review.gameId === current.gameId &&
+            (review.kind === 'standalone-preview' ? review.preview.ticket : review.round.ticket) === ticket,
+        );
       if (!replacement) show(queue[0]);
       else if (
         replacement.kind !== current.kind ||
@@ -146,6 +152,9 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
+        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
         {queueControls}
         <p>{target.title}</p>
         {missingStatus(targetPath(target))}
@@ -160,6 +169,9 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
+        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
         {queueControls}
         <p role="alert">The playable preview is unavailable.</p>
       </Dialog>
@@ -178,6 +190,15 @@ export function ReviewInbox({
           if (!sending) onClose();
         }}
       >
+        <button
+          type="button"
+          className="job-conversation-close"
+          aria-label="Close"
+          disabled={sending}
+          onClick={onClose}
+        >
+          ×
+        </button>
         <div className="decision-deck-body">
           {queueControls}
           {error && <p role="alert">Could not load all reviews.</p>}
@@ -206,6 +227,9 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
+        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
         {queueControls}
         {missingStatus(`${commandPath(command)}/${encodeURIComponent(command.decision_id)}/missing-media`)}
       </Dialog>
@@ -219,6 +243,9 @@ export function ReviewInbox({
         backdropClassName="job-conversation-backdrop"
         onClose={onClose}
       >
+        <button type="button" className="job-conversation-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
         {error ? <p role="alert">Could not load all reviews.</p> : null}
         {queue.length === 0 && !error ? <p>All reviews answered.</p> : null}
       </Dialog>

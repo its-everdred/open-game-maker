@@ -14,6 +14,111 @@ const game = 'g_60000000-0000-4000-8000-000000000001';
 const at = '2026-11-01T00:00:00.000Z';
 
 describe('worker progress route', () => {
+  it('returns empty progress and commands for a game without a repository', async () => {
+    const deps = makeDeps();
+    deps.db.insert(schema.families).values({ id: family, name: 'Family', ownerUserId: user, createdAt: at }).run();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId: family, userId: user, role: 'owner', capability: 'creator', joinedAt: at })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: game,
+        familyId: family,
+        ownerId: user,
+        title: 'Draft',
+        slug: 'draft',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: at,
+      })
+      .run();
+    installUsers(deps, [
+      {
+        kind: 'user',
+        userId: user,
+        familyId: family,
+        platformRole: 'none',
+        capability: 'creator',
+        email: 'owner@example.test',
+      },
+    ]);
+    const client = vi.fn().mockRejectedValue(new Error('no daemon'));
+    deps.aiurClientForGame = client;
+    const { app } = await makeApp(deps);
+    const progress = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect(progress.status).toBe(200);
+    expect(await progress.json()).toMatchObject({ workers: [], daemonUnavailable: false, trackerStale: false });
+    const commands = await app.request('/api/v1/me/commands?includeQuestions=1', { headers: asUser(user) });
+    expect(commands.status).toBe(200);
+    const commandBody = await commands.json();
+    expect(commandBody).toMatchObject({ commands: [] });
+    expect(commandBody).not.toHaveProperty('unavailable');
+    expect(client).not.toHaveBeenCalled();
+  });
+
+  it('does not report an absent daemon for a linked game with no open tickets', async () => {
+    const deps = makeDeps();
+    deps.db.insert(schema.families).values({ id: family, name: 'Family', ownerUserId: user, createdAt: at }).run();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId: family, userId: user, role: 'owner', capability: 'creator', joinedAt: at })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: game,
+        familyId: family,
+        ownerId: user,
+        title: 'Idle',
+        slug: 'idle',
+        githubOwner: 'owner',
+        githubRepo: 'repo',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: at,
+      })
+      .run();
+    installUsers(deps, [
+      {
+        kind: 'user',
+        userId: user,
+        familyId: family,
+        platformRole: 'none',
+        capability: 'creator',
+        email: 'owner@example.test',
+      },
+    ]);
+    deps.aiurClientForGame = async () => {
+      throw new HttpError(409, 'daemon_not_found');
+    };
+    deps.registry.trackerTickets = async () => ({ stale: false, tickets: [] });
+    const { app } = await makeApp(deps);
+    const progress = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect(await progress.json()).toMatchObject({ workers: [], daemonUnavailable: false });
+    const commands = await app.request('/api/v1/me/commands?includeQuestions=1', { headers: asUser(user) });
+    expect(await commands.json()).not.toHaveProperty('unavailable');
+    deps.registry.trackerTickets = async () => ({
+      stale: false,
+      tickets: [
+        {
+          ticket: '12',
+          title: 'Active',
+          labels: ['game:idle'],
+          closedAt: null,
+          updatedAt: at,
+          outcome: 'Closed',
+          url: 'https://example.test/12',
+        },
+      ],
+    });
+    const incomplete = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+    expect(await incomplete.json()).toMatchObject({ daemonUnavailable: true });
+    const unavailable = await app.request('/api/v1/me/commands?includeQuestions=1', { headers: asUser(user) });
+    expect(await unavailable.json()).toMatchObject({ unavailable: true });
+  });
+
   it('only exposes a game worker summary to an authorized creator', async () => {
     const deps = makeDeps();
     deps.db.insert(schema.families).values({ id: family, name: 'Family', ownerUserId: user, createdAt: at }).run();

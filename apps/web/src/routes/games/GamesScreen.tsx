@@ -14,8 +14,8 @@ import {
   type CoverRect,
   type TileRects,
 } from './flip';
-import { Spotlight } from './Spotlight';
-import { ShowcaseSpotlight } from './ShowcaseSpotlight';
+import { GameDetail } from './GameDetail';
+import { startTrailer, stopOtherTrailers, stopTrailers } from './trailerVideo';
 import { ShowcaseMenuControls } from './ShowcaseMenuControls';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
@@ -69,6 +69,15 @@ export function GamesScreen() {
   const initialViewChosen = useRef(false);
   const fitsThumbnailRow = gridCapacity !== null && sortedGames.length <= gridCapacity;
 
+  useEffect(() => () => stopTrailers(), []);
+  useEffect(() => stopOtherTrailers(selected?.trailerUrl), [selected?.trailerUrl]);
+
+  const branch = branches.find((item) => item.name === 'main') ?? branches[0];
+  const canOpen = Boolean(
+    (selected?.id.startsWith('showcase:') && selected.showcase?.id !== 'goblin-cellar') ||
+    (selected && target && branch?.latestBuildId && activeJobs.get(selected.id)?.kind !== 'new_game'),
+  );
+
   const captureTransition = () => {
     pendingRects.current = measureTiles(gridRef.current);
     pendingCovers.current = measureCovers(gridRef.current);
@@ -77,6 +86,7 @@ export function GamesScreen() {
   const select = (index: number) => {
     const game = sortedGames[index];
     if (!game) return;
+    startTrailer(game);
     initialViewChosen.current = true;
     captureTransition();
     const next = new URLSearchParams(searchParams);
@@ -85,6 +95,7 @@ export function GamesScreen() {
   };
 
   const close = () => {
+    stopTrailers();
     initialViewChosen.current = true;
     const returningTo = selected?.id;
     captureTransition();
@@ -94,11 +105,9 @@ export function GamesScreen() {
     pendingFocusId.current = returningTo ?? null;
   };
 
-  const open = (index: number, mode: 'play' | 'edit' = 'play', branchId?: string) => {
+  const open = (index: number, mode: 'play' | 'edit' = 'play') => {
     const game = sortedGames[index];
-    const branch =
-      branches.find((item) => item.id === branchId) ?? branches.find((item) => item.name === 'main') ?? branches[0];
-    if (!game || game.id !== selected?.id) return;
+    if (!game || game.id !== selected?.id || !canOpen) return;
     if (game.id.startsWith('showcase:') && game.showcase && game.showcase.id !== 'goblin-cellar') {
       navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
       return;
@@ -235,30 +244,15 @@ export function GamesScreen() {
                     }
                     spotlight={
                       game.id === selected?.id && selected ? (
-                        selected.showcase ? (
-                          <ShowcaseSpotlight
-                            game={selected}
-                            sharedCover
-                            canOpen={Boolean(
-                              (selected.id.startsWith('showcase:') && selected.showcase.id !== 'goblin-cellar') ||
-                              (target &&
-                                (branches.find((branch) => branch.name === 'main') ?? branches[0])?.latestBuildId),
-                            )}
-                            onPlay={() => open(selectedIndex ?? -1, 'play')}
-                            onEdit={() => open(selectedIndex ?? -1, 'edit')}
-                            onClose={close}
-                          />
-                        ) : (
-                          <Spotlight
-                            game={selected}
-                            sharedCover
-                            branches={branches}
-                            job={activeJobs.get(selected.id)}
-                            onPlay={(branchId) => open(selectedIndex ?? -1, 'play', branchId)}
-                            onEdit={(branchId) => open(selectedIndex ?? -1, 'edit', branchId)}
-                            onClose={close}
-                          />
-                        )
+                        <GameDetail
+                          game={selected}
+                          sharedCover
+                          job={activeJobs.get(selected.id)}
+                          canOpen={canOpen}
+                          onPlay={() => open(selectedIndex ?? -1, 'play')}
+                          onEdit={() => open(selectedIndex ?? -1, 'edit')}
+                          onClose={close}
+                        />
                       ) : null
                     }
                   />

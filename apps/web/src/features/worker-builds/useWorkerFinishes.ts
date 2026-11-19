@@ -59,6 +59,14 @@ export function useWorkerFinishes(workers: readonly WorkerBuild[], feeds: readon
         finished: [...(current.scope === scope ? current.finished : []), ...newlyFinished],
       }));
   }, [workers, feeds, scope]);
-  const dismiss = useCallback(() => setState({ scope, finished: [] }), [scope]);
+  const dismiss = useCallback(
+    (tickets?: readonly string[]) =>
+      setState((current) => ({
+        scope,
+        finished:
+          current.scope === scope && tickets ? current.finished.filter((item) => !tickets.includes(item.ticket)) : [],
+      })),
+    [scope],
+  );
   return { finished: state.scope === scope ? state.finished : [], dismiss };
 }

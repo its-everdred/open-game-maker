@@ -1,7 +1,12 @@
-import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { constants } from 'node:fs';
+import { link, mkdtemp, mkdir, open, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { AiurClient, Decision, DecisionMedia, DecisionMediaFile } from '@ogm/aiur-client';
 import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { eq } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -41,6 +46,7 @@ function seed() {
       slug: 'blobs',
       githubOwner: 'fixture',
       githubRepo: 'blobs',
+      githubPath: 'games/blobs',
       visibility: 'private',
       repoVisibility: 'private',
       createdAt: AT,
@@ -116,8 +122,9 @@ const stalled = (signal?: AbortSignal) =>
 const defaults = { ...aiurMediaTiming };
 afterEach(() => Object.assign(aiurMediaTiming, defaults));
 
-async function setup(options: Decision['options'], files: Record<string, File>, creatorMarker = true) {
+async function setup(options: Decision['options'], files: Record<string, File>, creatorMarker = true, root?: string) {
   const deps = seed();
+  if (root) deps.config.builderWorkspacesRoot = root;
   const decisionMedia = vi.fn(
     async (_id: string, attachmentId: string, signal?: AbortSignal): Promise<DecisionMediaFile> => {
       const file = files[attachmentId];
@@ -144,6 +151,158 @@ async function setup(options: Decision['options'], files: Record<string, File>, 
 }
 
 describe('a jobless Command’s option media', () => {
+  it('copies only files inside the owning ticket review directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ogm-media-'));
+    try {
+      const review = join(root, 'fixture', 'blobs', '12', 'review', '12');
+      await mkdir(review, { recursive: true });
+      const video = join(review, 'clip.mp4');
+      await writeFile(video, 'video bytes');
+      const secret = join(root, 'secret.mp4');
+      await writeFile(secret, 'secret');
+      const link = join(review, 'escape.mp4');
+      await symlink(secret, link);
+      const pathMedia = (value: string) => ({
+        kind: 'video',
+        mime_type: 'video/mp4',
+        locator: { kind: 'path', value },
+      });
+      const { read, deps } = await setup(
+        [
+          { id: 'a', label: 'Video', media: [pathMedia(video)] },
+          { id: 'b', label: 'Escape', media: [pathMedia(link)] },
+        ],
+        {},
+        true,
+        root,
+      );
+      const options = await read();
+      expect(options[0]!.media?.url).toContain('/api/v1/blobs/sha256/');
+      expect(options[1]!.media).toBeUndefined();
+      const url = new URL(options[0]!.media!.url as string);
+      const { app } = await makeApp(deps);
+      const response = await app.request(`${url.pathname}${url.search}`);
+      expect(await response.text()).toBe('video bytes');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it('reads fleet workspace media again after the decision version changes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ogm-fleet-media-'));
+    try {
+      const checkout = join(root, 'daemon');
+      const review = join(checkout, 'workspaces', 'fixture', 'blobs', '12', 'games', 'blobs', 'review', '12');
+      await mkdir(review, { recursive: true });
+      const video = join(review, 'clip.mp4');
+      await writeFile(video, 'first video');
+      const options = [
+        {
+          id: 'a',
+          label: 'Video',
+          media: [{ kind: 'video', mime_type: 'video/mp4', locator: { kind: 'path', value: video } }],
+        },
+        {
+          id: 'b',
+          label: 'Other',
+          media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/b.png' } }],
+        },
+      ];
+      const { deps, read } = await setup(options, {}, true, root);
+      deps.db
+        .update(schema.games)
+        .set({ githubOwner: 'Fixture', githubRepo: 'Blobs' })
+        .where(eq(schema.games.id, ids.game))
+        .run();
+      deps.db
+        .insert(schema.gameDaemons)
+        .values({
+          slug: 'blobs',
+          repo: 'fixture/blobs',
+          checkoutPath: checkout,
+          unit: 'fixture',
+          envFile: '/fixture',
+          port: 23456,
+          status: 'running',
+          createdAt: AT,
+        })
+        .run();
+      let version = 1;
+      deps.aiurClientForGame = async () =>
+        ({
+          baseUrl: 'http://127.0.0.1:4100',
+          decisions: async () => [{ ...decision(options), version }],
+        }) as unknown as AiurClient;
+      const first = (await read())[0]!.media!.url;
+      await writeFile(video, 'second video');
+      version = 2;
+      const second = (await read())[0]!.media!.url;
+      expect(new URL(second as string).pathname).not.toBe(new URL(first as string).pathname);
+      const secret = join(root, 'secret.mp4');
+      const linked = join(review, 'linked.mp4');
+      await writeFile(secret, 'private');
+      await link(secret, linked);
+      const { pathMedia } = await import('../../src/commands/path-media.js');
+      const namespaced = await pathMedia(
+        deps,
+        {
+          owner: 'fixture',
+          name: 'blobs',
+          ticket: '12',
+          workspaceRoot: join(checkout, 'workspaces', 'fixture', 'blobs'),
+          gamePath: 'games/blobs',
+        },
+        video,
+        'video/mp4',
+        100,
+      );
+      expect(await new Response(namespaced.body).text()).toBe('second video');
+      await expect(
+        pathMedia(
+          deps,
+          {
+            owner: 'fixture',
+            name: 'blobs',
+            ticket: '12',
+            workspaceRoot: join(checkout, 'workspaces'),
+            gamePath: 'games/blobs',
+          },
+          linked,
+          'video/mp4',
+          100,
+        ),
+      ).rejects.toThrow('invalid media file');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it('rejects a named pipe without waiting for a writer', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ogm-pipe-media-'));
+    try {
+      const review = join(root, 'fixture', 'blobs', '12', 'review', '12');
+      await mkdir(review, { recursive: true });
+      const pipe = join(review, 'pipe.mp4');
+      execFileSync('mkfifo', [pipe]);
+      const deps = seed();
+      deps.config.builderWorkspacesRoot = root;
+      const { pathMedia } = await import('../../src/commands/path-media.js');
+      const pending = pathMedia(deps, { owner: 'fixture', name: 'blobs', ticket: '12' }, pipe, 'video/mp4', 100).then(
+        () => 'accepted',
+        () => 'rejected',
+      );
+      const result = await Promise.race([
+        pending,
+        new Promise<string>((resolve) => setTimeout(() => resolve('blocked'), 2000)),
+      ]);
+      if (result === 'blocked') {
+        const writer = await open(pipe, constants.O_WRONLY | constants.O_NONBLOCK);
+        await pending;
+        await writer.close();
+      }
+      expect(result).toBe('rejected');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it('routes core Command attachments through the app origin', async () => {
     const png = new Uint8Array(await readFile(PNG));
     const options = [

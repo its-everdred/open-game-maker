@@ -40,6 +40,7 @@ import {
   useUnreadReplies,
 } from '../features/executor-thread/thread';
 import { signOut } from '../lib/api/auth';
+import { readUpdates, useNotify } from '../lib/notify/slice';
 import { useSession } from '../lib/api/session';
 import { getVolume, onChange, setMuted, setVolume, status } from '../lib/sound';
 import { useAdminMe } from '../routes/admin/api';
@@ -54,7 +55,7 @@ import {
 } from '../features/worker-builds/BuildTracker';
 import { useWorkers } from '../features/worker-builds/useWorkers';
 import { useWorkerReviews } from '../features/worker-builds/useWorkerReviews';
-import { useWorkerFinishes } from '../features/worker-builds/useWorkerFinishes';
+import { useWorkerFinishes, type FinishedWorker } from '../features/worker-builds/useWorkerFinishes';
 import { usePastTickets } from '../features/worker-builds/usePastTickets';
 
 const RECENT_BUILD_MS = 5 * 60 * 1000;
@@ -77,12 +78,16 @@ export function StudioMenu() {
   const decisions = useCreatorCommands(creatorId);
   const sound = useSyncExternalStore(onChange, status);
   const [volume, setLocalVolume] = useState(getVolume);
+  const unreadUpdates = useNotify((state) => (state.updateOwner === creatorId ? state.unreadUpdates : 0));
+  const hasUpdates = useNotify((state) => state.updateOwner === creatorId && state.updates.length > 0);
   const [announcement, setAnnouncement] = useState('');
-  const [reviewNotice, setReviewNotice] = useState(false);
-  const seenReviews = useRef<{ creator: string | undefined; keys: Set<string> } | undefined>(undefined);
   const [buildClock, setBuildClock] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
   const [sheet, setSheet] = useState<Sheet>();
+  const [acknowledged, setAcknowledged] = useState<{
+    creatorId: string | undefined;
+    finished: readonly FinishedWorker[];
+  }>();
   const bugDraft = useBugDraft();
   // The deck belongs to the creator who opened it: another account signed in on this device never sees it.
   const [deck, setDeck] = useState<{ creatorId: string; command: CreatorCommand }>();
@@ -106,41 +111,6 @@ export function StudioMenu() {
     : gameId
       ? finished.filter(({ ticket }) => ticket.startsWith(gameId + ':'))
       : finished;
-  useEffect(() => {
-    if (
-      !creatorId ||
-      builds.isLoading ||
-      workersLoading ||
-      reviewData.loading ||
-      gameReview.loading ||
-      coreReview.loading
-    )
-      return;
-    const keys = new Set([
-      ...reviews.map(
-        (review) =>
-          `${review.gameId}:${review.kind === 'standalone-preview' ? review.preview.buildId : review.round.id}`,
-      ),
-      ...coreReview.targets.map((target) => `core:${target.ticket}`),
-      ...missingReviewTargets(workers, reviews, reviewCommands).map((target) => `${target.gameId}:${target.ticket}`),
-      ...reviewCommands.map((command) => `${'source' in command ? 'core' : command.game_id}:${command.decision_id}`),
-    ]);
-    const previous = seenReviews.current;
-    if (previous?.creator === creatorId && [...keys].some((key) => !previous.keys.has(key))) setReviewNotice(true);
-    if (previous?.creator !== creatorId) setReviewNotice(false);
-    seenReviews.current = { creator: creatorId, keys };
-  }, [
-    builds.isLoading,
-    coreReview.loading,
-    coreReview.targets,
-    creatorId,
-    gameReview.loading,
-    reviewCommands,
-    reviewData.loading,
-    reviews,
-    workers,
-    workersLoading,
-  ]);
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
   const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
   // Status: every game the creator owns, live or not, with its running builds and what waits on them.
@@ -158,7 +128,13 @@ export function StudioMenu() {
   const threadAccess = useThreadAccess(isShowcase ? undefined : creatorId);
   useThreadPolling(creatorId, threadAccess);
   const unreadReplies = useUnreadReplies(threadAccess ? creatorId : undefined);
-  const menuBadge = openDecisions + unreadReplies;
+  const pendingReviews =
+    reviews.length +
+    reviewCommands.length +
+    coreReview.targets.length +
+    missingReviewTargets(workers, reviews, reviewCommands).length;
+  const menuBadge =
+    openDecisions + unreadReplies + pendingReviews - reviewCommands.length + visibleFinished.length + unreadUpdates;
   const threadCommands = useMemo(
     // In a game, that game's Commands and the core's; on the library, all of them.
     () =>
@@ -299,8 +275,12 @@ export function StudioMenu() {
     );
   }
   if (
-    gameId &&
-    (workers.length > 0 ||
+    isGameView &&
+    (hasUpdates ||
+      (acknowledged && acknowledged.creatorId === creatorId && acknowledged.finished.length > 0) ||
+      visibleFinished.length > 0 ||
+      sheet === 'builds' ||
+      workers.length > 0 ||
       reviews.length > 0 ||
       reviewCommands.length > 0 ||
       coreReview.targets.length > 0 ||
@@ -317,15 +297,27 @@ export function StudioMenu() {
         type="button"
         className="menu-circle"
         data-worker-builds="true"
-        aria-label={`${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running`}
+        aria-label={`${workers.length} ${workers.length === 1 ? 'build' : 'builds'} running${unreadUpdates ? `, ${unreadUpdates} new ${unreadUpdates === 1 ? 'update' : 'updates'}` : ''}`}
         aria-expanded={sheet === 'builds'}
         aria-controls="studio-menu-builds"
-        onClick={() => toggleSheet('builds')}
+        onClick={() => {
+          readUpdates();
+          if (visibleFinished.length)
+            setAcknowledged((prior) => ({
+              creatorId,
+              finished: [...(prior && prior.creatorId === creatorId ? prior.finished : []), ...visibleFinished],
+            }));
+          dismissFinished(visibleFinished.map((item) => item.ticket));
+          toggleSheet('builds');
+        }}
       >
         <MenuRing percent={combinedPercent(workers) ?? undefined} />
         <Icon name="hammer" />
         <span className="studio-menu-badge" aria-hidden="true">
-          {workers.length}
+          {pendingReviews +
+            visibleFinished.length +
+            workers.filter((worker) => worker.state !== 'human-review').length +
+            unreadUpdates}
         </span>
       </button>,
     );
@@ -505,9 +497,15 @@ export function StudioMenu() {
         historyError={past.error}
         workerError={workerError}
         reviewError={reviewData.error || gameReview.error || coreReview.error}
-        reviewLoading={workersLoading || reviewData.loading || gameReview.loading || coreReview.loading}
+        reviewLoading={
+          builds.isLoading || workersLoading || reviewData.loading || gameReview.loading || coreReview.loading
+        }
         historyLoading={past.loading}
         jobs={builds.jobs}
+        finished={[
+          ...(acknowledged && acknowledged.creatorId === creatorId ? acknowledged.finished : []),
+          ...visibleFinished,
+        ]}
         id="studio-menu-builds"
       />
     );
@@ -607,36 +605,20 @@ export function StudioMenu() {
           historyError={past.error}
           workerError={workerError}
           reviewError={reviewData.error || gameReview.error || coreReview.error}
-          reviewLoading={workersLoading || reviewData.loading || gameReview.loading || coreReview.loading}
+          reviewLoading={
+            builds.isLoading || workersLoading || reviewData.loading || gameReview.loading || coreReview.loading
+          }
           historyLoading={past.loading}
           jobs={builds.jobs}
           finished={visibleFinished}
-          onDismiss={dismissFinished}
+          onDismiss={() => dismissFinished(visibleFinished.map((item) => item.ticket))}
         />
-      )}
-      {reviewNotice && !open && (
-        <button
-          type="button"
-          className="worker-tracker-toast worker-tracker-game-toast"
-          onClick={() => {
-            setReviewNotice(false);
-            setOpen(true);
-            setSheet('builds');
-          }}
-        >
-          New review ready
-        </button>
-      )}
-      {isGameView && visibleFinished.length > 0 && (
-        <span className="worker-tracker-toast worker-tracker-game-toast" role="status">
-          {visibleFinished.at(-1)!.title} is ready
-        </span>
       )}
       <button
         ref={trigger}
         type="button"
         className="studio-menu-button"
-        hidden={hasStudioHeader}
+        hidden={hasStudioHeader || (controls?.hideButton === true && !open && !blocked)}
         style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}
@@ -646,7 +628,6 @@ export function StudioMenu() {
         aria-expanded={open}
         aria-controls="studio-menu-panel"
         onClick={() => {
-          dismissFinished();
           setOpen((current) => !current);
           setSheet(undefined);
         }}
@@ -666,6 +647,9 @@ export function StudioMenu() {
               ? `${openDecisions} ${openDecisions === 1 ? 'decision needs' : 'decisions need'} your answer`
               : '',
             unreadReplies > 0 ? `${unreadReplies} new ${unreadReplies === 1 ? 'reply' : 'replies'}` : '',
+            unreadUpdates > 0 ? `${unreadUpdates} new ${unreadUpdates === 1 ? 'update' : 'updates'}` : '',
+            pendingReviews > reviewCommands.length ? `${pendingReviews - reviewCommands.length} reviews` : '',
+            visibleFinished.length > 0 ? `${visibleFinished.length} completed builds` : '',
           ]
             .filter(Boolean)
             .join(', ')}

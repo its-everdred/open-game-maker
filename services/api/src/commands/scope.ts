@@ -38,3 +38,14 @@ export async function gameTicketFilter(
   );
   return (ticket) => owned.has(ticket) || allowed.has(ticket);
 }
+
+// An unprovisioned daemon is expected only while this game's tracker has no open tickets.
+export async function hasOpenGameTickets(deps: AppDeps, game: GameRow): Promise<boolean> {
+  if (!game.slug || !game.githubOwner || !game.githubRepo || !deps.registry.trackerTickets)
+    throw new HttpError(503, 'ticket_scope_unavailable');
+  const repo = { owner: game.githubOwner, name: game.githubRepo };
+  const snapshot = await deps.registry.trackerTickets(repo, 'open');
+  if (snapshot.stale) throw new HttpError(503, 'ticket_scope_unavailable');
+  const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
+  return snapshot.tickets.some((ticket) => belongsToGame(ticket, scope));
+}

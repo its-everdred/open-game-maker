@@ -114,6 +114,10 @@ export const gameManifestSchema = z.looseObject({
   title,
   /** Genre names displayed as icons in the games library. */
   genres: z.array(z.string().min(1).max(32)).max(4).optional(),
+  /** One line shown under the title on the game's detail view. */
+  description: z.string().min(1).max(160).optional(),
+  /** Extra tag names (vibe, art, world, players) shown as chips on the detail view. */
+  tags: z.array(z.string().min(1).max(32)).max(8).optional(),
   /** Build-relative logo image under media/, displayed over game artwork. */
   logo: z
     .string()
@@ -394,6 +398,8 @@ export interface HostApi {
   haptics: { pulse(pattern: 'light' | 'medium' | 'heavy' | number[]): void };
   settings: { onChange(cb: (s: PlayerSettings) => void): () => void };
   test: { register(hooks: GmTestHooks): void };
+  /** Hide the host Pause control on the game's own menu screens; it shows by default and again after a reload. */
+  setHostPauseVisible?(visible: boolean): void;
 }
 
 export const gameSchemas = {
