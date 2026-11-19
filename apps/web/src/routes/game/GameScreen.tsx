@@ -64,6 +64,8 @@ import { useBranches } from '../games/useBranches';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
 import { LoadingLayer } from './LoadingLayer';
 import { EditFrameOrientation, useEditFrameOrientation } from './EditFrameOrientation';
+import { EditWorkspace } from './EditWorkspace';
+import { EditConversation } from './EditConversation';
 import { gameLoadActivity } from './load-analytics';
 import { useAwayPause } from './away-pause';
 import { PlatformHud } from './PlatformHud';
@@ -132,6 +134,7 @@ export function GameScreen() {
   const [frameAttempt, setFrameAttempt] = useState(0);
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const [editorPlaying, setEditorPlaying] = useState(true);
+  const [conversationJobId, setConversationJobId] = useState<string>();
   useEffect(() => setEditorPlaying(true), [gameId]);
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
@@ -689,6 +692,229 @@ export function GameScreen() {
     openMenu: () => setMenuOpen(true),
   });
 
+  const conversationJob =
+    jobs.data?.jobs.find((job) => job.id === conversationJobId) ??
+    jobs.data?.jobs
+      .filter((job) => job.branchId === jobBranch)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const gameStage = (
+    <div className="game-stage-area" data-frame-orientation={mode === 'edit' ? frameOrientation : undefined}>
+      {mode === 'edit' && <EditFrameOrientation orientation={frameOrientation} onChange={setFrameOrientation} />}
+      <div className="game-stage">
+        <div className="game-frame" ref={containerRef} />
+        {mode === 'play' && frameController !== undefined ? (
+          <DiagnosticsOverlay
+            enabled={searchParams.get('net') === '1'}
+            build={build}
+            read={() => frameController.netInfo()}
+            room={() => roomFacts(room.snapshot)}
+            transport={() => ({ rttMs: room.snapshot?.rttMs })}
+          />
+        ) : null}
+        {!designLoadFailed && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
+          <LoadingLayer
+            key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
+            game={game.data ?? { familyId: '', title: '' }}
+            load={frameState.load}
+            firstFrame={frameState.firstFrame}
+          />
+        ) : null}
+        {mode === 'edit' &&
+        !editorPlaying &&
+        frameRef.current !== undefined &&
+        editorManifest !== undefined &&
+        sessionStore !== undefined &&
+        canvasOptions !== undefined ? (
+          <GizmoOverlay
+            activePrefab={canvasOptions.prefab}
+            frame={frameRef.current}
+            manifest={editorManifest}
+            session={sessionStore}
+            snap={canvasOptions.snap}
+            onRequestPlacement={
+              requestOnly && (noBuild || canvasOptions.prefab !== undefined) ? requestFallbackPlacement : undefined
+            }
+            onRequestDelete={
+              noBuild && !sidePreview
+                ? (entity) =>
+                    submitEditRequest(
+                      editJobRequest(
+                        { gameId, branchId: jobBranch },
+                        `Remove ${describeRequestedEntity(entity)}.`,
+                        'now',
+                        `edit:${crypto.randomUUID()}`,
+                      ),
+                    )
+                : undefined
+            }
+            onRequestTransform={
+              noBuild && !sidePreview
+                ? (entity, gizmo, target) =>
+                    submitEditRequest(
+                      editJobRequest(
+                        { gameId, branchId: jobBranch },
+                        `Change ${describeRequestedEntity(entity)} using ${gizmo}: ${JSON.stringify(target)}.`,
+                        'now',
+                        `edit:${crypto.randomUUID()}`,
+                      ),
+                    )
+                : undefined
+            }
+            allowReadOnlyRequests={noBuild}
+          />
+        ) : null}
+        {hudShown &&
+        frameRef.current !== undefined &&
+        frameState.manifest !== undefined &&
+        activeSnapshot !== undefined ? (
+          <PlatformHud
+            key={`platform-hud-${gameId}`}
+            build={build}
+            frame={frameRef.current}
+            gameId={gameId}
+            actions={frameState.manifest.inputs.actions}
+            controlBindings={frameState.manifest.controlBindings}
+            controlReservedKeys={frameState.manifest.controlReservedKeys}
+            gameOptions={frameState.manifest.gameOptions}
+            open={menuOpen || room.snapshot?.matchPause !== undefined}
+            paused={roomId === undefined ? menuOpen : room.snapshot?.matchPause !== undefined}
+            pauseName={room.snapshot?.matchPause?.name}
+            resumeAt={room.snapshot?.matchPause?.resumeAt}
+            serverOffsetMs={room.snapshot?.serverOffsetMs}
+            saveContext={{ branch, buildId: activeSnapshot.buildId }}
+            saves={frameState.manifest.saves}
+            saveSchema={frameState.manifest.saveSchema}
+            migratesFrom={frameState.manifest.migratesFrom}
+            onLeave={() => void leaveRoom()}
+            onResume={() => {
+              if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });
+              setMenuOpen(false);
+            }}
+          />
+        ) : null}
+        <GameExtras placement="hud" {...extraProps} />
+        {activeSnapshot ? (
+          <UpdateIndicator
+            key={gameId}
+            currentBuildId={activeSnapshot.buildId}
+            gameId={gameId}
+            onPublishedBuild={setPublishedBuildId}
+            onError={reportUpdateFailure}
+            onUpdate={() => window.location.reload()}
+          />
+        ) : null}
+        <GameExtras placement="overlay" {...extraProps} />
+        <RoomLayer
+          gameTitle={game.data?.title ?? ''}
+          lastSaveAt={lastSaveAt}
+          camera={watcherCamera}
+          onCamera={(cameraMode) => {
+            setWatcherCamera(cameraMode);
+          }}
+          onLeave={() => void leaveRoom()}
+          onMode={setMode}
+          onSelection={(ids) => frameRef.current?.select(ids)}
+          snapshot={room.snapshot}
+        />
+      </div>
+    </div>
+  );
+  const declaredControls = (frameState.manifest as typeof frameState.manifest & { controls?: unknown[] })?.controls;
+  const hasEditor =
+    noBuild ||
+    !!frameState.manifest?.palette?.items.length ||
+    !!frameState.manifest?.palette?.categories.length ||
+    !!frameState.manifest?.tools?.length ||
+    !!declaredControls?.length;
+  const editorChrome =
+    mode === 'edit' &&
+    hasEditor &&
+    editorManifest !== undefined &&
+    sessionView !== undefined &&
+    sessionStore !== undefined ? (
+      <EditorChrome
+        gameId={gameId}
+        manifest={editorManifest}
+        sceneryAssets={scenerySource.data?.assets}
+        buildPinnedAssets={!!paletteBuildId && !activePreview && !!scenerySource.data}
+        session={sessionView}
+        onSelection={(ids) => frameRef.current?.select(ids)}
+        onRequestLight={noBuild && !sidePreview ? requestLight : undefined}
+        onCommand={(command) => {
+          if (noBuild && !sidePreview) {
+            submitEditRequest(
+              editJobRequest(
+                { gameId, branchId: jobBranch },
+                `Apply this editor change: ${JSON.stringify(command)}.`,
+                'now',
+                `edit:${crypto.randomUUID()}`,
+              ),
+            );
+            return;
+          }
+          const state = sessionStore.getState();
+          void state.submit(
+            createIntent(state.doc, [command], command.op === 'invoke' ? command.command : command.control),
+          );
+        }}
+        onTool={(tool) => {
+          setEditorPlaying(false);
+          sessionStore.getState().setTool(tool);
+          document.querySelector<HTMLDetailsElement>('.edit-workspace-editor')?.removeAttribute('open');
+        }}
+        onUndo={() => void sessionStore.getState().undo()}
+        onRedo={() => void sessionStore.getState().redo()}
+        onDelete={(entityId) => {
+          const state = sessionStore.getState();
+          if (noBuild && !sidePreview) {
+            submitEditRequest(
+              editJobRequest(
+                { gameId, branchId: jobBranch },
+                `Remove ${describeRequestedEntity(state.doc.entities[entityId], entityId)}.`,
+                'now',
+                `edit:${crypto.randomUUID()}`,
+              ),
+            );
+            return;
+          }
+          void state.submit(deleteEntityIntent(state.doc, entityId, `Removed ${state.doc.entities[entityId]?.prefab}`));
+        }}
+        onDuplicate={(entityId) => {
+          const state = sessionStore.getState();
+          const source = state.doc.entities[entityId];
+          if (source === undefined) return;
+          if (noBuild && !sidePreview) {
+            submitEditRequest(
+              editJobRequest(
+                { gameId, branchId: jobBranch },
+                `Copy ${describeRequestedEntity(source)}.`,
+                'now',
+                `edit:${crypto.randomUUID()}`,
+              ),
+            );
+            return;
+          }
+          const entity = copyEntity(source, createStableId('e_'));
+          void state.submit(createEntityIntent(state.doc, entity, `Copied ${source.prefab}`));
+        }}
+        onInstanceCount={(change) => {
+          if (noBuild && !sidePreview) {
+            submitEditRequest(
+              editJobRequest(
+                { gameId, branchId: jobBranch },
+                `${change.direction > 0 ? 'Add' : 'Remove'} one ${JSON.stringify(change.prefab)} instance.`,
+                'now',
+                `edit:${crypto.randomUUID()}`,
+              ),
+            );
+            return Promise.resolve({ ok: true });
+          }
+          return changeInstanceCount(change, frameState.manifest!, frameRef.current!, sessionStore);
+        }}
+        onCanvasChange={setCanvasOptions}
+      />
+    ) : null;
+
   return (
     <section
       className={`game-screen is-${mode === 'edit' ? 'editing' : 'playing'}${frameState.manifest?.capabilities.includes('scenery') ? ' is-scenery' : ''}${['not-saved', 'read-only', 'retrying'].includes(editStartup ?? sessionView?.saved ?? '') ? ' is-unsaved' : ''}`}
@@ -714,210 +940,24 @@ export function GameScreen() {
           </output>
         </>
       ) : null}
-      <div className="game-stage-area" data-frame-orientation={mode === 'edit' ? frameOrientation : undefined}>
-        {mode === 'edit' && <EditFrameOrientation orientation={frameOrientation} onChange={setFrameOrientation} />}
-        <div className="game-stage">
-          <div className="game-frame" ref={containerRef} />
-          {mode === 'play' && frameController !== undefined ? (
-            <DiagnosticsOverlay
-              enabled={searchParams.get('net') === '1'}
-              build={build}
-              read={() => frameController.netInfo()}
-              room={() => roomFacts(room.snapshot)}
-              transport={() => ({ rttMs: room.snapshot?.rttMs })}
-            />
-          ) : null}
-          {!designLoadFailed && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
-            <LoadingLayer
-              key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
-              game={game.data ?? { familyId: '', title: '' }}
-              load={frameState.load}
-              firstFrame={frameState.firstFrame}
-            />
-          ) : null}
-          {mode === 'edit' && !editorPlaying &&
-          frameRef.current !== undefined &&
-          editorManifest !== undefined &&
-          sessionStore !== undefined &&
-          canvasOptions !== undefined ? (
-            <GizmoOverlay
-              activePrefab={canvasOptions.prefab}
-              frame={frameRef.current}
-              manifest={editorManifest}
-              session={sessionStore}
-              snap={canvasOptions.snap}
-              onRequestPlacement={
-                requestOnly && (noBuild || canvasOptions.prefab !== undefined) ? requestFallbackPlacement : undefined
-              }
-              onRequestDelete={
-                noBuild && !sidePreview
-                  ? (entity) =>
-                      submitEditRequest(
-                        editJobRequest(
-                          { gameId, branchId: jobBranch },
-                          `Remove ${describeRequestedEntity(entity)}.`,
-                          'now',
-                          `edit:${crypto.randomUUID()}`,
-                        ),
-                      )
-                  : undefined
-              }
-              onRequestTransform={
-                noBuild && !sidePreview
-                  ? (entity, gizmo, target) =>
-                      submitEditRequest(
-                        editJobRequest(
-                          { gameId, branchId: jobBranch },
-                          `Change ${describeRequestedEntity(entity)} using ${gizmo}: ${JSON.stringify(target)}.`,
-                          'now',
-                          `edit:${crypto.randomUUID()}`,
-                        ),
-                      )
-                  : undefined
-              }
-              allowReadOnlyRequests={noBuild}
-            />
-          ) : null}
-          {hudShown &&
-          frameRef.current !== undefined &&
-          frameState.manifest !== undefined &&
-          activeSnapshot !== undefined ? (
-            <PlatformHud
-              key={`platform-hud-${gameId}`}
-              build={build}
-              frame={frameRef.current}
+      {mode === 'edit' ? (
+        <EditWorkspace
+          game={gameStage}
+          chat={
+            <EditConversation
               gameId={gameId}
-              actions={frameState.manifest.inputs.actions}
-              controlBindings={frameState.manifest.controlBindings}
-              controlReservedKeys={frameState.manifest.controlReservedKeys}
-              gameOptions={frameState.manifest.gameOptions}
-              open={menuOpen || room.snapshot?.matchPause !== undefined}
-              paused={roomId === undefined ? menuOpen : room.snapshot?.matchPause !== undefined}
-              pauseName={room.snapshot?.matchPause?.name}
-              resumeAt={room.snapshot?.matchPause?.resumeAt}
-              serverOffsetMs={room.snapshot?.serverOffsetMs}
-              saveContext={{ branch, buildId: activeSnapshot.buildId }}
-              saves={frameState.manifest.saves}
-              saveSchema={frameState.manifest.saveSchema}
-              migratesFrom={frameState.manifest.migratesFrom}
-              onLeave={() => void leaveRoom()}
-              onResume={() => {
-                if (roomId !== undefined && room.snapshot?.matchPause)
-                  room.session?.send({ t: 'match.resume.request' });
-                setMenuOpen(false);
-              }}
+              branchId={jobBranch}
+              title={game.data?.title ?? ''}
+              job={conversationJob}
+              onAdmitted={setConversationJobId}
+              reading={searchParams.get('composer') === 'stacked' ? 'stacked' : 'inline'}
             />
-          ) : null}
-          <GameExtras placement="hud" {...extraProps} />
-          {activeSnapshot ? (
-            <UpdateIndicator
-              key={gameId}
-              currentBuildId={activeSnapshot.buildId}
-              gameId={gameId}
-              onPublishedBuild={setPublishedBuildId}
-              onError={reportUpdateFailure}
-              onUpdate={() => window.location.reload()}
-            />
-          ) : null}
-          <GameExtras placement="overlay" {...extraProps} />
-          <RoomLayer
-            gameTitle={game.data?.title ?? ''}
-            lastSaveAt={lastSaveAt}
-            camera={watcherCamera}
-            onCamera={(cameraMode) => {
-              setWatcherCamera(cameraMode);
-            }}
-            onLeave={() => void leaveRoom()}
-            onMode={setMode}
-            onSelection={(ids) => frameRef.current?.select(ids)}
-            snapshot={room.snapshot}
-          />
-        </div>
-      </div>
-      {mode === 'edit' && editorManifest !== undefined && sessionView !== undefined && sessionStore !== undefined ? (
-        <EditorChrome
-          gameId={gameId}
-          manifest={editorManifest}
-          sceneryAssets={scenerySource.data?.assets}
-          buildPinnedAssets={!!paletteBuildId && !activePreview && !!scenerySource.data}
-          session={sessionView}
-          onSelection={(ids) => frameRef.current?.select(ids)}
-          onRequestLight={noBuild && !sidePreview ? requestLight : undefined}
-          onCommand={(command) => {
-            if (noBuild && !sidePreview) {
-              submitEditRequest(
-                editJobRequest(
-                  { gameId, branchId: jobBranch },
-                  `Apply this editor change: ${JSON.stringify(command)}.`,
-                  'now',
-                  `edit:${crypto.randomUUID()}`,
-                ),
-              );
-              return;
-            }
-            const state = sessionStore.getState();
-            void state.submit(
-              createIntent(state.doc, [command], command.op === 'invoke' ? command.command : command.control),
-            );
-          }}
-          onTool={(tool) => {
-            setEditorPlaying(false);
-            sessionStore.getState().setTool(tool);
-          }}
-          onUndo={() => void sessionStore.getState().undo()}
-          onRedo={() => void sessionStore.getState().redo()}
-          onDelete={(entityId) => {
-            const state = sessionStore.getState();
-            if (noBuild && !sidePreview) {
-              submitEditRequest(
-                editJobRequest(
-                  { gameId, branchId: jobBranch },
-                  `Remove ${describeRequestedEntity(state.doc.entities[entityId], entityId)}.`,
-                  'now',
-                  `edit:${crypto.randomUUID()}`,
-                ),
-              );
-              return;
-            }
-            void state.submit(
-              deleteEntityIntent(state.doc, entityId, `Removed ${state.doc.entities[entityId]?.prefab}`),
-            );
-          }}
-          onDuplicate={(entityId) => {
-            const state = sessionStore.getState();
-            const source = state.doc.entities[entityId];
-            if (source === undefined) return;
-            if (noBuild && !sidePreview) {
-              submitEditRequest(
-                editJobRequest(
-                  { gameId, branchId: jobBranch },
-                  `Copy ${describeRequestedEntity(source)}.`,
-                  'now',
-                  `edit:${crypto.randomUUID()}`,
-                ),
-              );
-              return;
-            }
-            const entity = copyEntity(source, createStableId('e_'));
-            void state.submit(createEntityIntent(state.doc, entity, `Copied ${source.prefab}`));
-          }}
-          onInstanceCount={(change) => {
-            if (noBuild && !sidePreview) {
-              submitEditRequest(
-                editJobRequest(
-                  { gameId, branchId: jobBranch },
-                  `${change.direction > 0 ? 'Add' : 'Remove'} one ${JSON.stringify(change.prefab)} instance.`,
-                  'now',
-                  `edit:${crypto.randomUUID()}`,
-                ),
-              );
-              return Promise.resolve({ ok: true });
-            }
-            return changeInstanceCount(change, frameState.manifest!, frameRef.current!, sessionStore);
-          }}
-          onCanvasChange={setCanvasOptions}
+          }
+          editor={editorChrome}
         />
-      ) : null}
+      ) : (
+        gameStage
+      )}
       {frameState.bridgeState === 'error' || designLoadFailed ? (
         <div className="screen-error" role="alert">
           <button

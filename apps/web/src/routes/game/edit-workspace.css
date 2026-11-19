@@ -65,3 +65,48 @@
     grid-template-areas: 'game' 'chat';
   }
 }
+
+.game-screen.is-editing:has(.edit-workspace) {
+  display: block;
+  padding: 0;
+}
+
+.edit-workspace .game-stage-area {
+  width: 100%;
+  height: 100%;
+}
+
+.edit-workspace-chat .build-chat-chat {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-card);
+  color: var(--text);
+  --aiur-composer-bg: var(--surface-card);
+  --aiur-composer-fg: var(--text);
+  --aiur-composer-accent: var(--action-primary);
+  --aiur-composer-on-accent: var(--action-primary-text);
+}
+
+.edit-workspace-chat .build-chat-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.edit-workspace-editor .editor-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: min(70vw, 480px);
+}
+
+.edit-workspace-editor .editor-rail,
+.edit-workspace-editor .editor-palette,
+.edit-workspace-editor .editor-inspector-stack {
+  max-width: 100%;
+  max-height: 35vh;
+  overflow: auto;
+}

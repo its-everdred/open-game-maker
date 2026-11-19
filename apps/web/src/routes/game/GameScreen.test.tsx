@@ -222,6 +222,7 @@ describe('GameScreen', () => {
   it('changes the edit game viewport orientation without leaving the route', () => {
     const { container } = renderGame('/g/game?mode=edit');
     const stage = container.querySelector('.game-stage-area');
+    expect(container.querySelector('.edit-workspace-chat aiur-composer')).not.toBeNull();
     expect(stage?.getAttribute('data-frame-orientation')).toBe('wide');
     fireEvent.click(screen.getByRole('button', { name: 'Vertical game' }));
     expect(stage?.getAttribute('data-frame-orientation')).toBe('vertical');
@@ -709,6 +710,7 @@ describe('GameScreen', () => {
 
     renderGame('/g/game?mode=edit');
 
+    fireEvent.click(await screen.findByLabelText('Game editor'));
     expect(await screen.findByRole('button', { name: 'Skeleton' }, { timeout: 5_000 })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Skeleton' }).querySelector('img')).toHaveAttribute(
       'src',

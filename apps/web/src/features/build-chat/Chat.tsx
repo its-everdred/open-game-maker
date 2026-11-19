@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import type { BudgetStatus, Job } from '@ogm/contracts';
+import type { BudgetStatus, Job, VoiceTarget } from '@ogm/contracts';
 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
@@ -10,11 +10,13 @@ import { energyRefusalText } from '../energy/api';
 import { Offers } from '../scope-chat/Offers';
 import { AllowanceStatus } from '../scope-chat/ScopeChat';
 import { Composer } from './Composer';
+import { AiurComposer } from './AiurComposer';
 import type { EditDraft } from './dock';
 import { editJobRequest } from './edit';
 import { gameJobsQueryKey, isTerminal, myJobsQueryKey } from './jobs';
 import { MessageList } from './MessageList';
 import { reduceMessages, subscribeChat, type StreamedChatMessage } from './stream';
+import './chat.css';
 
 type Refusal = Extract<AdmissionResult, { kind: 'refused' }>;
 
@@ -26,6 +28,9 @@ export function Chat({
   onAdmitted,
   onMessages,
   heading = true,
+  useAiurComposer = false,
+  composerReading = 'inline',
+  dictationTarget,
 }: {
   jobId?: string;
   job?: Job;
@@ -35,6 +40,9 @@ export function Chat({
   onMessages?(jobId: string, messages: StreamedChatMessage[]): void;
   // The dock keeps its own header; the conversation modal already names the job, so it hides this one.
   heading?: boolean;
+  useAiurComposer?: boolean;
+  composerReading?: 'inline' | 'stacked';
+  dictationTarget?: VoiceTarget;
 }) {
   const streamId = jobId ?? job?.id;
   const target: EditDraft = job
@@ -167,15 +175,27 @@ export function Chat({
           {admissionError}
         </p>
       ) : null}
-      <Composer
-        jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
-        voiceTarget={voiceTarget}
-        postText={postChatText}
-        startJob={canPost ? undefined : (text) => admit(text, 'now')}
-        onOptimistic={addMessage}
-        onPosted={addMessage}
-        onFailed={removeMessage}
-      />
+      {useAiurComposer ? (
+        <AiurComposer
+          reading={composerReading}
+          dictationTarget={dictationTarget}
+          jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
+          voiceTarget={voiceTarget}
+          postText={postChatText}
+          startJob={canPost ? undefined : (text) => admit(text, 'now')}
+          onPosted={addMessage}
+        />
+      ) : (
+        <Composer
+          jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
+          voiceTarget={voiceTarget}
+          postText={postChatText}
+          startJob={canPost ? undefined : (text) => admit(text, 'now')}
+          onOptimistic={addMessage}
+          onPosted={addMessage}
+          onFailed={removeMessage}
+        />
+      )}
     </section>
   );
 }
