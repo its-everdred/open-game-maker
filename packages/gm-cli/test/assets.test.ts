@@ -1,11 +1,17 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+
+import { COMMANDS_DIR, loadCommands } from '../src/cli.js';
 
 import { gm, library, tempDir } from './helpers.js';
 
 const ORC = 't1:kenney-mini-dungeon/character-orc@2.0';
+
+beforeAll(async () => {
+  await loadCommands(COMMANDS_DIR);
+}, 60_000);
 
 describe('gm assets search', () => {
   it('prints the orc first as a contract row', async () => {
@@ -42,21 +48,17 @@ describe('gm assets search', () => {
     expect(result.out[0]?.startsWith(ORC)).toBe(true);
   });
 
-  // Quarantined after an intermittent package-load timeout; opt in to investigate (#951).
-  it.skipIf(process.env.OGM_RUN_FLAKY_TESTS !== '1')(
-    'exits 2 naming OGM_ASSETS_ROOT when no library can be found',
-    async () => {
-      const result = await gm(['assets', 'search', 'orc'], {
-        cwd: mkdtempSync('/tmp/gm-no-assets-library-'),
-        env: { OGM_ASSETS_ROOT: '' },
-      });
-      expect(result.code).toBe(2);
-      expect(result.out).toEqual([]);
-      expect(result.err).toHaveLength(1);
-      expect(result.err[0]).toContain('OGM_ASSETS_ROOT');
-      expect(result.err[0]).toContain('. Try: ');
-    },
-  );
+  it('exits 2 naming OGM_ASSETS_ROOT when no library can be found', async () => {
+    const result = await gm(['assets', 'search', 'orc'], {
+      cwd: mkdtempSync('/tmp/gm-no-assets-library-'),
+      env: { OGM_ASSETS_ROOT: '' },
+    });
+    expect(result.code).toBe(2);
+    expect(result.out).toEqual([]);
+    expect(result.err).toHaveLength(1);
+    expect(result.err[0]).toContain('OGM_ASSETS_ROOT');
+    expect(result.err[0]).toContain('. Try: ');
+  });
 
   it('appends one assets.search event to $GM_EVENTS_FILE, and nothing when it is unset', async () => {
     const root = library();
