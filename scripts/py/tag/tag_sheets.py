@@ -282,7 +282,7 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
     except (OSError, json.JSONDecodeError):
         return []
     rights = collection.get("rights", {})
-    if "vision-input" not in rights.get("uses", []) or rights.get("processing") not in ("any", "local-only"):
+    if "vision-input" not in rights.get("uses", []) or rights.get("processing", "local-only") not in ("any", "local-only"):
         return []
     assets_root = pack.parents[1]
     rows = []
@@ -298,7 +298,7 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
         effective_rights = card["rights"] if "rights" in card else rights
         if not isinstance(effective_rights, dict):
             continue
-        if "vision-input" not in effective_rights.get("uses", []) or effective_rights.get("processing") not in ("any", "local-only"):
+        if "vision-input" not in effective_rights.get("uses", []) or effective_rights.get("processing", "local-only") not in ("any", "local-only"):
             continue
         preview = card.get("previews", {}).get("sheet") or card.get("previews", {}).get("thumb")
         if isinstance(preview, str):
@@ -311,9 +311,10 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
     return rows
 
 
-def validate(packs: Path, staged: list[Path]):
-    collections = sorted(str(path) for path in packs.glob("*/collection.card.json"))
-    cards = sorted(str(path) for path in packs.glob("*/cards/**/*.card.json"))
+def validate(packs: Path, staged: list[Path], only=None):
+    selected = lambda path: any(fnmatch.fnmatch(path.relative_to(packs).parts[0], pattern) for pattern in only or ["*"])
+    collections = sorted(str(path) for path in packs.glob("*/collection.card.json") if selected(path))
+    cards = sorted(str(path) for path in packs.glob("*/cards/**/*.card.json") if selected(path))
     result = subprocess.run(
         ["node", str(VALIDATOR), *collections, *cards, *(str(path) for path in staged)],
         capture_output=True,
@@ -356,7 +357,7 @@ def main():
         part = stage_json(row["path"], merged)
         staged.append(part)
         records.append((row["path"], part, merged))
-    rc, failures, output = validate(args.packs, staged)
+    rc, failures, output = validate(args.packs, staged, args.only)
     if rc:
         for path, _, card in records:
             if args.json:

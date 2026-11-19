@@ -69,7 +69,9 @@ function narrowest(...values: Array<Redistribution | undefined>): Redistribution
 
 function allowsLocalVision(card: AssetCard, collection: AssetCard): boolean {
   const rights = card.rights ?? collection.rights;
-  return Boolean(rights?.uses.includes('vision-input') && ['any', 'local-only'].includes(rights.processing ?? ''));
+  return Boolean(
+    rights?.uses.includes('vision-input') && ['any', 'local-only'].includes(rights.processing ?? 'local-only'),
+  );
 }
 
 export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only = '*'): Promise<TargetDiscovery> {
@@ -99,7 +101,7 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
     }
     if (
       !collection.rights?.uses.includes('vision-input') ||
-      !['any', 'local-only'].includes(collection.rights.processing ?? '')
+      !['any', 'local-only'].includes(collection.rights.processing ?? 'local-only')
     ) {
       refusals.push(`${entry.name}: effective rights do not allow local vision-input`);
       continue;
@@ -120,11 +122,13 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
         // Existing invalid cards are not eligible inputs and remain untouched.
       }
     }
-    const audioSources =
-      kind === 'audio' &&
-      (await filesUnder(root, '')).some(
-        (path) => /\.(wav|ogg|mp3|flac|m4a|aif|aiff)$/i.test(path) && path.includes(`${sep}extracted${sep}`),
+    let audioSources = false;
+    if (kind === 'audio' && cards.length === 0) {
+      const version = await readCurrentVersion(root, entry.name);
+      audioSources = (await filesUnder(join(root, version, 'extracted'), '')).some((path) =>
+        /\.(wav|ogg|mp3|flac|m4a|aif|aiff)$/i.test(path),
       );
+    }
     if (cards.length > 0 || audioSources) {
       targets.push({ id: collection.id, slug: entry.name, root, collectionPath, collection, cards });
     }
@@ -277,10 +281,20 @@ function primary(card: AssetCard): NonNullable<AssetCard['source']>['files'][num
   return file;
 }
 
-async function currentVersion(target: TagTarget): Promise<string> {
-  const manifest = JSON.parse(await readFile(join(target.root, 'pack.json'), 'utf8')) as { current?: unknown };
-  if (typeof manifest.current !== 'string') throw new Error(`${target.slug}/pack.json has no current version`);
+async function readCurrentVersion(root: string, slug: string): Promise<string> {
+  const manifest = JSON.parse(await readFile(join(root, 'pack.json'), 'utf8')) as { current?: unknown };
+  if (
+    typeof manifest.current !== 'string' ||
+    !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(manifest.current) ||
+    manifest.current.includes('..')
+  ) {
+    throw new Error(`${slug}/pack.json has an invalid current version`);
+  }
   return manifest.current;
+}
+
+async function currentVersion(target: TagTarget): Promise<string> {
+  return readCurrentVersion(target.root, target.slug);
 }
 
 function relativeKey(assetsRoot: string, path: string): string {
@@ -310,6 +324,8 @@ export async function prepareVisualPreviews(options: {
     const source = primary(card);
     const version = await currentVersion(target);
     const extractedRoot = await realpath(join(target.root, version, 'extracted'));
+    if (!inside(await realpath(target.root), extractedRoot))
+      throw new Error(`${target.slug}: extracted directory escapes collection`);
     const sourceCandidate = resolve(extractedRoot, source.path);
     if (!inside(extractedRoot, sourceCandidate)) throw new Error(`${card.id} source path escapes its collection`);
     const sourcePath = await realpath(sourceCandidate);

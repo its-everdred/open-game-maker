@@ -70,7 +70,7 @@ def audio_files(packs: Path, only="*"):
             continue
         manifest = json.loads(pj.read_text())
         cur = manifest["current"]
-        ext = pj.parent / cur / "extracted"
+        ext = audio_rights.extracted_root(pj.parent, cur)
         hints = P.normalize_hints(manifest.get("hints"))
         rights = audio_rights.collection_rights(pj.parent)
         cards = audio_rights.source_cards(pj.parent)
@@ -78,6 +78,8 @@ def audio_files(packs: Path, only="*"):
         seen = {}
         for f in sorted(ext.rglob("*")):
             if f.suffix.lower() in AUDIO_EXT and f.is_file() and not f.name.startswith("._"):
+                if not f.resolve().is_relative_to(ext):
+                    raise ValueError(f"audio source escapes collection: {f}")
                 key = f.with_suffix("").relative_to(ext).as_posix().lower()
                 rank = [".ogg", ".wav", ".flac", ".aiff", ".aif", ".mp3", ".m4a"].index(f.suffix.lower())
                 if key not in seen or rank < seen[key][0]:
@@ -321,6 +323,7 @@ def main():
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
+    audio_rights.validate_inputs(a.packs, a.only)
     jobs = job_list(a.packs, a.only, a.limit, a.refresh)
     emit({"files": len(jobs), "workers": a.workers}, a.json, summary=True)
     counts = {}

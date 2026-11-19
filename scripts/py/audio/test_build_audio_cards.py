@@ -287,3 +287,15 @@ def test_only_selects_exactly_the_repeated_packs():
     assert not b.matches_any("refused-pack", ["kenney-music-loops", "drive-barbarian-chiptune"])
     assert b.matches_any("anything", None)
     assert b.matches_any("kenney-music-loops", "kenney-*")
+
+
+def test_validation_ignores_unselected_invalid_pack(tmp_path):
+    fixture = b.REPO / "packages/contracts/fixtures/cards/collection-kenney-mini-dungeon.json"
+    selected = tmp_path / "selected"
+    other = tmp_path / "other"
+    selected.mkdir()
+    other.mkdir()
+    (selected / "collection.card.json").write_text(fixture.read_text())
+    (other / "collection.card.json").write_text("not json")
+    result = b.validate(tmp_path, [], ["selected"])
+    assert result[0] == 0, result[-1]

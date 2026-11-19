@@ -209,3 +209,15 @@ def test_any_low_confidence_emitted_group_marks_the_card():
 def test_tall_floor_role_flags_conflict_with_measured_height():
     result = t.merge_card(card(), {"roles": {"values": ["floor"], "confidence": 0.8}}, baseline_count=20)
     assert "conflicts-with-measured" in result["flags"]
+
+
+def test_validation_ignores_unselected_invalid_pack(tmp_path):
+    fixture = t.REPO / "packages/contracts/fixtures/cards/collection-kenney-mini-dungeon.json"
+    selected = tmp_path / "selected"
+    other = tmp_path / "other"
+    selected.mkdir()
+    other.mkdir()
+    (selected / "collection.card.json").write_text(fixture.read_text())
+    (other / "collection.card.json").write_text("not json")
+    result = t.validate(tmp_path, [], ["selected"])
+    assert result[0] == 0, result[-1]

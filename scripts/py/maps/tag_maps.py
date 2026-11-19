@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import layout_fields
 
 REPO = Path(__file__).resolve().parents[3]
@@ -155,7 +156,7 @@ def rights_allow_map(rel: str) -> bool:
             if "rights" in card:
                 grants.append(card["rights"])
         return all(isinstance(rights, dict) and "vision-input" in rights.get("uses", [])
-                   and rights.get("processing") in ("any", "local-only") for rights in grants)
+                   and rights.get("processing", "local-only") in ("any", "local-only") for rights in grants)
     except (OSError, json.JSONDecodeError, TypeError):
         return False
 
@@ -490,7 +491,7 @@ def cards(json_mode=False, limit=0):
         if out.is_file():
             previous = json.loads(out.read_text())
             rights = previous.get("rights")
-            if rights is not None and ("vision-input" not in rights.get("uses", []) or rights.get("processing") not in ("any", "local-only")):
+            if rights is not None and ("vision-input" not in rights.get("uses", []) or rights.get("processing", "local-only") not in ("any", "local-only")):
                 continue
             card = preserve_card(previous, card)
         staged = stage_json(out, card)
@@ -560,6 +561,11 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
+    inputs = [str(COLL_DIR / "collection.card.json"), *(str(path) for path in sorted((COLL_DIR / "cards").rglob("*.card.json")))]
+    result = subprocess.run(["node", str(SCHEMAS / "tools/validate.mjs"), str(SCHEMAS), *inputs], capture_output=True, text=True)
+    if result.returncode:
+        print("card validation failed before map analysis: " + result.stdout[-3000:], file=sys.stderr)
+        raise SystemExit(1)
     if a.step == "analyse":
         jobs = list(maps())
         jobs = jobs[:a.limit] if a.limit else jobs

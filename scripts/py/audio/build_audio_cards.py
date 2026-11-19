@@ -644,9 +644,9 @@ def build(rows, sets, means, packs: Path, update_counts=True, limit=0):
     return written, dict(flags_count), records, collection_updates
 
 
-def validate(packs: Path, staged=()):
-    cards = sorted(str(p) for p in packs.glob("*/cards/**/*.card.json"))
-    colls = sorted(str(p) for p in packs.glob("*/collection.card.json"))
+def validate(packs: Path, staged=(), only=None):
+    cards = sorted(str(p) for p in packs.glob("*/cards/**/*.card.json") if matches_any(p.relative_to(packs).parts[0], only))
+    colls = sorted(str(p) for p in packs.glob("*/collection.card.json") if matches_any(p.relative_to(packs).parts[0], only))
     r = subprocess.run(["node", str(VALIDATOR), *colls, *cards, *(str(p) for p in staged)], capture_output=True, text=True)
     fails = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
     return r.returncode, len(cards), fails, r.stdout
@@ -660,6 +660,7 @@ def main():
     ap.add_argument("--no-validate", action="store_true")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
+    audio_rights.validate_inputs(a.packs, a.only)
     rows = load(a.packs, a.only)
     sets = prompts()
     emb, scale = text_embeddings(sets)
@@ -670,7 +671,7 @@ def main():
     staged = [part for _, part, _ in records] + [part for _, part, _ in collection_updates]
     emit({"sidecars": len(rows), "music": sum(d["music"] for d in rows), "cards": n, "flags": flags}, a.json, summary=True)
     if not a.no_validate:
-        rc, nc, fails, out = validate(a.packs, staged)
+        rc, nc, fails, out = validate(a.packs, staged, a.only)
         emit({"validated": nc, "fail_lines": len(fails), "rc": rc}, a.json, summary=True)
         for l in fails[:30]:
             print(l, file=sys.stderr if a.json else sys.stdout)

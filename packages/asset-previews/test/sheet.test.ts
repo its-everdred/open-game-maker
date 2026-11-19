@@ -57,8 +57,8 @@ describe.skipIf(process.env.GM_PREVIEWS_BROWSER !== '1')('renderSheet', () => {
     expect(metadata.height).toBe(768);
     expect(result.views).toHaveLength(6);
     expect(result.renderer).not.toBe('');
-    const pixels = await sharp(out).raw().toBuffer();
-    expect(pixels.some((value, index) => value !== [154, 154, 154][index % 3])).toBe(true);
+    const center = await sharp(out).extract({ left: 186, top: 186, width: 12, height: 12 }).raw().toBuffer();
+    expect(center.some((value) => Math.abs(value - 154) > 10)).toBe(true);
   }, 90_000);
 
   it('refuses external glTF resources', async () => {

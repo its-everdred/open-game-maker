@@ -1,6 +1,7 @@
 """Tests for the map card rules added after Kevin's first swipe review; each encodes a judgment he made on a real card."""
 import sys
 import json
+import subprocess
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -86,6 +87,14 @@ def test_map_rights_gate_analysis_and_preexisting_rows(tmp_path, monkeypatch):
     (tmp_path / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"], "processing": "local-only"}}))
     (tmp_path / "cards" / "denied.card.json").write_text(json.dumps({"rights": {"uses": [], "processing": "local-only"}}))
     assert t.rights_allow_map("allowed.png")
+    (tmp_path / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    assert t.rights_allow_map("allowed.png")
     assert not t.rights_allow_map("denied.png")
     (tmp_path / "cards" / "denied.card.json").write_text(json.dumps({"rights": {}}))
     assert not t.rights_allow_map("denied.png")
+
+
+def test_map_worker_starts_with_isolated_python():
+    result = subprocess.run([sys.executable, "-I", str(Path(t.__file__)), "--help"], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "analyse" in result.stdout

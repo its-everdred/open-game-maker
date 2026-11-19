@@ -115,6 +115,7 @@ describe('gm packs tag', () => {
     await rm(join(root, 'cards'), { recursive: true });
     const extracted = join(root, 'test-version/extracted');
     await mkdir(extracted, { recursive: true });
+    await writeFile(join(root, 'pack.json'), JSON.stringify({ current: 'test-version' }));
     await writeFile(join(extracted, 'track.wav'), 'audio');
     const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
     expect(targets).toHaveLength(1);

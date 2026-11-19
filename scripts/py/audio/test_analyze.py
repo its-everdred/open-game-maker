@@ -163,3 +163,7 @@ def test_restricted_alternate_format_blocks_preferred_format(tmp_path):
     (ext / "song.ogg").write_bytes(b"ogg")
     (pack / "cards" / "song.card.json").write_text(json.dumps({"source": {"files": [{"path": "song.wav"}]}, "rights": {"uses": [], "processing": "local-only", "redistribution": "none"}}))
     assert a.audio_files(tmp_path) == []
+
+
+def test_absent_processing_defaults_to_local_only():
+    assert a.audio_rights.allows_vision({"uses": ["vision-input"]})
