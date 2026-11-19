@@ -1,14 +1,4 @@
-import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readlinkSync,
-  renameSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -53,12 +43,8 @@ function makeSource(dependencies: Record<string, string> = {}): { cwd: string; p
   return { cwd, pack };
 }
 
-function sha(file: string): string {
-  return createHash('sha256').update(readFileSync(file)).digest('hex');
-}
-
 describe('gm new', () => {
-  it('copies a scaffold and installs a self-consistent skill pack and creation lock', async () => {
+  it('copies a scaffold without skills and records a creation lock', async () => {
     const { cwd, pack } = makeSource();
     const game = join(cwd, 'games/my-game');
     const result = await gm(['new', 'game-2d', 'my-game', '--family', 'chunky-low-poly', '--pov', 'side'], {
@@ -74,11 +60,11 @@ describe('gm new', () => {
     expect(readFileSync(join(game, 'src/main.ts'), 'utf8')).toContain('booted = true');
     expect(JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')).name).toBe('@game/my-game');
     expect(JSON.parse(readFileSync(join(game, 'tsconfig.json'), 'utf8'))).not.toHaveProperty('references');
-    expect(readFileSync(join(game, 'AGENTS.md'), 'utf8').split('\n')[0]).toBe(
-      'Load .claude/skills/gm-core/SKILL.md first.',
-    );
-    expect(readlinkSync(join(game, '.codex/skills/gm-core'))).toBe('../../.claude/skills/gm-core');
-    expect(statSync(join(game, '.agents/skills/gm-build/SKILL.md')).isFile()).toBe(true);
+    expect(readFileSync(join(game, 'AGENTS.md'), 'utf8').split('\n')[0]).toBe('Load the gm-core skill first.');
+    expect(existsSync(join(game, '.claude/skills'))).toBe(false);
+    expect(existsSync(join(game, '.codex/skills'))).toBe(false);
+    expect(existsSync(join(game, '.agents/skills'))).toBe(false);
+    expect(existsSync(join(game, 'skills.lock'))).toBe(false);
 
     const creation = JSON.parse(readFileSync(join(game, 'gm.lock.json'), 'utf8')) as Record<string, unknown>;
     expect(creation).toMatchObject({
@@ -89,18 +75,9 @@ describe('gm new', () => {
       gmVersion: '0.0.0',
     });
     expect(typeof creation.createdAt).toBe('string');
-
-    const lock = JSON.parse(readFileSync(join(game, 'skills.lock'), 'utf8')) as {
-      skills: Record<string, { sha256: string }>;
-    };
-    for (const [path, entry] of Object.entries(lock.skills)) {
-      expect(entry.sha256).toBe(sha(join(game, '.claude/skills', path)));
-    }
-    expect(existsSync(join(game, '.claude/skills/gm-set-smallscaleint'))).toBe(false);
-    expect(existsSync(join(game, '.claude/skills/gm-set-kaykit'))).toBe(false);
   });
 
-  it('pins one set adapter, installs only its skill, and records the set', async () => {
+  it('pins one set adapter and records the set', async () => {
     const { cwd, pack } = makeSource();
     const game = join(cwd, 'games/set-game');
 
@@ -117,7 +94,7 @@ describe('gm new', () => {
       family: 'isometric-2d',
       set: 'smallscaleint',
     });
-    expect(statSync(join(game, '.claude/skills/gm-set-smallscaleint/SKILL.md')).isFile()).toBe(true);
+    expect(existsSync(join(game, '.claude/skills'))).toBe(false);
     expect(existsSync(join(game, '.claude/skills/gm-set-kaykit'))).toBe(false);
   });
 

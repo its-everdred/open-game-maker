@@ -37,7 +37,7 @@ describe('GameRoom relay rules', () => {
     expect(address.port).not.toBe(2568);
   });
 
-  it('retains a new room through a delayed pair of joins', async () => {
+  it('keeps a new room available while client setup takes over one second', async () => {
     const room = await newRoom(harness.testServer);
     await sleep(1_200);
     await connect(harness.testServer, room, 'owner', 'owner');

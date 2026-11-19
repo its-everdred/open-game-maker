@@ -3,7 +3,6 @@ import { join } from 'node:path';
 
 import { fill, isExecutable, listFiles, readTemplate, WORKSPACE_ROOT } from './files.js';
 import { LABELS, type TemplateLabel } from './labels.js';
-import { skillPack } from './skills.js';
 
 export type FileMode = '100644' | '100755' | '120000';
 // A `120000` entry is a symlink whose content is its relative target.
@@ -24,7 +23,6 @@ export function parseTemplateRef(ref: string): Engine {
 export function renderRepoTemplate(ref: string, ctx: TemplateCtx, root: string = WORKSPACE_ROOT): RepoTemplate {
   const engine = parseTemplateRef(ref);
   const values = { gameId: ctx.gameId };
-  const pack = skillPack(root);
   const scaffoldFiles = scaffold(engine, root, values);
   const scaffoldPaths = new Set(scaffoldFiles.map((file) => file.path));
 
@@ -35,18 +33,6 @@ export function renderRepoTemplate(ref: string, ctx: TemplateCtx, root: string =
       ? [{ path: 'README.md', content: fill(readTemplate('README.md'), values) }]
       : []),
     { path: '.gitignore', content: readTemplate('gitignore') },
-    { path: 'skills.lock', content: pack.lock },
-    ...pack.files.map((file) => ({
-      path: `.claude/skills/${file.path}`,
-      content: file.content,
-      ...(file.mode ? { mode: file.mode } : {}),
-    })),
-    ...pack.discovery.flatMap(({ name, target }) => [
-      { path: `.codex/skills/${name}`, content: `../../.claude/skills/${target}`, mode: '120000' as const },
-      { path: `.agents/skills/${name}`, content: `../../.claude/skills/${target}`, mode: '120000' as const },
-      // A vendored skill also gets a flat `.claude/skills/<name>` link so top-level skill indexes list it.
-      ...(target !== name ? [{ path: `.claude/skills/${name}`, content: target, mode: '120000' as const }] : []),
-    ]),
     ...scaffoldFiles,
   ];
 

@@ -6,7 +6,7 @@ import { DefaultTemplateSource, withGameTemplates } from '../src/template-source
 import { contextWith, fakeRequest } from './helpers.js';
 
 describe('create_game with the game-repo template', () => {
-  it('commits skill links as symlinks inside the game folder and creates the game label', async () => {
+  it('commits a game without skills and creates the game label', async () => {
     const { request, calls } = fakeRequest((call) => {
       if (call.route.endsWith('/git/ref/{ref}')) return { object: { sha: 'main-1' } };
       if (call.route.endsWith('/git/commits/{commit_sha}')) return { tree: { sha: 'base-tree' } };
@@ -37,10 +37,9 @@ describe('create_game with the game-repo template', () => {
     }[];
     expect(calls.filter((call) => call.route.endsWith('/git/blobs'))).toHaveLength(0);
     const folder = 'games/castle-game';
-    const link = tree.find((entry) => entry.path === `${folder}/.codex/skills/gm-core`)!;
-    expect(link.mode).toBe('120000');
-    expect(link.content).toBe('../../.claude/skills/gm-core');
-    expect(tree.find((entry) => entry.path === `${folder}/.agents/skills/gm-core`)!.mode).toBe('120000');
+    expect(tree.some((entry) => /\/(?:\.claude|\.codex|\.agents)\/skills(?:\/|$)/u.test(entry.path))).toBe(false);
+    expect(tree.some((entry) => entry.path.includes('node_modules'))).toBe(false);
+    expect(tree.length).toBeLessThan(100);
     expect(tree.find((entry) => entry.path === `${folder}/AGENTS.md`)!.mode).toBe('100644');
     // The workflow belongs to the instance repository, so it never lands inside a game's folder.
     expect(tree.some((entry) => entry.path.includes('/.github/'))).toBe(false);

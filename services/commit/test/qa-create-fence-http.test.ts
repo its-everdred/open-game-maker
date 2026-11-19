@@ -59,6 +59,44 @@ describe('QA create fence HTTP', () => {
     }
   });
 
+  it('drains a refused create so cleanup can acquire the fence', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qa-fence-refused-'));
+    try {
+      const { request } = fakeRequest(() => ({}));
+      const { repos, ...operations } = contextWith(request);
+      const token = 't'.repeat(32);
+      const app = createCommitApp({
+        serviceToken: token,
+        operations,
+        repos,
+        audit: { append: async () => undefined },
+        remoteAddress: () => '127.0.0.1',
+        qaCreateFence: new QaCreateFence(dir),
+        execute: async () => ({
+          ok: false as const,
+          verdict: { allowed: false, reasons: [{ code: 'path' as const, detail: 'reserved path' }] },
+        }),
+      });
+      const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+      const body = JSON.stringify({
+        kind: 'create_game',
+        gameId: 'g_example',
+        slug: 'qa',
+        templateRef: 'default',
+        visibility: 'private',
+      });
+      expect((await app.request('/internal/commit', { method: 'POST', headers, body })).status).toBe(200);
+      const fence = await app.request('/internal/qa/create-fence/g_example', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ owner: 'run-1' }),
+      });
+      expect(await fence.json()).toEqual({ ready: true });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps a marker after an ambiguous create failure, including after service restart', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'qa-fence-failure-'));
     try {
