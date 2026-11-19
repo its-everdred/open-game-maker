@@ -200,7 +200,7 @@ describe('opening the inline review group', () => {
             <div class="worker-review-group-item"><button aria-label="Other, Needs review, progress unavailable">Other</button></div>
             <button>Castle [A]+</button><button>Completed</button>
           </div>
-        </section><div role="dialog" aria-label="Needs Review" hidden></div>
+        </section><div role="dialog" aria-label="Needs Review" hidden>Review content</div>
         <script>document.querySelector('[aria-label^="Castle"]').addEventListener('click', () => {
           document.querySelector('[role="dialog"]').hidden = false;
         });</script>`);
