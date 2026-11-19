@@ -15,3 +15,12 @@ python skills/gm-sprite-forge/scripts/measure_sheet.py path/to/prop.png
 ```
 
 The script reads the input and prints JSON; it does not modify the image. Use the matching cell size for the sheet. The numbers describe the reference packs, not an automatic pass/fail score.
+
+Score a rebuild against its original with the same dependencies:
+
+```sh
+python skills/gm-sprite-forge/scripts/score.py original.png rebuild.png --gates prop
+python skills/gm-sprite-forge/scripts/score.py original.png rebuild.png --cell 64 --gates character-64 --json scores.json
+```
+
+The sheet report includes each occupied frame, row counts and motion correlations; gates apply to the mean metrics and require matching frame positions. A missing palette or undefined motion correlation fails its gate. The shift is the displacement applied to the rebuild to align it with the original. `--json` writes the numeric report and gate results; the console also prints PASS or FAIL per gate.

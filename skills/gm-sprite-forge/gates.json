@@ -1,0 +1,30 @@
+{
+  "prop": {
+    "silhouette_iou": { "min": 0.9 },
+    "pixel_similarity": { "min": 0.95 },
+    "palette_distance": { "max": 4 },
+    "edge_f1": { "min": 0.7 },
+    "lum_hist_l1": { "max": 0.2 },
+    "shadow_iou": { "min": 0.6 }
+  },
+  "character-64": {
+    "silhouette_iou": { "min": 0.8 },
+    "pixel_similarity": { "min": 0.93 },
+    "palette_distance": { "max": 6 },
+    "edge_f1": { "min": 0.6 },
+    "lum_hist_l1": { "max": 0.25 },
+    "shadow_iou": { "min": 0.5 },
+    "frames_match": { "equals": true },
+    "motion_corr": { "min": 0.7 }
+  },
+  "character-128": {
+    "silhouette_iou": { "min": 0.8 },
+    "pixel_similarity": { "min": 0.93 },
+    "palette_distance": { "max": 6 },
+    "edge_f1": { "min": 0.6 },
+    "lum_hist_l1": { "max": 0.25 },
+    "shadow_iou": { "min": 0.5 },
+    "frames_match": { "equals": true },
+    "motion_corr": { "min": 0.7 }
+  }
+}
