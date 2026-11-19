@@ -61,7 +61,8 @@ Assumed: the `open-games` repo plus the hosted site.
 This directory: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/` (scripts) and `executor/handoff.md` (state). Run them from there.
 
 - **Loops:** `host-steps.sh` (merge, publish, stills, audits, follow-up triage), `auto-update.sh` (stack, web deploy, aiur pin), `command-listener.sh` (wakes the Executor).
-- **Helpers:** `file-ticket.sh`, `pick-page.sh`, `tell-aiur.sh`, `og-merge.sh`, `og-publish.sh`.
+- **Helpers:** `file-ticket.sh`, `pick-page.sh`, `tell-aiur.sh`, `og-merge.sh`, `og-publish.sh`, `decide.sh` (Executor pick decisions: comment + rework), `og-cpu-split.sh` (70/30 cgroup split), `og-dispatch-watchdog.sh` (restart a stalled open-games dispatch; both run from host-steps).
+- **Mock broker:** `mock-broker.py` (one copy, flock) generates workers' image mocks; references may come from `assets-local/packs/` (any licence), `sets/` and `review/` so mocks match the real kit (Kevin 2026-11-19); the rest of the private library is refused.
 - **Kevin's personal skills** (not workers' unless vendored): `its-everdred/skills`, where `external-skills.json` installs into `~/.agents/skills`.
 
 **Open moves** (host glue that belongs in a layer; from `docs/meta/layer-audit-2026-11-11.md` and later):
@@ -73,3 +74,5 @@ This directory: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/` (scri
 | fresh-thread, retry | aiur |
 | host-steps stills, merge gate and audit loop | aiur (generic host steps) plus core (`gm` capture) |
 | pick pages and the review queue | core #843 (app) and aiur (dashboard review) |
+| decide.sh (decision delivery as rework) | aiur: an Executor decision on a Command should resume the worker |
+| mock broker reference policy | core gm-image-mock / a core mock service |
