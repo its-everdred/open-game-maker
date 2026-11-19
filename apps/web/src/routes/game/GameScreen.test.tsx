@@ -270,7 +270,7 @@ describe('GameScreen', () => {
     );
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } })),
+      vi.fn().mockImplementation(async () => new Response('{}', { headers: { 'content-type': 'application/json' } })),
     );
     try {
       renderGame('/g/game?mode=edit');
@@ -475,7 +475,7 @@ describe('GameScreen', () => {
   it('shows loading while game metadata is pending', async () => {
     editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
     renderGame();
-    expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument());
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
   });
 

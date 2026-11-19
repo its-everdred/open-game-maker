@@ -62,18 +62,11 @@ beforeEach(() => {
   );
 });
 
-async function cleanupTest() {
+afterEach(() => {
   cleanup();
-  // Nanostores delays session cleanup after the last unsubscribe.
-  await vi.waitFor(
-    () => expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy(),
-    { timeout: 3_000 },
-  );
   vi.unstubAllGlobals();
   Reflect.deleteProperty(window.navigator, 'vibrate');
-}
-
-afterEach(cleanupTest);
+});
 
 function renderScreen(entry = '/new?step=genre') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
