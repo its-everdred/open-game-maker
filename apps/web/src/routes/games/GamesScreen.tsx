@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { registerTestApi } from '../../app/testHook';
-import { CopyLink } from './CopyLink';
 import { GameCell } from './GameCell';
 import {
   cancelGlides,
@@ -16,7 +15,6 @@ import {
 } from './flip';
 import { GameDetail } from './GameDetail';
 import { startTrailer, stopOtherTrailers, stopTrailers } from './trailerVideo';
-import { ShowcaseMenuControls } from './ShowcaseMenuControls';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
 import { TransitionGrid } from './TransitionGrid';
@@ -198,8 +196,6 @@ export function GamesScreen() {
 
   return (
     <div className={`games-screen${fitsThumbnailRow ? ' games-single-row' : ''}`}>
-      {selected?.showcase && !selected.id.startsWith('showcase:') && <ShowcaseMenuControls game={selected} />}
-
       {gamesQuery.isError && games.length === 0 ? (
         <RetryLine onRetry={() => void gamesQuery.refetch()} />
       ) : (
@@ -239,7 +235,6 @@ export function GamesScreen() {
                             select(index);
                           }}
                         />
-                        {!game.showcase && <CopyLink id={game.id} slug={game.slug} title={game.title} />}
                       </>
                     }
                     spotlight={

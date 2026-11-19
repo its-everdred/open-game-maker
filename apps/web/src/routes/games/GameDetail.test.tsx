@@ -123,7 +123,13 @@ describe('game detail', () => {
     expect(screen.getByText('v2.1.0')).toBeVisible();
     expect(screen.getByText('31.4k')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Play Blobs' })).toHaveTextContent('▶');
-    expect(screen.getByRole('button', { name: 'Edit Blobs' })).toHaveTextContent('✎');
+    expect(screen.getByRole('button', { name: 'Edit Blobs' }).querySelector('svg')).not.toBeNull();
+  });
+
+  it('orders player tags first and uses the group icon for multiplayer', () => {
+    const tags = detailOf({ ...blobs, slug: 'other', tags: ['Puzzle', 'Multiplayer', 'Solo'], choices: undefined }).tags;
+    expect(tags.map(({ label }) => label)).toEqual(['Solo', 'Multiplayer', 'Puzzle']);
+    expect(tags[1]?.key).toBe('party');
   });
 
   it('colours a tag with no curated colour from the shared palette tokens', () => {

@@ -195,7 +195,7 @@ it('orders played games newest first ahead of the existing unplayed order', asyn
 describe('GamesScreen', () => {
   it('opens the selected prototype showcase even when Goblin Cellar has a build', async () => {
     renderGames();
-    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }, AUTO_SELECT));
     expect(await screen.findByText('A sleepy village, one repair at a time.')).toBeVisible();
     const play = await screen.findByRole('button', { name: 'Play RestoreBound' });
     await waitFor(() => expect(play).toBeEnabled());
@@ -205,18 +205,15 @@ describe('GamesScreen', () => {
   it('opens the prototype demo for a showcase game before Goblin Cellar is registered', async () => {
     gamesResponse = [];
     renderGames();
-    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }, AUTO_SELECT));
     fireEvent.click(await screen.findByRole('button', { name: 'Play RestoreBound' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/restorebound?mode=play');
   });
-  it('keeps the real showcase game share link in the menu', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+  it('does not show a share button for a selected game', async () => {
     const { container } = renderGames('/all?spotlight=g_2');
     await screen.findByRole('heading', { name: 'Goblin Cellar' });
-    expect(container.querySelector('[data-game-id="g_2"] .game-copy')).toBeNull();
-    fireEvent.click(await screen.findByRole('button', { name: 'Copy link to Goblin Cellar' }));
-    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/play/g_2`);
+    expect(container.querySelector('.game-copy')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Copy link/ })).toBeNull();
   });
   it('keeps the prototype showcase when there are no real games', async () => {
     gamesResponse = [];

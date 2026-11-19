@@ -26,8 +26,8 @@ export function GameTrailer({ game, transparentPoster = false }: { game: GameSum
     video.setAttribute('aria-label', `${title} trailer`);
     if (poster) video.poster = poster;
     playing.current = video;
-    if (video.paused) void playTrailer(video);
     host.current?.replaceChildren(video);
+    if (video.paused) void playTrailer(video);
     return () => {
       playing.current = null;
       stopTrailers([trailerUrl]);

@@ -10,7 +10,7 @@ import type { TrailerMenus } from './trailer-menus.js';
 
 /** A game ships exactly one trailer, 16:9 landscape; the record beside it says which frames the capture saw in play. */
 export const TRAILER_FILE = 'trailer-landscape.mp4';
-export const TRAILER_SIZE = { width: 1920, height: 1080 } as const;
+export const TRAILER_SIZE = { width: 1280, height: 720 } as const;
 export const TRAILER_RECORD = 'trailer-landscape.frames.json';
 const SECONDS = { min: 15, max: 30 };
 // Concatenated clips can differ from the script's length by a few frames of audio.
@@ -54,9 +54,39 @@ export function trailerRecord(
 }
 
 type Probe = {
-  streams?: { codec_type?: string; codec_name?: string; width?: number; height?: number }[];
+  streams?: {
+    codec_type?: string;
+    codec_name?: string;
+    width?: number;
+    height?: number;
+    profile?: string;
+    level?: number;
+    pix_fmt?: string;
+  }[];
   format?: { duration?: string };
 };
+
+/** Check top-level MP4 boxes without mistaking matching bytes inside media for box headers. */
+function hasFaststart(bytes: Buffer): boolean {
+  let offset = 0;
+  while (offset + 8 <= bytes.length) {
+    let size = bytes.readUInt32BE(offset);
+    const type = bytes.toString('ascii', offset + 4, offset + 8);
+    let header = 8;
+    if (size === 1) {
+      if (offset + 16 > bytes.length) return false;
+      const large = bytes.readBigUInt64BE(offset + 8);
+      if (large > BigInt(Number.MAX_SAFE_INTEGER)) return false;
+      size = Number(large);
+      header = 16;
+    } else if (size === 0) size = bytes.length - offset;
+    if (size < header || offset + size > bytes.length) return false;
+    if (type === 'moov') return true;
+    if (type === 'mdat') return false;
+    offset += size;
+  }
+  return false;
+}
 
 /** Every reason the media directory breaks the trailer standard; empty when it passes. */
 export function checkTrailer(dir: string, menus: TrailerMenus, ffprobe = 'ffprobe'): string[] {
@@ -78,7 +108,7 @@ export function checkTrailer(dir: string, menus: TrailerMenus, ffprobe = 'ffprob
           '-v',
           'error',
           '-show_entries',
-          'stream=codec_type,codec_name,width,height:format=duration',
+          'stream=codec_type,codec_name,width,height,profile,level,pix_fmt:format=duration',
           '-of',
           'json',
           video,
@@ -89,6 +119,7 @@ export function checkTrailer(dir: string, menus: TrailerMenus, ffprobe = 'ffprob
   } catch {
     return [...failures, `${TRAILER_FILE} is not a readable video; capture the trailer again with gm trailer`];
   }
+  if (!hasFaststart(readFileSync(video))) failures.push(`${TRAILER_FILE} must place moov before mdat (faststart)`);
   const streams = probe.streams ?? [];
   const picture = streams.find((stream) => stream.codec_type === 'video');
   const sound = streams.find((stream) => stream.codec_type === 'audio');
@@ -99,6 +130,11 @@ export function checkTrailer(dir: string, menus: TrailerMenus, ffprobe = 'ffprob
     else if (width !== TRAILER_SIZE.width || height !== TRAILER_SIZE.height)
       failures.push(`${TRAILER_FILE} is ${width}×${height}, not ${TRAILER_SIZE.width}×${TRAILER_SIZE.height}`);
     if (picture.codec_name !== 'h264') failures.push(`${TRAILER_FILE} video is ${picture.codec_name}, not H.264`);
+    else {
+      if (picture.profile !== 'Main') failures.push(`${TRAILER_FILE} must use H.264 Main profile`);
+      if (!picture.level || picture.level > 41) failures.push(`${TRAILER_FILE} must use H.264 level 4.1 or lower`);
+      if (picture.pix_fmt !== 'yuv420p') failures.push(`${TRAILER_FILE} must use yuv420p`);
+    }
   }
   if (sound?.codec_name !== 'aac')
     failures.push(`${TRAILER_FILE} ${sound ? `audio is ${sound.codec_name}, not AAC` : 'has no AAC audio'}`);
