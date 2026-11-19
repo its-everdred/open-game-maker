@@ -50,7 +50,7 @@ describe('gm skill pack', () => {
     expect(prose).toContain('design/decisions.json');
     expect(prose).toContain('never go to the creator');
     expect(text).not.toContain('Needs Kevin');
-    expect(text).not.toMatch(/assets-local|scripts\/assets|meta-improve|claude\.ai|sprite-forge|landing-page/i);
+    expect(text).not.toMatch(/assets-local|scripts\/assets|meta-improve|claude\.ai|vendor\/sprite-forge|landing-page/i);
   });
 
   it('keeps gm-build short and makes offline installation the only install path', () => {

@@ -86,13 +86,13 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm preview [--ticket <number>] [--branch <id>]` builds this workspace for creator review without changing the live release; the verdict returns to the ticket. The game branch defaults to `main`. `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 - `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.
 ## Load when…
-
 | Skill | Load when… |
 |---|---|
 | gm-core | Starting or resuming any Game Maker build. Your `role:*` labels inlined the rest (`references/roles.md`); find others with `gm skills search <words>`, `gm skills show <name>`. |
 | gm-asset-showcase | Building or verifying a pre-rendered asset-set showcase. |
 | gm-map-inspiration | Building the first map, a level, dungeon, world layout, or terrain. |
 | gm-asset-variants | Recolouring a model, attaching a prop to a rig joint, or making any variant of a library asset. |
+| gm-sprite-forge | Measuring or making sprites to match the SmallScaleInt style. |
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
 | gm-voiceover | Making a short consented local voice draft and caption timing. |
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |
