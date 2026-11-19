@@ -47,7 +47,16 @@ defmodule OgmVoice.TranscriptDelivery do
          {:ok, _target_key} <- Target.key(target),
          false <- Map.has_key?(state.conversations, conversation_id),
          :ok <- state.subscribe.(instance, conversation_id, self()) do
-      conversation = %{target: target, user_sequence: 0, queue: :queue.new(), delivering?: false, ended?: false}
+      conversation = %{
+        target: target,
+        user_sequence: 0,
+        queue: :queue.new(),
+        delivering?: false,
+        ended?: false,
+        ready?: target["kind"] != "edit" or not is_nil(target["job_id"]),
+        pending_agent: []
+      }
+
       {:reply, :ok, put_in(state.conversations[conversation_id], conversation)}
     else
       true -> {:reply, :ok, state}
@@ -99,7 +108,12 @@ defmodule OgmVoice.TranscriptDelivery do
           "turn_id" => normalize_turn_id(turn_id)
         }
 
-        {:noreply, enqueue(state, conversation_id, payload)}
+        if not conversation.ready? do
+          conversation = %{conversation | pending_agent: conversation.pending_agent ++ [payload]}
+          {:noreply, put_conversation(state, conversation_id, conversation)}
+        else
+          {:noreply, enqueue(state, conversation_id, payload)}
+        end
 
       _other ->
         {:noreply, state}
@@ -155,6 +169,18 @@ defmodule OgmVoice.TranscriptDelivery do
 
         case perform_request(state, url, item.payload) do
           {:ok, status} when status in 200..299 ->
+            {remaining, conversation} =
+              if not conversation.ready? and item.payload["actor"] == "creator" do
+                queue =
+                  Enum.reduce(Enum.reverse(conversation.pending_agent), remaining, fn payload, queue ->
+                    :queue.in_r(%{payload: payload, retry_delays: state.retry_delays}, queue)
+                  end)
+
+                {queue, %{conversation | ready?: true, pending_agent: []}}
+              else
+                {remaining, conversation}
+              end
+
             send(self(), {:deliver, conversation_id})
             {:noreply, put_conversation(state, conversation_id, %{conversation | queue: remaining})}
 

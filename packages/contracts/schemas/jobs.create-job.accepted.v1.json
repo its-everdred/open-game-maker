@@ -6,6 +6,12 @@
       "type": "string",
       "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
     },
+    "reused": {
+      "type": "boolean"
+    },
+    "samePlan": {
+      "type": "boolean"
+    },
     "state": {
       "type": "string",
       "enum": [

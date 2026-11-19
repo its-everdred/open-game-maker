@@ -4,7 +4,7 @@
   "properties": {
     "target_key": {
       "type": "string",
-      "pattern": "^(scope|build|questions):.+$"
+      "pattern": "^(scope|build|questions|edit):.+$"
     },
     "observed_at": {
       "type": "string",

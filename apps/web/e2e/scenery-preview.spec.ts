@@ -40,8 +40,7 @@ test('opens a no-build diorama and requests a locked item', async ({ page }, tes
     return route.fallback();
   });
   await page.goto('/g/game?mode=edit&test');
-  const canvas = page.getByLabel('Editor canvas');
-  await expect(canvas).toBeVisible({ timeout: 30_000 });
+  await page.getByLabel('Game editor').click();
   await expect(page.locator('.game-frame canvas')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Trees', exact: true }).locator('.scenery-thumbnail img')).toBeVisible({
     timeout: 30_000,
@@ -51,6 +50,8 @@ test('opens a no-build diorama and requests a locked item', async ({ page }, tes
   });
   await page.screenshot({ path: testInfo.outputPath('scenery-palette.png') });
   await page.getByRole('button', { name: 'tree', exact: true }).click();
+  const canvas = page.getByLabel('Editor canvas');
+  await expect(canvas).toBeVisible({ timeout: 30_000 });
   await canvas.click({ position: { x: 180, y: 200 } });
   await expect.poll(() => request?.plan?.summary, { timeout: 30_000 }).toContain('scenery:t3:fixture/tree');
   await expect(page.locator('.screen-error')).toHaveCount(0);
@@ -118,8 +119,11 @@ test('keeps models and painted sprites together in a no-build scene', async ({ p
     return route.fallback();
   });
   await page.goto('/g/game?mode=edit&test&v=draft');
+  await page.getByLabel('Game editor').click();
   await expect(page.locator('.game-frame canvas')).toHaveAttribute('data-scenery-items', '0', { timeout: 30_000 });
   await expect(page.getByLabel('Scene items')).toContainText('tree');
+  await page.getByRole('button', { name: 'Backdrops', exact: true }).click();
+  await page.getByRole('button', { name: 'forest', exact: true }).click();
   const canvas = page.getByLabel('Editor canvas');
   const bounds = (await canvas.boundingBox())!;
   const scale = Math.min(bounds.width / 640, bounds.height / 480);
@@ -127,6 +131,7 @@ test('keeps models and painted sprites together in a no-build scene', async ({ p
     position: { x: (bounds.width - 640 * scale) / 2 + 200 * scale, y: (bounds.height - 480 * scale) / 2 + 250 * scale },
   });
   await expect(page.getByRole('button', { name: 'Move scenery:tree', exact: true })).toBeVisible();
+  await page.getByLabel('Game editor').click();
   await page.getByRole('button', { name: 'Rocks', exact: true }).click();
   await page.getByRole('button', { name: 'rock', exact: true }).click();
   await canvas.click({ position: { x: bounds.width * 0.75, y: bounds.height * 0.7 } });
@@ -169,6 +174,7 @@ test('shows a reviewed concept and sends scope placement to the builder', async 
     }),
   );
   await page.goto('/g/game?mode=edit&test');
+  await page.getByLabel('Game editor').click();
   await expect(page.locator('.game-frame img')).toBeVisible();
   await expect
     .poll(() => page.locator('.game-frame img').evaluate((image) => (image as HTMLImageElement).naturalWidth))

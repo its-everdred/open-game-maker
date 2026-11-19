@@ -768,3 +768,51 @@
 .game-screen.is-editing .editor-inspector-stack:has(.editor-inspector:not(.has-content)) {
   display: none;
 }
+
+/* The game gets its own viewport, so its media queries respond to the chosen shape. */
+.game-stage-area {
+  grid-area: stage;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.game-stage-area > [role='group'] {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+
+.game-stage-area > [role='group'] button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--editor-card);
+  color: var(--ink);
+  font-size: 24px;
+}
+
+.game-stage-area > [role='group'] button[aria-pressed='true'] {
+  background: var(--action-primary);
+  color: var(--action-primary-text);
+}
+
+.game-stage-area[data-frame-orientation] .game-stage {
+  flex: none;
+  width: min(100cqw, (100cqh - 44px) * 16 / 9);
+  aspect-ratio: 16 / 9;
+}
+
+.game-stage-area[data-frame-orientation='vertical'] .game-stage {
+  width: min(100cqw, (100cqh - 44px) * 9 / 16);
+  aspect-ratio: 9 / 16;
+}
+
+.game-screen.is-playing .game-stage-area .game-stage {
+  width: 100%;
+  height: 100%;
+}

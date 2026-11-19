@@ -219,6 +219,16 @@ describe('GameScreen', () => {
     vi.unstubAllGlobals();
   });
 
+  it('changes the edit game viewport orientation without leaving the route', () => {
+    const { container } = renderGame('/g/game?mode=edit');
+    const stage = container.querySelector('.game-stage-area');
+    expect(container.querySelector('.edit-workspace-chat aiur-composer')).not.toBeNull();
+    expect(stage?.getAttribute('data-frame-orientation')).toBe('wide');
+    fireEvent.click(screen.getByRole('button', { name: 'Vertical game' }));
+    expect(stage?.getAttribute('data-frame-orientation')).toBe('vertical');
+    expect(container.querySelector('.game-stage .game-frame')).not.toBeNull();
+  });
+
   it('changes the AI asset preference from the edit menu', async () => {
     let allowed = true;
     editorApi.getGame.mockImplementation(async () => ({
@@ -346,7 +356,7 @@ describe('GameScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
     await waitFor(() => expect(editorApi.acquireLease).toHaveBeenCalledWith('game', 'main', expect.any(String)));
-    expect(host.controller.setMode).toHaveBeenCalledWith('edit');
+    expect(host.controller.setMode).toHaveBeenCalledWith('play');
     expect(container.querySelector('.game-screen.is-editing')).toBeVisible();
     expect(container.querySelector('.play-bar')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
@@ -712,6 +722,7 @@ describe('GameScreen', () => {
 
     renderGame('/g/game?mode=edit');
 
+    fireEvent.click(await screen.findByLabelText('Game editor'));
     expect(await screen.findByRole('button', { name: 'Skeleton' }, { timeout: 5_000 })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Skeleton' }).querySelector('img')).toHaveAttribute(
       'src',
@@ -764,5 +775,15 @@ describe('GameScreen', () => {
         buildId: 'build',
       }),
     );
+  });
+
+  it('keeps the mounted game container when returning from edit to play', async () => {
+    const { container } = renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    const frame = container.querySelector('.game-frame');
+    expect(frame).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Play$/ }));
+    await waitFor(() => expect(container.querySelector('.game-screen')).toHaveClass('is-playing'));
+    expect(container.querySelector('.game-frame')).toBe(frame);
   });
 });

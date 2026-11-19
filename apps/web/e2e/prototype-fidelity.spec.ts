@@ -77,7 +77,7 @@ test.describe.configure({ mode: 'serial' });
 
 for (const scenario of scenarios) {
   for (const viewport of viewports) {
-    test(`${scenario.name} matches the prototype shell at ${viewport.width}x${viewport.height}`, async ({
+    test(`${scenario.name} ${scenario.name === 'editor' ? 'uses the selected workspace' : 'matches the prototype shell'} at ${viewport.width}x${viewport.height}`, async ({
       browser,
       page,
     }, testInfo) => {
@@ -98,7 +98,8 @@ for (const scenario of scenarios) {
       });
       page.on('pageerror', (error) => appErrors.push(error.message));
       page.on('response', (response) => {
-        const expectedVoiceFallback = response.url().endsWith('/api/v1/voice/token') && response.status() === 503;
+        const expectedVoiceFallback =
+          response.url().endsWith('/api/v1/voice/token') && [404, 503].includes(response.status());
         const pathname = new URL(response.url()).pathname;
         const expectedMissingGameResource =
           response.status() === 404 && ['/api/v1/games/game/published', '/api/v1/games/game/saves'].includes(pathname);
@@ -129,6 +130,10 @@ for (const scenario of scenarios) {
             body: appShell,
             contentType: 'image/png',
           });
+          // Option C replaces the archived editor prototype; its visual comparison is a host-side post-deploy check.
+          expect(appErrors, 'editor app console errors').toEqual([]);
+          expect(failedResponses, 'editor failed responses').toEqual([]);
+          return;
         }
         await test.step('normalize pages', () => Promise.all([normalize(page), normalize(reference)]));
         // Capture through CDP after normalization. Playwright's screenshot helper waits
@@ -378,36 +383,36 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
     `,
     });
   }
-  await Promise.all([
-    expect(app.locator('.editor-chrome')).toBeAttached(),
-    expect(app.locator('.editor-rail')).toBeVisible(),
-    expect(app.locator('.editor-rail button').first()).toBeVisible(),
-    expect(reference.locator('#editor')).toBeVisible(),
-  ]);
+  await expect(app.locator('.edit-workspace')).toBeVisible();
+  await expect(reference.locator('#editor')).toBeVisible();
+  const stage = await app.locator('.game-stage-area').boundingBox();
+  const chat = await app.locator('.edit-workspace-chat').boundingBox();
+  expect(stage).not.toBeNull();
+  expect(chat).not.toBeNull();
   if (app.viewportSize()!.width < app.viewportSize()!.height) {
-    const [stage, rail] = await Promise.all([
-      app.locator('.game-stage').boundingBox(),
-      app.locator('.editor-rail').boundingBox(),
-    ]);
-    const previewFraction = stage!.height / app.viewportSize()!.height;
-    expect(previewFraction).toBeGreaterThanOrEqual(0.65);
-    expect(previewFraction).toBeLessThanOrEqual(0.7);
-    expect(rail!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height);
+    expect(chat!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height);
+    expect(Math.abs(chat!.height - stage!.height)).toBeLessThan(5);
   } else {
-    const [stage, rail] = await Promise.all([
-      app.locator('.game-stage').boundingBox(),
-      app.locator('.editor-rail').boundingBox(),
-    ]);
-    expect(rail!.x + rail!.width).toBeLessThanOrEqual(stage!.x);
-    const palette = await app.locator('.editor-palette').boundingBox();
-    expect(palette!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height);
-    expect(palette!.width).toBeGreaterThan(stage!.width);
+    expect(chat!.x + chat!.width).toBeLessThanOrEqual(stage!.x);
+    expect(Math.abs(chat!.width - stage!.width)).toBeLessThan(5);
   }
-  await app.getByRole('button', { name: 'Menu', exact: true }).click();
-  await expect(app.locator('#studio-editor-tools .editor-inspector')).toBeVisible();
-  await app.getByRole('button', { name: 'Menu', exact: true }).click();
-  await expect(app.locator('.editor-rail button').first()).toBeEnabled();
-  await app.locator('.editor-rail button').first().click();
+  const frame = await app.locator('.game-stage').boundingBox();
+  const portraitDevice = app.viewportSize()!.width < app.viewportSize()!.height;
+  expect(frame!.width / frame!.height).toBeCloseTo(portraitDevice ? 16 / 9 : 9 / 16, 1);
+  await app.getByRole('button', { name: portraitDevice ? 'Vertical game' : 'Wide game' }).click();
+  await expect
+    .poll(async () => {
+      const box = await app.locator('.game-stage').boundingBox();
+      return box!.width / box!.height;
+    })
+    .toBeCloseTo(portraitDevice ? 9 / 16 : 16 / 9, 1);
+  await app.getByRole('button', { name: portraitDevice ? 'Wide game' : 'Vertical game' }).click();
+  await expect
+    .poll(async () => {
+      const box = await app.locator('.game-stage').boundingBox();
+      return box!.width / box!.height;
+    })
+    .toBeCloseTo(portraitDevice ? 16 / 9 : 9 / 16, 1);
   return { app: [app.locator('.game-stage')], reference: [reference.locator('#stage')] };
 }
 

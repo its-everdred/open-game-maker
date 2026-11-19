@@ -21,6 +21,11 @@ defmodule OgmVoice.Target do
       when is_binary(game) and game != "" and is_binary(creator) and creator != "",
       do: {:ok, "questions:" <> game <> ":" <> creator}
 
+  def key(%{"kind" => "edit", "game_id" => game, "creator_id" => creator, "session_id" => session})
+      when is_binary(game) and game != "" and is_binary(creator) and creator != "" and is_binary(session) and
+             session != "",
+      do: {:ok, "edit:" <> game <> ":" <> creator <> ":" <> session}
+
   def key(_target), do: :error
 
   @spec creator(term()) :: String.t() | nil

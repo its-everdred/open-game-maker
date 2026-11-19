@@ -1,0 +1,118 @@
+.edit-workspace {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'chat game';
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  gap: 4px;
+}
+
+.edit-workspace-game {
+  grid-area: game;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.edit-workspace.is-playing,
+.edit-workspace.is-playing .edit-workspace-game {
+  display: contents;
+}
+
+.edit-workspace-chat {
+  grid-area: chat;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.edit-workspace-editor {
+  grid-area: game;
+  z-index: 2;
+  justify-self: end;
+  align-self: start;
+  margin-top: calc(var(--safe-t) + 70px);
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.edit-workspace-editor > summary {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-card);
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.edit-workspace-editor > summary::-webkit-details-marker {
+  display: none;
+}
+
+.edit-workspace-editor-content {
+  max-height: min(70vh, 100%);
+  overflow: auto;
+  background: var(--surface-card);
+  color: var(--text);
+}
+
+@media (orientation: portrait) {
+  .edit-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'game' 'chat';
+  }
+}
+
+.game-screen.is-editing:has(.edit-workspace) {
+  display: block;
+  padding: 0;
+}
+
+.edit-workspace .game-stage-area {
+  width: 100%;
+  height: 100%;
+}
+
+.edit-workspace-chat .build-chat-chat {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-card);
+  color: var(--text);
+  --aiur-composer-bg: var(--surface-card);
+  --aiur-composer-fg: var(--text);
+  --aiur-composer-accent: var(--action-primary);
+  --aiur-composer-on-accent: var(--action-primary-text);
+}
+
+.edit-workspace-chat .build-chat-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.edit-workspace-editor .editor-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: min(70vw, 480px);
+}
+
+.edit-workspace-editor .editor-rail,
+.edit-workspace-editor .editor-palette,
+.edit-workspace-editor .editor-inspector-stack {
+  max-width: 100%;
+  max-height: 35vh;
+  overflow: auto;
+}

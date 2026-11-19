@@ -60,6 +60,8 @@ export const CreateJobRequest = z.object({
 });
 export const CreateJobAccepted = z.object({
   jobId: Id,
+  reused: z.boolean().optional(),
+  samePlan: z.boolean().optional(),
   state: z.enum(['queued', 'admitted']),
   reservation: Reservation,
   slot: JobSlot,
