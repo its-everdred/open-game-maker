@@ -7,6 +7,7 @@ const fake = vi.hoisted(() => ({
   listeners: new Map<string, (value: unknown) => void>(),
   end: vi.fn(),
   sendText: vi.fn(),
+  start: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@ogm/voice-client', () => ({
   Dictation: class {
@@ -26,9 +27,7 @@ vi.mock('@ogm/voice-client', () => ({
       fake.listeners.set(`voice:${name}`, callback);
       return () => fake.listeners.delete(`voice:${name}`);
     }
-    startFromGesture() {
-      return Promise.resolve();
-    }
+    startFromGesture = fake.start;
     end = fake.end;
     sendText = fake.sendText;
   },
@@ -115,4 +114,24 @@ it('does not start another voice job while text admission is still pending', asy
   finish('job-1');
   await sending;
   await expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).rejects.toThrow('conversation is starting');
+});
+
+it('rejects a second voice start and allows a new start after a remote end', async () => {
+  let finish: () => void = () => {};
+  fake.start.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const { container } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.voice).toBeDefined());
+  await waitFor(() => expect(fake.start).toBeDefined());
+  const first = composer.adapters.voice!.start({ onEnd: vi.fn() });
+  await expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).rejects.toThrow('already starting');
+  finish();
+  await first;
+  fake.listeners.get('voice:ended')!({});
+  await expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).resolves.toBeDefined();
 });

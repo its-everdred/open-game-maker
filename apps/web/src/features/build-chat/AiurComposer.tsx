@@ -25,6 +25,7 @@ export function AiurComposer({
 }: Props) {
   const ref = useRef<ComposerElement>(null);
   const voiceRef = useRef<VoiceClient | undefined>(undefined);
+  const voiceStarting = useRef(false);
   const dictationResult = useRef<Promise<string> | undefined>(undefined);
   const cancelDictation = useRef<(() => void) | undefined>(undefined);
   const voiceAvailability = useRef<VoiceAvailability>({ available: false });
@@ -35,10 +36,13 @@ export function AiurComposer({
   const callbacks = useRef({ postText, startJob, onPosted, wasAdmissionReused });
   callbacks.current = { postText, startJob, onPosted, wasAdmissionReused };
   const [error, setError] = useState('');
-  useEffect(() => () => {
-    voiceRef.current?.end();
-    cancelDictation.current?.();
-  }, []);
+  useEffect(
+    () => () => {
+      voiceRef.current?.end();
+      cancelDictation.current?.();
+    },
+    [],
+  );
   useEffect(() => {
     let active = true;
     if (voiceTarget?.kind === 'edit' && lastVoiceSession.current !== voiceTarget.session_id) {
@@ -143,6 +147,7 @@ export function AiurComposer({
         ? {
             voice: {
               start: async ({ onEnd }) => {
+                if (voiceStarting.current || voiceRef.current) throw new Error('Voice is already starting');
                 if (
                   admissionInFlight.current ||
                   (lastAdmittedJob.current &&
@@ -153,8 +158,10 @@ export function AiurComposer({
                 const available = voiceAvailability.current;
                 if (!available.available) throw new Error('Voice is unavailable');
                 const voice = new VoiceClient({ url: available.url, token: available.token, target: voiceTarget });
+                voiceStarting.current = true;
                 voiceRef.current = voice;
                 voice.on('ended', () => {
+                  if (voiceRef.current === voice) voiceRef.current = undefined;
                   element.removeAttribute('data-recording');
                   onEnd();
                 });
@@ -173,7 +180,15 @@ export function AiurComposer({
                       if (element.value.trim() === openingText) element.value = '';
                     });
                 });
-                await voice.startFromGesture();
+                try {
+                  await voice.startFromGesture();
+                } catch (error) {
+                  voice.end();
+                  if (voiceRef.current === voice) voiceRef.current = undefined;
+                  throw error;
+                } finally {
+                  voiceStarting.current = false;
+                }
                 return {
                   stop: async () => {
                     voice.end();
