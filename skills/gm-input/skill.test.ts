@@ -29,7 +29,7 @@ describe('gm-input skill', () => {
     expect(text).toContain('Never claim universal device support');
     expect(text).toContain('`phone-touch.json`');
     expect(text).toContain('`laptop-keys.json`');
-    expect(text).toContain('report the gamepad as unchecked');
+    expect(text).toContain('injected standard gamepad');
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
   }, 30_000);
 });

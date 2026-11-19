@@ -15,6 +15,19 @@ describe('journey schema', () => {
     expect(() => journeySchema.parse({ name: 'x', steps: [{ do: 'click' }] })).toThrow(/click needs text or selector/);
   });
 
+  it('validates gamepad controls and fills defaults', () => {
+    expect(journeySchema.parse({ name: 'x', steps: [{ do: 'pad', buttons: [0] }] })).toMatchObject({
+      steps: [{ buttons: [0], axes: [], holdMs: 100 }],
+    });
+    for (const step of [
+      { do: 'pad' },
+      { do: 'pad', buttons: [17] },
+      { do: 'pad', buttons: [0], holdMs: 49 },
+      { do: 'pad', buttons: [0], axes: [1.1] },
+    ])
+      expect(() => journeySchema.parse({ name: 'x', steps: [step] })).toThrow();
+  });
+
   it('refuses an expect that checks nothing, so a journey cannot pass without asserting', () => {
     expect(() => journeySchema.parse({ name: 'x', steps: [{ do: 'expect' }] })).toThrow(
       /expect needs text, pixels or look/,

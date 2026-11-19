@@ -57,9 +57,8 @@ Check that the same action produces the same mechanic across keyboard, touch, ga
 
 Then demonstrate the devices on the hosted build with two gm-qa journeys in `games/<name>/qa/journeys/`:
 `phone-touch.json` plays with the on-screen buttons on a phone viewport, and `laptop-keys.json` plays from the title to a
-round end with the keyboard alone on a desktop viewport. Blobs' pair in gm-qa's `journeys/blobs/` are the ones to copy.
-A journey cannot drive a gamepad yet, so report the gamepad as unchecked unless someone played it on a real pad. Report
-only the devices those journeys passed on.
+round end using keyboard and an injected standard gamepad on a desktop viewport. Blobs' pair in gm-qa's `journeys/blobs/` are the ones to copy.
+Report only the devices those journeys passed on, and distinguish the injected gamepad from a physical pad.
 
 ## Reference
 

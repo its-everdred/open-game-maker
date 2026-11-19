@@ -52,6 +52,16 @@ export const stepSchema = z.union([
     holdMs: ms.default(80),
     times: z.number().int().min(1).max(50).default(1),
   }),
+  z
+    .strictObject({
+      do: z.literal('pad'),
+      buttons: z.array(z.number().int().min(0).max(16)).max(17).default([]),
+      axes: z.array(z.number().min(-1).max(1)).max(4).default([]),
+      holdMs: ms.min(50).default(100),
+    })
+    .refine((s) => s.buttons.length > 0 || s.axes.some((value) => value !== 0), {
+      message: 'pad needs a button or nonzero axis',
+    }),
   z.strictObject({
     do: z.literal('swipe'),
     from: point,
@@ -128,6 +138,8 @@ export function describeStep(step: Step): string {
       return `${step.do} ${step.text !== undefined ? `"${step.text}"` : (step.selector ?? `at ${'at' in step ? step.at?.join(',') : ''}`)}`;
     case 'press':
       return `press ${step.key}${step.times > 1 ? ` x${step.times}` : ''}`;
+    case 'pad':
+      return `pad buttons ${step.buttons.join(',')} axes ${step.axes.join(',')}`;
     case 'swipe':
       return `swipe ${step.from.join(',')} -> ${step.to.join(',')}`;
     case 'wait':
