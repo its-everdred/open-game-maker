@@ -11,7 +11,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   use: {
-    baseURL: 'http://127.0.0.1:43174',
+    baseURL: 'http://127.0.0.1:23174',
     browserName: 'chromium',
     headless: true,
     launchOptions: {
@@ -20,8 +20,8 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: 'pnpm exec vite preview --host 127.0.0.1 --port 43174 --strictPort',
-    url: 'http://127.0.0.1:43174',
+    command: 'pnpm exec vite preview --host 127.0.0.1 --port 23174 --strictPort',
+    url: 'http://127.0.0.1:23174',
     reuseExistingServer: false,
   },
 });

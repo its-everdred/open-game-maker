@@ -65,6 +65,6 @@ export default defineConfig(({ mode }) => ({
     }),
   ],
   server: { host: '127.0.0.1' },
-  preview: { host: '127.0.0.1', port: 43173 },
+  preview: { host: '127.0.0.1', port: 23173 },
   build: { target: 'es2022' },
 }));
