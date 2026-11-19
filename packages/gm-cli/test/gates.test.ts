@@ -180,7 +180,7 @@ describe('gm check', () => {
       out: [],
       err: ['src/sim/enemy.ts:12 Math.random in simulation (use sdk rng)'],
     });
-    expect(state.l0Options).toEqual({ checks: ['typecheck', 'no-wall-clock-in-sim'] });
+    expect(state.l0Options).toEqual({ checks: ['typecheck', 'no-wall-clock-in-sim', 'image-stretch'] });
   });
 
   it('returns the GateResult unchanged with --json', async () => {
