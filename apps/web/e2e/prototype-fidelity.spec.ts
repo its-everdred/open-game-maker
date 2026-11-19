@@ -10,7 +10,7 @@ import { prototypePaletteNormalizationCss } from './support/prototype-palette';
 import { attachComparison, prototypeThresholds } from './support/visual-compare';
 
 // eslint-disable-next-line no-restricted-properties
-const referenceOrigin = `http://127.0.0.1:${process.env.OGM_PROTOTYPE_E2E_PORT ?? '43176'}`;
+const referenceOrigin = `http://127.0.0.1:${process.env.OGM_WEB_BRIDGE_PORT ?? '10001'}`;
 const townStub = readFileSync(new URL('./fixtures/town-stub/index.html', import.meta.url), 'utf8');
 const neutralImage = Buffer.from(
   '<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="788"><rect width="1400" height="788" fill="#6b6570"/></svg>',
@@ -74,6 +74,16 @@ const scenarios = [
 
 test.use({ serviceWorkers: 'block', reducedMotion: 'reduce' });
 test.describe.configure({ mode: 'serial' });
+
+test('serves prototype references from the bridge fixture', async ({ request }) => {
+  // eslint-disable-next-line no-restricted-properties
+  const bridgeOrigin = `http://127.0.0.1:${process.env.OGM_WEB_BRIDGE_PORT ?? '10001'}`;
+  for (const path of ['/studio/', '/ui/']) {
+    const response = await request.get(`${bridgeOrigin}${path}`);
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('text/html');
+  }
+});
 
 for (const scenario of scenarios) {
   for (const viewport of viewports) {
