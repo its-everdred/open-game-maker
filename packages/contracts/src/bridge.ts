@@ -314,7 +314,7 @@ export const gameToHostSchema = z
     envelope('input.rawKey', z.looseObject({ code: z.string().max(32), down: z.boolean() })),
     /** The host fills identity and slot. */
     envelope('save.write', save),
-    envelope('save.restored', empty),
+    envelope('save.restored', z.looseObject({ save: save.optional() })),
     envelope(
       'event',
       z.looseObject({ kind: z.enum(['achievement', 'analytics', 'checkpoint']), payload: z.unknown() }),

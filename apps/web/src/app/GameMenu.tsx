@@ -1,8 +1,10 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactElement,
@@ -34,17 +36,26 @@ type GameMenuState = {
   setControls: Dispatch<SetStateAction<GameMenuControls | undefined>>;
   setOpen: Dispatch<SetStateAction<boolean>>;
   setMoreHost: Dispatch<SetStateAction<HTMLElement | null>>;
+  setCloseLocked(locked: boolean): void;
 };
 
 const GameMenuContext = createContext<GameMenuState | undefined>(undefined);
 
 export function GameMenuProvider({ children }: { children: ReactNode }) {
   const [controls, setControls] = useState<GameMenuControls>();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const closeLocked = useRef(false);
+  const setCloseLocked = useCallback((locked: boolean) => {
+    closeLocked.current = locked;
+  }, []);
+  const setOpen: Dispatch<SetStateAction<boolean>> = useCallback((next) => {
+    if (closeLocked.current) return;
+    setOpenState(next);
+  }, []);
   const [moreHost, setMoreHost] = useState<HTMLElement | null>(null);
   const value = useMemo(
-    () => ({ controls, open, moreHost, setControls, setOpen, setMoreHost }),
-    [controls, open, moreHost],
+    () => ({ controls, open, moreHost, setControls, setOpen, setMoreHost, setCloseLocked }),
+    [controls, open, moreHost, setOpen, setCloseLocked],
   );
   return <GameMenuContext.Provider value={value}>{children}</GameMenuContext.Provider>;
 }

@@ -25,7 +25,8 @@ function frameHarness() {
       return vi.fn();
     }),
     pause: vi.fn(),
-    restoreSave: vi.fn(),
+    restoreSave: vi.fn(async (save) => save),
+    confirmSaveRecovery: vi.fn(),
     resume: vi.fn(),
     setSettings: vi.fn(),
   } as unknown as GameFrameController;
@@ -211,7 +212,7 @@ describe('PlatformHud', () => {
     await waitFor(() => expect(resume).toHaveFocus());
     fireEvent.click(resume);
 
-    expect(onResume).toHaveBeenCalledOnce();
+    await waitFor(() => expect(onResume).toHaveBeenCalledOnce());
     view.rerender(
       <PlatformHud
         build="draft"
@@ -574,6 +575,99 @@ describe('PlatformHud', () => {
     finishAuto();
     await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
     expect(write.mock.calls[1]?.[1]).toBe('1');
+  });
+
+  it('persists the confirmed manual restore to auto before resuming', async () => {
+    const test = frameHarness();
+    const old = { saveSchemaVersion: 1, data: { checkpoint: 'old' } };
+    const loaded = { saveSchemaVersion: 1, data: { checkpoint: 'loaded' } };
+    let finishOld!: () => void;
+    const write = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const slots = [
+      { slotId: 'auto', headRevision: 1, status: 'ok' },
+      { slotId: '1', headRevision: 1, status: 'ok' },
+    ] as SaveSlot[];
+    const read = vi.fn().mockResolvedValue(loaded);
+    const onResume = vi.fn();
+    const setCloseLocked = vi.fn();
+    let finishRestore!: (save: typeof loaded) => void;
+    vi.mocked(test.frame.restoreSave).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishRestore = resolve;
+        }),
+    );
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        setCloseLocked={setCloseLocked}
+        saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read, write }}
+        onResume={onResume}
+      />,
+    );
+    await openSettingsSection('Saves');
+    test.saveWrite(old);
+    await waitFor(() => expect(write).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: /Save slot 1/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load' }));
+    expect(setCloseLocked).toHaveBeenCalledWith(true);
+    expect(screen.getByRole('button', { name: 'Save slot 2' })).toBeDisabled();
+    expect(read).not.toHaveBeenCalled();
+    finishOld();
+    await waitFor(() => expect(test.frame.restoreSave).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Save slot 2' }));
+    test.saveWrite(loaded);
+    finishRestore(loaded);
+    await waitFor(() => expect(onResume).toHaveBeenCalledOnce());
+    expect(setCloseLocked).toHaveBeenLastCalledWith(false);
+    await waitFor(() => expect(write.mock.calls.filter((call) => call[1] === 'auto').at(-1)?.[2]).toEqual(loaded));
+    expect(write.mock.calls.some((call) => call[1] === '2')).toBe(false);
+  });
+
+  it('keeps recovery protected when saving the restored state fails', async () => {
+    const test = frameHarness();
+    const slot = { slotId: 'auto', headRevision: 1, status: 'ok' } as SaveSlot;
+    const onResume = vi.fn();
+    const toast = vi.fn();
+    const save = { saveSchemaVersion: 1, data: { checkpoint: 1 } };
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        saveWritesDisabled
+        saveApi={{
+          list: vi.fn().mockResolvedValue({ available: true, value: { slots: [slot] } }),
+          read: vi.fn().mockResolvedValue(save),
+          write: vi.fn().mockRejectedValue(new Error('offline')),
+        }}
+        onResume={onResume}
+        toast={toast}
+      />,
+    );
+    await openSettingsSection('Saves');
+    fireEvent.click(await screen.findByRole('button', { name: 'Load' }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Load failed'));
+    expect(test.frame.confirmSaveRecovery).not.toHaveBeenCalled();
+    expect(onResume).not.toHaveBeenCalled();
   });
 
   it('refreshes the slot revision before a second save write', async () => {

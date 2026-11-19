@@ -92,7 +92,7 @@ export function GameScreen() {
   const { gameId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { open: menuOpen, setOpen: setMenuOpen, setMoreHost } = useGameMenu();
+  const { open: menuOpen, setOpen: setMenuOpen, setMoreHost, setCloseLocked } = useGameMenu();
   const branch = searchParams.get('v')?.trim() || 'main';
   const roomId = searchParams.get('room')?.trim() || undefined;
   const isGameRoute = useMatch('/g/:gameId') !== null;
@@ -797,6 +797,7 @@ export function GameScreen() {
             saves={frameState.manifest.saves}
             saveWritesDisabled={frameState.startupSaveError}
             manualLoadDisabled={frameState.startupRecoveryUnavailable}
+            setCloseLocked={setCloseLocked}
             manualSaveSlots={frameState.manifest.manualSaveSlots}
             saveSchema={frameState.manifest.saveSchema}
             migratesFrom={frameState.manifest.migratesFrom}

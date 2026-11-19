@@ -61,6 +61,7 @@ type PlatformHudProps = {
   /** A failed startup restore must not overwrite the existing automatic save. */
   saveWritesDisabled?: boolean;
   manualLoadDisabled?: boolean;
+  setCloseLocked?(locked: boolean): void;
   /** The running build's save schema; absent when the build did not report one. */
   saveSchema?: number;
   /** The one older schema the build still migrates; absent when it cannot migrate. */
@@ -155,6 +156,7 @@ export function PlatformHud({
   manualSaveSlots = false,
   saveWritesDisabled = false,
   manualLoadDisabled = false,
+  setCloseLocked,
   saveSchema,
   migratesFrom,
   saveApi = defaultSaveApi,
@@ -170,6 +172,8 @@ export function PlatformHud({
   const visible = open ?? paused;
   const [slots, setSlots] = useState<SaveSlot[]>();
   const [savesAvailable, setSavesAvailable] = useState(false);
+  const [loadingSave, setLoadingSave] = useState(false);
+  const loadingSaveRef = useRef(false);
   const [selectedSlot, setSelectedSlot] = useState<SaveSlotId>('auto');
   const [settings, setSettings] = useState<PlayerSettings>(() => loadSettings());
   const [page, setPage] = useState<'pause' | 'settings' | 'more'>('pause');
@@ -321,13 +325,35 @@ export function PlatformHud({
     onResume();
   };
   const load = async () => {
+    if (loadingSaveRef.current) return;
     const slot = slots?.find((candidate) => candidate.slotId === selectedSlot);
     if (!saveSlotLoadable(slot)) return;
+    loadingSaveRef.current = true;
+    setCloseLocked?.(true);
+    setLoadingSave(true);
+    const transaction = saveQueueRef.current.then(async () => {
+      const restored = await frame.restoreSave(await saveApi.read(gameId, selectedSlot));
+      const latest = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
+      if (!latest.available) throw new Error('saves unavailable');
+      await storeSaveWrite(gameId, 'auto', restored, latest.value.slots, saveApi.write, saveContextRef.current);
+      const refreshed = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
+      if (refreshed.available) {
+        slotsRef.current = refreshed.value.slots;
+        setSlots(refreshed.value.slots);
+      }
+      frame.confirmSaveRecovery();
+    });
+    saveQueueRef.current = transaction.catch(() => undefined);
     try {
-      frame.restoreSave(await saveApi.read(gameId, selectedSlot));
+      await transaction;
+      setCloseLocked?.(false);
       resume();
     } catch {
       toast('Load failed');
+    } finally {
+      loadingSaveRef.current = false;
+      setCloseLocked?.(false);
+      setLoadingSave(false);
     }
   };
 
@@ -378,6 +404,7 @@ export function PlatformHud({
                 }}
                 backRef={backRef}
                 onBack={() => {
+                  if (loadingSaveRef.current) return;
                   setPage('pause');
                   setCreditsOpen(false);
                 }}
@@ -394,6 +421,7 @@ export function PlatformHud({
                           className="tap-secondary"
                           type="button"
                           key={id}
+                          disabled={loadingSave}
                           aria-pressed={selectedSlot === id}
                           onClick={() => setSelectedSlot(id)}
                         >
@@ -408,7 +436,9 @@ export function PlatformHud({
                         className="tap-secondary"
                         type="button"
                         disabled={
-                          manualLoadDisabled || !saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))
+                          loadingSave ||
+                          manualLoadDisabled ||
+                          !saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))
                         }
                         onClick={() => void load()}
                       >

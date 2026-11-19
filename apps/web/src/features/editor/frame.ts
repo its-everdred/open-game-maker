@@ -14,7 +14,7 @@ import type {
 } from '@ogm/contracts/browser';
 import { hostToGameSchema, SDK_PROTOCOL } from '@ogm/contracts/browser';
 
-type FrameLike = Pick<GameFrame, 'dispose' | 'on' | 'send' | 'setMode' | 'setSettings'> & {
+type FrameLike = Pick<GameFrame, 'dispose' | 'on' | 'send' | 'setMode' | 'setSettings' | 'restoreSave'> & {
   bridge: Pick<GameFrame['bridge'], 'dropped'>;
   /** Optional so a test double need not answer diagnostics; `netInfo()` reports `undefined` when it cannot ask. */
   request?: GameFrame['request'];
@@ -57,7 +57,8 @@ export type GameFrameController = {
   ): () => void;
   pause(): void;
   resume(): void;
-  restoreSave(save: SaveData<unknown>): void;
+  restoreSave(save: SaveData<unknown>): Promise<SaveData<unknown>>;
+  confirmSaveRecovery(): void;
   /**
    * A `save.restore` the running build refused, as a failed Load rather than a frame error. The game keeps running.
    */
@@ -325,10 +326,6 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
 
   const stopStartupRestore = frame.on('save.restored', () => {
     if (pendingStartupRestore) pendingStartupRestore.resolve();
-    else if (current.startupSaveError) {
-      current = { ...current, startupSaveError: false };
-      publish();
-    }
     pendingStartupRestore = undefined;
   });
   const stopStartupWrites = frame.on('save.write', (save) => {
@@ -420,8 +417,17 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     resume: () => {
       frame.send('lifecycle.resume', {});
     },
-    restoreSave: (save) => {
-      frame.send('save.restore', save);
+    restoreSave: async (save) => {
+      if (!frame.restoreSave) throw new Error('Save restore unavailable');
+      const restored = await frame.restoreSave(save);
+      startupWrites.length = 0;
+      return restored;
+    },
+    confirmSaveRecovery: () => {
+      if (current.startupSaveError) {
+        current = { ...current, startupSaveError: false };
+        publish();
+      }
     },
     onSaveLoadError: (callback) => {
       saveLoadErrors.add(callback);

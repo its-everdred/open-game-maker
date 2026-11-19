@@ -388,7 +388,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           if (envelope.payload.saveSchemaVersion !== currentVersion) {
             saveMachineState.current?.migrated(save as SaveData<S>);
           }
-          send('save.restored', {}, envelope.id);
+          send('save.restored', { save }, envelope.id);
           return;
         }
         case 'net.players':

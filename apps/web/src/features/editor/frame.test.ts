@@ -236,16 +236,23 @@ describe('game frame adapter', () => {
   });
   it('re-enables saving only after a manual restore is acknowledged', async () => {
     let options: GameFrameOptions | undefined;
-    let restored!: () => void;
+    let restored!: (save: { saveSchemaVersion: number; data: unknown }) => void;
+    let lateAck!: () => void;
     const frame = {
       bridge: { dropped: 0 },
       on: vi.fn((type: string, callback: () => void) => {
-        if (type === 'save.restored') restored = callback;
+        if (type === 'save.restored') lateAck = callback;
         return vi.fn();
       }),
       setMode: vi.fn(),
       setSettings: vi.fn(),
       send: vi.fn(),
+      restoreSave: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            restored = resolve;
+          }),
+      ),
       dispose: vi.fn(),
     };
     const controller = mountGameFrame({
@@ -265,9 +272,13 @@ describe('game frame adapter', () => {
     });
     options?.onReady?.(manifest, [], true);
     await vi.waitFor(() => expect(controller.state().startupSaveError).toBe(true));
-    controller.restoreSave({ saveSchemaVersion: 1, data: {} });
+    lateAck();
     expect(controller.state().startupSaveError).toBe(true);
-    restored();
+    const recovery = controller.restoreSave({ saveSchemaVersion: 1, data: {} });
+    expect(controller.state().startupSaveError).toBe(true);
+    restored({ saveSchemaVersion: 1, data: {} });
+    await recovery;
+    controller.confirmSaveRecovery();
     expect(controller.state().startupSaveError).toBe(false);
     controller.dispose();
   });
@@ -318,6 +329,7 @@ describe('game frame adapter', () => {
       setSettings: vi.fn(),
       send: vi.fn(),
       project: vi.fn().mockResolvedValue([2, 0, -1]),
+      restoreSave: vi.fn(async (save) => save),
       dispose: vi.fn(),
     };
     const states: Array<{ bridgeState: string; dropped: number }> = [];
@@ -374,7 +386,7 @@ describe('game frame adapter', () => {
     const secondPlacement = controller.validatePlacement('bat', { position: [3, 0, 4] });
     controller.pause();
     controller.resume();
-    controller.restoreSave({ saveSchemaVersion: 1, data: { room: 'crypt' } });
+    await controller.restoreSave({ saveSchemaVersion: 1, data: { room: 'crypt' } });
     expect(frame.send).toHaveBeenCalledWith('editor.pick', { x: 0.25, y: 0.75 });
     expect(frame.send).toHaveBeenCalledWith('editor.select', { ids: ['e_01BX5ZZKBKACTAV9WEVGEMMVRZ'] });
     expect(frame.send).toHaveBeenCalledWith('editor.camera', { mode: 'free' });
@@ -397,7 +409,7 @@ describe('game frame adapter', () => {
     await expect(secondPlacement).resolves.toEqual({ ok: false, reason: 'blocked' });
     expect(frame.send).toHaveBeenCalledWith('lifecycle.pause', {});
     expect(frame.send).toHaveBeenCalledWith('lifecycle.resume', {});
-    expect(frame.send).toHaveBeenCalledWith('save.restore', {
+    expect(frame.restoreSave).toHaveBeenCalledWith({
       saveSchemaVersion: 1,
       data: { room: 'crypt' },
     });

@@ -270,7 +270,10 @@ export function mountSceneryPreview(
     },
     pause: noop,
     resume: noop,
-    restoreSave: noop,
+    restoreSave: async () => {
+      throw new Error('Save restore unavailable');
+    },
+    confirmSaveRecovery: noop,
     onSaveLoadError: () => noop,
     sendRoomMessage: noop,
     onSaveWrite: () => noop,
