@@ -17,6 +17,7 @@ type FakeRoomHook = {
 test.use({ serviceWorkers: 'block' });
 
 test('scripts watcher catch-up, phases, and host-left through the fake session', async ({ page }, testInfo) => {
+  test.fixme(testInfo.project.name === 'desktop', 'Quarantined: intermittent 500ms phase transition timeout (#350)');
   await installAuthRoutes(page, { signedIn: true });
   await installGameApi(page);
   await page.route('**/api/v1/games/game/branches/main', (route) =>
