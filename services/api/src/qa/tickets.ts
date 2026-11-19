@@ -4,6 +4,7 @@ import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import type { QaMedia } from './fixtures.js';
 import { readQaState, updateQaState } from './state.js';
+import { QA_VOICE_ISSUE } from './voice.js';
 
 // Two tickets on the QA game (#873), as aiur's ticket detail (aiur-team/aiur#8043) describes them: one running and one
 // closed, each with a picture, a clip and a sound, a summary and a timeline with a creator verdict. The hammer panel
@@ -63,7 +64,8 @@ export function deleteTicketFixtures(deps: AppDeps, run?: string) {
   updateQaState(deps.db, (state) => {
     state.tickets = (state.tickets ?? []).filter(
       (ticket) =>
-        run !== undefined && ticket.identifier !== runningTicket(run) && ticket.identifier !== closedTicket(run),
+        ticket.identifier === String(QA_VOICE_ISSUE) ||
+        (run !== undefined && ticket.identifier !== runningTicket(run) && ticket.identifier !== closedTicket(run)),
     );
   });
 }

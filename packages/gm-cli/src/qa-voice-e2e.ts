@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { openRunningTicket, openTicketBuilds } from './qa-review-checks.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
@@ -225,14 +226,16 @@ async function until(check: () => boolean | Promise<boolean>, timeoutMs: number)
   }
 }
 
-async function openChat(page: Page, origin: string): Promise<void> {
+export async function openChat(page: Page, origin: string, title = TITLE): Promise<void> {
   const timeout = { timeout: 20_000 };
   await page.goto(`${origin}/all`, { waitUntil: 'load', timeout: 60_000 });
-  const menu = page.getByRole('button', { name: 'Menu', exact: true });
-  if (await menu.isVisible().catch(() => false)) await menu.click(timeout);
-  await page.locator('button[aria-controls="studio-menu-jobs"]').click(timeout);
-  await page.getByRole('button', { name: new RegExp(`^${TITLE}`, 'u') }).click(timeout);
-  await page.getByRole('dialog', { name: TITLE }).waitFor(timeout);
+  await openTicketBuilds(page);
+  await openRunningTicket(page, title);
+  await page.getByRole('dialog', { name: title }).getByRole('button', { name: 'Conversation' }).click(timeout);
+  await page
+    .getByRole('dialog', { name: title })
+    .and(page.locator('.job-conversation-dialog:not(.ticket-detail-dialog)'))
+    .waitFor(timeout);
 }
 
 export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promise<VoiceE2eResult> {
@@ -266,7 +269,9 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       await page.screenshot({ path: file });
       stills.push(file);
     };
-    const dialog = page.getByRole('dialog', { name: TITLE });
+    const dialog = page
+      .getByRole('dialog', { name: TITLE })
+      .and(page.locator('.job-conversation-dialog:not(.ticket-detail-dialog)'));
 
     try {
       await openChat(page, config.origin);
