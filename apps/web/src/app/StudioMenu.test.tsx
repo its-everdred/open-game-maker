@@ -278,6 +278,12 @@ describe('StudioMenu', () => {
     expect(workerHooks.observed).toHaveBeenLastCalledWith([{ id: 'mine', title: 'Mine', ownerId: 'user-1' }]);
   });
 
+  it('does not put the decision count on the sound control', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.decisions = [decision('d1'), decision('d2')];
+    renderMenu('/all');
+    expect(screen.getByRole('button', { name: 'Mute' }).querySelector('.studio-menu-badge')).toBeNull();
+  });
   it.each(['/all', '/all/', '/new', '/new/'])('keeps the sound control directly available on %s', (path) => {
     renderMenu(path);
     const volume = screen.getByRole('button', { name: 'Mute' });

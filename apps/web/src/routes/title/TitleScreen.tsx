@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 
 import { InstanceLogo } from '../../app/InstanceLogo';
@@ -7,16 +7,22 @@ import { useSession } from '../../lib/api/session';
 import { FocusZone, useFocusable, useInitialFocus } from '../../lib/input';
 import { set } from '../../lib/sound';
 import { TitleTown } from './TitleTown';
+import { preloadGames } from '../games/gamesCache';
 import './title.css';
 
 export function TitleScreen({ townSrc }: { townSrc?: string }) {
   const { data: session } = useSession();
   const navigate = useNavigate();
+  const enteringGames = useRef(false);
   useInitialFocus('title-menu');
+
+  useEffect(() => preloadGames(session?.user.id), [session?.user.id]);
 
   useEffect(() => {
     set('title');
-    return () => set('off');
+    return () => {
+      if (!enteringGames.current) set('off');
+    };
   }, []);
 
   return (
@@ -29,7 +35,13 @@ export function TitleScreen({ townSrc }: { townSrc?: string }) {
       <FocusZone id="title-menu" className="title-menu">
         <MenuButton
           className="title-start"
-          onClick={() => navigate(session ? '/all' : `/signin?next=${encodeURIComponent('/all')}`)}
+          onClick={() => {
+            if (session) {
+              enteringGames.current = true;
+              set('menu');
+            }
+            navigate(session ? '/all' : `/signin?next=${encodeURIComponent('/all')}`);
+          }}
         >
           Start
         </MenuButton>

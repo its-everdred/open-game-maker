@@ -8,6 +8,12 @@ import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 import { GamesScreen } from './GamesScreen';
 import { startTrailer } from './trailerVideo';
 
+const session = vi.hoisted(() => ({ userId: undefined as string | undefined }));
+vi.mock('../../lib/api/session', () => ({
+  useSession: () => ({ data: session.userId ? { user: { id: session.userId } } : undefined }),
+}));
+vi.mock('../../lib/sound', () => ({ set: vi.fn(), getVolume: () => 1, status: () => 'on', onChange: () => () => {} }));
+
 const games = [
   {
     id: 'g_1',
@@ -144,6 +150,8 @@ function setGridColumns(columns: number) {
 }
 
 beforeEach(() => {
+  session.userId = undefined;
+  localStorage.clear();
   gamesResponse = games;
   jobsResponse = jobs;
   commandsResponse = [];
@@ -435,6 +443,28 @@ describe('GamesScreen', () => {
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
   });
 
+  it('shows the saved library immediately while refreshing it', async () => {
+    session.userId = 'user-1';
+    localStorage.setItem('ogm.games.v1.user-1', JSON.stringify(games));
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/api/v1/games')) return new Promise<Response>(() => {});
+      return json({ jobs });
+    });
+    setGridColumns(20);
+    renderGames();
+    expect(screen.getAllByRole('button', { name: /Midnight Crumbs/ }).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Building 40%')).toBeVisible();
+    expect(screen.queryByRole('progressbar', { name: 'Loading' })).toBeNull();
+    expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
+  });
+
+  it('shows a wordless loading bar while the first library request is pending', () => {
+    vi.mocked(fetch).mockImplementation(async () => new Promise<Response>(() => {}));
+    renderGames();
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading your games…')).toBeNull();
+  });
+
   it('keeps cached tiles visible and offers retry when a refresh fails', async () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -443,7 +473,7 @@ describe('GamesScreen', () => {
       return json({ error: 'not_found' }, 404);
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(['games'], games);
+    client.setQueryData(['games', undefined], games);
 
     const { container } = renderGames('/all', client);
 
