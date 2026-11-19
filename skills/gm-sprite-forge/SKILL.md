@@ -15,3 +15,11 @@ python skills/gm-sprite-forge/scripts/measure_sheet.py path/to/prop.png
 ```
 
 The script reads the input and prints JSON; it does not modify the image. Use the matching cell size for the sheet. The numbers describe the reference packs, not an automatic pass/fail score.
+
+For calibrated CPU rendering, install Pillow, NumPy, SciPy and scikit-image in a local Python environment and make Blender 4.3 available on PATH. Render a 15-frame, eight-direction sheet from a Blender file with:
+
+```sh
+python skills/gm-sprite-forge/scripts/render_sheet.py blend output/walk.png --mesh model.blend --start 1 --end 30 --cell 64 --derived-from "source model" --shadow-sheet output/walk-shadow.png
+```
+
+The Blender import keeps mesh materials and animation, but ignores source cameras and lights; prepare the mesh with the desired materials before rendering. The script samples the inclusive animation range evenly, renders at lowered CPU priority, and writes a JSON manifest beside the sheet. Add `--ai-generated` when the source or output is AI-assisted. `cube`, `rock`, and `hull` are also available; `hull` takes an OBJ via `--mesh`. The separate shadow sheet contains black partial-alpha shadow pixels; without it, those pixels remain in the main sheet. For four 256-pixel prop views or the tile calibration, run `blender -b --python skills/gm-sprite-forge/scripts/blender_iso_rig.py -- tile output/ samples=1`. The hull carver and finisher expose their arguments with `--help`. Never write into a pack directory.
