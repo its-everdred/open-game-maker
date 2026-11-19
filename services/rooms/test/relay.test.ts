@@ -29,6 +29,14 @@ describe('GameRoom relay rules', () => {
     await harness.testServer.shutdown();
   });
 
+  it('uses an isolated port for the relay server', () => {
+    const address = harness.gameServer.transport.server?.address();
+    expect(address).toBeTruthy();
+    expect(typeof address).toBe('object');
+    if (address === null || address === undefined || typeof address === 'string') throw new Error('not a TCP listener');
+    expect(address.port).not.toBe(2568);
+  });
+
   it('keeps a new room available while client setup takes over one second', async () => {
     const room = await newRoom(harness.testServer);
     await sleep(1_200);
