@@ -12,6 +12,7 @@ import {
   rejectionCode,
   sleep,
   startHarness,
+  waitFor,
   type Harness,
 } from './helpers.js';
 
@@ -227,7 +228,7 @@ describe('GameRoom lifecycle', () => {
       timings: { ...defaultTimings, idleDisposeSec: 0.08 },
     });
 
-    await sleep(180);
+    await waitFor(() => harness.testServer.getRoomById(room.roomId) === undefined, 'idle room disposal', 5_000);
     expect(harness.testServer.getRoomById(room.roomId)).toBeUndefined();
     expect(callbacks.at(-1)?.body.reason).toBe('idle');
   });
@@ -239,7 +240,11 @@ describe('GameRoom lifecycle', () => {
       timings: { ...defaultTimings, idleDisposeSec: 0.05, callbackRetryMs: [5, 10, 20] },
     });
 
-    await sleep(180);
+    await waitFor(
+      () => harness.testServer.getRoomById(room.roomId) === undefined,
+      'room disposal after callback retries',
+      5_000,
+    );
     expect(harness.testServer.getRoomById(room.roomId)).toBeUndefined();
     expect(callbacks).toHaveLength(4);
     expect(error).toHaveBeenCalledTimes(1);
@@ -258,7 +263,11 @@ describe('GameRoom lifecycle', () => {
       },
     });
 
-    await sleep(250);
+    await waitFor(
+      () => harness.testServer.getRoomById(room.roomId) === undefined,
+      'room disposal after callback timeouts',
+      5_000,
+    );
     expect(harness.testServer.getRoomById(room.roomId)).toBeUndefined();
     expect(callbacks).toHaveLength(3);
     expect(error).toHaveBeenCalledTimes(1);
