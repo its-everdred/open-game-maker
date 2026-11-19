@@ -302,15 +302,14 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       await page.mouse.up();
       await until(async () => dictationFailure(await textbox.inputValue()) === null, wait);
       const text = await textbox.inputValue();
-      await still('dictation');
       const failure = dictationFailure(text);
-      steps.push({
-        name: 'dictation',
-        ok: failure === null,
-        ...(failure ? { failure, url: page.url() } : { detail: text }),
-      });
-      // The words stay a draft: the run never sends them.
-      await textbox.fill('');
+      if (failure) await failed('dictation', new StepFailed(failure));
+      else {
+        await still('dictation');
+        // The words stay a draft: the run never sends them.
+        await textbox.fill('');
+        steps.push({ name: 'dictation', ok: true, detail: text });
+      }
     } catch (error) {
       await failed('dictation', error);
     }

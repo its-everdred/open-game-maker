@@ -32,7 +32,7 @@ export type ReviewE2eConfig = {
   stamp: string;
 };
 
-export type ViewportResult = { viewport: string; ok: boolean; failure?: string; stills: string[] };
+export type ViewportResult = { viewport: string; ok: boolean; failure?: string; stills: string[]; url?: string };
 
 export const NOTE = 'QA note';
 export const PICK_NOTE = 'QA pick';
@@ -107,7 +107,7 @@ async function step<T>(name: string, run: () => Promise<T>): Promise<T> {
     return await run();
   } catch (error) {
     if (error instanceof StepFailed) throw error;
-    throw new StepFailed(`${name}: ${(error as Error).message.split('\n')[0]}`);
+    throw new StepFailed(`${name}: ${(error as Error).message}`);
   }
 }
 
@@ -121,6 +121,7 @@ async function runViewport(
   const stills: string[] = [];
   const media = (file: string) => readFileSync(new URL(file, MEDIA_DIR)).toString('base64');
   const context = await browser.newContext({ viewport, deviceScaleFactor: 2, hasTouch: true });
+  let ticketPage: Page | undefined;
   // Whether --break-media found the review picture to break; a run that broke nothing proves nothing.
   let broke = false;
   try {
@@ -133,15 +134,17 @@ async function runViewport(
       }),
     });
     await context.addCookies([{ ...config.cookie, url: config.origin }]);
-    const ticketPage = await context.newPage();
+    ticketPage = await context.newPage();
+    const ticketActive = ticketPage;
     await step('open a running and a closed ticket', () =>
-      ticketDetailSteps(ticketPage, config.origin, async (label) => {
+      ticketDetailSteps(ticketActive, config.origin, async (label) => {
         const file = join(config.out, `${name}-${stills.length + 1}-${label}.png`);
-        await ticketPage.screenshot({ path: file });
+        await ticketActive.screenshot({ path: file });
         stills.push(file);
       }),
     );
     await ticketPage.close();
+    ticketPage = undefined;
     const seeded = await internal(config, '/review-fixtures', {
       method: 'POST',
       body: JSON.stringify({
@@ -264,10 +267,26 @@ async function runViewport(
       return { viewport: name, ok: false, failure: '--break-media broke no picture', stills };
     return failure === null ? { viewport: name, ok: true, stills } : { viewport: name, ok: false, failure, stills };
   } catch (error) {
-    const failure = (error as Error).message;
+    let failure = (error as Error).message;
+    const url = ticketPage?.url();
+    if (ticketPage) {
+      const file = join(config.out, `${name}-${stills.length + 1}-ticket-failure.png`);
+      try {
+        await ticketPage.screenshot({ path: file });
+        stills.push(file);
+      } catch (captureError) {
+        failure += `\nScreenshot failed: ${String(captureError)}`;
+      }
+    }
     if (config.breakMedia && !broke)
-      return { viewport: name, ok: false, failure: `--break-media broke no picture (${failure})`, stills };
-    return { viewport: name, ok: false, failure, stills };
+      return {
+        viewport: name,
+        ok: false,
+        failure: `--break-media broke no picture (${failure})`,
+        stills,
+        ...(url ? { url } : {}),
+      };
+    return { viewport: name, ok: false, failure, stills, ...(url ? { url } : {}) };
   } finally {
     await context.close();
     await internal(config, `/review-fixtures/${run}`, { method: 'DELETE' }).catch(() => undefined);

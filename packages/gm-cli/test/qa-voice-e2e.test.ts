@@ -16,7 +16,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const frame = (value: Record<string, unknown>) => JSON.stringify(value);
 
-it('records a screenshot, URL and full locator failure for each failed voice step', async () => {
+it.each([false, true])('records each voice failure even when screenshot capture fails: %s', async (captureFails) => {
   const out = tempDir();
   const locator = { and: () => locator, isVisible: async () => false };
   const page = {
@@ -27,7 +27,10 @@ it('records a screenshot, URL and full locator failure for each failed voice ste
       throw new Error('locator.click: timeout\nwaiting for QA voice');
     },
     url: () => 'https://app.example.test/all',
-    screenshot: async ({ path }: { path: string }) => writeFileSync(path, 'still'),
+    screenshot: async ({ path }: { path: string }) => {
+      if (captureFails) throw new Error('capture unavailable');
+      writeFileSync(path, 'still');
+    },
   };
   const context = {
     addCookies: async () => {},
@@ -48,10 +51,11 @@ it('records a screenshot, URL and full locator failure for each failed voice ste
     out,
     stamp: 'run-1',
   });
-  expect(result.stills).toHaveLength(2);
+  expect(result.stills).toHaveLength(captureFails ? 0 : 2);
   for (const step of result.steps) {
     expect(step).toMatchObject({ ok: false, url: 'https://app.example.test/all' });
     expect(step.failure).toContain('waiting for QA voice');
+    if (captureFails) expect(step.failure).toContain('Screenshot failed: Error: capture unavailable');
   }
   expect(JSON.parse(readFileSync(join(out, 'voice-e2e.json'), 'utf8')).stills).toEqual(result.stills);
 });
