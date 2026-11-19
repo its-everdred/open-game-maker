@@ -62,11 +62,18 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => {
+async function cleanupTest() {
   cleanup();
+  // Nanostores delays session cleanup after the last unsubscribe.
+  await vi.waitFor(
+    () => expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy(),
+    { timeout: 3_000 },
+  );
   vi.unstubAllGlobals();
   Reflect.deleteProperty(window.navigator, 'vibrate');
-});
+}
+
+afterEach(cleanupTest);
 
 function renderScreen(entry = '/new?step=genre') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -86,6 +93,17 @@ function button(label: string): HTMLButtonElement {
 }
 
 describe('NewGameScreen', () => {
+  it('unsubscribes from the real session atom', () => {
+    const atom = authClient.$store.atoms.session;
+    const unsubscribe = atom.listen(() => {});
+    expect((atom as unknown as { active?: boolean }).active).toBe(true);
+    unsubscribe();
+  });
+
+  it('releases the session atom between tests', () => {
+    expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy();
+  });
+
   it('uses the prototype three-part wizard header without extra navigation copy', () => {
     const { container } = renderScreen();
 
