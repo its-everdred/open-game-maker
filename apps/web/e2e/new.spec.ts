@@ -215,72 +215,66 @@ test('style detail fits its media and navigation into phone and desktop viewport
               box.right <= window.innerWidth,
           };
         });
-      await expect
-        .poll(
-          () =>
-            controls
-              .or(tracks)
-              .or(stopRow)
-              .evaluateAll(boxesFor)
-              .then((boxes) => ({ count: boxes.length, outside: boxes.filter(({ inViewport }) => !inViewport) })),
-          { message: `style layout settled at ${viewport.width}x${viewport.height}` },
-        )
-        .toEqual({ count: 8, outside: [] });
-      const [controlBoxes, trackBoxes, stopRowBoxes, layoutBoxes] = await Promise.all([
-        controls.evaluateAll(boxesFor),
-        tracks.evaluateAll(boxesFor),
-        stopRow.evaluateAll(boxesFor),
-        page
-          .locator('.new-game-screen, .new-game-body, .new-style-step, .new-style-detail, .new-style-showcase-detail')
-          .evaluateAll(boxesFor),
-      ]);
-      const screenStyle = await page.locator('.new-game-screen').evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          paddingTop: style.paddingTop,
-          paddingBottom: style.paddingBottom,
-          gridTemplateRows: style.gridTemplateRows,
-          matchesDetail: element.matches(':has(.new-style-detail)'),
-        };
-      });
-      const [diorama, sheet] = trackBoxes;
+      // Retry the complete layout check: one track fitting does not mean the other controls have settled.
+      await expect(async () => {
+        const [controlBoxes, trackBoxes, stopRowBoxes, layoutBoxes] = await Promise.all([
+          controls.evaluateAll(boxesFor),
+          tracks.evaluateAll(boxesFor),
+          stopRow.evaluateAll(boxesFor),
+          page
+            .locator('.new-game-screen, .new-game-body, .new-style-step, .new-style-detail, .new-style-showcase-detail')
+            .evaluateAll(boxesFor),
+        ]);
+        const screenStyle = await page.locator('.new-game-screen').evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            paddingTop: style.paddingTop,
+            paddingBottom: style.paddingBottom,
+            gridTemplateRows: style.gridTemplateRows,
+            matchesDetail: element.matches(':has(.new-style-detail)'),
+          };
+        });
+        const [diorama, sheet] = trackBoxes;
 
-      expect(controlBoxes).toHaveLength(5);
-      expect(trackBoxes).toHaveLength(2);
-      expect(stopRowBoxes).toHaveLength(1);
-      const measuredBoxes = [...controlBoxes, ...trackBoxes, ...stopRowBoxes];
-      expect(
-        measuredBoxes.every(({ inViewport }) => inViewport),
-        `viewport ${viewport.width}x${viewport.height}: ${JSON.stringify(measuredBoxes)} layout=${JSON.stringify(layoutBoxes)}`,
-      ).toBe(true);
-      expect(Math.abs(diorama!.width - sheet!.width)).toBeLessThanOrEqual(1);
-      expect(Math.abs(diorama!.height - sheet!.height)).toBeLessThanOrEqual(1);
-      const styleArrowBoxes = controlBoxes.filter(({ name }) => name === 'Previous style' || name === 'Next style');
-      if (viewport.width <= 600) {
+        expect(controlBoxes).toHaveLength(5);
+        expect(trackBoxes).toHaveLength(2);
+        expect(stopRowBoxes).toHaveLength(1);
+        const measuredBoxes = [...controlBoxes, ...trackBoxes, ...stopRowBoxes];
         expect(
-          diorama!.bottom,
-          `viewport ${viewport.width}x${viewport.height}: tracks=${JSON.stringify(trackBoxes)} layout=${JSON.stringify(layoutBoxes)} screen=${JSON.stringify(screenStyle)}`,
-        ).toBeLessThanOrEqual(sheet!.top);
-        expect(
-          styleArrowBoxes.every((box) => Math.abs(box.top + box.height / 2 - (diorama.top + diorama.height / 2)) <= 1),
+          measuredBoxes.every(({ inViewport }) => inViewport),
+          `viewport ${viewport.width}x${viewport.height}: ${JSON.stringify(measuredBoxes)} layout=${JSON.stringify(layoutBoxes)}`,
         ).toBe(true);
-        expect(styleArrowBoxes.every((box) => box.left >= diorama!.left && box.right <= diorama!.right)).toBe(true);
-        expect(styleArrowBoxes[0]!.left).toBeLessThan(diorama!.left + diorama!.width / 4);
-        expect(styleArrowBoxes[1]!.right).toBeGreaterThan(diorama!.right - diorama!.width / 4);
-        expect(styleArrowBoxes.every((box) => box.width >= 44 && box.height >= 44)).toBe(true);
+        expect(Math.abs(diorama!.width - sheet!.width)).toBeLessThanOrEqual(1);
+        expect(Math.abs(diorama!.height - sheet!.height)).toBeLessThanOrEqual(1);
+        const styleArrowBoxes = controlBoxes.filter(({ name }) => name === 'Previous style' || name === 'Next style');
+        if (viewport.width <= 600) {
+          expect(
+            diorama!.bottom,
+            `viewport ${viewport.width}x${viewport.height}: tracks=${JSON.stringify(trackBoxes)} layout=${JSON.stringify(layoutBoxes)} screen=${JSON.stringify(screenStyle)}`,
+          ).toBeLessThanOrEqual(sheet!.top);
+          expect(
+            styleArrowBoxes.every(
+              (box) => Math.abs(box.top + box.height / 2 - (diorama.top + diorama.height / 2)) <= 1,
+            ),
+          ).toBe(true);
+          expect(styleArrowBoxes.every((box) => box.left >= diorama!.left && box.right <= diorama!.right)).toBe(true);
+          expect(styleArrowBoxes[0]!.left).toBeLessThan(diorama!.left + diorama!.width / 4);
+          expect(styleArrowBoxes[1]!.right).toBeGreaterThan(diorama!.right - diorama!.width / 4);
+          expect(styleArrowBoxes.every((box) => box.width >= 44 && box.height >= 44)).toBe(true);
+          expect(
+            diorama!.width,
+            `viewport ${viewport.width}x${viewport.height}: tracks=${JSON.stringify(trackBoxes)} layout=${JSON.stringify(layoutBoxes)} screen=${JSON.stringify(screenStyle)}`,
+          ).toBeGreaterThanOrEqual(viewport.width - 1);
+        } else {
+          expect(Math.abs(diorama!.width - diorama!.height)).toBeLessThanOrEqual(1);
+          expect(Math.abs(sheet!.width - sheet!.height)).toBeLessThanOrEqual(1);
+          expect(Math.abs(diorama!.top - sheet!.top)).toBeLessThanOrEqual(1);
+        }
         expect(
-          diorama!.width,
-          `viewport ${viewport.width}x${viewport.height}: tracks=${JSON.stringify(trackBoxes)} layout=${JSON.stringify(layoutBoxes)} screen=${JSON.stringify(screenStyle)}`,
-        ).toBeGreaterThanOrEqual(viewport.width - 1);
-      } else {
-        expect(Math.abs(diorama!.width - diorama!.height)).toBeLessThanOrEqual(1);
-        expect(Math.abs(sheet!.width - sheet!.height)).toBeLessThanOrEqual(1);
-        expect(Math.abs(diorama!.top - sheet!.top)).toBeLessThanOrEqual(1);
-      }
-      expect(
-        Math.max(diorama!.bottom, sheet!.bottom),
-        `viewport ${viewport.width}x${viewport.height}: tracks=${JSON.stringify(trackBoxes)} stops=${JSON.stringify(stopRowBoxes)} layout=${JSON.stringify(layoutBoxes)}`,
-      ).toBeLessThanOrEqual(stopRowBoxes[0]!.top);
+          Math.max(diorama!.bottom, sheet!.bottom),
+          `viewport ${viewport.width}x${viewport.height}: tracks=${JSON.stringify(trackBoxes)} stops=${JSON.stringify(stopRowBoxes)} layout=${JSON.stringify(layoutBoxes)}`,
+        ).toBeLessThanOrEqual(stopRowBoxes[0]!.top);
+      }).toPass({ timeout: 5_000 });
     });
   }
 
