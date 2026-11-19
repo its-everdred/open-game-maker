@@ -9,10 +9,13 @@ afterEach(() => {
 
 describe('save thumbnail', () => {
   it('captures the largest game canvas at a bounded size', () => {
+    const small = document.createElement('canvas');
+    small.width = 100;
+    small.height = 100;
     const source = document.createElement('canvas');
     source.width = 800;
     source.height = 450;
-    document.body.append(source);
+    document.body.append(small, source);
     const drawImage = vi.fn();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       drawImage,
