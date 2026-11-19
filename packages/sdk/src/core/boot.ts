@@ -9,6 +9,7 @@ import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
 import { GM_PAUSED_FLAG, GM_PAUSE_EVENT } from '../audio/unlock.js';
 import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
+import { createSaveThumbnailCache } from '../saves/thumbnail.js';
 import { installQa } from './qa.js';
 import { dispatchTest } from '../test/dispatch.js';
 import { SdkHooks } from '../test/hooks.js';
@@ -182,7 +183,12 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     const hooks = new SdkHooks(runtime, module.manifest, marks);
     runtime.attachHooks(hooks);
     host.test.register(hooks);
-    const saveMachine = createSaveMachine({ instance, send });
+    const thumbnails =
+      module.manifest.saves && module.manifest.manualSaveSlots
+        ? createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) })
+        : undefined;
+    if (thumbnails) runtime.addCleanup(() => thumbnails.dispose());
+    const saveMachine = createSaveMachine({ instance, send, captureThumbnail: () => thumbnails?.current() });
     saveMachineState.current = saveMachine;
     runtime.addCleanup(() => saveMachine.dispose());
     runtime.onStep(() => saveMachine.markDirty());
@@ -190,6 +196,14 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       saveMachine.markDirty();
       saveMachine.checkpoint();
     });
+
+    // Hold before announcing readiness, so no simulation step can race an initial restore.
+    if (hello.payload.startupHold) {
+      lifecyclePaused = true;
+      announcePause(true);
+      runtime.clock.pause();
+      instance.pause();
+    }
 
     // Inline literal check: a bundler that defines __GM_BUILD__ as 'published' drops the adapter chunk.
     if (!(typeof __GM_BUILD__ !== 'undefined' && __GM_BUILD__ === 'published') && build !== 'published') {
@@ -221,6 +235,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       manifest: readyManifest(module.manifest, instance),
       marks,
       firstFrameSignal: true,
+      ...(hello.payload.startupHold ? { startupHold: true } : {}),
     });
     // A game may draw during mount. Check only after its startup continuation can mark itself unready.
     if (!options.headless && typeof requestAnimationFrame === 'function') {
@@ -376,11 +391,15 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
               return;
             }
             save = active.instance.migrate(save);
+            if (!save.thumbnail && envelope.payload.thumbnail)
+              save = { ...save, thumbnail: envelope.payload.thumbnail };
           }
           active.instance.restore(save as SaveData<S>);
+          saveMachineState.current?.restored(save as SaveData<S>);
           if (envelope.payload.saveSchemaVersion !== currentVersion) {
             saveMachineState.current?.migrated(save as SaveData<S>);
           }
+          send('save.restored', { save }, envelope.id);
           return;
         }
         case 'net.players':

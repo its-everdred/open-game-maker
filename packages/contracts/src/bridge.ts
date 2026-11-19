@@ -70,7 +70,15 @@ const empty = z.looseObject({});
 const netData = z.string().max(NET_DATA_MAX_CHARS);
 const netSnapshot = z.looseObject({ seq: z.number().int().min(0), tick: z.number().int().min(0), data: netData });
 const netEvent = z.looseObject({ seq: z.number().int().min(0), data: netData });
-const save = z.looseObject({ saveSchemaVersion: z.number().int().min(0), data: z.unknown() });
+const save = z.looseObject({
+  saveSchemaVersion: z.number().int().min(0),
+  data: z.unknown(),
+  thumbnail: z
+    .string()
+    .max(32768)
+    .regex(/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/u)
+    .optional(),
+});
 const playMode = z.enum(['play', 'edit']);
 const testMs = z.looseObject({ ms: z.number().min(0) });
 const cameraCommand = z.looseObject({ mode: z.enum(['follow', 'free']), target: z.string().min(1).optional() });
@@ -88,6 +96,7 @@ export const hostToGameSchema = z
         capabilities: z.array(z.string()),
         mode: z.enum(['play', 'edit', 'test']),
         build: z.enum(['draft', 'test', 'published']),
+        startupHold: z.boolean().optional(),
         playerIndex: z
           .number()
           .int()
@@ -261,6 +270,7 @@ export const gameToHostSchema = z
         manifest: gameManifestSchema,
         marks: z.array(z.tuple([z.string(), z.number()])),
         firstFrameSignal: z.boolean().optional(),
+        startupHold: z.boolean().optional(),
       }),
     ),
     envelope('load.frame', z.looseObject({})),
@@ -306,6 +316,7 @@ export const gameToHostSchema = z
     envelope('input.rawKey', z.looseObject({ code: z.string().max(32), down: z.boolean() })),
     /** The host fills identity and slot. */
     envelope('save.write', save),
+    envelope('save.restored', z.looseObject({ save: save.optional() })),
     envelope(
       'event',
       z.looseObject({ kind: z.enum(['achievement', 'analytics', 'checkpoint']), payload: z.unknown() }),

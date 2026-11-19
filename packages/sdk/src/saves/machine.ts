@@ -11,6 +11,7 @@ export interface SaveMachine<S> {
   checkpoint(): void;
   hidden(): void;
   interval(): void;
+  restored(save: SaveData<S>): void;
   migrated(save: SaveData<S>): void;
   savedCloud(): void;
   conflict(): void;
@@ -26,6 +27,7 @@ export function createSaveMachine<S>(options: {
   onState?: (state: SaveState) => void;
   intervalMs?: number;
   visibilityDocument?: Pick<Document, 'addEventListener' | 'removeEventListener' | 'visibilityState'>;
+  captureThumbnail?: () => string | undefined;
 }): SaveMachine<S> {
   let currentState: SaveState = 'idle';
   let dirty = false;
@@ -43,6 +45,12 @@ export function createSaveMachine<S>(options: {
       if (options.instance.canSaveNow?.() === false) save = structuredClone(lastSafe);
       else {
         save = options.instance.serialize();
+        const thumbnail = options.captureThumbnail?.();
+        if (thumbnail) {
+          const pictured = { ...save, thumbnail };
+          // Leave room for the bridge envelope and do not make a previously valid large save too big.
+          if (new TextEncoder().encode(JSON.stringify(pictured)).byteLength < 200_000) save = pictured;
+        }
         lastSafe = structuredClone(save);
       }
     } else {
@@ -69,6 +77,10 @@ export function createSaveMachine<S>(options: {
     checkpoint: () => write('checkpoint'),
     hidden: () => write('hidden'),
     interval: () => write('interval'),
+    restored: (save) => {
+      lastSafe = structuredClone(save);
+      dirty = false;
+    },
     migrated: (save) => write('migration', save),
     savedCloud: () => transition('saved_cloud'),
     conflict: () => transition('conflict'),

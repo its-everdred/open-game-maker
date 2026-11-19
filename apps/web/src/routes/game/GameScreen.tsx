@@ -17,14 +17,12 @@ import {
   getEditorStage,
   getPreviewDesign,
   getScenerySource,
-  getOptionalReapply,
   listJobs,
   postAnalyticsEvent,
   NO_BUILD_ID,
   submitReapply,
   type DesignSnapshot,
 } from '../../features/editor/api';
-import { inspectBuildChange, readyBuildSignal } from '../../features/editor/builds';
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
 import { FocusZone } from '../../lib/input';
@@ -64,10 +62,12 @@ import { useBranches } from '../games/useBranches';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
 import { LoadingLayer } from './LoadingLayer';
 import { gameLoadActivity } from './load-analytics';
-import { useAwayPause } from './away-pause';
+import { readAway, useAwayPause, useEarlyAwayHold } from './away-pause';
 import { PlatformHud } from './PlatformHud';
 import { roomFacts } from './room-facts';
 import { recordPlay } from './recordPlay';
+import { saveOptions } from './startup-save';
+import { useReadyBuild } from './use-ready-build';
 import { UpdateIndicator } from './UpdateIndicator';
 import { gameExtras, type GameExtraProps } from './extras';
 import './game.css';
@@ -93,7 +93,7 @@ export function GameScreen() {
   const { gameId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { open: menuOpen, setOpen: setMenuOpen } = useGameMenu();
+  const { open: menuOpen, setOpen: setMenuOpen, setMoreHost, setCloseLocked } = useGameMenu();
   const branch = searchParams.get('v')?.trim() || 'main';
   const roomId = searchParams.get('room')?.trim() || undefined;
   const isGameRoute = useMatch('/g/:gameId') !== null;
@@ -125,9 +125,16 @@ export function GameScreen() {
   const jobBranch = branches.data?.find(({ id }) => id === branch)?.name === 'main' ? 'main' : branch;
   const containerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<GameFrameController | undefined>(undefined);
+  const awayHold = useRef(false);
+  useEarlyAwayHold(mode === 'play' && roomId === undefined, gameId, awayHold, () => setMenuOpen(true));
   const [frameController, setFrameController] = useState<GameFrameController>();
   const [frameState, setFrameState] = useState(initialFrameState);
   const [frameAttempt, setFrameAttempt] = useState(0);
+  const skipRestore = useRef(false);
+  const menuOpenRef = useRef(menuOpen);
+  const roomIdRef = useRef(roomId);
+  menuOpenRef.current = menuOpen;
+  roomIdRef.current = roomId;
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
@@ -136,8 +143,6 @@ export function GameScreen() {
   const [lastSaveAt, setLastSaveAt] = useState<string>();
   /* Outlives the watcher overlay (unmounted while playing); a new frame starts its game on the default follow camera. */
   const [watcherCamera, setWatcherCamera] = useState<'follow' | 'free'>('follow');
-  const inspectedBuildRef = useRef<string | undefined>(undefined);
-  const inspectedJobRef = useRef<string | undefined>(undefined);
   const activeSnapshot = adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
   const noBuild = activeSnapshot?.buildId === NO_BUILD_ID;
   const designLoadFailed = design.isError && activeSnapshot === undefined;
@@ -365,41 +370,11 @@ export function GameScreen() {
   );
 
   useEffect(() => {
-    inspectedBuildRef.current = undefined;
-    inspectedJobRef.current = undefined;
     setPendingBuild(undefined);
     setLastSaveAt(undefined);
   }, [branch, gameId]);
 
-  useEffect(() => {
-    const signal = readyBuildSignal(jobs.data?.jobs ?? [], jobBranch);
-    if (signal === undefined || signal === inspectedJobRef.current || activeSnapshot === undefined || gameId === '') {
-      return;
-    }
-    inspectedJobRef.current = signal;
-    let active = true;
-    void getDesignSnapshot(gameId, branch)
-      .then(async (next) => {
-        if (!active || next.buildId === activeSnapshot.buildId || inspectedBuildRef.current === next.buildId) return;
-        inspectedBuildRef.current = next.buildId;
-        const change = await inspectBuildChange(activeSnapshot, next, () =>
-          getOptionalReapply(gameId, branch, activeSnapshot.buildId, next.buildId),
-        );
-        if (!active) return;
-        if (change.kind === 'switch') {
-          setAdopted({ gameId, branch, snapshot: change.snapshot });
-        } else if (change.kind === 'review') {
-          setPendingBuild({ snapshot: change.snapshot, report: change.report });
-        }
-      })
-      .catch(() => {
-        inspectedJobRef.current = undefined;
-        inspectedBuildRef.current = undefined;
-      });
-    return () => {
-      active = false;
-    };
-  }, [activeSnapshot, branch, gameId, jobBranch, jobs.data?.jobs]);
+  useReadyBuild({ gameId, branch, jobBranch, activeSnapshot, jobs: jobs.data?.jobs, setAdopted, setPendingBuild });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -414,6 +389,13 @@ export function GameScreen() {
       return;
     }
     setFrameState(initialFrameState);
+    const restoreOnStart = mode === 'play' && roomId === undefined && !activePreview && !skipRestore.current;
+    const away = restoreOnStart ? readAway(gameId, snapshot.buildId) : undefined;
+    if (away) {
+      awayHold.current = true;
+      setMenuOpen(true);
+    }
+    skipRestore.current = false;
     let controller: GameFrameController;
     try {
       controller = activeStage
@@ -427,6 +409,7 @@ export function GameScreen() {
               buildId: activePreview?.accessId ?? snapshot.buildId,
               ...(activePreview ? { preview: true } : {}),
               mode,
+              ...(restoreOnStart ? saveOptions(gameId, roomIdRef, menuOpenRef, away, awayHold) : {}),
               design: activePreview ? previewDesign.data! : snapshot,
               build,
               onState: setFrameState,
@@ -615,7 +598,13 @@ export function GameScreen() {
       mode === 'play' || frameState.manifest?.capabilities.includes('scenery')
         ? {
             actions: [
-              { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
+              {
+                id: 'games',
+                label: 'Games',
+                icon: 'games',
+                onPausePanel: true,
+                onSelect: (): void => void leaveRoom(),
+              },
               ...preferenceAction,
               ...(mode === 'play'
                 ? [
@@ -623,6 +612,7 @@ export function GameScreen() {
                       id: 'edit',
                       label: 'Edit',
                       icon: 'edit',
+                      onPausePanel: true,
                       disabled: room.snapshot?.role === 'peer',
                       onSelect: (): void => {
                         void requestMode('edit');
@@ -676,13 +666,20 @@ export function GameScreen() {
     frameRef.current !== undefined &&
     frameState.manifest !== undefined &&
     activeSnapshot !== undefined;
-  useAwayPause({
-    frame: hudShown ? frameRef.current : undefined,
+  const { onSavePersisted: onAwaySavePersisted, resetAway } = useAwayPause({
+    frame: mode === 'play' ? frameController : undefined,
     gameId,
     buildId: activeSnapshot?.buildId,
     solo: roomId === undefined,
+    captureSaves: hudShown,
     menuOpen,
-    openMenu: () => setMenuOpen(true),
+    openMenu: () => {
+      awayHold.current = true;
+      setMenuOpen(true);
+    },
+    releaseHold: () => {
+      awayHold.current = false;
+    },
   });
 
   return (
@@ -792,9 +789,30 @@ export function GameScreen() {
             serverOffsetMs={room.snapshot?.serverOffsetMs}
             saveContext={{ branch, buildId: activeSnapshot.buildId }}
             saves={frameState.manifest.saves}
+            saveWritesDisabled={frameState.startupSaveError}
+            manualLoadDisabled={frameState.startupRecoveryUnavailable}
+            setCloseLocked={setCloseLocked}
+            onSavePersisted={onAwaySavePersisted}
+            manualSaveSlots={frameState.manifest.manualSaveSlots}
             saveSchema={frameState.manifest.saveSchema}
             migratesFrom={frameState.manifest.migratesFrom}
             onLeave={() => void leaveRoom()}
+            onRestart={
+              roomId === undefined
+                ? () => {
+                    setMenuOpen(false);
+                    resetAway();
+                    skipRestore.current = true;
+                    setFrameAttempt((attempt) => attempt + 1);
+                  }
+                : undefined
+            }
+            onEdit={() => {
+              setMenuOpen(false);
+              void requestMode('edit');
+            }}
+            editDisabled={room.snapshot?.role === 'peer'}
+            onMoreHost={setMoreHost}
             onResume={() => {
               if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });
               setMenuOpen(false);

@@ -1,4 +1,5 @@
 import { schema } from '@ogm/db';
+import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
 import { acquirePlayLease, assertPlayLease, LeaseHeld, LeaseMismatch } from '../src/saves/lease.js';
@@ -67,6 +68,18 @@ function putInput(revision: number, overrides: Record<string, unknown> = {}) {
 }
 
 describe('save store', () => {
+  it('returns the thumbnail from the current save revision', () => {
+    const deps = setup();
+    const thumbnail = 'data:image/webp;base64,YWJj';
+    const payload = gzipSync(JSON.stringify({ saveSchemaVersion: 1, data: {}, thumbnail }));
+    putSaveRevision(deps.sqlite, putInput(0, { payload }));
+    expect(listSaveSlots(deps.sqlite, ids.user, ids.game)[0]?.thumbnail).toBe(thumbnail);
+    putSaveRevision(
+      deps.sqlite,
+      putInput(1, { payload: gzipSync(JSON.stringify({ thumbnail: 'data:text/html,unsafe' })) }),
+    );
+    expect(listSaveSlots(deps.sqlite, ids.user, ids.game)[0]?.thumbnail).toBeUndefined();
+  });
   it('assigns revisions atomically, reports stale heads, and replays idempotency keys', () => {
     const deps = setup();
     const first = putSaveRevision(deps.sqlite, putInput(0));
@@ -119,7 +132,7 @@ describe('save store', () => {
     putSaveRevision(deps.sqlite, putInput(1, { clientSeq: 2, saveSchemaVersion: 2 }));
 
     expect(listSaveSlots(deps.sqlite, ids.user, ids.game)).toMatchObject([
-      { slotId: 'auto', headRevision: 2, headSchema: 2 },
+      { slotId: 'auto', headRevision: 2, headSchema: 2, savedAt: '2026-11-01T16:00:01.000Z' },
     ]);
     expect(countSavesAboveSchema(deps.sqlite, ids.game, 3)).toBe(1);
   });

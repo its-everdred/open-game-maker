@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 
@@ -25,7 +25,8 @@ function frameHarness() {
       return vi.fn();
     }),
     pause: vi.fn(),
-    restoreSave: vi.fn(),
+    restoreSave: vi.fn(async (save) => save),
+    confirmSaveRecovery: vi.fn(),
     resume: vi.fn(),
     setSettings: vi.fn(),
   } as unknown as GameFrameController;
@@ -38,6 +39,12 @@ function frameHarness() {
 }
 
 const saveContext = { branch: 'main', buildId: 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ' };
+
+/** Saves and credits live in Settings, not on the pause panel itself. */
+async function openSettingsSection(name: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+  fireEvent.click(await screen.findByText(name));
+}
 
 afterEach(() => {
   cleanup();
@@ -205,7 +212,7 @@ describe('PlatformHud', () => {
     await waitFor(() => expect(resume).toHaveFocus());
     fireEvent.click(resume);
 
-    expect(onResume).toHaveBeenCalledOnce();
+    await waitFor(() => expect(onResume).toHaveBeenCalledOnce());
     view.rerender(
       <PlatformHud
         build="draft"
@@ -278,6 +285,7 @@ describe('PlatformHud', () => {
 
   it('hides save controls when the later-owned route is unavailable', async () => {
     const test = frameHarness();
+    const list = vi.fn().mockResolvedValue({ available: false });
     render(
       <PlatformHud
         build="draft"
@@ -286,12 +294,87 @@ describe('PlatformHud', () => {
         paused
         saveContext={saveContext}
         saves
-        saveApi={{ list: vi.fn().mockResolvedValue({ available: false }), read: vi.fn(), write: vi.fn() }}
+        saveApi={{ list, read: vi.fn(), write: vi.fn() }}
         onResume={vi.fn()}
       />,
     );
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
-    await waitFor(() => expect(screen.queryByRole('group', { name: 'Save slots' })).not.toBeInTheDocument());
+    expect(screen.queryByText('Saves')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Save slots' })).not.toBeInTheDocument();
+  });
+
+  it('keeps manual slots hidden when the game did not declare them', async () => {
+    const test = frameHarness();
+    const list = vi.fn().mockResolvedValue({ available: true, value: { slots: [] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        saveApi={{ list, read: vi.fn(), write: vi.fn() }}
+        onResume={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.queryByText('Saves')).not.toBeInTheDocument();
+  });
+
+  it('keeps manual loads available but prevents writes after startup restore fails', async () => {
+    const test = frameHarness();
+    const write = vi.fn();
+    const list = vi
+      .fn()
+      .mockResolvedValue({ available: true, value: { slots: [{ slotId: 'auto', headRevision: 1, status: 'ok' }] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        saveWritesDisabled
+        saveApi={{ list, read: vi.fn(), write }}
+        onResume={vi.fn()}
+      />,
+    );
+    await openSettingsSection('Saves');
+    expect(await screen.findByRole('button', { name: 'Load' })).toBeEnabled();
+    await act(async () => {
+      test.saveWrite({ saveSchemaVersion: 1, data: {} });
+      await Promise.resolve();
+    });
+    expect(write).not.toHaveBeenCalled();
+  });
+  it('does not offer unconfirmed manual recovery on an older game build', async () => {
+    const test = frameHarness();
+    const list = vi
+      .fn()
+      .mockResolvedValue({ available: true, value: { slots: [{ slotId: 'auto', headRevision: 1, status: 'ok' }] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        saveWritesDisabled
+        manualLoadDisabled
+        saveApi={{ list, read: vi.fn(), write: vi.fn() }}
+        onResume={vi.fn()}
+      />,
+    );
+    await openSettingsSection('Saves');
+    expect(await screen.findByRole('button', { name: 'Update game to load' })).toBeDisabled();
   });
 
   // A slot the running build cannot read must not offer Load: the SDK would refuse the restore and the host used to
@@ -313,10 +396,12 @@ describe('PlatformHud', () => {
         paused
         saveContext={saveContext}
         saves
+        manualSaveSlots
         saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read, write: vi.fn() }}
         onResume={vi.fn()}
       />,
     );
+    await openSettingsSection('Saves');
     const load = await screen.findByRole('button', { name: 'Load' });
 
     expect(load).toBeEnabled();
@@ -389,11 +474,13 @@ describe('PlatformHud', () => {
         paused
         saveContext={saveContext}
         saves
+        manualSaveSlots
         saveApi={saveApi}
         toast={toast}
         onResume={onResume}
       />,
     );
+    await openSettingsSection('Saves');
     fireEvent.click(await screen.findByRole('button', { name: 'Load' }));
 
     await waitFor(() => expect(test.frame.restoreSave).toHaveBeenCalledWith(save));
@@ -406,7 +493,14 @@ describe('PlatformHud', () => {
 
   it('renders all contract slots and writes game saves into the selected host slot', async () => {
     const test = frameHarness();
-    const slots = [{ slotId: 'auto', headRevision: 4 }] as SaveSlot[];
+    const slots = [
+      {
+        slotId: 'auto',
+        headRevision: 4,
+        savedAt: '2026-11-01T16:00:00.000Z',
+        thumbnail: 'data:image/webp;base64,YWJj',
+      },
+    ] as SaveSlot[];
     const write = vi.fn().mockResolvedValue(undefined);
     render(
       <PlatformHud
@@ -416,18 +510,26 @@ describe('PlatformHud', () => {
         paused
         saveContext={saveContext}
         saves
+        manualSaveSlots
         saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read: vi.fn(), write }}
         onResume={vi.fn()}
       />,
     );
 
-    expect(await screen.findByRole('button', { name: 'Auto save' })).toBeVisible();
+    await openSettingsSection('Saves');
+    expect(await screen.findByRole('button', { name: /Auto save/ })).toBeVisible();
+    expect(document.querySelector('time')).toHaveAttribute('datetime', '2026-11-01T16:00:00.000Z');
+    expect(screen.getByRole('button', { name: /Auto save/ }).querySelector('img')).toHaveAttribute(
+      'src',
+      'data:image/webp;base64,YWJj',
+    );
     expect(screen.getByRole('button', { name: 'Save slot 1' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 2' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save slot 3' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Save slot 3' }));
     test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 2 } });
 
+    await waitFor(() => expect(write).toHaveBeenCalledWith('game', 'auto', expect.anything(), 4, saveContext));
     await waitFor(() =>
       expect(write).toHaveBeenCalledWith(
         'game',
@@ -437,6 +539,135 @@ describe('PlatformHud', () => {
         saveContext,
       ),
     );
+  });
+
+  it('writes to the slot selected when the save event arrived', async () => {
+    const test = frameHarness();
+    let finishAuto!: () => void;
+    const write = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishAuto = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const list = vi.fn().mockResolvedValue({ available: true, value: { slots: [] } });
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        saveApi={{ list, read: vi.fn(), write }}
+        onResume={vi.fn()}
+      />,
+    );
+    await openSettingsSection('Saves');
+    fireEvent.click(await screen.findByRole('button', { name: 'Save slot 1' }));
+    test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 1 } });
+    await waitFor(() => expect(write).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: 'Save slot 2' }));
+    finishAuto();
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    expect(write.mock.calls[1]?.[1]).toBe('1');
+  });
+
+  it('persists the confirmed manual restore to auto before resuming', async () => {
+    const test = frameHarness();
+    const old = { saveSchemaVersion: 1, data: { checkpoint: 'old' } };
+    const loaded = { saveSchemaVersion: 1, data: { checkpoint: 'loaded' } };
+    let finishOld!: () => void;
+    const write = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const slots = [
+      { slotId: 'auto', headRevision: 1, status: 'ok' },
+      { slotId: '1', headRevision: 1, status: 'ok' },
+    ] as SaveSlot[];
+    const read = vi.fn().mockResolvedValue(loaded);
+    const onResume = vi.fn();
+    const setCloseLocked = vi.fn();
+    let finishRestore!: (save: typeof loaded) => void;
+    vi.mocked(test.frame.restoreSave).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishRestore = resolve;
+        }),
+    );
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        setCloseLocked={setCloseLocked}
+        saveApi={{ list: vi.fn().mockResolvedValue({ available: true, value: { slots } }), read, write }}
+        onResume={onResume}
+      />,
+    );
+    await openSettingsSection('Saves');
+    test.saveWrite(old);
+    await waitFor(() => expect(write).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: /Save slot 1/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load' }));
+    expect(setCloseLocked).toHaveBeenCalledWith(true);
+    expect(screen.getByRole('button', { name: 'Save slot 2' })).toBeDisabled();
+    expect(read).not.toHaveBeenCalled();
+    finishOld();
+    await waitFor(() => expect(test.frame.restoreSave).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Save slot 2' }));
+    test.saveWrite(loaded);
+    finishRestore(loaded);
+    await waitFor(() => expect(onResume).toHaveBeenCalledOnce());
+    expect(setCloseLocked).toHaveBeenLastCalledWith(false);
+    await waitFor(() => expect(write.mock.calls.filter((call) => call[1] === 'auto').at(-1)?.[2]).toEqual(loaded));
+    expect(write.mock.calls.some((call) => call[1] === '2')).toBe(false);
+  });
+
+  it('keeps recovery protected when saving the restored state fails', async () => {
+    const test = frameHarness();
+    const slot = { slotId: 'auto', headRevision: 1, status: 'ok' } as SaveSlot;
+    const onResume = vi.fn();
+    const toast = vi.fn();
+    const save = { saveSchemaVersion: 1, data: { checkpoint: 1 } };
+    render(
+      <PlatformHud
+        build="draft"
+        frame={test.frame}
+        gameId="game"
+        paused
+        saveContext={saveContext}
+        saves
+        manualSaveSlots
+        saveWritesDisabled
+        saveApi={{
+          list: vi.fn().mockResolvedValue({ available: true, value: { slots: [slot] } }),
+          read: vi.fn().mockResolvedValue(save),
+          write: vi.fn().mockRejectedValue(new Error('offline')),
+        }}
+        onResume={onResume}
+        toast={toast}
+      />,
+    );
+    await openSettingsSection('Saves');
+    fireEvent.click(await screen.findByRole('button', { name: 'Load' }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Load failed'));
+    expect(test.frame.confirmSaveRecovery).not.toHaveBeenCalled();
+    expect(onResume).not.toHaveBeenCalled();
   });
 
   it('refreshes the slot revision before a second save write', async () => {
@@ -460,7 +691,7 @@ describe('PlatformHud', () => {
       />,
     );
     await waitFor(() => expect(list).toHaveBeenCalledOnce());
-    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledTimes(1));
 
     test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 1 } });
     await waitFor(() => expect(write).toHaveBeenNthCalledWith(1, 'game', 'auto', expect.anything(), 4, saveContext));
@@ -492,7 +723,7 @@ describe('PlatformHud', () => {
       />,
     );
     await waitFor(() => expect(list).toHaveBeenCalledOnce());
-    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(test.frame.onSaveWrite).toHaveBeenCalledTimes(1));
 
     test.saveWrite({ saveSchemaVersion: 1, data: { checkpoint: 1 } });
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Save failed'));
@@ -529,7 +760,7 @@ describe('PlatformHud', () => {
     expect(toast).toHaveBeenCalledWith('Opened the crypt (test)');
   });
 
-  it('shows exact-build credits from pause, including private packs without a download action', async () => {
+  it('shows exact-build credits from pause settings, including private packs without a download action', async () => {
     const test = frameHarness();
     const credits = vi.fn().mockResolvedValue({
       version: 1,
@@ -558,7 +789,7 @@ describe('PlatformHud', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Credits' }));
+    await openSettingsSection('Credits');
 
     expect(await screen.findByText('Synty Pack')).toBeVisible();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toHaveFocus());

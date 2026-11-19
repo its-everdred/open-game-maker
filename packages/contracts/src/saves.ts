@@ -9,6 +9,12 @@ export const SaveSlotSchema = z.looseObject({
   kind: z.enum(['auto', 'manual']),
   label: z.string().optional(),
   headRevision: RevisionSchema,
+  savedAt: IsoTimeSchema.optional(),
+  thumbnail: z
+    .string()
+    .max(32768)
+    .regex(/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/u)
+    .optional(),
   status: z.enum(['ok', 'needs_migration', 'unsupported_old', 'incompatible_after_rollback']),
 });
 export type SaveSlot = z.infer<typeof SaveSlotSchema>;

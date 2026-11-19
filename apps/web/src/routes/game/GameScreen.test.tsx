@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -295,8 +295,20 @@ describe('GameScreen', () => {
     await waitFor(() => expect(screen.getByTestId('menu-theme')).toHaveTextContent('"colour":"#e02020"'));
     expect(screen.getByTestId('menu-theme')).toHaveTextContent('"icon":"pause"');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Paused' })).getByRole('button', { name: 'Edit' }));
     await waitFor(() => expect(screen.queryByTestId('menu-theme')).not.toBeInTheDocument());
+  });
+  // Restart has to start a fresh game, not just close the menu: the frame is mounted again from scratch.
+  it('restarts solo play from the pause panel with a new game frame', async () => {
+    renderGame();
+    await readyPlayFrame();
+    const mounts = host.mountGameFrame.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Paused' })).getByRole('button', { name: 'Restart' }));
+
+    await waitFor(() => expect(host.mountGameFrame.mock.calls.length).toBe(mounts + 1));
+    expect(screen.queryByRole('dialog', { name: 'Paused' })).not.toBeInTheDocument();
   });
   it('defaults to a full-screen play view with the host actions only inside the menu', async () => {
     const { container } = renderGame();

@@ -1,4 +1,4 @@
-import { useState, type Ref } from 'react';
+import { useState, type ReactNode, type Ref } from 'react';
 import { resetReviewDrafts } from '../../features/commands-inbox/drafts';
 import { signOut } from '../../lib/api/auth';
 import { Icon } from '../../components/Icon';
@@ -21,6 +21,8 @@ type Props = {
   onGameOptionsChange(options: Record<string, boolean | string | number>): void;
   onBack?(): void;
   backRef?: Ref<HTMLButtonElement>;
+  /** Extra sections the pause menu adds after the shared ones (saves, credits). */
+  children?: ReactNode;
 };
 
 export function SharedSettings({
@@ -36,6 +38,7 @@ export function SharedSettings({
   onGameOptionsChange,
   onBack,
   backRef,
+  children,
 }: Props) {
   const [signOutFailed, setSignOutFailed] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -276,6 +279,7 @@ export function SharedSettings({
           </div>
         </details>
       ) : null}
+      {children}
     </div>
   );
 }

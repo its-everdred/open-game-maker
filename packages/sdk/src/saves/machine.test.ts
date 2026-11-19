@@ -65,6 +65,36 @@ describe('save machine', () => {
     machine.dispose();
   });
 
+  it('uses the restored state as the last safe snapshot', () => {
+    const { machine, send, setSafe } = fixture();
+    machine.restored({ saveSchemaVersion: 1, data: { value: 42 } });
+    setSafe(false);
+    machine.markDirty();
+    machine.hidden();
+    expect(send).toHaveBeenCalledWith('save.write', expect.objectContaining({ data: { value: 42 } }));
+    machine.dispose();
+  });
+
+  it('retains the screenshot of the last safe state when saving becomes unsafe', () => {
+    const instance = {
+      serialize: () => ({ saveSchemaVersion: 1, data: {} }),
+      canSaveNow: vi.fn().mockReturnValueOnce(true).mockReturnValue(false),
+    };
+    const send = vi.fn();
+    const captureThumbnail = vi.fn().mockReturnValue('data:image/webp;base64,YWJj');
+    const machine = createSaveMachine({ instance, send, captureThumbnail });
+    machine.markDirty();
+    machine.checkpoint();
+    machine.markDirty();
+    machine.hidden();
+    expect(captureThumbnail).toHaveBeenCalledOnce();
+    expect(send).toHaveBeenLastCalledWith(
+      'save.write',
+      expect.objectContaining({ thumbnail: 'data:image/webp;base64,YWJj' }),
+    );
+    machine.dispose();
+  });
+
   it('tracks local, cloud, conflict, queued, and read-only states', () => {
     const { machine, states } = fixture();
     machine.markDirty();

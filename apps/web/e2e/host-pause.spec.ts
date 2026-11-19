@@ -47,6 +47,11 @@ for (const viewport of [
     await expect(pause).toBeHidden();
     await page.reload();
     await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 30_000 }).toBe('ready');
+    await signalFirstFrame(page);
+    // Reload fires pagehide, so the away-pause safeguard requires an explicit resume.
+    const paused = page.getByRole('dialog', { name: 'Paused' });
+    await expect(paused).toBeVisible();
+    await paused.getByRole('button', { name: 'Resume' }).click();
     await expect(pause).toBeVisible();
   });
 }
@@ -54,6 +59,13 @@ for (const viewport of [
 async function openReadyGame(page: Page): Promise<void> {
   await page.goto('/g/game?test');
   await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 30_000 }).toBe('ready');
+  await signalFirstFrame(page);
+}
+
+async function signalFirstFrame(page: Page): Promise<void> {
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  if (!frame) throw new Error('game frame missing');
+  await frame.evaluate(() => (window as Window & { __fixture: FixtureHook }).__fixture.send('load.frame', {}));
 }
 
 function gameState(page: Page): Promise<GameHook | undefined> {

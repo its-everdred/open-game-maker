@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -7,6 +8,7 @@ import {
   type CSSProperties,
   type ReactElement,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, matchPath, useLocation } from 'react-router';
 
 import {
@@ -69,8 +71,20 @@ export function StudioMenu() {
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
+  const traySlot = useRef<HTMLDivElement>(null);
+  // The tray keeps one container for the menu's whole life and only that container moves between the studio control
+  // and the pause panel's More page, so stateful extras (a pending room invite) never remount on the way.
+  const [trayHost] = useState(() => {
+    const host = document.createElement('div');
+    host.style.display = 'contents';
+    return host;
+  });
   const location = useLocation();
-  const { controls, open, setOpen } = useGameMenu();
+  const { controls, open, setOpen, moreHost, pausePanelVisible } = useGameMenu();
+  // Before paint, so the tray never shows a frame in the place it just left.
+  useLayoutEffect(() => {
+    (moreHost ?? traySlot.current)?.appendChild(trayHost);
+  }, [moreHost, trayHost]);
   const { data: session } = useSession();
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
@@ -171,14 +185,17 @@ export function StudioMenu() {
 
   useEffect(() => {
     if (wasOpen.current && !open) {
-      const soundTrigger = hasStudioHeader
-        ? root.current?.querySelector<HTMLButtonElement>('.studio-library-volume button')
-        : null;
-      (soundTrigger ?? trigger.current)?.focus();
       setSheet(undefined);
+      if (!pausePanelVisible) {
+        const soundTrigger = hasStudioHeader
+          ? root.current?.querySelector<HTMLButtonElement>('.studio-library-volume button')
+          : null;
+        (soundTrigger ?? trigger.current)?.focus();
+        wasOpen.current = false;
+      }
     }
-    wasOpen.current = open;
-  }, [hasStudioHeader, open, sheet]);
+    if (open) wasOpen.current = true;
+  }, [hasStudioHeader, open, sheet, pausePanelVisible]);
 
   useEffect(() => {
     if (deck && deck.creatorId !== creatorId) setDeck(undefined);
@@ -230,9 +247,14 @@ export function StudioMenu() {
 
   // Nearest the menu button first; the row runs right to left.
   const circles: ReactElement[] = [];
+  // Inside the pause panel's More page, actions the panel itself offers (Leave, Edit) and Sound are not repeated.
+  const inPause = moreHost !== null;
+  const trayOpen = open || inPause;
   if (controls) {
     circles.push(
-      ...controls.actions.map((action) => <MenuAction key={action.id} action={action} close={close} />),
+      ...controls.actions
+        .filter((action) => !inPause || !action.onPausePanel)
+        .map((action) => <MenuAction key={action.id} action={action} close={close} />),
       ...controls.extras,
     );
   }
@@ -373,7 +395,7 @@ export function StudioMenu() {
       }}
     />
   );
-  if (!hasStudioHeader) circles.push(volumeCircle);
+  if (!hasStudioHeader && !inPause) circles.push(volumeCircle);
   circles.push(<BugButton key="bug" open={sheet === 'bug'} onToggle={() => toggleSheet('bug')} />);
   if (gamePath) {
     circles.push(
@@ -396,7 +418,7 @@ export function StudioMenu() {
   }
   // Game extras can own in-flight operations (for example room creation), so only those controls stay mounted while
   // the tray is folded. The rest of the menu keeps its original open-only DOM lifetime.
-  const renderedCircles = open ? circles : (controls?.extras ?? []);
+  const renderedCircles = trayOpen ? circles : (controls?.extras ?? []);
   if (session) {
     circles.push(<MenuLink key="credits" label="Credits" icon="credits" to="/settings/credits" close={close} />);
     if (requireAdmin(admin.data ?? null) === 'ok') {
@@ -584,6 +606,22 @@ export function StudioMenu() {
     );
   }
 
+  const tray = (
+    <div className="studio-menu-tray" data-gm-overlay-allowed hidden={!trayOpen}>
+      <div id="studio-menu-panel" className="studio-menu-row" role="group" aria-label="Menu">
+        {renderedCircles.map((circle, index) => (
+          <span key={circle.key} className="studio-menu-slot" style={{ '--i': index } as CSSProperties}>
+            {circle}
+          </span>
+        ))}
+      </div>
+      {gameId && new URLSearchParams(location.search).get('mode') === 'edit' && (
+        <div id="studio-editor-tools" className="studio-editor-tools" />
+      )}
+      {trayOpen && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
+    </div>
+  );
+
   return (
     <div ref={root} className="studio-menu-control">
       {hasStudioHeader && <div className="studio-library-volume">{volumeCircle}</div>}
@@ -617,7 +655,7 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
-        hidden={hasStudioHeader || (controls?.hideButton === true && !open && !blocked)}
+        hidden={hasStudioHeader || pausePanelVisible || (controls?.hideButton === true && !open && !blocked)}
         style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}
@@ -657,19 +695,8 @@ export function StudioMenu() {
       <span className="sr" role="status" aria-live="polite">
         {announcement}
       </span>
-      <div className="studio-menu-tray" data-gm-overlay-allowed hidden={!open}>
-        <div id="studio-menu-panel" className="studio-menu-row" role="group" aria-label="Menu">
-          {renderedCircles.map((circle, index) => (
-            <span key={circle.key} className="studio-menu-slot" style={{ '--i': index } as CSSProperties}>
-              {circle}
-            </span>
-          ))}
-        </div>
-        {gameId && new URLSearchParams(location.search).get('mode') === 'edit' && (
-          <div id="studio-editor-tools" className="studio-editor-tools" />
-        )}
-        {open && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
-      </div>
+      <div ref={traySlot} style={{ display: 'contents' }} />
+      {createPortal(tray, trayHost)}
       <JobConversationModal />
       {threadAccess && creatorId ? (
         <ExecutorThread
