@@ -178,15 +178,15 @@ describe('game detail', () => {
   });
 
   it('shows published media for a real showcase game', () => {
-    detail({
+    const { container } = detail({
       ...mergeShowcase([])[0]!,
       coverUrl: '/thumbnail.png',
       trailerUrl: '/landscape.mp4',
     });
-    expect(document.querySelector('img[src="/thumbnail.png"]')).not.toBeNull();
-    expect(document.querySelectorAll('video')).toHaveLength(1);
-    expect(document.querySelector('video')).toHaveAttribute('src', '/landscape.mp4');
-    expect(document.querySelector('video')).toHaveAttribute('poster', '/thumbnail.png');
+    expect(container.querySelector('img[src="/thumbnail.png"]')).not.toBeNull();
+    expect(container.querySelectorAll('video')).toHaveLength(1);
+    expect(container.querySelector('video')).toHaveAttribute('src', '/landscape.mp4');
+    expect(container.querySelector('video')).toHaveAttribute('poster', '/thumbnail.png');
   });
 
   it('uses the responsive cover beneath a shared trailer without loading the original poster', () => {

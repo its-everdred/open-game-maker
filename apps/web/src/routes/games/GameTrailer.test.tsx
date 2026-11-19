@@ -255,3 +255,21 @@ it('fades to a previously blocked trailer after sound is enabled', async () => {
   expect(video.muted).toBe(false);
   expect(vi.mocked(musicBus.gain.setTargetAtTime)).toHaveBeenLastCalledWith(0, 0, 0.15);
 });
+
+it('clears a closed trailer selection before the next trailer mounts', () => {
+  vi.useFakeTimers();
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  const game = { ...mergeShowcase([])[0]!, trailerUrl: '/closed-a.mp4' };
+  const first = render(<GameTrailer game={game} />);
+  const oldVideo = first.container.querySelector('video')!;
+  first.unmount();
+  expect(oldVideo).not.toHaveAttribute('aria-label');
+  const second = render(<GameTrailer game={{ ...game, trailerUrl: '/closed-b.mp4' }} />);
+  const nextVideo = second.container.querySelector('video')!;
+  nextVideo.dispatchEvent(new Event('playing'));
+  expect(vi.mocked(musicBus.gain.setTargetAtTime)).toHaveBeenLastCalledWith(0, 0, 0.15);
+  second.unmount();
+  vi.advanceTimersByTime(800);
+  vi.useRealTimers();
+});

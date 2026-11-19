@@ -16,6 +16,8 @@ function fadeMenu(trailerActive: boolean): void {
 
 // Keep outgoing media in the document while React removes its original host.
 function preserve(video: HTMLVideoElement): void {
+  video.removeAttribute('aria-label');
+  video.setAttribute('aria-hidden', 'true');
   video.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none';
   document.body.appendChild(video);
 }
@@ -118,6 +120,10 @@ export function stopTrailers(urls?: Iterable<string | null | undefined>): void {
       continue;
     }
     retire(url, video);
+    if (selectedUrl === url) selectedUrl = undefined;
   }
-  if (!selectedUrl || videos.size === 0) fadeMenu(false);
+  if (!selectedUrl) {
+    for (const [url, video] of videos) retire(url, video);
+    fadeMenu(false);
+  } else if (videos.size === 0) fadeMenu(false);
 }

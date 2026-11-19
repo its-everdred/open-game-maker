@@ -21,6 +21,7 @@ export function GameTrailer({ game, transparentPoster = false }: { game: GameSum
   useEffect(() => {
     if (!trailerUrl) return;
     const video = trailerVideo(trailerUrl);
+    video.removeAttribute('aria-hidden');
     video.setAttribute('aria-label', `${title} trailer`);
     if (poster) video.poster = poster;
     playing.current = video;
