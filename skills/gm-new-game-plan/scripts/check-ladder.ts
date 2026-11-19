@@ -91,8 +91,9 @@ export function checkLadder(markdown: string): string[] {
     gameLabel ??= games[0];
     return gameLabel === games[0];
   };
-  if (rosterRows.some((row) => !validLabels(row.Labels)))
-    problems.push('Features: each ticket needs consistent game and known role labels');
+  const ladderRoles = [...new Set(STAGES.flatMap((stage) => stage.roles.split(', ')))];
+  if (rosterRows.some((row) => !validLabels(row.Labels, ladderRoles)))
+    problems.push('Features: each ticket needs consistent game and all ladder role labels');
   if (new Set(features).size !== features.length) problems.push('Features: a feature is listed twice');
 
   const media = all.find((section) => section.heading === 'Game media');

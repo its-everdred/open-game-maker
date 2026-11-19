@@ -49,11 +49,24 @@ describe('check-ladder', () => {
     );
   });
 
+  it('rejects a ticket shared by two features', () => {
+    const shared = BLOBS.replaceAll('Chains: Blobs', 'Play screen: Blobs');
+    expect(checkLadder(shared)).toContain('Features: each feature needs its own ticket');
+  });
+
   it('rejects placeholder, inconsistent and unknown labels', () => {
     for (const bad of ['game:<slug>, role:<role>', 'game:other, role:visual', 'game:blobs, role:visual-invalid']) {
       const changed = BLOBS.replace(/game:blobs, role:game-design, role:audio, role:3d, role:assets, role:visual, role:gameplay, role:qa/, bad);
       expect(checkLadder(changed)).not.toEqual([]);
     }
+  });
+
+  it('rejects a feature missing roles needed by its ladder', () => {
+    const incomplete = BLOBS.replace(
+      'game:blobs, role:game-design, role:audio, role:3d, role:assets, role:visual, role:gameplay, role:qa',
+      'game:blobs, role:qa',
+    );
+    expect(checkLadder(incomplete)).toContain('Features: each ticket needs consistent game and all ladder role labels');
   });
 
   it('reads only the first table of a section, so notes tables beside a stage are allowed', () => {
