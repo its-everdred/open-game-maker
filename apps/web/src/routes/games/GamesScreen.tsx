@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { registerTestApi } from '../../app/testHook';
+import { set as setMusic } from '../../lib/sound';
 import { CopyLink } from './CopyLink';
 import { GameCell } from './GameCell';
 import {
@@ -69,6 +70,10 @@ export function GamesScreen() {
   const initialViewChosen = useRef(false);
   const fitsThumbnailRow = gridCapacity !== null && sortedGames.length <= gridCapacity;
 
+  useEffect(() => {
+    setMusic('menu');
+    return () => setMusic('off');
+  }, []);
   useEffect(() => () => stopTrailers(), []);
   useEffect(() => stopOtherTrailers(selected?.trailerUrl), [selected?.trailerUrl]);
 
@@ -127,7 +132,7 @@ export function GamesScreen() {
   });
 
   useEffect(() => {
-    if (initialViewChosen.current || gamesQuery.isPending || jobsQuery.isPending) return;
+    if (initialViewChosen.current || gamesQuery.isPending || gamesQuery.isFetching || jobsQuery.isPending) return;
     if (sortedGames.length === 0) return;
     if (gridCapacity === null) return;
 
@@ -139,6 +144,7 @@ export function GamesScreen() {
   }, [
     fitsThumbnailRow,
     gamesQuery.isPending,
+    gamesQuery.isFetching,
     gridCapacity,
     jobsQuery.isPending,
     searchParams,
@@ -194,7 +200,12 @@ export function GamesScreen() {
     });
   }, []);
 
-  if (gamesQuery.isPending) return <p className="games-status">Loading your games…</p>;
+  if (gamesQuery.isPending)
+    return (
+      <div className="games-loading" role="progressbar" aria-label="Loading">
+        <span />
+      </div>
+    );
 
   return (
     <div className={`games-screen${fitsThumbnailRow ? ' games-single-row' : ''}`}>
