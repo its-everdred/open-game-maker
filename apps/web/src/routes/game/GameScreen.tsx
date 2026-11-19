@@ -8,7 +8,7 @@ import type { OgmHost } from '../../app/testHook';
 import { useGameMenu, useGameMenuControls } from '../../app/GameMenu';
 import { useDock } from '../../features/build-chat/dock';
 import { editJobRequest } from '../../features/build-chat/edit';
-import { gameJobsQueryKey, isTerminal, myJobsQueryKey } from '../../features/build-chat/jobs';
+import { gameJobsQueryKey, myJobsQueryKey } from '../../features/build-chat/jobs';
 import {
   getDesignSnapshot,
   getGame,
@@ -18,7 +18,6 @@ import {
   getPreviewDesign,
   getScenerySource,
   getOptionalReapply,
-  listJobs,
   postAnalyticsEvent,
   NO_BUILD_ID,
   submitReapply,
@@ -26,8 +25,6 @@ import {
 } from '../../features/editor/api';
 import { inspectBuildChange, readyBuildSignal } from '../../features/editor/builds';
 import { EditorChrome } from '../../features/editor/EditorChrome';
-import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
-import { FocusZone } from '../../lib/input';
 import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
@@ -56,7 +53,6 @@ import {
   deleteEntityIntent,
 } from '../../features/editor/transactions';
 import { api } from '../../lib/api/client';
-import { useSession } from '../../lib/api/session';
 import { pushToast } from '../../lib/notify/slice';
 import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
 import { RoomLayer } from '../../features/room/RoomLayer';
@@ -65,8 +61,8 @@ import { useBranches } from '../games/useBranches';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
 import { LoadingLayer } from './LoadingLayer';
 import { EditFrameOrientation, useEditFrameOrientation } from './EditFrameOrientation';
-import { EditWorkspace } from './EditWorkspace';
-import { EditConversation } from './EditConversation';
+import { EditPlayBar, GameEditWorkspace } from './EditWorkspace';
+import { useEditConversation } from './useEditConversation';
 import { gameLoadActivity } from './load-analytics';
 import { useAwayPause } from './away-pause';
 import { PlatformHud } from './PlatformHud';
@@ -119,13 +115,6 @@ export function GameScreen() {
     queryFn: () => getDesignSnapshot(gameId, branch),
     enabled: gameId !== '',
   });
-  const jobs = useQuery({
-    queryKey: gameJobsQueryKey(gameId),
-    queryFn: () => listJobs(gameId),
-    enabled: gameId !== '',
-    refetchInterval: 5_000,
-  });
-  const { data: creatorSession } = useSession();
   const branches = useBranches(gameId === '' ? null : gameId);
   // Games open with the branch id in `v`; job admission only takes the canonical name of the main branch.
   const jobBranch = branches.data?.find(({ id }) => id === branch)?.name === 'main' ? 'main' : branch;
@@ -136,8 +125,7 @@ export function GameScreen() {
   const [frameAttempt, setFrameAttempt] = useState(0);
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const [editorPlaying, setEditorPlaying] = useState(true);
-  const [conversationJobId, setConversationJobId] = useState<string>();
-  useEffect(() => setConversationJobId(undefined), [gameId, jobBranch]);
+  const { jobs, ...conversation } = useEditConversation(gameId, jobBranch);
   useEffect(() => setEditorPlaying(true), [gameId]);
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
@@ -695,20 +683,6 @@ export function GameScreen() {
     openMenu: () => setMenuOpen(true),
   });
 
-  const conversationJob =
-    jobs.data?.jobs.find(
-      (job) => job.id === conversationJobId && job.creatorId === creatorSession?.user?.id && !isTerminal(job.state),
-    ) ??
-    jobs.data?.jobs
-      .filter(
-        (job) => job.branchId === jobBranch && job.creatorId === creatorSession?.user?.id && !isTerminal(job.state),
-      )
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-  const lastConversationJob = useRef<string | undefined>(undefined);
-  if (conversationJob) lastConversationJob.current = conversationJob.id;
-  const completedConversationJob = jobs.data?.jobs.find(
-    (job) => job.id === (conversationJobId ?? lastConversationJob.current) && isTerminal(job.state),
-  );
   const gameStage = (
     <div className="game-stage-area" data-frame-orientation={mode === 'edit' ? frameOrientation : undefined}>
       {mode === 'edit' && <EditFrameOrientation orientation={frameOrientation} onChange={setFrameOrientation} />}
@@ -933,40 +907,22 @@ export function GameScreen() {
       aria-label="Play and edit"
     >
       {mode === 'edit' ? (
-        <>
-          <FocusZone id={EDITOR_FOCUS_ZONES.bar} className="editor-play-zone">
-            <button
-              className="editor-play-button"
-              type="button"
-              aria-label="Play"
-              disabled={room.snapshot?.role === 'peer'}
-              onClick={() => (editorPlaying ? requestMode('play') : setEditorPlaying(true))}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M7 3v18l14-9z" />
-              </svg>
-            </button>
-          </FocusZone>
-          <output className="sr" aria-live="polite">
-            {savedLabel(editStartup ?? sessionView?.saved)}
-          </output>
-        </>
+        <EditPlayBar
+          disabled={room.snapshot?.role === 'peer'}
+          onPlay={() => (editorPlaying ? requestMode('play') : setEditorPlaying(true))}
+          saved={savedLabel(editStartup ?? sessionView?.saved)}
+        />
       ) : null}
       {mode === 'edit' ? (
-        <EditWorkspace
+        <GameEditWorkspace
           game={gameStage}
-          chat={
-            <EditConversation
-              gameId={gameId}
-              branchId={jobBranch}
-              title={game.data?.title ?? ''}
-              job={conversationJob}
-              admittedJobId={completedConversationJob ? undefined : conversationJobId}
-              completedJobId={completedConversationJob?.id}
-              onAdmitted={setConversationJobId}
-              reading={searchParams.get('composer') === 'stacked' ? 'stacked' : 'inline'}
-            />
-          }
+          conversation={{
+            gameId,
+            branchId: jobBranch,
+            title: game.data?.title ?? '',
+            ...conversation,
+            reading: searchParams.get('composer') === 'stacked' ? 'stacked' : 'inline',
+          }}
           editor={editorChrome}
         />
       ) : (
