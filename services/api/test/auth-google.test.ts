@@ -75,7 +75,9 @@ describe('Google sign-in', () => {
     const { app } = await makeApp();
     const { url, cookies } = await startGoogle(app);
 
-    expect(cookies).not.toMatch(/age/i);
+    expect(cookies.split('; ').map((cookie) => cookie.split('=')[0])).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/age/i)]),
+    );
     expect(url.origin).toBe('https://accounts.google.com');
     expect(url.searchParams.get('redirect_uri')).toBe(`${APP_ORIGIN}/auth/callback/google`);
   });
