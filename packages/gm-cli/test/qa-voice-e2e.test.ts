@@ -1,13 +1,64 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { costLine, dictationFailure, elevenLabsUsage, tallyFrames, twoWayFailure } from '../src/qa-voice-e2e.js';
+import {
+  costLine,
+  dictationFailure,
+  elevenLabsUsage,
+  tallyFrames,
+  twoWayFailure,
+  voiceE2e,
+} from '../src/qa-voice-e2e.js';
 import { gm, tempDir } from './helpers.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
 const frame = (value: Record<string, unknown>) => JSON.stringify(value);
+
+it.each([false, true])('records each voice failure even when screenshot capture fails: %s', async (captureFails) => {
+  const out = tempDir();
+  const locator = { and: () => locator, isVisible: async () => false };
+  const page = {
+    on: () => {},
+    getByRole: () => locator,
+    locator: () => locator,
+    goto: async () => {
+      throw new Error('locator.click: timeout\nwaiting for QA voice');
+    },
+    url: () => 'https://app.example.test/all',
+    screenshot: async ({ path }: { path: string }) => {
+      if (captureFails) throw new Error('capture unavailable');
+      writeFileSync(path, 'still');
+    },
+  };
+  const context = {
+    addCookies: async () => {},
+    addInitScript: async () => {},
+    newPage: async () => page,
+    close: async () => {},
+  };
+  const browser = { newContext: async () => context } as unknown as Parameters<typeof voiceE2e>[0];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({})),
+  );
+  const result = await voiceE2e(browser, {
+    origin: 'https://app.example.test',
+    api: 'https://api.example.test',
+    internalToken: 'test',
+    cookie: { name: 'session', value: 'test' },
+    out,
+    stamp: 'run-1',
+  });
+  expect(result.stills).toHaveLength(captureFails ? 0 : 2);
+  for (const step of result.steps) {
+    expect(step).toMatchObject({ ok: false, url: 'https://app.example.test/all' });
+    expect(step.failure).toContain('waiting for QA voice');
+    if (captureFails) expect(step.failure).toContain('Screenshot failed: Error: capture unavailable');
+  }
+  expect(JSON.parse(readFileSync(join(out, 'voice-e2e.json'), 'utf8')).stills).toEqual(result.stills);
+});
 
 describe('voice socket tally (#879)', () => {
   // The two-way check passes only on audio the agent actually streamed back, so the tally must count agent_audio

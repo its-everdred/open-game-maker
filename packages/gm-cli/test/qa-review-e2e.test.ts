@@ -16,9 +16,46 @@ vi.mock('../src/qa-review-checks.js', () => ({
 
 // The hammer's ticket-detail steps (#873) run first in each size and have their own browser test; this suite drives the
 // review deck.
-vi.mock('../src/qa-ticket-detail-e2e.js', () => ({ ticketDetailSteps: async () => {} }));
+const ticketSteps = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('../src/qa-ticket-detail-e2e.js', () => ({ ticketDetailSteps: ticketSteps }));
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('captures the shared ticket step failure and its URL at each size', async () => {
+  ticketSteps.mockImplementation(async () => {
+    throw new Error('locator.click: timeout\nwaiting for Details');
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({})),
+  );
+  const page = {
+    url: () => 'https://app.example.test/all',
+    screenshot: async ({ path }: { path: string }) => writeFileSync(path, 'still'),
+  };
+  const context = { addCookies: async () => {}, newPage: async () => page, close: async () => {} };
+  const browser = { newContext: async () => context } as unknown as Parameters<typeof reviewE2e>[0];
+  try {
+    const results = await reviewE2e(browser, {
+      origin: 'https://app.example.test',
+      api: 'http://127.0.0.1:4300',
+      internalToken: 'test',
+      cookie: { name: 'session', value: 'test' },
+      out: tempDir(),
+      injectRegression: false,
+      breakMedia: false,
+      stamp: 'test',
+    });
+    expect(results).toHaveLength(4);
+    for (const result of results) {
+      expect(result.url).toBe('https://app.example.test/all');
+      expect(result.failure).toContain('waiting for Details');
+      expect(result.stills).toHaveLength(1);
+    }
+  } finally {
+    ticketSteps.mockImplementation(async () => {});
+  }
+});
 
 it('rejects broken images and unloaded video or audio in the production readiness gate', () => {
   const image = { naturalWidth: 100 };
