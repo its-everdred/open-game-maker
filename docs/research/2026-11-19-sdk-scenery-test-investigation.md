@@ -1,0 +1,9 @@
+# SDK scenery test failure investigation
+
+Issue #924 investigated `TypeError: __export is not a function` in six web test suites in [CI run 44445044830, workspace job](https://github.com/its-everdred/open-game-maker/actions/runs/44445044830/job/135295266998). All six failed while importing `@gm/sdk/scenery` through `scenery-bootstrap.ts`. The cited [main run 44441143067](https://github.com/its-everdred/open-game-maker/actions/runs/44441143067) passed.
+
+The failed job started web tests at 02:37:52 UTC, then `gm-verify` rebuilt SDK dependencies from 02:37:53 through 02:37:55. The SDK bundle's scenery chunk imports `__export` from a shared generated chunk, and both builds write to the same `packages/sdk/dist` tree. Reading the output during the rebuild is a possible cause, but the log does not show which bytes Vitest read, so it does not establish a cause.
+
+At main commit `5b06fc88747d92bf297ba358d4649ed76264a2cc`, the focused `scenery-bootstrap.test.ts` passed alone and in five runs started alongside `node packages/sdk/scripts/build.mjs`. Those attempts do not replicate the full CI scheduling or rule out a rare race. The full recursive test attempt stopped before the web suite on an unrelated blob-store timeout; a concurrent full web test and gm-verify build was interrupted after unrelated timeouts under host contention. A later [main workspace job](https://github.com/its-everdred/open-game-maker/actions/runs/44531523436/job/135586181670) ran all web test files but failed on a separate Better Auth teardown exception.
+
+No scenery tests were quarantined: the reported failure was not reproduced on main in these attempts, and skipping the six suites would remove coverage without identifying the triggering condition. On recurrence, capture the SDK output files and timestamps at the failure and compare the test and dependency-build timelines before attributing it to a read during the rebuild.
