@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
+import { openClosedTicket, openRunningTicket, openTicketBuilds } from '../../../packages/gm-cli/src/qa-review-checks';
+import { openChat } from '../../../packages/gm-cli/src/qa-voice-e2e';
 
 // Kevin opens the hammer, taps a running ticket and a closed one, and sees each one's summary, status, media and
 // timeline on his phone (#873). The API's ticket detail is mocked in the shape services/api answers.
@@ -45,28 +47,43 @@ const detail = (ticket: string, running: boolean) => ({
 
 test.use({ serviceWorkers: 'block' });
 
+test('opens a build conversation through the voice check path', async ({ page, baseURL }, testInfo) => {
+  testInfo.setTimeout(180_000);
+  await installAuthRoutes(page, { signedIn: true });
+  await installApi(page);
+  await openChat(page, baseURL!, 'Forest backdrop');
+  await expect(page.getByRole('dialog', { name: 'Forest backdrop' }).locator('.job-conversation-close')).toBeVisible();
+  await expect(page.locator('.ticket-detail-dialog')).toHaveCount(0);
+});
+
 test('opens a running and a closed ticket’s detail from the hammer', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'the test sets each acceptance viewport itself');
   testInfo.setTimeout(240_000);
   await installAuthRoutes(page, { signedIn: true });
   await installApi(page);
   await page.goto('/all');
-  await page.getByRole('button', { name: '1 build running' }).click();
-  await page.getByRole('button', { name: /Forest backdrop/ }).click();
-  let dialog = page.getByRole('dialog', { name: 'Forest backdrop' });
-  await expect(dialog.getByText('Painting the forest behind the blobs; the first stills are in.')).toBeVisible();
-  await expect(dialog.getByText('Capturing stills')).toBeVisible();
-  await expectMedia(dialog);
-  await fitsEverySize(page);
-  await dialog.getByRole('button', { name: 'Close' }).click();
-
-  await page.getByRole('button', { name: 'Completed' }).click();
-  await page.getByRole('button', { name: 'Blob trailer · Completed' }).click();
-  dialog = page.getByRole('dialog', { name: 'Blob trailer' });
-  await expect(dialog.getByText('#66 Merged')).toBeVisible();
-  await expect(dialog.getByText('make it loop')).toBeVisible();
-  await expectMedia(dialog);
-  await fitsEverySize(page);
+  for (const viewport of VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await openTicketBuilds(page);
+    const close = page.getByRole('button', { name: 'Close builds' });
+    await expect(close).toBeInViewport();
+    await openRunningTicket(page, 'Forest backdrop');
+    let dialog = page.getByRole('dialog', { name: 'Forest backdrop' });
+    await expect(dialog.getByText('Painting the forest behind the blobs; the first stills are in.')).toBeVisible();
+    await expect(dialog.getByText('Capturing stills')).toBeVisible();
+    await expectMedia(dialog);
+    await fits(page);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await openClosedTicket(page, 'Blob trailer');
+    dialog = page.getByRole('dialog', { name: 'Blob trailer' });
+    await expect(dialog.getByText('#66 Merged')).toBeVisible();
+    await expect(dialog.getByText('make it loop')).toBeVisible();
+    await expectMedia(dialog);
+    await fits(page);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await close.click();
+    await expect(page.getByRole('region', { name: 'Builds' })).toBeHidden();
+  }
 });
 
 async function expectMedia(dialog: ReturnType<Page['getByRole']>) {
@@ -76,14 +93,9 @@ async function expectMedia(dialog: ReturnType<Page['getByRole']>) {
   await expect(dialog.locator('audio')).toHaveAttribute('src', 'https://api.example.test/blobs/sha256/sound');
 }
 
-async function fitsEverySize(page: Page) {
-  for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport);
-    await page.waitForTimeout(150);
-    // Nothing in the detail scrolls sideways on a phone.
-    const body = page.locator('.ticket-detail-body');
-    expect(await body.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
-  }
+async function fits(page: Page) {
+  const body = page.locator('.ticket-detail-body');
+  expect(await body.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
 }
 
 async function installApi(page: Page) {
@@ -115,7 +127,21 @@ async function installApi(page: Page) {
     if (path === `/api/v1/games/${gameId}/tickets/11/detail`) return json(route, detail('11', false));
     if (/\/(commands|previews|review-rounds)$/.test(path))
       return json(route, { commands: [], previews: [], rounds: [] });
-    if (path.startsWith('/api/v1/jobs')) return json(route, { jobs: [] });
+    if (path === '/api/v1/jobs')
+      return json(route, {
+        jobs: [
+          {
+            id: 'j_12',
+            gameId,
+            creatorId: 'u1',
+            aiurIssueNumber: 12,
+            state: 'filed',
+            plan: { title: 'Forest backdrop', summary: '', scope: { included: [], excluded: [] }, tickets: [] },
+            updatedAt: '2026-11-17T12:00:00Z',
+          },
+        ],
+      });
+    if (path.startsWith('/api/v1/jobs')) return json(route, { messages: [] });
     return json(route, { error: 'not_mocked', path }, 404);
   });
   await page.route('**/api.example.test/blobs/sha256/*', (route) => {

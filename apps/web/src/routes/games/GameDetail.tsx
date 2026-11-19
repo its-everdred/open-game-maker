@@ -40,16 +40,27 @@ export function detailOf(game: GameSummary): { description?: string; tags: Detai
   const curated = game.showcase;
   const publishedTags = gameTags(game);
   const showcaseOnly = game.id.startsWith('showcase:');
+  const ordered = (tags: DetailTag[]) =>
+    [...tags].sort((a, b) => {
+      const rank = (label: string) =>
+        label.trim().toLowerCase() === 'solo' ? 0 : label.trim().toLowerCase() === 'multiplayer' ? 1 : 2;
+      return rank(a.label) - rank(b.label);
+    });
   return {
     description: game.tagline ?? curated?.tagline,
-    tags:
+    tags: ordered(
       game.tags !== undefined || !curated
         ? publishedTags.map((name) => {
-            const key = genreIcon(name);
+            const key = name.trim().toLowerCase() === 'multiplayer' ? 'party' : genreIcon(name);
             const label = name === name.toLowerCase() ? name.charAt(0).toUpperCase() + name.slice(1) : name;
             return { key, label, color: tagColor(key) };
           })
-        : curated.displayTags.map(({ key, label, color }) => ({ key, label, color })),
+        : curated.displayTags.map(({ key, label, color }) => ({
+            key: label.toLowerCase() === 'multiplayer' ? 'party' : key,
+            label,
+            color,
+          })),
+    ),
     stats: {
       played: showcaseOnly ? curated?.played || undefined : undefined,
       rating: showcaseOnly ? (curated?.rating ?? undefined) : undefined,
@@ -196,7 +207,7 @@ export function GameDetail({
             aria-label={`Edit ${game.title}`}
             onClick={onEdit}
           >
-            ✎
+            <Icon name="pencil" />
           </button>
         </div>
       </div>

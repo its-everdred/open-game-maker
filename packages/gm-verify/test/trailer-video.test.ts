@@ -13,7 +13,7 @@ const ffmpegAvailable = ['ffmpeg', 'ffprobe'].every(
 );
 
 it.skipIf(!ffmpegAvailable)(
-  'encodes the scripted canvas as a 1920×1080 trailer a phone can play: Main profile, level 4.1 or lower (requires ffmpeg)',
+  'encodes a 1280×720 phone-safe trailer at the requested frame rate (requires ffmpeg)',
   async () => {
     const dir = mkdtempSync(join(tmpdir(), 'trailer-video-'));
     const image = join(dir, 'frame.png');
@@ -39,38 +39,32 @@ it.skipIf(!ffmpegAvailable)(
         game: { evaluate: async () => {}, locator: () => ({ first: () => ({ evaluate: async () => data }) }) },
       } as unknown as HookDriver;
       await recordTrailerVideo(hooks, { script: [], seconds: 1, fps: 10 }, output);
-      const stream = execFileSync(
-        'ffprobe',
-        [
-          '-v',
-          'error',
-          '-select_streams',
-          'v:0',
-          '-show_entries',
-          'stream=width,height,profile,level,r_frame_rate',
-          '-of',
-          'default=nw=1',
-          output,
-        ],
-        { encoding: 'utf8' },
+      const probe = JSON.parse(
+        execFileSync(
+          'ffprobe',
+          [
+            '-v',
+            'error',
+            '-select_streams',
+            'v:0',
+            '-show_entries',
+            'stream=width,height,codec_name,profile,level,pix_fmt,r_frame_rate',
+            '-of',
+            'json',
+            output,
+          ],
+          { encoding: 'utf8' },
+        ),
       );
-      const {
-        width,
-        height,
-        profile,
-        level,
-        r_frame_rate: rate,
-      } = Object.fromEntries(
-        stream
-          .trim()
-          .split('\n')
-          .map((line) => line.split('=')),
-      );
-      expect(`${width}x${height}`).toBe('1920x1080');
-      /* x264's own pick (High, level 6.2) never played on the creator's phone. */
-      expect(profile).toBe('Main');
-      expect(Number(level)).toBeLessThanOrEqual(41);
-      expect(rate).toBe('10/1');
+      expect(probe.streams[0]).toMatchObject({
+        width: 1280,
+        height: 720,
+        codec_name: 'h264',
+        profile: 'Main',
+        level: 41,
+        pix_fmt: 'yuv420p',
+        r_frame_rate: '10/1',
+      });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

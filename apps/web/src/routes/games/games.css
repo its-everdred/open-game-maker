@@ -285,41 +285,6 @@
   min-width: 0;
 }
 
-/* One icon control per game: the shareable `/play/<slug>` link, copied to the clipboard (ticket 513). */
-.game-copy {
-  position: absolute;
-  z-index: 4;
-  bottom: 10px;
-  right: 16px;
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border: 0;
-  border-radius: 999px;
-  background: var(--surface-deep);
-  color: var(--games-hi);
-  cursor: pointer;
-  transition:
-    opacity 0.3s var(--games-ease),
-    transform 0.3s var(--games-ease);
-}
-
-.game-copy:hover,
-.game-copy:focus-visible,
-.game-copy[data-copied='true'] {
-  transform: translateY(-2px);
-}
-
-.game-copy[data-copied='true'] {
-  color: var(--action-primary);
-}
-
-.game-copy .icon {
-  width: 18px;
-  height: 18px;
-}
-
 .games-grid [role='gridcell'].is-selected {
   grid-column: 1 / -1;
 }
@@ -521,14 +486,9 @@
   .showcase-tile:has(.game-building-chip) .game-tile-meta strong {
     font-size: 16px;
   }
-  .showcase-tile:has(.game-building-chip) .game-tag-icons > span {
+  .game-tile:has(.game-building-chip) .game-tag-icons > span {
     width: 24px;
     height: 24px;
-  }
-  .game-tile:not(.showcase-tile) .game-tag-icons .icon {
-    width: 18px;
-    height: 18px;
-    padding: 3px;
   }
   .game-cover:has(.game-logo):has(.game-building-chip) .game-logo {
     top: 24%;
@@ -662,7 +622,7 @@
   display: grid;
   justify-items: center;
   gap: 8px;
-  width: 64px;
+  min-width: 64px;
   color: var(--text-muted);
   font: 700 12px/16px var(--body);
   text-align: center;
@@ -709,7 +669,7 @@
     gap: 8px 4px;
   }
   .games-detail-tags li {
-    width: 44px;
+    min-width: 60px;
     font-size: 10px;
   }
   .games-detail-tags li > span {
@@ -737,7 +697,7 @@
   justify-content: space-between;
   gap: 8px;
 }
-.showcase-tile .game-tag-icons > span {
+.game-tag-icons > span {
   display: grid;
   place-items: center;
   width: 28px;
@@ -747,7 +707,7 @@
   background: color-mix(in srgb, var(--tag-color) 36%, transparent);
   box-shadow: inset 0 0 0 1px var(--tag-color);
 }
-.showcase-tile .game-tag-icons .icon {
+.game-tag-icons > span .icon {
   width: 65%;
   height: 65%;
   padding: 0;
@@ -840,4 +800,45 @@
   object-fit: contain;
   transform: translate(-50%, -50%);
   pointer-events: none;
+}
+
+.games-edit .icon {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+}
+
+.games-loading {
+  width: min(320px, calc(100% - 24px));
+  height: 12px;
+  overflow: hidden;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 35%, transparent);
+  margin: 40svh auto 0;
+}
+
+.games-loading span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+  animation: games-loading 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes games-loading {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(150%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .games-loading span {
+    animation: none;
+  }
 }

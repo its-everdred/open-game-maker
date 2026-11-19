@@ -68,6 +68,28 @@ it('answers a ledger round with a note and advances to the next review', async (
   expect(screen.getByText('1 left')).toBeVisible();
 }, 10000);
 
+it('opens the selected review while keeping the rest of the queue', () => {
+  const first = {
+    kind: 'round' as const,
+    gameId: 'g',
+    round: { id: 'a', ticket: '12', question: 'First?', media: [{ kind: 'still' as const, url: '/first.png' }] },
+  };
+  const second = {
+    kind: 'round' as const,
+    gameId: 'g',
+    round: { id: 'b', ticket: '12', question: 'Second?', media: [{ kind: 'still' as const, url: '/second.png' }] },
+  };
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} onClose={() => {}} reviews={[first, second]} initialReview={second} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('2 left')).toBeVisible();
+  expect(screen.getByText('Second?')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByText('First?')).toBeVisible();
+});
+
 it('keeps an open review while an incomplete poll replaces the list', () => {
   const first = {
     kind: 'round' as const,
@@ -314,12 +336,15 @@ it('lists core Commands alongside game reviews', () => {
       { id: 'b', label: 'B', media: { url: '/b.png', width: 10, height: 10 } },
     ],
   };
+  const close = vi.fn();
   render(
     <QueryClientProvider client={queryClient}>
-      <ReviewInbox commands={[core]} reviews={[]} onClose={() => {}} />
+      <ReviewInbox commands={[core]} reviews={[]} onClose={close} />
     </QueryClientProvider>,
   );
   expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(close).toHaveBeenCalledOnce();
 });
 
 it('refreshes the version and options of the open command', () => {
@@ -388,6 +413,7 @@ it('keeps a command open while an answer is sending', async () => {
   );
   fireEvent.click(screen.getByRole('button', { name: 'Pick A: A' }));
   expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
   expect(close).not.toHaveBeenCalled();
   finish({ status: 'answered' });

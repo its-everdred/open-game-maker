@@ -504,6 +504,35 @@ describe('games routes', () => {
     expect(deps.db.select().from(schema.games).get()?.repoUrl).toBe('https://github.com/instance/games');
   });
 
+  it('does not create a game when the provisioner is unavailable', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    const { app } = await makeApp(deps);
+    deps.registry.repoProvisioner = undefined;
+    expect((await createGame(app)).status).toBe(503);
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(0);
+  });
+
+  it('can update a recovered game title while retaining its provisioned folder slug', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    const { app } = await makeApp(deps);
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const created = await createGame(app);
+    const game = (await created.json()) as { id: string; slug: string };
+    const patched = await app.request(`/api/v1/games/${game.id}`, {
+      method: 'PATCH',
+      headers: { ...asUser(creator.userId), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Epic Racing', preserveSlug: true }),
+    });
+    expect(patched.status).toBe(200);
+    expect(await patched.json()).toMatchObject({ title: 'Epic Racing', slug: game.slug });
+    expect(deps.db.select().from(schema.games).get()).toMatchObject({
+      slug: game.slug,
+      githubPath: `games/${game.slug}`,
+    });
+  });
+
   it('lists family-visible games plus the caller private games', async () => {
     const deps = makeDeps();
     seedFamily(deps);

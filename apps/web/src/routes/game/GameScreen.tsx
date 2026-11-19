@@ -32,6 +32,7 @@ import { fallbackEditRequest, previewEditRequest } from '../../features/editor/f
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
 import {
+  hidesHostPause,
   mountGameFrame,
   type GameFrameController,
   type GameFrameState,
@@ -639,6 +640,7 @@ export function GameScreen() {
             ],
             extras: gameExtraElements('topbar', extraProps),
             button: frameState.manifest?.playMenuButton,
+            hideButton: hidesHostPause(mode, frameState),
           }
         : {
             actions: [
@@ -658,6 +660,8 @@ export function GameScreen() {
       askForChange,
       extraProps,
       frameState.manifest?.playMenuButton,
+      frameState.bridgeState,
+      frameState.hostPauseVisible,
       leaveRoom,
       mode,
       requestMode,

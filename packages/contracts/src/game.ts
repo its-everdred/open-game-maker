@@ -398,6 +398,8 @@ export interface HostApi {
   haptics: { pulse(pattern: 'light' | 'medium' | 'heavy' | number[]): void };
   settings: { onChange(cb: (s: PlayerSettings) => void): () => void };
   test: { register(hooks: GmTestHooks): void };
+  /** Hide the host Pause control on the game's own menu screens; it shows by default and again after a reload. */
+  setHostPauseVisible?(visible: boolean): void;
 }
 
 export const gameSchemas = {

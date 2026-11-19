@@ -1,8 +1,18 @@
 import { DisplayImage } from './DisplayImage';
 import type { CSSProperties } from 'react';
+import records from './showcase-data.json';
 import { Icon } from '../../components/Icon';
 import { Cover } from './Cover';
-import { gameTags, genreIcon, type GameSummary, type JobView } from './types';
+import { gameGenres, genreIcon, type GameSummary, type JobView } from './types';
+
+const colors = new Map(records.flatMap((record) => record.displayTags.map((tag) => [tag.key, tag.color] as const)));
+const playerTags = new Set([
+  'solo',
+  'multiplayer',
+  ...records.flatMap((record) =>
+    record.displayTags.filter((tag) => tag.kind === 'players').flatMap((tag) => [tag.key, tag.label.toLowerCase()]),
+  ),
+]);
 
 type TileProps = {
   game: GameSummary;
@@ -60,7 +70,15 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
       </button>
     );
   }
-  const tags = gameTags(game).slice(0, 4);
+  const publishedTags = (game.tags ?? []).filter((tag) => !playerTags.has(tag.trim().toLowerCase()));
+  const tags = [
+    ...new Map(
+      [...gameGenres(game), ...(game.choices?.vibe ?? []), ...publishedTags].map((tag) => [
+        tag.trim().toLowerCase(),
+        tag,
+      ]),
+    ).values(),
+  ].slice(0, 4);
   const label = game.tagline ? `${game.title}: ${game.tagline}` : game.title;
 
   return (
@@ -90,7 +108,12 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
           {tags.length > 0 && (
             <span className="game-tag-icons" aria-label={tags.join(', ')}>
               {tags.map((tag) => (
-                <Icon key={tag} name={genreIcon(tag)} />
+                <span
+                  key={tag}
+                  style={{ '--tag-color': colors.get(genreIcon(tag)) ?? 'var(--aqua-b)' } as CSSProperties}
+                >
+                  <Icon name={genreIcon(tag)} />
+                </span>
               ))}
             </span>
           )}

@@ -79,10 +79,9 @@ A painted mock can promise what the engine cannot draw. Before the picked mock b
 
 ## Show
 
-Raise one `decision.requested` Command with `blocking: true` (until aiur #7872 is deployed, a non-blocking one expires
-unseen): the mocks in `media[]` (option ids A to D), recommendation first, each option described as what the player sees
+Raise one `decision.requested` Command with `blocking: false` only once every option has media: the mocks in `media[]` (option ids A to D), recommendation first, each option described as what the player sees
 in one line. The creator answers per option (like or dislike, a note each) and with notes on the whole set; apply both.
-Label them as mock-ups. Record the pick in the decision log; the pick is the visual target for the diorama and build
+Label them as mock-ups. Build and ship the recommendation while the pick is pending; silence is a provisional default, never approval. Record the pick in the decision log; the pick is the visual target for the diorama and build
 work that follows. A mock answers how the game looks; how it feels (speed, chain pause, controls) is never a still or a
 link: offer playable options instead (`gm decide --playable <id>=<scenario query>`), which the review deck plays one
 after another in the card.

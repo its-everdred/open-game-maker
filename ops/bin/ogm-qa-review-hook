@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# OGM QA review hook: after a web deploy, run the prod review E2E (`gm qa review-e2e`) when the deploy touched the
-# review screens or the review API, and wake the Executor when it fails. The host's auto-update calls it right after a
-# successful deploy with the commits it deployed from and to.
+# OGM QA review hook: after a deploy, run the prod review E2E (`gm qa review-e2e`) when the deploy touched the review
+# screens or the review API, and the prod voice E2E (`gm qa voice-e2e`, #879) when it touched a voice path, and wake the
+# Executor when either fails. The host's auto-update calls it right after a successful deploy with the commits it
+# deployed from and to.
 #
 # usage: ogm-qa-review-hook <have> <want> [--repo <checkout>] [--attention <file>]
 #
-#   <have> <want>  the deployed range; only paths changed in it decide whether the E2E runs
+#   <have> <want>  the deployed range; only paths changed in it decide which E2E runs
 #   --repo         the deployed checkout (default: this script's repository)
 #   --attention    the file the Executor listens on; a failure appends one line to it (default: $OGM_QA_ATTENTION)
 #
 # Review paths: apps/web/src/**review**, the deck's apps/web/src/features/{worker-builds,commands-inbox}/ and
-# app/StudioMenu*, and services/api/src/{review-rounds,commands,previews,qa,worker-progress,blobs,blob-proxy}/. Before the run it
-# mints a fresh QA session (ops/bin/ogm-qa-session). Stills land in <repo>/assets-local/review/app/qa-e2e/<want>/ and
-# the run's log in ~/.local/state/ogm/qa/review-e2e/<want>.log. Prints the E2E's last line, `exit=<n> qa-review-e2e`.
+# app/StudioMenu*, and services/api/src/{review-rounds,commands,previews,qa,worker-progress,blobs,blob-proxy}/. Voice
+# paths: the list in ops/voice-paths, the same one CI's voice host job reads. Before the runs it mints a fresh QA session
+# (ops/bin/ogm-qa-session). Stills land in <repo>/assets-local/review/app/{qa-e2e,voice-e2e}/<want>/ and each run's log
+# in ~/.local/state/ogm/qa/{review-e2e,voice-e2e}/<want>.log. Prints each E2E's last line, `exit=<n> qa-review-e2e` and
+# `exit=<n> qa-voice-e2e`.
 #
-# exit 0 passed or nothing to check; 1 the E2E or the session failed; 64 bad usage.
+# exit 0 passed or nothing to check; 1 an E2E or the session failed; 64 bad usage.
 
 set -uo pipefail
 
@@ -51,24 +54,46 @@ changed=$(git -C "$repo" diff --name-only "$have" "$want" 2> /dev/null) || {
 # The deck is more than the files named review: its swipe, Command cards and menu live beside them.
 review='^apps/web/src/(.*[Rr]eview|features/(worker-builds|commands-inbox)/|app/StudioMenu)'
 review+='|^services/api/src/(review-rounds|commands|previews|qa|worker-progress|blobs|blob-proxy)/'
-if ! grep -qE "$review" <<< "$changed"; then
-  printf 'ogm-qa-review-hook: no review change in %s..%s\n' "$have" "$want"
+runs=()
+grep -qE "$review" <<< "$changed" && runs+=(review)
+mapfile -t voice_paths < "$(dirname -- "${BASH_SOURCE[0]}")/../voice-paths"
+git -C "$repo" diff --quiet "$have" "$want" -- "${voice_paths[@]}" 2> /dev/null || runs+=(voice)
+if ((${#runs[@]} == 0)); then
+  printf 'ogm-qa-review-hook: no review or voice change in %s..%s\n' "$have" "$want"
   exit 0
 fi
 
 sha=$(git -C "$repo" rev-parse --short=12 "$want")
-logs=${OGM_QA_ROOT:-$HOME/.local/state/ogm/qa}/review-e2e
-mkdir -p "$logs"
-log=$logs/$sha.log
 gm=${OGM_QA_GM:-node $repo/packages/gm-cli/dist/index.js}
 session=${OGM_QA_SESSION_CMD:-$repo/ops/bin/ogm-qa-session}
-
-{
-  $session && (cd "$repo" && $gm qa review-e2e --sha "$sha" --out "$repo/assets-local/review/app/qa-e2e/$sha")
-} > "$log" 2>&1
-rc=$?
-if ((rc != 0)) && [[ -n $attention ]]; then
-  printf '%s qa-review-e2e failed on %s (exit %s): %s\n' "$(date -u +%FT%TZ)" "$sha" "$rc" "$log" >> "$attention"
-fi
-grep -E '^exit=[0-9]+ qa-review-e2e$' "$log" | tail -n 1 || printf 'exit=%s qa-review-e2e\n' "$rc"
-exit $((rc == 0 ? 0 : 1))
+# A hung browser or call must not hold the hook (and the next deploy's check) forever; a timeout counts as a failure.
+limit=${OGM_QA_TIMEOUT_SEC:-3600}
+worst=0
+session_rc=
+for kind in "${runs[@]}"; do
+  name=qa-$kind-e2e
+  stills=qa-e2e
+  [[ $kind == voice ]] && stills=voice-e2e
+  logs=${OGM_QA_ROOT:-$HOME/.local/state/ogm/qa}/$kind-e2e
+  mkdir -p "$logs"
+  log=$logs/$sha.log
+  : > "$log"
+  # One fresh session serves both runs; its output goes to the first run's log.
+  if [[ -z $session_rc ]]; then
+    timeout --kill-after=30 "$limit" $session >> "$log" 2>&1
+    session_rc=$?
+  fi
+  rc=$session_rc
+  if ((rc == 0)); then
+    (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa "$kind-e2e" --sha "$sha" --out "$repo/assets-local/review/app/$stills/$sha") >> "$log" 2>&1
+    rc=$?
+  fi
+  if ((rc != 0)); then
+    worst=1
+    [[ -n $attention ]] && printf '%s %s failed on %s (exit %s): %s\n' "$(date -u +%FT%TZ)" "$name" "$sha" "$rc" "$log" >> "$attention"
+  fi
+  grep -E "^exit=[0-9]+ $name\$" "$log" | tail -n 1 || printf 'exit=%s %s\n' "$rc" "$name"
+  # Without a session every run would fail the same way: wake the Executor once.
+  ((session_rc == 0)) || break
+done
+exit "$worst"

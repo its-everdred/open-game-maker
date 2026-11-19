@@ -357,7 +357,6 @@ export function StudioMenu() {
       onMute={setMuted}
       sliderOpen={sheet === 'volume'}
       menuOpen={hasStudioHeader && open}
-      decisionCount={hasStudioHeader && !open ? menuBadge : 0}
       blocked={hasStudioHeader && blocked}
       building={hasStudioHeader && buildingJobs.length > 0}
       onMenu={
@@ -497,7 +496,9 @@ export function StudioMenu() {
         historyError={past.error}
         workerError={workerError}
         reviewError={reviewData.error || gameReview.error || coreReview.error}
-        reviewLoading={workersLoading || reviewData.loading || gameReview.loading || coreReview.loading}
+        reviewLoading={
+          builds.isLoading || workersLoading || reviewData.loading || gameReview.loading || coreReview.loading
+        }
         historyLoading={past.loading}
         jobs={builds.jobs}
         finished={[
@@ -603,7 +604,9 @@ export function StudioMenu() {
           historyError={past.error}
           workerError={workerError}
           reviewError={reviewData.error || gameReview.error || coreReview.error}
-          reviewLoading={workersLoading || reviewData.loading || gameReview.loading || coreReview.loading}
+          reviewLoading={
+            builds.isLoading || workersLoading || reviewData.loading || gameReview.loading || coreReview.loading
+          }
           historyLoading={past.loading}
           jobs={builds.jobs}
           finished={visibleFinished}
@@ -614,7 +617,7 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
-        hidden={hasStudioHeader}
+        hidden={hasStudioHeader || (controls?.hideButton === true && !open && !blocked)}
         style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}

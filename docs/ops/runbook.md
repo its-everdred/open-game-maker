@@ -151,6 +151,43 @@ that is, and no mail is sent to it.
 See [ingress.md](ingress.md): `ops/bin/ogm-ingress.sh` mounts 8443 and 10000 on Tailscale, after Kevin's operator hand
 step.
 
+## Run the voice host
+
+The live stack runs its services as detached processes started by the Executor's auto-update, not as the systemd
+units above, so the voice host has its own control script that follows the same pattern: env from
+`~/.config/ogm/env/voice-host.env`, log in `~/ogm-stack.voice-host.log`, the browser socket on `OGM_VOICE_PORT`
+(40400) and `/healthz` plus the API's internal calls on `OGM_VOICE_INTERNAL_PORT` (40401), both on `127.0.0.1`.
+
+```
+ops/bin/ogm-voice-host check-env   # names every missing or mismatched setting, never a value
+ops/bin/ogm-voice-host build       # Mix deps + prod release in services/voice-host (needs mise and GitHub)
+ops/bin/ogm-voice-host start       # check-env, start, wait for /healthz
+ops/bin/ogm-voice-host restart     # after each build
+ops/bin/ogm-voice-host ensure      # restart only when /healthz does not answer as the voice host
+ops/bin/ogm-voice-host health
+```
+
+The start command creates a missing cleanup directory with mode `0700`; `check-env` reports a missing or insecure directory. Fix an existing directory with `chmod 700` before starting.
+
+One-time host settings (`check-env` lists whichever are still missing):
+
+- `voice-host.env`: `OGM_VOICE_TOKEN_SECRET` and `OGM_VOICE_INTERNAL_SECRET` copied from `api.env` (they must match),
+  `OGM_API_INTERNAL_URL=http://127.0.0.1:<OGM_API_PORT>`, and for live voice `OGM_VOICE_PROVIDER=elevenlabs_agents`,
+  `OGM_VOICE_LLM` (the agent's model), `OGM_VOICE_CLEANUP_ROOT` (a durable directory such as
+  `~/.local/state/ogm/voice-cleanup`, mode `0700`) and `ELEVENLABS_AGENT_ID` (the host does not read `OGM_VOICE_AGENT_ID`).
+- `api.env`: `OGM_VOICE_HOST_INTERNAL_URL=http://127.0.0.1:40401` and
+  `OGM_VOICE_WS_URL=wss://<tailnet-host>:8443/ws/voice`; restart the API after.
+- Ingress: `ops/bin/ogm-ingress.sh` mounts `/ws/voice` on 8443 beside `/` and `/ws/rooms`.
+
+Auto-update wiring, in the Executor's `auto-update.sh` (`$STACK` is the stack checkout):
+
+- In `update_ogm`, after the `pnpm -r ... build` succeeds:
+  `(cd "$STACK" && ops/bin/ogm-voice-host build > "$HOME/ogm-stack.voice-build.log" 2>&1) || log "ogm: voice host build FAILED (~/ogm-stack.voice-build.log)"`
+- At the end of `restart_services`:
+  `"$STACK/ops/bin/ogm-voice-host" restart >> "$HOME/ogm-stack.voice-host.log" 2>&1 || log "ogm: service voice-host DOWN after restart (~/ogm-stack.voice-host.log)"`
+- In the main loop, once per pass:
+  `"$STACK/ops/bin/ogm-voice-host" ensure >> "$HOME/ogm-stack.voice-host.log" 2>&1 || log "ogm: voice-host down and restart failed"`
+
 ## Backup
 
 `ogm-backup.timer` runs `ops/backup/backup.sh` nightly at 03:30 (`Persistent=true`, so a missed run happens at the next
@@ -376,15 +413,39 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    It deletes its fixtures, saves stills per size in `assets-local/review/app/qa-e2e/<sha>/` and ends with
    `exit=<n> qa-review-e2e` (0 passed, 1 failed). `--inject-regression` hides the round's note box and
    `--break-media` answers the review picture with a 404, each to prove a broken deck fails the run.
-3. After a web deploy, auto-update calls `ops/bin/ogm-qa-review-hook <have> <want> --attention <file>`. It runs both
+3. After a deploy, auto-update calls `ops/bin/ogm-qa-review-hook <have> <want> --attention <file>`. It runs both
    steps when the deploy changed the review deck (`apps/web/src/**review**`,
    `apps/web/src/features/{worker-builds,commands-inbox}/`, `apps/web/src/app/StudioMenu*`) or the review API
    (`services/api/src/{review-rounds,commands,previews,qa,worker-progress,blobs,blob-proxy}/`) and appends one line to the attention file when the run fails, which wakes the Executor. Its log is
    `~/.local/state/ogm/qa/review-e2e/<sha>.log`.
 
-The host routes behind it, `/internal/qa/session`, `/internal/qa/review-fixtures[/<run>]` and
-`/internal/qa/ticket-fixtures[/<run>]`, take only the internal
+The host routes behind it, `/internal/qa/session`, `/internal/qa/review-fixtures[/<run>]`,
+`/internal/qa/ticket-fixtures[/<run>]` and `/internal/qa/voice-fixtures[/<run>]`, take only the internal
 token in `x-ogm-internal`.
+
+## Check voice on prod
+
+`gm qa voice-e2e --sha <deployed sha>` checks one-way and two-way voice in the deployed app as the QA creator, at
+390×844. It seeds a build named `QA voice` on the QA game (filed and released, so it takes no job slot and no daemon
+runs it), opens its chat from the menu's builds sheet, and replaces the microphone with recorded speech
+(`packages/gm-cli/qa/voice-e2e/`, 3.2 s in all):
+
+1. One-way: holds "Hold to talk" while "Make the sky blue." plays, and passes when the message box shows the clip's
+   words. The words are cleared, never sent.
+2. Two-way: taps "Start voice chat", plays "Hello, can you hear me?" once the session is listening, and passes when the
+   agent's audio streams back over the socket, the app plays it, and the creator's spoken turn is stored in the build's
+   chat. It hangs up as soon as the reply arrives.
+
+One run at a time per QA env dir: a second run waits up to 10 minutes, because each run replaces the voice build. It
+deletes the build and its chat, saves a still per step and `voice-e2e.json` (steps, socket tally, cost) in
+`assets-local/review/app/voice-e2e/<sha>/`, prints `cost elevenlabs characters=<n> minutes=<m> audio_sent_s=<s>
+call_s=<s>` (characters are the account's usage before and after, so another session at the same time counts too;
+`unknown` without `ELEVENLABS_API_KEY`) and ends with `exit=<n> qa-voice-e2e`. Each run spends ElevenLabs
+transcription and conversational-AI credits, so it runs only when voice code changes: `ogm-qa-review-hook` runs it after
+a deploy that touches a path in `ops/voice-paths` (the list CI's voice host job also reads), logs to
+`~/.local/state/ogm/qa/voice-e2e/<sha>.log`, cuts off a run that takes longer than `OGM_QA_TIMEOUT_SEC` (3600), and
+appends a `qa-voice-e2e failed` line to the attention file when it
+fails. Run `ops/bin/ogm-voice-host build` and `restart` before it when the voice host changed.
 
 ## Prove the instance monorepo flow
 

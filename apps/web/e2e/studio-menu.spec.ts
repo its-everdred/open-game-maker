@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { optionFailures, swipeDeckFailures } from '../../../packages/gm-cli/src/qa-review-checks';
+import { openReviewDeck, optionFailures, swipeDeckFailures } from '../../../packages/gm-cli/src/qa-review-checks';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { installGameApi } from './support/mock-game-api';
@@ -163,9 +163,8 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
     return json(route, { status: 'answered' });
   });
   await page.goto('/all');
-  await page.locator('.worker-tracker-button').click();
-  await page.getByRole('button', { name: '3 Needs Review' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Needs Review' });
+  // The prod review E2E's own step (#891): if this path changes, the prod run would break, so CI fails here first.
+  const dialog = await openReviewDeck(page);
   await expect(dialog.getByText('3 left')).toBeVisible();
   await expect(dialog.getByLabel('Concept target and review')).toBeVisible();
   for (const viewport of [
@@ -284,7 +283,16 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
       json: {
         workers: complete
           ? []
-          : [{ ticket: '211', title: 'Moon gate', percent, etaSeconds: 10, startedAt: '2026-11-01T00:00:00Z' }],
+          : [
+              {
+                ticket: '211',
+                title: 'Moon gate',
+                percent,
+                etaSeconds: 10,
+                phase: 'Building',
+                startedAt: '2026-11-01T00:00:00Z',
+              },
+            ],
         cursor: complete ? 11 : 10,
         completed: complete ? [{ ticket: '211', seq: 11, at: '2026-11-01T00:00:01Z' }] : [],
       },
@@ -299,7 +307,11 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
   await expect(page.getByText('40%', { exact: true })).toBeVisible();
   percent = 80;
   await expect(page.getByText('80%', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Moon gate', { exact: true })).toBeVisible();
+  const row = page.getByRole('button', { name: /Moon gate/ });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText('Building', { exact: true })).toBeVisible();
   await capturePhone(page, testInfo, 'worker-builds-expanded');
   await page.getByRole('button', { name: '1 build running' }).click();
   complete = true;
@@ -312,20 +324,23 @@ test('updates the worker tracker without a reload', async ({ page }, testInfo) =
   await expect(page.getByRole('region', { name: 'Builds' }).getByText('Moon gate is ready')).toBeVisible();
 });
 
-test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
-  testInfo.setTimeout(90_000);
-  await installAuthRoutes(page);
-  await stubBrandArt(page);
-  await stubTown(page);
-  await page.goto('/');
+test.describe('title menu', () => {
+  // Context creation is part of the test timeout and can be slow on CI (#890).
+  test.describe.configure({ timeout: 90_000 });
+  test('opens the same volume and report menu on the title', async ({ page }, testInfo) => {
+    await installAuthRoutes(page);
+    await stubBrandArt(page);
+    await stubTown(page);
+    await page.goto('/');
 
-  await capturePhone(page, testInfo, 'title-menu-closed');
-  await page.getByRole('button', { name: 'Menu' }).click();
+    await capturePhone(page, testInfo, 'title-menu-closed');
+    await page.getByRole('button', { name: 'Menu' }).click();
 
-  await expect(page.getByRole('button', { name: /^(Mute|Unmute)$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible();
-  await expect(page.locator('.bug-fab')).toHaveCount(0);
-  await capturePhone(page, testInfo, 'title-menu-open');
+    await expect(page.getByRole('button', { name: /^(Mute|Unmute)$/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible();
+    await expect(page.locator('.bug-fab')).toHaveCount(0);
+    await capturePhone(page, testInfo, 'title-menu-open');
+  });
 });
 
 test('shows the active build ring and contextual build in the games menu', async ({ page }, testInfo) => {
@@ -338,7 +353,7 @@ test('shows the active build ring and contextual build in the games menu', async
   const trigger = page.locator('.studio-library-volume button');
   await expect(trigger).toHaveAttribute('data-building', 'true');
   await expect(page.locator('.studio-menu-control [role="status"]')).toHaveText('Building Moon Vault');
-  await expect(page.locator('.studio-menu-badge')).toHaveText('2');
+  await expect(trigger.locator('.studio-menu-badge')).toHaveCount(0);
   await capturePhone(page, testInfo, 'games-menu-building');
 
   await trigger.click({ button: 'right' });
@@ -358,7 +373,7 @@ test('shows the active build ring and contextual build in the games menu', async
   await capturePhone(page, testInfo, 'games-menu-conversation');
 });
 
-// Kevin (2026-11-08): sign in, see how many decisions are open on the top-right button, and click through each one.
+// Open decisions remain available in the menu without a count on the sound control.
 test('counts the open decisions and walks through each one from the menu', async ({ page }, testInfo) => {
   testInfo.setTimeout(90_000);
   await installAuthRoutes(page, { signedIn: true });
@@ -367,7 +382,7 @@ test('counts the open decisions and walks through each one from the menu', async
   await page.goto('/all');
 
   const trigger = page.locator('.studio-library-volume button');
-  await expect(page.locator('.studio-menu-badge')).toHaveText('3');
+  await expect(trigger.locator('.studio-menu-badge')).toHaveCount(0);
   await expect(trigger).toHaveAttribute('data-blocking', 'true');
   await capturePhone(page, testInfo, 'decisions-badge');
 

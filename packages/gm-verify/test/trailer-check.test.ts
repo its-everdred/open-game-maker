@@ -20,7 +20,17 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 /** A clip at the given size (15 s unless told) with optional AAC audio, plus a capture record when asked. */
 function trailer(
   size: string,
-  options: { audio?: boolean; record?: boolean; file?: string; seconds?: number; codec?: string } = {},
+  options: {
+    audio?: boolean;
+    record?: boolean;
+    file?: string;
+    seconds?: number;
+    codec?: string;
+    profile?: string;
+    level?: string;
+    pixFmt?: string;
+    faststart?: boolean;
+  } = {},
 ) {
   const seconds = options.seconds ?? 15;
   const file = join(dir, options.file ?? TRAILER_FILE);
@@ -36,9 +46,11 @@ function trailer(
     '-c:v',
     options.codec ?? 'libx264',
     '-preset',
-    'ultrafast',
+    'fast',
+    ...(options.codec === 'mpeg4' ? [] : ['-profile:v', options.profile ?? 'main', '-level:v', options.level ?? '4.1']),
     '-pix_fmt',
-    'yuv420p',
+    options.pixFmt ?? 'yuv420p',
+    ...(options.faststart === false ? [] : ['-movflags', '+faststart']),
     '-shortest',
     file,
   ]);
@@ -54,10 +66,23 @@ it('fails when the trailer is missing, before needing ffprobe', () => {
 });
 
 it.skipIf(!ffmpegAvailable)(
-  'passes the one 1920×1080 H.264 and AAC gameplay trailer (requires ffmpeg)',
+  'passes the one 1280×720 H.264 and AAC gameplay trailer (requires ffmpeg)',
   () => {
-    trailer('1920x1080');
+    trailer('1280x720');
     expect(checkTrailer(dir, none)).toEqual([]);
+  },
+  60_000,
+);
+
+it.skipIf(!ffmpegAvailable)(
+  'rejects incompatible H.264 profile, level, pixel format and MP4 layout (requires ffmpeg)',
+  () => {
+    trailer('1280x720', { profile: 'high444', level: '6.2', pixFmt: 'yuv444p', faststart: false });
+    const failures = checkTrailer(dir, none);
+    expect(failures).toContain(`${TRAILER_FILE} must use H.264 Main profile`);
+    expect(failures).toContain(`${TRAILER_FILE} must use H.264 level 4.1 or lower`);
+    expect(failures).toContain(`${TRAILER_FILE} must use yuv420p`);
+    expect(failures).toContain(`${TRAILER_FILE} must place moov before mdat (faststart)`);
   },
   60_000,
 );
@@ -79,7 +104,7 @@ it.skipIf(!ffmpegAvailable)(
   () => {
     trailer('640x360', { audio: false });
     expect(checkTrailer(dir, none)).toEqual([
-      `${TRAILER_FILE} is 640×360, not 1920×1080`,
+      `${TRAILER_FILE} is 640×360, not 1280×720`,
       `${TRAILER_FILE} has no AAC audio`,
     ]);
   },
@@ -89,7 +114,7 @@ it.skipIf(!ffmpegAvailable)(
 it.skipIf(!ffmpegAvailable)(
   'fails without a capture record, or with one for another video (requires ffmpeg)',
   () => {
-    trailer('1920x1080', { record: false });
+    trailer('1280x720', { record: false });
     expect(checkTrailer(dir, none)).toEqual([`${TRAILER_RECORD} is missing; capture the trailer with gm trailer`]);
     writeFileSync(
       join(dir, TRAILER_RECORD),
@@ -105,7 +130,7 @@ it.skipIf(!ffmpegAvailable)(
 it.skipIf(!ffmpegAvailable)(
   'fails menu frames and a capture made before the manifest named its menus (requires ffmpeg)',
   () => {
-    trailer('1920x1080');
+    trailer('1280x720');
     const record = JSON.parse(readFileSync(join(dir, TRAILER_RECORD), 'utf8')) as ReturnType<typeof trailerRecord>;
     record.scenes[0]!.inPlay = 4;
     writeFileSync(join(dir, TRAILER_RECORD), JSON.stringify(record));
@@ -120,9 +145,9 @@ it.skipIf(!ffmpegAvailable)(
 it.skipIf(!ffmpegAvailable)(
   'fails a trailer shorter than 15 s or over 30 s (requires ffmpeg)',
   () => {
-    trailer('1920x1080', { seconds: 1 });
+    trailer('1280x720', { seconds: 1 });
     expect(checkTrailer(dir, none)).toEqual([`${TRAILER_FILE} runs 1.000000 s; a trailer runs 15–30 s`]);
-    trailer('1920x1080', { seconds: 31 });
+    trailer('1280x720', { seconds: 31 });
     expect(checkTrailer(dir, none)).toEqual([`${TRAILER_FILE} runs 31.000000 s; a trailer runs 15–30 s`]);
   },
   60_000,
@@ -131,7 +156,7 @@ it.skipIf(!ffmpegAvailable)(
 it.skipIf(!ffmpegAvailable)(
   'fails a non-H.264 video and an unreadable file (requires ffmpeg)',
   () => {
-    trailer('1920x1080', { codec: 'mpeg4' });
+    trailer('1280x720', { codec: 'mpeg4' });
     expect(checkTrailer(dir, none)).toEqual([`${TRAILER_FILE} video is mpeg4, not H.264`]);
     writeFileSync(join(dir, TRAILER_FILE), 'not a video');
     expect(checkTrailer(dir, none)).toEqual([
@@ -144,7 +169,7 @@ it.skipIf(!ffmpegAvailable)(
 it.skipIf(!ffmpegAvailable)(
   'fails a malformed record and one made before a manifest route (requires ffmpeg)',
   () => {
-    trailer('1920x1080');
+    trailer('1280x720');
     const record = readFileSync(join(dir, TRAILER_RECORD), 'utf8');
     expect(checkTrailer(dir, { selectors: [], routes: ['#menu'] })).toEqual([
       "the capture predates the manifest's menu markers (#menu); capture the trailer again",

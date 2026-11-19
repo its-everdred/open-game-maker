@@ -11,15 +11,17 @@ import { authContextFor } from '../auth/routes.js';
 import { ensureQaAccount, mintQaSession } from './account.js';
 import { deleteTicketFixtures, seedTicketFixtures } from './tickets.js';
 import { deleteReviewFixtures, reviewFixtureReport, seedReviewFixtures } from './fixtures.js';
+import { deleteVoiceFixtures, seedVoiceFixture, voiceFixtureReport } from './voice.js';
 
 // The host's QA routes (#859): the QA creator account and its session (`ops/bin/ogm-qa-session`), and the fixtures a
-// prod review E2E (`gm qa review-e2e`) seeds, reads back and deletes on the QA game. Only the internal token reaches
+// prod review and voice E2Es (`gm qa review-e2e`, `gm qa voice-e2e`) seed, read back and delete on the QA game. Only the internal token reaches
 // them; a user session never does.
 export const prefix = '/internal/qa';
 
 const RUN = /^[a-z0-9-]{1,40}$/u;
 const SessionBody = z.object({ email: z.string().email() }).strict();
 const Base64 = z.string().min(1).max(4_000_000);
+const RunBody = z.object({ run: z.string().regex(RUN) }).strict();
 const FixturesBody = z
   .object({ run: z.string().regex(RUN), media: z.object({ still: Base64, clip: Base64, audio: Base64 }).strict() })
   .strict();
@@ -93,5 +95,25 @@ export default new Hono<ApiBindings>()
   .delete('/ticket-fixtures/:run', (c) => {
     requireOperator(c);
     deleteTicketFixtures(c.get('deps'), run(c));
+    return c.json({ status: 'deleted' });
+  })
+  // The voice E2E's build chat (#879): seeded, read back for the stored transcript, deleted.
+  .post('/voice-fixtures', async (c) => {
+    requireOperator(c);
+    const body = await parseBody(c, RunBody);
+    return c.json(seedVoiceFixture(c.get('deps'), body.run), 201);
+  })
+  .get('/voice-fixtures/:run', (c) => {
+    requireOperator(c);
+    return c.json(voiceFixtureReport(c.get('deps'), run(c)));
+  })
+  .delete('/voice-fixtures', (c) => {
+    requireOperator(c);
+    deleteVoiceFixtures(c.get('deps'));
+    return c.json({ status: 'deleted' });
+  })
+  .delete('/voice-fixtures/:run', (c) => {
+    requireOperator(c);
+    deleteVoiceFixtures(c.get('deps'), run(c));
     return c.json({ status: 'deleted' });
   });

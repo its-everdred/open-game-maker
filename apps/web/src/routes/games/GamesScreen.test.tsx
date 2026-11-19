@@ -8,6 +8,12 @@ import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 import { GamesScreen } from './GamesScreen';
 import { startTrailer } from './trailerVideo';
 
+const session = vi.hoisted(() => ({ userId: undefined as string | undefined }));
+vi.mock('../../lib/api/session', () => ({
+  useSession: () => ({ data: session.userId ? { user: { id: session.userId } } : undefined }),
+}));
+vi.mock('../../lib/sound', () => ({ set: vi.fn(), getVolume: () => 1, status: () => 'on', onChange: () => () => {} }));
+
 const games = [
   {
     id: 'g_1',
@@ -144,6 +150,8 @@ function setGridColumns(columns: number) {
 }
 
 beforeEach(() => {
+  session.userId = undefined;
+  localStorage.clear();
   gamesResponse = games;
   jobsResponse = jobs;
   commandsResponse = [];
@@ -195,7 +203,7 @@ it('orders played games newest first ahead of the existing unplayed order', asyn
 describe('GamesScreen', () => {
   it('opens the selected prototype showcase even when Goblin Cellar has a build', async () => {
     renderGames();
-    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }, AUTO_SELECT));
     expect(await screen.findByText('A sleepy village, one repair at a time.')).toBeVisible();
     const play = await screen.findByRole('button', { name: 'Play RestoreBound' });
     await waitFor(() => expect(play).toBeEnabled());
@@ -205,18 +213,15 @@ describe('GamesScreen', () => {
   it('opens the prototype demo for a showcase game before Goblin Cellar is registered', async () => {
     gamesResponse = [];
     renderGames();
-    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }, AUTO_SELECT));
     fireEvent.click(await screen.findByRole('button', { name: 'Play RestoreBound' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/restorebound?mode=play');
   });
-  it('keeps the real showcase game share link in the menu', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+  it('does not show a share button for a selected game', async () => {
     const { container } = renderGames('/all?spotlight=g_2');
     await screen.findByRole('heading', { name: 'Goblin Cellar' });
-    expect(container.querySelector('[data-game-id="g_2"] .game-copy')).toBeNull();
-    fireEvent.click(await screen.findByRole('button', { name: 'Copy link to Goblin Cellar' }));
-    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/play/g_2`);
+    expect(container.querySelector('.game-copy')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Copy link/ })).toBeNull();
   });
   it('keeps the prototype showcase when there are no real games', async () => {
     gamesResponse = [];
@@ -435,6 +440,28 @@ describe('GamesScreen', () => {
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
   });
 
+  it('shows the saved library immediately while refreshing it', async () => {
+    session.userId = 'user-1';
+    localStorage.setItem('ogm.games.v1.user-1', JSON.stringify(games));
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/api/v1/games')) return new Promise<Response>(() => {});
+      return json({ jobs });
+    });
+    setGridColumns(20);
+    renderGames();
+    expect(screen.getAllByRole('button', { name: /Midnight Crumbs/ }).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Building 40%')).toBeVisible();
+    expect(screen.queryByRole('progressbar', { name: 'Loading' })).toBeNull();
+    expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
+  });
+
+  it('shows a wordless loading bar while the first library request is pending', () => {
+    vi.mocked(fetch).mockImplementation(async () => new Promise<Response>(() => {}));
+    renderGames();
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading your games…')).toBeNull();
+  });
+
   it('keeps cached tiles visible and offers retry when a refresh fails', async () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -443,7 +470,7 @@ describe('GamesScreen', () => {
       return json({ error: 'not_found' }, 404);
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(['games'], games);
+    client.setQueryData(['games', undefined], games);
 
     const { container } = renderGames('/all', client);
 
