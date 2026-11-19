@@ -9,7 +9,7 @@ export async function captureStill(
   timeout: number,
 ): Promise<void> {
   try {
-    await page.screenshot({ ...(path ? { path } : {}), timeout });
+    await page.screenshot({ ...(path ? { path } : {}), timeout, caret: 'initial' });
   } catch (error) {
     if (error instanceof errors.TimeoutError)
       throw new ScreenshotTimeout(`shell capture: ${stage} screenshot timed out after ${timeout / 1000} seconds`);

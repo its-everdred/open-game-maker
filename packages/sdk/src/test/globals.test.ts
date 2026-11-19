@@ -2,6 +2,7 @@ import type { GmTestHooks } from '@ogm/contracts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { installGlobals } from './globals.js';
+import { beginImageDraws, reportImageDraw } from './image-draws.js';
 
 const makeHooks = (): GmTestHooks => ({
   ready: true,
@@ -48,5 +49,21 @@ describe('installGlobals', () => {
     expect(window.__frame).toBeUndefined();
     expect(window.__ready).toBeUndefined();
     expect(window.__marks).toBeUndefined();
+  });
+
+  it('exposes the current UI sprite reports only while the draft hooks are installed', () => {
+    const cleanup = installGlobals(makeHooks(), 'draft');
+    expect(window.__gm?.imageDrawsReady?.()).toBe(false);
+    beginImageDraws();
+    reportImageDraw({
+      id: 'button',
+      file: 'button.png',
+      source: { width: 90, height: 30 },
+      drawn: { width: 30, height: 30 },
+    });
+    expect(window.__gm?.imageDraws?.()).toMatchObject([{ id: 'button', file: 'button.png' }]);
+    expect(window.__gm?.imageDrawsReady?.()).toBe(true);
+    cleanup();
+    expect(window.__gm).toBeUndefined();
   });
 });

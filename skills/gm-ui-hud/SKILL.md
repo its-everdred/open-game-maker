@@ -21,6 +21,7 @@ gameplay calls, so the same model drives the screen, tests, and spectators. Keep
 
 ## Layout
 
+Follow [image distortion guidance](references/image-distortion.md) for UI art and canvas sprites.
 Read the `Viewport` from `HostApi.viewport.current()` on the `host` that `mount` receives, and follow
 `HostApi.viewport.onChange`; it carries size, `dpr`, orientation, and `safe` insets. Keep every HUD element inside the
 safe insets. Lay out against the manifest's `presentation.minLogical` reference size and scale uniformly from it;
@@ -69,7 +70,6 @@ a phone with the on-screen buttons showing, and asks at each step whether a butt
 is unchecked. Never claim every device.
 
 ## Reference
-
 Open `.claude/skills/vendor/gamedev/game-ui-ux/SKILL.md` for anchors, focus order, and event-driven HUD patterns, and
 `.claude/skills/vendor/phaser/scale-and-responsive/SKILL.md` or
 `.claude/skills/vendor/phaser/text-and-bitmaptext/SKILL.md` only for engine details. The host contract wins when a

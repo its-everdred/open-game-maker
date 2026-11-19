@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { build } from 'esbuild';
 import { expect, it } from 'vitest';
 
 const exec = promisify(execFile);
@@ -29,16 +30,30 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
     const source = readFileSync(html, 'utf8');
     const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
     if (!script) throw new Error('bridge fixture script missing');
+    const sdk = await build({
+      stdin: {
+        contents: `import { installGlobals } from './globals.ts'; import { beginImageDraws, reportImageDraw } from './image-draws.ts';
+          installGlobals({ ready: true, marks: [], advanceTime() {}, renderAt() {}, renderGameToText() {} }, 'draft');
+          setInterval(() => { beginImageDraws();
+            reportImageDraw({ id: 'sdk-sprite', file: 'sprite.png', source: { width: 90, height: 30 }, drawn: { width: 30, height: 30 } }); }, 100);`,
+        resolveDir: fileURLToPath(new URL('../../sdk/src/test/', import.meta.url)),
+        loader: 'ts',
+      },
+      bundle: true,
+      write: false,
+      platform: 'browser',
+      format: 'iife',
+    });
     writeFileSync(
       join(game, 'fixture.js'),
-      `fetch('http://127.0.0.1:${port}/').then(() => { document.querySelector('button').textContent = 'LEAKED'; }, () => { document.querySelector('button').textContent = 'Start'; });\n${script}`,
+      `${sdk.outputFiles[0]!.text}\nlet __lateAdded = false; const __decode = Image.prototype.decode; Image.prototype.decode = function() { if (__lateAdded) return __decode.call(this); __lateAdded = true; setTimeout(() => { const image = document.createElement('img'); image.id = 'late'; image.src = 'café scene.png'; image.style.cssText = 'width:90px;height:30px'; document.querySelector('#canvas').append(image); }, 25); return new Promise((resolve) => setTimeout(resolve, 100)).then(() => __decode.call(this)); };\nfetch('http://127.0.0.1:${port}/').then(() => { document.querySelector('button').textContent = 'LEAKED'; }, () => { document.querySelector('button').textContent = 'Start'; });\n${script}`,
     );
     writeFileSync(
       html,
       source
         .replace(
           'Bridge fixture</div>',
-          '<button data-gm-play-area>Waiting</button><img src="café scene.png" alt=""> </div>',
+          '<button data-gm-play-area>Waiting</button><img id="stretched" src="café scene.png" alt="" style="width:90px;height:30px"><div style="width:90px;height:30px;background:url(\'café scene.png\') 0 0 / 90px 30px"></div> </div>',
         )
         .replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
     );
@@ -69,6 +84,17 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
       }
     }
     expect(externalRequests).toBe(0);
+    const distortions = JSON.parse(readFileSync(join(out, 'image-distortion.json'), 'utf8')) as {
+      element: string;
+      viewport: string;
+      screen: string;
+    }[];
+    for (const viewport of ['390x844', '844x390', '820x1180', '1180x820'])
+      expect(distortions).toContainEqual(expect.objectContaining({ element: '#stretched', viewport, screen: 'play' }));
+    expect(distortions).toContainEqual(expect.objectContaining({ element: '#late', screen: 'play' }));
+    expect(distortions).toContainEqual(expect.objectContaining({ element: '#stretched', screen: 'after Start' }));
+    expect(distortions).toContainEqual(expect.objectContaining({ element: 'sdk-sprite', screen: 'play' }));
+    expect(distortions.filter((item) => item.element === 'document')).toEqual([]);
     expect(JSON.parse(readFileSync(join(out, 'play-area.json'), 'utf8'))).toMatchObject(
       ['390x844', '844x390', '820x1180', '1180x820'].flatMap((viewport) =>
         ['play', 'ingame', 'menu', 'edit'].map((screen) => ({ viewport, screen, ok: false })),

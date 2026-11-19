@@ -25,6 +25,8 @@ export interface ShellOptions {
   videoDir?: string;
   /** Also collect the game frame's console errors, from its first script on. */
   gameConsole?: boolean;
+  /** Install capture instrumentation before any page script runs. */
+  initScript?: () => void;
 }
 
 export interface OpenShell {
@@ -47,6 +49,7 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
     ...(options.videoDir ? { recordVideo: { dir: options.videoDir, size: { width, height } } } : {}),
   });
   try {
+    if (options.initScript) await context.addInitScript(options.initScript);
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));

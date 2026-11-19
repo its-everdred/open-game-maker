@@ -2,6 +2,7 @@ export const GATE_CHECK_IDS = [
   'typecheck',
   'no-wall-clock-in-sim',
   'hook-present',
+  'image-stretch',
   'boot',
   'ticks',
   'round-trip',

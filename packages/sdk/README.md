@@ -1,5 +1,20 @@
 # Game SDK
 
+## UI sprite measurements
+
+In draft builds, canvas and WebGL UI renderers can report visible sprites to the shell's distortion gate with
+`@gm/sdk/debug`. Call `beginImageDraws()` at the beginning of each UI frame, then call
+`reportImageDraw({ id, file, source: { width, height }, drawn: { width, height } })` for each sprite. Source dimensions
+describe its sampled rectangle; drawn dimensions are CSS pixels. The capture reads the latest frame through
+`window.__gm.imageDraws()`. Call `beginImageDraws()` even when a frame has no UI sprites, so a visible canvas can be
+verified as having no sprites to report. Do not report world textures, and omit the instrumentation from published builds.
+Mark a WebGL canvas that contains only game-world rendering with `data-gm-world-canvas="true"`; never use this marker on
+a canvas that contains UI. Canvas 2D `drawImage` calls are also inspected by the capture, including unreported draws.
+For WebGL UI, use a separate canvas from the world, give it a unique DOM id, and include that id as `canvasId` in each
+report. Draw sprites as quads after `beginImageDraws()`. The capture compares each canvas's quad count against its
+reports and reports unsupported geometry explicitly. Clear the full color buffer before each new WebGL UI frame so
+coverage cannot discard a still-visible draw from an earlier frame.
+
 ## Shared player settings
 
 The host owns the settings menu. Subscribe with `host.settings.onChange` and pass the received settings to

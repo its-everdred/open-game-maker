@@ -103,7 +103,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-qa | QA-ing a hosted build like a player: phone and desktop, journeys, rooms across devices, report. |
 | gm-genre-platformer | Building or tuning a platformer. |
 | gm-input | Adding input actions, buffering, rebinding, or accessibility. |
-| gm-ui-hud | Building menus, HUD, layout, or readable game text. |
+| gm-ui-hud | Building menus, HUD, layout, or readable game text; includes the no-stretch image rule. |
 | gm-audio | Adding or tuning music and sound effects. |
 | gm-multiplayer-ready | Structuring player state or building multiplayer. |
 | gm-image-mock | Any visual design review: step 1 is generated mocks of the player screen in the kit, before dioramas. |
