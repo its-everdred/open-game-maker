@@ -69,10 +69,10 @@ describe('ensureDaemon', () => {
 
     const result = await fleet.ensureDaemon({ slug, repo }, 'feature');
 
-    expect(result).toEqual({ status: 'stopped', reasons: ['config drift: agent.codex'] });
+    expect(result).toEqual({ status: 'stopped', reasons: [`${slug}: config drift: agent.codex`] });
     expect(systemctlCalls(runner)).toEqual([]);
     expect(runner.calls).toEqual([]);
-    expect(store.rows.get(slug)).toMatchObject({ status: 'stopped', lastError: 'config drift: agent.codex' });
+    expect(store.rows.get(slug)).toMatchObject({ status: 'stopped', lastError: `${slug}: config drift: agent.codex` });
   });
 
   it('runs the real preflight against the rendered files', async () => {
@@ -135,7 +135,7 @@ describe('ensureDaemon', () => {
     ]);
   });
 
-  it('fails closed when a live peer cannot pass membership refresh preflight', async () => {
+  it('fails closed when a managed live peer cannot pass membership refresh preflight', async () => {
     const home = await tempHome();
     const { fleet, runner } = buildFleet(home);
 
@@ -148,6 +148,20 @@ describe('ensureDaemon', () => {
       reasons: ['alpha: missing .aiur/config'],
     });
     expect(systemctlCalls(runner)).not.toContain('--user start ogm-aiur@charlie.service');
+  });
+
+  it('names the requested game when its config is missing during preflight', async () => {
+    const home = await tempHome();
+    const preflight = vi.fn(async (dir: string, input: Parameters<typeof realPreflight>[1]) => {
+      await rm(join(dir, '.aiur/config'));
+      return realPreflight(dir, input);
+    });
+    const { fleet } = buildFleet(home, { preflight });
+    await expect(fleet.ensureDaemon({ slug: 'charlie', repo }, 'feature')).resolves.toEqual({
+      status: 'stopped',
+      reasons: ['charlie: missing .aiur/config'],
+    });
+    expect(preflight.mock.calls[0]?.[0]).toBe(join(home, '.local/share/ogm/daemons/charlie'));
   });
 
   it('refuses a fifth daemon with waiting_capacity while four are live, without touching systemd', async () => {

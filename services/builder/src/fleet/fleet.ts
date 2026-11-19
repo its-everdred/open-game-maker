@@ -175,9 +175,7 @@ export function createFleet(deps: FleetDeps) {
       if (row.slug !== currentSlug) await materializeCodexHome(input, codexAuthFor(env));
       const verdict = await checkPolicy(paths.dir, input);
       if (!verdict.ok) {
-        const reasons =
-          row.slug === currentSlug ? verdict.reasons : verdict.reasons.map((reason) => `${row.slug}: ${reason}`);
-        throw new FleetPreflightError(reasons);
+        throw new FleetPreflightError(verdict.reasons.map((reason) => `${row.slug}: ${reason}`));
       }
     }
   }
