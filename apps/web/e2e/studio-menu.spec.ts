@@ -3,7 +3,12 @@ import { Buffer } from 'node:buffer';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { openReviewDeck, optionFailures, swipeDeckFailures } from '../../../packages/gm-cli/src/qa-review-checks';
+import {
+  openReviewDeck,
+  openReviewItem,
+  optionFailures,
+  swipeDeckFailures,
+} from '../../../packages/gm-cli/src/qa-review-checks';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { installGameApi } from './support/mock-game-api';
@@ -164,7 +169,7 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   });
   await page.goto('/all');
   // The prod review E2E's own step (#891): if this path changes, the prod run would break, so CI fails here first.
-  const dialog = await openReviewDeck(page);
+  const dialog = await openReviewDeck(page, 20_000, 'Review?', ['Review?', 'Missing?', 'Choose']);
   await expect(dialog.getByText('3 left')).toBeVisible();
   await expect(dialog.getByLabel('Concept target and review')).toBeVisible();
   for (const viewport of [
@@ -239,7 +244,8 @@ test('reviews a queue with swipe, undo, notes and an option pick', async ({ page
   await expect(dialog.getByRole('status').filter({ hasText: 'sent to agent' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Next' }).click();
   await expect(dialog.getByText('Asked the agent for media in the next round.')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Next' }).click();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await openReviewItem(page, 'Choose');
   expect(await optionFailures(dialog, 3)).toEqual([]);
   await dialog.getByLabel('Note (optional)').fill('Keep blue');
   await dialog.getByRole('button', { name: 'View option B' }).click();

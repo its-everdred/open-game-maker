@@ -2,7 +2,14 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { reviewOptionImageReady, reviewRoundMediaReady } from './qa-review-media.js';
 
-import { mediaFailures, openReviewDeck, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
+import {
+  mediaFailures,
+  openReviewDeck,
+  openReviewItem,
+  optionFailures,
+  settleMedia,
+  swipeDeckFailures,
+} from './qa-review-checks.js';
 import { ticketDetailSteps } from './qa-ticket-detail-e2e.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
@@ -217,8 +224,7 @@ async function runViewport(
     await still('round-sent');
     await step('pick B on the Command with a note', async () => {
       await dialog.getByRole('button', { name: 'Close' }).click(timeout);
-      const list = page.getByRole('region', { name: 'Builds' });
-      await list.getByRole('button', { name: 'QA review', exact: true }).click(timeout);
+      await openReviewItem(page, 'QA review', timeout.timeout);
       await dialog.getByText('QA: which one?').waitFor(timeout);
       await settleMedia(dialog);
       await still('command');

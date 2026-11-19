@@ -65,6 +65,18 @@ function reviewItemName(title: string): RegExp {
   return new RegExp(`^${escaped}(?:, Needs review,.*)?$`, 'u');
 }
 
+/** Select a review row after the group has been expanded. */
+export async function openReviewItem(page: Page, title: string, timeout = 20_000): Promise<Locator> {
+  await page
+    .getByRole('region', { name: 'Builds' })
+    .locator('.worker-review-group-item')
+    .getByRole('button', { name: reviewItemName(title) })
+    .click({ timeout });
+  const dialog = page.getByRole('dialog', { name: 'Needs Review' });
+  await dialog.waitFor({ timeout });
+  return dialog;
+}
+
 export async function openReviewDeck(
   page: Page,
   timeout = 20_000,
@@ -82,7 +94,8 @@ export async function openReviewDeck(
     for (const name of expected) await group.getByRole('button', { name: reviewItemName(name) }).waitFor({ timeout });
     if ((await items.count()) !== expected.length) throw new Error('filtered review list has an unexpected item count');
   }
-  await (title ? group.getByRole('button', { name: reviewItemName(title) }) : items.first()).click({ timeout });
+  if (title) return openReviewItem(page, title, timeout);
+  await items.first().click({ timeout });
   const dialog = page.getByRole('dialog', { name: 'Needs Review' });
   await dialog.waitFor({ timeout });
   return dialog;

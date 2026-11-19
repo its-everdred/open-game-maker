@@ -9,6 +9,7 @@ import { gm, tempDir } from './helpers.js';
 vi.mock('../src/qa-review-checks.js', () => ({
   settleMedia: async () => {},
   openReviewDeck: async () => {},
+  openReviewItem: async () => {},
   mediaFailures: async () => [],
   swipeDeckFailures: async () => [],
   optionFailures: async () => [],
