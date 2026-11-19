@@ -47,3 +47,33 @@ def test_cellar_does_not_inherit_other_floors():
     """Kevin: the cellar map was tagged with upper stories and roofs, words from its links legend to the other floors."""
     assert t.level_of("CA197 City Block Cellar no SS4") == "cellar"
     assert t.level_of("CA161 Ryecroft Town") is None
+
+
+def test_worker_card_record_has_only_the_json_lines_contract_fields():
+    assert t.card_record("inspiration/cards/map.card.json", {"status": "tagged"}) == {
+        "card": "inspiration/cards/map.card.json",
+        "status": "tagged",
+        "flags": [],
+    }
+
+
+def test_staged_card_preserves_previous_file_until_promotion(tmp_path):
+    out = tmp_path / "map.card.json"
+    out.write_text("old\n")
+    staged = t.stage_json(out, {"status": "tagged"})
+
+    assert out.read_text() == "old\n"
+    t.promote(staged, out)
+    assert '"status": "tagged"' in out.read_text()
+
+
+def test_existing_card_keeps_protected_and_locked_fields():
+    previous = {"rights": {"uses": []}, "source": {"files": ["original"]},
+                "describe": {"description": "human"},
+                "provenance": {"describe.description": {"by": "human", "locked": True}}}
+    generated = {"source": {"files": ["changed"]}, "describe": {"description": "model"}, "provenance": {}}
+    result = t.preserve_card(previous, generated)
+    assert result["rights"] == previous["rights"]
+    assert result["source"] == previous["source"]
+    assert result["describe"]["description"] == "human"
+    assert result["provenance"]["describe.description"]["locked"] is True

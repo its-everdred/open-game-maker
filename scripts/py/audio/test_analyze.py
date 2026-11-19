@@ -63,13 +63,73 @@ class JobListTests(unittest.TestCase):
     def test_one_job_per_sound_not_per_format(self):
         jobs = a.job_list(self.packs, "*")
         self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs[0][2].suffix, ".ogg")
+        self.assertEqual(jobs[0]["file"].suffix, ".ogg")
 
     def test_refresh_reaches_every_job(self):
         """`--refresh` is the only way a new sidecar field reaches files carded before it existed."""
-        self.assertTrue(all(job[3] for job in a.job_list(self.packs, "*", refresh=True)))
-        self.assertFalse(any(job[3] for job in a.job_list(self.packs, "*")))
+        self.assertTrue(all(job["refresh"] for job in a.job_list(self.packs, "*", refresh=True)))
+        self.assertFalse(any(job["refresh"] for job in a.job_list(self.packs, "*")))
 
     def test_a_pack_glob_can_narrow_the_run(self):
         self.assertEqual(a.job_list(self.packs, "pixabay-*"), [])
         self.assertEqual(len(a.job_list(self.packs, "sonniss-*", limit=1)), 1)
+def test_json_mode_keeps_records_on_stdout_and_summaries_on_stderr(capsys):
+    a.emit({"file": "music.wav", "status": "ok"}, json_mode=True)
+    a.emit({"done": {"ok": 1}}, json_mode=True, summary=True)
+    captured = capsys.readouterr()
+    assert captured.out.strip() == '{"file": "music.wav", "status": "ok"}'
+    assert captured.err.strip() == '{"done": {"ok": 1}}'
+
+
+def test_audio_jobs_use_card_and_manifest_evidence_with_rights_safe_prefix(tmp_path):
+    packs = tmp_path / "packs"
+    pack = packs / "drive-barbarian-chiptune"
+    extracted = pack / "v1" / "extracted"
+    extracted.mkdir(parents=True)
+    (extracted / "01.wav").write_bytes(b"wav")
+    (pack / "cards").mkdir()
+    (pack / "pack.json").write_text(json.dumps({"current": "v1", "hints": {"mood": "dark retro", "genre": "chiptune"}}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"redistribution": "none"}}))
+    (pack / "cards" / "01.card.json").write_text(
+        json.dumps({"subkind": "sfx/other", "source": {"files": [{"path": "01.wav", "role": "primary"}]}})
+    )
+
+    [job] = a.audio_files(packs, "*")
+    assert job["music"] is True
+    assert job["preview_prefix"] == "private/previews"
+    assert job["hints"] == ["dark retro", "chiptune"]
+
+
+def test_music_sidecar_is_rebuilt_when_new_preview_derivatives_are_missing(tmp_path):
+    current = {
+        "sha256": "abc",
+        "music": True,
+        "hints": ["dark chiptune"],
+        "preview": {"waveform": "private/previews/wave.png", "clip": "private/previews/clip.ogg"},
+        "preview_tile": "analysis/tile.png",
+    }
+    assert not a.analysis_current(current, "abc", tmp_path, True, "private/previews", ["dark chiptune"], tmp_path)
+    (tmp_path / "analysis").mkdir()
+    (tmp_path / "analysis" / "tile.png").write_bytes(b"png")
+    (tmp_path / "private" / "previews").mkdir(parents=True)
+    (tmp_path / "private" / "previews" / "wave.png").write_bytes(b"png")
+    (tmp_path / "private" / "previews" / "clip.ogg").write_bytes(b"ogg")
+    assert a.analysis_current(current, "abc", tmp_path, True, "private/previews", ["dark chiptune"], tmp_path)
+    assert not a.analysis_current(current, "abc", tmp_path, True, "previews", ["dark chiptune"], tmp_path)
+    assert not a.analysis_current(current, "abc", tmp_path, True, "private/previews", ["new hint"], tmp_path)
+    (tmp_path / "previews").mkdir()
+    (tmp_path / "previews" / "wave.png").write_bytes(b"png")
+    sound = {"sha256": "abc", "music": False, "hints": [], "preview": {"waveform": "previews/wave.png"}}
+    assert a.analysis_current(sound, "abc", tmp_path, False, "previews", [], tmp_path)
+    assert not a.analysis_current(sound, "abc", tmp_path, True, "previews", [], tmp_path)
+
+
+def test_audio_jobs_skip_packs_outside_the_repeated_only_list(tmp_path):
+    """Only the collections gm selected are analysed; others under the same packs root stay untouched."""
+    for pid in ("kept", "refused"):
+        (tmp_path / pid).mkdir()
+        (tmp_path / pid / "pack.json").write_text(json.dumps({"current": "v1"}))
+        (tmp_path / pid / "v1" / "extracted").mkdir(parents=True)
+        (tmp_path / pid / "v1" / "extracted" / "hit.wav").write_bytes(b"wav")
+    assert {job["pack"] for job in a.audio_files(tmp_path, ["kept"])} == {"kept"}
+    assert {job["pack"] for job in a.audio_files(tmp_path, None)} == {"kept", "refused"}

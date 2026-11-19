@@ -66,6 +66,20 @@ describe('card schemas', () => {
     if (!result.ok) expect(result.errors.join('\n')).toContain('directions');
   });
 
+  it('accepts bounded descriptive hints and rejects duplicates or oversized values', () => {
+    const card = structuredClone(
+      cardFixtureDocs().find(({ file }) => file === 'collection-kenney-mini-dungeon.json')?.doc,
+    ) as { describe: Record<string, unknown> };
+    card.describe.hints = ['dark retro', 'action-adventure', 'rpg'];
+    expect(validateCard(card)).toMatchObject({ ok: true });
+
+    card.describe.hints = ['dark retro', 'dark retro'];
+    expect(validateCard(card)).toMatchObject({ ok: false });
+
+    card.describe.hints = ['x'.repeat(121)];
+    expect(validateCard(card)).toMatchObject({ ok: false });
+  });
+
   it('accepts local specimen, diorama, loop, and vendor-store preview keys', () => {
     const card = structuredClone(
       cardFixtureDocs().find(({ file }) => file === 'collection-kenney-mini-dungeon.json')?.doc,
@@ -156,6 +170,14 @@ describe('card schemas', () => {
     const result = validateCard(card);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.join('\n')).toContain('path');
+  });
+
+  it('rejects traversing source paths', () => {
+    const card = structuredClone(
+      cardFixtureDocs().find(({ file }) => file === 'sprite-kenney-tiny-dungeon-knight.json')?.doc,
+    ) as { source: { files: Array<{ path: string }> } };
+    card.source.files[0]!.path = '../../outside.glb';
+    expect(validateCard(card)).toMatchObject({ ok: false });
   });
 
   it('reports the invalid interpretation author', () => {

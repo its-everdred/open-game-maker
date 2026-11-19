@@ -392,6 +392,26 @@ the output and no preview command for an inspiration map, so an agent cannot end
 library. Once an agent chooses a searchable map, `gm maps info` returns its validated abstract layout graph without a
 file or preview path. Contact sheets stay a human tool: `gm assets sheet`.
 
+## Tag local asset packs
+
+```text
+gm packs tag --kind <audio|map|model|sprite> [--only <collection-glob>] [--workers <n>] [--limit <n>] [--json]
+```
+
+The command runs only local analysis models and validates every reported card before it updates collection counts.
+`--workers 0` selects the safe default; larger requests are capped at one third of the machine's logical cores. Model
+and sprite passes create deterministic contact sheets before tagging. Audio passes measure tracks, build searchable
+cards, and generate clips, a pack sheet, a medley, and compatibility suggestions. Map processing currently supports
+the local `profantasy-cc3` collection.
+
+Collections must allow `vision-input`; `processing: local-only` is honored. A run never downloads model weights, and
+fails when the required CLIP or CLAP cache is absent. `--json` streams one record per changed card followed by a
+summary. Use `--only` when processing a single private pack, for example:
+
+```text
+gm packs tag --kind audio --only drive-barbarian-chiptune --workers 4 --json
+```
+
 ## Search the asset library
 
 ```text

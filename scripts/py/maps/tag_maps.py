@@ -1,7 +1,7 @@
 """Tag the exported CC3+ maps per C3 at three depths (cards, CAD sidecar, the image) and write validated cards.
 
 usage: scripts/py/audio/.venv/bin/python -I scripts/py/maps/tag_maps.py analyse [--workers N]   # sha, thumbnail, CLIP embedding per map
-       scripts/py/audio/.venv/bin/python -I scripts/py/maps/tag_maps.py cards                   # score labels, write cards, validate
+       scripts/py/audio/.venv/bin/python -I scripts/py/maps/tag_maps.py cards [--json]          # score labels, write cards, validate
 
 Depth 1 (card): map type, setting (folder only), environment, objects (from CAD symbol names), keywords (from map labels), grid,
 publication. Depth 2 (sidecar, already written by the export): every symbol and label with coordinates, referenced from
@@ -11,7 +11,7 @@ decides only when they say nothing, and its judgments are ranked by lift against
 Kevin's first review (2026-10-29) added map.is_map, map.usable, map.view and map.scale. They come from folder and file names
 plus ink coverage, not CLIP: zero-shot CLIP called a castle plan a "diagram" and a city panorama "top-down". Non-maps (standees,
 tokens, symbol sheets, papercraft) and unusable maps keep their cards so search can filter them out."""
-import argparse, hashlib, json, re, subprocess, sys
+import argparse, copy, hashlib, json, os, re, subprocess, sys
 from collections import Counter, defaultdict
 from datetime import datetime
 from multiprocessing import Pool
@@ -22,10 +22,11 @@ import numpy as np
 import layout_fields
 
 REPO = Path(__file__).resolve().parents[3]
-COLL_DIR = REPO / "assets-local/inspiration/profantasy-cc3"
+ASSETS_ROOT = Path(os.environ.get("OGM_ASSETS_ROOT", REPO / "assets-local"))
+COLL_DIR = ASSETS_ROOT / "inspiration/profantasy-cc3"
 MAPS = COLL_DIR / "maps"
 ANALYSIS = COLL_DIR / "analysis"
-PREVIEWS = REPO / "assets-local"
+PREVIEWS = ASSETS_ROOT
 SCHEMAS = REPO / "docs/research/v0.5/schemas"
 CLIP_ID = "openai/clip-vit-large-patch14"
 VERSION = "v1"
@@ -35,6 +36,52 @@ TOOL = "tag_maps@0.1"
 NOW = datetime.now().astimezone().isoformat(timespec="seconds")
 HASH_MANIFEST = "private/hash-manifests/profantasy-cc3-v1.txt"  # written by hash_manifest.py
 NOT_MAPS = re.compile(r"(^|/)(Parts|Symbols)/")  # grid templates, altitude keys and symbol catalogues: hash-listed, not carded
+
+
+def preserve_card(previous: dict, generated: dict) -> dict:
+    """Keep ownership and human-locked values when regenerating map descriptions."""
+    merged = copy.deepcopy(generated)
+    for field in ("rights", "license", "source"):
+        if field in previous:
+            merged[field] = copy.deepcopy(previous[field])
+        else:
+            merged.pop(field, None)
+    for dotted, provenance in previous.get("provenance", {}).items():
+        if not isinstance(provenance, dict) or not provenance.get("locked") or dotted == "*":
+            continue
+        parts = dotted.split(".")
+        value = previous
+        for part in parts:
+            if not isinstance(value, dict) or part not in value:
+                break
+            value = value[part]
+        else:
+            target = merged
+            for part in parts[:-1]:
+                target = target.setdefault(part, {})
+            target[parts[-1]] = copy.deepcopy(value)
+            merged.setdefault("provenance", {})[dotted] = copy.deepcopy(provenance)
+    return merged
+
+
+def card_record(path: str, card: dict) -> dict:
+    return {"card": path, "status": card["status"], "flags": card.get("flags", [])}
+
+
+def emit(record: dict, json_mode: bool = False, summary: bool = False):
+    stream = sys.stderr if json_mode and summary else sys.stdout
+    print(json.dumps(record), file=stream, flush=True)
+
+
+def stage_json(out: Path, payload: dict, indent=1) -> Path:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    staged = out.with_name(out.name + ".part")
+    staged.write_text(json.dumps(payload, indent=indent) + "\n")
+    return staged
+
+
+def promote(staged: Path, out: Path):
+    staged.replace(out)
 
 MAP_TYPES = {"dungeon": "a top-down dungeon map with rooms and corridors", "cave": "a map of natural caves and caverns",
              "castle": "a floor plan of a castle", "keep": "a floor plan of a fortified keep tower", "temple": "a floor plan of a temple",
@@ -120,8 +167,11 @@ def clip():
     if _M is None:
         import torch
         from transformers import CLIPModel, CLIPProcessor
-        torch.set_num_threads(3)
-        _M = (CLIPModel.from_pretrained(CLIP_ID).eval(), CLIPProcessor.from_pretrained(CLIP_ID))
+        torch.set_num_threads(int(os.environ.get("OGM_TORCH_THREADS", "3")))
+        _M = (
+            CLIPModel.from_pretrained(CLIP_ID, local_files_only=True).eval(),
+            CLIPProcessor.from_pretrained(CLIP_ID, local_files_only=True),
+        )
     return _M
 
 
@@ -287,11 +337,13 @@ def text_type(rel: str):
     return None
 
 
-def cards():
+def cards(json_mode=False, limit=0):
     import torch
     from transformers import CLIPModel, CLIPProcessor
+    torch.set_num_threads(int(os.environ.get("OGM_TORCH_THREADS", "3")))
     rows = [json.loads(p.read_text()) for p in sorted(ANALYSIS.rglob("*.analysis.json"))]
-    m, p = CLIPModel.from_pretrained(CLIP_ID).eval(), CLIPProcessor.from_pretrained(CLIP_ID)
+    m = CLIPModel.from_pretrained(CLIP_ID, local_files_only=True).eval()
+    p = CLIPProcessor.from_pretrained(CLIP_ID, local_files_only=True)
     sets = {"map_type": (list(MAP_TYPES), list(MAP_TYPES.values())),
             "environments": (list(ENVIRONMENTS), [f"a map of {v}" for v in ENVIRONMENTS.values()])}
     with torch.no_grad():
@@ -306,10 +358,12 @@ def cards():
             z = np.exp(z - z.max(1, keepdims=True))
             r["_p"][k] = (z / z.sum(1, keepdims=True)).mean(0)
     mean = {k: np.mean([r["_p"][k] for r in rows], 0) for k in sets}
-    seen, dups, written = {}, [], 0
+    seen, dups, written, records = {}, [], 0, []
     outdir = COLL_DIR / "cards"
     type_counts = Counter()
-    for r in sorted(rows, key=lambda r: (r["map"].startswith("Source Maps"), r["map"])):  # keep the non-"Source Maps" copy of duplicates
+    selected_rows = sorted(rows, key=lambda r: (r["map"].startswith("Source Maps"), r["map"]))
+    selected_rows = selected_rows[:limit] if limit else selected_rows
+    for r in selected_rows:  # keep the non-"Source Maps" copy of duplicates
         if r["sha256"] in seen:
             dups.append((r["map"], seen[r["sha256"]]))
             continue
@@ -417,21 +471,41 @@ def cards():
         if flags:
             card["flags"] = flags
         out = outdir / (kebab(Path(rel).with_suffix("").as_posix()) + ".card.json")
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(card, indent=1) + "\n")
+        if out.is_file():
+            previous = json.loads(out.read_text())
+            rights = previous.get("rights")
+            if rights is not None and ("vision-input" not in rights.get("uses", []) or rights.get("processing") not in ("any", "local-only")):
+                continue
+            card = preserve_card(previous, card)
+        staged = stage_json(out, card)
+        records.append((out, staged, card))
         seen[r["sha256"]] = card["id"]
         type_counts[map_type] += 1
         written += 1
     (COLL_DIR / "duplicates.json").write_text(json.dumps([{"duplicate": d, "same_as": k} for d, k in dups], indent=1) + "\n")
-    write_collection(written, type_counts)
-    print(json.dumps({"analysed": len(rows), "cards": written, "duplicates": len(dups), "map_types": dict(type_counts.most_common())}))
-    cardsf = sorted(str(x) for x in outdir.rglob("*.card.json"))
+    emit({"analysed": len(rows), "cards": written, "duplicates": len(dups), "map_types": dict(type_counts.most_common())}, json_mode, summary=True)
+    cardsf = sorted(str(x) for x in outdir.rglob("*.card.json")) + [str(staged) for _, staged, _ in records]
     rr = subprocess.run(["node", str(SCHEMAS / "tools/validate.mjs"), str(SCHEMAS), str(COLL_DIR / "collection.card.json"), *cardsf],
                         capture_output=True, text=True)
     fails = [l for l in rr.stdout.splitlines() if l.startswith("FAIL")]
-    print(json.dumps({"validated": len(cardsf), "fail_lines": len(fails), "rc": rr.returncode}))
+    emit({"validated": len(cardsf), "fail_lines": len(fails), "rc": rr.returncode}, json_mode, summary=True)
     for l in fails[:20]:
-        print(l)
+        print(l, file=sys.stderr if json_mode else sys.stdout)
+    if rr.returncode:
+        if json_mode:
+            for path, staged, _ in records:
+                if any(staged.name in failure for failure in fails):
+                    emit({"card": path.relative_to(ASSETS_ROOT).as_posix(), "status": "invalid", "flags": [], "errors": fails})
+        for _, staged, _ in records:
+            staged.unlink(missing_ok=True)
+        raise SystemExit(1)
+    for path, staged, _ in records:
+        promote(staged, path)
+    if not json_mode:
+        write_collection(written, type_counts)
+    if json_mode:
+        for path, _, card in records:
+            emit(card_record(path.relative_to(ASSETS_ROOT).as_posix(), card), json_mode=True)
 
 
 def write_collection(n, type_counts):
@@ -468,20 +542,23 @@ def main():
     ap.add_argument("step", choices=["analyse", "cards"])
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
     if a.step == "analyse":
         jobs = list(maps())
         jobs = jobs[:a.limit] if a.limit else jobs
-        print(json.dumps({"maps": len(jobs)}), flush=True)
+        emit({"maps": len(jobs)}, a.json, summary=True)
         c = Counter()
         with Pool(a.workers) as pool:
             for r in pool.imap_unordered(analyse, jobs):
                 c[r["status"]] += 1
-                if r["status"] == "fail":
-                    print(json.dumps(r), flush=True)
-        print(json.dumps({"done": dict(c)}), flush=True)
+                if r["status"] != "skip":
+                    emit(r, a.json)
+        emit({"done": dict(c)}, a.json, summary=True)
+        if c.get("fail"):
+            raise SystemExit(1)
     else:
-        cards()
+        cards(a.json, a.limit)
 
 
 if __name__ == "__main__":

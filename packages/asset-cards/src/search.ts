@@ -66,6 +66,7 @@ function fieldsOf(card: ResolvedCard): [number, string[]][] {
   const rest = [
     describe.description,
     ...(describe.keywords ?? []),
+    ...(describe.hints ?? []),
     ...(describe.roles ?? []),
     ...(describe.genre ?? []),
     ...(describe.instruments ?? []),
