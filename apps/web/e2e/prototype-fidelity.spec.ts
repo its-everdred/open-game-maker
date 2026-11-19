@@ -400,11 +400,19 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
   const portraitDevice = app.viewportSize()!.width < app.viewportSize()!.height;
   expect(frame!.width / frame!.height).toBeCloseTo(portraitDevice ? 16 / 9 : 9 / 16, 1);
   await app.getByRole('button', { name: portraitDevice ? 'Vertical game' : 'Wide game' }).click();
-  const override = await app.locator('.game-stage').boundingBox();
-  expect(override!.width / override!.height).toBeCloseTo(portraitDevice ? 9 / 16 : 16 / 9, 1);
+  await expect
+    .poll(async () => {
+      const box = await app.locator('.game-stage').boundingBox();
+      return box!.width / box!.height;
+    })
+    .toBeCloseTo(portraitDevice ? 9 / 16 : 16 / 9, 1);
   await app.getByRole('button', { name: portraitDevice ? 'Wide game' : 'Vertical game' }).click();
-  const restored = await app.locator('.game-stage').boundingBox();
-  expect(restored!.width / restored!.height).toBeCloseTo(portraitDevice ? 16 / 9 : 9 / 16, 1);
+  await expect
+    .poll(async () => {
+      const box = await app.locator('.game-stage').boundingBox();
+      return box!.width / box!.height;
+    })
+    .toBeCloseTo(portraitDevice ? 16 / 9 : 9 / 16, 1);
   return { app: [app.locator('.game-stage')], reference: [reference.locator('#stage')] };
 }
 
