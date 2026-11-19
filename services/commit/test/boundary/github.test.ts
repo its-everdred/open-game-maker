@@ -6,7 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BoundaryCheckPoster } from '../../src/boundary/check-run.js';
 import { buildDiffInput } from '../../src/boundary/inputs.js';
-import { runBoundaryPoll } from '../../src/boundary/poller.js';
+import { runBoundaryPoll, startBoundaryPoller } from '../../src/boundary/poller.js';
+import { BoundaryApiClient, BoundaryApiError } from '../../src/boundary/api-client.js';
+import { GitHubRequestError } from '../../src/github-request.js';
 import { registerBoundaryWebhook } from '../../src/boundary/webhook.js';
 import type { ActiveRepository } from '../../src/boundary/api-client.js';
 import type { AuthenticatedGitHub, GitHubApp, GitHubIdentity } from '../../src/types.js';
@@ -21,6 +23,129 @@ const repository = {
 } as const satisfies ActiveRepository;
 const game = { owner: repository.owner, name: repository.name, visibility: repository.visibility } as const;
 const emptyLock = { version: 1, family: 'any', pov: 'iso', assets: [] };
+
+it('distinguishes an API 401 from a connection refusal in poll logs', async () => {
+  const { request } = fakeRequest(() => []);
+  const log = vi.fn();
+  const fetches: (typeof fetch)[] = [
+    async () => new Response('sensitive response', { status: 401 }),
+    async () => {
+      throw new TypeError('connection refused');
+    },
+  ];
+  for (const fetch of fetches) {
+    const api = new BoundaryApiClient({ baseUrl: 'http://127.0.0.1:3000', token: 'secret', fetch });
+    const poller = startBoundaryPoller({ api, app: appWith(request), check: vi.fn(), log });
+    try {
+      await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(fetch === fetches[0] ? 1 : 2));
+    } finally {
+      poller.stop();
+    }
+  }
+  expect(log.mock.calls).toEqual([
+    [{ event: 'boundary-poll-error', error: 'BoundaryApiError', reason: 'http', status: 401 }],
+    [{ event: 'boundary-poll-error', error: 'BoundaryApiError', reason: 'transport', status: undefined }],
+  ]);
+});
+
+it('logs the safe status when listing pulls fails', async () => {
+  const { request } = fakeRequest(() => {
+    throw new GitHubRequestError('sensitive', 403);
+  });
+  const log = vi.fn();
+  await runBoundaryPoll({
+    api: { activeRepositories: async () => [{ ...repository, gameId: 'g1' }] },
+    app: appWith(request),
+    check: vi.fn(),
+    log,
+  });
+  expect(log).toHaveBeenCalledWith({
+    event: 'boundary-poll-error',
+    repo: 'alice/instance',
+    error: 'GitHubRequestError',
+    status: 403,
+  });
+});
+
+it('logs the safe status when the active repository API fails', async () => {
+  const { request } = fakeRequest(() => []);
+  const log = vi.fn();
+  const poller = startBoundaryPoller({
+    api: {
+      activeRepositories: async () => {
+        throw new BoundaryApiError('http', 503);
+      },
+    },
+    app: appWith(request),
+    check: vi.fn(),
+    log,
+  });
+  try {
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith({
+        event: 'boundary-poll-error',
+        error: 'BoundaryApiError',
+        reason: 'http',
+        status: 503,
+      }),
+    );
+  } finally {
+    poller.stop();
+  }
+});
+
+it('continues checking other pulls after one fails and reports its safe status', async () => {
+  const { request } = fakeRequest(() =>
+    [1, 2, 3, 4, 5].map((number) => ({ number, draft: false, head: { sha: 'head' } })),
+  );
+  const checked: number[] = [];
+  const log = vi.fn();
+  await runBoundaryPoll({
+    api: { activeRepositories: async () => [{ ...repository, gameId: 'g1' }] },
+    app: appWith(request),
+    check: async ({ pull }) => {
+      checked.push(pull.number);
+      if (pull.number === 1) throw new GitHubRequestError('secret', 403);
+    },
+    log,
+  });
+  expect(checked.sort()).toEqual([1, 2, 3, 4, 5]);
+  expect(log).toHaveBeenCalledWith({
+    event: 'boundary-poll-error',
+    repo: 'alice/instance',
+    pull: 1,
+    error: 'GitHubRequestError',
+    status: 403,
+  });
+});
+
+it('waits for remaining pull checks after a failure', async () => {
+  const { request } = fakeRequest(() => [1, 2].map((number) => ({ number, draft: false, head: { sha: 'head' } })));
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let finished = false;
+  let pollSettled = false;
+  const poll = runBoundaryPoll({
+    api: { activeRepositories: async () => [{ ...repository, gameId: 'g1' }] },
+    app: appWith(request),
+    check: async ({ pull }) => {
+      if (pull.number === 1) throw new GitHubRequestError('secret', 403);
+      await pending;
+      finished = true;
+    },
+    log: vi.fn(),
+  });
+  void poll.then(() => {
+    pollSettled = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(pollSettled).toBe(false);
+  release();
+  await poll;
+  expect(finished).toBe(true);
+});
 
 function appWith(request: AuthenticatedGitHub['request']): GitHubApp {
   return {
