@@ -29,6 +29,14 @@ describe('GameRoom relay rules', () => {
     await harness.testServer.shutdown();
   });
 
+  it('keeps a new room available while client setup takes over one second', async () => {
+    const room = await newRoom(harness.testServer);
+    await sleep(1_200);
+    await connect(harness.testServer, room, 'owner', 'owner');
+    await connect(harness.testServer, room, 'player', 'player');
+    expect(room.clients).toHaveLength(2);
+  });
+
   it('drops owner-only messages from a player and counts the violation', async () => {
     const room = await newRoom(harness.testServer);
     const owner = await connect(harness.testServer, room, 'owner', 'owner');

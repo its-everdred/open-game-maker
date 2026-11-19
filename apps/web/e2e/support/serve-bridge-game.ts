@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 
+import { servePrototype } from './serve-prototypes.ts';
+
 const host = '127.0.0.1';
 // eslint-disable-next-line no-restricted-properties
 const port = Number.parseInt(process.env.OGM_WEB_BRIDGE_PORT ?? '10001', 10);
@@ -18,6 +20,10 @@ createServer(async (request, response) => {
   const pathname = new URL(request.url ?? '/', `http://${host}:${port}`).pathname;
   if (pathname === '/health') {
     response.writeHead(204).end();
+    return;
+  }
+  if (pathname === '/studio' || pathname.startsWith('/studio/') || pathname === '/ui' || pathname.startsWith('/ui/')) {
+    servePrototype(request, response);
     return;
   }
   const file = Object.keys(files).find((name) => pathname.startsWith('/g/') && pathname.endsWith(`/${name}`));

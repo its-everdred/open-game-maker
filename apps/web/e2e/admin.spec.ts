@@ -130,6 +130,8 @@ test('persists confirmed admin changes, retries failures, and refetches their vi
     email: 'new-member@example.com',
     capability: 'player',
   });
+  // The dialog closes only after the successful mutation has refetched invitations.
+  await expect(page.getByRole('alertdialog')).not.toBeVisible({ timeout: 15_000 });
   const inviteRow = page.getByRole('row').filter({ hasText: 'new-member@example.com' });
   await expect(inviteRow).toContainText('pending');
   await activate(inviteRow.getByRole('button', { name: 'Revoke' }));
@@ -147,7 +149,11 @@ test('persists confirmed admin changes, retries failures, and refetches their vi
 
   await page.goto('/admin?test');
   await activate(page.getByRole('button', { name: 'Delist' }));
+  const delistResponse = page.waitForResponse(
+    (response) => response.url().endsWith(`/admin/games/${ids.game}/delist`) && response.request().method() === 'POST',
+  );
   await activate(page.getByRole('button', { name: 'Confirm' }));
+  expect((await delistResponse).status()).toBe(204);
   await expect.poll(() => requests.delists).toBe(1);
   await expect(page.getByRole('row').filter({ hasText: game.title })).toContainText('delisted');
 

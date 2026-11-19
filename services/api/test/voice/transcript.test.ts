@@ -70,6 +70,50 @@ async function setup() {
 }
 
 describe('POST /internal/voice/transcript', () => {
+  it('creates one edit job on the first spoken turn and attaches both sides of the conversation', async () => {
+    const { deps, request } = await setup();
+    const target: VoiceTarget = {
+      kind: 'edit',
+      game_id: ids.game,
+      creator_id: ids.creator,
+      session_id: '29000000-0000-4000-8000-000000000001',
+    };
+    const first = await request(target, 'creator', 'Make the bridge wider', 'edit-user-1');
+    const replay = await request(target, 'creator', 'Make the bridge wider', 'edit-user-1');
+    const reply = await request(target, 'agent', 'I can do that.', 'edit-agent-1');
+    expect(first.status).toBe(200);
+    expect(await replay.json()).toMatchObject({ inserted: false });
+    expect(reply.status).toBe(200);
+    const jobs = deps.db
+      .select()
+      .from(schema.jobs)
+      .all()
+      .filter((job) => job.idempotencyKey?.startsWith('voice-edit:'));
+    expect(jobs).toHaveLength(1);
+    expect(listSince(deps.sqlite, jobs[0]!.id, 0).map(({ text }) => text)).toEqual([
+      'Make the bridge wider',
+      'I can do that.',
+    ]);
+  });
+
+  it('preserves a long opening turn without exceeding the job plan limit', async () => {
+    const { deps, request } = await setup();
+    const target: VoiceTarget = {
+      kind: 'edit',
+      game_id: ids.game,
+      creator_id: ids.creator,
+      session_id: '29000000-0000-4000-8000-000000000002',
+    };
+    const text = 'x'.repeat(5000);
+    expect((await request(target, 'creator', text)).status).toBe(200);
+    const job = deps.db
+      .select()
+      .from(schema.jobs)
+      .all()
+      .find((row) => row.idempotencyKey?.startsWith('voice-edit:'))!;
+    expect(JSON.parse(job.plan).summary).toHaveLength(4000);
+    expect(listSince(deps.sqlite, job.id, 0)[0]!.text).toBe(text);
+  });
   it('appends final creator and agent build turns exactly once without Aiur mirroring', async () => {
     const { deps, request } = await setup();
 

@@ -290,7 +290,7 @@ test('asking for a change with no build running starts an edit job and streams i
   await expect(page.getByRole('heading', { name: 'Goblin Cellar' })).toBeVisible();
 
   await page.getByRole('textbox', { name: 'Message the builder' }).fill('Make the door glow');
-  await page.getByRole('button', { name: 'Send' }).click({ force: true });
+  await page.locator('.build-chat-composer').getByRole('button', { name: 'Send' }).click({ force: true });
 
   await expect.poll(() => created.length).toBe(1);
   expect(created[0]).toMatchObject({ gameId: 'game', branchId: 'main', kind: 'feature', start: 'now' });

@@ -215,17 +215,40 @@ export const RECOVERY_SETTLE_MS = 2_000;
  * numbers that are not latency — a 3 s drop shows up as a 3 s "remote update" — so samples inside the recovery window
  * (the drop itself plus {@link RECOVERY_SETTLE_MS} of catch-up) are dropped from the p95 fold and counted in the probe.
  */
-export function withoutStalls(samples: readonly HarnessSnapshot[], settleMs = RECOVERY_SETTLE_MS): HarnessSnapshot[] {
+export function withoutStalls(
+  samples: readonly HarnessSnapshot[],
+  allSamples: readonly (readonly HarnessSnapshot[])[] = [samples],
+  settleMs = RECOVERY_SETTLE_MS,
+  forfeits: readonly { seat: number; at: number }[] = [],
+): HarnessSnapshot[] {
+  const windows = new Map<string, { start: number; end: number }>();
+  for (const seatSamples of allSamples) {
+    for (const snapshot of seatSamples) {
+      const start = snapshot.droppedAt;
+      if (start === undefined) continue;
+      const key = `${snapshot.seat}:${start}`;
+      const rejoined =
+        snapshot.rejoinedAt !== undefined && snapshot.rejoinedAt >= start ? snapshot.rejoinedAt : Infinity;
+      const forfeit = forfeits.find((event) => event.seat === snapshot.seat && event.at >= start)?.at ?? Infinity;
+      const end = Math.min(rejoined, forfeit) + settleMs;
+      const previous = windows.get(key);
+      if (previous === undefined || end !== Infinity) windows.set(key, { start, end });
+    }
+  }
   return samples.filter((sample) => {
     if (sample.remoteUpdateMs > STALL_SAMPLE_MS || sample.eventDelayMs > STALL_SAMPLE_MS) return false;
-    const since = Math.max(sample.rejoinedAt ?? 0, sample.droppedAt ?? 0);
-    return since === 0 || sample.at - since > settleMs;
+    return ![...windows.values()].some(({ start, end }) => sample.at >= start && sample.at <= end);
   });
 }
 
 /** One page's samples, folded into the one report entry the seat gets: latest gauges, p95 for the two delays. */
-export function toSeatMetrics(seat: number, samples: readonly HarnessSnapshot[]): SeatMetrics {
+export function toSeatMetrics(
+  seat: number,
+  samples: readonly HarnessSnapshot[],
+  latencySamples = samples,
+): SeatMetrics {
   assert(samples.length > 0, `no metric samples for seat ${seat}`);
+  assert(latencySamples.length > 0, `no latency samples for seat ${seat}`);
   const latest = samples[samples.length - 1]!;
   const p95 = (values: number[]): number => {
     if (values.length === 0) return 0;
@@ -248,8 +271,8 @@ export function toSeatMetrics(seat: number, samples: readonly HarnessSnapshot[])
     inputDelayTicks: latest.inputDelayTicks,
     inputGaps: latest.inputGaps,
     localResponseMs: latest.localResponseMs,
-    remoteUpdateP95Ms: p95(samples.map((sample) => sample.remoteUpdateMs)),
-    eventDelayP95Ms: p95(samples.map((sample) => sample.eventDelayMs)),
+    remoteUpdateP95Ms: p95(latencySamples.map((sample) => sample.remoteUpdateMs)),
+    eventDelayP95Ms: p95(latencySamples.map((sample) => sample.eventDelayMs)),
     desyncs: latest.desyncs,
     recoveries: Math.max(...samples.map((sample) => sample.recoveries)),
     hardResyncs: latest.hardResyncs,
@@ -815,13 +838,22 @@ export async function runMultiClient(options: MultiClientOptions): Promise<Multi
     await shoot(7);
 
     log('8 collect per-seat metrics');
-    for (const [index, client] of clients.entries()) {
+    for (const client of clients) {
       const sample = (await client.page.evaluate(() => window.__multiHarness.netMetrics())) as HarnessSnapshot;
       client.samples.push(sample);
-      seats.push(toSeatMetrics(index, withoutStalls(client.samples)));
     }
+    const allSamples = clients.map((client) => client.samples);
+    const forfeits = await clients[0]!.page.evaluate(() =>
+      window.__multiHarness.seatEvents.filter((event) => event.event === 'net.seat.forfeit'),
+    );
+    for (const [index, client] of clients.entries())
+      seats.push(
+        toSeatMetrics(index, client.samples, withoutStalls(client.samples, allSamples, RECOVERY_SETTLE_MS, forfeits)),
+      );
     probes.stalledSamples = clients.reduce(
-      (total, client) => total + (client.samples.length - withoutStalls(client.samples).length),
+      (total, client) =>
+        total +
+        (client.samples.length - withoutStalls(client.samples, allSamples, RECOVERY_SETTLE_MS, forfeits).length),
       0,
     );
     /*

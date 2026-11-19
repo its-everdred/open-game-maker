@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import type { BudgetStatus, Job } from '@ogm/contracts';
+import type { BudgetStatus, Job, VoiceTarget } from '@ogm/contracts';
 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
@@ -10,11 +10,13 @@ import { energyRefusalText } from '../energy/api';
 import { Offers } from '../scope-chat/Offers';
 import { AllowanceStatus } from '../scope-chat/ScopeChat';
 import { Composer } from './Composer';
+import { AiurComposer } from './AiurComposer';
 import type { EditDraft } from './dock';
 import { editJobRequest } from './edit';
 import { gameJobsQueryKey, isTerminal, myJobsQueryKey } from './jobs';
 import { MessageList } from './MessageList';
 import { reduceMessages, subscribeChat, type StreamedChatMessage } from './stream';
+import './chat.css';
 
 type Refusal = Extract<AdmissionResult, { kind: 'refused' }>;
 
@@ -26,6 +28,10 @@ export function Chat({
   onAdmitted,
   onMessages,
   heading = true,
+  useAiurComposer = false,
+  composerReading = 'inline',
+  dictationTarget,
+  conversationVoiceTarget,
 }: {
   jobId?: string;
   job?: Job;
@@ -35,6 +41,10 @@ export function Chat({
   onMessages?(jobId: string, messages: StreamedChatMessage[]): void;
   // The dock keeps its own header; the conversation modal already names the job, so it hides this one.
   heading?: boolean;
+  useAiurComposer?: boolean;
+  composerReading?: 'inline' | 'stacked';
+  dictationTarget?: VoiceTarget;
+  conversationVoiceTarget?: VoiceTarget;
 }) {
   const streamId = jobId ?? job?.id;
   const target: EditDraft = job
@@ -50,6 +60,7 @@ export function Chat({
   const since = useRef(0);
   const admittingRef = useRef(false);
   const admissionKeyRef = useRef<{ text: string; key: string }>(undefined);
+  const admissionReused = useRef(false);
   const mountedRef = useRef(true);
   const budget = useQuery({
     queryKey: ['build-chat', 'edit-budget', target.gameId],
@@ -82,7 +93,8 @@ export function Chat({
   const removeMessage = (messageId: string) => setMessages((current) => current.filter(({ id }) => id !== messageId));
   const voiceTarget = useMemo(
     () =>
-      job && canPost
+      conversationVoiceTarget ??
+      (job && canPost
         ? {
             kind: 'build' as const,
             game_id: job.gameId,
@@ -90,8 +102,8 @@ export function Chat({
             ticket: job.aiurIssueNumber === null ? '' : String(job.aiurIssueNumber),
             creator_id: job.creatorId,
           }
-        : undefined,
-    [canPost, job],
+        : undefined),
+    [canPost, job, conversationVoiceTarget],
   );
 
   const admit = async (text: string, start: 'now' | 'at_reset'): Promise<string | undefined> => {
@@ -100,7 +112,14 @@ export function Chat({
     setSubmitting(true);
     setAdmissionError('');
     // One key per instruction, so a retry after a lost response finds the job the first request created.
-    if (admissionKeyRef.current?.text !== text) admissionKeyRef.current = { text, key: `edit:${crypto.randomUUID()}` };
+    if (admissionKeyRef.current?.text !== text)
+      admissionKeyRef.current = {
+        text,
+        key:
+          conversationVoiceTarget?.kind === 'edit'
+            ? `voice-edit:${conversationVoiceTarget.game_id}:${conversationVoiceTarget.session_id}`
+            : `edit:${crypto.randomUUID()}`,
+      };
     try {
       const result = await admitJob(editJobRequest(target, text, start, admissionKeyRef.current.key));
       if (result.kind === 'refused') {
@@ -109,6 +128,7 @@ export function Chat({
         return undefined;
       }
       admissionKeyRef.current = undefined;
+      admissionReused.current = result.reused === true && result.samePlan !== true;
       setRefusal(undefined);
       setWaitingForAdmin(false);
       void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
@@ -167,15 +187,28 @@ export function Chat({
           {admissionError}
         </p>
       ) : null}
-      <Composer
-        jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
-        voiceTarget={voiceTarget}
-        postText={postChatText}
-        startJob={canPost ? undefined : (text) => admit(text, 'now')}
-        onOptimistic={addMessage}
-        onPosted={addMessage}
-        onFailed={removeMessage}
-      />
+      {useAiurComposer ? (
+        <AiurComposer
+          reading={composerReading}
+          dictationTarget={dictationTarget}
+          jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
+          voiceTarget={voiceTarget}
+          postText={postChatText}
+          startJob={canPost ? undefined : (text) => admit(text, 'now')}
+          wasAdmissionReused={() => admissionReused.current}
+          onPosted={addMessage}
+        />
+      ) : (
+        <Composer
+          jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
+          voiceTarget={voiceTarget}
+          postText={postChatText}
+          startJob={canPost ? undefined : (text) => admit(text, 'now')}
+          onOptimistic={addMessage}
+          onPosted={addMessage}
+          onFailed={removeMessage}
+        />
+      )}
     </section>
   );
 }

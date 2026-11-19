@@ -13,7 +13,7 @@ export type AdmissionInput = {
 export type SupportedOffer = Extract<AllowanceExceeded['offers'][number], 'queue' | 'ask_admin'>;
 
 export type AdmissionResult =
-  | { kind: 'accepted'; jobId: string }
+  | { kind: 'accepted'; jobId: string; reused?: boolean; samePlan?: boolean }
   | ({ kind: 'refused' } & Omit<AllowanceExceeded, 'offers'> & { offers: SupportedOffer[] });
 
 type AdmissionDeps = {
@@ -58,7 +58,11 @@ export async function admitJob(
 ): Promise<AdmissionResult> {
   try {
     const accepted = await send<CreateJobAccepted>('/jobs', { method: 'POST', json: request });
-    return { kind: 'accepted', jobId: accepted.jobId };
+    return {
+      kind: 'accepted',
+      jobId: accepted.jobId,
+      ...(accepted.reused ? { reused: true, samePlan: accepted.samePlan } : {}),
+    };
   } catch (error) {
     const response = error as Partial<ApiError>;
     if (response.status !== 402 || !response.body || typeof response.body !== 'object') throw error;

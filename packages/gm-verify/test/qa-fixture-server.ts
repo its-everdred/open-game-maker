@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const PAGE = readFileSync(fileURLToPath(new URL('../fixtures/qa-game/index.html', import.meta.url)), 'utf8');
 /** A seat that has not polled for this long has left the room. */
-const PRESENCE_MS = 600;
-const COUNTDOWN_MS = 3_000;
+const PRESENCE_MS = 30_000;
+const COUNTDOWN_MS = 60_000;
 
 type Room = { tokens: string[]; xs: number[]; seen: number[]; startAt: number | null };
 
