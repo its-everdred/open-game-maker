@@ -74,13 +74,29 @@ describe('web save client against the API', () => {
 
     await expect(getOptionalSaves(ids.game)).resolves.toEqual({ available: true, value: { slots: [] } });
     await expect(
-      putSave(ids.game, '2', { saveSchemaVersion: 3, data: { room: 'crypt' } }, undefined, context),
+      putSave(
+        ids.game,
+        '2',
+        { saveSchemaVersion: 3, data: { room: 'crypt' }, thumbnail: 'data:image/webp;base64,YWJj' },
+        undefined,
+        context,
+      ),
     ).resolves.toEqual({ revision: 1 });
 
     const listed = await getOptionalSaves(ids.game);
     expect(listed).toEqual({
       available: true,
-      value: { slots: [expect.objectContaining({ slotId: '2', headRevision: 1, status: 'ok' })] },
+      value: {
+        slots: [
+          expect.objectContaining({
+            slotId: '2',
+            headRevision: 1,
+            status: 'ok',
+            savedAt: expect.any(String),
+            thumbnail: 'data:image/webp;base64,YWJj',
+          }),
+        ],
+      },
     });
 
     await expect(

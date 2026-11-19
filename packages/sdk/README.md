@@ -13,6 +13,12 @@ Both `musicVolume` and `gameOptions` are optional for compatibility with older h
 The emitted JSON Schema checks option structure; cross-field checks for unique IDs, valid defaults, and number steps
 are enforced by the Zod manifest validator used by the SDK and host.
 
+Games with `saves: true` write an automatic save. Set `manualSaveSlots: true` in the game manifest to also offer
+player-selected slots in Settings. While a manual slot is selected, save events update that slot and the automatic save.
+For games declaring manual slots, the SDK captures a small image of the largest game canvas when the browser permits
+it. Saves remain usable when no canvas image is available, such as a tainted or discarded WebGL buffer. Older game builds
+with an existing automatic save must be rebuilt with the current SDK before that save can be restored or updated safely.
+
 To let players change keyboard controls, declare the complete code-to-action `controlBindings` mapping in the manifest,
 matching the mapping passed to `runtime.attachInput`. The shared menu sends `keyboardBindings`, and the runtime applies
 them to its keyboard input. Games using their own input handling must apply that field themselves. Escape remains a host

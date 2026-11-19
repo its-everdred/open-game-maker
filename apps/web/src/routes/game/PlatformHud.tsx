@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type {
   CreditsDocument,
@@ -28,10 +28,13 @@ import {
 } from '../../features/editor/hud/saves';
 import { loadSettings, saveSettings } from '../../features/editor/hud/settings';
 import { pushToast } from '../../lib/notify/slice';
+import { Icon } from '../../components/Icon';
+import { useOptionalGameMenu } from '../../app/GameMenu';
 import { CreditsList } from '../settings/CreditsList';
 import { getCredits } from '../settings/credits';
 import { SharedSettings } from './SharedSettings';
 import { assignableKey } from './control-keys';
+import { PauseMenu } from './PauseMenu';
 
 export type PlatformSaveApi = {
   list(gameId: string, query?: SaveListQuery): Promise<OptionalCapability<{ slots: SaveSlot[] }>>;
@@ -55,6 +58,12 @@ type PlatformHudProps = {
   serverOffsetMs?: number;
   saveContext: SaveContext;
   saves: boolean;
+  manualSaveSlots?: boolean;
+  /** A failed startup restore must not overwrite the existing automatic save. */
+  saveWritesDisabled?: boolean;
+  manualLoadDisabled?: boolean;
+  setCloseLocked?(locked: boolean): void;
+  onSavePersisted?(save: SaveData<unknown>, restored?: boolean): void;
   /** The running build's save schema; absent when the build did not report one. */
   saveSchema?: number;
   /** The one older schema the build still migrates; absent when it cannot migrate. */
@@ -63,6 +72,12 @@ type PlatformHudProps = {
   toast?: (message: string) => void;
   creditsApi?: (gameId: string, buildId: string) => Promise<CreditsDocument>;
   onLeave?(): void;
+  /** Starts the game over from a fresh frame; absent in room play, where one player cannot restart the match. */
+  onRestart?(): void;
+  onEdit?(): void;
+  editDisabled?: boolean;
+  /** Receives the More page's container, where the studio menu shows the rest of the actions. */
+  onMoreHost?(host: HTMLElement | null): void;
   onResume(): void;
 };
 
@@ -140,20 +155,37 @@ export function PlatformHud({
   serverOffsetMs = 0,
   saveContext,
   saves,
+  manualSaveSlots = false,
+  saveWritesDisabled = false,
+  manualLoadDisabled = false,
+  setCloseLocked,
+  onSavePersisted,
   saveSchema,
   migratesFrom,
   saveApi = defaultSaveApi,
   toast = pushToast,
   creditsApi = defaultCreditsApi,
   onLeave,
+  onRestart,
+  onEdit,
+  editDisabled,
+  onMoreHost,
   onResume,
 }: PlatformHudProps) {
   const visible = open ?? paused;
+  const setPausePanelVisible = useOptionalGameMenu()?.setPausePanelVisible;
+  useLayoutEffect(() => {
+    setPausePanelVisible?.(visible);
+    return () => setPausePanelVisible?.(false);
+  }, [setPausePanelVisible, visible]);
   const [slots, setSlots] = useState<SaveSlot[]>();
   const [savesAvailable, setSavesAvailable] = useState(false);
+  const [loadingSave, setLoadingSave] = useState(false);
+  const loadingSaveRef = useRef(false);
   const [selectedSlot, setSelectedSlot] = useState<SaveSlotId>('auto');
   const [settings, setSettings] = useState<PlayerSettings>(() => loadSettings());
-  const [page, setPage] = useState<'pause' | 'credits' | 'settings'>('pause');
+  const [page, setPage] = useState<'pause' | 'settings' | 'more'>('pause');
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [optionValues, setOptionValues] = useState<Record<string, boolean | string | number>>(() =>
     loadGameOptions(gameId, gameOptions ?? []),
   );
@@ -178,6 +210,10 @@ export function PlatformHud({
   slotsRef.current = slots;
   selectedSlotRef.current = selectedSlot;
   saveContextRef.current = saveContext;
+
+  useEffect(() => {
+    if (!manualSaveSlots) setSelectedSlot('auto');
+  }, [manualSaveSlots]);
 
   useEffect(() => {
     if (!saves) {
@@ -220,32 +256,32 @@ export function PlatformHud({
 
   useEffect(() => {
     let active = true;
-    const stopSave = frame.onSaveWrite((payload) => {
-      if (!savesAvailable) return;
-      saveQueueRef.current = saveQueueRef.current
-        .then(async () => {
-          try {
-            await storeSaveWrite(
-              gameId,
-              selectedSlotRef.current,
-              payload,
-              slotsRef.current ?? [],
-              saveApi.write,
-              saveContextRef.current,
-            );
-          } finally {
-            // A write whose response was lost may still have landed: reread the heads either way.
-            const result = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
-            if (active) {
-              setSavesAvailable(result.available);
-              const nextSlots = result.available ? result.value.slots : undefined;
-              slotsRef.current = nextSlots;
-              setSlots(nextSlots);
-            }
-          }
-        })
-        .catch(() => toast('Save failed'));
-    });
+    const stopSave =
+      savesAvailable && !saveWritesDisabled
+        ? frame.onSaveWrite((payload) => {
+            const selected = selectedSlotRef.current;
+            const context = saveContextRef.current;
+            saveQueueRef.current = saveQueueRef.current
+              .then(async () => {
+                try {
+                  for (const slot of selected === 'auto' ? (['auto'] as const) : (['auto', selected] as const)) {
+                    await storeSaveWrite(gameId, slot, payload, slotsRef.current ?? [], saveApi.write, context);
+                  }
+                  onSavePersisted?.(payload);
+                } finally {
+                  // A write whose response was lost may still have landed: reread the heads either way.
+                  const result = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
+                  if (active) {
+                    setSavesAvailable(result.available);
+                    const nextSlots = result.available ? result.value.slots : undefined;
+                    slotsRef.current = nextSlots;
+                    setSlots(nextSlots);
+                  }
+                }
+              })
+              .catch(() => toast('Save failed'));
+          })
+        : () => undefined;
     const stopEvent = frame.onEvent((kind, payload) => handleGameEvent(kind, payload, build, toast));
     const stopLoadError = frame.onSaveLoadError(() => toast('Load failed'));
     return () => {
@@ -254,7 +290,18 @@ export function PlatformHud({
       stopEvent();
       stopLoadError();
     };
-  }, [build, frame, gameId, migratesFrom, saveApi, saveSchema, savesAvailable, toast]);
+  }, [
+    build,
+    frame,
+    gameId,
+    migratesFrom,
+    onSavePersisted,
+    saveApi,
+    saveSchema,
+    savesAvailable,
+    saveWritesDisabled,
+    toast,
+  ]);
 
   useEffect(() => {
     if (visible) (page !== 'pause' ? backRef : resumeRef).current?.focus();
@@ -263,6 +310,7 @@ export function PlatformHud({
   useEffect(() => {
     if (!visible) {
       setPage('pause');
+      setCreditsOpen(false);
     }
   }, [visible]);
 
@@ -278,7 +326,7 @@ export function PlatformHud({
   }, [gameId, saveContext.buildId]);
 
   useEffect(() => {
-    if (page !== 'credits' || credits !== undefined) return;
+    if (!creditsOpen || credits !== undefined) return;
     let active = true;
     setCreditsFailed(false);
     void creditsApi(gameId, saveContext.buildId)
@@ -291,19 +339,42 @@ export function PlatformHud({
     return () => {
       active = false;
     };
-  }, [credits, creditsApi, gameId, page, saveContext.buildId]);
+  }, [credits, creditsApi, creditsOpen, gameId, saveContext.buildId]);
 
   const resume = () => {
     onResume();
   };
   const load = async () => {
+    if (loadingSaveRef.current) return;
     const slot = slots?.find((candidate) => candidate.slotId === selectedSlot);
     if (!saveSlotLoadable(slot)) return;
+    loadingSaveRef.current = true;
+    setCloseLocked?.(true);
+    setLoadingSave(true);
+    const transaction = saveQueueRef.current.then(async () => {
+      const restored = await frame.restoreSave(await saveApi.read(gameId, selectedSlot));
+      const latest = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
+      if (!latest.available) throw new Error('saves unavailable');
+      await storeSaveWrite(gameId, 'auto', restored, latest.value.slots, saveApi.write, saveContextRef.current);
+      onSavePersisted?.(restored, true);
+      const refreshed = await saveApi.list(gameId, listQuery(saveSchema, migratesFrom));
+      if (refreshed.available) {
+        slotsRef.current = refreshed.value.slots;
+        setSlots(refreshed.value.slots);
+      }
+      frame.confirmSaveRecovery();
+    });
+    saveQueueRef.current = transaction.catch(() => undefined);
     try {
-      frame.restoreSave(await saveApi.read(gameId, selectedSlot));
+      await transaction;
+      setCloseLocked?.(false);
       resume();
     } catch {
       toast('Load failed');
+    } finally {
+      loadingSaveRef.current = false;
+      setCloseLocked?.(false);
+      setLoadingSave(false);
     }
   };
 
@@ -316,105 +387,128 @@ export function PlatformHud({
             data-studio-menu-boundary
             role="dialog"
             aria-modal="true"
-            aria-label={
-              page === 'pause' ? (paused ? 'Paused' : 'Game menu') : page === 'credits' ? 'Credits' : 'Settings'
-            }
+            aria-label={page === 'pause' ? (paused ? 'Paused' : 'Game menu') : page === 'more' ? 'More' : 'Settings'}
           >
             {page === 'settings' ? (
-              <>
-                <SharedSettings
-                  settings={settings}
-                  onChange={setSettings}
-                  actions={actions ?? {}}
-                  bindings={controlBindings ? bindings : undefined}
-                  reservedKeys={controlReservedKeys}
-                  onBindingsChange={(next) => {
-                    setBindings(next);
-                    try {
-                      localStorage.setItem(`ogm.controls.${gameId}`, JSON.stringify(next));
-                    } catch {
-                      /* Storage is optional. */
-                    }
-                  }}
-                  onResetBindings={() => {
-                    const next = { ...controlBindings };
-                    setBindings(next);
-                    try {
-                      localStorage.removeItem(`ogm.controls.${gameId}`);
-                    } catch {
-                      /* Storage is optional. */
-                    }
-                  }}
-                  options={gameOptions ?? []}
-                  gameOptions={optionValues}
-                  onGameOptionsChange={(values) => {
-                    setOptionValues(values);
-                    try {
-                      localStorage.setItem(`ogm.game-options.${gameId}`, JSON.stringify(values));
-                    } catch {
-                      /* Storage is optional. */
-                    }
-                  }}
-                  backRef={backRef}
-                  onBack={() => setPage('pause')}
-                />
-              </>
-            ) : page === 'credits' ? (
-              <>
-                <h2>Credits</h2>
-                <button ref={backRef} className="tap-secondary" type="button" onClick={() => setPage('pause')}>
-                  Back
-                </button>
-                {credits === undefined && !creditsFailed ? <p>Loading…</p> : null}
-                {creditsFailed ? <p role="alert">Unavailable</p> : null}
-                {credits ? <CreditsList packs={credits.packs} /> : null}
-              </>
-            ) : (
-              <>
-                <h2>{paused ? 'Paused' : 'Game menu'}</h2>
-                {pauseName ? <p>Paused by {pauseName}</p> : null}
-                {resumeAt ? (
-                  <p aria-live="polite">{Math.max(1, Math.ceil((resumeAt - (now + serverOffsetMs)) / 1000))}</p>
-                ) : null}
-                <button ref={resumeRef} className="tap-primary" type="button" onClick={resume} disabled={!!resumeAt}>
-                  Resume
-                </button>
-                {savesAvailable && slots !== undefined ? (
-                  <div className="save-slots" role="group" aria-label="Save slots">
-                    {saveSlotOptions(slots).map(({ id }) => (
+              <SharedSettings
+                settings={settings}
+                onChange={setSettings}
+                actions={actions ?? {}}
+                bindings={controlBindings ? bindings : undefined}
+                reservedKeys={controlReservedKeys}
+                onBindingsChange={(next) => {
+                  setBindings(next);
+                  try {
+                    localStorage.setItem(`ogm.controls.${gameId}`, JSON.stringify(next));
+                  } catch {
+                    /* Storage is optional. */
+                  }
+                }}
+                onResetBindings={() => {
+                  const next = { ...controlBindings };
+                  setBindings(next);
+                  try {
+                    localStorage.removeItem(`ogm.controls.${gameId}`);
+                  } catch {
+                    /* Storage is optional. */
+                  }
+                }}
+                options={gameOptions ?? []}
+                gameOptions={optionValues}
+                onGameOptionsChange={(values) => {
+                  setOptionValues(values);
+                  try {
+                    localStorage.setItem(`ogm.game-options.${gameId}`, JSON.stringify(values));
+                  } catch {
+                    /* Storage is optional. */
+                  }
+                }}
+                backRef={backRef}
+                onBack={() => {
+                  if (loadingSaveRef.current) return;
+                  setPage('pause');
+                  setCreditsOpen(false);
+                }}
+              >
+                {manualSaveSlots && savesAvailable && slots !== undefined ? (
+                  <details>
+                    <summary>
+                      <Icon name="publish" />
+                      Saves
+                    </summary>
+                    <div className="shared-settings-content save-slots" role="group" aria-label="Save slots">
+                      {saveSlotOptions(slots).map(({ id, slot }) => (
+                        <button
+                          className="tap-secondary"
+                          type="button"
+                          key={id}
+                          disabled={loadingSave}
+                          aria-pressed={selectedSlot === id}
+                          onClick={() => setSelectedSlot(id)}
+                        >
+                          {slot?.thumbnail ? <img src={slot.thumbnail} alt="" /> : null}
+                          {slot?.label ?? saveSlotLabel(id)}
+                          {slot?.savedAt ? (
+                            <time dateTime={slot.savedAt}> {new Date(slot.savedAt).toLocaleString()}</time>
+                          ) : null}
+                        </button>
+                      ))}
                       <button
                         className="tap-secondary"
                         type="button"
-                        key={id}
-                        aria-label={saveSlotLabel(id)}
-                        aria-pressed={selectedSlot === id}
-                        onClick={() => setSelectedSlot(id)}
+                        disabled={
+                          loadingSave ||
+                          manualLoadDisabled ||
+                          !saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))
+                        }
+                        onClick={() => void load()}
                       >
-                        {id === 'auto' ? 'Auto' : id}
+                        {manualLoadDisabled ? 'Update game to load' : 'Load'}
                       </button>
-                    ))}
-                    <button
-                      className="tap-secondary"
-                      type="button"
-                      disabled={!saveSlotLoadable(slots.find((slot) => slot.slotId === selectedSlot))}
-                      onClick={() => void load()}
-                    >
-                      Load
-                    </button>
+                    </div>
+                  </details>
+                ) : null}
+                <details onToggle={(event) => setCreditsOpen(event.currentTarget.open)}>
+                  <summary>
+                    <Icon name="credits" />
+                    Credits
+                  </summary>
+                  <div className="shared-settings-content">
+                    {credits === undefined && !creditsFailed ? <p>Loading…</p> : null}
+                    {creditsFailed ? <p role="alert">Unavailable</p> : null}
+                    {credits ? <CreditsList packs={credits.packs} /> : null}
                   </div>
-                ) : null}
-                <button className="tap-secondary" type="button" onClick={() => setPage('settings')}>
-                  Settings
+                </details>
+              </SharedSettings>
+            ) : page === 'more' ? (
+              <div className="pause-more">
+                <button
+                  ref={backRef}
+                  type="button"
+                  className="shared-settings-back"
+                  aria-label="Back"
+                  onClick={() => setPage('pause')}
+                >
+                  <Icon name="close" />
                 </button>
-                <button className="tap-secondary" type="button" onClick={() => setPage('credits')}>
-                  Credits
-                </button>
-                {onLeave ? (
-                  <button className="tap-primary" type="button" onClick={onLeave}>
-                    Leave
-                  </button>
-                ) : null}
-              </>
+                <div ref={onMoreHost} className="pause-more-host" />
+              </div>
+            ) : (
+              <PauseMenu
+                title={paused ? 'Paused' : 'Game menu'}
+                pauseName={pauseName}
+                countdown={resumeAt ? Math.max(1, Math.ceil((resumeAt - (now + serverOffsetMs)) / 1000)) : undefined}
+                muted={settings.mute}
+                resumeRef={resumeRef}
+                editDisabled={editDisabled}
+                onResume={resume}
+                onRestart={onRestart}
+                onLeave={onLeave}
+                onMute={(mute) => setSettings((current) => ({ ...current, mute }))}
+                onSettings={() => setPage('settings')}
+                onEdit={onEdit}
+                onMore={() => setPage('more')}
+              />
             )}
           </div>
         </div>

@@ -30,6 +30,7 @@ export async function release(op: ExtractCommitOp<'release'>, context: Operation
   const tag = releaseTag(repository.slug, op.semver);
   const created = await github.request<{ sha: string }>('POST /repos/{owner}/{repo}/git/tags', {
     ...repository,
+    repo: repository.name,
     tag,
     message: op.changelog,
     object: op.sha,
@@ -39,6 +40,7 @@ export async function release(op: ExtractCommitOp<'release'>, context: Operation
   try {
     await github.request('POST /repos/{owner}/{repo}/git/refs', {
       ...repository,
+      repo: repository.name,
       ref: `refs/tags/${tag}`,
       sha: created.data.sha,
     });
@@ -63,6 +65,7 @@ async function existingTagSha(
   try {
     ref = await request<{ object: { sha: string; type: string } }>('GET /repos/{owner}/{repo}/git/ref/{ref}', {
       ...repository,
+      repo: repository.name,
       ref: `tags/${tag}`,
     });
   } catch (error) {
@@ -72,6 +75,7 @@ async function existingTagSha(
   if (ref.data.object.type !== 'tag') return null;
   const object = await request<{ object: { sha: string } }>('GET /repos/{owner}/{repo}/git/tags/{tag_sha}', {
     ...repository,
+    repo: repository.name,
     tag_sha: ref.data.object.sha,
   });
   return object.data.object.sha === commitSha ? ref.data.object.sha : null;

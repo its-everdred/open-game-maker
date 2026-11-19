@@ -422,7 +422,7 @@ export async function kaiju(ctx) {
     const toW = (f, lx, lz) => [f.x + lx * Math.cos(f.yaw) + lz * Math.sin(f.yaw), f.z - lx * Math.sin(f.yaw) + lz * Math.cos(f.yaw)], mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
     const out0 = 33, out1 = 34.4, in0 = mv.back0, in1 = mv.back0 + 1.6;
     for (let i = 0; i < 4; i++) {
-      const side = i < 2 ? 1 : -1, lx = lerp(fb.min.x, fb.max.x, i % 2 ? .62 : .34), lz = side * ((side > 0 ? fb.max.z : -fb.min.z) + 1.1), far = side * (Math.max(fb.max.x, -fb.min.x) + 2);
+      const side = i < 2 ? 1 : -1, lx = lerp(fb.min.x, fb.max.x, [.18, .68, .38, .84][i]), lz = side * ((side > 0 ? fb.max.z : -fb.min.z) + [1.2, 1.8, 1.5, 1.1][i]), far = side * (Math.max(fb.max.x, -fb.min.x) + 2 + (i % 2) * .6);
       const push = t => { const f = fieldAt(t); return toW(t >= mv.back0 ? { ...f, yaw: f.yaw - Math.PI } : f, lx, lz); }, stand = toW(fieldAt(out1), lx, far);
       const m = man([[0, 0, 0, 'idle']]); m.fieldCrew = true;
       m.pos = t => t < out0 ? push(t) : t < out1 ? mix(push(t), stand, smooth((t - out0) / (out1 - out0))) : t < in0 ? stand : t < in1 ? mix(stand, push(t), smooth((t - in0) / (in1 - in0))) : push(t);
@@ -629,17 +629,17 @@ export async function kaiju(ctx) {
     return { p: m.o.position.toArray().map(v => +v.toFixed(2)), yaw: +y.toFixed(2), vis: m.o.visible, push: !!m.pushing, clip: m.cur?.getClip().name, armFwd: +(d.x * Math.sin(y) + d.z * Math.cos(y)).toFixed(2), armUp: +d.y.toFixed(2), leg: +(2 * Math.acos(Math.min(1, Math.abs(m.bones['leg-left'].quaternion.w)))).toFixed(2) }; });
   window.__crowdCheck = t => {
     const propBoxes = [];
-    for (const e of engines) { e.o.updateMatrixWorld(true); e.o.traverse(n => { if (n.isMesh && n.visible) { n.geometry.computeBoundingBox(); const scale = new THREE.Vector3().setFromMatrixScale(n.matrixWorld); propBoxes.push({ name: n.name, box: n.geometry.boundingBox, inverse: n.matrixWorld.clone().invert(), scale }); } }); }
+    for (const e of engines) { e.o.updateMatrixWorld(true); e.o.traverse(n => { if (n.isMesh && n.visible) { n.geometry.computeBoundingBox(); const scale = new THREE.Vector3().setFromMatrixScale(n.matrixWorld); propBoxes.push({ name: n.name, field: e === field, box: n.geometry.boundingBox, inverse: n.matrixWorld.clone().invert(), scale }); } }); }
     return men.map((m, i) => {
     const position = [m.o.position.x, m.o.position.z], y = m.o.position.y;
     const screen = new THREE.Vector3(position[0], y + 1.35, position[1]).project(ctx.camera);
     return { i, field: !!m.fieldCrew, spearman: !!m.spearman, stationaryFallback: !!m.stationaryFallback, wanderer: !!m.wanderer, fallbackReason: m.fallbackReason, gait: m.mov[Math.min(NS - 1, Math.floor(t / DT))], fieldRouteComplete, fieldCrewLimit, fieldDistance: Math.hypot(position[0] - field.o.position.x, position[1] - field.o.position.z), returnSafe: m.returnSafe, pushing: !!m.pushing?.(t), wall: !!m.wall, position, height: y, clip: m.cur?.getClip().name, monster: [posAt(t).x, posAt(t).z], screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
-      inView: Math.abs(screen.x) <= 1.05 && Math.abs(screen.y) <= 1.05 && screen.z >= -1 && screen.z <= 1,
+      fieldMeshCount: propBoxes.filter(b => b.field).length, inView: Math.abs(screen.x) <= 1.05 && Math.abs(screen.y) <= 1.05 && screen.z >= -1 && screen.z <= 1,
       blocked: blocked(position, obstacles.filter(o => !m.wall || (o.model !== 'breach-wall' && o.top > m.y + .1))),
       prop: propBoxes.filter(({ box: b, inverse, scale }) => {
         const foot = new THREE.Vector3(position[0], y + .1, position[1]).applyMatrix4(inverse), head = new THREE.Vector3(position[0], y + 2.7, position[1]).applyMatrix4(inverse);
         return Math.max(foot.y, head.y) > b.min.y && Math.min(foot.y, head.y) < b.max.y && foot.x >= b.min.x - .5 / scale.x && foot.x <= b.max.x + .5 / scale.x && foot.z >= b.min.z - .5 / scale.z && foot.z <= b.max.z + .5 / scale.z;
-      }).map(({ name }) => ({ name })) };
+      }).map(({ name, field }) => ({ name, field })) };
     });
   };
   const arrowMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(.04, .04, 1.4, 4).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#5e4a44' }), arrows.length);

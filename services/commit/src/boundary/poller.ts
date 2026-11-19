@@ -21,6 +21,7 @@ async function openPulls(app: GitHubApp, repository: Repository): Promise<Pull[]
   for (let page = 1; ; page += 1) {
     const response = await github.request<Pull[]>('GET /repos/{owner}/{repo}/pulls', {
       ...repository,
+      repo: repository.name,
       state: 'open',
       per_page: 100,
       page,

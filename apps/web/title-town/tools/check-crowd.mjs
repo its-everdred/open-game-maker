@@ -32,6 +32,12 @@ try {
       }
       const crew = crowd.filter(person => person.field);
       if (crew.length !== 4 || crew.some(person => !person.fieldRouteComplete)) failures.push({ t, problem: 'field crew route incomplete' });
+      if (crowd.some(person => !person.fieldMeshCount)) failures.push({ t, problem: 'moving siege engine meshes not checked' });
+      if (t === 25) {
+        const visibleCrew = crew.filter(person => person.inView);
+        if (visibleCrew.length !== 2 || Math.abs(visibleCrew[0].screen[0] - visibleCrew[1].screen[0]) < .04)
+          failures.push({ t, problem: 'visible siege crew forms a column' });
+      }
       if ((t < 30 || (t >= 62 && t < 88)) && crew.some(person => !person.pushing || person.fieldDistance > person.fieldCrewLimit)) failures.push({ t, problem: 'field crew not pushing' });
       for (const person of crowd) {
         if (person.returnSafe === false) failures.push({ t, i: person.i, problem: 'no safe return route' });

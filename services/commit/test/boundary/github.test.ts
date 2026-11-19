@@ -171,7 +171,7 @@ describe('boundary check run', () => {
 
 describe('boundary poller', () => {
   it('checks every open pull request from active game repositories', async () => {
-    const { request } = fakeRequest((call) => {
+    const { request, calls } = fakeRequest((call) => {
       if (call.route.endsWith('/pulls')) {
         return call.parameters.page === 1 ? [{ number: 7, draft: false, head: { sha: 'head-7' } }] : [];
       }
@@ -186,6 +186,7 @@ describe('boundary poller', () => {
       log: vi.fn(),
     });
 
+    expect(calls[0]?.parameters.repo).toBe(repository.name);
     expect(check).toHaveBeenCalledWith({
       repository: game,
       pull: { number: 7, draft: false, headSha: 'head-7' },

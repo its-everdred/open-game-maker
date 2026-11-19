@@ -58,29 +58,31 @@ function harness(
     request: async <R>(message: Envelope<string, unknown>) => {
       requests.push(message);
       return (
-        message.t === 'editor.project'
-          ? {
-              v: 1,
-              id: 'projected-1',
-              replyTo: message.id,
-              t: 'editor.projected',
-              payload: { position: [2, 0, -1] },
-            }
-          : message.t === 'editor.pick'
+        message.t === 'save.restore'
+          ? { v: 1, id: 'restored-1', replyTo: message.id, t: 'save.restored', payload: { save: message.payload } }
+          : message.t === 'editor.project'
             ? {
                 v: 1,
-                id: 'picked-1',
+                id: 'projected-1',
                 replyTo: message.id,
-                t: 'editor.picked',
-                payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+                t: 'editor.projected',
+                payload: { position: [2, 0, -1] },
               }
-            : {
-                v: 1,
-                id: 'result-1',
-                replyTo: message.id,
-                t: 'test.result',
-                payload: { ok: true, value: { rendered: true } },
-              }
+            : message.t === 'editor.pick'
+              ? {
+                  v: 1,
+                  id: 'picked-1',
+                  replyTo: message.id,
+                  t: 'editor.picked',
+                  payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+                }
+              : {
+                  v: 1,
+                  id: 'result-1',
+                  replyTo: message.id,
+                  t: 'test.result',
+                  payload: { ok: true, value: { rendered: true } },
+                }
       ) as R;
     },
     close,
@@ -177,6 +179,16 @@ describe('HostBridge', () => {
     inbound(ready());
     await bridge.whenReady;
     await expect(bridge.request('test.renderInfo', {})).resolves.toEqual({ rendered: true });
+    bridge.close();
+  });
+
+  it('returns the state confirmed by a correlated save restore', async () => {
+    const { bridge, inbound, requests } = harness(() => 'owner');
+    inbound(ready());
+    await bridge.whenReady;
+    const save = { saveSchemaVersion: 1, data: { checkpoint: 2 } };
+    await expect(bridge.restoreSave(save)).resolves.toEqual(save);
+    expect(requests.at(-1)).toMatchObject({ t: 'save.restore', payload: save });
     bridge.close();
   });
 

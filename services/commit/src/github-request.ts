@@ -1,5 +1,7 @@
 import type { GitHubRequest, GitHubResponse } from './types.js';
 
+type Log = (entry: Record<string, unknown>) => void;
+
 type Delay = (milliseconds: number) => Promise<void>;
 
 export class GitHubRequestError extends Error {
@@ -44,6 +46,28 @@ function messageOf(error: unknown): string {
   return 'github request failed';
 }
 
+// GitHub can echo request data, so emit only fixed, recognized response summaries.
+function diagnosticMessage(error: unknown): string {
+  if (typeof error !== 'object' || error === null || !('response' in error)) return 'github request failed';
+  const response = error.response;
+  if (typeof response !== 'object' || response === null || !('data' in response)) return 'github request failed';
+  const data = response.data;
+  if (typeof data !== 'object' || data === null || !('message' in data)) return 'github request failed';
+  const message = data.message;
+  if (typeof message !== 'string') return 'github request failed';
+  const safe = [
+    'Not Found',
+    'Bad credentials',
+    'Resource not accessible by integration',
+    'Validation Failed',
+    'API rate limit exceeded',
+    'Requires authentication',
+  ];
+  if (safe.includes(message)) return message;
+  if (/^GH013: Repository rule violations found for /u.test(message)) return 'GH013: Repository rule violations found';
+  return 'github request failed';
+}
+
 function retryDelay(headers: Record<string, string | undefined>, now: () => number): number {
   const retryAfter = Number(headers['retry-after']);
   if (Number.isFinite(retryAfter) && retryAfter >= 0) return retryAfter * 1_000;
@@ -69,12 +93,19 @@ export function withSafeGitHubRequests(
   request: GitHubRequest,
   delay: Delay = defaultDelay,
   now: () => number = Date.now,
+  log?: Log,
 ): GitHubRequest {
   return async <T>(route: string, parameters: Record<string, unknown> = {}): Promise<GitHubResponse<T>> => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         return await request<T>(route, parameters);
       } catch (error) {
+        log?.({
+          event: 'github-request-error',
+          status: statusOf(error),
+          endpoint: route,
+          message: diagnosticMessage(error),
+        });
         if (!isRateLimited(error)) {
           throw new GitHubRequestError(messageOf(error), statusOf(error));
         }

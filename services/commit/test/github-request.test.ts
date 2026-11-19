@@ -36,6 +36,30 @@ describe('withSafeGitHubRequests', () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  it('logs safe GitHub diagnostics without exposing arbitrary response data', async () => {
+    const log = vi.fn();
+    const error = Object.assign(failure(404), { response: { headers: {}, data: { message: 'Not Found' } } });
+    const safe = withSafeGitHubRequests(vi.fn<GitHubRequest>().mockRejectedValue(error), undefined, undefined, log);
+    await expect(safe('GET /repos/{owner}/{repo}/pulls')).rejects.toBeInstanceOf(GitHubRequestError);
+    expect(log).toHaveBeenCalledWith({
+      event: 'github-request-error',
+      status: 404,
+      endpoint: 'GET /repos/{owner}/{repo}/pulls',
+      message: 'Not Found',
+    });
+    error.response.data.message =
+      'GH013: Repository rule violations found for refs/heads/main\nSee https://example.invalid/?token=secret';
+    await expect(safe('PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge')).rejects.toBeInstanceOf(
+      GitHubRequestError,
+    );
+    expect(log).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: 'GH013: Repository rule violations found' }),
+    );
+    error.response.data.message = 'token secret-installation-token';
+    await expect(safe('GET /app')).rejects.toBeInstanceOf(GitHubRequestError);
+    expect(JSON.stringify(log.mock.calls)).not.toContain('secret-installation-token');
+  });
+
   it('redacts the upstream message and response data', async () => {
     const request = vi
       .fn<GitHubRequest>()

@@ -140,6 +140,19 @@ export class HostBridge {
     return result.data.payload.value;
   }
 
+  async restoreSave(payload: HostPayload<'save.restore'>): Promise<HostPayload<'save.restore'>> {
+    if (!this.readyPayload) throw new BridgeError('not_ready');
+    const parsed = hostToGameSchema.parse({ v: 1, id: this.nextId(), t: 'save.restore', payload });
+    const reply = await this.transport.request<Envelope<string, unknown>>(
+      parsed,
+      this.options.requestTimeoutMs ?? 10_000,
+    );
+    const result = gameToHostSchema.safeParse(reply);
+    if (!result.success || result.data.t !== 'save.restored' || !result.data.payload.save)
+      throw new Error('Save restore was not confirmed');
+    return result.data.payload.save;
+  }
+
   async project(x: number, y: number, prefab?: string): Promise<[number, number, number] | null> {
     if (!this.readyPayload) throw new BridgeError('not_ready');
     const parsed = hostToGameSchema.safeParse({

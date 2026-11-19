@@ -57,6 +57,41 @@ describe('boot', () => {
     bridge.onMessage = undefined;
   });
 
+  it('holds simulation until the host resumes after startup', async () => {
+    const pauses: boolean[] = [];
+    const onPause = (event: Event) => pauses.push((event as CustomEvent<{ paused: boolean }>).detail.paused);
+    window.addEventListener('gm-pause', onPause);
+    const { module } = createCounterGame();
+    const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
+    await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+    bridge.onMessage!(
+      message('hello', {
+        protocol: 1,
+        capabilities: [],
+        mode: 'play',
+        build: 'draft',
+        playerIndex: 0,
+        startupHold: true,
+      }),
+    );
+    const runtime = await pending;
+    expect(runtime.clock.paused).toBe(true);
+    expect(pauses).toEqual([true]);
+    bridge.onMessage!(message('lifecycle.pause', {}));
+    expect(pauses).toEqual([true]);
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        t: 'ready',
+        payload: expect.objectContaining({ startupHold: true }),
+      }),
+    );
+    bridge.onMessage!(message('lifecycle.resume', {}));
+    expect(runtime.clock.paused).toBe(false);
+    expect(pauses).toEqual([true, false]);
+    window.removeEventListener('gm-pause', onPause);
+    runtime.dispose();
+  });
+
   it('does not start the live frame loop during test trailer capture', async () => {
     const startLoop = vi.spyOn(RuntimeImpl.prototype, 'startLiveLoop');
     const state = window as Window & { __gmTrailerAudio?: unknown };
@@ -332,12 +367,18 @@ describe('boot', () => {
 
   it('migrates supported saves and rejects unsupported versions', async () => {
     const migrated = await start();
-    bridge.onMessage!(message('save.restore', { saveSchemaVersion: 0, data: { counter: 4 } }));
+    bridge.onMessage!(
+      message('save.restore', { saveSchemaVersion: 0, data: { counter: 4 }, thumbnail: 'data:image/webp;base64,YWJj' }),
+    );
     await vi.waitFor(() => expect(migrated.metrics.restoreCalls).toHaveLength(1));
     expect(migrated.metrics.restoreCalls[0]?.saveSchemaVersion).toBe(1);
     expect(bridge.send).toHaveBeenCalledWith(
-      expect.objectContaining({ t: 'save.write', payload: expect.objectContaining({ reason: 'migration' }) }),
+      expect.objectContaining({
+        t: 'save.write',
+        payload: expect.objectContaining({ reason: 'migration', thumbnail: 'data:image/webp;base64,YWJj' }),
+      }),
     );
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'save.restored' }));
 
     bridge.send.mockClear();
     const unsupported = await start({ migrate: false });

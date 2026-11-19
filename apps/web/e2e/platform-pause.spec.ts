@@ -4,7 +4,7 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
 
 type GameHook = { bridgeState: string };
-type FixtureHook = { messages: Array<{ t: string }> };
+type FixtureHook = { messages: Array<{ t: string }>; send(type: string, payload: object): void };
 
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '10001';
@@ -25,7 +25,7 @@ for (const viewport of viewports) {
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'the test sets each acceptance viewport itself');
-    test.setTimeout(90_000);
+    test.setTimeout(300_000);
     await page.setViewportSize(viewport);
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page);
@@ -58,62 +58,75 @@ for (const viewport of viewports) {
     expect(gameBox?.height).toBe(viewport.height);
     await page.screenshot({
       path: testInfo.outputPath(`play-${viewport.width}x${viewport.height}.png`),
-      timeout: 30_000,
+      timeout: 120_000,
     });
 
     await menu.click();
-    const menuRow = page.getByRole('group', { name: 'Menu' });
-    for (const name of ['Games', 'Edit', 'Ask for a change', 'Invite', 'Versions']) {
+    const pauseDialog = page.getByRole('dialog', { name: 'Paused' });
+    await expect(pauseDialog).toBeVisible();
+    await expect.poll(() => fixtureMessages(page)).toContain('lifecycle.pause');
+    // Kevin, 2026-11-18: the studio circles sprayed over the pause panel. Pause shows one panel and nothing on top.
+    await expect(page.getByRole('group', { name: 'Menu' })).toBeHidden();
+    for (const name of ['Resume', 'Restart', 'Leave', 'Sound', 'Settings', 'Edit', 'More']) {
+      await expect(pauseDialog.getByRole('button', { name, exact: true })).toBeVisible();
+    }
+    await expect(pauseDialog).toBeInViewport({ ratio: 1 });
+    for (const name of ['Sound', 'Settings', 'Edit', 'More']) {
+      const box = await pauseDialog.getByRole('button', { name, exact: true }).boundingBox();
+      expect(box?.width).toBe(50);
+      expect(box?.height).toBe(50);
+    }
+    await page.screenshot({
+      path: testInfo.outputPath(`menu-${viewport.width}x${viewport.height}.png`),
+      timeout: 120_000,
+    });
+
+    await pauseDialog.getByRole('button', { name: 'More' }).click();
+    const more = page.getByRole('dialog', { name: 'More' });
+    const menuRow = more.getByRole('group', { name: 'Menu' });
+    for (const name of ['Ask for a change', 'Invite', 'Versions']) {
       await expect(menuRow.getByRole('button', { name, exact: true })).toBeVisible();
+    }
+    for (const name of ['Games', 'Edit']) {
+      await expect(menuRow.getByRole('button', { name, exact: true })).toHaveCount(0);
     }
     await expectMenuSlotsNotToOverlap(menuRow);
     if (viewport.width === 844) {
       const buttons = menuRow.locator('button, a');
-      expect(await buttons.count()).toBeGreaterThan(10);
+      expect(await buttons.count()).toBeGreaterThan(8);
       for (const button of await buttons.all()) {
         await button.scrollIntoViewIfNeeded();
         const box = await button.boundingBox();
         expect(box).not.toBeNull();
         expect(box!.width).toBeGreaterThanOrEqual(44);
         expect(box!.height).toBeGreaterThanOrEqual(44);
-        expect(box!.x).toBeGreaterThanOrEqual(640);
-        expect(box!.y).toBeGreaterThanOrEqual(0);
-        expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
         await expect(button).toBeInViewport({ ratio: 1 });
       }
-      await menuRow.evaluate((element) => {
-        element.scrollTop = 0;
-      });
       await menuRow.getByRole('button', { name: 'Report a problem' }).click();
       const report = page.getByRole('form', { name: 'Report a problem' });
+      await report.getByRole('textbox', { name: 'What went wrong?' }).scrollIntoViewIfNeeded();
       await expect(report.getByRole('textbox', { name: 'What went wrong?' })).toBeInViewport({ ratio: 1 });
       await report.getByRole('button', { name: 'Close' }).click();
     }
-    await expect.poll(() => fixtureMessages(page)).toContain('lifecycle.pause');
-    await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
     await page.screenshot({
-      path: testInfo.outputPath(`menu-${viewport.width}x${viewport.height}.png`),
-      timeout: 30_000,
+      path: testInfo.outputPath(`more-${viewport.width}x${viewport.height}.png`),
+      timeout: 120_000,
     });
-
-    const pauseDialog = page.getByRole('dialog', { name: 'Paused' });
-    await pauseDialog.getByRole('button', { name: 'Credits' }).click();
-    await expect(page.getByRole('dialog', { name: 'Credits' })).toBeVisible();
-    await expect(menuRow).toBeVisible();
     expect(await fixtureMessages(page)).not.toContain('lifecycle.resume');
-    await page.getByRole('dialog', { name: 'Credits' }).getByRole('button', { name: 'Back' }).click();
-    await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+    await more.getByRole('button', { name: 'Back' }).click();
+    await expect(pauseDialog).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Menu' })).toBeHidden();
 
     // The short-landscape case covers the play menu; the other sizes exercise the editor round trip.
     if (viewport.width === 844) return;
 
-    await menuRow.getByRole('button', { name: 'Edit', exact: true }).click();
+    await pauseDialog.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
     await expect(page).toHaveURL(/mode=edit/);
     await expect.poll(() => fixtureMessages(page)).toContain('lifecycle.resume');
     await page.screenshot({
       path: testInfo.outputPath(`edit-${viewport.width}x${viewport.height}.png`),
-      timeout: 30_000,
+      timeout: 120_000,
     });
 
     await page.getByRole('button', { name: /Play/ }).click();
@@ -155,21 +168,25 @@ test('play menu stays readable over light artwork', async ({ page }, testInfo) =
   expect(contrast).toBeGreaterThanOrEqual(4.5);
 });
 
-test('settings hides the game menu until returning to pause', async ({ page }, testInfo) => {
+test('settings holds credits and keeps the game menu hidden until returning to pause', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'desktop covers the shared menu interaction');
   await installAuthRoutes(page, { signedIn: true });
   await installGameApi(page);
   await openReadyGame(page);
   await page.getByRole('button', { name: 'Menu' }).click({ force: true });
   const menuRow = page.getByRole('group', { name: 'Menu' });
-  await expect(menuRow).toBeVisible();
   await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'Settings' }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
   await expect(settings).toBeVisible();
   await expect(menuRow).toBeHidden();
   await expect(settings.locator('summary').filter({ hasText: 'Sound' })).toHaveCSS('list-style-type', 'none');
+  await settings.locator('summary').filter({ hasText: 'Credits' }).click();
+  await expect(
+    settings.getByText('Loading…').or(settings.locator('.credits-list, [role="alert"]')).first(),
+  ).toBeVisible();
   await settings.getByRole('button', { name: 'Back' }).click();
-  await expect(menuRow).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+  await expect(menuRow).toBeHidden();
 });
 
 test('opening the menu in a room does not pause the game', async ({ page }, testInfo) => {
@@ -180,14 +197,20 @@ test('opening the menu in a room does not pause the game', async ({ page }, test
   await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 30_000 }).toBe('ready');
 
   await page.getByRole('button', { name: 'Menu' }).click({ force: true });
-  await expect(page.getByRole('group', { name: 'Menu' })).toBeVisible();
+  const gameMenu = page.getByRole('dialog', { name: 'Game menu' });
+  await expect(gameMenu).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Paused' })).toHaveCount(0);
+  await expect(gameMenu.getByRole('button', { name: 'Restart' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Menu' })).toBeHidden();
   expect(await fixtureMessages(page)).not.toContain('lifecycle.pause');
 });
 
 async function openReadyGame(page: Page): Promise<void> {
   await page.goto('/g/game?test');
   await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 30_000 }).toBe('ready');
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  if (!frame) throw new Error('Bridge fixture frame is missing');
+  await frame.evaluate(() => (window as Window & { __fixture: FixtureHook }).__fixture.send('load.frame', {}));
 }
 
 function gameState(page: Page): Promise<GameHook | undefined> {

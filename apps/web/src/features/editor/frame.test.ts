@@ -17,6 +17,337 @@ afterEach(() => {
 });
 
 describe('game frame adapter', () => {
+  it('does not consume startup writes when an away observer subscribes first', () => {
+    const listeners = new Map<string, Set<(payload: never) => void>>();
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn((type: string, callback: (payload: never) => void) => {
+        const callbacks = listeners.get(type) ?? new Set();
+        callbacks.add(callback);
+        listeners.set(type, callbacks);
+        return () => callbacks.delete(callback);
+      }),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: () => frame,
+    });
+    const observe = vi.fn();
+    controller.observeSaveWrite!(observe);
+    const migrated = { saveSchemaVersion: 1, data: { migrated: true } };
+    for (const callback of listeners.get('save.write') ?? []) callback(migrated as never);
+    const persist = vi.fn();
+    controller.onSaveWrite(persist);
+    expect(observe).toHaveBeenCalledWith(migrated);
+    expect(persist).toHaveBeenCalledWith(migrated);
+    controller.dispose();
+  });
+  it('restores a save before releasing an acknowledged startup hold', async () => {
+    let options: GameFrameOptions | undefined;
+    let resolveSave!: (save: { saveSchemaVersion: number; data: unknown }) => void;
+    let restored!: () => void;
+    let startupWrite!: (value: { saveSchemaVersion: number; data: unknown }) => void;
+    const save = { saveSchemaVersion: 1, data: { room: 'crypt' } };
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn((type: string, callback: (payload: never) => void) => {
+        if (type === 'save.restored') restored = () => callback(undefined as never);
+        if (type === 'save.write') startupWrite = (value) => callback(value as never);
+        return vi.fn();
+      }),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    });
+    expect(options?.startupHold).toBe(true);
+    options?.onReady?.(manifest, [], true);
+    expect(controller.state().bridgeState).toBe('connecting');
+    await vi.waitFor(() => expect(resolveSave).toBeTypeOf('function'));
+    resolveSave(save);
+    await vi.waitFor(() => expect(frame.send).toHaveBeenCalledWith('save.restore', save));
+    expect(controller.state().bridgeState).toBe('connecting');
+    startupWrite(save);
+    restored();
+    await vi.waitFor(() => expect(controller.state().bridgeState).toBe('ready'));
+    expect(frame.send.mock.calls.map(([type]) => type)).toEqual(['design.apply', 'save.restore', 'lifecycle.resume']);
+    const onSaveWrite = vi.fn();
+    controller.onSaveWrite(onSaveWrite);
+    expect(onSaveWrite).toHaveBeenCalledWith(save);
+    controller.dispose();
+  });
+  it('protects an existing save when a legacy game cannot hold startup', async () => {
+    let options: GameFrameOptions | undefined;
+    const restore = vi.fn().mockResolvedValue({ saveSchemaVersion: 1, data: {} });
+    const error = vi.fn();
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: restore,
+      onStartupRestoreError: error,
+    });
+    options?.onReady?.({ ...manifest, saves: true }, []);
+    await vi.waitFor(() =>
+      expect(controller.state()).toMatchObject({
+        bridgeState: 'ready',
+        startupSaveError: true,
+        startupRecoveryUnavailable: true,
+      }),
+    );
+    expect(restore).toHaveBeenCalledOnce();
+    expect(frame.send).not.toHaveBeenCalledWith('save.restore', expect.anything());
+    expect(error).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+  it('keeps saving available for a legacy game with no existing save', async () => {
+    let options: GameFrameOptions | undefined;
+    const restore = vi.fn().mockResolvedValue(undefined);
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: restore,
+    });
+    options?.onReady?.({ ...manifest, saves: true }, []);
+    await vi.waitFor(() => expect(controller.state().bridgeState).toBe('ready'));
+    expect(restore).toHaveBeenCalledOnce();
+    expect(controller.state().startupSaveError).toBeUndefined();
+    controller.dispose();
+  });
+  it('disables legacy manual recovery when the startup lookup fails', async () => {
+    let options: GameFrameOptions | undefined;
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: async () => {
+        throw new Error('lookup failed');
+      },
+    });
+    options?.onReady?.({ ...manifest, saves: true }, []);
+    await vi.waitFor(() =>
+      expect(controller.state()).toMatchObject({
+        bridgeState: 'ready',
+        startupSaveError: true,
+        startupRecoveryUnavailable: true,
+      }),
+    );
+    controller.dispose();
+  });
+  it('disables saving for the session when the startup load fails', async () => {
+    let options: GameFrameOptions | undefined;
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const error = vi.fn();
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: async () => {
+        throw new Error('offline');
+      },
+      onStartupRestoreError: error,
+    });
+    options?.onReady?.(manifest, [], true);
+    await vi.waitFor(() => expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true }));
+    expect(error).toHaveBeenCalledOnce();
+    expect(frame.send).toHaveBeenCalledWith('lifecycle.resume', {});
+    controller.dispose();
+  });
+  it('drops buffered edit-mode writes when returning to play', () => {
+    const callbacks = new Map<string, (payload: never) => void>();
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn((type: string, callback: (payload: never) => void) => {
+        callbacks.set(type, callback);
+        return vi.fn();
+      }),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: () => frame,
+    });
+    controller.setMode('edit');
+    callbacks.get('save.write')?.({ saveSchemaVersion: 1, data: { edit: true } } as never);
+    controller.setMode('play');
+    const write = vi.fn();
+    controller.onSaveWrite(write);
+    expect(write).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+  it('re-enables saving only after a manual restore is acknowledged', async () => {
+    let options: GameFrameOptions | undefined;
+    let restored!: (save: { saveSchemaVersion: number; data: unknown }) => void;
+    let lateAck!: () => void;
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn((type: string, callback: () => void) => {
+        if (type === 'save.restored') lateAck = callback;
+        return vi.fn();
+      }),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      restoreSave: vi.fn(
+        () =>
+          new Promise<{ saveSchemaVersion: number; data: unknown }>((resolve) => {
+            restored = resolve;
+          }),
+      ),
+      dispose: vi.fn(),
+    };
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: async () => {
+        throw new Error('offline');
+      },
+    });
+    options?.onReady?.(manifest, [], true);
+    await vi.waitFor(() => expect(controller.state().startupSaveError).toBe(true));
+    lateAck();
+    expect(controller.state().startupSaveError).toBe(true);
+    const recovery = controller.restoreSave({ saveSchemaVersion: 1, data: {} });
+    expect(controller.state().startupSaveError).toBe(true);
+    restored({ saveSchemaVersion: 1, data: {} });
+    await recovery;
+    controller.confirmSaveRecovery();
+    expect(controller.state().startupSaveError).toBe(false);
+    controller.dispose();
+  });
+  it('does not treat a rejected startup restore as successful', async () => {
+    let options: GameFrameOptions | undefined;
+    const frame = {
+      bridge: { dropped: 0 },
+      on: vi.fn(() => vi.fn()),
+      setMode: vi.fn(),
+      setSettings: vi.fn(),
+      send: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const error = vi.fn();
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 1, doc: {} as DesignDoc },
+      create: (value) => {
+        options = value;
+        return frame;
+      },
+      startupRestore: async () => ({ saveSchemaVersion: 1, data: {} }),
+      onStartupRestoreError: error,
+    });
+    options?.onReady?.(manifest, [], true);
+    await vi.waitFor(() => expect(frame.send).toHaveBeenCalledWith('save.restore', expect.anything()));
+    options?.onError?.({ code: 'save_unsupported', message: 'unsupported' });
+    await vi.waitFor(() => expect(controller.state()).toMatchObject({ bridgeState: 'ready', startupSaveError: true }));
+    expect(error).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
   it('mounts through @gm/host, forwards mode, and counts rejected origins', async () => {
     const container = document.createElement('div');
     document.body.append(container);
@@ -32,6 +363,7 @@ describe('game frame adapter', () => {
       setSettings: vi.fn(),
       send: vi.fn(),
       project: vi.fn().mockResolvedValue([2, 0, -1]),
+      restoreSave: vi.fn(async (save) => save),
       dispose: vi.fn(),
     };
     const states: Array<{ bridgeState: string; dropped: number }> = [];
@@ -88,7 +420,7 @@ describe('game frame adapter', () => {
     const secondPlacement = controller.validatePlacement('bat', { position: [3, 0, 4] });
     controller.pause();
     controller.resume();
-    controller.restoreSave({ saveSchemaVersion: 1, data: { room: 'crypt' } });
+    await controller.restoreSave({ saveSchemaVersion: 1, data: { room: 'crypt' } });
     expect(frame.send).toHaveBeenCalledWith('editor.pick', { x: 0.25, y: 0.75 });
     expect(frame.send).toHaveBeenCalledWith('editor.select', { ids: ['e_01BX5ZZKBKACTAV9WEVGEMMVRZ'] });
     expect(frame.send).toHaveBeenCalledWith('editor.camera', { mode: 'free' });
@@ -111,7 +443,7 @@ describe('game frame adapter', () => {
     await expect(secondPlacement).resolves.toEqual({ ok: false, reason: 'blocked' });
     expect(frame.send).toHaveBeenCalledWith('lifecycle.pause', {});
     expect(frame.send).toHaveBeenCalledWith('lifecycle.resume', {});
-    expect(frame.send).toHaveBeenCalledWith('save.restore', {
+    expect(frame.restoreSave).toHaveBeenCalledWith({
       saveSchemaVersion: 1,
       data: { room: 'crypt' },
     });
