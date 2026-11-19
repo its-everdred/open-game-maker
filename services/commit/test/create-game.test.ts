@@ -61,6 +61,9 @@ describe('create_game', () => {
     );
 
     expect(result).toEqual({ ok: true, sha: 'merge-1' });
+    expect(
+      calls.filter((call) => call.route.includes('{repo}')).every((call) => call.parameters.repo === 'instance'),
+    ).toBe(true);
     const tree = calls.find((call) => call.route.endsWith('/git/trees'))!.parameters.tree as { path: string }[];
     // Every file lands in the game's folder; the workflow belongs to the instance repository, not the game.
     expect(tree.map(({ path }) => path)).toEqual([`${FOLDER}/README.md`, `${FOLDER}/design/design.json`]);

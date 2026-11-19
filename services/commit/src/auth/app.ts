@@ -45,6 +45,7 @@ export type GitHubAppConfig = {
   fetch?: typeof fetch;
   now?: Clock;
   timeoutMs?: number;
+  log?: (entry: Record<string, unknown>) => void;
 };
 
 export async function createGitHubApp(config: GitHubAppConfig): Promise<GitHubApp & GitHubInstallations> {
@@ -56,10 +57,13 @@ export async function createGitHubApp(config: GitHubAppConfig): Promise<GitHubAp
       ? { clientId: config.clientId, clientSecret: config.clientSecret }
       : null;
   const rawRequest = octokitRequest.defaults({ request: { fetch: boundedFetch } });
-  const request = Object.assign(withSafeGitHubRequests(rawRequest as unknown as GitHubRequest), {
-    endpoint: rawRequest.endpoint,
-    defaults: rawRequest.defaults,
-  }) as typeof rawRequest;
+  const request = Object.assign(
+    withSafeGitHubRequests(rawRequest as unknown as GitHubRequest, undefined, undefined, config.log),
+    {
+      endpoint: rawRequest.endpoint,
+      defaults: rawRequest.defaults,
+    },
+  ) as typeof rawRequest;
   const auth = createAppAuth({ appId: config.appId, privateKey, request });
   const appClient = new Octokit({
     authStrategy: createAppAuth,
@@ -68,7 +72,12 @@ export async function createGitHubApp(config: GitHubAppConfig): Promise<GitHubAp
     retry: { enabled: false },
     throttle: { enabled: false },
   });
-  const appRequest = withSafeGitHubRequests(appClient.request.bind(appClient) as unknown as GitHubRequest);
+  const appRequest = withSafeGitHubRequests(
+    appClient.request.bind(appClient) as unknown as GitHubRequest,
+    undefined,
+    undefined,
+    config.log,
+  );
   const installations = new Map<string, CachedInstallation>();
   const tokens = new Map<number, CachedToken>();
   let identityValue: GitHubIdentity | undefined;
@@ -155,7 +164,10 @@ export async function createGitHubApp(config: GitHubAppConfig): Promise<GitHubAp
         throttle: { enabled: false },
       });
       const request = client.request.bind(client) as unknown as GitHubRequest;
-      return { accountType: installation.accountType, request: withSafeGitHubRequests(request) };
+      return {
+        accountType: installation.accountType,
+        request: withSafeGitHubRequests(request, undefined, undefined, config.log),
+      };
     },
     async identity(): Promise<GitHubIdentity> {
       if (identityValue !== undefined) return identityValue;

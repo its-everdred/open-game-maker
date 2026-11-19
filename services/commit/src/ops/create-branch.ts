@@ -18,6 +18,7 @@ export async function createBranch(
   const github = await context.app.forOwner(repository.owner);
   await github.request('POST /repos/{owner}/{repo}/git/refs', {
     ...repository,
+    repo: repository.name,
     ref: `refs/heads/${branch}`,
     sha: op.sha,
   });

@@ -15,6 +15,7 @@ export async function createTreeFromFiles(
     const path = normalizeCommitPath(file.path);
     const blob = await request<{ sha: string }>('POST /repos/{owner}/{repo}/git/blobs', {
       ...repo,
+      repo: repo.name,
       content: Buffer.from(file.content, 'utf8').toString('base64'),
       encoding: 'base64',
     });
@@ -41,6 +42,7 @@ export async function createTree(
   }));
   const response = await request<{ sha: string }>('POST /repos/{owner}/{repo}/git/trees', {
     ...repo,
+    repo: repo.name,
     ...(baseTree === undefined ? {} : { base_tree: baseTree }),
     tree,
   });
@@ -57,6 +59,7 @@ export async function createCommit(
 ): Promise<string> {
   const response = await request<{ sha: string }>('POST /repos/{owner}/{repo}/git/commits', {
     ...repo,
+    repo: repo.name,
     message,
     tree,
     parents,

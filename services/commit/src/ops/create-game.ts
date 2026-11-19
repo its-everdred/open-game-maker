@@ -41,6 +41,7 @@ async function createdMerge(
 ): Promise<string | null> {
   const history = await request<{ sha: string; commit?: { message?: string } }[]>('GET /repos/{owner}/{repo}/commits', {
     ...repository,
+    repo: repository.name,
     path: folder,
     per_page: '20',
   });
@@ -61,11 +62,17 @@ async function moveGameBranch(
   sha: string,
 ): Promise<void> {
   try {
-    await request('POST /repos/{owner}/{repo}/git/refs', { ...repository, ref: `refs/heads/${branch}`, sha });
+    await request('POST /repos/{owner}/{repo}/git/refs', {
+      ...repository,
+      repo: repository.name,
+      ref: `refs/heads/${branch}`,
+      sha,
+    });
   } catch (error) {
     if (!(error instanceof GitHubRequestError) || error.status !== 422) throw error;
     await request('PATCH /repos/{owner}/{repo}/git/refs/{ref}', {
       ...repository,
+      repo: repository.name,
       ref: `heads/${branch}`,
       sha,
       force: true,
@@ -83,6 +90,7 @@ async function openPull(
   try {
     const created = await request<Pull>('POST /repos/{owner}/{repo}/pulls', {
       ...repository,
+      repo: repository.name,
       head: branch,
       base: 'main',
       title,
@@ -92,6 +100,7 @@ async function openPull(
     if (!(error instanceof GitHubRequestError) || error.status !== 422) throw error;
     const existing = await request<Pull[]>('GET /repos/{owner}/{repo}/pulls', {
       ...repository,
+      repo: repository.name,
       head: `${repository.owner}:${branch}`,
       state: 'open',
     });
@@ -165,10 +174,12 @@ async function copyBlob(
   if (sameRepository(sourceRepository, destinationRepository)) return sha;
   const blob = await source<{ content: string; encoding: string }>('GET /repos/{owner}/{repo}/git/blobs/{file_sha}', {
     ...sourceRepository,
+    repo: sourceRepository.name,
     file_sha: sha,
   });
   const created = await destination<{ sha: string }>('POST /repos/{owner}/{repo}/git/blobs', {
     ...destinationRepository,
+    repo: destinationRepository.name,
     content: blob.data.content,
     encoding: blob.data.encoding,
   });
@@ -189,10 +200,12 @@ export async function createGame(op: ExtractCommitOp<'create_game'>, context: Op
   const github = await context.app.forOwner(repository.owner);
   const head = await github.request<{ object: { sha: string } }>('GET /repos/{owner}/{repo}/git/ref/{ref}', {
     ...repository,
+    repo: repository.name,
     ref: 'heads/main',
   });
   const base = await github.request<CommitData>('GET /repos/{owner}/{repo}/git/commits/{commit_sha}', {
     ...repository,
+    repo: repository.name,
     commit_sha: head.data.object.sha,
   });
   const marker = createMarker(folder);
@@ -243,6 +256,7 @@ export async function createGame(op: ExtractCommitOp<'create_game'>, context: Op
   const pull = await openPull(github.request, repository, branch, title);
   const merged = await github.request<MergeResponse>('PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge', {
     ...repository,
+    repo: repository.name,
     pull_number: pull.number,
     sha,
     merge_method: 'squash',
@@ -258,6 +272,7 @@ export async function ensureGameLabel(request: GitHubRequest, repository: GameRe
   try {
     await request('POST /repos/{owner}/{repo}/labels', {
       ...repository,
+      repo: repository.name,
       name: gameIssueLabel(slug),
       color: '0e8a16',
       description: `Game ${slug}`,

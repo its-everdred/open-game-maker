@@ -12,6 +12,7 @@ export async function merge(op: ExtractCommitOp<'merge'>, context: OperationCont
   const github = await context.app.forOwner(repository.owner);
   const pull = await github.request<PullRequest>('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
     ...repository,
+    repo: repository.name,
     pull_number: op.prNumber,
   });
   const verdict = await context.gate.evaluate({
@@ -27,6 +28,7 @@ export async function merge(op: ExtractCommitOp<'merge'>, context: OperationCont
   try {
     response = await github.request<MergeResponse>('PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge', {
       ...repository,
+      repo: repository.name,
       pull_number: op.prNumber,
       sha: pull.data.head.sha,
       merge_method: 'squash',
