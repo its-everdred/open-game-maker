@@ -75,6 +75,16 @@ const scenarios = [
 test.use({ serviceWorkers: 'block', reducedMotion: 'reduce' });
 test.describe.configure({ mode: 'serial' });
 
+test('serves prototype references from the bridge fixture', async ({ request }) => {
+  // eslint-disable-next-line no-restricted-properties
+  const bridgeOrigin = `http://127.0.0.1:${process.env.OGM_WEB_BRIDGE_PORT ?? '10001'}`;
+  for (const path of ['/studio/', '/ui/']) {
+    const response = await request.get(`${bridgeOrigin}${path}`);
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('text/html');
+  }
+});
+
 for (const scenario of scenarios) {
   for (const viewport of viewports) {
     test(`${scenario.name} matches the prototype shell at ${viewport.width}x${viewport.height}`, async ({
