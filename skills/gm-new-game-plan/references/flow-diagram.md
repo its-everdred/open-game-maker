@@ -1,6 +1,6 @@
 # Game flow diagram
 
-Every new game maps its loops and screens before any screen or gameplay ticket is cut. Without it, the order of the
+Every new game maps its loops and screens before screen or gameplay implementation. Without it, the order of the
 menus, the game modes, whether mode or character comes first, what a round end offers and what multiplayer adds are
 each guessed by a different ticket, and nobody can say which screens the game has.
 
@@ -25,7 +25,7 @@ Navigation rules:
   concept until one exists (the buildable target, rendered in the engine where one exists), and, once the screen is
   built, its **live** still from `gm run --viewport phone` (a scenario that opens that screen):
   `screens/<id>.target.png` and `screens/<id>.live.png`. Drop the `<img>` of an image that does not exist yet; a screen
-  with no target is a plain node and gets a stage 1 concept ticket.
+  with no target is a plain node and gets a mock on its feature ticket.
 
 The **Screens** table lists each node with its target's decision id, its live still's build and the tickets that build
 it. The **Open choices** table lists every question the diagram cannot settle yet.
@@ -45,7 +45,7 @@ updates `screens/` and the Executor re-renders. Look at every render before send
 
 - The Executor owns the diagram. Draw it from the spec right after the architecture, with the targets that exist
   (plain nodes for the rest), so stage 1 concepts never wait on it.
-- Each open choice is one `decision.requested` Command with `blocking: true` (as in gm-image-mock): render each variant
+- Each open choice is one `decision.requested` Command with `blocking: false` (as in gm-image-mock): render each variant
   of the affected part of the graph (mode then character beside character then mode) into a scratch flow directory and
   put the renders in `media[]` as options A, B, C, recommended first.
 - One more Command sends the rendered levels in the review deck for approval of the diagram as a whole. Like every

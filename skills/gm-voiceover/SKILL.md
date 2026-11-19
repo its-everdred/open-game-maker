@@ -1,6 +1,6 @@
 ---
 name: gm-voiceover
-description: Make a short consented local draft voiceover and caption timing without sending media to a service.
+description: Sample expressive character voices through the media broker and make captioned local draft voiceovers.
 ---
 
 # Game Maker voiceover
@@ -8,10 +8,18 @@ description: Make a short consented local draft voiceover and caption timing wit
 Use this for a short NPC line, trailer read, or accessibility draft. Keep the written script as the caption source of
 truth. Transcription supplies draft timestamps and an intelligibility check; it never rewrites approved words.
 
-## Rights and size gate
+## Voice samples for creator picks
+
+Use the same media-broker route as `gm-image-mock`: `request-mock.py --kind voices --out <dir>` lists voices;
+`--kind voice --voice-id <id> --prompt-file <line.txt> --out <dir>` generates a short sample. Offer six expressive
+voices per character, each saying the same two lines, with `--voice-model eleven_v3 --stability 0.0` and emotion tags.
+Attach audio to every option before raising a non-blocking pick. Build the recommendation while waiting; silence is
+not approval. Generate no full set until the creator picks. Do not send private or unconsented reference audio.
+
+## Local draft rights and size gate
 
 Use a synthetic built-in reference or a reference whose speaker gave explicit consent for this use. Never imitate a
-real person, public figure, or minor without that consent. Keep the reference, model cache, generated WAV, and caption
+real person, public figure, or minor without that consent. For local drafts, keep the reference, model cache, generated WAV, and caption
 files local; do not publish or upload them. A model download over 5 GB or generation beyond a short test needs Kevin's
 approval before it starts.
 
