@@ -29,6 +29,22 @@ describe('GameRoom relay rules', () => {
     await harness.testServer.shutdown();
   });
 
+  it('uses an isolated port for the relay server', () => {
+    const address = harness.gameServer.transport.server?.address();
+    expect(address).toBeTruthy();
+    expect(typeof address).toBe('object');
+    if (address === null || address === undefined || typeof address === 'string') throw new Error('not a TCP listener');
+    expect(address.port).not.toBe(2568);
+  });
+
+  it('retains a new room through a delayed pair of joins', async () => {
+    const room = await newRoom(harness.testServer);
+    await sleep(1_200);
+    await connect(harness.testServer, room, 'owner', 'owner');
+    await connect(harness.testServer, room, 'player', 'player');
+    expect(room.clients).toHaveLength(2);
+  });
+
   it('drops owner-only messages from a player and counts the violation', async () => {
     const room = await newRoom(harness.testServer);
     const owner = await connect(harness.testServer, room, 'owner', 'owner');

@@ -1,5 +1,5 @@
 import type { Room as ClientRoom } from '@colyseus/sdk';
-import { boot, ColyseusTestServer } from '@colyseus/testing';
+import { ColyseusTestServer } from '@colyseus/testing';
 import { LIMITS, type Role } from '@ogm/contracts';
 import { signGrant } from '@ogm/room-protocol';
 
@@ -15,7 +15,7 @@ export const defaultTimings: RoomTimings = {
   ownerReconnectSec: 0.2,
   playerReconnectSec: 0.2,
   seatReconnectSec: 0.2,
-  idleDisposeSec: 1,
+  idleDisposeSec: 60,
   callbackTimeoutMs: 100,
   callbackRetryMs: [5, 10, 20],
 };
@@ -34,12 +34,14 @@ export async function startHarness(overrides: Partial<RoomsServiceConfig> = {}, 
     endedFetch: async () => new Response(null, { status: 204 }),
     ...overrides,
   });
-  let testServer: ColyseusTestServer;
-  if (port === undefined) testServer = await boot(bundle.gameServer);
-  else {
-    await bundle.gameServer.listen(port, '127.0.0.1');
-    testServer = new ColyseusTestServer(bundle.gameServer);
+  await bundle.gameServer.listen(port ?? 0, '127.0.0.1');
+  const address = bundle.gameServer.transport.server?.address();
+  if (address === null || address === undefined || typeof address === 'string') {
+    throw new Error('rooms test server did not bind to a TCP port');
   }
+  // ColyseusTestServer reads Server.port, which otherwise remains 0 after an ephemeral bind.
+  (bundle.gameServer as unknown as { port: number }).port = address.port;
+  const testServer = new ColyseusTestServer(bundle.gameServer);
   return { ...bundle, testServer };
 }
 
