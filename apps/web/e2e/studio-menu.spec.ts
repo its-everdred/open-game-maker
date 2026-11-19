@@ -353,7 +353,7 @@ test('shows the active build ring and contextual build in the games menu', async
   const trigger = page.locator('.studio-library-volume button');
   await expect(trigger).toHaveAttribute('data-building', 'true');
   await expect(page.locator('.studio-menu-control [role="status"]')).toHaveText('Building Moon Vault');
-  await expect(page.locator('.studio-menu-badge')).toHaveText('2');
+  await expect(trigger.locator('.studio-menu-badge')).toHaveCount(0);
   await capturePhone(page, testInfo, 'games-menu-building');
 
   await trigger.click({ button: 'right' });
@@ -373,7 +373,7 @@ test('shows the active build ring and contextual build in the games menu', async
   await capturePhone(page, testInfo, 'games-menu-conversation');
 });
 
-// Kevin (2026-11-08): sign in, see how many decisions are open on the top-right button, and click through each one.
+// Open decisions remain available in the menu without a count on the sound control.
 test('counts the open decisions and walks through each one from the menu', async ({ page }, testInfo) => {
   testInfo.setTimeout(90_000);
   await installAuthRoutes(page, { signedIn: true });
@@ -382,7 +382,7 @@ test('counts the open decisions and walks through each one from the menu', async
   await page.goto('/all');
 
   const trigger = page.locator('.studio-library-volume button');
-  await expect(page.locator('.studio-menu-badge')).toHaveText('3');
+  await expect(trigger.locator('.studio-menu-badge')).toHaveCount(0);
   await expect(trigger).toHaveAttribute('data-blocking', 'true');
   await capturePhone(page, testInfo, 'decisions-badge');
 
