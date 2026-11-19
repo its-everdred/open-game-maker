@@ -2,7 +2,14 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { reviewOptionImageReady, reviewRoundMediaReady } from './qa-review-media.js';
 
-import { mediaFailures, openReviewDeck, optionFailures, settleMedia, swipeDeckFailures } from './qa-review-checks.js';
+import {
+  mediaFailures,
+  openReviewDeck,
+  openReviewItem,
+  optionFailures,
+  settleMedia,
+  swipeDeckFailures,
+} from './qa-review-checks.js';
 import { ticketDetailSteps } from './qa-ticket-detail-e2e.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
@@ -122,6 +129,7 @@ async function runViewport(
   const media = (file: string) => readFileSync(new URL(file, MEDIA_DIR)).toString('base64');
   const context = await browser.newContext({ viewport, deviceScaleFactor: 2, hasTouch: true });
   let ticketPage: Page | undefined;
+  let reviewPage: Page | undefined;
   // Whether --break-media found the review picture to break; a run that broke nothing proves nothing.
   let broke = false;
   try {
@@ -171,6 +179,7 @@ async function runViewport(
         });
       }, REGRESSION_CSS);
     const page = await context.newPage();
+    reviewPage = page;
     const still = async (label: string) => {
       const file = join(config.out, `${name}-${stills.length + 1}-${label}.png`);
       await page.screenshot({ path: file });
@@ -188,13 +197,15 @@ async function runViewport(
         ['QA review round', 'QA review'],
         'QA running ticket',
       );
-      await dialog.getByText('QA review round').waitFor(timeout);
-      await dialog.locator('video').first().waitFor(timeout);
-      await dialog
+    });
+    await step('wait for round question', () => dialog.getByText('QA review round').waitFor(timeout));
+    await step('wait for round video', () => dialog.locator('video').first().waitFor(timeout));
+    await step('wait for round audio', () =>
+      dialog
         .locator('audio')
         .first()
-        .waitFor({ state: 'attached', ...timeout });
-    });
+        .waitFor({ state: 'attached', ...timeout }),
+    );
     await step('show the round', async () => {
       await settleMedia(dialog);
       await still('round');
@@ -217,12 +228,11 @@ async function runViewport(
     await still('round-sent');
     await step('pick B on the Command with a note', async () => {
       await dialog.getByRole('button', { name: 'Close' }).click(timeout);
-      const list = page.getByRole('region', { name: 'Builds' });
-      await list.getByRole('button', { name: 'QA review', exact: true }).click(timeout);
-      await dialog.getByText('QA: which one?').waitFor(timeout);
+      await openReviewItem(page, 'QA review', timeout.timeout);
+      await step('wait for Command question', () => dialog.getByText('QA: which one?').waitFor(timeout));
       await settleMedia(dialog);
       await still('command');
-      await page.waitForFunction(reviewOptionImageReady, null, timeout);
+      await step('wait for Command image', () => page.waitForFunction(reviewOptionImageReady, null, timeout));
       const failures = [
         ...(await mediaFailures(dialog, 'the Command')),
         ...(typeof seeded.options === 'number'
@@ -232,24 +242,28 @@ async function runViewport(
       if (failures.length) throw new StepFailed(failures.join('; '));
       await dialog.getByLabel('Note (optional)').fill(PICK_NOTE, timeout);
       await dialog.getByRole('button', { name: 'View option B' }).click(timeout);
-      await dialog.locator('video').first().waitFor(timeout);
-      await page.waitForFunction(
-        () => {
-          const video = document.querySelector('.worker-review-option video') as HTMLVideoElement | null;
-          return Boolean(video && video.readyState >= 2);
-        },
-        null,
-        timeout,
+      await step('wait for Command video', () => dialog.locator('video').first().waitFor(timeout));
+      await step('wait for playable Command video', () =>
+        page.waitForFunction(
+          () => {
+            const video = document.querySelector('.worker-review-option video') as HTMLVideoElement | null;
+            return Boolean(video && video.readyState >= 2);
+          },
+          null,
+          timeout,
+        ),
       );
       await still('command-b');
       await dialog.getByRole('button', { name: 'View option C' }).click(timeout);
-      await page.waitForFunction(
-        () => {
-          const audio = document.querySelector('.worker-review-option audio') as HTMLAudioElement | null;
-          return Boolean(audio && audio.duration > 1);
-        },
-        null,
-        timeout,
+      await step('wait for Command audio', () =>
+        page.waitForFunction(
+          () => {
+            const audio = document.querySelector('.worker-review-option audio') as HTMLAudioElement | null;
+            return Boolean(audio && audio.duration > 1);
+          },
+          null,
+          timeout,
+        ),
       );
       await still('command-c');
       await dialog.getByRole('button', { name: 'View option B' }).click(timeout);
@@ -268,11 +282,12 @@ async function runViewport(
     return failure === null ? { viewport: name, ok: true, stills } : { viewport: name, ok: false, failure, stills };
   } catch (error) {
     let failure = (error as Error).message;
-    const url = ticketPage?.url();
-    if (ticketPage) {
-      const file = join(config.out, `${name}-${stills.length + 1}-ticket-failure.png`);
+    const failedPage = ticketPage ?? reviewPage;
+    const url = failedPage?.url();
+    if (failedPage) {
+      const file = join(config.out, `${name}-${stills.length + 1}-${ticketPage ? 'ticket' : 'review'}-failure.png`);
       try {
-        await ticketPage.screenshot({ path: file });
+        await failedPage.screenshot({ path: file });
         stills.push(file);
       } catch (captureError) {
         failure += `\nScreenshot failed: ${String(captureError)}`;

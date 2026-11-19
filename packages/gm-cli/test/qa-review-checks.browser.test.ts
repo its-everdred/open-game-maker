@@ -7,6 +7,7 @@ import {
   optionFailures,
   settleMedia,
   swipeDeckFailures,
+  openReviewItem,
 } from '../src/qa-review-checks.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
@@ -208,6 +209,15 @@ describe('opening the inline review group', () => {
         'filtered review list has an unexpected item count',
       );
       await expect(openReviewDeck(page, 60000, 'Castle [A]+', ['Castle [A]+', 'Other'])).resolves.toBeTruthy();
+      await page.locator('[role="dialog"]').evaluate((dialog) => {
+        (dialog as HTMLElement).hidden = true;
+      });
+      await page.locator('[aria-label^="Other"]').evaluate((button) => {
+        button.addEventListener('click', () => {
+          document.querySelector<HTMLElement>('[role="dialog"]')!.hidden = false;
+        });
+      });
+      await expect(openReviewItem(page, 'Other', 5000)).resolves.toBeTruthy();
     } finally {
       await context.close();
     }

@@ -6,9 +6,11 @@ import { NOTE, PICK_NOTE, reached, reviewE2e, type Report } from '../src/qa-revi
 import { reviewOptionImageReady, reviewRoundMediaReady } from '../src/qa-review-media.js';
 import { gm, tempDir } from './helpers.js';
 
+const openDeck = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('../src/qa-review-checks.js', () => ({
   settleMedia: async () => {},
-  openReviewDeck: async () => {},
+  openReviewDeck: openDeck,
+  openReviewItem: async () => {},
   mediaFailures: async () => [],
   swipeDeckFailures: async () => [],
   optionFailures: async () => [],
@@ -55,6 +57,36 @@ it('captures the shared ticket step failure and its URL at each size', async () 
   } finally {
     ticketSteps.mockImplementation(async () => {});
   }
+});
+
+it('captures the review page and named wait when opening the deck fails', async () => {
+  openDeck.mockRejectedValueOnce(new Error('wait for review row QA review: timeout'));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({})),
+  );
+  const page = {
+    url: () => 'https://app.example.test/all',
+    goto: async () => {},
+    close: async () => {},
+    screenshot: async ({ path }: { path: string }) => writeFileSync(path, 'still'),
+    getByRole: () => ({}),
+  };
+  const context = { addCookies: async () => {}, newPage: async () => page, close: async () => {} };
+  const browser = { newContext: async () => context } as unknown as Parameters<typeof reviewE2e>[0];
+  const results = await reviewE2e(browser, {
+    origin: 'https://app.example.test',
+    api: 'http://127.0.0.1:4300',
+    internalToken: 'test',
+    cookie: { name: 'session', value: 'test' },
+    out: tempDir(),
+    injectRegression: false,
+    breakMedia: false,
+    stamp: 'test',
+  });
+  expect(results[0]?.failure).toContain('wait for review row QA review: timeout');
+  expect(results[0]?.stills[0]).toMatch(/review-failure\.png$/u);
+  expect(results[0]?.url).toBe('https://app.example.test/all');
 });
 
 it('rejects broken images and unloaded video or audio in the production readiness gate', () => {
@@ -125,6 +157,7 @@ it.each(['image', 'video', 'audio', 'option'] as const)(
       close: async () => {},
       newCDPSession: async () => ({ send: async () => {}, detach: async () => {} }),
       newPage: async () => ({
+        url: () => 'https://app.example.test/all',
         goto: async () => {},
         close: async () => {},
         screenshot: async () => {},
@@ -148,7 +181,7 @@ it.each(['image', 'video', 'audio', 'option'] as const)(
       breakMedia: false,
       stamp: 'test',
     });
-    const step = broken === 'option' ? 'pick B on the Command with a note' : 'load the round image, video and audio';
+    const step = broken === 'option' ? 'wait for Command image' : 'load the round image, video and audio';
     expect(results).toHaveLength(4);
     for (const result of results) {
       expect(result.ok).toBe(false);
