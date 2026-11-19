@@ -83,7 +83,7 @@ fallback when it is blank.
 
 | Unit file | Fill | Optional |
 | --- | --- | --- |
-| `api.env` | `OGM_API_PORT`, `OGM_PUBLIC_ORIGIN`, `OGM_APP_ORIGIN`, `OGM_GAMES_ORIGIN`, `OGM_DATA_DIR`, `OGM_BLOB_ROOT`, `OGM_ROOMS_INTERNAL_URL`, `OGM_COMMIT_INTERNAL_URL`, `OGM_INSTANCE_REPO` (`owner/repository` every game lives in), `OGM_BUILDER_BOT_LOGIN`, `OGM_INTAKE_BOT_LOGIN`, `OGM_VAPID_SUBJECT`; tokens you obtain: `OGM_BUILDER_BOT_TOKEN`, `OGM_INTAKE_GITHUB_TOKEN` | `OGM_INSTANCE_OWNER_ID`, `OGM_GAMES_ROOT`, `OGM_ASSETS_ROOT`, `OGM_INTAKE_DIR`, `OGM_VOICE_HOST_INTERNAL_URL`, `OGM_VOICE_WS_URL`, `OGM_BUILDER_WORKSPACES_ROOT`, `OGM_VAPID_KEY_FILE`, `OGM_GAME_TEMPLATE_REF`, `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD`, `OGM_RESET_ZONE_DEFAULT`, `OGM_ANALYTICS_RETENTION_DAYS`, `OGM_REPORT_BUNDLE_MAX_BYTES`, `OGM_NARRATION_CONCURRENCY`, `OGM_INTAKE_SWEEP_SECONDS`, `OGM_CHAT_POLL_MS`, `OGM_COMMAND_POLL_MS`, `OGM_DESIGN_DEFAULT_MS`, `OGM_VOICE_QUESTIONS_AT`, `OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `SMTP_URL`/`SMTP_FROM`, `OGM_QA_EMAILS` |
+| `api.env` | `OGM_API_PORT`, `OGM_PUBLIC_ORIGIN`, `OGM_APP_ORIGIN`, `OGM_GAMES_ORIGIN`, `OGM_DATA_DIR`, `OGM_BLOB_ROOT`, `OGM_ROOMS_INTERNAL_URL`, `OGM_COMMIT_INTERNAL_URL`, `OGM_INSTANCE_REPO` (`owner/repository` for creator games), `OGM_BUILDER_BOT_LOGIN`, `OGM_INTAKE_BOT_LOGIN`, `OGM_VAPID_SUBJECT`; tokens you obtain: `OGM_BUILDER_BOT_TOKEN`, `OGM_INTAKE_GITHUB_TOKEN` | `OGM_INSTANCE_OWNER_ID`, `OGM_GAMES_ROOT`, `OGM_ASSETS_ROOT`, `OGM_INTAKE_DIR`, `OGM_VOICE_HOST_INTERNAL_URL`, `OGM_VOICE_WS_URL`, `OGM_BUILDER_WORKSPACES_ROOT`, `OGM_VAPID_KEY_FILE`, `OGM_GAME_TEMPLATE_REF`, `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD`, `OGM_RESET_ZONE_DEFAULT`, `OGM_ANALYTICS_RETENTION_DAYS`, `OGM_REPORT_BUNDLE_MAX_BYTES`, `OGM_NARRATION_CONCURRENCY`, `OGM_INTAKE_SWEEP_SECONDS`, `OGM_CHAT_POLL_MS`, `OGM_COMMAND_POLL_MS`, `OGM_DESIGN_DEFAULT_MS`, `OGM_VOICE_QUESTIONS_AT`, `OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `OGM_QA_INSTANCE_REPO`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `SMTP_URL`/`SMTP_FROM`, `OGM_QA_EMAILS` |
 | `rooms.env` | `OGM_ROOMS_PORT`, `OGM_GAMES_ORIGIN`, `OGM_API_INTERNAL_URL` | |
 | `games.env` | `OGM_GAMES_PORT`, `OGM_GAMES_ROOT`, `OGM_APP_ORIGIN` | `OGM_GAMES_SW` (defaults to the workspace's built `packages/host/dist/game-cache.js`) |
 | `voice-host.env` | `OGM_VOICE_PORT`, `OGM_VOICE_INTERNAL_PORT`, `OGM_API_INTERNAL_URL`, `OGM_VOICE_PROVIDER` (`fake`) | Live ElevenLabs only: `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `OGM_VOICE_LLM`, `OGM_VOICE_CLEANUP_ROOT`; tuning: `OGM_VOICE_MAX_SESSIONS`, `OGM_VOICE_RENDER_DIR`, `OGM_VOICE_NARRATION_ENABLED` |
@@ -409,9 +409,12 @@ address, origin or database.
 
 On the host after deploy, run `gm qa new-game-e2e --sha <deployed sha>` with the QA creator session from
 `ops/bin/ogm-qa-session`. The host needs ffmpeg, its user service manager, and a `gh` credential with write access to
-the configured instance repository. The command creates a game at each phone orientation, sends two text messages,
+the QA repository (and the instance repository when cleaning older runs). The command creates a game at each phone orientation, sends two text messages,
 finishes creation, and checks the private context, privacy-safe parent issue, and library progress. It saves stills,
 MP4s, a result, and private recovery state under `assets-local/review/app/new-game-e2e/<sha>/`.
+Set `OGM_QA_INSTANCE_REPO` in `api.env` to a separate `owner/repository` before running this check. Install the commit
+service's GitHub App and grant the builder and intake credentials access to that repository. The QA creator's new games
+are refused if this setting is absent or names `OGM_INSTANCE_REPO`.
 
 It removes the QA games and their associated repository, scope and issue artifacts, including earlier QA leftovers. Cleanup
 can wait up to 40 minutes for a game daemon or create operation to stop. The commit service fences each QA game while
@@ -493,7 +496,7 @@ fails. Run `ops/bin/ogm-voice-host build` and `restart` before it when the voice
 
 ## Prove the instance monorepo flow
 
-Every game in an instance lives in the one repository named by `OGM_INSTANCE_REPO`: `games/<slug>/` per game and
+Creator games live in the repository named by `OGM_INSTANCE_REPO`: `games/<slug>/` per game and
 `packages/` for components the instance's games share. No repository is created per game. This run proves that flow on
 the deployed app from a phone, so it happens after a deploy and needs the operator's sign-in. It covers acceptance
 checks 3, 4, 7, 11 and 18 in [acceptance.md](../plans/ogm-v1-build/acceptance.md); record the results in the pull

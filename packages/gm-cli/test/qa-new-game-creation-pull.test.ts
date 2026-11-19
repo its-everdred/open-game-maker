@@ -9,8 +9,8 @@ describe('QA creation pull cleanup', () => {
       title: 'Add game qa',
       state: 'open',
       changed_files: 1,
-      head: { ref: 'game/qa', sha: 'a'.repeat(40), repo: { full_name: 'example/games' } },
-      base: { ref: 'main', repo: { full_name: 'example/games' } },
+      head: { ref: 'game/qa', sha: 'a'.repeat(40), repo: { full_name: 'Example/Games' } },
+      base: { ref: 'main', repo: { full_name: 'Example/Games' } },
     };
     let reads = 0;
     let closed = false;

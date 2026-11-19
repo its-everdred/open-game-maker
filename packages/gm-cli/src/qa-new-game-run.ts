@@ -20,14 +20,14 @@ export type NewGameRunServices = {
 
 /** Keep the game IDs durable before continuing and never guess which unexplained QA row belongs to this run. */
 export async function runNewGameQa(
-  config: { out: string; repo: string; run: string; legacyIds?: readonly string[] },
+  config: { out: string; repo: string; run: string; legacyRepo?: string; legacyIds?: readonly string[] },
   services: NewGameRunServices,
 ) {
   await mkdir(config.out, { recursive: true });
   const path = join(config.out, 'state.json');
   const failures: string[] = [];
   const results: NewGameCaptureResult[] = [];
-  let state = await readQaManifest(path, config.repo);
+  let state = await readQaManifest(path, config.repo, config.legacyRepo);
   async function inventory(): Promise<string[]> {
     const ids = await services.inventory();
     if (

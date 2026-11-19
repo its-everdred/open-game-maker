@@ -33,7 +33,7 @@ const Manifest = z
 
 export type QaManifest = z.infer<typeof Manifest>;
 
-export async function readQaManifest(path: string, repo: string): Promise<QaManifest | null> {
+export async function readQaManifest(path: string, repo: string, legacyRepo?: string): Promise<QaManifest | null> {
   let text: string;
   try {
     text = await readFile(path, 'utf8');
@@ -43,7 +43,11 @@ export async function readQaManifest(path: string, repo: string): Promise<QaMani
   }
   const result = Manifest.safeParse(JSON.parse(text) as unknown);
   if (!result.success) throw new Error('invalid QA recovery manifest');
-  if (result.data.repo !== repo) throw new Error('QA recovery manifest names a different repository');
+  if (
+    result.data.repo.toLowerCase() !== repo.toLowerCase() &&
+    result.data.repo.toLowerCase() !== legacyRepo?.toLowerCase()
+  )
+    throw new Error('QA recovery manifest names a different repository');
   return result.data;
 }
 

@@ -58,6 +58,7 @@ describe('QA New Game cleanup', () => {
     const body = (jobs: string[] = [], tickets: Ticket[] = [], sessions: Session[] = []) =>
       JSON.stringify({
         folder: game.githubPath,
+        repo: 'instance/games',
         jobs,
         tickets,
         sessions,
@@ -71,7 +72,8 @@ describe('QA New Game cleanup', () => {
     expect((await app.request('/internal/qa/new-games')).status).toBe(401);
     expect(await (await app.request('/internal/qa/new-games', { headers })).json()).toEqual({
       games: [{ id: game.id }],
-      repo: 'instance/games',
+      repo: null,
+      instanceRepo: 'instance/games',
     });
     expect((await app.request(reportPath)).status).toBe(401);
     expect(await (await app.request(reportPath, { headers })).json()).toMatchObject({ game: { id: game.id } });
@@ -92,6 +94,7 @@ describe('QA New Game cleanup', () => {
           headers,
           body: JSON.stringify({
             folder: 'games/other',
+            repo: 'instance/games',
             jobs: [],
             tickets: [],
             sessions: [],
@@ -160,7 +163,10 @@ describe('QA New Game cleanup', () => {
         throw new Error('failed');
       },
     };
-    const provisioning = provisionGame(deps, game).catch(() => undefined);
+    deps.config.qaInstanceRepo = { owner: 'instance', name: 'qa-games' };
+    const provisioning = provisionGame(deps, { ...game, githubOwner: 'instance', githubRepo: 'qa-games' }).catch(
+      () => undefined,
+    );
     expect((await remove([ticket.jobId], [ticket])).status).toBe(409);
     finish();
     await provisioning;
@@ -202,6 +208,7 @@ describe('QA New Game cleanup', () => {
     const oldPath = `/internal/qa/new-games/${old.id}`;
     const oldBody = JSON.stringify({
       folder: old.githubPath,
+      repo: 'instance/games',
       jobs: [],
       tickets: [],
       sessions: [],
@@ -209,8 +216,53 @@ describe('QA New Game cleanup', () => {
       daemonStopped: true,
       fenceOwner: 'legacy-123',
     });
+    expect(
+      (
+        await app.request(oldPath, {
+          method: 'DELETE',
+          headers,
+          body: oldBody.replace('instance/games', 'other/games'),
+        })
+      ).status,
+    ).toBe(409);
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ ready: false }), { status: 200 }));
     expect((await app.request(oldPath, { method: 'DELETE', headers, body: oldBody })).status).toBe(409);
     expect((await app.request(oldPath, { method: 'DELETE', headers, body: oldBody })).status).toBe(200);
+    const isolated = createGameRow(deps.db, {
+      familyId: qa.familyId,
+      ownerId: qa.userId,
+      title: 'QA isolated',
+      repoVisibility: 'private',
+      repository: { owner: 'instance', name: 'qa-games' },
+    });
+    deps.db
+      .update(schema.games)
+      .set({ repoUrl: 'https://github.com/instance/qa-games' })
+      .where(eq(schema.games.id, isolated.id))
+      .run();
+    const isolatedPath = `/internal/qa/new-games/${isolated.id}`;
+    expect(await (await app.request(isolatedPath, { headers })).json()).toMatchObject({
+      game: { repository: 'instance/qa-games' },
+    });
+    const isolatedBody = JSON.stringify({
+      folder: isolated.githubPath,
+      repo: 'instance/QA-GAMES',
+      jobs: [],
+      tickets: [],
+      sessions: [],
+      remoteClean: true,
+      daemonStopped: true,
+      fenceOwner: 'run-1',
+    });
+    expect(
+      (
+        await app.request(isolatedPath, {
+          method: 'DELETE',
+          headers,
+          body: isolatedBody.replace('instance/QA-GAMES', 'other/games'),
+        })
+      ).status,
+    ).toBe(409);
+    expect((await app.request(isolatedPath, { method: 'DELETE', headers, body: isolatedBody })).status).toBe(200);
   });
 });

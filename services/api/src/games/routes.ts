@@ -24,6 +24,7 @@ import { gameMedia } from './media.js';
 import { gameStats } from './stats.js';
 import { assignSlug, findGameBySlugOrId } from './slug.js';
 import { CommitServiceRepoProvisioner } from './repo-provisioner.js';
+import { readQaState } from '../qa/state.js';
 
 export const prefix = '/api/v1';
 
@@ -71,12 +72,24 @@ const routes = new Hono<ApiBindings>()
     const body = await parseBody(c, createBody);
     if (!c.get('deps').registry.repoProvisioner) throw new HttpError(503, 'repo_provisioner_unavailable');
     // Creators never connect GitHub: the operator installed the App on the instance repository once.
-    const game = createGameRow(c.get('deps').db, {
+    const deps = c.get('deps');
+    const qa = readQaState(deps.db);
+    const isQaCreator = qa?.userId === principal.userId && qa.familyId === principal.familyId;
+    const repository = isQaCreator ? deps.config.qaInstanceRepo : undefined;
+    if (
+      isQaCreator &&
+      (!repository ||
+        `${repository.owner}/${repository.name}`.toLowerCase() ===
+          `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`.toLowerCase())
+    )
+      throw new HttpError(503, 'qa_repository_not_configured');
+    const game = createGameRow(deps.db, {
       familyId: principal.familyId,
       ownerId: principal.userId,
       title: body.title,
       repoVisibility: body.repoVisibility,
       allowAiGeneratedAssets: body.allowAiGeneratedAssets,
+      repository,
     });
     return c.json(gameResponse(await provisionGame(c.get('deps'), game)), 201);
   })

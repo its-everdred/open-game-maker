@@ -91,6 +91,7 @@ const deps: AppDeps = {
     commitServiceToken: env.OGM_COMMIT_SERVICE_TOKEN,
     gameTemplateRef: env.OGM_GAME_TEMPLATE_REF,
     instanceRepo: parseRepositoryName(env.OGM_INSTANCE_REPO),
+    qaInstanceRepo: env.OGM_QA_INSTANCE_REPO ? parseRepositoryName(env.OGM_QA_INSTANCE_REPO) : undefined,
     coreRepo: env.OGM_CORE_BUMP_CORE_REPO ? parseRepositoryName(env.OGM_CORE_BUMP_CORE_REPO) : undefined,
     instanceOwnerId: env.OGM_INSTANCE_OWNER_ID,
     gamesRoot: env.OGM_GAMES_ROOT ?? join(env.OGM_DATA_DIR, '..', 'games'),

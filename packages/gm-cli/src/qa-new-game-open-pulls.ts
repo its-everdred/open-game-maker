@@ -1,5 +1,6 @@
 import type { GitHubRequest } from './qa-new-game-folder-github.js';
 import { qaFolderRemovals } from './qa-new-game-folder.js';
+import { sameQaRepo } from './qa-new-game-checks.js';
 
 function object(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('invalid GitHub response');
@@ -151,8 +152,8 @@ export async function closeQaScopePulls(
       if (verifiedCleanup?.number === item.number) {
         if (
           head.sha !== verifiedCleanup.head ||
-          object(head.repo).full_name !== repo ||
-          object(base.repo).full_name !== repo
+          !sameQaRepo(object(head.repo).full_name, repo) ||
+          !sameQaRepo(object(base.repo).full_name, repo)
         )
           throw new Error('QA cleanup pull changed');
         continue;
@@ -161,8 +162,8 @@ export async function closeQaScopePulls(
         !['open', 'closed'].includes(String(pull.state)) ||
         references.length !== 1 ||
         !scopeIssues.includes(references[0]!) ||
-        object(head.repo).full_name !== repo ||
-        object(base.repo).full_name !== repo ||
+        !sameQaRepo(object(head.repo).full_name, repo) ||
+        !sameQaRepo(object(base.repo).full_name, repo) ||
         base.ref !== 'main' ||
         typeof head.sha !== 'string' ||
         !/^[a-f0-9]{40}$/u.test(head.sha) ||

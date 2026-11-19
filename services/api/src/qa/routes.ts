@@ -28,6 +28,7 @@ const DeleteNewGameBody = z
   .object({
     folder: z.string().regex(/^games\/[a-z0-9]+(?:-[a-z0-9]+)*$/u),
     jobs: z.array(z.string().min(1)).max(100),
+    repo: z.string().regex(/^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/u),
     tickets: z
       .array(
         z
@@ -115,7 +116,10 @@ export default new Hono<ApiBindings>()
     const deps = c.get('deps');
     return c.json({
       games: listNewQaGames(deps.db),
-      repo: `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`,
+      instanceRepo: `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`,
+      repo: deps.config.qaInstanceRepo
+        ? `${deps.config.qaInstanceRepo.owner}/${deps.config.qaInstanceRepo.name}`
+        : null,
     });
   })
   .get('/new-games/:id', (c) => {

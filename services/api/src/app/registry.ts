@@ -19,12 +19,13 @@ export type TicketJob = {
 };
 export type TicketJobResolver = (repo: string, identifier: string) => Promise<TicketJob | null>;
 export type RepoProvisioner = {
-  // A game is a folder in the instance repository: `path` is `games/<slug>` and the repository is the instance's.
+  // A game is a folder in its assigned repository: `path` is `games/<slug>`.
   provision(game: {
     id: string;
     title: string;
     slug: string;
     visibility: 'public' | 'private';
+    repository?: { owner: string; name: string };
   }): Promise<{ owner: string; repo: string; url: string; path: string }>;
 };
 // The GitHub account an App installation belongs to. A login is only answered for proof of ownership.

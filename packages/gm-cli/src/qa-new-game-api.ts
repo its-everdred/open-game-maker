@@ -1,7 +1,7 @@
 import type { NewGamePrivateContext } from './qa-new-game-checks.js';
 
 export type QaGameReport = {
-  game: { id: string; slug: string | null; path: string | null; repoUrl: string | null };
+  game: { id: string; slug: string | null; path: string | null; repoUrl: string | null; repository?: string | null };
   jobs: {
     id: string;
     kind: string;
@@ -36,7 +36,7 @@ export class NewGameQaApi {
     return this.get(`/internal/qa/new-games/${encodeURIComponent(gameId)}`);
   }
 
-  games(): Promise<{ games: { id: string }[]; repo: string }> {
+  games(): Promise<{ games: { id: string }[]; repo: string | null; instanceRepo: string }> {
     return this.get('/internal/qa/new-games');
   }
 
@@ -61,11 +61,21 @@ export class NewGameQaApi {
     tickets: QaGameReport['tickets'],
     sessions: QaGameReport['sessions'],
     fenceOwner: string,
+    repo: string,
   ): Promise<void> {
     const response = await this.fetcher(`${this.base}/internal/qa/new-games/${encodeURIComponent(gameId)}`, {
       method: 'DELETE',
       headers: { 'x-ogm-internal': this.token, 'content-type': 'application/json' },
-      body: JSON.stringify({ folder, jobs, tickets, sessions, remoteClean: true, daemonStopped: true, fenceOwner }),
+      body: JSON.stringify({
+        folder,
+        repo,
+        jobs,
+        tickets,
+        sessions,
+        remoteClean: true,
+        daemonStopped: true,
+        fenceOwner,
+      }),
       signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) throw new Error(`QA game deletion returned ${response.status}`);

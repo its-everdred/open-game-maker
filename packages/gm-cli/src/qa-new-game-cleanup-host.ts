@@ -83,10 +83,9 @@ export function hostQaCleanup(
     async removeFolder(folder) {
       await removeQaFolder(folder, gitFor(folder), unprovisioned.has(folder), scopePaths);
     },
-    deleteGame: (id, folder, jobs, tickets, sessions) => api.deleteGame(id, folder, jobs, tickets, sessions, run),
+    deleteGame: (id, folder, jobs, tickets, sessions) => api.deleteGame(id, folder, jobs, tickets, sessions, run, repo),
     async gameExists(id) {
       const result = await api.games();
-      if (result.repo !== repo) throw new Error('configured repository does not match the selected API');
       if (!Array.isArray(result.games) || result.games.some((game) => typeof game.id !== 'string'))
         throw new Error('invalid QA inventory');
       return result.games.some((game) => game.id === id);
