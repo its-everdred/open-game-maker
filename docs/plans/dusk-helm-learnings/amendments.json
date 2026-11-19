@@ -1,0 +1,512 @@
+[
+  {
+    "number": 1,
+    "title": "New game: Dusk Helm",
+    "ladder": "n/a",
+    "labels_add": [],
+    "labels_remove": [],
+    "addendum": "Planning record; the Executor applies these before any child dispatches:\n- **Flow diagram first** (gm-new-game-plan step 2): file one `role:game-design` `phase:mock` ticket for the core, run and meta loops and the menu graph, each screen node with its target image. Screen tickets #8, #14, #15, #16, #18, #27 and #30 cite their node and wait on its approval.\n- **Ladder plan**: write `games/dusk-helm/design/ladder.md` from the template and pass `check-ladder.ts`. Children climb rungs on one ticket each (`phase:*` + `model:*`), per gm-prototype (see the Conflicts section of the shared rules).\n- **Missing standard tickets**: thumbnail (`role:visual`, blocked by #30 and the look tickets), loading image (`role:visual`), and trailer (`role:visual role:audio`, blocked by #22/#44). Rule 26.\n- **Role labels**: none of #2–#44 carried a `role:*`, so workers would start without their skills (11-08). Apply this file's `labels_add`, then run `gm plan check --tickets … --game dusk-helm`.\n- **Hold**: these labels do not dispatch anything; the hold on #2 stands until the creator says go. If the in-app New Game run becomes Dusk Helm, keep the slug `dusk-helm` so these tickets still point at `games/dusk-helm/`.\n- A play-screen look concept had no owner; #3 now starts with it.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 2,
+    "title": "Skeleton: games/dusk-helm with input, actor, physics and world interfaces",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket (no creator review). Beyond the stubs, the skeleton must give every later rung its hooks:\n- **Scenario loader**: `?scenario=<id>` reads `games/dusk-helm/scenarios/<id>.json` (seed, area, class, build, enemies, inventory), so prototypes and playtests open straight onto their moment (gm-new-game-plan `prototype-ladder.md`).\n- **Manifest**: declare `move` as a **stick** plus at most five buttons, most-used first (rule 27; the 2D scaffold's `axis` gives phones no controls). Declare `modes` (one per class, with exact tap paths) and `playArea.tap` for `gm qa playtest --all-modes` and `gm look shell` (rules 41–42).\n- Mark the world canvas `data-gm-play-area`. Put `user-select:none; -webkit-touch-callout:none` on `html, body`. Add an empty `qa.invariants()` hook that later tickets extend (rule 31, 42).\n- Create `design/feedback.json`, `review/decisions.json` and `review/` evidence folders so `gm options check` and `gm look check` have something to read (11-09: an absent decisions file let every look pass).\n- Keep player state in `players: Map` with no singleton player (gm-multiplayer-ready), even though multiplayer is out of scope.\n- Done also needs `gm check boot --dist dist` green at 390x844, plus the title rendering in a clean-clone production build (rule 43).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 3,
+    "title": "Foundation proof: assembled village fragment, correct scale, depth order and collision",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:assets"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`: this ticket now owns the game's **play-screen look**, which had no concept step.\n- **Mock round 1**: four `image_gen.imagegen` stills of one in-play frame (hero walking past a house in the village, HUD in place), phone portrait first, then landscape. They differ in time of day and palette, camera zoom, HUD shape and building density (rule 4). Describe the SmallScaleInt kit in words; never attach pack renders (rule 23). Mark them AI-generated.\n- **Prototype rung**: the assembled fragment in the engine, from the same camera, beside the picked mock. Include the feasibility list (each element mapped to a card id or marked a gap, rule 7) and a `gm look score/judge` sheet. Plateau rule 14.\n- **Build rung**: the spec's evidence at four touch sizes plus desktop and a short capture, in the app shell (rule 41).\n- Pitfalls from the SmallScaleInt showcase (rule 19): houses must be whole with doors in walls, no scattered kit pieces, nothing covering the walk path, and depth sort correct behind roofs. Vary repeated houses with clone variants (rule 16).\n- Low-confidence pack: ask in small batches, one pick per round (rule 10).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 4,
+    "title": "Foundation proof: movement and combat transitions for one representative fighter",
+    "ladder": "prototype",
+    "labels_add": [
+      "phase:prototype",
+      "model:medium",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:prototype`: a feel ticket. Feel is played, never a still (rule 3).\n- **Round 1**: a playable slice with the pack's knight sheets, opened by `?scenario=combat-chain`. Add a phone MP4 of the chained sequence with the transition frames captioned and slowed (rule 44).\n- **Feel pick**: 2–4 playable variants of one knob at a time (roll distance or attack recovery first) with `gm decide --playable`, your recommendation shipped meanwhile (rule 51).\n- One-shots play once and hold, as the card says. No looped attack clips, no ice-skating, and every hit gets a reaction (rule 19; gm-set-smallscaleint `one-shot-and-hold`).\n- Input buffers live in `src/tunables.ts`. Declare actions; the host draws touch buttons (rule 27). Prove devices with `phone-touch` and `laptop-keys` journeys; the gamepad stays unchecked unless played (rules 47–48).\n- Expose roll and attack timings to the editor (gm-editor-tuning).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 5,
+    "title": "Foundation proof: physical interactions (movable object, knockback, one light puzzle)",
+    "ladder": "prototype",
+    "labels_add": [
+      "phase:prototype",
+      "model:medium",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:prototype`: the creator judges how the push and the knockback feel.\n- **Round 1**: playable scenarios `?scenario=push-boulder` and `?scenario=knockback`, plus a captioned phone MP4 of each (rule 44).\n- Feel variants (knockback distance, boulder weight) go out as `gm decide --playable` cards, one knob per question (rule 3).\n- Add `qa.invariants` entries for \"no body outside the playable area\" and \"puzzle reward reachable\", so `gm qa playtest` checks them on every later build (rule 42).\n- Physics never causes a fall death the design did not ask for (per the revision). Displacement uses the shared effects vocabulary once #39 lands; until then keep it behind one function.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 6,
+    "title": "Run lifecycle and saves: class profile vs active run, suspend/resume, boss-banked progression, one-time claims",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket; proof is tests plus one reload clip, with no creator pick.\n- **No backwards compatibility**: change the save format in place, with no migrations or version shims, until the creator says otherwise (rule 55).\n- Suspend/resume: the host owns pause and must survive switching apps (core #874). Resume from the host's `resume` call; never draw a game pause screen (rule 27).\n- Add `qa.invariants` for \"reward never granted twice\" and \"run state and class profile separate\" (rule 42).\n- Unit tests for each one-time claim and boss bank. Run the whole suite before ready (rule 46).\n- Any unanswered lifecycle choice the revision marks Open becomes a provisional default recorded as a decision, not a question to the creator about engineering (rule 49).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 7,
+    "title": "Foundation proof: area transitions and seeded generation with protected landmarks",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket (generation plus transitions); no creator pick.\n- Load gm-map-inspiration: choose layout sources yourself, never ask the creator, and record source id, transforms and tileset card id in the design record (rule 25). The first-map gate applies.\n- Area transitions follow rule 21: the new area renders underneath and only the top layer fades. No cut, no dim cross-fade, and audio continues. Attach a phone MP4 of one transition.\n- The reachability validator also becomes a `qa.invariants` entry (rule 42).\n- Seeds come from the SDK's seeded randomness so scenarios can pin a layout for reviews and playtests.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 8,
+    "title": "Town hub: priest, starting skill points, difficulty choice, phase-aware dialogue, victory wrap-up",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`. Wait for the flow diagram's town node and #3's approved play-screen look; that look is the style target.\n- **Mock round 1**: four image mocks of the town hub in play (layout, priest and quest-giver staging, overhead indicators). The difficulty choice is **its own** pick, never bundled with the hub (rule 5).\n- Townsfolk sprites come from #17's approved cast cards. Before that, use lineup stand-ins from the set, never generic primitives (gm-core).\n- **Prototype**: the hub assembled in the engine beside the picked mock, with the feasibility list (rule 7). **Build**: the dialogue phases wired.\n- Whole houses, varied by clone variants, with doors in walls (rules 16, 19). The camera keeps the hero out of the lower 140×200 corners (rule 29).\n- Town music and ambience on the build rung (rule 36).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 9,
+    "title": "First wilderness stage (fields): camps, shrines, finite resources, pacing to the mini-boss",
+    "ladder": "prototype",
+    "labels_add": [
+      "phase:prototype",
+      "model:medium",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:prototype` once #40's compositions are approved; #40 owns the look, this ticket owns pacing and content.\n- **Round 1**: a playable route `?scenario=fields-<seed>` built from the approved fragments only. Attach a phone MP4 from town gate to cave mouth with the time measured.\n- Pacing and density are feel: offer 2–3 playable variants (encounter count or cache density) as `gm decide --playable` (rule 3).\n- Wildlife and caches appear with a cause and a transition, never popping in (rule 20).\n- Check encounter visibility in narrow portrait: a threat must not first appear inside the lower-corner control zones (rules 29, 34).\n- Map layout follows gm-map-inspiration (rule 25).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 10,
+    "title": "Mini-dungeon (goblin cave) with the mini-boss checkpoint",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay",
+      "role:assets"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`.\n- **Before any mock**: run the goblin coverage report. If the goblin sprites do not match the isometric set, fix it with a clone variant (rule 16) or raise it as an option gap with the closest kit choice (rule 7). The goblin sprites may not match the isometric set, so check this first.\n- **Mock round 1**: four image mocks of the cave interior in play (lighting, rock palette, the goblin group mid-fight). Goblins as a lineup sheet with each sprite at least 150 px (rule 45).\n- **Prototype**: the cave in the engine beside the pick, plus a playable `?scenario=goblin-cave` and the puzzle's physics invariant (#5).\n- The mini-boss checkpoint itself is #42's; this ticket places it.\n- Hits get reactions and goblins never attack thin air (rule 19).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 11,
+    "title": "Warrior: two builds, sword-and-shield and two-handed play, starting abilities",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`. The two builds are two **looks** of one class, not two mechanical subclasses (per the revision).\n- **Mock round 1, look**: twice the needed looks, so **four Warrior appearance cards**, each its own card with each sprite at least 150 px, pushed past the kit's default (palette, gear, silhouette). No gender labels. Rules 6, 45. Build them from the set's real sprites and variants; Blobs once built a generic knight, ranger and wizard instead of the cast (gm-prototype lessons 7).\n- **Mock round 2, abilities** (after the look pick): a keyed rendered clip per starting ability (sword-and-shield and two-handed), captioned at the hit and phone-encoded (rule 44).\n- **Prototype**: playable `?scenario=warrior-arena`, with feel variants of one ability knob as `gm decide --playable` (rule 3). **Build**: abilities on the shared effects vocabulary (#39).\n- Declare `warrior` as a playtest mode (rule 42). Actions stay within the five host buttons (rule 27).\n- Block and charge reactions use one-shot-and-hold sequences; no looped one-shots (rule 19).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 12,
+    "title": "Wizard: two builds, fire/ice/lightning starting spells, ranged defense",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`. The two builds are two **looks** of one class, not two mechanical subclasses (per the revision).\n- **Mock round 1, look**: twice the needed looks, so **four Wizard appearance cards**, each its own card with each sprite at least 150 px, pushed past the kit's default (palette, gear, silhouette). No gender labels. Rules 6, 45. Build them from the set's real sprites and variants; Blobs once built a generic knight, ranger and wizard instead of the cast (gm-prototype lessons 7).\n- **Mock round 2, abilities** (after the look pick): a keyed rendered clip per starting ability (wand or staff, fire/ice/lightning), captioned at the hit and phone-encoded (rule 44).\n- **Prototype**: playable `?scenario=wizard-arena`, with feel variants of one ability knob as `gm decide --playable` (rule 3). **Build**: abilities on the shared effects vocabulary (#39).\n- Declare `wizard` as a playtest mode (rule 42). Actions stay within the five host buttons (rule 27).\n- Spell effects are shared-vocabulary data; the resource bar belongs to #16's HUD model.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 13,
+    "title": "Ranger: two builds, bow and crossbow, starting abilities",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`. The two builds are two **looks** of one class, not two mechanical subclasses (per the revision).\n- **Mock round 1, look**: twice the needed looks, so **four Ranger appearance cards**, each its own card with each sprite at least 150 px, pushed past the kit's default (palette, gear, silhouette). No gender labels. Rules 6, 45. Build them from the set's real sprites and variants; Blobs once built a generic knight, ranger and wizard instead of the cast (gm-prototype lessons 7).\n- **Mock round 2, abilities** (after the look pick): a keyed rendered clip per starting ability (bow and crossbow), captioned at the hit and phone-encoded (rule 44).\n- **Prototype**: playable `?scenario=ranger-arena`, with feel variants of one ability knob as `gm decide --playable` (rule 3). **Build**: abilities on the shared effects vocabulary (#39).\n- Declare `ranger` as a playtest mode (rule 42). Actions stay within the five host buttons (rule 27).\n- Narrow-screen fairness: aim and target visibility checked at 390x844 portrait, with no target hidden in the lower corners (rules 29, 34).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 14,
+    "title": "Character select after the title: class and appearance chosen visually",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`; waits on the flow diagram's select node and #11–#13's approved appearance cards.\n- **Mock round 1**: four image mocks of **this screen only** (rule 5): class first, then appearance, phone portrait and landscape. Screen inspiration from other games stays in private notes (rule 56).\n- Large, centred select targets; Blobs shipped an oversized, off-centre close button (rule 33). No labels where an icon or the character reads (rule 32).\n- Card frames are 9-slices, never stretched art (rule 24).\n- **Build**: the transition from title to select to town is seamless (rule 21), and menu music plays here (rule 36).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 15,
+    "title": "Items and run equipment: run-only gear, finite supplies, three inventory concepts",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock` for the inventory screen. Item data and drops are engineering inside the same ticket and need no pick.\n- **Mock round 1**: the ticket's three inventory concepts, each its own card at portrait **and** landscape. Item icons are the set's real art described in the prompt, at a readable close-up of 150 px or more per item (rules 23, 45). Replace \"default after ~5 min\" with a non-blocking pick: build the recommended hybrid meanwhile (rule 51).\n- The compare and equip panel is a separate pick from the bag layout (rule 5).\n- Item frames and slots are 9-slices; tier colours and frames come from #33's data (rule 24).\n- **Build**: the inventory never covers the hero during play; it is a game-owned overlay that pauses through the host (rule 27).\n- The merchant view (#31) reuses this approved screen, so record the pick in `review/decisions.json`.\n- Split candidate: inventory UI (ladder) vs item data and equip logic (n/a).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 16,
+    "title": "Responsive HUD, touch controls, dialogue and menus",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`.\n- **Host contract first** (rules 27–29): the host draws pause, settings, the top-right menu button and the touch buttons (one stick plus five buttons). This ticket draws **no** pause/settings menu and **no** ability or consumable buttons; it declares actions and maps them. The ticket's \"pause/settings\" and \"buttons\" wording predates gm-ui-hud and gm-input: treat it as declared actions plus the HUD model.\n- **Mock round 1**: one A–E set per screen (rule 5): the in-play HUD (health, class resource, blessing slots, elite stars, run status), the dialogue box with response buttons, and the run-end screen. Phone portrait first.\n- Keep the HUD to 25% or less, the lower 140×200 corners clear and the top-right corner free. Text is at least 16 px on a plate, with `user-select:none` (rules 29–31).\n- HUD panels are 9-slices (rule 24). No captions or helper text (rule 32).\n- **Build**: `HudModel` per player; `hud-clear`, `phone-touch` and `laptop-keys` journeys (rule 48). Blobs' phone feedback hit haptics, button sizes and menu music, so pre-check those.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 17,
+    "title": "Townsfolk personalities and per-run episodes with three dialogue phases",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:game-design"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock` for the **cast**; the scripts are writing work inside the ticket.\n- **Mock round 1**: ask how many townsfolk the run needs, then offer twice that many cards. Each card has a sprite from the set (variant if needed), a name and a one-line personality, voted per item (rule 6).\n- Story and line text are words, not media: don't raise a text-only Command. Write them and route any open product question as `Executor: product question:` for the voice session (rule 50).\n- Scripts are voice-ready for #29: short lines and captions as source of truth (gm-voiceover).\n- No commercial references, private spec text or the creator's words in the repo (rule 56).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 18,
+    "title": "Quest system, dialogue engine, fog of war and the map unlock",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock` for the **map view**. Quest states, the dialogue runner and fog logic are engineering in the same ticket.\n- **Mock round 1**: four image mocks of the map view (simplified map art and approximate guidance) on its own, then quest indicators in play as a separate pick (rule 5).\n- The dialogue presentation is #16's approved box; this ticket only drives it.\n- Fog reveals with a transition, never a snap (rule 20). The map screen opens from the host menu path the flow diagram defines, not a game-drawn button.\n- **Build**: `qa.invariants` for \"quest target reachable and marked\" (rule 42).\n- Split candidate: map view (ladder) vs quest/dialogue engine (n/a).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 19,
+    "title": "Class progression: per-class difficulty unlocks, starting points, run points, boss-banked rewards",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket (rules and data); unit tests are the proof.\n- Any **skill-point screen** this needs is a player-facing screen: put it through the ladder as its own mock round on #16 (or a new `phase:mock` ticket), never ship an unreviewed menu.\n- Values (points per difficulty, unlock thresholds) live in `src/tunables.ts` and are exposed to the editor (gm-editor-tuning).\n- No save migrations (rule 55). The exact mastery model is Open in the revision: use a provisional default recorded as a decision.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 20,
+    "title": "Death: one recoverable death per run",
+    "ladder": "prototype",
+    "labels_add": [
+      "phase:prototype",
+      "model:medium",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:prototype`: the death and recovery moment is judged by playing it.\n- **Round 1**: `?scenario=death-recover` (die, return to town, walk to the marker, pick up gear), plus a captioned phone MP4 (rule 44).\n- The return to town is a seamless transition, not a cut (rule 21). No gore.\n- The corpse marker is a small set prop or variant, not a primitive (rules 15–16).\n- `qa.invariants`: one recoverable death per run, and the second death ends the run (rule 42).\n- Sound on death and on recovery (rule 36).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 21,
+    "title": "Music and sound: area themes, combat intensity, SFX sets, combat vocals",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:audio"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock` with audio concepts (rule 35).\n- **Mock round 1**: 3–4 library tracks by mood for each of the town, fields, cave and combat. Each is its own audio option; start from the existing Dusk Helm soundtrack shortlist. Separately, 2–3 SFX sets (hit, block, pickup, UI), as audio on every option (rule 50). One area per pick (rule 5). Prefer recorded sources over synthesized ones.\n- **Prototype**: the picks laid on a gameplay clip, with SFX landing on the hit frames checked frame by frame.\n- **Build**: one SDK graph with four buses, music about -12 dB under SFX, peaks below -1 dBFS, combat intensity crossfades with no hard switch, and pitch variation on repeated cues (rule 37).\n- Check sound per screen: title, select, town, menus and run end. Title audio stops on exit (rule 36). Sound stays listed as unchecked unless someone listened (rule 47).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 22,
+    "title": "First-half playable: town → fields → mini-dungeon → mini-boss, banking and recovery",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:qa",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Checkpoint ticket: integration plus playtest, then the creator plays it.\n- `gm qa playtest dusk-helm --all-modes` must pass with every class declared as a mode, and every mode's stills and clip looked at (rule 42). A one-mode pass missed three breaking bugs in Blobs (11-17).\n- Run gm-qa on the **hosted** build: `gm qa open`, then the `phone-touch`, `laptop-keys` and `hud-clear` journeys plus a town-to-mini-boss journey, `gm qa look --report` (rule 48).\n- **Merged is not shipped**: done means the published build plays the loop. Name the build you tested (rule 12).\n- Captures at the four touch sizes plus desktop, with phone MP4s at H.264 Main 4.1 or lower (rules 41, 44).\n- Signal readiness through the Executor; never open the game for the creator. His play notes come back as a rework on this ticket.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 23,
+    "title": "Second wilderness stage (forest): biome compositions, harder mix, finite-resource pressure",
+    "ladder": "prototype",
+    "labels_add": [
+      "phase:prototype",
+      "model:medium",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:prototype` once #41's forest compositions are approved; same shape as #9.\n- **Round 1**: playable `?scenario=forest-<seed>` from the approved fragments only, plus a phone MP4 with the route time measured.\n- Pressure and density as 2–3 playable variants (rule 3).\n- No pop-in for spawns (rule 20). Threats are visible in narrow portrait (rule 34). The layout is from gm-map-inspiration (rule 25).\n- Optional branches never strand quest content: add a `qa.invariants` entry (rule 42).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 24,
+    "title": "Graveyard landmark and undead enemies",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:assets"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`; #41 owns the approach biome, this ticket owns the composed landmark.\n- **Before mocks**: a lineup of the set's skeleton and zombie sprites at 150 px or more each (rule 45), checked for style match; fix mismatches with clone variants (rule 16).\n- **Mock round 1**: four image mocks of the graveyard landmark in play with the crypt entrance readable. Darker but inviting; no gore.\n- **Prototype**: the landmark built from kit pieces beside the pick, with the feasibility list (rule 7). Never scattered pieces; the entrance is never occluded (rule 19).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 25,
+    "title": "Crypt: maze-like seeded dungeon with puzzles",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock` for the crypt interior look; maze generation is engineering in the same ticket.\n- **Mock round 1**: four image mocks of a crypt room in play (lighting, stone palette, a puzzle in view).\n- **Prototype**: playable `?scenario=crypt-<seed>`, with the generator from gm-map-inspiration (rule 25) and reachability as a `qa.invariants` entry (rule 42).\n- Puzzles reuse #5's physics rules. Hits and traps get reactions (rule 19).\n- This ticket builds the crypt content only; #44 does the full-run integration.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 26,
+    "title": "Final boss (built in a test arena first)",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`; built in a test arena first.\n- **Mock round 1**: boss look as cards (set sprite plus variants, each at 150 px or more), and a keyed rendered clip of 2–3 attack patterns with their warning tells, captioned and phone-encoded (rules 6, 44).\n- **Prototype**: `?scenario=boss-arena&class=<c>` for all three classes. Difficulty or tell timing as `gm decide --playable` variants (rule 3).\n- Every enemy ability has a readable warning and counterplay (#39 safety rules), and the tells stay visible outside the lower-corner zones in portrait (rules 29, 34).\n- Declare each class as a playtest mode; the bot reaches the arena by scenario (rule 42).\n- Boss music and impact SFX at the build rung (rule 36).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 27,
+    "title": "Victory: teleport to town, accolades, progression and unlocks, next-run flow",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`.\n- **Mock round 1**: four image mocks of the accolades and unlocks screen only (rule 5); the next-run choice is a separate pick if it is its own screen.\n- Teleport to town is a seamless transition (rule 21). No helper sentences; the \"you beat the game\" acknowledgment is the only required text (rule 32).\n- Frames and plaques are 9-slices (rule 24). Victory music and sound (rule 36).\n- **Build**: `qa.invariants` that the next run resets gear and skills while banked progress stays (rule 42).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 28,
+    "title": "Bounded optional opportunities within a run",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering and content ticket (data-driven, seeded), with no new screens.\n- Reuse #38's event and #7's generation interfaces; no new campaign content.\n- Fast unit tests for seeded selection and bounds. Any new look (a dungeon dressing) reuses the approved biome and crypt looks; a genuinely new look is a separate `phase:mock` ask.\n- Opportunities never block a route: add a `qa.invariants` entry (rule 42).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 29,
+    "title": "Voiced townsfolk lines with the configured voice provider",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:audio"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock` with **voice samples**, after #17's cast and scripts are stable.\n- **Mock round 1**: six voices per speaking townsperson, each saying the same two in-character lines, expressive and never monotone, as audio on every option (rule 39). One character per pick.\n- The voice route (local gm-voiceover vs the mock broker) is the Executor's call; see the Conflicts section. Ask before any full set. No provider key in the game, and lines are baked at build time (gm-core).\n- **Build**: the voice bus is clearest and music ducks under it (rule 37). Captions show before play and advance on a tap or timer when muted (gm-ui-hud).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 30,
+    "title": "Title screen and logo options",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`.\n- **Logo round 1**: four or more `image_gen.imagegen` logo directions, never hand-coded SVG (Blobs' SVG logos were rejected, rule 22). Each logo is its own card. A logo is a separate pick from the title screen (rule 5).\n- **Title round 1**: four image mocks of the title showing the starter village (in #3's approved look), phone portrait and landscape.\n- No taglines or extra labels (rule 32). The loading screen to title transition is seamless and audio starts at once (rule 21). Title music stops on exit (rule 36).\n- An approved logo then wins over any logo a later mock bakes in (rule 13).\n- The approved logo unblocks the thumbnail ticket (rule 26).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 31,
+    "title": "Merchants within a run: finite stock, sell-back, no stash",
+    "ladder": "build",
+    "labels_add": [
+      "phase:build",
+      "model:xhigh",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:build`: the merchant view reuses #15's approved inventory screen, so there is no new look to mock. If it needs a layout #15 did not cover, drop back to `phase:mock` for that screen only.\n- The title (no stash) and the body (a modest stash) disagree, and the revision reopens this ticket's scope. Follow the revision and record the provisional default as a decision; don't ask the creator about it as engineering (rule 49).\n- Carry #15's approved layout over exactly (rule 13). Frames are 9-slices (rule 24).\n- Stock and sell-back values live in `src/tunables.ts` (gm-editor-tuning). Add unit tests for finite stock and for no duplicate sell exploit.\n- Evidence at the four touch sizes (rule 41).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 32,
+    "title": "Full QA: complete 20-minute runs, all classes and difficulties, both bosses",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:qa"
+    ],
+    "labels_remove": [],
+    "addendum": "QA ticket. The acceptance adds the Blobs checkpoint lessons:\n- `gm qa playtest dusk-helm --all-modes` covering every class and difficulty declared as modes, with invariants for banking, reset, single recovery and no double rewards (rule 42).\n- gm-qa on the **hosted** build with journeys covering every flow-diagram edge; name the build tested (rules 12, 48).\n- Stills at 390x844, 844x390, 820x1180 and 1180x820 plus desktop. Name the worst defect first. Unchecked items (iPhone Safari, sound, gamepad) are listed, not passed (rule 47).\n- Check sound per screen and look for stretched art (rules 24, 36).\n- QA verdicts (ship or fix) go to the Executor, never to the creator (rule 49).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 33,
+    "title": "Loot drops: cascading tier rolls with per-tier chances and layered randomization",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket; the creator already fixed the proof as **fast unit tests only** (comment of 2026-11-04). Keep it that way: no simulation and no capture.\n- Drop tables live in `src/items/loot/` and are exposed to the editor as data (gm-editor-tuning).\n- The tier's colour and frame on the drop are #15's approved look. A drop appears with a transition and a tier sound, never popping in (rules 20, 36). That is checked in #22, not here.\n- No save migrations when the item shape changes (rule 55).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 34,
+    "title": "Blessings: priest start, shrines in wilds and dungeons, strict slots, synergy",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket; the creator set **fast unit tests only** and no new art beyond small set props and icons (2026-11-04). Keep that proof.\n- Tables are data, seeded by the session seed, and exposed to the editor (gm-editor-tuning).\n- The shrine pick UI is one line of icons plus short names in #16's approved style; if it needs a new look, that is a `phase:mock` round on #16. Icons are set art, never stretched (rule 24).\n- No save migrations (rule 55). Priority stays behind the first-half loop (#22).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 35,
+    "title": "Elites: frequent, one-to-three stars, levels, shared and enemy-only abilities",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket; the creator set **fast unit tests only** and no new art beyond small set props and icons (2026-11-04). Keep that proof.\n- Tables are data, seeded by the session seed, and exposed to the editor (gm-editor-tuning).\n- The trait tells (tint, aura, icon) must be readable at phone scale; check one still at 390x844 in #22. Elite abilities obey #39's warning and counterplay rule.\n- No save migrations (rule 55). Priority stays behind the first-half loop (#22).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 36,
+    "title": "Push your luck: optional deeper floors in caves and crypts",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Parked: the revision defers it. If it is unparked: fast unit tests only (2026-11-04), the depth readout reuses #16's HUD model, and stairs appear with a transition (rule 20).\n- Do not unpark without the creator's go.\n- Tables are data seeded by the session seed; no save migrations (rule 55).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 37,
+    "title": "Run modifiers: omens and unlockable drawback-for-benefit choices as one system",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket; the creator set **fast unit tests only** and no new art beyond small set props and icons (2026-11-04). Keep that proof.\n- Tables are data, seeded by the session seed, and exposed to the editor (gm-editor-tuning).\n- The omen choice reuses #16's approved choice UI; omen icons are set art at their native ratio (rule 24). Omens and drawback modifiers stay one system, as the title says.\n- No save migrations (rule 55). Priority stays behind the first-half loop (#22).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 38,
+    "title": "Road events: seeded encounters on the way",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket; the creator set **fast unit tests only** and no new art beyond small set props and icons (2026-11-04). Keep that proof.\n- Tables are data, seeded by the session seed, and exposed to the editor (gm-editor-tuning).\n- Events appear with a cause, never popping in (rule 20), and never block the route (`qa.invariants`, rule 42).\n- No save migrations (rule 55). Priority stays behind the first-half loop (#22).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 39,
+    "title": "Shared effects and abilities: status effects, attack primitives, player and enemy-only pools",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket (shared vocabulary); fast unit tests are the proof.\n- The safety rules become `qa.invariants` (no unbounded trigger loop, no permanent crowd control) so `gm qa playtest` checks them in every later build (rule 42).\n- Effect durations and stacks live in `src/tunables.ts` and are exposed to the editor (gm-editor-tuning).\n- Status effect visuals (tints, icons) are set art at native ratio (rule 24), and their look is judged with #11–#13's ability clips, not here.\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 40,
+    "title": "Biome direction: lush fields (first wilderness), reusable compositions and natural boundaries",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:assets"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`: image mocks before in-engine compositions (gm-image-mock), in #3's approved play-screen look.\n- **Mock round 1**: four `image_gen.imagegen` stills of the lush fields in play, at phone portrait and landscape. They differ in palette, density, boundary type and route shape (rule 4). The kit is described in words, never attached (rule 23).\n- **Prototype**: the ticket's in-engine compositions and generated results beside the pick, with the feasibility list (rule 7) and a `gm look score/judge` sheet. Plateau rule 14.\n- One question per round (naturalness, density **or** readability, not all three at once), with each composition its own card (rules 5, 10).\n- Vary repeated props with clone variants (rule 16). Boundaries never look like scattered kit pieces, and paths are never covered (rule 19). Map sources are agent-only (rule 25).\n- **Build**: the approved fragments as data the generator uses (#9 or #23 for pacing).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 41,
+    "title": "Biome direction: forest and graveyard approach, reusable compositions and natural boundaries",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:assets"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`: image mocks before in-engine compositions (gm-image-mock), in #3's approved play-screen look.\n- **Mock round 1**: four `image_gen.imagegen` stills of the forest and graveyard approach in play, at phone portrait and landscape. They differ in palette, density, boundary type and route shape (rule 4). The kit is described in words, never attached (rule 23).\n- **Prototype**: the ticket's in-engine compositions and generated results beside the pick, with the feasibility list (rule 7) and a `gm look score/judge` sheet. Plateau rule 14.\n- One question per round (naturalness, density **or** readability, not all three at once), with each composition its own card (rules 5, 10).\n- Vary repeated props with clone variants (rule 16). Boundaries never look like scattered kit pieces, and paths are never covered (rule 19). Map sources are agent-only (rule 25).\n- **Build**: the approved fragments as data the generator uses (#9 or #23 for pacing).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 42,
+    "title": "Mini-boss (test arena first), then the mini-dungeon checkpoint",
+    "ladder": "mock",
+    "labels_add": [
+      "phase:mock",
+      "model:low",
+      "role:visual",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Starts at `phase:mock`; built in a test arena first.\n- **Mock round 1**: mini-boss look cards (set sprite plus variants at 150 px or more) and a keyed clip of its readable patterns with tells, captioned (rules 6, 44, 45).\n- **Prototype**: `?scenario=miniboss-arena&class=<c>` for each class, with tell timing as `gm decide --playable` variants (rule 3).\n- Tells stay outside the lower-corner zones in portrait (rule 29). The skull marker is set art, not stretched (rule 24).\n- **Build**: placed in the cave (#10), with the bank triggered (#6) and an invariant for it (rule 42).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 43,
+    "title": "Adaptive support: visible, budgeted help when a run is going badly",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Engineering ticket (local rules, no live AI); unit tests are the proof.\n- \"Never invisible\" means the help is a visible world opportunity with a cause (rule 20). Its look reuses the approved shrine and biome looks.\n- Budgets per difficulty live in `src/tunables.ts` and are exposed to the editor (gm-editor-tuning).\n- `qa.invariants`: never rerolled on reload, never farmable (rule 42).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  },
+  {
+    "number": 44,
+    "title": "Complete-run playable: second wilderness, crypt, final boss, wrap-up and next-run reset",
+    "ladder": "n/a",
+    "labels_add": [
+      "role:qa",
+      "role:gameplay"
+    ],
+    "labels_remove": [],
+    "addendum": "Checkpoint ticket: the complete run, then the creator plays it.\n- `gm qa playtest dusk-helm --all-modes` (every class, each difficulty) with invariants for the reset to the next run and for banked progress (rule 42). Look at every mode's clip.\n- Measure pacing on the **hosted** build with a gm-qa journey through both bosses; name the build (rules 12, 48).\n- Every transition in the loop is seamless (rule 21), and sound is checked per screen (rule 36).\n- After this lands, file the trailer refresh (16:9, gameplay only) and the thumbnail refresh if the look changed (rule 26).\n- The creator's play notes become reworks on this ticket, not new follow-up tickets (rule 1).\n\nShared rules: `docs/plans/dusk-helm-learnings/learnings.md` in the core repo (rule numbers above refer to it)."
+  }
+]
