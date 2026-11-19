@@ -39,7 +39,7 @@ fi
 
 # the castle town: the subset the studio copied, Kenney stand-ins for the Synty particle textures, one bundled script
 rm -rf "$OUT"; mkdir -p "$OUT/models"
-cp "$TC/index.html" "$TC/city.js" "$TC/rampage.js" "$TC/earthbound.js" "$TC/fx.js" "$TC/timeline.js" "$OUT/"; cp -r "$TC/vendor" "$TC/fx-variants" "$OUT/"
+cp "$TC/index.html" "$TC/city.js" "$TC/rampage.js" "$TC/crowd-path.js" "$TC/earthbound.js" "$TC/fx.js" "$TC/timeline.js" "$OUT/"; cp -r "$TC/vendor" "$TC/fx-variants" "$OUT/"
 cp -r "$TC/models/castle" "$TC/models/minidungeon" "$TC/models/monsters" "$TC/models/fx" "$TC/models/sounds" "$OUT/models/"
 mkdir -p "$OUT/models/sprites/variants" "$OUT/models/sprites/ufo"
 cp "$TC/models/sprites/variants/"ness*.png "$OUT/models/sprites/variants/"; cp "$TC/models/sprites/ufo/"ufo_[abc].png "$OUT/models/sprites/ufo/"
@@ -52,5 +52,5 @@ for v in m["variants"]: shutil.copy(src / (v["name"] + ".glb"), dst)
 (dst / "manifest.json").write_text(json.dumps(m))' "$TC/models/variants" "$OUT/models/variants"
 mkdir -p "$OUT/models/bake"; cp "$TC/models/bake/"*.bin "$TC/models/bake/"*.gz "$TC/models/bake/"*.webp "$TC/models/bake/"*.jpg "$OUT/models/bake/"
 node "$TC/tools/bundle.mjs" "$OUT" && sed -i 's#<script type="module" src="city.js"></script>#<script type="module" src="city.bundle.js"></script>#' "$OUT/index.html"
-rm -rf "$OUT/vendor/pixelfx" "$OUT/fx-variants" "$OUT/"{city,rampage,earthbound,fx,timeline}.js; find "$OUT/vendor/three" -name "*.js" -delete
+rm -rf "$OUT/vendor/pixelfx" "$OUT/fx-variants" "$OUT/"{city,rampage,crowd-path,earthbound,fx,timeline}.js; find "$OUT/vendor/three" -name "*.js" -delete
 echo "built $OUT and $A"

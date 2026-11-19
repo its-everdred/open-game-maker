@@ -432,9 +432,9 @@ void main() {
 const kitMat = (map, o = {}) => new THREE.ShaderMaterial({ vertexShader: KIT_V, fragmentShader: KIT_F,
   uniforms: { map: { value: map }, tint: { value: o.tint || C(ROOFS.castle[0]) }, cut: { value: 9999 }, ...U } });
 // instanced placement: put() records a piece, flush() makes one instanced mesh per model
-const INST = new Map();
-const put = (model, x, y, z, rot = 0, s = 1, roof = ROOFS.castle[0]) => { if (!INST.has(model)) INST.set(model, []); const e = { x, y, z, rot, s: [s, s, s], roof: C(roof) }; INST.get(model).push(e); return e; };
-const putS = (model, x, y, z, rot, s3) => { if (!INST.has(model)) INST.set(model, []); const e = { x, y, z, rot, s: s3, roof: C(ROOFS.castle[0]) }; INST.get(model).push(e); return e; };
+const INST = new Map(), TOWN_PLACEMENTS = [];
+const put = (model, x, y, z, rot = 0, s = 1, roof = ROOFS.castle[0]) => { if (!INST.has(model)) INST.set(model, []); const e = { x, y, z, rot, s: [s, s, s], roof: C(roof) }; INST.get(model).push(e); TOWN_PLACEMENTS.push({ model, entry: e }); return e; };
+const putS = (model, x, y, z, rot, s3) => { if (!INST.has(model)) INST.set(model, []); const e = { x, y, z, rot, s: s3, roof: C(ROOFS.castle[0]) }; INST.get(model).push(e); TOWN_PLACEMENTS.push({ model, entry: e }); return e; };
 const WALL_SEGS = [];   // the stretched wall pieces, so a scene can claim one to break
 const TOWERS = [];   // the wall's towers, each its stacked pieces, likewise
 async function flush() {
@@ -614,6 +614,7 @@ function slum() {   // shacks in clumps outside the south-west wall, with barrel
 }
 
 // ---------------- trees ----------------
+const TOWN_TREES = [];
 async function trees() {
   const spots = [];
   R = rng(5);
@@ -634,6 +635,7 @@ async function trees() {
     if (sl > .45 || fbm(x * .03, z * .03) < (td < 2.1 ? .5 : .42)) continue;
     spots.push([x, z, rr(1, 2.1) * (1 + h / 60), R() < .03]);
   }
+  TOWN_TREES.push(...spots);
   window.__treesBake = () => new Float32Array(spots.slice(nTown).flatMap(([x, z, s, b]) => [x, z, s, b ? 1 : 0]));
   const cone = mergeGeometries([new THREE.ConeGeometry(.9, 2.6, 6).translate(0, 2.1, 0), new THREE.CylinderGeometry(.18, .22, 1, 5).translate(0, .5, 0)].map(g => { g = g.toNonIndexed(); g.deleteAttribute('uv'); return g; }));
   const round = mergeGeometries([new THREE.IcosahedronGeometry(1.1, 0).translate(0, 2.1, 0), new THREE.CylinderGeometry(.16, .2, 1.2, 5).translate(0, .6, 0)].map(g => { g = g.toNonIndexed(); g.deleteAttribute('uv'); return g; }));
@@ -853,7 +855,7 @@ function claimRampage() {
     // the kaiju shot's angle, pulled back and turned toward the market so the other scenes fit (phones further back)
     view(aspect, also) { const port = aspect < 1, w = port ? .5 : .4, l = also ? [f[0] + (also[0] - f[0]) * w, f[1] + (also[1] - f[1]) * w] : f, k = port ? 2.1 : 1.45;
       return { fov: port ? 66 : 44, pos: [l[0] - (nx - sx) * 40 * k, PLAIN + 30 * k, l[1] - (nz - sz) * 40 * k], look: [l[0], PLAIN + 5, l[1]] }; },
-    run: () => kaiju({ sfx, claimNear, walls: WALL_SEGS, scene, camera, U, PLAIN, ground: groundH, kenney, kenneyScene, kitMat, houses: zone, approach: [[coastX(18) + 75, 18], [coastX(15) + 8, 15]] /* straight in from open sea off the right of the frame, deeper the further out */, castle: { x: CASTLE.x, z: CASTLE.z, r: PADS[0].r, face: CASTLE_FACE }, wall: { x: seg.x, z: seg.z, yaw: seg.yaw, L: seg.L, KW, entry: seg.entry },
+    run: () => kaiju({ sfx, claimNear, walls: WALL_SEGS, scene, camera, U, PLAIN, ground: groundH, kenney, kenneyScene, kitMat, houses: zone, townHouses: houses, townPlacements: TOWN_PLACEMENTS, townTrees: TOWN_TREES, approach: [[coastX(18) + 75, 18], [coastX(15) + 8, 15]] /* straight in from open sea off the right of the frame, deeper the further out */, castle: { x: CASTLE.x, z: CASTLE.z, r: PADS[0].r, face: CASTLE_FACE }, wall: { x: seg.x, z: seg.z, yaw: seg.yaw, L: seg.L, KW, entry: seg.entry },
       breach: [seg.x, seg.z], inward, scaffold, layers, stepped, steps }) };
 }
 // The EarthBound homage (earthbound.js): the market quarter's houses, struck by the saucer.
@@ -942,6 +944,7 @@ function frame(t) {
   if (SC?.pixel) renderPixel(SC.pixel); else renderer.render(scene, camera);
 }
 window.__frame = frame;
+window.__crowdStep = t => { placeCamera(t); camera.updateMatrixWorld(); const s = SCS[0]; s.update(s.local(t)); return window.__crowdCheck?.(s.local(t)); };
 window.__info = () => ({ ev: dyn.slice(0, 4).map(d => [+d.per.toFixed(1), +d.ev[0].start.toFixed(1), +d.ev[1].start.toFixed(1)]), houses: houses.length, changing: dyn.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles });
 if (!CAPTURE) {
   let t = 0, last = performance.now();

@@ -9,6 +9,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { FX, reseed } from './fx.js';
+import { blocked, route } from './crowd-path.js';
 
 export const PER = 104;
 const LEAVE = 58;   // when he is gone
@@ -353,6 +354,26 @@ export async function kaiju(ctx) {
   // wall, spearmen charge his feet and stab, then cheer and chase him off
   const hk = await ctx.kenneyScene('minidungeon/character-human'), spear = await ctx.kenneyScene('minidungeon/weapon-spear');
   const hb = new THREE.Box3().setFromObject(hk.scene), HS = 2.7 / (hb.max.y - hb.min.y);   // a bit larger than life, so they read next to the monster
+  // All of the town's ground-level structures, including unclaimed houses and props,
+  // remain blockers even while the monster is breaking part of the town.
+  const structures = [...ctx.townPlacements.filter(({ entry }) => entry !== W.entry && entry.y <= Math.max(PLAIN, ground(entry.x, entry.z)) + 1),
+    ...ctx.townHouses.filter(h => !h.entry).map(h => ({ model: h.model, entry: { x: h.x, z: h.z, rot: h.rot, s: [h.s, h.s, h.s] } }))];
+  const obstacles = [];
+  for (const { model, entry: e } of structures) {
+    if (Math.hypot(e.x - bx, e.z - bz) > 120) continue;
+    const k = await ctx.kenney(model);
+    obstacles.push({ model, top: (e.y ?? PLAIN) + k.h * e.s[1], x: e.x, z: e.z, yaw: e.rot, halfX: k.w * e.s[0] / 2 + .8, halfZ: k.d * e.s[2] / 2 + .8 });
+  }
+  for (const [x, z, scale] of ctx.townTrees) if (Math.hypot(x - bx, z - bz) <= 120)
+    obstacles.push({ model: 'tree', top: Math.max(PLAIN, ground(x, z)) + 3.4 * scale, x, z, yaw: 0, halfX: 1.1 * scale + .8, halfZ: 1.1 * scale + .8 });
+  // The breach can be prevented by a tap, so ground routes treat the wall as
+  // solid throughout the loop, even when its central section is destroyed.
+  obstacles.push({ model: 'breach-wall', top: PLAIN + wk.h * W.KW, x: W.x, z: W.z, yaw: W.yaw, halfX: wk.w * W.L / 2 + .8, halfZ: wk.d * W.KW / 2 + .8 });
+  for (const e of engines) if (e !== field) {
+    e.o.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(e.o);
+    obstacles.push({ model: 'siege', top: box.max.y, x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2, yaw: 0, halfX: (box.max.x - box.min.x) / 2 + 1, halfZ: (box.max.z - box.min.z) / 2 + 1 });
+    e.crewRadius = Math.hypot(Math.max(Math.abs(box.min.x - e.x), Math.abs(box.max.x - e.x)), Math.max(Math.abs(box.min.z - e.z), Math.abs(box.max.z - e.z))) + 2;
+  }
   const men = [];
   const man = (plan, armed) => {   // plan: [[t, x, z, clip, yawTarget?], ...] — position eases between keys
     const o = cloneSkinned(hk.scene); o.scale.setScalar(HS); scene.add(o); o.traverse(n => { n.frustumCulled = false; });   // its own skeleton (a plain clone stays bound to the original's, never posed); skinned bounds are stale, so no culling
@@ -369,36 +390,76 @@ export async function kaiju(ctx) {
   for (const e of engines) for (let i = 0; i < 3; i++) {
     if (e === field) continue;
     const off = (x, z, r, a) => [x + Math.cos(a) * r, z + Math.sin(a) * r], a0 = e.o.rotation.y + Math.PI / 2 + (i - 1) * .7;
-    const p = off(e.x, e.z, 3, a0); man([[0, p[0], p[1], 'idle'], [e.shots[0] - .4, p[0], p[1], 'interact-right'], [e.shots[0] + .3, p[0], p[1], 'emote-yes'], [e.shots[0] + 2, p[0], p[1], 'idle'], [LEAVE - 12, p[0], p[1], 'emote-yes']]);
+    const raw = off(e.x, e.z, e.crewRadius, a0), p = route(raw, raw, obstacles)?.[0] || raw; man([[0, p[0], p[1], 'idle'], [e.shots[0] - .4, p[0], p[1], 'interact-right'], [e.shots[0] + .3, p[0], p[1], 'emote-yes'], [e.shots[0] + 2, p[0], p[1], 'idle'], [LEAVE - 12, p[0], p[1], 'emote-yes']]);
   }
-  { // the field crew: two at each side of the trebuchet, hands on its frame, walking it in; they step clear to watch it shoot
-    // (far enough out that it can swing round past them), then walk back in and push it home. Placed in its own frame.
+  { // The field crew walks alongside the moving trebuchet, clear of its swinging arm.
     const r0 = field.o.rotation.y, p0 = field.o.position.clone(); field.o.rotation.y = 0; field.o.position.set(0, 0, 0); field.o.updateMatrixWorld(true);
     const fb = new THREE.Box3().setFromObject(field.o); field.o.rotation.y = r0; field.o.position.copy(p0); field.o.updateMatrixWorld(true);
     const toW = (f, lx, lz) => [f.x + lx * Math.cos(f.yaw) + lz * Math.sin(f.yaw), f.z - lx * Math.sin(f.yaw) + lz * Math.cos(f.yaw)], mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
-    const mv = field.move, out0 = 33, out1 = 34.4, in0 = mv.back0, in1 = mv.back0 + 1.6;
+    const mv = field.move, out0 = 33, out1 = 34.4, in0 = mv.back0, in1 = mv.back0 + 1.6, anchors = [];
     for (let i = 0; i < 4; i++) {
-      const s = i < 2 ? 1 : -1, lx = lerp(fb.min.x, fb.max.x, i % 2 ? .62 : .34), lz = s * ((s > 0 ? fb.max.z : -fb.min.z) + .5), far = s * (Math.max(fb.max.x, -fb.min.x) + 1.2);
+      const s = i < 2 ? 1 : -1, lx = lerp(fb.min.x, fb.max.x, i % 2 ? .62 : .34), lz = s * (Math.hypot(Math.max(Math.abs(fb.min.x), Math.abs(fb.max.x)), Math.max(Math.abs(fb.min.z), Math.abs(fb.max.z))) + 2), far = lz + s * 2;
       const push = t => { const f = fieldAt(t); return toW(t >= mv.back0 ? { ...f, yaw: f.yaw - Math.PI } : f, lx, lz); }, stand = toW(fieldAt(out1), lx, far);   // after it turns round, the same spot on the same side
-      const m = man([[0, 0, 0, 'idle']]); m.stays = true;
-      m.pos = t => t < out0 ? push(t) : t < out1 ? mix(push(t), stand, smooth((t - out0) / (out1 - out0))) : t < in0 ? stand : t < in1 ? mix(stand, push(t), smooth((t - in0) / (in1 - in0))) : push(t);
+      const planned = t => t < out0 ? push(t) : t < out1 ? mix(push(t), stand, smooth((t - out0) / (out1 - out0))) : t < in0 ? stand : t < in1 ? mix(stand, push(t), smooth((t - in0) / (in1 - in0))) : push(t);
+      // If the moving formation crosses a tree or building, post that person
+      // beside the field instead of letting them pass through it.
+      let unsafe = false; for (let t = 0; t < PER; t += .1) if (blocked(planned(t), obstacles)) { unsafe = true; break; }
+      let anchor;
+      if (unsafe) {
+        const dx = mv.to[0] - mv.from[0], dz = mv.to[1] - mv.from[1], len = Math.hypot(dx, dz);
+        search: for (let r = 18; r <= 50; r += 2) for (let k = 0; k < 24; k++) {
+          const angle = (k + i * 3) * Math.PI / 12, p = [mv.to[0] + Math.cos(angle) * r, mv.to[1] + Math.sin(angle) * r];
+          const u = clamp01(((p[0] - mv.from[0]) * dx + (p[1] - mv.from[1]) * dz) / (len * len));
+          if (Math.hypot(p[0] - mv.from[0] - u * dx, p[1] - mv.from[1] - u * dz) > 15 && anchors.every(q => Math.hypot(p[0] - q[0], p[1] - q[1]) > 2.5) && !blocked(p, obstacles)) { anchor = p; break search; }
+        }
+        if (!anchor) continue;
+        anchors.push(anchor);
+      }
+      const m = man([[0, 0, 0, 'idle']]); m.stays = true; m.fieldCrew = true;
+      m.pos = anchor ? () => anchor : planned;
       m.clipAt = t => t >= 36.1 && t < 38 ? ['emote-yes', 36.1] : t >= LEAVE && t < LEAVE + 1.4 ? ['emote-yes', LEAVE] : ['idle', 0];
-      m.pushing = t => t < out0 || t >= in1 - .3;
     }
   }
-  // archers on the wall either side of the breach: out of the corner towers at the wall's ends, and back in once he's gone
-  const arrows = [];
-  for (let i = 0; i < 4; i++) { const side = i < 2 ? -1 : 1, a = side * Math.min(9 + (i % 2) * 2.5, W.L / 2 - 1.5), at = a => [W.x + Math.cos(W.yaw) * a, W.z - Math.sin(W.yaw) * a];
-    const p = at(a), tw = at(side * W.L / 2), walk = Math.abs(W.L / 2 - Math.abs(a)) / 1.6, t0 = 25.6 - walk - (i % 2) * .8, t1 = LEAVE + 2 + i * .6;   /* at their posts before the first volley (26.5) */
-    const m = man([[t0, ...tw, 'idle'], [t0 + walk, ...p, 'idle'], [26.5, ...p, 'holding-both-shoot'], [41, ...p, 'emote-yes'], [LEAVE, ...p, 'idle'], [t1, ...p, 'idle'], [t1 + walk, ...tw, 'idle']]);
-    m.y = PLAIN + W.KW * 1.25; m.show = t0; m.hide = t1 + walk;
-    for (let k = 0; k < 6; k++) { const tf = 27 + k * 1.9 + i * .25; arrows.push({ t: tf, from: [p[0], m.y + 1.4, p[1]], fl: .8 }); } }
+  // Archers remain at their posts, clear of the corner towers, throughout the loop.
+  const arrows = [], posts = [], groundPosts = [];
+  for (let i = 0; i < 4; i++) { const side = i < 2 ? -1 : 1, a = side * Math.max(0, W.L / 2 - 5) * ((i % 2) ? 1 : .45), at = a => [W.x + Math.cos(W.yaw) * a, W.z - Math.sin(W.yaw) * a];
+    const candidates = Array.from({ length: Math.max(1, Math.floor((W.L - 4) * 2)) }, (_, n) => -W.L / 2 + 2 + n * .5).sort((x, y) => Math.abs(x - a) - Math.abs(y - a));
+    const post = candidates.find(n => Math.abs(n) >= 7.3 && posts.every(other => Math.abs(n - other) >= 1.8) && !blocked(at(n), obstacles.filter(o => o.model !== 'breach-wall' && o.top > PLAIN + W.KW * 1.25 + .1)));
+    let p;
+    if (post === undefined) {
+      const occupied = groundPosts.map(([x, z]) => ({ x, z, yaw: 0, halfX: 1.2, halfZ: 1.2 }));
+      const path = route(at(a), at(a), [...obstacles, ...occupied]);
+      if (!path) continue;
+      p = path[0]; groundPosts.push(p);
+    } else { posts.push(post); p = at(post); }
+    const m = man([[0, ...p, 'idle'], [26.5, ...p, 'holding-both-shoot'], [41, ...p, 'emote-yes'], [LEAVE, ...p, 'idle']]);
+    if (post !== undefined) { m.y = PLAIN + W.KW * 1.25; m.wall = true; }
+    const y = m.y ?? Math.max(PLAIN, ground(...p));
+    for (let k = 0; k < 6; k++) { const tf = 27 + k * 1.9 + i * .25; arrows.push({ t: tf, from: [p[0], y + 1.4, p[1]], fl: .8 }); } }
   // spearmen: out of the streets, at his feet, stabbing; they scatter when he reels, then cheer and give chase
   const doors = D.filter(d => d.kind === 'house' && !d.hits.length && !d.shoved);   // they come out of houses he leaves alone, and go back in
   for (let i = 0; i < 8; i++) {
-    const a = i / 8 * Math.PI * 2, h0 = P(30 + (i % 3) * 3, -12 + i * 3), hd = doors.sort((p, q) => Math.hypot(p.x - h0[0], p.z - h0[1]) - Math.hypot(q.x - h0[0], q.z - h0[1]))[0], home = hd ? [hd.x, hd.z] : h0, ring = [pts.c[0] + Math.cos(a) * 6.5, pts.c[1] + Math.sin(a) * 6.5], back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
-    const m = man([[0, ...home, 'idle'], [29.4 + i * .15, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P(-2, -2 + (i - 4) * 1.5), 'emote-yes'], [LEAVE, ...P(-2, -2 + (i - 4) * 1.5), 'idle'], [LEAVE + 7, ...home, 'sprint']], true);
-    m.show = 29.4 + i * .15; m.hide = LEAVE + 7;
+    const a = i / 8 * Math.PI * 2, h0 = P(30 + (i % 3) * 3, -12 + i * 3), hd = doors.sort((p, q) => Math.hypot(p.x - h0[0], p.z - h0[1]) - Math.hypot(q.x - h0[0], q.z - h0[1]))[0], home = hd ? [hd.x + Math.cos(a) * (hd.r + 2), hd.z + Math.sin(a) * (hd.r + 2)] : h0, ring = [pts.c[0] + Math.cos(a) * 6.5, pts.c[1] + Math.sin(a) * 6.5], back = [pts.c[0] + Math.cos(a) * 11, pts.c[1] + Math.sin(a) * 11];
+    const m = man([[0, ...home, 'idle'], [29.4 + i * .15, ...home, 'sprint'], [32, ...ring, 'attack-melee-right'], [38.7, ...ring, 'sprint'], [40, ...back, 'emote-yes'], [41.5, ...back, 'sprint'], [46, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'emote-yes'], [LEAVE, ...P([-1, -4, 1, -3, 2, -5, 0, -3][i], [-6, -3, -4, 0, 2, 3, 6, 8][i]), 'idle'], [LEAVE + 7, ...home, 'sprint']], true);
+    const legs = []; let current = home, unplaceable = false;
+    for (let j = 0; j < m.plan.length - 1; j++) {
+      const target = m.plan[j + 1].slice(1, 3);
+      const path = j === m.plan.length - 2 ? legs.slice().reverse().flatMap((leg, n) => leg.slice().reverse().slice(n ? 1 : 0)) : route(current, target, obstacles);
+      if (!path) { scene.remove(m.o); men.pop(); unplaceable = true; break; }
+      current = path[path.length - 1]; legs.push(path);
+    }
+    if (unplaceable) continue;
+    const spans = legs.map(path => {
+      const length = path.slice(1).map((p, j) => Math.hypot(p[0] - path[j][0], p[1] - path[j][1]));
+      return { path, length, total: length.reduce((sum, n) => sum + n, 0) };
+    });
+    m.pos = t => {
+      let i = 0; while (i < m.plan.length - 2 && m.plan[i + 1][0] <= t) i++;
+      const a = m.plan[i], b = m.plan[i + 1], { path, length, total } = spans[i];
+      let d = total * clamp01((t - a[0]) / (b[0] - a[0]));
+      for (let j = 0; j < length.length; j++) { if (!length[j]) continue; if (d <= length[j]) return [lerp(path[j][0], path[j + 1][0], d / length[j]), lerp(path[j][1], path[j + 1][1], d / length[j])]; d -= length[j]; }
+      return path[path.length - 1];
+    };
   }
   // walking: the step cycle advances with the ground covered (no sliding feet); slower walkers take shorter strides, as
   // people do; heading turns at most 6 rad/s toward where he is going (or, standing, toward the monster)
@@ -412,6 +473,18 @@ export async function kaiju(ctx) {
   const ID = new THREE.Quaternion(), AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0);
   window.__men = () => men.map(m => { const q = new THREE.Quaternion(), d = new THREE.Vector3(-1, 0, 0).applyQuaternion(m.bones['arm-right'].getWorldQuaternion(q)), y = m.o.rotation.y;   // debug: heading, where the right arm points (fwd/up), leg swing
     return { p: m.o.position.toArray().map(v => +v.toFixed(2)), yaw: +y.toFixed(2), vis: m.o.visible, push: !!m.pushing, clip: m.cur?.getClip().name, armFwd: +(d.x * Math.sin(y) + d.z * Math.cos(y)).toFixed(2), armUp: +d.y.toFixed(2), leg: +(2 * Math.acos(Math.min(1, Math.abs(m.bones['leg-left'].quaternion.w)))).toFixed(2) }; });
+  window.__crowdCheck = t => {
+    const propBoxes = [];
+    for (const e of engines) { e.o.updateMatrixWorld(true); e.o.traverse(n => { if (n.isMesh && n.visible) propBoxes.push(new THREE.Box3().setFromObject(n)); }); }
+    return men.map((m, i) => {
+    const position = m.pos(t), y = m.y ?? Math.max(PLAIN, ground(...position));
+    const screen = new THREE.Vector3(position[0], y + 1.35, position[1]).project(ctx.camera);
+    return { i, field: !!m.fieldCrew, wall: !!m.wall, position, screen: [screen.x, screen.y], valid: [...position, y, screen.x, screen.y, screen.z].every(Number.isFinite), visible: m.o.visible,
+      inView: Math.abs(screen.x) <= 1.05 && Math.abs(screen.y) <= 1.05 && screen.z >= -1 && screen.z <= 1,
+      blocked: blocked(position, obstacles.filter(o => !m.wall || (o.model !== 'breach-wall' && o.top > m.y + .1))),
+      prop: propBoxes.some(b => b.max.y > y + .1 && b.min.y < y + 2.7 && position[0] >= b.min.x - .5 && position[0] <= b.max.x + .5 && position[1] >= b.min.z - .5 && position[1] <= b.max.z + .5) };
+    });
+  };
   const arrowMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(.04, .04, 1.4, 4).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#5e4a44' }), arrows.length);
   arrowMesh.frustumCulled = false; scene.add(arrowMesh);
   for (const ar of arrows) ar.to = chest(ar.t + ar.fl);
@@ -524,7 +597,7 @@ export async function kaiju(ctx) {
         field.o.traverse(n => { if (n.name === 'wheel') n.rotation.z = -(f.k + 2 * f.back) * 12; }); }
       for (const m of men) {
         const i = Math.min(NS - 2, Math.floor(lt / DT)), f = lt / DT - i, [x, z] = m.pos(lt), gait = m.mov[i], [clip, since] = m.clipAt(lt), B = m.bones;
-        m.o.visible = m.show !== undefined ? lt >= m.show && lt < m.hide : m.stays || lt < LEAVE + 4; m.o.position.set(x, m.y ?? Math.max(PLAIN, ground(x, z)), z);
+        m.o.visible = true; m.o.position.set(x, m.y ?? Math.max(PLAIN, ground(x, z)), z);
         m.o.rotation.y = m.yaw[i] + wrapA(m.yaw[i + 1] - m.yaw[i]) * f;
         const act = m.acts[gait || (clip === 'sprint' || clip === 'walk' ? 'idle' : clip)] || m.acts.idle;
         if (m.cur !== act) { m.mixer.stopAllAction(); act.reset().play(); m.cur = act; }
