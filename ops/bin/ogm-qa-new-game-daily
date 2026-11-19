@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+head=$(git -C "$repo" rev-parse HEAD)
+exec "$repo/ops/bin/ogm-qa-review-hook" "$head" "$head" --daily

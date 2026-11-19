@@ -55,6 +55,27 @@ OGM_TEST_RC=0 "$hook" "$base" "$other" --repo "$stack" --attention "$attention" 
 assert_grep 'no review or voice change' "$scratch/out"
 assert_eq '' "$(cat "$scratch/calls")" 'an unrelated deploy runs nothing'
 
+# Each New Game dependency triggers its smoke, and the daily run does so without a change.
+for path in templates/game-2d/src/main.ts packages/game-repo-template/src/repo.ts services/api/src/games/routes.ts services/commit/src/server.ts; do
+  from=$(git -C "$stack" rev-parse HEAD)
+  to=$(commit "$path")
+  : > "$scratch/calls"
+  OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" > /dev/null
+  assert_grep 'qa new-game-e2e' "$scratch/calls"
+done
+: > "$scratch/calls"
+OGM_TEST_RC=0 "$hook" "$to" "$to" --daily --repo "$stack" > /dev/null
+assert_grep 'qa new-game-e2e' "$scratch/calls"
+: > "$scratch/calls"
+set +e
+OGM_TEST_RC=1 "$hook" "$to" "$to" --daily --repo "$stack" > /dev/null
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a failing daily smoke fails'
+assert_grep 'qa-new-game-e2e failed on' "$attention"
+rm -f "$attention"
+: > "$scratch/calls"
+
 # A review screen changed and the E2E passes: a fresh session, the E2E for the deployed SHA, no wake.
 OGM_TEST_RC=0 "$hook" "$other" "$review" --repo "$stack" --attention "$attention" > "$scratch/out"
 short=$(git -C "$stack" rev-parse --short=12 "$review")

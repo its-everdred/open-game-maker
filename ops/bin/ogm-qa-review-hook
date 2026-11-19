@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # OGM QA review hook: after a deploy, run the prod review E2E (`gm qa review-e2e`) when the deploy touched the review
 # screens or the review API, and the prod voice E2E (`gm qa voice-e2e`, #879) when it touched a voice path, and wake the
-# Executor when either fails. The host's auto-update calls it right after a successful deploy with the commits it
+# Executor when a run fails. New Game runs for template, games API or commit-service changes and on the daily timer.
+# The host's auto-update calls it right after a successful deploy with the commits it
 # deployed from and to.
 #
-# usage: ogm-qa-review-hook <have> <want> [--repo <checkout>] [--attention <file>]
+# usage: ogm-qa-review-hook <have> <want> [--daily] [--repo <checkout>] [--attention <file>]
 #
 #   <have> <want>  the deployed range; only paths changed in it decide which E2E runs
 #   --repo         the deployed checkout (default: this script's repository)
+#   --daily        run the New Game smoke even when no relevant paths changed
 #   --attention    the file the Executor listens on; a failure appends one line to it (default: $OGM_QA_ATTENTION)
 #
 # Review paths: apps/web/src/**review**, the deck's apps/web/src/features/{worker-builds,commands-inbox}/ and
@@ -22,15 +24,17 @@
 set -uo pipefail
 
 usage() {
-  printf 'usage: ogm-qa-review-hook <have> <want> [--repo <checkout>] [--attention <file>]\n' >&2
+  printf 'usage: ogm-qa-review-hook <have> <want> [--daily] [--repo <checkout>] [--attention <file>]\n' >&2
   exit 64
 }
 
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 attention=${OGM_QA_ATTENTION:-}
+daily=0
 range=()
 while (($#)); do
   case $1 in
+    --daily) daily=1; shift ;;
     --repo | --attention)
       [[ $# -ge 2 ]] || usage
       declare "${1#--}=$2"
@@ -47,6 +51,19 @@ done
 have=${range[0]}
 want=${range[1]}
 
+# The deploy caller supplies the Executor's attention file. Remember it for the
+# timer, which runs outside that caller's environment.
+qa_root=${OGM_QA_ROOT:-$HOME/.local/state/ogm/qa}
+attention_config=$qa_root/attention-path
+if [[ -n $attention ]]; then
+  mkdir -p "$qa_root"
+  config_tmp=$(mktemp "$qa_root/.attention-path.XXXXXX")
+  printf '%s\n' "$attention" > "$config_tmp"
+  mv -f -- "$config_tmp" "$attention_config"
+elif ((daily)) && [[ -f $attention_config ]]; then
+  IFS= read -r attention < "$attention_config" || :
+fi
+
 changed=$(git -C "$repo" diff --name-only "$have" "$want" 2> /dev/null) || {
   printf 'ogm-qa-review-hook: cannot diff %s..%s in %s\n' "$have" "$want" "$repo" >&2
   exit 64
@@ -58,8 +75,10 @@ runs=()
 grep -qE "$review" <<< "$changed" && runs+=(review)
 mapfile -t voice_paths < "$(dirname -- "${BASH_SOURCE[0]}")/../voice-paths"
 git -C "$repo" diff --quiet "$have" "$want" -- "${voice_paths[@]}" 2> /dev/null || runs+=(voice)
+new_game='^(templates/game-[^/]+/|packages/game-repo-template/|services/api/src/games/|services/commit/)'
+if ((daily)) || grep -qE "$new_game" <<< "$changed"; then runs+=(new-game); fi
 if ((${#runs[@]} == 0)); then
-  printf 'ogm-qa-review-hook: no review or voice change in %s..%s\n' "$have" "$want"
+  printf 'ogm-qa-review-hook: no review or voice change or new-game change in %s..%s\n' "$have" "$want"
   exit 0
 fi
 
@@ -74,7 +93,8 @@ for kind in "${runs[@]}"; do
   name=qa-$kind-e2e
   stills=qa-e2e
   [[ $kind == voice ]] && stills=voice-e2e
-  logs=${OGM_QA_ROOT:-$HOME/.local/state/ogm/qa}/$kind-e2e
+  [[ $kind == new-game ]] && stills=new-game-e2e
+  logs=$qa_root/$kind-e2e
   mkdir -p "$logs"
   log=$logs/$sha.log
   : > "$log"
