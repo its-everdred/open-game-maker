@@ -55,6 +55,19 @@ export const LICENSES: LicenseRow[] = [
     confirmed: { by: 'kevin', on: '2026-10-30' },
   },
   {
+    id: 'LicenseRef-caseportman-royalty-free',
+    aliases: ['caseportman-royalty-free'],
+    ceiling: {
+      uses: ['in-game', 'placeholder', 'edit-audio', 'derive-audio'],
+      audience: 'private',
+      redistribution: 'in-build',
+      attribution: null,
+    },
+    processing: 'local-only',
+    ref: 'Case Portman Cute & Cozy UI SFX licence',
+    note: 'Project use and audio edits allowed; no standalone resale or redistribution; no credit required.',
+  },
+  {
     id: 'LicenseRef-hattap-commercial',
     aliases: ['custom-commercial-ok'],
     ceiling: { uses: PIXEL_USES, audience: 'private', redistribution: 'in-build', attribution: null },
@@ -84,6 +97,15 @@ export const LICENSES: LicenseRow[] = [
     ref: 'LimeZu itch.io store page, copied to License.txt',
     note: 'LimeZu licence: commercial or non-commercial use, edits allowed, credit LimeZu, no resale or redistribution.',
     confirmed: { by: 'kevin', on: '2026-10-30' },
+  },
+  {
+    id: 'LicenseRef-limezu-standard',
+    aliases: ['limezu-standard', 'limezu'],
+    ceiling: { uses: PIXEL_USES, audience: 'private', redistribution: 'in-build', attribution: null },
+    processing: 'local-only',
+    ref: 'LimeZu Modern Farm licence',
+    note: 'Use and edits allowed in projects; credit appreciated; no resale or redistribution of assets.',
+    confirmed: { by: 'kevin', on: '2026-11-01' },
   },
   {
     id: 'LicenseRef-smallscaleint-itch',
@@ -120,7 +142,7 @@ export const LICENSES: LicenseRow[] = [
   },
   {
     id: 'NOASSERTION',
-    aliases: [],
+    aliases: ['unknown-itch-free'],
     ceiling: { uses: ['vision-input'], audience: 'private', redistribution: 'none', attribution: null },
     processing: 'local-only',
     ref: 'none',

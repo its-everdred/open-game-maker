@@ -66,6 +66,79 @@ class Library(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_limezu_reader_writes_valid_item_cards_from_canonical_size(self):
+        pack = add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {
+            '32x32/Animated_32x32/Animated_sheets_32x32/Cow_32x32.png': png(32, 32),
+            '16x16/Animated_16x16/Animated_sheets_16x16/Cow_16x16.png': png(16, 16),
+        })
+        report = bcc.run(self.root, only='limezu-modern-farm')
+        self.assertEqual(report['failures'], {})
+        cards = list((pack / 'cards').rglob('*.card.json'))
+        self.assertEqual(len(cards), 1)
+        self.assertTrue(validator_ok(cards[0], pack / 'collection.card.json'))
+        self.assertEqual(len(json.loads(cards[0].read_text())['source']['files']), 2)
+
+    def test_limezu_collection_records_compatible_collections(self):
+        for peer in ('limezu-modern-interiors', 'limezu-modern-exteriors', 'limezu-modern-user-interface'):
+            add_pack(self.root, peer, 'limezu', 'LimeZu-commercial', {'image.png': png(1, 1)})
+        add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {'image.png': png(1, 1)})
+        self.assertEqual(bcc.run(self.root, only='limezu-modern-farm')['failures'], {})
+        card = card_of(self.root, 'limezu-modern-farm')
+        self.assertEqual(card['describe']['set'], 'limezu-modern')
+        self.assertEqual({r['id'] for r in card['related']}, {
+            't1:limezu-modern-interiors@1.0', 't1:limezu-modern-exteriors@1.0',
+            't1:limezu-modern-user-interface@1.0',
+        })
+
+    def test_limezu_item_preserves_a_locked_human_title(self):
+        pack = add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {
+            '32x32/Animated_32x32/Animated_sheets_32x32/Cow_32x32.png': png(32, 32),
+        })
+        self.assertEqual(bcc.run(self.root, only='limezu-modern-farm')['failures'], {})
+        path = next((pack / 'cards').rglob('*.card.json'))
+        card = json.loads(path.read_text())
+        card['title'] = 'Curated cow'
+        card['provenance']['title'] = {'by': 'human', 'locked': True, 'at': '2026-11-01T00:00:00Z'}
+        path.write_text(json.dumps(card))
+        self.assertEqual(bcc.run(self.root, only='limezu-modern-farm')['failures'], {})
+        self.assertEqual(json.loads(path.read_text())['title'], 'Curated cow')
+
+    def test_reader_refuses_to_delete_an_obsolete_locked_item(self):
+        pack = add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {
+            '32x32/Animated_32x32/Animated_sheets_32x32/Cow_32x32.png': png(32, 32),
+        })
+        self.assertEqual(bcc.run(self.root, only='limezu-modern-farm')['failures'], {})
+        path = next((pack / 'cards').rglob('*.card.json'))
+        card = json.loads(path.read_text())
+        card['provenance']['title'] = {'by': 'human', 'locked': True, 'at': '2026-11-01T00:00:00Z'}
+        obsolete = path.with_name('obsolete.card.json')
+        obsolete.write_text(json.dumps(card))
+        report = bcc.run(self.root, only='limezu-modern-farm')
+        self.assertIn('limezu-modern-farm', report['failures'])
+        self.assertTrue(obsolete.exists())
+
+    def test_tinyrpg_reader_preserves_unknown_rights(self):
+        pack = add_pack(self.root, 'tinyrpg-characters-01-soldier-orc', 'tinyrpg', 'unknown-itch-free', {
+            'Characters(100x100 split)/Orc/Orc/Orc_Idle.png': png(200, 100),
+        })
+        report = bcc.run(self.root, only='tinyrpg-characters-01-soldier-orc')
+        self.assertEqual(report['failures'], {})
+        cards = list((pack / 'cards').rglob('*.card.json'))
+        self.assertEqual(len(cards), 1)
+        self.assertTrue(validator_ok(cards[0], pack / 'collection.card.json'))
+        self.assertEqual(card_of(self.root, 'tinyrpg-characters-01-soldier-orc')['rights']['uses'], ['vision-input'])
+
+    def test_ansimuz_effect_reader_is_selected_by_vendor_and_pack(self):
+        pack = add_pack(self.root, 'ansimuz-explosion-tutorial', 'ansimuz', 'ansimuz-free-commercial', {
+            'sprites/explosion1.png': png(32, 32), 'sprites/explosion2.png': png(32, 32),
+            'explosion.png': png(64, 32),
+        })
+        report = bcc.run(self.root, only='ansimuz-explosion-tutorial')
+        self.assertEqual(report['failures'], {})
+        cards = list((pack / 'cards').rglob('*.card.json'))
+        self.assertEqual(len(cards), 1)
+        self.assertTrue(validator_ok(cards[0]))
+
     def test_every_vendor_gets_a_valid_card_with_the_processing_default(self):
         """Packs the old script skipped (LimeZu) were invisible to search; vendor-licensed bytes must stay local."""
         rep = bcc.run(self.root)

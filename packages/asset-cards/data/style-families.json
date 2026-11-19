@@ -222,7 +222,7 @@
           "perspective": "topdown",
           "judgment": "Looked at as one modern-world line at a shared base resolution."
         },
-        "packs": [{ "id": "limezu-modern-interiors" }, { "id": "limezu-modern-exteriors" }, { "id": "limezu-modern-user-interface" }]
+        "packs": [{ "id": "limezu-modern-interiors" }, { "id": "limezu-modern-exteriors" }, { "id": "limezu-modern-user-interface" }, { "id": "limezu-modern-farm", "compatible_with": ["limezu-modern-interiors", "limezu-modern-exteriors", "limezu-modern-user-interface"] }]
       },
       {
         "id": "limezu-fantasy",

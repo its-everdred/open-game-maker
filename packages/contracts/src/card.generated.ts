@@ -362,6 +362,24 @@ export const assetCardMetaDefs: Record<string, object> = {
             "fps": {
               "type": "number"
             },
+            "frame_size": {
+              "type": "object",
+              "required": [
+                "width",
+                "height"
+              ],
+              "properties": {
+                "width": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false
+            },
             "directions": {
               "type": "array",
               "minItems": 1,
@@ -3579,6 +3597,10 @@ export interface Sprite {
     name: string;
     frames: number[];
     fps?: number;
+    frame_size?: {
+      width: number;
+      height: number;
+    };
     /**
      * @minItems 1
      */

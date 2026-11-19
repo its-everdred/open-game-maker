@@ -293,6 +293,26 @@
                         "fps": {
                           "type": "number"
                         },
+                        "frame_size": {
+                          "type": "object",
+                          "properties": {
+                            "width": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "height": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "width",
+                            "height"
+                          ],
+                          "additionalProperties": false
+                        },
                         "directions": {
                           "uniqueItems": true,
                           "minItems": 1,

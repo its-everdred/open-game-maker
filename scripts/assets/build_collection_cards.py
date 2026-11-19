@@ -25,6 +25,10 @@ sys.path.insert(0, str(HERE))
 
 import smallscaleint
 import smallscaleint_thumbnails
+import limezu_layout
+import caseportman_audio
+import tinyrpg_cards
+import ansimuz_effects
 
 REPO = Path(__file__).resolve().parents[2]
 TAGS = Path(__file__).parent / "data" / "collection_tags.jsonl"
@@ -44,11 +48,22 @@ KIND_BY_EXT = {"glb": "model", "gltf": "model", "fbx": "model", "obj": "model", 
 FAMILY_COVERAGE = {"c": "characters", "e": "environment", "p": "props", "u": "ui", "s": "sfx", "m": "music"}
 SKIP_NAMES = {"preview.png", "sample.png", "license.txt", "icon.png"}
 
+# Readers receive the extracted directory and collection card. Explicit pack
+# membership prevents a reader from replacing unrelated cards from that vendor.
+ITEM_BUILDERS = {
+    "limezu": {"limezu-modern-farm": limezu_layout.build_cards},
+    "caseportman": {"caseportman-cute-cozy-ui-sfx": caseportman_audio.build_cards},
+    "tinyrpg": {"tinyrpg-characters-01-soldier-orc": tinyrpg_cards.build_cards,
+                "tinyrpg-characters-02-demon-blood-monster": tinyrpg_cards.build_cards},
+    "ansimuz": {"ansimuz-explosion-pack-1": ansimuz_effects.build_cards,
+                "ansimuz-explosion-tutorial": ansimuz_effects.build_cards},
+}
 
-def load_style_compatibility(path: Path = STYLE_FAMILIES_JSON) -> dict[str, dict[str, str]]:
+
+def load_style_compatibility(path: Path = STYLE_FAMILIES_JSON) -> dict[str, dict]:
     """Curated pack id -> family and compatibility set; membership is written during intake step 7b."""
     return {
-        pack["id"]: {"family": family["id"], "set": style_set["id"]}
+        pack["id"]: {"family": family["id"], "set": style_set["id"], "compatible_with": pack.get("compatible_with", [])}
         for family in json.loads(path.read_text())
         for style_set in family.get("sets", [])
         for pack in style_set["packs"]
@@ -163,6 +178,26 @@ def without_at(card: dict) -> dict:
     return c
 
 
+def preserve_item_locks(pack: Path, cards: list[dict]) -> list[dict]:
+    """Keep human-locked item fields and refuse to discard locked obsolete cards."""
+    expected = {smallscaleint.card_path(pack, card): card for card in cards}
+    for path in (pack / 'cards').rglob('*.card.json'):
+        old = json.loads(path.read_text())
+        locks = {field: entry for field, entry in old.get('provenance', {}).items() if entry.get('locked')}
+        if not locks:
+            continue
+        if path not in expected:
+            raise ValueError(f'locked item card no longer generated: {path.relative_to(pack)}')
+        if '*' in locks:
+            expected[path].clear()
+            expected[path].update(old)
+            continue
+        for field, entry in locks.items():
+            set_path(expected[path], field, copy.deepcopy(get_path(old, field)))
+            expected[path]['provenance'][field] = entry
+    return cards
+
+
 def card(pj: Path, tags: dict, table: dict, old: dict | None) -> dict:
     m = json.loads(pj.read_text())
     pid, ver, vendor = m["id"], m["current"], m["vendor"]
@@ -221,6 +256,20 @@ def card(pj: Path, tags: dict, table: dict, old: dict | None) -> dict:
     out = {"schema": "ogm.asset-card/1.0", "vocab": VOCAB, "id": f"t1:{pid}@{ver}", "card_type": "collection", "status": None,
            "title": (old or {}).get("title") if keep_old else f"{m['title']} ({vendor.capitalize()})", "license": row["id"],
            "rights": None, "describe": describe, "collection_info": info, "provenance": prov}
+    compatibility = STYLE_COMPATIBILITY_BY_PACK.get(pid, {})
+    prior_related = (old or {}).get('related', []) if not (old or {}).get('provenance', {}).get('related', {}).get('tool', '').startswith(TOOL) else []
+    related = copy.deepcopy(prior_related)
+    for peer in compatibility.get('compatible_with', []):
+        manifest = pj.parent.parent / peer / 'pack.json'
+        if manifest.exists():
+            peer_version = json.loads(manifest.read_text())['current']
+            relation = {'rel': 'pairs-with', 'id': f't1:{peer}@{peer_version}'}
+            if relation not in related:
+                related.append(relation)
+    if related:
+        out['related'] = related
+        out['provenance']['related'] = {'by': 'code', 'tool': TOOL, 'at': NOW,
+                                        'input': 'style-families.json compatible packs and installed pack versions'}
     if keep_old:
         for k in ("previews", "flags"):
             if k in old:
@@ -280,15 +329,20 @@ def run(root: Path, only: str = "*", dry_run: bool = False, table: dict | None =
             built[pid] = card(pj, tags, table, json.loads(cc.read_text()) if cc.exists() else None)
             if pid in smallscaleint.PACKS:
                 items[pid] = smallscaleint.build_cards(pj.parent, built[pid])
+            elif builder := ITEM_BUILDERS.get(vendor_of[pid], {}).get(pid):
+                cards = builder(pj.parent / built[pid]["collection_info"]["version"] / "extracted", built[pid])
+                if cards:
+                    items[pid] = preserve_item_locks(pj.parent, cards)
         except (KeyError, OSError, ValueError, json.JSONDecodeError) as e:
             errors[pid] = [str(e).strip('"')]
-    if items:
+    smallscale_items = {pid: cards for pid, cards in items.items() if pid in smallscaleint.PACKS}
+    if smallscale_items:
         try:
-            thumbnail_jobs = smallscaleint_thumbnails.thumbnail_jobs(root, items)
+            thumbnail_jobs = smallscaleint_thumbnails.thumbnail_jobs(root, smallscale_items)
             if not dry_run:
                 smallscaleint_thumbnails.render_thumbnails(root, thumbnail_jobs)
         except (OSError, ValueError, json.JSONDecodeError) as e:
-            for pid in items:
+            for pid in smallscale_items:
                 errors.setdefault(pid, []).append(str(e).strip('"'))
     documents = dict(built)
     documents.update({f"{pid}::{index}": item for pid, cards in items.items() for index, item in enumerate(cards)})
@@ -308,7 +362,8 @@ def run(root: Path, only: str = "*", dry_run: bool = False, table: dict | None =
         r["item_cards"] += len(items.get(pid, []))
         if pid in items:
             smallscaleint.write_cards(cc.parent, items[pid], dry_run)
-            sheet_collections[pid], sheet_cards[pid] = c, items[pid]
+            if pid in smallscaleint.PACKS:
+                sheet_collections[pid], sheet_cards[pid] = c, items[pid]
         if cc.exists() and json.loads(cc.read_text()) == c:
             r["unchanged"] += 1
             continue
