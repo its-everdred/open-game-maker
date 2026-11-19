@@ -862,10 +862,16 @@
 }
 
 @keyframes games-loading {
-  from { transform: translateX(0); }
-  to { transform: translateX(150%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(150%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .games-loading span { animation: none; }
+  .games-loading span {
+    animation: none;
+  }
 }
