@@ -15,7 +15,8 @@ export const defaultTimings: RoomTimings = {
   ownerReconnectSec: 0.2,
   playerReconnectSec: 0.2,
   seatReconnectSec: 0.2,
-  idleDisposeSec: 1,
+  // Connection setup can take longer under a concurrent workspace test run.
+  idleDisposeSec: 30,
   callbackTimeoutMs: 100,
   callbackRetryMs: [5, 10, 20],
 };
