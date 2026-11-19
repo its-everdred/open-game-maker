@@ -32,11 +32,15 @@ def build_cards(root: Path, collection: dict) -> list[dict]:
         title = wav.stem.replace('_', ' ')
         pack, version = collection['id'].rsplit('@', 1)
         cards.append({'schema': collection['schema'], 'vocab': collection['vocab'],
-                      'id': f'{pack}/{slug}@{version}', 'card_type': 'asset', 'status': 'measured',
+                      'id': f'{pack}/{slug}@{version}', 'card_type': 'asset', 'status': 'tagged',
                       'title': title, 'kind': 'audio', 'subkind': 'sfx/ui', 'collection': collection['id'],
-                      'describe': {'roles': ['feedback']}, 'source': {'files': files, 'content_hash': files[0]['sha256']},
+                      'describe': {'description': f'UI sound effect: {title}', 'objects': ['ui'], 'roles': ['feedback']},
+                      'previews': {},
+                      'source': {'files': files, 'content_hash': files[0]['sha256']},
                       'audio': {'duration_s': duration, 'sample_rate': rate, 'channels': channels,
                                 'peak_dbfs': peak_dbfs, 'search_notes': f'UI SFX: {title}'},
                       'provenance': {'*': {'by': 'code', 'tool': 'caseportman-sfx@0.1', 'at': NOW,
-                                           'input': 'WAV header and matching OGG filename'}}})
+                                           'input': 'WAV header and matching OGG filename'},
+                                     'describe': {'by': 'filename', 'tool': 'caseportman-sfx@0.1', 'at': NOW,
+                                                  'input': 'pack and filename'}}})
     return cards

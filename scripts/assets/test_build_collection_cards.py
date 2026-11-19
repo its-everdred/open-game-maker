@@ -81,12 +81,14 @@ class Library(unittest.TestCase):
         paths = {f'Characters(100x100 split)/Orc/Orc/Orc_{action}.png': png(frames * 100, 100)
                  for action, frames in [('Idle', 6), ('Walk', 8), ('Attack01', 6),
                                         ('Attack02', 6), ('Hurt', 4), ('Death', 4)]}
+        paths['Characters(100x100 split)/Orc/Orc with shadows/Orc_Idle.png'] = png(600, 100)
         pack = add_pack(self.root, 'tinyrpg-characters-01-soldier-orc', 'tinyrpg', 'unknown-itch-free', paths)
         self.assertEqual(bcc.run(self.root, only=pack.name)['failures'], {})
         item, = (pack / 'cards').rglob('*.card.json')
         card = json.loads(item.read_text())
         self.assertTrue(validator_ok(item, pack / 'collection.card.json'))
         self.assertEqual(len(card['sprite']['animations'][1]['frames']), 8)
+        self.assertEqual(len(card['sprite']['animations'][0]['sheets']), 2)
 
     def test_limezu_reader_writes_valid_item_cards_from_canonical_size(self):
         pack = add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {

@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 from limezu_gif import metadata
-from smallscaleint import NOW, source
+from smallscaleint import NOW, png_info, source
 
 
 def build_cards(root: Path, collection: dict) -> list[dict]:
@@ -18,6 +18,16 @@ def build_cards(root: Path, collection: dict) -> list[dict]:
         animation = {'name': title, 'frames': list(range(info['frames'])),
                      'frame_size': {'width': info['width'], 'height': info['height']},
                      'files': [gif.relative_to(root).as_posix()]}
+        sheets = []
+        for path in gif.parent.glob('*.png'):
+            width, height, _ = png_info(path)
+            fw, fh = info['width'], info['height']
+            if width % fw == 0 and height % fh == 0 and width // fw * (height // fh) == info['frames']:
+                sheets.append({'path': path.relative_to(root).as_posix(), 'frame_w': fw, 'frame_h': fh,
+                               'cols': width // fw, 'rows': height // fh})
+        if len(sheets) == 1:
+            animation.pop('files')
+            animation['sheets'] = sheets
         if info['fps'] is not None:
             animation['fps'] = info['fps']
         pack, version = collection['id'].rsplit('@', 1)
