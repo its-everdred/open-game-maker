@@ -47,6 +47,11 @@ describe('licence table', () => {
     expect(licenseFor('synty-personal')?.id).toBe('LicenseRef-synty-personal');
     expect(licenseFor('sidetrax-royalty-free')?.id).toBe('LicenseRef-sidetrax-royalty-free');
     expect(licenseFor('LimeZu-commercial')?.id).toBe('LicenseRef-limezu-commercial');
+    expect(licenseFor('limezu-standard')).toMatchObject({
+      id: 'LicenseRef-limezu-standard',
+      processing: 'local-only',
+      ceiling: { audience: 'private', redistribution: 'in-build', attribution: null },
+    });
     expect(licenseFor('smallscaleint-itch')?.id).toBe('LicenseRef-smallscaleint-itch');
     expect(licenseFor('ansimuz-free-commercial')?.id).toBe('LicenseRef-ansimuz-free');
     expect(licenseFor('custom-commercial-ok')?.id).toBe('LicenseRef-hattap-commercial');

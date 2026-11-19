@@ -145,6 +145,10 @@ describe('style-families.json', () => {
     expect(setFor('limezu-modern-interiors')?.packs).toContainEqual(
       expect.objectContaining({ id: 'limezu-modern-interiors' }),
     );
+    expect(setFor('limezu-modern-farm')?.id).toBe('limezu-modern');
+    expect(
+      setFor('limezu-modern-farm')?.packs.find((pack) => pack.id === 'limezu-modern-farm')?.compatible_with,
+    ).toEqual(['limezu-modern-interiors', 'limezu-modern-exteriors', 'limezu-modern-user-interface']);
     expect(loadFamilies().flatMap((f) => f.sets)).toHaveLength(11);
   });
 

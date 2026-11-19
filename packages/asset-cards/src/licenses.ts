@@ -86,6 +86,15 @@ export const LICENSES: LicenseRow[] = [
     confirmed: { by: 'kevin', on: '2026-10-30' },
   },
   {
+    id: 'LicenseRef-limezu-standard',
+    aliases: ['limezu-standard', 'limezu'],
+    ceiling: { uses: PIXEL_USES, audience: 'private', redistribution: 'in-build', attribution: null },
+    processing: 'local-only',
+    ref: 'LimeZu Modern Farm licence',
+    note: 'Use and edits allowed in projects; credit appreciated; no resale or redistribution of assets.',
+    confirmed: { by: 'kevin', on: '2026-11-01' },
+  },
+  {
     id: 'LicenseRef-smallscaleint-itch',
     aliases: ['smallscaleint-itch'],
     ceiling: { uses: PIXEL_USES, audience: 'private', redistribution: 'in-build', attribution: null },

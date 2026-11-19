@@ -172,6 +172,19 @@ describe('card schemas', () => {
     if (!result.ok) expect(result.errors.join('\n')).toContain('path');
   });
 
+  it('validates animation frame dimensions as a pair', () => {
+    const card = structuredClone(
+      cardFixtureDocs().find(({ file }) => file === 'sprite-kenney-tiny-dungeon-knight.json')?.doc,
+    ) as { sprite: Record<string, unknown> };
+    const animation = { name: 'fire', frames: [0], frame_size: { width: 16, height: 16 } as Record<string, number> };
+    card.sprite.animations = [animation];
+    expect(validateCard(card)).toMatchObject({ ok: true });
+    delete animation.frame_size.height;
+    expect(validateCard(card)).toMatchObject({ ok: false });
+    animation.frame_size.height = 0;
+    expect(validateCard(card)).toMatchObject({ ok: false });
+  });
+
   it('reports the invalid interpretation author', () => {
     const result = validateCard(negativeFixture('interpretation-not-admin.json').doc);
     expect(result.ok).toBe(false);
