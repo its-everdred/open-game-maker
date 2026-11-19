@@ -2,6 +2,7 @@ import { createServer } from 'node:net';
 import { createAiurClient, type AiurClient } from '@ogm/aiur-client';
 
 import { preflight } from '../policy/preflight.js';
+import { externalPreflight, sameDirectory } from './external-preflight.js';
 import {
   aiurRoot,
   codexAuthFor,
@@ -171,6 +172,16 @@ export function createFleet(deps: FleetDeps) {
     for (const row of rows) {
       if (!LIVE_STATUSES.includes(row.status)) continue;
       const paths = daemonPaths(env.home, row.slug);
+      if (row.slug !== currentSlug && !(await sameDirectory(row.checkoutPath, paths.dir))) {
+        const managed = rows.filter((other) => other.slug !== row.slug);
+        const reasons = await externalPreflight(
+          row.checkoutPath,
+          env.home,
+          managed.map((other) => daemonPaths(env.home, other.slug).workspaces),
+        );
+        if (reasons.length) throw new FleetPreflightError(reasons.map((reason) => `${row.slug}: ${reason}`));
+        continue;
+      }
       const input = renderInputFor(row, paths, env, 'feature', rows);
       if (row.slug !== currentSlug) await materializeCodexHome(input, codexAuthFor(env));
       const verdict = await checkPolicy(paths.dir, input);

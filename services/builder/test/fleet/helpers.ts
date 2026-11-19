@@ -140,6 +140,11 @@ export function liveRow(
 
 export function buildFleet(home: string, overrides: Partial<FleetDeps> & { jobs?: Record<string, JobKind[]> } = {}) {
   const store = (overrides.store as ReturnType<typeof memoryStore> | undefined) ?? memoryStore();
+  for (const row of store.rows?.values() ?? []) {
+    if (row.checkoutPath === `/home/x/.local/share/ogm/daemons/${row.slug}`) {
+      row.checkoutPath = join(home, '.local/share/ogm/daemons', row.slug);
+    }
+  }
   const runner = (overrides.runner as ReturnType<typeof fakeRunner> | undefined) ?? fakeRunner();
   const fetchImpl = (overrides.fetch as ReturnType<typeof fakeFetch> | undefined) ?? fakeFetch([200]);
   const sleeps: number[] = [];

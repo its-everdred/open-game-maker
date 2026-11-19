@@ -18,11 +18,14 @@ Two layers, one uid (`<user>`). There is no VM and no second user.
 The profile's deny list is `DEFAULT_DENY_READ_ROOTS` in `services/builder/src/policy/profile.ts` plus the roots the
 daemon passes: every other game workspace, `~/github/aiur/.env` and `assets-local/`.
 
-Each daemon has a distinct `CODEX_HOME` at `~/.config/ogm/codex/<slug>`. Its atomic `config.toml` render names every
-other stored daemon workspace, and fleet membership changes re-render and preflight every live daemon profile.
+Each managed daemon has a distinct `CODEX_HOME` at `~/.config/ogm/codex/<slug>`. Its atomic `config.toml` render names every
+other stored daemon workspace, and fleet membership changes re-render and preflight every live managed daemon profile.
 `auth.json` is an absolute symlink to the existing `~/.config/ogm/codex-gamebuilder/auth.json` login, so the homes
 share only subscription authentication and never require a second login. The daemon env file supplies its
 `CODEX_HOME`; `agent.accounts.codex` stays empty so Aiur does not replace that path with a machine account profile.
+For an externally registered live daemon, the fleet checks its checkout config's workspace root and Codex writable
+roots for overlap with managed workspaces. Missing or unreadable config fails the check. This verifies write-path
+separation, not the external daemon's read-deny rules; its sandbox remains operator-managed.
 
 ## Probe result and the fallback in force
 

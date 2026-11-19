@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, readlink, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readlink, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -163,6 +163,58 @@ describe('ensureDaemon', () => {
     });
     expect(preflight.mock.calls[0]?.[0]).toBe(join(home, '.local/share/ogm/daemons/charlie'));
   });
+
+  it.each(['disjoint', 'workspace overlap', 'writable overlap', 'stopped overlap', 'unreadable'] as const)(
+    'checks an external peer: %s',
+    async (scenario) => {
+      const home = await tempHome();
+      const checkout = join(home, 'external');
+      const target = join(home, '.local/share/ogm/daemons/charlie/workspaces');
+      const stopped = join(home, '.local/share/ogm/daemons/old-game/workspaces');
+      const store = memoryStore([
+        liveRow(1, 'running', { slug: 'blobs', checkoutPath: checkout }),
+        liveRow(2, 'stopped', { slug: 'old-game' }),
+      ]);
+      if (scenario !== 'unreadable') {
+        await mkdir(join(checkout, '.aiur'), { recursive: true });
+        await writeFile(
+          join(checkout, '.aiur/config'),
+          JSON.stringify({
+            workspace: {
+              root:
+                scenario === 'workspace overlap'
+                  ? target
+                  : scenario === 'stopped overlap'
+                    ? stopped
+                    : join(home, 'external-workspaces'),
+            },
+            agent: {
+              codex: {
+                turn_sandbox_policy: {
+                  writableRoots: [scenario === 'writable overlap' ? home : join(home, 'external-write')],
+                },
+              },
+            },
+          }),
+        );
+      }
+      const { fleet, runner } = buildFleet(home, { store });
+      const result = await fleet.ensureDaemon({ slug: 'charlie', repo }, 'feature');
+      if (scenario === 'disjoint') {
+        expect(result).toMatchObject({ status: 'running', daemon: { slug: 'charlie' } });
+      } else {
+        expect(result).toEqual({
+          status: 'stopped',
+          reasons: [
+            scenario === 'unreadable'
+              ? 'blobs: cannot verify external daemon workspace and writableRoots'
+              : 'blobs: external daemon workspace or writableRoots overlaps a managed workspace',
+          ],
+        });
+        expect(systemctlCalls(runner)).not.toContain('--user start ogm-aiur@charlie.service');
+      }
+    },
+  );
 
   it('refuses a fifth daemon with waiting_capacity while four are live, without touching systemd', async () => {
     const home = await tempHome();
