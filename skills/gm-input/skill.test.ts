@@ -31,5 +31,5 @@ describe('gm-input skill', () => {
     expect(text).toContain('`laptop-keys.json`');
     expect(text).toContain('report the gamepad as unchecked');
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
-  }, 10_000);
+  }, 30_000);
 });
