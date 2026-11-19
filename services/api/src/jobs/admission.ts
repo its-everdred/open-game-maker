@@ -96,7 +96,12 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           .from(schema.jobs)
           .where(and(eq(schema.jobs.creatorId, actor.userId), eq(schema.jobs.idempotencyKey, request.idempotencyKey)))
           .get();
-        if (existing) return { created: false, response: acceptedFor(deps.db, existing), samePlan: JSON.parse(existing.plan).summary === request.plan.summary };
+        if (existing)
+          return {
+            created: false,
+            response: acceptedFor(deps.db, existing),
+            samePlan: JSON.parse(existing.plan).summary === request.plan.summary,
+          };
       }
 
       const settings = getBudgetSettings(deps.db, game.familyId, deps.defaults);

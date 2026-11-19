@@ -412,7 +412,9 @@ export class AiurComposer extends HTMLElementBase {
   }
 
   #fail(action, error) {
-    this.dispatchEvent(new CustomEvent('aiur-composer-error', { detail: { action, error }, bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent('aiur-composer-error', { detail: { action, error }, bubbles: true, composed: true }),
+    );
   }
 
   get disabled() {

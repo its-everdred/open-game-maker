@@ -58,7 +58,11 @@ export async function admitJob(
 ): Promise<AdmissionResult> {
   try {
     const accepted = await send<CreateJobAccepted>('/jobs', { method: 'POST', json: request });
-    return { kind: 'accepted', jobId: accepted.jobId, ...(accepted.reused ? { reused: true, samePlan: accepted.samePlan } : {}) };
+    return {
+      kind: 'accepted',
+      jobId: accepted.jobId,
+      ...(accepted.reused ? { reused: true, samePlan: accepted.samePlan } : {}),
+    };
   } catch (error) {
     const response = error as Partial<ApiError>;
     if (response.status !== 402 || !response.body || typeof response.body !== 'object') throw error;
