@@ -127,28 +127,6 @@ class Library(unittest.TestCase):
         self.assertIn('limezu-modern-farm', report['failures'])
         self.assertTrue(obsolete.exists())
 
-    def test_tinyrpg_reader_preserves_unknown_rights(self):
-        pack = add_pack(self.root, 'tinyrpg-characters-01-soldier-orc', 'tinyrpg', 'unknown-itch-free', {
-            'Characters(100x100 split)/Orc/Orc/Orc_Idle.png': png(200, 100),
-        })
-        report = bcc.run(self.root, only='tinyrpg-characters-01-soldier-orc')
-        self.assertEqual(report['failures'], {})
-        cards = list((pack / 'cards').rglob('*.card.json'))
-        self.assertEqual(len(cards), 1)
-        self.assertTrue(validator_ok(cards[0], pack / 'collection.card.json'))
-        self.assertEqual(card_of(self.root, 'tinyrpg-characters-01-soldier-orc')['rights']['uses'], ['vision-input'])
-
-    def test_ansimuz_effect_reader_is_selected_by_vendor_and_pack(self):
-        pack = add_pack(self.root, 'ansimuz-explosion-tutorial', 'ansimuz', 'ansimuz-free-commercial', {
-            'sprites/explosion1.png': png(32, 32), 'sprites/explosion2.png': png(32, 32),
-            'explosion.png': png(64, 32),
-        })
-        report = bcc.run(self.root, only='ansimuz-explosion-tutorial')
-        self.assertEqual(report['failures'], {})
-        cards = list((pack / 'cards').rglob('*.card.json'))
-        self.assertEqual(len(cards), 1)
-        self.assertTrue(validator_ok(cards[0]))
-
     def test_every_vendor_gets_a_valid_card_with_the_processing_default(self):
         """Packs the old script skipped (LimeZu) were invisible to search; vendor-licensed bytes must stay local."""
         rep = bcc.run(self.root)

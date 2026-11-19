@@ -26,9 +26,6 @@ sys.path.insert(0, str(HERE))
 import smallscaleint
 import smallscaleint_thumbnails
 import limezu_layout
-import caseportman_audio
-import tinyrpg_cards
-import ansimuz_effects
 
 REPO = Path(__file__).resolve().parents[2]
 TAGS = Path(__file__).parent / "data" / "collection_tags.jsonl"
@@ -52,11 +49,6 @@ SKIP_NAMES = {"preview.png", "sample.png", "license.txt", "icon.png"}
 # membership prevents a reader from replacing unrelated cards from that vendor.
 ITEM_BUILDERS = {
     "limezu": {"limezu-modern-farm": limezu_layout.build_cards},
-    "caseportman": {"caseportman-cute-cozy-ui-sfx": caseportman_audio.build_cards},
-    "tinyrpg": {"tinyrpg-characters-01-soldier-orc": tinyrpg_cards.build_cards,
-                "tinyrpg-characters-02-demon-blood-monster": tinyrpg_cards.build_cards},
-    "ansimuz": {"ansimuz-explosion-pack-1": ansimuz_effects.build_cards,
-                "ansimuz-explosion-tutorial": ansimuz_effects.build_cards},
 }
 
 

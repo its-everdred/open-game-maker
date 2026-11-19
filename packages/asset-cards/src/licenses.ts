@@ -55,19 +55,6 @@ export const LICENSES: LicenseRow[] = [
     confirmed: { by: 'kevin', on: '2026-10-30' },
   },
   {
-    id: 'LicenseRef-caseportman-royalty-free',
-    aliases: ['caseportman-royalty-free'],
-    ceiling: {
-      uses: ['in-game', 'placeholder', 'edit-audio', 'derive-audio'],
-      audience: 'private',
-      redistribution: 'in-build',
-      attribution: null,
-    },
-    processing: 'local-only',
-    ref: 'Case Portman Cute & Cozy UI SFX licence',
-    note: 'Project use and audio edits allowed; no standalone resale or redistribution; no credit required.',
-  },
-  {
     id: 'LicenseRef-hattap-commercial',
     aliases: ['custom-commercial-ok'],
     ceiling: { uses: PIXEL_USES, audience: 'private', redistribution: 'in-build', attribution: null },
@@ -142,7 +129,7 @@ export const LICENSES: LicenseRow[] = [
   },
   {
     id: 'NOASSERTION',
-    aliases: ['unknown-itch-free'],
+    aliases: [],
     ceiling: { uses: ['vision-input'], audience: 'private', redistribution: 'none', attribution: null },
     processing: 'local-only',
     ref: 'none',
