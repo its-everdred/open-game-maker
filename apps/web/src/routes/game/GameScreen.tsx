@@ -17,7 +17,6 @@ import {
   getEditorStage,
   getPreviewDesign,
   getScenerySource,
-  getOptionalReapply,
   postAnalyticsEvent,
   NO_BUILD_ID,
   submitReapply,
