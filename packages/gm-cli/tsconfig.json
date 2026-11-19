@@ -11,6 +11,7 @@
     { "path": "../contracts" },
     { "path": "../asset-cards" },
     { "path": "../asset-measure" },
+    { "path": "../asset-previews" },
     { "path": "../blob-store" },
     { "path": "../game-repo-template" },
     { "path": "../gm-verify" }

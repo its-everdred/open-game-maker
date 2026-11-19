@@ -91,6 +91,7 @@ describe('command registry', () => {
       'packs import',
       'packs index',
       'packs sync',
+      'packs tag',
       'perf',
       'plan check',
       'plan premises',

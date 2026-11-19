@@ -206,7 +206,11 @@ The importer copies originals, preflights every archive member before extraction
 gm packs import --confirm <collection-id> --license <SPDX-or-LicenseRef> --confirmed-by kevin --json
 ```
 
-Confirmation recomputes effective rights from the licence table and makes draft/measured assets searchable. Tagging and rendered 3D previews remain OGM-065 work.
+Confirmation recomputes effective rights from the licence table and makes draft/measured assets searchable. Run
+`gm packs tag --kind <audio|map|model|sprite> --only <pack-id>` to add local-model judgments and previews. The command
+requires effective `vision-input` rights, honors `local-only` processing, and restores prior card files if a worker or
+schema validation fails. Human or vendor guidance in `pack.json` is copied to descriptive hints; it is not recorded as
+a measured fact. Private collections write derivatives only below `private/previews/`.
 
 ## Pinned tier-2 mirrors
 

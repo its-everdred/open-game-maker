@@ -1,7 +1,7 @@
 """Tag the exported CC3+ maps per C3 at three depths (cards, CAD sidecar, the image) and write validated cards.
 
 usage: scripts/py/audio/.venv/bin/python -I scripts/py/maps/tag_maps.py analyse [--workers N]   # sha, thumbnail, CLIP embedding per map
-       scripts/py/audio/.venv/bin/python -I scripts/py/maps/tag_maps.py cards                   # score labels, write cards, validate
+       scripts/py/audio/.venv/bin/python -I scripts/py/maps/tag_maps.py cards [--json]          # score labels, write cards, validate
 
 Depth 1 (card): map type, setting (folder only), environment, objects (from CAD symbol names), keywords (from map labels), grid,
 publication. Depth 2 (sidecar, already written by the export): every symbol and label with coordinates, referenced from
@@ -11,21 +11,26 @@ decides only when they say nothing, and its judgments are ranked by lift against
 Kevin's first review (2026-10-29) added map.is_map, map.usable, map.view and map.scale. They come from folder and file names
 plus ink coverage, not CLIP: zero-shot CLIP called a castle plan a "diagram" and a city panorama "top-down". Non-maps (standees,
 tokens, symbol sheets, papercraft) and unusable maps keep their cards so search can filter them out."""
-import argparse, hashlib, json, re, subprocess, sys
+import argparse, copy, hashlib, json, os, re, subprocess, sys
 from collections import Counter, defaultdict
 from datetime import datetime
 from multiprocessing import Pool
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from preview_paths import safe_preview
+
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import layout_fields
 
 REPO = Path(__file__).resolve().parents[3]
-COLL_DIR = REPO / "assets-local/inspiration/profantasy-cc3"
+ASSETS_ROOT = Path(os.environ.get("OGM_ASSETS_ROOT", REPO / "assets-local"))
+COLL_DIR = ASSETS_ROOT / "inspiration/profantasy-cc3"
 MAPS = COLL_DIR / "maps"
 ANALYSIS = COLL_DIR / "analysis"
-PREVIEWS = REPO / "assets-local"
+PREVIEWS = ASSETS_ROOT
 SCHEMAS = REPO / "docs/research/v0.5/schemas"
 CLIP_ID = "openai/clip-vit-large-patch14"
 VERSION = "v1"
@@ -35,6 +40,52 @@ TOOL = "tag_maps@0.1"
 NOW = datetime.now().astimezone().isoformat(timespec="seconds")
 HASH_MANIFEST = "private/hash-manifests/profantasy-cc3-v1.txt"  # written by hash_manifest.py
 NOT_MAPS = re.compile(r"(^|/)(Parts|Symbols)/")  # grid templates, altitude keys and symbol catalogues: hash-listed, not carded
+
+
+def preserve_card(previous: dict, generated: dict) -> dict:
+    """Keep ownership and human-locked values when regenerating map descriptions."""
+    merged = copy.deepcopy(generated)
+    for field in ("rights", "license", "source"):
+        if field in previous:
+            merged[field] = copy.deepcopy(previous[field])
+        else:
+            merged.pop(field, None)
+    for dotted, provenance in previous.get("provenance", {}).items():
+        if not isinstance(provenance, dict) or not provenance.get("locked") or dotted == "*":
+            continue
+        parts = dotted.split(".")
+        value = previous
+        for part in parts:
+            if not isinstance(value, dict) or part not in value:
+                break
+            value = value[part]
+        else:
+            target = merged
+            for part in parts[:-1]:
+                target = target.setdefault(part, {})
+            target[parts[-1]] = copy.deepcopy(value)
+            merged.setdefault("provenance", {})[dotted] = copy.deepcopy(provenance)
+    return merged
+
+
+def card_record(path: str, card: dict) -> dict:
+    return {"card": path, "status": card["status"], "flags": card.get("flags", [])}
+
+
+def emit(record: dict, json_mode: bool = False, summary: bool = False):
+    stream = sys.stderr if json_mode and summary else sys.stdout
+    print(json.dumps(record), file=stream, flush=True)
+
+
+def stage_json(out: Path, payload: dict, indent=1) -> Path:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    staged = out.with_name(out.name + ".part")
+    staged.write_text(json.dumps(payload, indent=indent) + "\n")
+    return staged
+
+
+def promote(staged: Path, out: Path):
+    staged.replace(out)
 
 MAP_TYPES = {"dungeon": "a top-down dungeon map with rooms and corridors", "cave": "a map of natural caves and caverns",
              "castle": "a floor plan of a castle", "keep": "a floor plan of a fortified keep tower", "temple": "a floor plan of a temple",
@@ -98,12 +149,60 @@ LEVELS = {"cellar": {"cellar", "cellars", "basement"}, "ground": {"ground"}, "up
 LABEL_STOP = {"scale", "feet", "foot", "miles", "mile", "north", "south", "east", "west", "level", "map", "the", "and", "of"}
 
 
-def maps():
+def map_rights():
+    if COLL_DIR.parent.is_symlink() or COLL_DIR.is_symlink():
+        raise ValueError("collection directory symlinks are not allowed")
+    if (COLL_DIR / "collection.card.json").is_symlink():
+        raise ValueError("collection card symlinks are not allowed")
+    collection_card = json.loads((COLL_DIR / "collection.card.json").read_text())
+    collection = collection_card.get("rights")
+    by_source = {}
+    if (COLL_DIR / "cards").is_symlink():
+        raise ValueError("card directory symlinks are not allowed")
+    for path in sorted((COLL_DIR / "cards").rglob("*.card.json")):
+        if path.is_symlink():
+            raise ValueError(f"card symlink is not allowed: {path}")
+        card = json.loads(path.read_text())
+        if card.get("collection") is not None and card.get("collection") != collection_card.get("id"):
+            raise ValueError(f"asset card belongs to a different collection: {path}")
+        for source in card.get("source", {}).get("files", []):
+            name = source.get("path")
+            if isinstance(name, str):
+                if not name or "\\" in name or name.startswith("/") or any(part in ("", ".", "..") for part in name.split("/")):
+                    raise ValueError(f"noncanonical map source path in {path}: {name}")
+                rel = name.removeprefix("maps/")
+                candidate = MAPS.resolve() / rel
+                if candidate.resolve() != candidate or not candidate.resolve().is_relative_to(MAPS.resolve()):
+                    raise ValueError(f"map source alias in {path}: {name}")
+                if card.get("status") == "reviewed" or card.get("provenance", {}).get("*", {}).get("locked"):
+                    by_source.setdefault(rel, []).append({})
+                elif "rights" in card:
+                    by_source.setdefault(rel, []).append(card["rights"])
+    return collection, by_source
+
+
+def rights_allow_map(rel: str, policy=None) -> bool:
+    try:
+        collection, by_source = policy if policy is not None else map_rights()
+        grants = [collection, *by_source.get(rel, [])]
+        return all(isinstance(rights, dict) and "vision-input" in rights.get("uses", [])
+                   and rights.get("processing", "local-only") in ("any", "local-only") for rights in grants)
+    except (OSError, json.JSONDecodeError, TypeError):
+        return False
+
+
+def maps(policy=None):
+    if not MAPS.resolve().is_relative_to(COLL_DIR.resolve()):
+        raise ValueError("map directory escapes its collection")
     for png in sorted(MAPS.rglob("*.png")):
+        if png.resolve() != MAPS.resolve() / png.relative_to(MAPS) or not png.resolve().is_relative_to(MAPS.resolve()):
+            raise ValueError(f"map source escapes its collection: {png}")
         rel = png.relative_to(MAPS).as_posix()
         meta = png.with_suffix(".json")
-        if NOT_MAPS.search(rel) or not meta.exists():
+        if NOT_MAPS.search(rel) or not meta.exists() or not rights_allow_map(rel, policy):
             continue
+        if not meta.resolve().is_relative_to(MAPS.resolve()):
+            raise ValueError(f"map metadata escapes collection: {meta}")
         if json.loads(meta.read_text()).get("ok"):
             yield png
 
@@ -120,8 +219,11 @@ def clip():
     if _M is None:
         import torch
         from transformers import CLIPModel, CLIPProcessor
-        torch.set_num_threads(3)
-        _M = (CLIPModel.from_pretrained(CLIP_ID).eval(), CLIPProcessor.from_pretrained(CLIP_ID))
+        torch.set_num_threads(int(os.environ.get("OGM_TORCH_THREADS", "3")))
+        _M = (
+            CLIPModel.from_pretrained(CLIP_ID, local_files_only=True).eval(),
+            CLIPProcessor.from_pretrained(CLIP_ID, local_files_only=True),
+        )
     return _M
 
 
@@ -139,8 +241,8 @@ def analyse(png: Path):
         im = im.convert("RGB")
         im.thumbnail((1024, 1024))
         key = f"private/previews/{h[:2]}/{h[:16]}-thumb.webp"  # redistribution none: private prefix (C3 §7)
-        (PREVIEWS / key).parent.mkdir(parents=True, exist_ok=True)
-        im.save(PREVIEWS / key, "WEBP", quality=80)
+        preview = safe_preview(PREVIEWS, key, create=True)
+        im.save(preview, "WEBP", quality=80)
         def square(x):
             s = max(x.size)
             c = Image.new("RGB", (s, s), "white")
@@ -287,11 +389,38 @@ def text_type(rel: str):
     return None
 
 
-def cards():
+def safe_analysis_row(path: Path) -> dict:
+    analysis_root = ANALYSIS.resolve()
+    if not analysis_root.is_relative_to(COLL_DIR.resolve()) or not path.resolve().is_relative_to(analysis_root):
+        raise ValueError(f"map sidecar escapes collection: {path}")
+    row = json.loads(path.read_text())
+    rel = row["map"]
+    expected = str(path.relative_to(ANALYSIS)).removesuffix(".analysis.json")
+    if not isinstance(rel, str) or str(Path(rel).with_suffix("")) != expected:
+        raise ValueError(f"map sidecar does not match source: {path}")
+    maps_root = MAPS.resolve()
+    source = (MAPS / rel).resolve()
+    if (not maps_root.is_relative_to(COLL_DIR.resolve()) or source != maps_root / rel
+            or not source.is_relative_to(maps_root)):
+        raise ValueError(f"map source escapes collection: {rel}")
+    for related in (source.with_suffix(".json"), source.with_name(source.stem + ".entities.json")):
+        if not related.resolve().is_relative_to(maps_root):
+            raise ValueError(f"map metadata escapes collection: {related}")
+    preview_root = (ASSETS_ROOT / "private/previews").resolve()
+    thumb = safe_preview(ASSETS_ROOT, row["thumb"]).resolve()
+    if not preview_root.is_relative_to(ASSETS_ROOT.resolve()) or not thumb.is_relative_to(preview_root):
+        raise ValueError(f"map preview escapes private bucket: {row['thumb']}")
+    return row
+
+
+def cards(json_mode=False, limit=0, policy=None):
     import torch
     from transformers import CLIPModel, CLIPProcessor
-    rows = [json.loads(p.read_text()) for p in sorted(ANALYSIS.rglob("*.analysis.json"))]
-    m, p = CLIPModel.from_pretrained(CLIP_ID).eval(), CLIPProcessor.from_pretrained(CLIP_ID)
+    torch.set_num_threads(int(os.environ.get("OGM_TORCH_THREADS", "3")))
+    rows = [row for p in sorted(ANALYSIS.rglob("*.analysis.json"))
+            if rights_allow_map((row := safe_analysis_row(p))["map"], policy)]
+    m = CLIPModel.from_pretrained(CLIP_ID, local_files_only=True).eval()
+    p = CLIPProcessor.from_pretrained(CLIP_ID, local_files_only=True)
     sets = {"map_type": (list(MAP_TYPES), list(MAP_TYPES.values())),
             "environments": (list(ENVIRONMENTS), [f"a map of {v}" for v in ENVIRONMENTS.values()])}
     with torch.no_grad():
@@ -306,10 +435,12 @@ def cards():
             z = np.exp(z - z.max(1, keepdims=True))
             r["_p"][k] = (z / z.sum(1, keepdims=True)).mean(0)
     mean = {k: np.mean([r["_p"][k] for r in rows], 0) for k in sets}
-    seen, dups, written = {}, [], 0
+    seen, dups, written, records = {}, [], 0, []
     outdir = COLL_DIR / "cards"
     type_counts = Counter()
-    for r in sorted(rows, key=lambda r: (r["map"].startswith("Source Maps"), r["map"])):  # keep the non-"Source Maps" copy of duplicates
+    selected_rows = sorted(rows, key=lambda r: (r["map"].startswith("Source Maps"), r["map"]))
+    selected_rows = selected_rows[:limit] if limit else selected_rows
+    for r in selected_rows:  # keep the non-"Source Maps" copy of duplicates
         if r["sha256"] in seen:
             dups.append((r["map"], seen[r["sha256"]]))
             continue
@@ -417,50 +548,53 @@ def cards():
         if flags:
             card["flags"] = flags
         out = outdir / (kebab(Path(rel).with_suffix("").as_posix()) + ".card.json")
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(card, indent=1) + "\n")
+        if out.is_file():
+            previous = json.loads(out.read_text())
+            rights = previous.get("rights")
+            if rights is not None and ("vision-input" not in rights.get("uses", []) or rights.get("processing", "local-only") not in ("any", "local-only")):
+                continue
+            card = preserve_card(previous, card)
+        staged = stage_json(out, card)
+        records.append((out, staged, card))
         seen[r["sha256"]] = card["id"]
         type_counts[map_type] += 1
         written += 1
     (COLL_DIR / "duplicates.json").write_text(json.dumps([{"duplicate": d, "same_as": k} for d, k in dups], indent=1) + "\n")
-    write_collection(written, type_counts)
-    print(json.dumps({"analysed": len(rows), "cards": written, "duplicates": len(dups), "map_types": dict(type_counts.most_common())}))
-    cardsf = sorted(str(x) for x in outdir.rglob("*.card.json"))
+    emit({"analysed": len(rows), "cards": written, "duplicates": len(dups), "map_types": dict(type_counts.most_common())}, json_mode, summary=True)
+    cardsf = sorted(str(x) for x in outdir.rglob("*.card.json")) + [str(staged) for _, staged, _ in records]
     rr = subprocess.run(["node", str(SCHEMAS / "tools/validate.mjs"), str(SCHEMAS), str(COLL_DIR / "collection.card.json"), *cardsf],
                         capture_output=True, text=True)
     fails = [l for l in rr.stdout.splitlines() if l.startswith("FAIL")]
-    print(json.dumps({"validated": len(cardsf), "fail_lines": len(fails), "rc": rr.returncode}))
+    emit({"validated": len(cardsf), "fail_lines": len(fails), "rc": rr.returncode}, json_mode, summary=True)
     for l in fails[:20]:
-        print(l)
+        print(l, file=sys.stderr if json_mode else sys.stdout)
+    if rr.returncode:
+        if json_mode:
+            for path, staged, _ in records:
+                if any(staged.name in failure for failure in fails):
+                    emit({"card": path.relative_to(ASSETS_ROOT).as_posix(), "status": "invalid", "flags": [], "errors": fails})
+        for _, staged, _ in records:
+            staged.unlink(missing_ok=True)
+        raise SystemExit(1)
+    for path, staged, _ in records:
+        promote(staged, path)
+    if not json_mode:
+        write_collection(written, type_counts)
+    if json_mode:
+        for path, _, card in records:
+            emit(card_record(path.relative_to(ASSETS_ROOT).as_posix(), card), json_mode=True)
 
 
 def write_collection(n, type_counts):
-    """Rights: Kevin's 2026-10-26 decision (inspiration only). The EULA reading is not yet confirmed, so the strict default
-    applies and effective rights are vision-input only; confirming the licence entry unlocks derive-layout."""
-    lic = {"type": "license", "license": "LicenseRef-profantasy-eula", "ref": "ProFantasy EULA shipped with the CC3+ installers",
-           "uses": ["derive-layout", "style-reference", "vision-input"], "audience": "private", "redistribution": "none", "attribution": None,
-           "set_by": {"role": "intake-code"}, "date": "2026-10-28",
-           "note": "Proposed ceiling for a purchased product used privately. Needs Kevin's confirmation of the EULA reading (confirmed_by)."}
-    default = {"type": "default", "uses": ["vision-input"], "audience": "private", "redistribution": "none", "set_by": {"role": "intake-code"},
-               "date": "2026-10-28"}
-    decision = {"type": "decision", "uses": ["derive-layout", "vision-input"], "audience": "private", "redistribution": "none",
-                "set_by": {"role": "admin", "name": "kevin"}, "date": "2026-10-26",
-                "note": "Inspiration only: agents learn layouts; images and symbols never used in a game, not even as placeholders (C2 §9)."}
-    files_total = sum(1 for f in MAPS.rglob("*") if f.is_file())
-    card = {"schema": "ogm.asset-card/1.0", "vocab": VOCAB, "id": COLL_ID, "card_type": "collection", "status": "tagged",
-            "title": "Campaign Cartographer 3+ maps (ProFantasy)", "license": "LicenseRef-profantasy-eula",
-            "rights": {"uses": ["vision-input"], "audience": "private", "redistribution": "none", "attribution": None,
-                       "basis": [lic, default, decision]},
-            "describe": {"description": "Every map shipped with Kevin's CC3+ bundle (examples, Cartographer's Annual issues, castles, temples, cities), exported to PNG with grid scale and CAD symbol/label sidecars.",
-                         "environments": ["dungeon", "castle", "temple", "city", "town"], "settings": ["fantasy", "medieval", "sci-fi"],
-                         "roles": ["layout-reference"]},
-            "collection_info": {"vendor": "profantasy", "version": VERSION, "origin": "vendor-pack", "counts": {"inspiration/map": n},
-                                "creation_choice": False, "files_total": files_total,
-                                **({"hash_manifest": HASH_MANIFEST} if (REPO / "assets-local" / HASH_MANIFEST).exists() else {})},
-            "provenance": {"*": {"by": "code", "tool": TOOL, "at": NOW},
-                           "rights": {"by": "license", "tool": TOOL, "at": NOW, "input": "proposed licence + strict default + Kevin's decision"},
-                           "describe": {"by": "code", "tool": TOOL, "at": NOW, "input": "folder list"}}}
-    (COLL_DIR / "collection.card.json").write_text(json.dumps(card, indent=1) + "\n")
+    """Refresh map counts while preserving intake-owned rights and human edits."""
+    path = COLL_DIR / "collection.card.json"
+    collection = json.loads(path.read_text())
+    provenance = collection.get("provenance", {})
+    if any(provenance.get(key, {}).get("locked") for key in ("*", "collection_info", "collection_info.counts")):
+        return
+    info = collection.setdefault("collection_info", {})
+    info["counts"] = {**info.get("counts", {}), "inspiration/map": n}
+    promote(stage_json(path, collection), path)
 
 
 def main():
@@ -468,20 +602,36 @@ def main():
     ap.add_argument("step", choices=["analyse", "cards"])
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
+    if (COLL_DIR / "collection.card.json").is_symlink():
+        raise ValueError("collection card symlinks are not allowed")
+    if (COLL_DIR / "cards").is_symlink():
+        raise ValueError("card directory symlinks are not allowed")
+    card_paths = sorted((COLL_DIR / "cards").rglob("*.card.json"))
+    if any(path.is_symlink() for path in card_paths):
+        raise ValueError("card symlinks are not allowed")
+    inputs = [str(COLL_DIR / "collection.card.json"), *(str(path) for path in card_paths)]
+    result = subprocess.run(["node", str(SCHEMAS / "tools/validate.mjs"), str(SCHEMAS), *inputs], capture_output=True, text=True)
+    if result.returncode:
+        print("card validation failed before map analysis: " + (result.stderr or result.stdout)[-3000:], file=sys.stderr)
+        raise SystemExit(1)
+    policy = map_rights()
     if a.step == "analyse":
-        jobs = list(maps())
+        jobs = list(maps(policy))
         jobs = jobs[:a.limit] if a.limit else jobs
-        print(json.dumps({"maps": len(jobs)}), flush=True)
+        emit({"maps": len(jobs)}, a.json, summary=True)
         c = Counter()
         with Pool(a.workers) as pool:
             for r in pool.imap_unordered(analyse, jobs):
                 c[r["status"]] += 1
-                if r["status"] == "fail":
-                    print(json.dumps(r), flush=True)
-        print(json.dumps({"done": dict(c)}), flush=True)
+                if r["status"] != "skip":
+                    emit(r, a.json)
+        emit({"done": dict(c)}, a.json, summary=True)
+        if c.get("fail"):
+            raise SystemExit(1)
     else:
-        cards()
+        cards(a.json, a.limit, policy)
 
 
 if __name__ == "__main__":

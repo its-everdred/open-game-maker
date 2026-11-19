@@ -367,10 +367,17 @@
         "materials": { "type": "array", "items": { "$ref": "#/$defs/vocab/material" }, "uniqueItems": true },
         "condition": { "$ref": "#/$defs/vocab/condition" },
         "style_family": { "$ref": "#/$defs/vocab/styleFamily" },
-        "set": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Measured visual-compatibility group nested under style_family." },
+        "set": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Compatibility group nested under style_family. Visual sets use measured appearance; audio sets may combine measured rhythm/key with declared local-model timbre provenance." },
         "world": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Curated world grouping within a compatibility set." },
         "pov_fit": { "type": "array", "items": { "$ref": "#/$defs/vocab/pov" }, "uniqueItems": true },
         "keywords": { "type": "array", "items": { "$ref": "#/$defs/tag" }, "maxItems": 12, "uniqueItems": true, "description": "Free search words that fit no other field (e.g. colour names, vendor naming). Not faceted." },
+        "hints": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "maxItems": 12,
+          "uniqueItems": true,
+          "description": "Human, collection, or vendor guidance copied as judgment input. Searchable but never treated as a measured fact or facet."
+        },
         "genre": { "type": "array", "items": { "$ref": "#/$defs/vocab/genre" }, "uniqueItems": true, "maxItems": 3 },
         "instruments": { "type": "array", "items": { "$ref": "#/$defs/vocab/instrument" }, "uniqueItems": true, "maxItems": 10 },
         "has_vocals": { "type": "boolean" },

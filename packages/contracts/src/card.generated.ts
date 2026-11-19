@@ -1166,7 +1166,7 @@ export interface Describe {
     | "photoreal"
     | "any";
   /**
-   * Measured visual-compatibility group nested under style_family.
+   * Compatibility group nested under style_family. Visual sets use measured appearance; audio sets may combine measured rhythm/key with declared local-model timbre provenance.
    */
   set?: string;
   /**
@@ -1196,6 +1196,25 @@ export interface Describe {
     | [Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag]
     | [Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag]
     | [Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag, Tag];
+  /**
+   * Human, collection, or vendor guidance copied as judgment input. Searchable but never treated as a measured fact or facet.
+   *
+   * @maxItems 12
+   */
+  hints?:
+    | []
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string]
+    | [string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string];
   /**
    * @maxItems 3
    */

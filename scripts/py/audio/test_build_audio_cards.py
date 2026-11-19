@@ -1,8 +1,10 @@
 """Tests for the card step's rules: each encodes a promise the cards make to agents searching them."""
 import sys
+import json
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
 import build_audio_cards as b
@@ -108,6 +110,135 @@ def test_plate_is_not_a_material_word():
     assert "plate" not in b.MAT_WORDS
 
 
+def test_worker_card_record_has_only_the_json_lines_contract_fields():
+    assert b.card_record("packs/music/cards/track.card.json", {"status": "tagged", "flags": ["low-confidence"]}) == {
+        "card": "packs/music/cards/track.card.json",
+        "status": "tagged",
+        "flags": ["low-confidence"],
+    }
+
+
+def test_staged_card_preserves_previous_file_until_promotion(tmp_path):
+    out = tmp_path / "track.card.json"
+    out.write_text("old\n")
+    staged = b.stage_json(out, {"status": "tagged"})
+
+    assert out.read_text() == "old\n"
+    assert staged.name.endswith(".part")
+    b.promote(staged, out)
+    assert '"status": "tagged"' in out.read_text()
+
+
+def test_manifest_hints_supply_genre_without_pack_id_heuristics():
+    assert b.hint_genres(["Dark retro", "Chiptune", "Action-adventure / RPG"]) == ["chiptune"]
+    assert b.hint_genres(["Dark impacts"]) == []
+
+
+def test_locked_human_set_and_hints_survive_a_generated_card_merge():
+    previous = {
+        "describe": {"set": "kevin-set", "hints": ["hand-picked"]},
+        "provenance": {
+            "describe.set": {"by": "human", "at": "2026-11-01T00:00:00Z", "locked": True},
+            "describe.hints": {"by": "human", "at": "2026-11-01T00:00:00Z", "locked": True},
+        },
+    }
+    generated = {
+        "describe": {"set": "model-set", "hints": ["manifest"]},
+        "provenance": {"describe.set": {"by": "model"}, "describe.hints": {"by": "collection"}},
+    }
+    merged = b.preserve_locked(previous, generated)
+    assert merged["describe"]["set"] == "kevin-set"
+    assert merged["describe"]["hints"] == ["hand-picked"]
+    assert merged["provenance"]["describe.set"]["locked"] is True
+
+
+def test_existing_card_keeps_rights_license_and_source_when_retagged():
+    previous = {"rights": {"uses": ["vision-input"]}, "license": "owned", "source": {"files": ["original"]}}
+    generated = {"rights": {"uses": []}, "license": "other", "source": {"files": ["changed"]}}
+    assert b.preserve_locked(previous, generated) == previous
+
+
+def test_pack_derivatives_write_private_sheet_and_medley_to_collection(tmp_path, monkeypatch):
+    pid = "drive-barbarian-chiptune"
+    pack = tmp_path / "packs" / pid
+    for name in ("01", "02"):
+        (pack / "v1" / "extracted").mkdir(parents=True, exist_ok=True)
+        (pack / "v1" / "extracted" / f"{name}.wav").write_bytes(b"wav")
+        tile = pack / "v1" / "analysis" / f"{name}.preview.png"
+        tile.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (b.P.TILE_WIDTH, b.P.TILE_HEIGHT), "black").save(tile)
+    items = [
+        {
+            "file": f"{name}.wav",
+            "music": True,
+            "sha256": name * 32,
+            "_ver": "v1",
+            "preview_tile": f"analysis/{name}.preview.png",
+            "measure": {"audio": {"duration_s": 60.0}, "sidecar": {"downbeats_s": [0.0]}},
+        }
+        for name in ("01", "02")
+    ]
+    collection = {"rights": {"redistribution": "free"}}
+    items[0]["_preview_prefix"] = "private/previews"
+    medley_entries = []
+
+    def fake_medley(entries, out):
+        medley_entries.extend(entries)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"ogg")
+
+    monkeypatch.setattr(b, "ROOT", tmp_path)
+    monkeypatch.setattr(b.P, "make_medley", fake_medley)
+    assert b.build_pack_derivatives(pid, items, collection, tmp_path / "packs")
+    assert collection["previews"]["sheet"].startswith("private/previews/")
+    assert collection["previews"]["clip"].startswith("private/previews/")
+    assert len(medley_entries) == 2
+    first_clip = collection["previews"]["clip"]
+    for item in items:
+        item["measure"]["sidecar"]["downbeats_s"] = [5.0]
+    second_collection = {"rights": {"redistribution": "none"}}
+    assert b.build_pack_derivatives(pid, items, second_collection, tmp_path / "packs")
+    assert second_collection["previews"]["clip"] != first_clip
+
+
+def test_limit_still_builds_pack_derivatives_from_every_analysed_track(tmp_path, monkeypatch):
+    packs = tmp_path / "packs"
+    pack = packs / "music-pack"
+    pack.mkdir(parents=True)
+    (pack / "collection.card.json").write_text('{"id":"t1:music-pack@v1","collection_info":{"counts":{}}}')
+    probabilities = np.full(len(b.L.SFX_EVENTS), 1 / len(b.L.SFX_EVENTS))
+    materials = np.full(len(b.L.MATERIALS), 1 / len(b.L.MATERIALS))
+    rows = [
+        {
+            "_pack": "music-pack",
+            "_ver": "v1",
+            "_sidecar": pack / "v1" / "analysis" / f"sound-{index}.analysis.json",
+            "file": f"sound-{index}.wav",
+            "sha256": str(index + 1) * 64,
+            "bytes": 10,
+            "music": False,
+            "measure": {"audio": {"duration_s": 1.0, "peak_dbfs": -1.0}},
+            "preview": {"waveform": f"private/previews/{index}.png"},
+            "vendor": {},
+            "_p": {"sfx_event": probabilities, "sfx_material": materials},
+        }
+        for index in range(2)
+    ]
+    derivative_sizes = []
+    monkeypatch.setattr(
+        b,
+        "build_pack_derivatives",
+        lambda _pid, items, _collection, _packs: derivative_sizes.append(len(items)) or False,
+    )
+    means = {(False, "sfx_event"): probabilities, (False, "sfx_material"): materials}
+
+    written, _, records, _ = b.build(rows, b.prompts(), means, packs, update_counts=False, limit=1)
+
+    assert written == 1
+    assert len(records) == 1
+    assert derivative_sizes == [2]
+
+
 def test_voice_lines_have_no_material():
     """'We need wood' is a spoken line, not a wooden sound."""
     desc, *_ = _sfx("we_need_wood", "kenney-synth-voice-2")
@@ -140,3 +271,70 @@ def test_library_summary_is_one_line_within_the_cap():
     assert summary == "3 footstep; 2 loop; moods tense; genres chiptune; materials stone"
     assert b.library_summary([("music/track", {})]) == "1 track"
     assert len(b.library_summary([("sfx/other", {"moods": [f"m{i}" for i in range(3)] * 2})] * 40)) <= b.SUMMARY_MAX
+def test_pack_derivatives_wait_for_every_music_preview_tile(tmp_path):
+    """A --limit run leaves older sidecars without preview tiles; the pack sheet waits for them instead of crashing."""
+    items = [
+        {"file": "01.wav", "music": True, "sha256": "1" * 64, "_ver": "v1", "preview_tile": "analysis/01.preview.png"},
+        {"file": "02.wav", "music": True, "sha256": "2" * 64, "_ver": "v1"},
+    ]
+    collection = {"rights": {"redistribution": "none"}}
+    assert b.build_pack_derivatives("pack", items, collection, tmp_path / "packs") is False
+    assert "previews" not in collection
+
+
+def test_only_selects_exactly_the_repeated_packs():
+    """gm passes one --only per rights-eligible collection; a refused pack must not ride along on a shared glob."""
+    assert b.matches_any("kenney-music-loops", ["kenney-music-loops", "drive-barbarian-chiptune"])
+    assert not b.matches_any("refused-pack", ["kenney-music-loops", "drive-barbarian-chiptune"])
+    assert b.matches_any("anything", None)
+    assert b.matches_any("kenney-music-loops", "kenney-*")
+
+
+def test_validation_ignores_unselected_invalid_pack(tmp_path):
+    fixture = b.REPO / "packages/contracts/fixtures/cards/collection-kenney-mini-dungeon.json"
+    selected = tmp_path / "selected"
+    other = tmp_path / "other"
+    selected.mkdir()
+    other.mkdir()
+    (selected / "collection.card.json").write_text(fixture.read_text())
+    (other / "collection.card.json").write_text("not json")
+    result = b.validate(tmp_path, [], ["selected"])
+    assert result[0] == 0, result[-1]
+
+
+def test_load_ignores_old_pack_versions(tmp_path):
+    pack = tmp_path / "pack"
+    (pack / "cards").mkdir(parents=True)
+    (pack / "pack.json").write_text(json.dumps({"current": "v2"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    for version in ("v1", "v2"):
+        analysis = pack / version / "analysis"
+        analysis.mkdir(parents=True)
+        (analysis / "track.analysis.json").write_text(json.dumps({"file": "track.wav"}))
+    rows = b.load(tmp_path)
+    assert len(rows) == 1
+    assert rows[0]["_ver"] == "v2"
+
+
+def test_load_rejects_sidecar_source_and_tile_escaping_collection(tmp_path):
+    import pytest
+    pack = tmp_path / "pack"
+    analysis = pack / "v1" / "analysis"
+    analysis.mkdir(parents=True)
+    (pack / "cards").mkdir()
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    sidecar = analysis / "track.analysis.json"
+    sidecar.write_text(json.dumps({"file": "other.wav"}))
+    with pytest.raises(ValueError, match="does not match"):
+        b.load(tmp_path)
+    extracted = pack / "v1" / "extracted"
+    extracted.mkdir()
+    (extracted / "track.wav").symlink_to(tmp_path / "secret.wav")
+    sidecar.write_text(json.dumps({"file": "track.wav"}))
+    with pytest.raises(ValueError, match="source escapes"):
+        b.load(tmp_path)
+    (extracted / "track.wav").unlink()
+    sidecar.write_text(json.dumps({"file": "track.wav", "preview_tile": "../../secret.png"}))
+    with pytest.raises(ValueError, match="tile escapes"):
+        b.load(tmp_path)

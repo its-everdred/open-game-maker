@@ -14,42 +14,98 @@ import argparse, fnmatch, hashlib, json, os, re, struct, subprocess, sys, time
 from multiprocessing import Pool
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from preview_paths import safe_preview
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import name_tags
+import audio_rights
 import previews
 from card_coverage import project_run_hours
 
-ROOT = HERE.parents[2] / "assets-local"
+ROOT = Path(os.environ.get("OGM_ASSETS_ROOT", HERE.parents[2] / "assets-local"))
 AUDIO_EXT = {".wav", ".ogg", ".mp3", ".flac", ".m4a", ".aif", ".aiff"}
 MUSIC_PACKS = name_tags.MUSIC_PACKS  # the families named in #509 plus Sidetrax and Kenney music; see name_tags
 CLAP_ID = "laion/clap-htsat-unfused"
 CLAP_SR = 48000
 WIN_S = 10  # CLAP's native window; whole windows only, so its random-crop path never runs
-PRIVATE_VENDORS = ("sidetrax-", "synty-")  # redistribution none/in-build: previews under private/
+
+sys.path.insert(0, str(HERE))
+import tag_previews as P
 
 
 def is_music(pack: str) -> bool:
     return name_tags.is_music(pack)
 
 
-def audio_files(packs: Path, only: str):
+def emit(record: dict, json_mode: bool = False, summary: bool = False):
+    """Keep JSON-mode records on stdout and operational summaries on stderr."""
+    stream = sys.stderr if json_mode and summary else sys.stdout
+    print(json.dumps(record), file=stream, flush=True)
+
+
+def _card_subkinds(pack: Path) -> dict[str, str]:
+    result = {}
+    for path in sorted((pack / "cards").rglob("*.card.json")):
+        try:
+            card = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        for source in card.get("source", {}).get("files", []):
+            if source.get("role") == "primary" and isinstance(source.get("path"), str):
+                result[source["path"]] = card.get("subkind", "")
+    return result
+
+
+def matches_any(name: str, only) -> bool:
+    """True when the pack id matches one of the --only globs (a bare string is one glob; none means all)."""
+    patterns = [only] if isinstance(only, str) else (only or ["*"])
+    return any(fnmatch.fnmatch(name, pattern) for pattern in patterns)
+
+
+def audio_files(packs: Path, only="*"):
     """(pack id, version dir, file) for every audio file, one format per stem (ogg preferred over wav/mp3 copies)."""
     out = []
+    if packs.is_symlink():
+        raise ValueError("packs directory symlinks are not allowed")
     for pj in sorted(packs.glob("*/pack.json")):
         pid = pj.parent.name
-        if not fnmatch.fnmatch(pid, only):
+        if pj.parent.is_symlink():
+            raise ValueError("collection directory symlinks are not allowed")
+        if not matches_any(pid, only):
             continue
-        cur = json.loads(pj.read_text())["current"]
-        ext = pj.parent / cur / "extracted"
+        manifest = json.loads(pj.read_text())
+        cur = manifest["current"]
+        ext = audio_rights.extracted_root(pj.parent, cur)
+        hints = P.normalize_hints(manifest.get("hints"))
+        rights = audio_rights.collection_rights(pj.parent)
+        cards = audio_rights.source_cards(pj.parent, ext)
+        subkinds = _card_subkinds(pj.parent)
         seen = {}
         for f in sorted(ext.rglob("*")):
             if f.suffix.lower() in AUDIO_EXT and f.is_file() and not f.name.startswith("._"):
+                if f.resolve() != f or not f.resolve().is_relative_to(ext):
+                    raise ValueError(f"audio source escapes collection: {f}")
                 key = f.with_suffix("").relative_to(ext).as_posix().lower()
                 rank = [".ogg", ".wav", ".flac", ".aiff", ".aif", ".mp3", ".m4a"].index(f.suffix.lower())
                 if key not in seen or rank < seen[key][0]:
                     seen[key] = (rank, f)
-        out += [(pid, pj.parent / cur, f) for _, f in sorted(seen.values(), key=lambda x: str(x[1]))]
+        for _, f in sorted(seen.values(), key=lambda x: str(x[1])):
+            rel = f.relative_to(ext).as_posix()
+            allowed, prefix = audio_rights.source_policy(rights, audio_rights.cards_for_stem(cards, rel))
+            if not allowed:
+                continue
+            out.append(
+                {
+                    "pack": pid,
+                    "version_dir": ext.parent,
+                    "file": f,
+                    "music": is_music(pid) or P.music_evidence(subkinds.get(rel), hints),
+                    "preview_prefix": prefix,
+                    "hints": hints,
+                }
+            )
     return out
 
 
@@ -59,10 +115,10 @@ def sidecar_path(vdir: Path, f: Path) -> Path:
 
 
 def job_list(packs: Path, only: str, limit: int = 0, refresh: bool = False):
-    """The work for the pool: (pack id, version dir, file, whether to ignore an existing sidecar)."""
+    """Build work records, including whether to ignore existing sidecars."""
     jobs = audio_files(packs, only)
     jobs = jobs[:limit] if limit else jobs
-    return [(pid, vdir, f, refresh) for pid, vdir, f in jobs]
+    return [{**job, "refresh": refresh} for job in jobs]
 
 
 def sha256(f: Path) -> str:
@@ -71,6 +127,39 @@ def sha256(f: Path) -> str:
         for b in iter(lambda: r.read(1 << 20), b""):
             h.update(b)
     return h.hexdigest()
+
+
+def analysis_current(
+    data: dict,
+    source_hash: str,
+    version_dir: Path,
+    expected_music: bool,
+    expected_preview_prefix: str,
+    expected_hints: list[str],
+    assets_root: Path = ROOT,
+) -> bool:
+    if (
+        data.get("sha256") != source_hash
+        or data.get("music") is not expected_music
+        or data.get("hints") != expected_hints
+    ):
+        return False
+    waveform = data.get("preview", {}).get("waveform")
+    if not isinstance(waveform, str) or not waveform.startswith(expected_preview_prefix + "/"):
+        return False
+    if not safe_preview(assets_root, waveform).is_file():
+        return False
+    if not expected_music:
+        return True
+    clip = data.get("preview", {}).get("clip")
+    tile = data.get("preview_tile")
+    return (
+        isinstance(clip, str)
+        and clip.startswith(expected_preview_prefix + "/")
+        and isinstance(tile, str)
+        and safe_preview(assets_root, clip).is_file()
+        and (version_dir / tile).is_file()
+    )
 
 
 def vendor_tags(f: Path) -> dict:
@@ -130,7 +219,10 @@ def clap():
         import torch
         from transformers import ClapModel, ClapProcessor
         torch.set_num_threads(int(os.environ.get("OGM_TORCH_THREADS", "2")))
-        _M = (ClapModel.from_pretrained(CLAP_ID, use_safetensors=False).eval(), ClapProcessor.from_pretrained(CLAP_ID))
+        _M = (
+            ClapModel.from_pretrained(CLAP_ID, use_safetensors=False, local_files_only=True).eval(),
+            ClapProcessor.from_pretrained(CLAP_ID, local_files_only=True),
+        )
     return _M
 
 
@@ -169,45 +261,60 @@ def waveform_png(y, out: Path):
 
 
 def analyse(job):
-    pid, vdir, f, refresh = job
+    pid, vdir, f = job["pack"], job["version_dir"], job["file"]
     sc = sidecar_path(vdir, f)
+    analysis_root = (vdir / "analysis").resolve()
+    if not analysis_root.is_relative_to(vdir.resolve()) or not sc.resolve().is_relative_to(analysis_root):
+        return {"file": str(f), "status": "fail", "error": "analysis path escapes collection"}
     h = sha256(f)
-    if sc.exists() and not refresh:
+    if sc.exists() and not job["refresh"]:
         try:
-            if json.loads(sc.read_text()).get("sha256") == h:
+            if analysis_current(
+                json.loads(sc.read_text()),
+                h,
+                vdir,
+                job["music"],
+                job["preview_prefix"],
+                job["hints"],
+            ):
                 return {"file": str(f), "status": "skip"}
         except json.JSONDecodeError:
             pass
     t0 = time.time()
     try:
         import librosa
-        sys.path.insert(0, str(HERE))
         import measure
-        music = is_music(pid)
+        music = job["music"]
         rel = f.relative_to(vdir / "extracted")
-        # Names first, before anything is measured or embedded: what the file and its folder say is free, and on the
-        # fields it can answer it outranks the model (asset-searchability §5).
         names = name_tags.names_for(pid, rel)
         meas = measure.measure(f, loop_search=music, music=music)
         dur = meas["audio"]["duration_s"]
         y, _ = librosa.load(str(f), sr=CLAP_SR, mono=True)
         spans = excerpts(meas["sidecar"].get("loudness_short_term_1hz", []), dur, music)
-        prefix = "private/previews" if pid.startswith(PRIVATE_VENDORS) else "previews"
+        prefix = job["preview_prefix"]
         key = f"{prefix}/{h[:2]}/{h[:16]}-waveform.png"
-        waveform_png(y, ROOT / key)
+        waveform_png(y, safe_preview(ROOT, key, create=True))
         preview = {"waveform": key}
-        clip_key = previews.clip_key(prefix, h)
-        # Asked once per worker process, not once per file: an encoder that cannot start is a fact card_coverage reports
-        # as a missing `previews.clip` column, not ten thousand identical lines.
-        if previews.have_ffmpeg():
+        tile = None
+        if music:
+            start, length = P.preview_bounds(meas["sidecar"], dur)
+            clip_key = P.derivative_key(prefix, h, "clip", "ogg", start_s=start, duration_s=length)
+            P.make_clip(f, ROOT / clip_key, start, length)
+            preview["clip"] = clip_key
+            tile = sc.with_name(sc.name.removesuffix(".analysis.json") + ".preview.png")
+            P.render_tile(y, f.stem, tile)
+        elif previews.have_ffmpeg():
+            clip_key = previews.clip_key(prefix, h)
             try:
-                previews.clip(f, ROOT / clip_key)
+                previews.clip(f, safe_preview(ROOT, clip_key, create=True))
                 preview["clip"] = clip_key
-            except (OSError, RuntimeError, ValueError) as e:  # a missing preview must not cost the file its card
-                print(json.dumps({"file": str(f), "preview": "fail", "error": str(e)[:300]}), flush=True)
-        res = {"file": rel.as_posix(), "pack": pid, "sha256": h, "bytes": f.stat().st_size, "music": music,
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"file": str(f), "preview": "fail", "error": str(exc)[:300]}), file=sys.stderr, flush=True)
+        res = {"file": f.relative_to(vdir / "extracted").as_posix(), "pack": pid, "sha256": h, "bytes": f.stat().st_size, "music": music,
                "measure": meas, "vendor": vendor_tags(f), "names": names, "clap": {"model": CLAP_ID, "excerpts": embed(y, spans)},
-               "preview": preview, "analysed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "secs": round(time.time() - t0, 1)}
+               "preview": preview, "hints": job["hints"],
+               **({"preview_tile": tile.relative_to(vdir).as_posix()} if tile else {}),
+               "analysed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "secs": round(time.time() - t0, 1)}
     except Exception as e:  # one bad file must not stop the batch; reported, retried on the next run
         return {"file": str(f), "status": "fail", "error": f"{type(e).__name__}: {e}"[:300]}
     sc.parent.mkdir(parents=True, exist_ok=True)
@@ -221,12 +328,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--packs", type=Path, default=ROOT / "packs")
-    ap.add_argument("--only", default="*")
+    ap.add_argument("--only", action="append", help="pack id glob; repeat to select several packs")
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--refresh", action="store_true", help="re-analyse a file whose sidecar already matches its sha256")
+    ap.add_argument("--refresh", action="store_true")
+    ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
+    audio_rights.validate_inputs(a.packs, a.only)
     jobs = job_list(a.packs, a.only, a.limit, a.refresh)
-    print(json.dumps({"files": len(jobs), "workers": a.workers}), flush=True)
+    emit({"files": len(jobs), "workers": a.workers}, a.json, summary=True)
     counts = {}
     secs, timed = 0.0, 0
     with Pool(a.workers, maxtasksperchild=200) as pool:
@@ -235,12 +344,11 @@ def main():
             if r["status"] == "ok":
                 secs, timed = secs + (r.get("secs") or 0.0), timed + 1
             if r["status"] != "skip":
-                print(json.dumps({"n": i, **r}), flush=True)
-    # Calibration (C3 §13's cost guard): the first files of a run price the rest, so `--limit 20` answers "how long will
-    # this take" before the long run starts. Wall-clock per worker, so it reads low by roughly the worker count.
+                emit({"n": i, **r}, a.json)
     per_file = secs / timed if timed else None
-    print(json.dumps({"done": counts, "calibration": {"files": timed, "secs_per_file": round(per_file, 1) if per_file else None,
-                                                     "projected_hours": project_run_hours(per_file, len(jobs) - timed)}}), flush=True)
+    emit({"done": counts, "calibration": {"files": timed, "secs_per_file": round(per_file, 1) if per_file else None, "projected_hours": project_run_hours(per_file, len(jobs) - timed)}}, a.json, summary=True)
+    if counts.get("fail"):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

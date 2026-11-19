@@ -147,6 +147,17 @@ describe('search', () => {
     ]);
   });
 
+  it('indexes descriptive audio hints without turning them into measured fields', () => {
+    const base = index.cards.find((card) => card.id === LOOP);
+    if (!base) throw new Error('fixture music loop missing');
+    const hinted = structuredClone(base);
+    (hinted.describe as Record<string, unknown>).hints = ['dark retro', 'chiptune'];
+
+    expect(
+      search({ ...index, cards: [hinted] }, { words: ['music', 'dark', 'chiptune'] }).map((card) => card.id),
+    ).toEqual([LOOP]);
+  });
+
   it('filters by the curated compatibility set instead of stale card metadata', () => {
     const tileId = 't1:kenney-tiny-dungeon/tiles/tile-0097@1.0';
     const tile = index.cards.find((card) => card.id === tileId);

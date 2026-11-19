@@ -17,6 +17,14 @@
       "tests": "pytest",
       "ci": false
     },
+    "tag": {
+      "dir": "scripts/py/tag",
+      "venv": "scripts/py/audio/.venv",
+      "python": "scripts/py/audio/.venv/bin/python",
+      "requirements": "scripts/py/audio/requirements.txt",
+      "tests": "pytest",
+      "ci": false
+    },
     "drive-sync": {
       "dir": "scripts/py/drive-sync",
       "venv": "scripts/py/drive-sync/.venv",
