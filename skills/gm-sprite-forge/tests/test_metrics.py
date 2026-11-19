@@ -19,13 +19,14 @@ class SpriteMetricsTests(unittest.TestCase):
             return sheet.measure(path, cell)
 
     def test_counts_nonempty_frames_and_measures_sprite(self):
-        pixels = np.zeros ( (8, 24, 4), dtype=np.uint8)
+        pixels = np.zeros((8, 24, 4), dtype=np.uint8)
         pixels[1:4, 2:4] = [100, 50, 20, 255]
         pixels[2:5, 18:20] = [200, 50, 20, 255]
         result = self.measure(pixels, 8)
         self.assertEqual(result['grid'], {'cell': 8, 'cols': 3, 'rows': 1})
         self.assertEqual(result['rows'][0]['frames'], 2)
         self.assertEqual(result['sheet_colours'], 2)
+        self.assertIsNone(result['rows'][0]['consecutive_iou'])
         self.assertEqual(result['per_frame']['bbox_w']['mean'], 2)
         self.assertEqual(result['per_frame']['bbox_h']['mean'], 3)
 
@@ -44,6 +45,8 @@ class SpriteMetricsTests(unittest.TestCase):
     def test_invalid_cell_is_clear(self):
         with self.assertRaisesRegex(ValueError, 'cell must be positive'):
             self.measure(np.zeros((8, 8, 4), dtype=np.uint8), 9)
+        with self.assertRaisesRegex(ValueError, 'cell must be positive'):
+            self.measure(np.zeros((8, 8, 4), dtype=np.uint8), 0)
 
 
 if __name__ == '__main__':

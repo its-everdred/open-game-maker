@@ -45,7 +45,7 @@ def sprite_stats(a):
 def measure(path, cell=None):
     sheet = sm.load(path)
     out = {'file': str(path), 'size': list(sheet.shape[1::-1])}
-    if not cell:
+    if cell is None:
         out['sprite'] = sprite_stats(sheet)
         return out
     if cell <= 0 or sheet.shape[0] % cell or sheet.shape[1] % cell:
@@ -57,12 +57,16 @@ def measure(path, cell=None):
         # object mask, or the alpha mask for shadow-only sheets (no object pixels)
         masks = [sm.mask(c) if sm.mask(c).any() else c[..., 3] > 0 for c in frames]
         stats = [sprite_stats(c) for c in frames]
-        consecutive = [sm.iou(masks[i], masks[i + 1]) for i in range(len(masks) - 1)]
+        indexed_masks = {i: sm.mask(c) if sm.mask(c).any() else c[..., 3] > 0
+                         for i, c in enumerate(row) if (c[..., 3] > 0).any()}
+        consecutive = [sm.iou(indexed_masks[i], indexed_masks[i + 1])
+                       for i in indexed_masks if i + 1 in indexed_masks]
         rows.append({
             'row': r,
             'frames': len(frames),
             'consecutive_iou': summarise(consecutive),
-            'loop_iou': sm.iou(masks[-1], masks[0]) if len(masks) > 1 else None,
+            'loop_iou': sm.iou(indexed_masks[len(row) - 1], indexed_masks[0])
+            if len(row) > 1 and 0 in indexed_masks and len(row) - 1 in indexed_masks else None,
             'opaque_px': summarise([float(m.sum()) for m in masks]),
             'light_angle_deg': summarise([s['light_angle_deg'] for s in stats]),
         })
