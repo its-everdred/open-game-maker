@@ -60,9 +60,20 @@ the packs, gm-asset-variants and the generation routes below.
 Use `image_gen.imagegen` first for mockups and logos when it is available. Otherwise run
 `python3 <this skill>/scripts/request-mock.py --prompt-file <file> --out <dir> [--ref <workspace path>]... [--aspect 9:16]`.
 The host's mock broker writes the image into `<dir>`; the script waits and prints the paths. You never hold a provider
-key. For either route, reference only creator-supplied art and free-licence images; never send paid-pack files or
-renders. The broker may impose stricter reference restrictions. Mark outputs as AI-generated. Keep each prompt
-self-contained: the kit description, the screen, the moment, the palette, the HUD.
+key. Mark outputs as AI-generated. Keep each prompt self-contained: the screen, the moment, the palette, the HUD.
+
+**Mocks match the real kit, or they are useless** (Kevin, 2026-11-19: painted, over-detailed mocks "don't match the
+asset pack style"):
+- **Attach the kit as references on every generation**: 2-4 real sprites from the game's packs (`gm assets search`, then
+  the card's sprite sheet frames under `assets-local/packs/<pack>/`) plus a scene render of the set if one exists
+  (`assets-local/sets/<set>/` dioramas and showcase frames). Packs of any licence are allowed as mock references; the
+  broker refuses only other private-library files.
+- Prompt for **the kit's detail level**: same pixel density, outline and shading as the references, no added painterly
+  detail, the same camera angle. A mock more detailed than the kit is off-style: regenerate it.
+- **Assets that already exist in the packs are not mocked.** Show a lineup of the real sprites (classes, enemies, props)
+  as the option instead, for the creator's sign-off.
+- Look check: put a real kit sprite beside every mock (`--kind look --ref <mock> --ref <kit sprite>`) and fail any mock
+  whose pixel size, outline or detail differs.
 
 Budget: one image per option per view, then regenerate only the ones that came out wrong. Look at every image before
 sending it (gm-verify). If your tools cannot show you an image (a shell-only agent), ask a vision model:
