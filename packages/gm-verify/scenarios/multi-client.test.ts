@@ -23,6 +23,7 @@ import {
   profileFor,
   runMultiClient,
   toSeatMetrics,
+  withoutStalls,
   type LinkProfileName,
 } from './multi-client.ts';
 import { NO_FORFEIT } from './multi-client/run-options.ts';
@@ -157,6 +158,33 @@ describe('the multi-client bands and verdict', () => {
 });
 
 describe('folding samples into a seat entry', () => {
+  it('excludes a connected seat’s frozen latency during another seat’s outage and recovery', () => {
+    const live = [
+      sample({ at: 999, remoteUpdateMs: 80 }),
+      sample({ at: 1_000, remoteUpdateMs: 412 }),
+      sample({ at: 3_500, remoteUpdateMs: 412 }),
+      sample({ at: 6_000, remoteUpdateMs: 412 }),
+      sample({ at: 6_001, remoteUpdateMs: 90 }),
+    ];
+    const peer = [
+      sample({ seat: 2, at: 1_000, droppedAt: 1_000 }),
+      sample({ seat: 2, at: 4_000, droppedAt: 1_000, rejoinedAt: 4_000 }),
+    ];
+    const retained = withoutStalls(live, [live, peer]);
+    expect(retained.map(({ at }) => at)).toEqual([999, 6_001]);
+    expect(toSeatMetrics(0, retained).remoteUpdateP95Ms).toBe(90);
+  });
+
+  it('ends a forfeited seat’s outage and keeps the latest gauges', () => {
+    const live = [sample({ at: 999 }), sample({ at: 3_000, tick: 200, desyncs: 1 }), sample({ at: 7_001, tick: 300 })];
+    const peer = [sample({ seat: 2, at: 1_000, droppedAt: 1_000 })];
+    const retained = withoutStalls(live, [live, peer], 2_000, [{ seat: 2, at: 5_000 }]);
+    expect(retained.map(({ at }) => at)).toEqual([999, 7_001]);
+    const seat = toSeatMetrics(0, live, retained);
+    expect(seat.tick).toBe(300);
+    expect(toSeatMetrics(0, live.slice(0, 2), retained.slice(0, 1)).desyncs).toBe(1);
+  });
+
   it('keeps the latest gauges and takes the nearest-rank p95 of the two delays', () => {
     const delays = Array.from({ length: 100 }, (_, index) => index + 1);
     const seat = toSeatMetrics(1, [
