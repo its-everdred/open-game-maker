@@ -12,8 +12,9 @@ vi.mock('../../features/build-chat/Chat', () => ({
 it('authorizes transcription against the game before a build job exists', () => {
   render(<EditConversation gameId="game" branchId="main" title="Game" onAdmitted={() => {}} reading="inline" />);
   expect(JSON.parse(screen.getByRole('status').textContent!)).toEqual({
-    kind: 'questions',
+    kind: 'edit',
     game_id: 'game',
     creator_id: 'creator',
+    session_id: expect.any(String),
   });
 });

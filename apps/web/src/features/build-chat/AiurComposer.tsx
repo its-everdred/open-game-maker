@@ -22,10 +22,12 @@ export function AiurComposer({
   reading = 'inline',
 }: Props) {
   const ref = useRef<ComposerElement>(null);
+  const voiceRef = useRef<VoiceClient | undefined>(undefined);
   const pendingAdmission = useRef<{ text: string; jobId: string } | undefined>(undefined);
   const callbacks = useRef({ postText, startJob, onPosted });
   callbacks.current = { postText, startJob, onPosted };
   const [error, setError] = useState('');
+  useEffect(() => () => voiceRef.current?.end(), []);
   useEffect(() => {
     defineComposer();
     const element = ref.current;
@@ -56,7 +58,6 @@ export function AiurComposer({
     element.addEventListener('pointercancel', recording);
     element.addEventListener('keydown', recording);
     element.addEventListener('keyup', recording);
-    let voice: VoiceClient | undefined;
     const transcriptionTarget = dictationTarget ?? voiceTarget;
     const dictation =
       transcriptionTarget && Dictation.isSupported()
@@ -100,13 +101,14 @@ export function AiurComposer({
               start: async ({ onEnd }) => {
                 const available = await probeVoice(voiceTarget);
                 if (!available.available) throw new Error('Voice is unavailable');
-                voice = new VoiceClient({ url: available.url, token: available.token, target: voiceTarget });
+                const voice = new VoiceClient({ url: available.url, token: available.token, target: voiceTarget });
+                voiceRef.current = voice;
                 voice.on('ended', onEnd);
                 await voice.startFromGesture();
                 return {
                   stop: async () => {
-                    voice?.end();
-                    voice = undefined;
+                    voice.end();
+                    if (voiceRef.current === voice) voiceRef.current = undefined;
                   },
                 };
               },
@@ -156,7 +158,6 @@ export function AiurComposer({
       element.removeEventListener('keyup', recording);
       style.remove();
       dictation?.cancel();
-      voice?.end();
     };
   }, [jobId, voiceTarget, dictationTarget, reading]);
   return (

@@ -9,7 +9,14 @@ import type { AppDeps } from '../app/types.js';
 import { getChatRuntime } from '../build-chat/routes.js';
 import { getChatRow, insertChatRow } from '../build-chat/store.js';
 import { AdmissionRefused, admit } from '../jobs/admission.js';
-import { clearVoiceWaitingOn, localTime, setVoiceWaitingOn, targetKey } from './briefing-push.js';
+import {
+  clearVoiceWaitingOn,
+  editAdmissionKey,
+  jobFor,
+  localTime,
+  setVoiceWaitingOn,
+  targetKey,
+} from './briefing-push.js';
 
 type Delivery = { promise: Promise<InstructResponse>; expiresAt: number };
 
@@ -78,7 +85,7 @@ async function deliverScope(
   request: InstructRequest,
 ): Promise<'delivered' | 'queued_at_reset' | 'needs_choice'> {
   const target = request.target;
-  if (target.kind !== 'scope') throw new Error('not a scope target');
+  if (target.kind !== 'scope' && target.kind !== 'edit') throw new Error('not a scope or edit target');
   const draft = scopeText(request.text);
   if (!draft.text) throw new Error('empty voice draft');
   const game = deps.db.select().from(schema.games).where(eq(schema.games.id, target.game_id)).get();
@@ -135,7 +142,7 @@ async function deliverScope(
           ],
         },
         start: draft.later ? 'at_reset' : 'now',
-        idempotencyKey: admissionKey(request.idempotency_key),
+        idempotencyKey: target.kind === 'edit' ? editAdmissionKey(target) : admissionKey(request.idempotency_key),
       },
       actor,
     );
@@ -147,6 +154,32 @@ async function deliverScope(
     setVoiceWaitingOn(target, refusalText(error.body, reset));
     return 'needs_choice';
   }
+}
+
+async function deliverEdit(
+  deps: AppDeps,
+  request: InstructRequest,
+): Promise<'delivered' | 'queued_at_reset' | 'needs_choice'> {
+  if (request.target.kind !== 'edit') throw new Error('not an edit target');
+  const job = jobFor(deps.db, request.target);
+  if (!job) return deliverScope(deps, request);
+  const id = `m_${stableUuid(`${targetKey(request.target)}:${request.idempotency_key}`)}`;
+  const { inserted } = insertChatRow(deps.sqlite, {
+    id,
+    jobId: job.id,
+    actor: 'creator',
+    kind: 'text',
+    text: request.text,
+    mirrorState: 'pending',
+  });
+  if (inserted) {
+    const runtime = getChatRuntime(deps);
+    runtime.hub.publish(job.id);
+    void runtime.mirror.mirror(id).catch((error: unknown) => {
+      deps.log({ event: 'chat-mirror-error', jobId: job.id, error: (error as Error).name });
+    });
+  }
+  return 'delivered';
 }
 
 const ENERGY_WINDOWS = { day: 'today', week: 'this week', month: 'this month' } as const;
@@ -163,7 +196,11 @@ async function attempt(deps: AppDeps, request: InstructRequest): Promise<Instruc
   const delivery_id = receiptFor(request.target, request.idempotency_key);
   try {
     const status =
-      request.target.kind === 'build' ? await deliverBuild(deps, request) : await deliverScope(deps, request);
+      request.target.kind === 'build'
+        ? await deliverBuild(deps, request)
+        : request.target.kind === 'edit'
+          ? await deliverEdit(deps, request)
+          : await deliverScope(deps, request);
     return { delivery_id, status };
   } catch (error) {
     deps.log({

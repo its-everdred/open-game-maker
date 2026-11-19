@@ -9,6 +9,8 @@ import { getChatRuntime } from '../build-chat/routes.js';
 import { insertChatRow } from '../build-chat/store.js';
 import { scopeSessions } from '../scope/store.js';
 import { targetKey } from './briefing-push.js';
+import { jobFor } from './briefing-push.js';
+import { deliverInstruction } from './instruct.js';
 
 function stableUuid(value: string): string {
   const digest = createHash('sha256').update(value).digest('hex');
@@ -44,10 +46,23 @@ function questionsJob(deps: AppDeps, target: Extract<VoiceTarget, { kind: 'quest
 
 function targetJob(deps: AppDeps, target: VoiceTarget): string | null {
   if (target.kind === 'questions') return questionsJob(deps, target);
+  if (target.kind === 'edit') return jobFor(deps.db, target)?.id ?? null;
   return target.kind === 'build' ? buildJob(deps, target) : scopeJob(deps, target);
 }
 
-export function appendVoiceTranscript(deps: AppDeps, request: VoiceTranscriptRequest): VoiceTranscriptResponse | null {
+export async function appendVoiceTranscript(
+  deps: AppDeps,
+  request: VoiceTranscriptRequest,
+): Promise<VoiceTranscriptResponse | null> {
+  if (request.target.kind === 'edit' && request.actor === 'creator' && !jobFor(deps.db, request.target)) {
+    const result = await deliverInstruction(deps, {
+      target: request.target,
+      text: request.text,
+      idempotency_key: `opening:${request.conversation_id}`,
+      kind: 'instruct',
+    });
+    if (result.status === 'failed' || result.status === 'needs_choice') return null;
+  }
   const jobId = targetJob(deps, request.target);
   if (jobId === null) return null;
 

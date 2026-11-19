@@ -31,6 +31,7 @@ export function Chat({
   useAiurComposer = false,
   composerReading = 'inline',
   dictationTarget,
+  conversationVoiceTarget,
 }: {
   jobId?: string;
   job?: Job;
@@ -43,6 +44,7 @@ export function Chat({
   useAiurComposer?: boolean;
   composerReading?: 'inline' | 'stacked';
   dictationTarget?: VoiceTarget;
+  conversationVoiceTarget?: VoiceTarget;
 }) {
   const streamId = jobId ?? job?.id;
   const target: EditDraft = job
@@ -90,7 +92,8 @@ export function Chat({
   const removeMessage = (messageId: string) => setMessages((current) => current.filter(({ id }) => id !== messageId));
   const voiceTarget = useMemo(
     () =>
-      job && canPost
+      conversationVoiceTarget ??
+      (job && canPost
         ? {
             kind: 'build' as const,
             game_id: job.gameId,
@@ -98,8 +101,8 @@ export function Chat({
             ticket: job.aiurIssueNumber === null ? '' : String(job.aiurIssueNumber),
             creator_id: job.creatorId,
           }
-        : undefined,
-    [canPost, job],
+        : undefined),
+    [canPost, job, conversationVoiceTarget],
   );
 
   const admit = async (text: string, start: 'now' | 'at_reset'): Promise<string | undefined> => {
