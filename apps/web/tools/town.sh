@@ -52,5 +52,5 @@ for v in m["variants"]: shutil.copy(src / (v["name"] + ".glb"), dst)
 (dst / "manifest.json").write_text(json.dumps(m))' "$TC/models/variants" "$OUT/models/variants"
 mkdir -p "$OUT/models/bake"; cp "$TC/models/bake/"*.bin "$TC/models/bake/"*.gz "$TC/models/bake/"*.webp "$TC/models/bake/"*.jpg "$OUT/models/bake/"
 node "$TC/tools/bundle.mjs" "$OUT" && sed -i 's#<script type="module" src="city.js"></script>#<script type="module" src="city.bundle.js"></script>#' "$OUT/index.html"
-rm -rf "$OUT/vendor/pixelfx" "$OUT/fx-variants" "$OUT/"{city,rampage,crowd-path,earthbound,fx,timeline}.js; find "$OUT/vendor/three" -name "*.js" -delete
+rm -rf "$OUT/vendor/pixelfx" "$OUT/fx-variants" "$OUT/"{city,rampage,earthbound,fx,timeline}.js "$OUT/crowd-path.js"; find "$OUT/vendor/three" -name "*.js" -delete
 echo "built $OUT and $A"
