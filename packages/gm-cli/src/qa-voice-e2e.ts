@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { openRunningTicket, openTicketBuilds } from './qa-review-checks.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
@@ -228,10 +229,9 @@ async function until(check: () => boolean | Promise<boolean>, timeoutMs: number)
 async function openChat(page: Page, origin: string): Promise<void> {
   const timeout = { timeout: 20_000 };
   await page.goto(`${origin}/all`, { waitUntil: 'load', timeout: 60_000 });
-  const menu = page.getByRole('button', { name: 'Menu', exact: true });
-  if (await menu.isVisible().catch(() => false)) await menu.click(timeout);
-  await page.locator('button[aria-controls="studio-menu-jobs"]').click(timeout);
-  await page.getByRole('button', { name: new RegExp(`^${TITLE}`, 'u') }).click(timeout);
+  await openTicketBuilds(page);
+  await openRunningTicket(page, TITLE);
+  await page.getByRole('dialog', { name: TITLE }).getByRole('button', { name: 'Conversation' }).click(timeout);
   await page.getByRole('dialog', { name: TITLE }).waitFor(timeout);
 }
 

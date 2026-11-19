@@ -67,7 +67,7 @@ export async function openReviewDeck(
   expected?: string[],
   activeTitle?: string,
 ): Promise<Locator> {
-  await page.locator('.worker-tracker-button').click({ timeout });
+  await openTicketBuilds(page, timeout);
   const panel = page.getByRole('region', { name: 'Builds' });
   if (activeTitle) await panel.getByRole('button', { name: new RegExp(`^${activeTitle}`, 'u') }).waitFor({ timeout });
   await panel.getByRole('button', { name: /\d+ need review/i }).click({ timeout });

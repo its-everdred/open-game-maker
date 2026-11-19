@@ -36,6 +36,25 @@ async function qaApp() {
 }
 
 describe('QA ticket fixtures (#873)', () => {
+  it('exposes the voice build through the hammer until its run is deleted', async () => {
+    const { internal, user } = await qaApp();
+    await internal('/internal/qa/voice-fixtures', {
+      method: 'POST',
+      body: JSON.stringify({ run: 'voice-1' }),
+    });
+    const workers = (await (await user('/workers')).json()) as { workers: { ticket: string; title: string }[] };
+    expect(workers.workers).toContainEqual(expect.objectContaining({ ticket: '879', title: 'QA voice' }));
+    const detail = await user('/tickets/879/detail');
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toEqual(expect.objectContaining({ title: 'QA voice' }));
+    await internal('/internal/qa/ticket-fixtures', { method: 'DELETE' });
+    expect((await user('/tickets/879/detail')).status).toBe(200);
+    await internal('/internal/qa/voice-fixtures/old-run', { method: 'DELETE' });
+    expect((await user('/tickets/879/detail')).status).toBe(200);
+    await internal('/internal/qa/voice-fixtures/voice-1', { method: 'DELETE' });
+    expect(((await (await user('/workers')).json()) as { workers: unknown[] }).workers).toEqual([]);
+    expect((await user('/tickets/879/detail')).status).toBe(404);
+  });
   it('lists a running and a closed ticket whose details open with loadable media, and deletes them', async () => {
     const { deps, internal, user } = await qaApp();
     const seeded = await internal('/internal/qa/ticket-fixtures', {

@@ -4,7 +4,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
-import { readQaState } from './state.js';
+import { readQaState, updateQaState } from './state.js';
 
 // The voice E2E's build (#879): one job on the QA game whose build chat shows the mic and "Start voice chat", so the
 // prod run dictates into its message box and holds a voice session on it. Like an operator publish it is `filed` with
@@ -58,6 +58,24 @@ export function seedVoiceFixture(deps: AppDeps, run: string) {
       updatedAt: at,
     })
     .run();
+  updateQaState(deps.db, (qa) => {
+    qa.tickets = [
+      ...(qa.tickets ?? []).filter((ticket) => ticket.identifier !== String(QA_VOICE_ISSUE)),
+      {
+        identifier: String(QA_VOICE_ISSUE),
+        title: QA_VOICE_TITLE,
+        url: null,
+        state: 'open',
+        status: 'working',
+        phase: 'work',
+        summary: { text: 'QA voice check' },
+        pr: null,
+        live: { running: true, activity: null },
+        media: [],
+        timeline: [],
+      },
+    ];
+  });
   return { gameId: state.gameId, jobId: jobId(run), title: QA_VOICE_TITLE };
 }
 
@@ -86,6 +104,20 @@ export function voiceFixtureReport(deps: AppDeps, run: string) {
 // Removes the voice builds a run left (every run's when none is named) and their chat rows.
 export function deleteVoiceFixtures(deps: AppDeps, run?: string) {
   const state = requireQa(deps);
+  if (
+    run === undefined ||
+    state.tickets?.some((ticket) => ticket.identifier === String(QA_VOICE_ISSUE))
+  ) {
+    const active = deps.db
+      .select({ id: schema.jobs.id })
+      .from(schema.jobs)
+      .where(eq(schema.jobs.id, jobId(run ?? '')))
+      .get();
+    if (run === undefined || active)
+      updateQaState(deps.db, (qa) => {
+        qa.tickets = (qa.tickets ?? []).filter((ticket) => ticket.identifier !== String(QA_VOICE_ISSUE));
+      });
+  }
   deps.db.transaction((tx) => {
     const ids = tx
       .select({ id: schema.jobs.id })
