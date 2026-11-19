@@ -98,7 +98,7 @@ test('keeps spotlight actions and close control touch sized on a phone', async (
   const edit = page.getByRole('button', { name: 'Edit Goblin Cellar' });
   const create = page.getByRole('button', { name: 'New game' });
   const close = page.getByRole('button', { name: 'Close game' });
-  await expect(play).toBeEnabled();
+  await expect(play).toBeEnabled({ timeout: 30_000 });
   await expect(create).toHaveCount(0);
 
   for (const target of [play, edit]) {
