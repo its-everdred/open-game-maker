@@ -489,7 +489,7 @@ export async function kaiju(ctx) {
   };
   const separated = (...args) => !firstConflict(...args);
   const choosePath = (from, target, occupied, start, end, holdUntil, peers, initial = false, combat = false) => {
-    const maxVisited = combat ? 5000 : 1000, monster = combat ? posAt(35) : null;
+    const maxVisited = combat ? 500 : 100, monster = combat ? posAt(35) : null;
     const avoid = peopleBoxes(occupied), first = route(from, target, crowdObstacles, 1.5, maxVisited);
     if (!first) return null;
     const centre = first.at(-1);
@@ -511,7 +511,7 @@ export async function kaiju(ctx) {
       const angle = n * Math.PI / (combat ? 12 : 6), radius = combat ? 5 + ring * 2 : ring * 1.5;
       const origin = combat ? [monster.x, monster.z] : centre, goal = [origin[0] + Math.cos(angle) * radius, origin[1] + Math.sin(angle) * radius];
       if (blocked(goal, crowdObstacles) || blocked(goal, avoid)) continue;
-      path = tryPath(route(from, goal, crowdObstacles, 1.5, Math.min(maxVisited, 150))); if (path) return path;
+      path = tryPath(route(from, goal, crowdObstacles, 1.5, Math.min(maxVisited, 30))); if (path) return path;
     }
     return null;
   };
