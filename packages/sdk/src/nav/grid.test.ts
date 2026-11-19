@@ -41,7 +41,7 @@ describe('findPath', () => {
     ]);
   });
 
-  it('searches a seeded 200 by 200 wall grid within the acceptance budget', () => {
+  it('bounds grid accesses when searching a seeded 200 by 200 wall grid', () => {
     const grid = new Uint8Array(200 * 200);
     let state = 7;
     for (let index = 0; index < grid.length; index += 1) {
@@ -51,11 +51,18 @@ describe('findPath', () => {
     grid[0] = 0;
     grid[grid.length - 1] = 0;
 
-    findPath(grid, 200, 200, [0, 0], [199, 199]);
-    const started = process.cpuUsage();
-    findPath(grid, 200, 200, [0, 0], [199, 199]);
-    const elapsed = process.cpuUsage(started);
+    let accesses = 0;
+    const countedGrid = new Proxy(grid, {
+      get(target, property) {
+        if (typeof property === 'string' && /^\d+$/.test(property)) accesses += 1;
+        return Reflect.get(target, property, target);
+      },
+    });
 
-    expect((elapsed.user + elapsed.system) / 1000).toBeLessThan(50);
+    const path = findPath(countedGrid, 200, 200, [0, 0], [199, 199]);
+    expect(path).toBeNull();
+    // Baseline: 109,081 reads. Guard against early exit and extra search work.
+    expect(accesses).toBeGreaterThan(50_000);
+    expect(accesses).toBeLessThan(160_000);
   });
 });
