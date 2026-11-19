@@ -114,8 +114,8 @@ test('a tab reloaded in the background comes back paused where the player left i
 
   await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'Resume' }).click();
   await expect.poll(async () => (await sdkState(page))?.counter ?? 0).toBeGreaterThan(left.counter);
-  // Resuming ends the away state: the next load starts fresh.
-  expect(await page.evaluate(() => sessionStorage.getItem('ogm.away.game'))).toBeNull();
+  // The mock save service is unavailable, so retain the snapshot until a later save is durable.
+  expect(await page.evaluate(() => sessionStorage.getItem('ogm.away.game'))).toContain('"counter"');
 });
 
 async function openPlaying(page: Page): Promise<void> {
