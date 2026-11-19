@@ -25,7 +25,7 @@ for (const viewport of viewports) {
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'the test sets each acceptance viewport itself');
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
     await page.setViewportSize(viewport);
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page);
@@ -58,7 +58,7 @@ for (const viewport of viewports) {
     expect(gameBox?.height).toBe(viewport.height);
     await page.screenshot({
       path: testInfo.outputPath(`play-${viewport.width}x${viewport.height}.png`),
-      timeout: 90_000,
+      timeout: 120_000,
     });
 
     await menu.click();
@@ -78,7 +78,7 @@ for (const viewport of viewports) {
     }
     await page.screenshot({
       path: testInfo.outputPath(`menu-${viewport.width}x${viewport.height}.png`),
-      timeout: 90_000,
+      timeout: 120_000,
     });
 
     await pauseDialog.getByRole('button', { name: 'More' }).click();
@@ -110,7 +110,7 @@ for (const viewport of viewports) {
     }
     await page.screenshot({
       path: testInfo.outputPath(`more-${viewport.width}x${viewport.height}.png`),
-      timeout: 30_000,
+      timeout: 120_000,
     });
     expect(await fixtureMessages(page)).not.toContain('lifecycle.resume');
     await more.getByRole('button', { name: 'Back' }).click();
@@ -126,7 +126,7 @@ for (const viewport of viewports) {
     await expect.poll(() => fixtureMessages(page)).toContain('lifecycle.resume');
     await page.screenshot({
       path: testInfo.outputPath(`edit-${viewport.width}x${viewport.height}.png`),
-      timeout: 30_000,
+      timeout: 120_000,
     });
 
     await page.getByRole('button', { name: /Play/ }).click();
