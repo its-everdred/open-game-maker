@@ -3,6 +3,7 @@ import { extname, join, parse } from 'node:path';
 import sharp from 'sharp';
 
 import { atomicWebp } from './sheet.js';
+import { outputKey } from './key.js';
 
 const CELL_SIZE = 128;
 const COLUMNS = 8;
@@ -22,7 +23,9 @@ export type CollectionSheetResult = {
 export async function renderCollectionSheet(
   thumbs: readonly (string | { id: string; file: string })[],
   out: string,
+  options: { assetsRoot?: string } = {},
 ): Promise<CollectionSheetResult> {
+  const key = outputKey(out, options.assetsRoot);
   if (thumbs.length === 0) throw new Error('at least one thumbnail is required');
   const pages: string[] = [];
   for (let offset = 0; offset < thumbs.length; offset += PAGE_SIZE) {
@@ -70,8 +73,9 @@ export async function renderCollectionSheet(
         })),
       ),
       target,
+      options.assetsRoot,
     );
     pages.push(target);
   }
-  return { pages, key: pages[0]! };
+  return { pages, key };
 }

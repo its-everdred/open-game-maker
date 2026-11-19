@@ -1,12 +1,15 @@
-import { mkdir, rename, unlink } from 'node:fs/promises';
-import { basename, dirname } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { lstat, mkdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import sharp, { type Sharp } from 'sharp';
 
 import { renderModelViews, type BrowserRenderOptions } from './browser.js';
 import { VIEWS, type View } from './page.js';
+import { outputKey } from './key.js';
 
 export type RenderSheetOptions = BrowserRenderOptions & {
+  assetsRoot?: string;
   cellSize?: number;
   size?: number;
   label?: string;
@@ -23,11 +26,27 @@ export type RenderSheetResult = {
   views: readonly View[];
 };
 
-async function atomicWebp(image: Sharp, out: string): Promise<void> {
-  await mkdir(dirname(out), { recursive: true });
-  const staged = `${out}.part`;
+async function atomicWebp(image: Sharp, out: string, assetsRoot?: string): Promise<void> {
+  const key = outputKey(out, assetsRoot);
+  const root = resolve(out, ...key.split('/').map(() => '..'));
+  const canonicalRoot = await realpath(root);
+  let current = root;
+  for (const part of key.split('/').slice(0, -1)) {
+    current = join(current, part);
+    await mkdir(current).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'EEXIST') throw error;
+    });
+    if ((await lstat(current)).isSymbolicLink()) {
+      throw new Error('preview output resolves outside the asset library or uses a symlink');
+    }
+    const local = relative(canonicalRoot, await realpath(current));
+    if (isAbsolute(local) || local === '..' || local.startsWith(`..${sep}`)) {
+      throw new Error('preview output resolves outside the asset library');
+    }
+  }
+  const staged = `${out}.part-${randomUUID()}`;
   try {
-    await image.webp({ quality: 82 }).toFile(staged);
+    await writeFile(staged, await image.webp({ quality: 82 }).toBuffer(), { flag: 'wx' });
     await rename(staged, out);
   } catch (error) {
     await unlink(staged).catch(() => undefined);
@@ -40,6 +59,7 @@ export async function renderSheet(
   out: string,
   options: RenderSheetOptions = {},
 ): Promise<RenderSheetResult> {
+  const key = outputKey(out, options.assetsRoot);
   const views = options.views ?? VIEWS;
   if (views.length === 0) throw new Error('at least one model view is required');
   const cellSize = options.size ?? options.cellSize ?? 384;
@@ -68,10 +88,11 @@ export async function renderSheet(
       { input: labelStrip, left: 0, top: rows * cellSize - 24 },
     ]),
     out,
+    options.assetsRoot,
   );
   return {
     out,
-    key: out,
+    key,
     width: columns * cellSize,
     height: rows * cellSize,
     renderer: rendered.renderer,

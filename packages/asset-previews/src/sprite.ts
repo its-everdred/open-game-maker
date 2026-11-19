@@ -1,8 +1,10 @@
 import sharp from 'sharp';
 
 import { atomicWebp } from './sheet.js';
+import { outputKey } from './key.js';
 
 export type SpriteSheetOptions = {
+  assetsRoot?: string;
   scale?: 1 | 2 | 3;
   width?: number;
   height?: number;
@@ -14,6 +16,7 @@ export async function spriteSheet(
   out: string,
   options: SpriteSheetOptions = {},
 ): Promise<{ out: string; key: string }> {
+  const key = outputKey(out, options.assetsRoot);
   const image = sharp(png);
   if (
     options.scale !== undefined ||
@@ -30,6 +33,6 @@ export async function spriteSheet(
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     });
   }
-  await atomicWebp(image, out);
-  return { out, key: out };
+  await atomicWebp(image, out, options.assetsRoot);
+  return { out, key };
 }

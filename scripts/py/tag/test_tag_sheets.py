@@ -155,18 +155,32 @@ def test_stage_keeps_the_previous_card_until_promotion(tmp_path):
 def test_eligible_cards_require_local_vision_rights_and_a_preview(tmp_path):
     pack = tmp_path / "pack"
     (pack / "cards").mkdir(parents=True)
+    (pack / "v1" / "extracted" / "models").mkdir(parents=True)
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "v1" / "extracted" / "models" / "SM_Bld_Prop_Torch_01.glb").write_bytes(b"glb")
     collection = card()
     collection.update({"id": "t1:pack@v1", "card_type": "collection"})
     (pack / "collection.card.json").write_text(json.dumps(collection))
-    (pack / "cards" / "torch.card.json").write_text(json.dumps(card()))
+    eligible = card()
+    import hashlib
+    eligible["source"]["files"][0]["sha256"] = "sha256:" + hashlib.sha256(b"glb").hexdigest()
+    eligible["previews"]["sheet"] = t.expected_sheet_key(eligible, collection["rights"])
+    (pack / "cards" / "torch.card.json").write_text(json.dumps(eligible))
     assert len(t.eligible_cards(pack)) == 1
     assert len(t.eligible_cards(pack, "model")) == 1
     assert t.eligible_cards(pack, "sprite") == []
-    malformed = card()
-    malformed["rights"] = {}
-    (pack / "cards" / "malformed.card.json").write_text(json.dumps(malformed))
+    reviewed = json.loads(json.dumps(eligible))
+    reviewed["status"] = "reviewed"
+    reviewed["previews"]["sheet"] = t.expected_sheet_key(reviewed, collection["rights"])
+    (pack / "cards" / "reviewed.card.json").write_text(json.dumps(reviewed))
     assert len(t.eligible_cards(pack, "model")) == 1
-    fbx = card()
+    malformed = json.loads(json.dumps(eligible))
+    malformed["rights"] = {}
+    malformed["previews"]["sheet"] = t.expected_sheet_key(malformed, collection["rights"])
+    (pack / "cards" / "malformed.card.json").write_text(json.dumps(malformed))
+    assert t.eligible_cards(pack, "model") == []
+    (pack / "cards" / "malformed.card.json").unlink()
+    fbx = json.loads(json.dumps(eligible))
     fbx["source"]["files"][0]["format"] = "fbx"
     (pack / "cards" / "fbx.card.json").write_text(json.dumps(fbx))
     assert len(t.eligible_cards(pack, "model")) == 1
@@ -237,3 +251,20 @@ def test_validator_accepts_paths_on_stdin():
     fixture = t.REPO / "packages/contracts/fixtures/cards/collection-kenney-mini-dungeon.json"
     result = subprocess.run(["node", str(t.VALIDATOR), "--paths-stdin"], input=json.dumps([str(fixture)]), capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_visual_rights_index_rejects_restricted_source_alias(tmp_path):
+    pack = tmp_path / "pack"
+    extracted = pack / "v1" / "extracted" / "models"
+    extracted.mkdir(parents=True)
+    (pack / "cards").mkdir()
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    (extracted / "real.glb").write_bytes(b"glb")
+    (extracted / "alias.glb").symlink_to(extracted / "real.glb")
+    denied = card()
+    denied["source"]["files"][0]["path"] = "models/alias.glb"
+    denied["rights"] = {"uses": []}
+    (pack / "cards" / "denied.card.json").write_text(json.dumps(denied))
+    with pytest.raises(ValueError, match="source alias"):
+        t.eligible_cards(pack, "model")

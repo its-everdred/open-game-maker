@@ -90,7 +90,7 @@ async function executeStages(options: {
     const onRecord: RunJsonWorkerOptions['onRecord'] = (record) => {
       assertWorkerRecord(record);
       options.records.push(record);
-      visibleRecord(options.ctx, stage.label, record);
+      if (!record.card) visibleRecord(options.ctx, stage.label, record);
     };
     await runJsonWorker({
       label: stage.label,
@@ -118,7 +118,7 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
   const limit = Number(flags.limit ?? ctx.limit);
   const discovery = await discoverTagTargets(assetsRoot, kind, only);
   for (const refusal of discovery.refusals) ctx.err(refusal);
-  const targets =
+  let targets =
     kind === 'map' ? discovery.targets.filter((target) => target.slug === 'profantasy-cc3') : discovery.targets;
   if (targets.length === 0) {
     if (kind === 'map' && discovery.targets.length > 0) ctx.err('map: the local worker supports profantasy-cc3 only');
@@ -127,12 +127,19 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
     return EXIT.usage;
   }
 
-  const unlock = await lockTargets(targets);
+  const unlock = await lockTargets(targets).catch((error: unknown) => {
+    throw new CommandError(error instanceof Error ? error.message : String(error));
+  });
   try {
+    const lockedRoots = new Set(targets.map((target) => target.root));
+    const refreshed = await discoverTagTargets(assetsRoot, kind, only);
+    targets = refreshed.targets.filter((target) => lockedRoots.has(target.root));
+    if (targets.length === 0) throw new CommandError('no eligible collections remain after acquiring locks');
     const snapshot = await snapshotTargets(targets);
     const records: WorkerRecord[] = [];
     let pages: string[] = [];
     let renderers: string[] = [];
+    let committed = false;
     try {
       if (kind === 'model' || kind === 'sprite') {
         ({ pages, renderers } = await prepareVisualPreviews({
@@ -148,7 +155,6 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
       const cards = await validateWorkerCards(assetsRoot, targets, records, snapshot);
       if (cards === 0) throw new Error('worker completed without reporting a card');
       await reconcileCounts(targets, kind);
-
       const summary = {
         kind,
         only,
@@ -158,11 +164,16 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
         pages,
         renderers: [...new Set(renderers)].sort(),
       };
+      ctx.emit('packs.tag', summary);
+      committed = true;
+      for (const record of records) if (record.card) visibleRecord(ctx, kind, record);
       if (ctx.json) printJson(ctx, { summary });
       else ctx.out(`${cards} ${kind} card(s) tagged across ${targets.length} collection(s); workers ${workers}`);
-      ctx.emit('packs.tag', summary);
       return EXIT.ok;
     } catch (error) {
+      if (committed) {
+        throw new CommandError(`tagging completed but output failed: ${String(error)}`);
+      }
       try {
         await restoreSnapshot(snapshot);
       } catch (restoreError) {

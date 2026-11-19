@@ -85,12 +85,12 @@ def test_map_rights_gate_analysis_and_preexisting_rows(tmp_path, monkeypatch):
     monkeypatch.setattr(t, "COLL_DIR", tmp_path)
     (tmp_path / "cards").mkdir()
     (tmp_path / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"], "processing": "local-only"}}))
-    (tmp_path / "cards" / "denied.card.json").write_text(json.dumps({"rights": {"uses": [], "processing": "local-only"}}))
+    (tmp_path / "cards" / "custom.card.json").write_text(json.dumps({"source": {"files": [{"path": "maps/denied.png", "role": "companion"}]}, "rights": {"uses": [], "processing": "local-only"}}))
     assert t.rights_allow_map("allowed.png")
     (tmp_path / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
     assert t.rights_allow_map("allowed.png")
     assert not t.rights_allow_map("denied.png")
-    (tmp_path / "cards" / "denied.card.json").write_text(json.dumps({"rights": {}}))
+    (tmp_path / "cards" / "custom.card.json").write_text(json.dumps({"source": {"files": [{"path": "maps/denied.png", "role": "companion"}]}, "rights": {}}))
     assert not t.rights_allow_map("denied.png")
 
 
@@ -98,3 +98,66 @@ def test_map_worker_starts_with_isolated_python():
     result = subprocess.run([sys.executable, "-I", str(Path(t.__file__)), "--help"], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert "analyse" in result.stdout
+
+
+def test_map_sidecar_rejects_source_and_preview_escapes(tmp_path, monkeypatch):
+    import pytest
+    coll = tmp_path / "collection"
+    maps = coll / "maps"
+    analysis = coll / "analysis"
+    maps.mkdir(parents=True)
+    analysis.mkdir()
+    monkeypatch.setattr(t, "COLL_DIR", coll)
+    monkeypatch.setattr(t, "MAPS", maps)
+    monkeypatch.setattr(t, "ANALYSIS", analysis)
+    monkeypatch.setattr(t, "ASSETS_ROOT", tmp_path)
+    sidecar = analysis / "map.analysis.json"
+    sidecar.write_text(json.dumps({"map": "../../secret.png", "thumb": "private/previews/ok.webp"}))
+    with pytest.raises(ValueError, match="does not match"):
+        t.safe_analysis_row(sidecar)
+    sidecar.write_text(json.dumps({"map": "map.png", "thumb": "../../secret.webp"}))
+    with pytest.raises(ValueError, match="preview bucket"):
+        t.safe_analysis_row(sidecar)
+
+
+def test_direct_collection_update_preserves_rights_and_license(tmp_path, monkeypatch):
+    monkeypatch.setattr(t, "COLL_DIR", tmp_path)
+    path = tmp_path / "collection.card.json"
+    original = {"rights": {"uses": ["vision-input"], "redistribution": "none"}, "license": "owned", "collection_info": {"counts": {}}, "provenance": {}}
+    path.write_text(json.dumps(original))
+    t.write_collection(3, {})
+    result = json.loads(path.read_text())
+    assert result["rights"] == original["rights"]
+    assert result["license"] == original["license"]
+    assert result["collection_info"]["counts"]["inspiration/map"] == 3
+
+
+def test_map_discovery_allows_symlinked_library_root(tmp_path, monkeypatch):
+    library = tmp_path / "library"
+    coll = library / "inspiration" / "pack"
+    maps = coll / "maps"
+    maps.mkdir(parents=True)
+    (coll / "cards").mkdir()
+    (coll / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    (maps / "map.png").write_bytes(b"png")
+    (maps / "map.json").write_text(json.dumps({"ok": True}))
+    link = tmp_path / "assets-local"
+    link.symlink_to(library, target_is_directory=True)
+    monkeypatch.setattr(t, "COLL_DIR", link / "inspiration" / "pack")
+    monkeypatch.setattr(t, "MAPS", link / "inspiration" / "pack" / "maps")
+    assert len(list(t.maps())) == 1
+
+
+def test_map_rights_index_rejects_restricted_source_alias(tmp_path, monkeypatch):
+    import pytest
+    maps = tmp_path / "maps"
+    maps.mkdir()
+    (tmp_path / "cards").mkdir()
+    (tmp_path / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    (maps / "real.png").write_bytes(b"png")
+    (maps / "alias.png").symlink_to(maps / "real.png")
+    (tmp_path / "cards" / "denied.card.json").write_text(json.dumps({"source": {"files": [{"path": "maps/alias.png"}]}, "rights": {"uses": []}}))
+    monkeypatch.setattr(t, "COLL_DIR", tmp_path)
+    monkeypatch.setattr(t, "MAPS", maps)
+    with pytest.raises(ValueError, match="source alias"):
+        t.map_rights()

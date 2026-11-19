@@ -1,5 +1,6 @@
 """Tests for the card step's rules: each encodes a promise the cards make to agents searching them."""
 import sys
+import json
 from pathlib import Path
 
 import numpy as np
@@ -299,3 +300,41 @@ def test_validation_ignores_unselected_invalid_pack(tmp_path):
     (other / "collection.card.json").write_text("not json")
     result = b.validate(tmp_path, [], ["selected"])
     assert result[0] == 0, result[-1]
+
+
+def test_load_ignores_old_pack_versions(tmp_path):
+    pack = tmp_path / "pack"
+    (pack / "cards").mkdir(parents=True)
+    (pack / "pack.json").write_text(json.dumps({"current": "v2"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    for version in ("v1", "v2"):
+        analysis = pack / version / "analysis"
+        analysis.mkdir(parents=True)
+        (analysis / "track.analysis.json").write_text(json.dumps({"file": "track.wav"}))
+    rows = b.load(tmp_path)
+    assert len(rows) == 1
+    assert rows[0]["_ver"] == "v2"
+
+
+def test_load_rejects_sidecar_source_and_tile_escaping_collection(tmp_path):
+    import pytest
+    pack = tmp_path / "pack"
+    analysis = pack / "v1" / "analysis"
+    analysis.mkdir(parents=True)
+    (pack / "cards").mkdir()
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    sidecar = analysis / "track.analysis.json"
+    sidecar.write_text(json.dumps({"file": "other.wav"}))
+    with pytest.raises(ValueError, match="does not match"):
+        b.load(tmp_path)
+    extracted = pack / "v1" / "extracted"
+    extracted.mkdir()
+    (extracted / "track.wav").symlink_to(tmp_path / "secret.wav")
+    sidecar.write_text(json.dumps({"file": "track.wav"}))
+    with pytest.raises(ValueError, match="source escapes"):
+        b.load(tmp_path)
+    (extracted / "track.wav").unlink()
+    sidecar.write_text(json.dumps({"file": "track.wav", "preview_tile": "../../secret.png"}))
+    with pytest.raises(ValueError, match="tile escapes"):
+        b.load(tmp_path)

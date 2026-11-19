@@ -14,6 +14,9 @@ import argparse, fnmatch, hashlib, json, os, re, struct, subprocess, sys, time
 from multiprocessing import Pool
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from preview_paths import safe_preview
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import name_tags
@@ -73,12 +76,12 @@ def audio_files(packs: Path, only="*"):
         ext = audio_rights.extracted_root(pj.parent, cur)
         hints = P.normalize_hints(manifest.get("hints"))
         rights = audio_rights.collection_rights(pj.parent)
-        cards = audio_rights.source_cards(pj.parent)
+        cards = audio_rights.source_cards(pj.parent, ext)
         subkinds = _card_subkinds(pj.parent)
         seen = {}
         for f in sorted(ext.rglob("*")):
             if f.suffix.lower() in AUDIO_EXT and f.is_file() and not f.name.startswith("._"):
-                if not f.resolve().is_relative_to(ext):
+                if f.resolve() != f or not f.resolve().is_relative_to(ext):
                     raise ValueError(f"audio source escapes collection: {f}")
                 key = f.with_suffix("").relative_to(ext).as_posix().lower()
                 rank = [".ogg", ".wav", ".flac", ".aiff", ".aif", ".mp3", ".m4a"].index(f.suffix.lower())
@@ -140,7 +143,7 @@ def analysis_current(
     waveform = data.get("preview", {}).get("waveform")
     if not isinstance(waveform, str) or not waveform.startswith(expected_preview_prefix + "/"):
         return False
-    if not (assets_root / waveform).is_file():
+    if not safe_preview(assets_root, waveform).is_file():
         return False
     if not expected_music:
         return True
@@ -150,7 +153,7 @@ def analysis_current(
         isinstance(clip, str)
         and clip.startswith(expected_preview_prefix + "/")
         and isinstance(tile, str)
-        and (assets_root / clip).is_file()
+        and safe_preview(assets_root, clip).is_file()
         and (version_dir / tile).is_file()
     )
 
@@ -256,6 +259,9 @@ def waveform_png(y, out: Path):
 def analyse(job):
     pid, vdir, f = job["pack"], job["version_dir"], job["file"]
     sc = sidecar_path(vdir, f)
+    analysis_root = (vdir / "analysis").resolve()
+    if not analysis_root.is_relative_to(vdir.resolve()) or not sc.resolve().is_relative_to(analysis_root):
+        return {"file": str(f), "status": "fail", "error": "analysis path escapes collection"}
     h = sha256(f)
     if sc.exists() and not job["refresh"]:
         try:
@@ -283,7 +289,7 @@ def analyse(job):
         spans = excerpts(meas["sidecar"].get("loudness_short_term_1hz", []), dur, music)
         prefix = job["preview_prefix"]
         key = f"{prefix}/{h[:2]}/{h[:16]}-waveform.png"
-        waveform_png(y, ROOT / key)
+        waveform_png(y, safe_preview(ROOT, key, create=True))
         preview = {"waveform": key}
         tile = None
         if music:
@@ -296,7 +302,7 @@ def analyse(job):
         elif previews.have_ffmpeg():
             clip_key = previews.clip_key(prefix, h)
             try:
-                previews.clip(f, ROOT / clip_key)
+                previews.clip(f, safe_preview(ROOT, clip_key, create=True))
                 preview["clip"] = clip_key
             except (OSError, RuntimeError, ValueError) as exc:
                 print(json.dumps({"file": str(f), "preview": "fail", "error": str(exc)[:300]}), file=sys.stderr, flush=True)

@@ -1,3 +1,6 @@
+import { rmSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
@@ -21,6 +24,14 @@ vi.mock('../src/packs/workers.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/packs/workers.js')>();
   return { ...actual, runJsonWorker: worker.run };
 });
+
+function tagLibrary(): string {
+  const root = library();
+  for (const name of ['broken-no-source.card.json', 'broken-status.card.json']) {
+    rmSync(join(root, 'packs/kenney-mini-dungeon/cards', name), { force: true });
+  }
+  return root;
+}
 
 const MUSIC = 'packs/kenney-music-loops/cards';
 
@@ -64,7 +75,7 @@ beforeEach(() => {
 describe('gm packs tag', () => {
   it('runs bounded offline stages, validates cards, reconciles counts, and emits once', async () => {
     successfulWorkers();
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const eventsFile = join(tempDir('gm-tag-events-'), 'events.jsonl');
 
     const result = await gm(
@@ -95,6 +106,7 @@ describe('gm packs tag', () => {
     expect(calls[0].args).toContain('--json');
 
     const output = result.out.map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(output.some((record) => record.card === `${MUSIC}/infinite-descent.card.json`)).toBe(true);
     const summary = output.at(-1)?.summary as {
       cards: number;
       workers: { requested: number; effective: number };
@@ -117,7 +129,7 @@ describe('gm packs tag', () => {
   });
 
   it('discovers a newly imported audio pack with no cards', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const root = join(assetsRoot, 'packs/kenney-music-loops');
     await rm(join(root, 'cards'), { recursive: true });
     const extracted = join(root, 'test-version/extracted');
@@ -129,8 +141,52 @@ describe('gm packs tag', () => {
     expect(targets[0].cards).toEqual([]);
   });
 
+  it('does not report committed cards when event publication fails', async () => {
+    successfulWorkers();
+    const assetsRoot = tagLibrary();
+    const eventsDirectory = tempDir('gm-events-dir-');
+    const result = await gm(['packs', 'tag', '--kind', 'audio', '--only', 'kenney-music-loops', '--json'], {
+      env: { OGM_ASSETS_ROOT: assetsRoot, GM_EVENTS_FILE: eventsDirectory },
+    });
+    expect(result.code).toBe(1);
+    expect(result.out.some((line) => line.includes('infinite-descent.card.json') || line.includes('summary'))).toBe(
+      false,
+    );
+  });
+
+  it('does not report a card from a worker that later fails', async () => {
+    const assetsRoot = tagLibrary();
+    worker.run.mockImplementation(async (options: RunJsonWorkerOptions) => {
+      if (options.label === 'audio cards') {
+        emitMusic(options);
+        throw new Error('worker failed');
+      }
+      return { stderr: '', stderrTruncated: false };
+    });
+    const result = await gm(['packs', 'tag', '--kind', 'audio', '--only', 'kenney-music-loops', '--json'], {
+      env: { OGM_ASSETS_ROOT: assetsRoot },
+    });
+    expect(result.code).toBe(1);
+    expect(result.out.some((line) => line.includes('infinite-descent.card.json'))).toBe(false);
+  });
+
+  it('returns a normal error when a collection lock is held', async () => {
+    const assetsRoot = tagLibrary();
+    const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
+    const unlock = await lockTargets(targets);
+    try {
+      const result = await gm(['packs', 'tag', '--kind', 'audio', '--only', 'kenney-music-loops'], {
+        env: { OGM_ASSETS_ROOT: assetsRoot },
+      });
+      expect(result.code).toBe(1);
+      expect(result.err.join(' ')).toContain('already being tagged');
+    } finally {
+      await unlock();
+    }
+  });
+
   it('prevents simultaneous taggers from locking the same collection', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
     const unlock = await lockTargets(targets);
     try {
@@ -141,6 +197,29 @@ describe('gm packs tag', () => {
     const unlockAgain = await lockTargets(targets);
     await unlockAgain();
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'reacquires a collection lock after its holder dies',
+    async () => {
+      const assetsRoot = tagLibrary();
+      const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
+      const lockPath = join(targets[0]!.root, '.gm-tag.lock');
+      const holder = spawn('flock', ['-n', lockPath, 'sh', '-c', 'printf locked; sleep 30'], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      await once(holder.stdout, 'data');
+      try {
+        await expect(lockTargets(targets)).rejects.toThrow('already being tagged');
+      } finally {
+        process.kill(-holder.pid!, 'SIGKILL');
+        await once(holder, 'close');
+      }
+      const unlock = await lockTargets(targets);
+      await unlock();
+    },
+    20_000,
+  );
 
   it('does not delete existing cards if restoring a snapshot fails', async () => {
     const root = tempDir('gm-restore-');
@@ -161,7 +240,7 @@ describe('gm packs tag', () => {
   });
 
   it('refuses rights-ineligible collections before spawning a worker', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const path = join(assetsRoot, 'packs/kenney-music-loops/collection.card.json');
     const collection = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
     collection.rights = { ...(collection.rights as object), uses: ['in-game'] };
@@ -178,7 +257,7 @@ describe('gm packs tag', () => {
 
   it('hands workers only the rights-eligible collections, never the raw glob', async () => {
     successfulWorkers();
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const path = join(assetsRoot, 'packs/sidetrax-pack-60-battle/collection.card.json');
     const collection = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
     collection.rights = { ...(collection.rights as object), uses: ['in-game'] };
@@ -198,7 +277,7 @@ describe('gm packs tag', () => {
   });
 
   it('fails and restores when a worker rewrites a card whose own rights exclude tagging', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const path = join(assetsRoot, MUSIC, 'infinite-descent.card.json');
     const card = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
     card.rights = { ...NARROWED_RIGHTS };
@@ -216,7 +295,7 @@ describe('gm packs tag', () => {
   });
 
   it('excludes cards whose explicit rights narrow inherited vision access', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const path = join(assetsRoot, MUSIC, 'infinite-descent.card.json');
     const card = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
     card.rights = { ...NARROWED_RIGHTS };
@@ -231,7 +310,7 @@ describe('gm packs tag', () => {
   });
 
   it('keeps FBX-only model cards in collection counts while excluding them from tagging', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const cards = join(assetsRoot, 'packs/kenney-mini-dungeon/cards');
     const fbx = JSON.parse(await readFile(join(cards, 'wall.card.json'), 'utf8')) as Record<string, unknown>;
     fbx.id = 't1:kenney-mini-dungeon/fbx-only@2.0';
@@ -257,7 +336,7 @@ describe('gm packs tag', () => {
   });
 
   it('rejects worker changes to protected rights and source fields', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
     const snapshot = await snapshotTargets(targets);
     const path = join(assetsRoot, MUSIC, 'infinite-descent.card.json');
@@ -275,7 +354,7 @@ describe('gm packs tag', () => {
   });
 
   it('rejects an unreported card changed by a worker', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const { targets } = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
     const snapshot = await snapshotTargets(targets);
     const path = join(assetsRoot, MUSIC, 'night-patrol.card.json');
@@ -293,7 +372,7 @@ describe('gm packs tag', () => {
   });
 
   it('rejects a model that still needs conversion', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const cards = join(assetsRoot, 'packs/kenney-mini-dungeon/cards');
     const fbx = JSON.parse(await readFile(join(cards, 'wall.card.json'), 'utf8')) as Record<string, unknown>;
     fbx.id = 't1:kenney-mini-dungeon/fbx-only@2.0';
@@ -318,7 +397,7 @@ describe('gm packs tag', () => {
     ['absolute', '/tmp/escape.card.json'],
     ['wrong collection', 'packs/drive-2026-10-26-dungeon-sfx/cards/door-creak.card.json'],
   ])('rejects a %s worker card path and restores prior cards', async (_case, card) => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const priorPath = join(assetsRoot, MUSIC, 'infinite-descent.card.json');
     const before = await readFile(priorPath);
     worker.run.mockImplementation(async (options: RunJsonWorkerOptions) => {
@@ -336,7 +415,7 @@ describe('gm packs tag', () => {
   });
 
   it('restores an existing card byte-for-byte when a worker writes invalid JSON', async () => {
-    const assetsRoot = library();
+    const assetsRoot = tagLibrary();
     const cardPath = join(assetsRoot, MUSIC, 'night-patrol.card.json');
     const before = await readFile(cardPath);
     const collectionPart = join(assetsRoot, 'packs/kenney-music-loops/collection.card.json.part');

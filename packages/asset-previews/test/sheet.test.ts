@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -50,12 +50,16 @@ async function modelFixture(directory: string): Promise<string> {
 describe.skipIf(process.env.GM_PREVIEWS_BROWSER !== '1')('renderSheet', () => {
   it('renders six deterministic model views through the isolated local page', async () => {
     const directory = await workspace();
-    const out = join(directory, 'model.webp');
-    const result = await renderSheet(await modelFixture(directory), out, { executablePath: '/usr/bin/chromium' });
+    const out = join(directory, 'previews', 'model.webp');
+    const result = await renderSheet(await modelFixture(directory), out, {
+      assetsRoot: directory,
+      executablePath: '/usr/bin/chromium',
+    });
     const metadata = await sharp(out).metadata();
     expect(metadata.width).toBe(1152);
     expect(metadata.height).toBe(768);
     expect(result.views).toHaveLength(6);
+    expect(result.key).toBe('previews/model.webp');
     expect(result.renderer).not.toBe('');
     const center = await sharp(out).extract({ left: 186, top: 186, width: 12, height: 12 }).raw().toBuffer();
     expect(center.some((value) => Math.abs(value - 154) > 10)).toBe(true);
@@ -87,13 +91,17 @@ describe.skipIf(process.env.GM_PREVIEWS_BROWSER !== '1')('renderSheet', () => {
       }),
     );
     await expect(
-      renderSheet(model, join(directory, 'should-not-exist.webp'), { executablePath: '/usr/bin/chromium' }),
+      renderSheet(model, join(directory, 'previews', 'should-not-exist.webp'), {
+        assetsRoot: directory,
+        executablePath: '/usr/bin/chromium',
+      }),
     ).rejects.toThrow(/external glTF resources are refused|Failed to fetch|Could not load|preview request failed/);
   }, 90_000);
 
   it('renders through the explicit software fallback', async () => {
     const directory = await workspace();
-    const result = await renderSheet(await modelFixture(directory), join(directory, 'software.webp'), {
+    const result = await renderSheet(await modelFixture(directory), join(directory, 'previews', 'software.webp'), {
+      assetsRoot: directory,
       executablePath: '/usr/bin/chromium',
       software: true,
       views: ['three-quarter'],
@@ -108,7 +116,8 @@ describe.skipIf(process.env.GM_PREVIEWS_BROWSER !== '1')('renderSheet', () => {
     previewContextStats(true);
     await Promise.all(
       Array.from({ length: 3 }, (_, index) =>
-        renderSheet(model, join(directory, `concurrent-${index}.webp`), {
+        renderSheet(model, join(directory, 'previews', `concurrent-${index}.webp`), {
+          assetsRoot: directory,
           executablePath: '/usr/bin/chromium',
           software: true,
           views: ['three-quarter'],
@@ -134,9 +143,10 @@ describe('renderCollectionSheet', () => {
       }),
     );
 
-    const out = join(directory, 'collection.webp');
-    const result = await renderCollectionSheet(thumbnails, out);
-    expect(result.pages).toEqual([out, join(directory, 'collection-2.webp')]);
+    const out = join(directory, 'previews', 'collection.webp');
+    const result = await renderCollectionSheet(thumbnails, out, { assetsRoot: directory });
+    expect(result.pages).toEqual([out, join(directory, 'previews', 'collection-2.webp')]);
+    expect(result.key).toBe('previews/collection.webp');
     expect((await sharp(result.pages[0]).metadata()).width).toBe(8 * 128);
     expect((await sharp(result.pages[1]).metadata()).height).toBe(128);
   });
@@ -149,11 +159,39 @@ describe('spriteSheet', () => {
     await sharp({ create: { width: 48, height: 32, channels: 4, background: '#ffffffff' } })
       .png()
       .toFile(source);
-    const out = join(directory, 'geometry.webp');
+    const out = join(directory, 'previews', 'geometry.webp');
 
-    await spriteSheet(source, out, { pixelArt: true });
+    const result = await spriteSheet(source, out, { assetsRoot: directory, pixelArt: true });
+    expect(result.key).toBe('previews/geometry.webp');
 
     expect(await sharp(out).metadata()).toMatchObject({ width: 144, height: 96 });
+  });
+
+  it('refuses a preview bucket symlink outside the library', async () => {
+    const directory = await workspace();
+    const outside = await workspace();
+    const source = join(directory, 'sprite.png');
+    await sharp({ create: { width: 2, height: 2, channels: 3, background: '#fff' } })
+      .png()
+      .toFile(source);
+    await symlink(outside, join(directory, 'previews'));
+    await expect(
+      spriteSheet(source, join(directory, 'previews', 'escape.webp'), { assetsRoot: directory }),
+    ).rejects.toThrow('outside the asset library');
+  });
+
+  it('refuses a private bucket aliased to a public bucket', async () => {
+    const directory = await workspace();
+    const source = join(directory, 'sprite.png');
+    await sharp({ create: { width: 2, height: 2, channels: 3, background: '#fff' } })
+      .png()
+      .toFile(source);
+    await mkdir(join(directory, 'previews'));
+    await mkdir(join(directory, 'private'));
+    await symlink(join(directory, 'previews'), join(directory, 'private', 'previews'));
+    await expect(
+      spriteSheet(source, join(directory, 'private', 'previews', 'escape.webp'), { assetsRoot: directory }),
+    ).rejects.toThrow('symlink');
   });
 
   it('uses nearest-neighbour scaling only for pixel art', async () => {
@@ -173,10 +211,10 @@ describe('spriteSheet', () => {
         .toBuffer(),
     );
 
-    const pixel = join(directory, 'pixel.webp');
-    const smooth = join(directory, 'smooth.webp');
-    await spriteSheet(source, pixel, { width: 32, height: 16, pixelArt: true });
-    await spriteSheet(source, smooth, { width: 32, height: 16, pixelArt: false });
+    const pixel = join(directory, 'previews', 'pixel.webp');
+    const smooth = join(directory, 'previews', 'smooth.webp');
+    await spriteSheet(source, pixel, { assetsRoot: directory, width: 32, height: 16, pixelArt: true });
+    await spriteSheet(source, smooth, { assetsRoot: directory, width: 32, height: 16, pixelArt: false });
 
     const pixelRaw = await sharp(await readFile(pixel))
       .raw()

@@ -14,6 +14,9 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from preview_paths import safe_preview
+
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
@@ -200,16 +203,36 @@ def load(packs: Path, only="*"):
     rows = []
     policies = {}
     for sc in sorted(packs.glob("*/*/analysis/**/*.analysis.json")):
-        if not matches_any(sc.relative_to(packs).parts[0], only):
-            continue
-        d = json.loads(sc.read_text())
-        d["_sidecar"] = sc
         rel = sc.relative_to(packs)
-        d["_pack"], d["_ver"] = rel.parts[0], rel.parts[1]
-        pack = packs / d["_pack"]
-        if d["_pack"] not in policies:
-            policies[d["_pack"]] = (audio_rights.collection_rights(pack), audio_rights.source_cards(pack))
-        rights, cards = policies[d["_pack"]]
+        pid, sidecar_version = rel.parts[0], rel.parts[1]
+        if not matches_any(pid, only):
+            continue
+        pack = packs / pid
+        if pid not in policies:
+            manifest = json.loads((pack / "pack.json").read_text())
+            version = manifest["current"]
+            extracted = audio_rights.extracted_root(pack, version)
+            analysis = (pack / version / "analysis").resolve()
+            if not analysis.is_relative_to(pack.resolve()):
+                raise ValueError(f"analysis directory escapes collection: {pack}")
+            policies[pid] = (audio_rights.collection_rights(pack), audio_rights.source_cards(pack, extracted), version, extracted, analysis)
+        rights, cards, version, extracted, analysis = policies[pid]
+        if sidecar_version != version:
+            continue
+        if not sc.resolve().is_relative_to(analysis):
+            raise ValueError(f"analysis sidecar escapes collection: {sc}")
+        d = json.loads(sc.read_text())
+        sidecar_stem = str(sc.relative_to(pack / version / "analysis")).removesuffix(".analysis.json")
+        if str(Path(d["file"]).with_suffix("")) != sidecar_stem:
+            raise ValueError(f"audio sidecar does not match source: {sc}")
+        source = (extracted / d["file"]).resolve()
+        if source != extracted / d["file"] or not source.is_relative_to(extracted):
+            raise ValueError(f"audio source escapes collection: {d['file']}")
+        if "preview_tile" in d:
+            tile = (pack / version / d["preview_tile"]).resolve()
+            if not tile.is_relative_to(analysis):
+                raise ValueError(f"preview tile escapes collection: {d['preview_tile']}")
+        d["_sidecar"], d["_pack"], d["_ver"] = sc, pid, sidecar_version
         allowed, prefix = audio_rights.source_policy(rights, audio_rights.cards_for_stem(cards, d["file"]))
         if not allowed:
             continue
@@ -451,7 +474,7 @@ def build_pack_derivatives(pid: str, items: list[dict], collection: dict, packs:
     if missing:
         raise FileNotFoundError(f"missing audio preview tile: {missing[0]}")
     sheet_key = P.derivative_key(prefix, combined_hash, "audio-sheet", "webp", tracks=len(music), version=1)
-    sheet_out = ROOT / sheet_key
+    sheet_out = safe_preview(ROOT, sheet_key, create=True)
     if not sheet_out.is_file():
         P.compose_sheet(tiles, sheet_out)
 
@@ -478,7 +501,7 @@ def build_pack_derivatives(pid: str, items: list[dict], collection: dict, packs:
         (combined_hash + "\0" + json.dumps(plan, sort_keys=True, separators=(",", ":"))).encode()
     ).hexdigest()
     medley_key = P.derivative_key(prefix, plan_hash, "medley", "ogg", tracks=len(music), duration_s=30, version=1)
-    medley_out = ROOT / medley_key
+    medley_out = safe_preview(ROOT, medley_key, create=True)
     if not medley_out.is_file():
         P.make_medley(entries, medley_out)
     collection.setdefault("previews", {}).update({"sheet": sheet_key, "clip": medley_key})

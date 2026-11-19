@@ -98,6 +98,7 @@ export async function runJsonWorker(options: RunJsonWorkerOptions): Promise<Work
   child.stdout.setEncoding('utf8');
   let stdout = '';
   let failure: Error | null = null;
+  let closed = false;
   let killTimer: NodeJS.Timeout | undefined;
   const stderr: Buffer[] = [];
   let stderrBytes = 0;
@@ -106,6 +107,7 @@ export async function runJsonWorker(options: RunJsonWorkerOptions): Promise<Work
   const terminate = (error: unknown): void => {
     if (failure) return;
     failure = asError(error);
+    if (closed) return;
     const signalGroup = (signal: NodeJS.Signals): void => {
       try {
         if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, signal);
@@ -168,6 +170,7 @@ export async function runJsonWorker(options: RunJsonWorkerOptions): Promise<Work
   }).catch((error) => {
     throw new WorkerError(`${options.label} could not start: ${asError(error).message}`);
   });
+  closed = true;
   if (killTimer) clearTimeout(killTimer);
   if (!failure && stdout.trim()) consume(stdout.replace(/\r$/, ''));
   const diagnostics = Buffer.concat(stderr).toString('utf8');

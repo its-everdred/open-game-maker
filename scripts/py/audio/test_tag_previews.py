@@ -134,3 +134,12 @@ def test_make_medley_represents_each_planned_track_in_the_requested_duration(tmp
         text=True,
     )
     assert 2.9 <= float(json.loads(probe.stdout)["format"]["duration"]) <= 3.1
+
+
+def test_private_preview_bucket_cannot_alias_public(tmp_path):
+    from preview_paths import safe_preview
+    (tmp_path / "private").mkdir()
+    (tmp_path / "previews").mkdir()
+    (tmp_path / "private" / "previews").symlink_to(tmp_path / "previews", target_is_directory=True)
+    with pytest.raises(ValueError, match="symlink"):
+        safe_preview(tmp_path, "private/previews/aa/clip.ogg", create=True)

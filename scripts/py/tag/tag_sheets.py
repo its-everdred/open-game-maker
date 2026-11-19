@@ -3,6 +3,7 @@
 import argparse
 import copy
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -10,6 +11,9 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from preview_paths import safe_preview
 
 import numpy as np
 
@@ -82,7 +86,7 @@ def rank_group(probabilities, labels: list[str], cap: int, threshold=1.5, seeds=
                 candidates.append((lift, float(row[index]), label))
         candidates.sort(key=lambda item: (item[2] not in row_seeds, -item[0], -item[1], item[2]))
         kept = candidates[:cap]
-        confidence = max((min(1.0, lift / 3) for lift, _, _ in kept), default=0.0)
+        confidence = max((min(0.9, lift / 3) for lift, _, _ in kept), default=0.0)
         output.append(
             {
                 "values": [label for _, _, label in kept],
@@ -222,7 +226,8 @@ def load_clip(model_class=None, processor_class=None):
         model = model_class.from_pretrained(CLIP_ID, local_files_only=True)
         processor = processor_class.from_pretrained(CLIP_ID, local_files_only=True)
     except OSError as error:
-        raise RuntimeError(f"{CLIP_ID} is missing from the local Hugging Face cache; offline tagging cannot start") from error
+        cache = Path(os.environ.get("HF_HUB_CACHE", Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface")) / "hub"))
+        raise RuntimeError(f"{CLIP_ID} is missing from the local Hugging Face cache {cache}; offline tagging cannot start") from error
     return model.eval(), processor
 
 
@@ -281,18 +286,59 @@ def score_rows(rows: list[dict], model, processor) -> list[dict[str, dict]]:
     return result
 
 
+def expected_sheet_key(card: dict, collection_rights: dict, restrictions=()) -> str | None:
+    files = card.get("source", {}).get("files", [])
+    primary = next((file for file in files if file.get("role") == "primary"), files[0] if files else {})
+    source_hash = primary.get("sha256", "")
+    if not isinstance(source_hash, str) or not source_hash.startswith("sha256:"):
+        return None
+    grants = [collection_rights]
+    for other in (restrictions or [card]):
+        if "rights" in other:
+            grants.append(other["rights"])
+    prefix = "previews" if all(isinstance(grant, dict) and grant.get("redistribution") in ("free", "in-build") for grant in grants) else "private/previews"
+    kind = card.get("kind")
+    params = {"version": 1}
+    if kind == "sprite":
+        params = {"pixelArt": card.get("image", {}).get("pixel_art") is True, "version": 1}
+    payload = {"sourceHash": source_hash.removeprefix("sha256:"), "kind": f"{kind}-sheet", "parameters": params}
+    digest = hashlib.sha256(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    return f"{prefix}/{digest[:2]}/{digest[:16]}-{kind}-sheet.webp"
+
+
 def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
     try:
         collection = json.loads((pack / "collection.card.json").read_text())
     except (OSError, json.JSONDecodeError):
         return []
     rights = collection.get("rights", {})
+    try:
+        version = json.loads((pack / "pack.json").read_text())["current"]
+        if not isinstance(version, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", version) or ".." in version:
+            return []
+        extracted = (pack / version / "extracted").resolve()
+        if not extracted.is_relative_to(pack.resolve()):
+            return []
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return []
     if "vision-input" not in rights.get("uses", []) or rights.get("processing", "local-only") not in ("any", "local-only"):
         return []
     assets_root = pack.parents[1]
     rows = []
-    for path in sorted((pack / "cards").rglob("*.card.json")):
-        card = json.loads(path.read_text())
+    cards = [(path, json.loads(path.read_text())) for path in sorted((pack / "cards").rglob("*.card.json"))]
+    by_source = {}
+    for _, item in cards:
+        for file in item.get("source", {}).get("files", []):
+            name = file.get("path")
+            if not isinstance(name, str) or not name or "\\" in name or name.startswith("/") or any(part in ("", ".", "..") for part in name.split("/")):
+                raise ValueError("noncanonical visual asset source path")
+            candidate = extracted / name
+            if candidate.resolve() != candidate or not candidate.resolve().is_relative_to(extracted):
+                raise ValueError(f"visual source alias: {name}")
+            by_source.setdefault(name, []).append(item)
+    for path, card in cards:
+        if card.get("status") == "reviewed" or _locked(card, "previews.sheet"):
+            continue
         if card.get("kind") not in VISUAL_KINDS or (kind and card.get("kind") != kind):
             continue
         if card.get("kind") == "model":
@@ -300,14 +346,22 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
             primary = next((file for file in files if file.get("role") == "primary"), files[0] if files else {})
             if primary.get("format") != "glb":
                 continue
-        effective_rights = card["rights"] if "rights" in card else rights
-        if not isinstance(effective_rights, dict):
+        files = card.get("source", {}).get("files", [])
+        primary = next((file for file in files if file.get("role") == "primary"), files[0] if files else {})
+        restrictions = by_source.get(primary.get("path"), [card])
+        grants = [item["rights"] if "rights" in item else rights for item in restrictions]
+        if any(not isinstance(grant, dict) or "vision-input" not in grant.get("uses", []) or grant.get("processing", "local-only") not in ("any", "local-only") for grant in grants):
             continue
-        if "vision-input" not in effective_rights.get("uses", []) or effective_rights.get("processing", "local-only") not in ("any", "local-only"):
+        source = (extracted / primary.get("path", "")).resolve()
+        if source != extracted / primary.get("path", "") or not source.is_relative_to(extracted) or not source.is_file():
             continue
-        preview = card.get("previews", {}).get("sheet") or card.get("previews", {}).get("thumb")
-        if isinstance(preview, str):
-            preview_path = (assets_root / preview).resolve()
+        with source.open("rb") as stream:
+            actual_hash = "sha256:" + hashlib.file_digest(stream, "sha256").hexdigest()
+        if actual_hash != primary.get("sha256"):
+            continue
+        preview = card.get("previews", {}).get("sheet")
+        if isinstance(preview, str) and preview == expected_sheet_key(card, rights, restrictions):
+            preview_path = safe_preview(assets_root, preview).resolve()
             try:
                 preview_path.relative_to(assets_root.resolve())
             except ValueError:
@@ -351,7 +405,7 @@ def main():
     inputs.extend(str(row["path"]) for row in rows)
     checked = subprocess.run(["node", str(VALIDATOR), "--paths-stdin"], input=json.dumps(inputs), capture_output=True, text=True)
     if checked.returncode:
-        print("card validation failed before visual analysis: " + checked.stdout[-3000:], file=sys.stderr)
+        print("card validation failed before visual analysis: " + (checked.stderr or checked.stdout)[-3000:], file=sys.stderr)
         raise SystemExit(1)
     model, processor = load_clip()
     selections = score_rows(rows, model, processor)

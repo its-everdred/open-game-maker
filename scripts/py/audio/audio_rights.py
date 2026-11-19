@@ -13,7 +13,7 @@ def collection_rights(pack: Path) -> dict:
         return {}
 
 
-def source_cards(pack: Path) -> dict[str, list[dict]]:
+def source_cards(pack: Path, extracted: Path | None = None) -> dict[str, list[dict]]:
     result = {}
     for path in sorted((pack / "cards").rglob("*.card.json")):
         try:
@@ -22,7 +22,15 @@ def source_cards(pack: Path) -> dict[str, list[dict]]:
             raise ValueError(f"cannot determine source rights from {path}: {exc}") from exc
         for source in card.get("source", {}).get("files", []):
             if isinstance(source.get("path"), str):
-                result.setdefault(source["path"], []).append(card)
+                name = source["path"]
+                if not name or "\\" in name or name.startswith("/") or any(part in ("", ".", "..") for part in name.split("/")):
+                    raise ValueError(f"noncanonical audio source path in {path}: {name}")
+                if extracted is not None:
+                    candidate = extracted / name
+                    if candidate.resolve() != candidate or not candidate.resolve().is_relative_to(extracted):
+                        raise ValueError(f"audio source alias in {path}: {name}")
+                stem = str(Path(name).with_suffix("")).lower()
+                result.setdefault(stem, []).append(card)
     return result
 
 
@@ -32,14 +40,17 @@ def allows_vision(rights: dict) -> bool:
 
 def source_policy(collection: dict, cards: list[dict]) -> tuple[bool, str]:
     grants = [collection] + [card["rights"] for card in cards if card.get("rights") is not None]
-    allowed = all(allows_vision(grant) for grant in grants)
+    allowed = all(allows_vision(grant) for grant in grants) and not any(
+        card.get("status") == "reviewed" or card.get("provenance", {}).get("*", {}).get("locked")
+        for card in cards
+    )
     public = all(grant.get("redistribution") in ("free", "in-build") for grant in grants)
     return allowed, "previews" if public else "private/previews"
 
 
 def cards_for_stem(cards: dict[str, list[dict]], source: str) -> list[dict]:
     stem = str(Path(source).with_suffix("")).lower()
-    return [card for path, matches in cards.items() if str(Path(path).with_suffix("")).lower() == stem for card in matches]
+    return cards.get(stem, [])
 
 
 def validate_inputs(packs: Path, only=None) -> None:
@@ -51,7 +62,7 @@ def validate_inputs(packs: Path, only=None) -> None:
     if paths:
         result = subprocess.run(["node", str(repo / "packages/contracts/bin/validate-cards.mjs"), "--paths-stdin"], input=json.dumps(paths), capture_output=True, text=True)
         if result.returncode:
-            raise ValueError("card validation failed before audio analysis: " + result.stdout[-3000:])
+            raise ValueError("card validation failed before audio analysis: " + (result.stderr or result.stdout)[-3000:])
 
 
 def extracted_root(pack: Path, version: str) -> Path:

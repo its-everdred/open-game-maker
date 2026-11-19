@@ -16,3 +16,11 @@ describe('previewKey', () => {
     expect(first).not.toBe(previewKey('a'.repeat(64), 'model-sheet', 'free', { views: 1, size: 256 }));
   });
 });
+
+it('returns portable keys for public and private output paths', async () => {
+  const { outputKey } = await import('../src/key.js');
+  expect(outputKey('/fixture/previews/aa/model.webp', '/fixture')).toBe('previews/aa/model.webp');
+  expect(outputKey('/fixture/private/previews/aa/model.webp', '/fixture')).toBe('private/previews/aa/model.webp');
+  expect(() => outputKey('/fixture/model.webp', '/fixture')).toThrow('previews bucket');
+  expect(() => outputKey('/other/previews/model.webp', '/fixture')).toThrow('asset library');
+});

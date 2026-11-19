@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Dirent } from 'node:fs';
-import { access, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { createReadStream, type Dirent } from 'node:fs';
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
 import { previewKey, renderCollectionSheet, renderSheet, spriteSheet } from '@ogm/asset-previews';
-import { validateCard, type AssetCard } from '@ogm/contracts';
+import { checkDocuments, validateCard, type AssetCard } from '@ogm/contracts';
 
 import type { WorkerRecord } from './workers.js';
 
@@ -17,7 +18,7 @@ export type TagTarget = {
   root: string;
   collectionPath: string;
   collection: AssetCard;
-  cards: Array<{ path: string; card: AssetCard }>;
+  cards: Array<{ path: string; card: AssetCard; restrictions?: AssetCard[] }>;
 };
 
 export type TargetDiscovery = { targets: TagTarget[]; refusals: string[] };
@@ -106,21 +107,70 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
       refusals.push(`${entry.name}: effective rights do not allow local vision-input`);
       continue;
     }
-    const cards: TagTarget['cards'] = [];
+    const version =
+      kind === 'model' || kind === 'sprite' ? await readCurrentVersion(root, entry.name).catch(() => null) : null;
+    const visualRoot = version ? await realpath(join(root, version, 'extracted')).catch(() => null) : null;
+    if (visualRoot && !inside(await realpath(root), visualRoot))
+      throw new Error(`${entry.name}: extracted directory escapes collection`);
+    const candidates: TagTarget['cards'] = [];
     for (const path of await filesUnder(join(root, 'cards'), '.card.json')) {
-      try {
-        const parsed = validateCard(JSON.parse(await readFile(path, 'utf8')) as unknown);
-        if (
-          parsed.ok &&
-          parsed.card.card_type === 'asset' &&
-          matchesKind(parsed.card, kind) &&
-          allowsLocalVision(parsed.card, collection)
-        ) {
-          cards.push({ path, card: parsed.card });
-        }
-      } catch {
-        // Existing invalid cards are not eligible inputs and remain untouched.
+      const document: unknown = JSON.parse(await readFile(path, 'utf8'));
+      const parsed = validateCard(document);
+      if (!parsed.ok || parsed.card.card_type !== 'asset') {
+        if (document && typeof document === 'object' && !('source' in document)) continue;
+        throw new Error(`invalid asset card: ${path}`);
       }
+      for (const source of parsed.card.source?.files ?? []) {
+        if (
+          !source.path ||
+          source.path.includes('\\') ||
+          source.path.startsWith('/') ||
+          source.path.split('/').some((part) => part === '' || part === '.' || part === '..')
+        ) {
+          throw new Error(`noncanonical asset source path: ${path}`);
+        }
+        if (visualRoot) {
+          const candidate = resolve(visualRoot, source.path);
+          try {
+            if ((await realpath(candidate)) !== candidate) throw new Error(`visual source alias: ${path}`);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          }
+        }
+      }
+      candidates.push({ path, card: parsed.card });
+    }
+    const rightsChecks = checkDocuments([
+      { file: collectionPath, doc: collection },
+      ...candidates.map(({ path, card }) => ({ file: path, doc: card })),
+    ]).results.filter(
+      (result) => ['rights=basis', 'no-model-rights', 'processing-rule'].includes(result.check) && !result.ok,
+    );
+    if (rightsChecks.length) throw new Error(`invalid asset rights in ${entry.name}: ${rightsChecks[0]?.check}`);
+    const bySource = new Map<string, AssetCard[]>();
+    for (const { card } of candidates) {
+      for (const file of card.source?.files ?? []) {
+        const references = bySource.get(file.path) ?? [];
+        references.push(card);
+        bySource.set(file.path, references);
+      }
+    }
+    const cards: TagTarget['cards'] = [];
+    for (const candidate of candidates) {
+      const card = candidate.card;
+      if (
+        !matchesKind(card, kind) ||
+        ((kind === 'model' || kind === 'sprite') &&
+          (card.status === 'reviewed' ||
+            card.provenance['*']?.locked ||
+            card.provenance.previews?.locked ||
+            card.provenance['previews.sheet']?.locked))
+      )
+        continue;
+      const source = card.source?.files.find((file) => file.role === 'primary') ?? card.source?.files[0];
+      const restrictions = source ? (bySource.get(source.path) ?? [card]) : [card];
+      if (restrictions.every((other) => allowsLocalVision(other, collection)))
+        cards.push({ ...candidate, restrictions });
     }
     let audioSources = false;
     if (kind === 'audio' && cards.length === 0) {
@@ -170,25 +220,33 @@ export async function restoreSnapshot(snapshot: Snapshot): Promise<void> {
   }
 }
 
-/** Exclusive collection locks prevent concurrent taggers from undoing each other's writes. */
+/** Kernel locks are released if the holder exits, including after a crash. */
 export async function lockTargets(targets: readonly TagTarget[]): Promise<() => Promise<void>> {
-  const acquired: string[] = [];
+  const acquired: Array<{ close: () => void; done: Promise<void> }> = [];
   const release = async (): Promise<void> => {
-    for (const path of acquired.reverse()) await rm(path, { recursive: true, force: true });
+    for (const lock of acquired.reverse()) {
+      lock.close();
+      await lock.done;
+    }
     acquired.length = 0;
   };
   try {
     for (const target of [...targets].sort((a, b) => a.root.localeCompare(b.root))) {
-      const path = join(target.root, '.gm-tag-lock');
-      try {
-        await mkdir(path);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-          throw new Error(`${target.slug} is already being tagged (lock: ${path})`);
-        }
-        throw error;
-      }
-      acquired.push(path);
+      const path = join(target.root, '.gm-tag.lock');
+      const child = spawn('flock', ['-n', path, 'sh', '-c', 'printf locked; cat >/dev/null'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const done = new Promise<void>((resolve) => {
+        child.once('close', () => resolve());
+        child.once('error', () => resolve());
+      });
+      const ready = await new Promise<boolean>((resolve) => {
+        child.stdout.once('data', () => resolve(true));
+        child.once('close', () => resolve(false));
+        child.once('error', () => resolve(false));
+      });
+      if (!ready) throw new Error(`${target.slug} is already being tagged or its lock could not be acquired`);
+      acquired.push({ close: () => child.stdin.end(), done });
     }
   } catch (error) {
     await release();
@@ -341,6 +399,21 @@ function relativeKey(assetsRoot: string, path: string): string {
   return relative(assetsRoot, path).split(sep).join('/');
 }
 
+async function safeExistingPreview(root: string, key: string): Promise<boolean> {
+  let path = root;
+  try {
+    for (const part of key.split('/')) {
+      path = join(path, part);
+      if ((await lstat(path)).isSymbolicLink()) throw new Error(`preview path uses a symlink: ${key}`);
+    }
+    if (!inside(await realpath(root), await realpath(path))) throw new Error(`preview escapes library: ${key}`);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 export async function prepareVisualPreviews(options: {
   assetsRoot: string;
   targets: readonly TagTarget[];
@@ -352,16 +425,21 @@ export async function prepareVisualPreviews(options: {
   const selected = all.slice(0, options.limit || undefined);
   const pages: string[] = [];
   const renderers: string[] = [];
-  for (const { target, path, card } of selected) {
-    const existing = card.previews?.sheet;
-    if (
-      existing &&
-      (await access(join(options.assetsRoot, existing))
-        .then(() => true)
-        .catch(() => false))
-    )
-      continue;
+  for (const { target, path, card, restrictions } of selected) {
+    const inherited = target.collection.rights?.redistribution;
+    const redistribution = narrowest(
+      inherited,
+      ...(restrictions ?? [card]).map((item) => item.rights?.redistribution ?? inherited),
+    );
     const source = primary(card);
+    const hash = source.sha256.replace(/^sha256:/, '');
+    const key = previewKey(hash, `${options.kind}-sheet`, redistribution, {
+      version: 1,
+      ...(options.kind === 'sprite' ? { pixelArt: card.image?.pixel_art === true } : {}),
+    });
+    const existing = card.previews?.sheet;
+    if (card.provenance['*']?.locked || card.provenance['previews.sheet']?.locked || card.provenance.previews?.locked)
+      continue;
     const version = await currentVersion(target);
     const extractedRoot = await realpath(join(target.root, version, 'extracted'));
     if (!inside(await realpath(target.root), extractedRoot))
@@ -369,23 +447,22 @@ export async function prepareVisualPreviews(options: {
     const sourceCandidate = resolve(extractedRoot, source.path);
     if (!inside(extractedRoot, sourceCandidate)) throw new Error(`${card.id} source path escapes its collection`);
     const sourcePath = await realpath(sourceCandidate);
-    if (!inside(extractedRoot, sourcePath)) throw new Error(`${card.id} source path resolves outside its collection`);
-    const hash = source.sha256.replace(/^sha256:/, '');
-    const inherited = target.collection.rights?.redistribution;
-    const redistribution = narrowest(card.rights?.redistribution ?? inherited, inherited);
-    const key = previewKey(hash, `${options.kind}-sheet`, redistribution, {
-      version: 1,
-      ...(options.kind === 'sprite' ? { pixelArt: card.image?.pixel_art === true } : {}),
-    });
+    if (!inside(extractedRoot, sourcePath) || sourcePath !== sourceCandidate)
+      throw new Error(`${card.id} source path resolves outside its collection or uses a symlink`);
+    const digest = createHash('sha256');
+    for await (const chunk of createReadStream(sourcePath)) digest.update(chunk as Buffer);
+    if (digest.digest('hex') !== hash) throw new Error(`${card.id}: source hash does not match card`);
+    if (existing === key && (await safeExistingPreview(options.assetsRoot, existing))) continue;
     const out = join(options.assetsRoot, key);
     if (options.kind === 'model') {
       const result = await renderSheet(sourcePath, out, {
+        assetsRoot: options.assetsRoot,
         executablePath: '/usr/bin/chromium',
         software: options.software,
       });
       renderers.push(result.renderer);
     } else {
-      await spriteSheet(sourcePath, out, { pixelArt: card.image?.pixel_art === true });
+      await spriteSheet(sourcePath, out, { assetsRoot: options.assetsRoot, pixelArt: card.image?.pixel_art === true });
     }
     const updated = structuredClone(card);
     updated.previews = { ...updated.previews, sheet: key };
@@ -394,6 +471,12 @@ export async function prepareVisualPreviews(options: {
 
   if (selected.length === all.length) {
     for (const target of options.targets) {
+      if (
+        target.collection.provenance['*']?.locked ||
+        target.collection.provenance.previews?.locked ||
+        target.collection.provenance['previews.sheet']?.locked
+      )
+        continue;
       const cards = await Promise.all(
         target.cards.map(async ({ path }) => JSON.parse(await readFile(path, 'utf8')) as AssetCard),
       );
@@ -407,13 +490,19 @@ export async function prepareVisualPreviews(options: {
         .digest('hex');
       const redistribution = narrowest(
         target.collection.rights?.redistribution,
-        ...cards.map((card) => card.rights?.redistribution ?? target.collection.rights?.redistribution),
+        ...target.cards.flatMap(({ card, restrictions }) =>
+          (restrictions ?? [card]).map(
+            (item) => item.rights?.redistribution ?? target.collection.rights?.redistribution,
+          ),
+        ),
       );
       const key = previewKey(combined, `${options.kind}-collection-sheet`, redistribution, {
         items: cards.length,
         version: 1,
       });
-      const result = await renderCollectionSheet(thumbs, join(options.assetsRoot, key));
+      const result = await renderCollectionSheet(thumbs, join(options.assetsRoot, key), {
+        assetsRoot: options.assetsRoot,
+      });
       const pageKeys = result.pages.map((page) => relativeKey(options.assetsRoot, page));
       pages.push(...pageKeys);
       const collection = structuredClone(target.collection);

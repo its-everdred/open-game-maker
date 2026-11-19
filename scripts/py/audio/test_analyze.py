@@ -181,3 +181,18 @@ def test_audio_jobs_work_with_a_symlinked_library(tmp_path):
     link.symlink_to(library, target_is_directory=True)
     [job] = a.audio_files(link / "packs")
     assert a.sidecar_path(job["version_dir"], job["file"]) == pack / "v1" / "analysis" / "sound.analysis.json"
+
+
+def test_rights_index_rejects_restricted_source_alias(tmp_path):
+    import pytest
+    pack = tmp_path / "pack"
+    ext = pack / "v1" / "extracted"
+    ext.mkdir(parents=True)
+    (pack / "cards").mkdir()
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "collection.card.json").write_text(json.dumps({"rights": {"uses": ["vision-input"]}}))
+    (ext / "real.wav").write_bytes(b"wav")
+    (ext / "alias.wav").symlink_to(ext / "real.wav")
+    (pack / "cards" / "denied.card.json").write_text(json.dumps({"source": {"files": [{"path": "alias.wav"}]}, "rights": {"uses": []}}))
+    with pytest.raises(ValueError, match="source alias"):
+        a.audio_files(tmp_path)
