@@ -20,14 +20,13 @@ build with it. A stage that is only judged against the stage before it can never
 | 4 | **Video to real gameplay** | The approved clips implemented as playable slices that look and sound like the clips; the video-to-game study and compare scripts make the side-by-side | Play-then-vote cards beside the approved clip (`gm decide --playable`) | role:gameplay, role:qa |
 | 5 | **Gameplay iterations** | Tuned snippets (feel, speed, difficulty, modes) as playable variants | Play-then-vote per variant, one feature at a time | role:gameplay, role:qa |
 
-The role labels stamp each stage ticket's skills once roles land (#656); a stage ticket carries every role in its
-row.
+One feature ticket carries the union of roles needed across its activities, plus `game:<slug>`. The five activities map to the four `gm-prototype` phases: concepts to mock, dioramas and clips to prototype, playable slices to build, and iterations to polish.
 
 ## Rules
 
 - **In order, per feature.** A feature is a piece of the game the creator reviews on its own: a screen or a moment from
   the flow diagram (`references/flow-diagram.md`), such as the play screen, a chain, character select or the round end.
-  No stage starts for a feature before the previous stage's review for that feature is answered. Features move
+  A pending pick is non-blocking: proceed with the recommendation as provisional, never as approval. Features move
   independently: the play screen can be at stage 4 while character select is at stage 2.
 - **A rejection loops back within the same stage.** The stage makes new options from the creator's words (recorded with
   `gm options reject`, so the rejected option never returns) and asks again. It never skips ahead or falls back a stage.
@@ -35,7 +34,7 @@ row.
   its diorama, and stage 4 and 5 screens against the stage 3 clip and the stage 2 diorama, never against the stage 1
   concept.
 - **The flow diagram places every screen.** Each screen node in the session loop gets its feature ladder; a stage covers
-  the screens on it, and each stage ticket names its node (`flow: round_end`).
+  the screens on it, and each feature ticket names its node (`flow: round_end`).
 - **Silence is a provisional default, never approval.** Commands get a provisional default after about five minutes, so
   a quiet creator never stops the ladder; the default is recorded as such and a later answer reopens what it touched.
 
@@ -95,22 +94,14 @@ row.
 
 ## Tickets
 
-- **One ticket per stage per feature.** Title it by stage, feature and game ("3 Clips: chains, Blobs"). Each ticket
-  ends in exactly one review Command with media; stages 4 and 5 also leave a play link with scenarios and a phone MP4.
-- **Plan the whole ladder up front, research just in time.** Write the game's ladder plan from
-  `references/build-order-template.md` into `games/<name>/design/ladder.md` and file every stage ticket as soon as the
-  spec lands, so the Build Order shows the whole game. Deep-dive a stage ticket (research-spike step 3) when the decision
-  it builds on exists: researching stage 3 before stage 2 is decided researches a guess. Stage 1 tickets are researched
-  up front.
-- **Gates are decisions.** Stage n+1 of a feature is blocked by stage n's Command for that feature (the decision id is in
-  its "relies on" list).
-- **Check the plan.** `node .claude/skills/gm-new-game-plan/scripts/check-ladder.ts games/<name>/design/ladder.md`
-  fails unless the Features table is filled in and the plan holds the five stages in order, each with its review
-  Command and roles, a row for every feature (and none that is not in Features) and a ticket on every row.
-- **Skeleton first** (gm-new-game-plan): it adds the scenario loader and the stage evidence folders, so every later
-  ticket owns its own files.
-
-Worked example: `references/examples/blobs-ladder.md`, a falling-blob versus puzzle.
+- File **one ticket per feature**, with `game:<slug>` and every applicable `role:*` from the table. Start it at
+  `phase:mock` / `model:low`; approval advances the same ticket through prototype / medium, build / xhigh and
+  polish / high. Rejection stays on the current rung. Never file Review, Continue or Verify follow-ups.
+- Plan the evidence for all five activities in `games/<name>/design/ladder.md`; use the same ticket in every row for
+  a feature. Research later activities when their inputs exist. Skeleton work provides scenarios and evidence folders.
+- Every option carries media; decisions are non-blocking. Ship the recommendation while waiting, recording it as
+  provisional, and apply later feedback on the same ticket. Each approved output is the next acceptance target.
+- Run `node .claude/skills/gm-new-game-plan/scripts/check-ladder.ts games/<name>/design/ladder.md`.
 
 ## Acceptance per stage
 
@@ -127,13 +118,5 @@ gap goes back to the creator as a question; it never ships as "close enough".
 
 ## Reopening an earlier stage
 
-Every stage ticket lists the decision ids it relies on. When a decision is superseded (a late answer, a feasibility gap
-found late, a stage 5 answer that changes play):
-
-1. Record the new decision with `supersedes`; record the rejected option with `gm options reject` so the reopened stage
-   never offers it again.
-2. Find every stage ticket whose "relies on" list holds the old id; they are stale.
-3. File a revision ticket for the earliest stale stage ("2 Dioramas rev 2: play screen"), gated as before; later stale
-   stages of that feature wait on it. Merged work stays until its revision lands; revert only what the new decision
-   forbids.
-4. Message running agents on stale tickets (`aiur-main message`).
+Record superseding decisions and rejected options. Rework the affected feature on its existing ticket and carry the
+new target forward; do not file revision or continuation tickets. Preserve merged work until its replacement lands.

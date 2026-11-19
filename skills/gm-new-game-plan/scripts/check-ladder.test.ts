@@ -33,10 +33,27 @@ describe('check-ladder', () => {
     expect(checkLadder(missing)).toContain('Game media: expected one Thumbnail ticket');
     const missingTrailer = BLOBS.replace(/^\| Trailer \|.*\n/m, '');
     expect(checkLadder(missingTrailer)).toContain('Game media: expected one Trailer ticket');
-    expect(checkLadder(BLOBS.replace('role:visual, role:audio | 4 Slice', 'role:visual | 4 Slice')))
+    expect(checkLadder(BLOBS.replace('role:visual, role:audio | Play screen:', 'role:visual | Play screen:')))
       .toContain('Game media: Trailer roles must be role:visual, role:audio');
-    expect(checkLadder(BLOBS.replace('Logo: Blobs; Look: play screen, Blobs', '')))
+    expect(checkLadder(BLOBS.replace('Logo: Blobs; Play screen: Blobs', '')))
       .toContain('Game media: Thumbnail needs blockers');
+  });
+
+  it('rejects separate stage tickets and missing standard tickets', () => {
+    expect(checkLadder(BLOBS.replace('Chains: Blobs', 'Separate mock: Blobs'))).toContain(
+      '2. Dioramas: "chains" must use the same feature ticket',
+    );
+    expect(checkLadder(BLOBS.replace(/^\| Loading image \|.*\n/m, ''))).toContain('Game media: expected one Loading image ticket');
+    expect(checkLadder(BLOBS.replace(/^\| Flow diagram \|.*\n/m, ''))).toContain(
+      'Standard tickets: flow diagram needs one ticket, role:game-design and blockers',
+    );
+  });
+
+  it('rejects placeholder, inconsistent and unknown labels', () => {
+    for (const bad of ['game:<slug>, role:<role>', 'game:other, role:visual', 'game:blobs, role:visual-invalid']) {
+      const changed = BLOBS.replace(/game:blobs, role:game-design, role:audio, role:3d, role:assets, role:visual, role:gameplay, role:qa/, bad);
+      expect(checkLadder(changed)).not.toEqual([]);
+    }
   });
 
   it('reads only the first table of a section, so notes tables beside a stage are allowed', () => {
@@ -81,8 +98,8 @@ describe('check-ladder', () => {
   });
 
   it('fails a stage row with no ticket', () => {
-    const noTicket = BLOBS.replace('3 Clips: chains, Blobs', '');
-    expect(checkLadder(noTicket)).toEqual(['3. Rendered gameplay clips: "chains" has no ticket']);
+    const noTicket = BLOBS.replace('Chains: Blobs', '');
+    expect(checkLadder(noTicket)).toEqual(['1. Concepts: "chains" has no ticket']);
   });
 
   it('runs as a command that exits 1 with the problems, 0 when clean, 2 without a file', () => {
@@ -98,8 +115,8 @@ describe('check-ladder', () => {
     const run = (...args: string[]) => runScript(script, ...args);
     expect(run(path('../references/examples/blobs-ladder.md'))).toEqual({ code: 0, out: '' });
     const broken = join(mkdtempSync(join(tmpdir(), 'gm-ladder-test-')), 'ladder.md');
-    writeFileSync(broken, BLOBS.replace('3 Clips: chains, Blobs', ''));
-    expect(run(broken)).toEqual({ code: 1, out: '3. Rendered gameplay clips: "chains" has no ticket\n' });
+    writeFileSync(broken, BLOBS.replace('Chains: Blobs', ''));
+    expect(run(broken)).toEqual({ code: 1, out: '1. Concepts: "chains" has no ticket\n' });
     expect(run().code).toBe(2);
     expect(run(join(dirname(broken), 'missing.md')).code).toBe(2);
     const link = join(dirname(broken), 'skill-link');

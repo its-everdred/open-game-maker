@@ -2,14 +2,14 @@
 
 Copy to `games/<name>/design/ladder.md` and fill it in from the spec and the flow diagram (rules in
 `prototype-ladder.md`). Keep the five stage headings, their order and their Review and Roles lines; every stage table
-has one row per feature in Features, with its ticket title. Check it with
+has one row per feature in Features, with the same feature ticket title in every stage. Check it with
 `node .claude/skills/gm-new-game-plan/scripts/check-ladder.ts games/<name>/design/ladder.md`.
 
 ## Features
 
-| Feature   | Flow node |
-| --------- | --------- |
-| <feature> | `<node>`  |
+| Feature | Flow node | Labels |
+|---|---|---|
+| <feature> | `<node>` | game:<slug>, role:<role> |
 
 ## 1. Concepts
 
@@ -56,13 +56,19 @@ Roles: role:gameplay, role:qa
 |---|---|---|---|---|
 | <feature> |  |  | <ticket> |  |
 
+## Standard tickets
+
+| Asset | Ticket | Roles | Blocked by |
+|---|---|---|---|
+| Flow diagram | <flow ticket> | game:<slug>, role:game-design | <skeleton ticket> |
+
 ## Game media
 
 | Asset | Ticket | Roles | Blocked by |
 |---|---|---|---|
-| Thumbnail | <composed art-only scene; follow the Thumbnail rule in SKILL.md> | role:visual | <logo and graphics/look tickets> |
-| Loading image | <loading image ticket> | role:visual | <graphics/look tickets> |
-| Trailer | <trailer ticket> | role:visual, role:audio | <gameplay tickets> |
+| Thumbnail | <composed art-only scene; follow the Thumbnail rule in SKILL.md> | game:<slug>, role:visual | <logo and graphics/look tickets> |
+| Loading image | <loading image ticket> | game:<slug>, role:visual | <graphics/look tickets> |
+| Trailer | <trailer ticket> | game:<slug>, role:visual, role:audio | <gameplay tickets> |
 
 Record these as GitHub native blocked-by edges, not just prose. Refresh the affected media when the style or core gameplay changes.
 
@@ -70,7 +76,8 @@ Record these as GitHub native blocked-by edges, not just prose. Refresh the affe
 
 ```text
 skeleton
-├─ <feature>: 1 concepts ─ 2 diorama ─ 3 clips ─ 4 slice ─ 5 iterations
+├─ flow diagram
+├─ <feature>: one ticket (mock → prototype → build → polish)
 ├─ logo + graphics/look → thumbnail
 ├─ graphics/look → loading image
 └─ gameplay → trailer
