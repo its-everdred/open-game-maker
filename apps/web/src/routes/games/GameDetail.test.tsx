@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useLayoutEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { detailOf, GameDetail } from './GameDetail';
 import { GameTrailer } from './GameTrailer';
@@ -63,6 +64,22 @@ function shape(element: Element): string {
 }
 
 describe('game detail', () => {
+  it('can dismiss with Escape as soon as the detail is committed', () => {
+    const onClose = vi.fn();
+    function PressEscape() {
+      useLayoutEffect(() => {
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+      }, []);
+      return null;
+    }
+    render(
+      <>
+        <GameDetail game={blobs} canOpen onPlay={vi.fn()} onEdit={vi.fn()} onClose={onClose} />
+        <PressEscape />
+      </>,
+    );
+    expect(onClose).toHaveBeenCalledOnce();
+  });
   it('renders the same layout and splatter border for every game, varying only the data', async () => {
     const views = [];
     for (const game of [blobs, goblin]) {

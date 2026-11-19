@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { CommandsInbox } from '../../features/commands-inbox/CommandsInbox';
 import { openConversation } from '../../features/build-chat/conversation';
 import { Icon } from '../../components/Icon';
@@ -97,7 +97,7 @@ export function GameDetail({
   const [mask, setMask] = useState<string>();
   const { description, tags, stats } = detailOf(game);
   const hasStats = Object.values(stats).some((value) => value !== undefined);
-  useEffect(() => close.current?.focus(), [game.id]);
+  useLayoutEffect(() => close.current?.focus(), [game.id]);
   useEffect(() => {
     let active = true;
     void splatMask(FRAME_SEED).then((value) => {

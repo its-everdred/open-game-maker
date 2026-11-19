@@ -34,6 +34,8 @@ export function GameCell({
     if (selected && !wasSelected.current) setShowTrailer(false);
     if (selected) lastSpotlight.current = spotlight;
     const current = cell.current;
+    // A closing spotlight stays mounted for its exit animation and may reopen before unmounting.
+    if (selected && !wasSelected.current) current?.querySelector<HTMLButtonElement>('.games-close')?.focus();
     const slot = current?.querySelector(
       selected ? '.game-cell-spotlight [data-cover-slot]' : '.game-cell-tile [data-cover-slot]',
     );

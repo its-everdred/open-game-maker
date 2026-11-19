@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, useLocation, useNavigate, type InitialEntry } from 'react-router';
+import { createMemoryRouter, MemoryRouter, useLocation, useNavigate, type InitialEntry } from 'react-router';
 
 import { commandFixture } from '../../features/commands-inbox/fixtures';
+import { App } from '../../app/App';
 import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 import { GamesScreen } from './GamesScreen';
 import { startTrailer } from './trailerVideo';
@@ -396,6 +397,38 @@ describe('GamesScreen', () => {
     expect(screen.queryByText(/Create a new game|Add another game|Start creating/)).toBeNull();
   });
 
+  it('commits keyboard selection before a subsequent Escape', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/all',
+          element: (
+            <GameMenuProvider>
+              <GamesScreen />
+            </GameMenuProvider>
+          ),
+        },
+      ],
+      { initialEntries: ['/all?test'] },
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <App router={router} />
+      </QueryClientProvider>,
+    );
+    const tile = await screen.findByRole('button', { name: /^Goblin Cellar/ });
+    act(() => {
+      tile.focus();
+      tile.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(screen.getByRole('button', { name: 'Close game' })).toHaveFocus();
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await waitFor(() => expect(router.state.location.search).not.toContain('spotlight'));
+    expect(router.state.location.search).toContain('test');
+    expect(router.state.location.state).toEqual({ spotlightDismissed: true });
+  });
+
   it('writes selection to the URL and returns focus to the tile after closing with Escape', async () => {
     renderGames('/all?test');
     const tile = await screen.findByRole('button', { name: /^Goblin Cellar/ });
@@ -409,6 +442,20 @@ describe('GamesScreen', () => {
     fireEvent.keyDown(close, { key: 'Escape' });
     await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight'));
     await waitFor(() => expect(screen.getByRole('button', { name: /^Goblin Cellar/ })).toHaveFocus());
+  });
+
+  it('focuses the close control when reopening during the exit animation', async () => {
+    renderGames('/all?test');
+    const tile = await screen.findByRole('button', { name: /^Goblin Cellar/ });
+    fireEvent.click(tile);
+    const close = await screen.findByRole('button', { name: 'Close game' });
+    fireEvent.keyDown(close, { key: 'Escape' });
+    expect(close.closest('.game-cell-exiting')).not.toBeNull();
+    fireEvent.click(tile);
+    expect(screen.getByRole('button', { name: 'Close game' })).toBe(close);
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight'));
   });
 
   it('does not auto-select again when a user chooses and closes a game before measurement settles', async () => {
