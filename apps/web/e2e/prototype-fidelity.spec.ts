@@ -225,7 +225,12 @@ async function prepareTitle(app: Page, reference: Page): Promise<Masks> {
     neutralizeReferenceAssets(reference),
     installAuthRoutes(app, { signedIn: true }),
   ]);
-  await app.route('**/town/index.html*', (route) => route.fulfill({ contentType: 'text/html', body: townStub }));
+  const controlledTown = townStub.replace(
+    "setTimeout(() => parent.postMessage('town-ready', location.origin), 100);",
+    "addEventListener('message', (e) => { if (e.data === 'release-town-ready') parent.postMessage('town-ready', location.origin); });",
+  );
+  expect(controlledTown, 'town stub must wait for the test to release readiness').not.toBe(townStub);
+  await app.route('**/town/index.html*', (route) => route.fulfill({ contentType: 'text/html', body: controlledTown }));
   await app.route('**/api/v1/games', (route) => route.fulfill({ json: { games: [] } }));
   await Promise.all([
     app.goto('/?test', { waitUntil: 'domcontentloaded' }),
@@ -233,10 +238,15 @@ async function prepareTitle(app: Page, reference: Page): Promise<Masks> {
   ]);
   await expect(reference.locator('#lib-grid .tile').first()).toBeVisible();
   await showStudioScreen(reference, 's-title');
-  await app.locator('.title-town').evaluate((town) => {
-    town.replaceChildren();
-    (town as HTMLElement).style.background = '#6b6570';
+  // Keep React's children mounted: town-ready can still update the poster and iframe.
+  await app.addStyleTag({
+    content: '.title-town { background: #6b6570 !important; } .title-town > * { visibility: hidden !important; }',
   });
+  await expect(app.frameLocator('.title-town iframe').locator('script')).toHaveCount(1);
+  await app.locator('.title-town iframe').evaluate((frame) => {
+    (frame as HTMLIFrameElement).contentWindow!.postMessage('release-town-ready', location.origin);
+  });
+  await expect(app.locator('.title-town')).toHaveClass(/\blive\b/, { timeout: 10000 });
   await Promise.all([
     expect(app.getByRole('button', { name: 'Start', exact: true })).toBeVisible(),
     expect(reference.locator('#t-start')).toBeVisible(),
