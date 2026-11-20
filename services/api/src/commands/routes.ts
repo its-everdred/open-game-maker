@@ -24,6 +24,7 @@ import {
   readReviewEpisode,
 } from '../review-rounds/answer-guard.js';
 import { getRound } from '../review-rounds/store.js';
+import { logReviewFeedRefresh } from '../review-rounds/feed-log.js';
 
 export const prefix = '/api/v1';
 
@@ -45,12 +46,28 @@ export default new Hono<ApiBindings>()
     const page: GameCommandsPage = {
       commands: shownOneByOne(c.get('deps'), await listGameCommands(c.get('deps'), game)),
     };
+    await logReviewFeedRefresh(
+      'game_commands',
+      game.id,
+      page.commands.flatMap((command) =>
+        command.ticket ? [{ ticket: command.ticket, id: command.decision_id, postedAt: command.opened_at }] : [],
+      ),
+      c.get('deps').log,
+    );
     return c.json(page);
   })
   // The menu's decision inbox: the caller's player-facing Commands across every game they may edit.
   .get('/me/commands', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     const page = await listCreatorCommands(c.get('deps'), principal, c.req.query('includeQuestions') === '1');
+    await logReviewFeedRefresh(
+      'creator_commands',
+      'creator',
+      page.commands.flatMap((command) =>
+        command.ticket ? [{ ticket: command.ticket, id: command.decision_id, postedAt: command.opened_at }] : [],
+      ),
+      c.get('deps').log,
+    );
     return c.json(page);
   })
   .post('/games/:gameId/commands/:decisionId/missing-media', async (c) => {
