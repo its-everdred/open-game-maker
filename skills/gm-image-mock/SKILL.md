@@ -9,6 +9,8 @@ Follow the image sizing rule in `gm-ui-hud`: never scale images non-uniformly; u
 resizable art, and generate a separately named asset at the exact slot aspect ratio for a new shape. State its pixel
 size in the prompt and mark it AI-generated as usual. Include the distortion gate's output in the verify checklist.
 
+**Every image is an aspect set** (creator, 2026-11-20: "make all images work for all device sizes and aspect ratios include phones"). Anything a player or the creator sees (thumbnail, logo lockup, loading and title art, backgrounds, panels, and the review images themselves) is made for phone portrait (390x844), phone landscape (844x390), tablet and desktop, never desktop alone. Fill a slot one of two ways: a background plate larger than every ratio with the foreground (logo, characters) placed per ratio inside a marked safe area, or one image generated at each exact ratio. Never crop through the subject, stretch, or add bars. Post review rounds phone portrait first, each composite at its real display size, and record the ratios and anchors in the recipe so the app can serve the right one. A round with only a wide desktop image is not ready to post.
+
 A creator judges a look fastest from a picture of the game screen. Before building dioramas or wiring real assets,
 show **image mocks**: generated stills of the actual play screen, steered by the kit (asset set) the game uses. Real
 assets come in step 2, built toward the mock the creator picked.
@@ -27,7 +29,7 @@ assets come in step 2, built toward the mock the creator picked.
    character staging. Never four tints of one scene.
 3. **The player's screen, nothing else.** Each mock is one in-game frame as the player sees it, from the game's real
    camera: playfield, HUD (score, next, timers), characters, effects at a key moment (a clear, a hit, a win). No
-   off-camera, wide, orbit or debug views. Phone portrait first when the game targets phones, then desktop.
+   off-camera, wide, orbit or debug views. Phone portrait first, then phone landscape, tablet and desktop (the aspect set above).
 4. **Rosters are voted item by item.** For characters (or any set the game ships several of), first ask how many
    the game starts with, then offer **twice that many** individual options, each its own card with a name and a
    one-line personality. Push each past the kit's default look (colours, props, expression, pose) so no two read as
