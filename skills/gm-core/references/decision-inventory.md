@@ -56,7 +56,11 @@ settled; each settled item enters the inventory as `answered`).
    feature's decisions first (`gm-scope-options`). Each ticket body lists its ids under `## Creator decisions`.
 2. **Building.** At the start of a ticket, raise each of its `open` decisions as a non-blocking Command with media on
    every option: one decision per Command, or one multi-question Command when the creator judges each option
-   separately (like or dislike each enemy). Set `status: asked`, build the recommendation, and continue. A decision
+   separately (like or dislike each enemy). Default to letting the creator pick several (like or dislike each option);
+   a single pick only when the options truly exclude each other (creator, 2026-11-20: "i should be able to pick
+   multiple, i like all 3"). Motion media (clips, GIFs) is a short seamless loop that plays muted on its own.
+   Options for a screen or layout are rendered mocks of the real screen in the game's look (gm-image-mock), never
+   bare layout sketches ("these are very boring. render as a mock first"). Set `status: asked`, build the recommendation, and continue. A decision
    you discover while building goes into the inventory first, then is raised the same way.
 3. **Answers.** The worker that receives the answer writes `answered`, `answer` and `answered_at` in its next PR. The
    Executor writes `defaulted` when it applies a provisional default.
