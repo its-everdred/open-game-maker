@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { NOTE, PICK_NOTE, reached, reviewE2e, type Report } from '../src/qa-review-e2e.js';
+import { commandReached, NOTE, PICK_NOTE, reached, reviewE2e, type Report } from '../src/qa-review-e2e.js';
 import { reviewOptionImageReady, reviewRoundMediaReady } from '../src/qa-review-media.js';
 import { gm, tempDir } from './helpers.js';
 
@@ -15,6 +15,7 @@ vi.mock('../src/qa-review-checks.js', () => ({
   swipeDeckFailures: async () => [],
   optionFailures: async () => [],
 }));
+vi.mock('../src/qa-review-touch.js', () => ({ swipeReviewMedia: async () => {} }));
 
 // The hammer's ticket-detail steps (#873) run first in each size and have their own browser test; this suite drives the
 // review deck.
@@ -63,7 +64,7 @@ it('captures the review page and named wait when opening the deck fails', async 
   openDeck.mockRejectedValueOnce(new Error('wait for review row QA review: timeout'));
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => Response.json({})),
+    vi.fn(async () => Response.json({ gameId: 'g_qa', decisionId: 'qa_test' })),
   );
   const page = {
     url: () => 'https://app.example.test/all',
@@ -125,7 +126,7 @@ it.each(['image', 'video', 'audio', 'option'] as const)(
     });
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response('{"options":3}', { status: 200 })),
+      vi.fn(async () => new Response('{"gameId":"g_qa","decisionId":"qa_test","options":3}', { status: 200 })),
     );
     const element = {
       click: async () => {},
@@ -191,6 +192,224 @@ it.each(['image', 'video', 'audio', 'option'] as const)(
   },
 );
 
+async function runAnswerReceiptCase(
+  delivery: 'late' | 'immediate',
+  routeAnswer: { status: string; option_id: string } = { status: 'answered', option_id: 'b' },
+) {
+  let reportReads = 0;
+  let responseWaitRegistered = false;
+  let responseBodyRead = false;
+  let resolveAnswer!: (response: FakeAnswerResponse) => void;
+  let answerResponse: Promise<FakeAnswerResponse>;
+  const responseOrdering: boolean[] = [];
+  const roundPollCounts: number[] = [];
+  const answerPath = '/api/v1/games/g_qa/commands/qa_test/answer';
+  const fakeAnswerResponse: FakeAnswerResponse = {
+    request: () => ({ method: () => 'POST' }),
+    url: () => `https://app.example.test${answerPath}`,
+    ok: () => true,
+    status: () => 200,
+    json: async () => {
+      responseBodyRead = true;
+      return routeAnswer;
+    },
+  };
+  const resetAnswerResponse = () => {
+    reportReads = 0;
+    responseWaitRegistered = false;
+    responseBodyRead = false;
+    answerResponse = new Promise((resolve) => (resolveAnswer = resolve));
+  };
+  resetAnswerResponse();
+  const waitingRound: Report['round'] = { verdict: null, notes: null, dispatch: null };
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/review-fixtures') && init?.method === 'POST') {
+        resetAnswerResponse();
+        return Response.json({ gameId: 'g_qa', decisionId: 'qa_test', options: 3 });
+      }
+      if (url.pathname.includes('/review-fixtures/') && init?.method !== 'DELETE') {
+        reportReads += 1;
+        let report: Report;
+        if (delivery === 'late' && reportReads === 1) report = { round: waitingRound, received: [] };
+        else if (delivery === 'immediate' && reportReads === 1)
+          report = {
+            round: waitingRound,
+            received: [
+              {
+                kind: 'answer',
+                response: JSON.stringify({
+                  kind: 'question_answers',
+                  answers: [{ option_id: 'b', verdict: 'like' }],
+                  notes: PICK_NOTE,
+                }),
+              },
+            ],
+          };
+        else if (delivery === 'immediate' && reportReads === 2)
+          report = {
+            round: waitingRound,
+            received: [
+              {
+                kind: 'answer',
+                response: JSON.stringify({
+                  kind: 'question_answers',
+                  answers: [{ option_id: 'b', verdict: 'like' }],
+                  notes: PICK_NOTE,
+                }),
+              },
+            ],
+          };
+        else
+          report = {
+            round: { verdict: 'needs_work', notes: NOTE, dispatch: null },
+            received: [
+              {
+                kind: 'answer',
+                response: JSON.stringify({
+                  kind: 'question_answers',
+                  answers: [{ option_id: 'b', verdict: 'like' }],
+                  notes: PICK_NOTE,
+                }),
+              },
+              { kind: 'rework', reason: NOTE },
+            ],
+          };
+        if (delivery === 'immediate') roundPollCounts.push(reportReads);
+        if (reportReads === 1 && report.received.some((item) => item.kind === 'answer'))
+          responseOrdering.push(responseBodyRead);
+        return Response.json(report);
+      }
+      return Response.json({});
+    }),
+  );
+
+  const makeLocator = (name = ''): FakeLocator => ({
+    click: async () => {
+      if (name === 'Send choice') {
+        if (!responseWaitRegistered) throw new Error('answer response waiter was not registered before the click');
+        resolveAnswer(fakeAnswerResponse);
+      }
+    },
+    waitFor: async () => {},
+    fill: async () => {},
+    scrollIntoViewIfNeeded: async () => {},
+    boundingBox: async () => ({ x: 0, y: 0, width: 100, height: 100 }),
+    evaluate: async () => ({ x: 50, y: 50 }),
+    first() {
+      return this;
+    },
+    locator() {
+      return this;
+    },
+    getByText() {
+      return this;
+    },
+    getByRole(_role, options) {
+      return makeLocator(String(options?.name ?? ''));
+    },
+    getByLabel() {
+      return this;
+    },
+    filter() {
+      return this;
+    },
+    count: async () => 0,
+    innerText: async () => '',
+  });
+
+  const page = {
+    url: () => 'https://app.example.test/all',
+    goto: async () => {},
+    close: async () => {},
+    screenshot: async ({ path }: { path: string }) => writeFileSync(path, 'still'),
+    getByRole: (_role: string, options?: { name?: string | RegExp }) => makeLocator(String(options?.name ?? '')),
+    getByLabel: () => makeLocator(),
+    locator: () => makeLocator(),
+    waitForFunction: async () => {},
+    waitForResponse: (matches: (response: FakeAnswerResponse) => boolean) => {
+      if (!matches(fakeAnswerResponse)) throw new Error('unexpected answer request');
+      responseWaitRegistered = true;
+      return answerResponse;
+    },
+  };
+  const context = {
+    addCookies: async () => {},
+    close: async () => {},
+    newPage: async () => page,
+  };
+  const browser = { newContext: async () => context } as unknown as Parameters<typeof reviewE2e>[0];
+  const results = await reviewE2e(browser, {
+    origin: 'https://app.example.test',
+    api: 'http://127.0.0.1:4300',
+    internalToken: 'test',
+    cookie: { name: 'session', value: 'test' },
+    out: tempDir(),
+    injectRegression: false,
+    breakMedia: false,
+    stamp: `receipt-${delivery}`,
+  });
+  return { results, responseOrdering, roundPollCounts };
+}
+
+type FakeAnswerResponse = {
+  request: () => { method: () => string };
+  url: () => string;
+  ok: () => boolean;
+  status: () => number;
+  json: () => Promise<{ status: string; option_id: string }>;
+};
+
+type FakeLocator = {
+  click: () => Promise<void>;
+  waitFor: () => Promise<void>;
+  fill: (_value: string) => Promise<void>;
+  scrollIntoViewIfNeeded: () => Promise<void>;
+  boundingBox: () => Promise<{ x: number; y: number; width: number; height: number }>;
+  evaluate: () => Promise<{ x: number; y: number }>;
+  first: () => FakeLocator;
+  locator: () => FakeLocator;
+  getByText: () => FakeLocator;
+  getByRole: (_role: string, options?: { name?: string | RegExp }) => FakeLocator;
+  getByLabel: () => FakeLocator;
+  filter: () => FakeLocator;
+  count: () => Promise<number>;
+  innerText: () => Promise<string>;
+};
+
+describe('Command answer receipt timing', () => {
+  it('fails before later polling can hide a delayed aiur receipt', async () => {
+    const { results } = await runAnswerReceiptCase('late');
+    expect(results).toHaveLength(4);
+    for (const result of results) {
+      expect(result.ok).toBe(false);
+      expect(result.failure).toContain(
+        'the Command answer did not reach aiur when the direct answer route acknowledged',
+      );
+    }
+  });
+
+  it('accepts the immediate Command receipt while the review round reconciles later', async () => {
+    const { results, responseOrdering, roundPollCounts } = await runAnswerReceiptCase('immediate');
+    expect(results).toHaveLength(4);
+    expect(results.every((result) => result.ok)).toBe(true);
+    expect(responseOrdering).toEqual([true, true, true, true]);
+    expect(roundPollCounts).toEqual([1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3]);
+  });
+
+  it('rejects a route response for a different option even when the report contains B', async () => {
+    const { results } = await runAnswerReceiptCase('immediate', { status: 'answered', option_id: 'a' });
+    expect(results).toHaveLength(4);
+    expect(results.every((result) => !result.ok)).toBe(true);
+    expect(results.every((result) => result.failure === 'the Command answer route did not confirm choice B')).toBe(
+      true,
+    );
+  });
+});
+
 function host(qa: string) {
   const home = tempDir();
   const env = join(home, '.config', 'ogm', 'env');
@@ -249,13 +468,48 @@ describe('verdicts reaching aiur', () => {
   const delivered: Report = {
     round: { verdict: 'needs_work', notes: NOTE, dispatch: 'delivered' },
     received: [
-      { kind: 'answer', response: JSON.stringify({ answers: [{ option_id: 'b' }], notes: PICK_NOTE }) },
+      {
+        kind: 'answer',
+        response: JSON.stringify({
+          kind: 'question_answers',
+          answers: [{ option_id: 'b', verdict: 'like' }],
+          notes: PICK_NOTE,
+        }),
+      },
       { kind: 'rework', reason: `<!-- marker -->\n${NOTE}` },
     ],
   };
 
   it('passes only when the round note and the Command pick with its note both arrived', () => {
     expect(reached(delivered)).toBeNull();
+  });
+
+  it('requires the Command pick and note to have reached aiur before the answer response completes', () => {
+    expect(commandReached(delivered)).toBeNull();
+    expect(
+      commandReached({ ...delivered, received: delivered.received.filter((item) => item.kind !== 'answer') }),
+    ).toBe('the Command answer did not reach aiur');
+    expect(commandReached({ ...delivered, received: [{ kind: 'answer', option: 'a', response: PICK_NOTE }] })).toBe(
+      'the Command answer is not B with its note',
+    );
+    expect(
+      commandReached({ ...delivered, received: [{ kind: 'answer', option: 'b', response: 'no creator note' }] }),
+    ).toBe('the Command answer is not B with its note');
+    expect(
+      commandReached({
+        ...delivered,
+        received: [
+          {
+            kind: 'answer',
+            response: JSON.stringify({
+              kind: 'question_answers',
+              answers: [{ option_id: 'b', verdict: 'dislike' }],
+              notes: PICK_NOTE,
+            }),
+          },
+        ],
+      }),
+    ).toBe('the Command answer is not B with its note');
   });
 
   it('fails when the round verdict stayed in the app', () => {
