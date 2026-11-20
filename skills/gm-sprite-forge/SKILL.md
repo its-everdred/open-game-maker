@@ -26,6 +26,14 @@ The Blender import keeps mesh materials and animation, but ignores source camera
 
 The experimental `tree` rig scene accepts `dense=1` for a seeded clustered canopy and `leaf_count` (1–100000, default 24000) to control its detail. `canopy_scale`, `crown_width`, `crown_depth` and `crown_height` adjust the crown proportions. This is a blockout and has not passed the vegetation reference gates. Set `shadows=0` on the rig when the reference has no cast-shadow pixels. Render and score against the relevant original before using it.
 
+After a variant is approved, render and package all four views in one command:
+
+```sh
+python skills/gm-sprite-forge/scripts/render_vegetation.py tree assets-local/sets/smallscaleint-vegetation/ tree-v1 --source-card source.card.json --source-collection collection.card.json --metadata provenance.json --seed 42 --dense --shadowless
+```
+
+`provenance.json` must provide `agent.backend`, `agent.model`, a nonempty `skills` list and `tool_versions.blender`. The command records those fields, the source ID, rig hash, seed and parameters in the variant recipe. Its geometry remains experimental; the command does not confer approval.
+
 Once a vegetation variant has passed the applicable review gate, package four rig renders named `N.png`, `E.png`, `S.png` and `W.png` outside the pack:
 
 ```sh

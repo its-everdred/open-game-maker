@@ -1,0 +1,64 @@
+"""Exercise render orchestration with synthetic Blender output."""
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parents[1]
+REPO = ROOT.parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from render_vegetation import render_variant
+
+
+class RenderVegetationTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.collection = json.loads((REPO / 'packages/contracts/fixtures/cards/collection-kenney-mini-dungeon.json').read_text())
+        self.source = {'id': 't1:kenney-mini-dungeon/tiles/tree@2.0', 'card_type': 'asset',
+                       'collection': self.collection['id']}
+        self.metadata = {'agent': {'backend': 'test', 'model': 'synthetic'},
+                         'skills': ['gm-sprite-forge'], 'tool_versions': {'blender': 'test'}}
+
+    def test_render_packages_four_views_and_records_parameters(self):
+        commands = []
+        def fake_blender(cmd, check):
+            self.assertTrue(check)
+            commands.append(cmd)
+            raw = Path(cmd[cmd.index('--') + 2])
+            for i, view in enumerate('NESW'):
+                Image.new('RGBA', (256, 256), (30 + i, 80, 20, 255)).save(raw / f'tree_{view}.png')
+        with patch('render_vegetation.subprocess.run', side_effect=fake_blender):
+            result = render_variant('tree', self.root / 'set', 'tree-v1', self.source, self.collection,
+                                    seed=42, dense=True, shadows=False, metadata=self.metadata)
+        self.assertEqual(len(commands), 1)
+        self.assertIn('seed=42', commands[0])
+        self.assertIn('shadows=0', commands[0])
+        card = json.loads((result / 'tree-v1.card.json').read_text())
+        recipe = json.loads((result / 'recipe.json').read_text())
+        self.assertEqual(set(card['sprite']['facings']), set('NESW'))
+        self.assertEqual(recipe['parameters']['seed'], 42)
+        self.assertEqual(recipe['derived_from'], self.source['id'])
+        self.assertTrue(recipe['ai_generated'])
+        self.assertEqual(recipe['agent'], self.metadata['agent'])
+        self.assertEqual(len(recipe['rig_sha256']), 64)
+
+    def test_invalid_inputs_do_not_invoke_blender(self):
+        with patch('render_vegetation.subprocess.run') as run:
+            for kwargs in ({'seed': 1, 'height': 0}, {'seed': 1, 'metadata': {}},
+                           {'seed': 1, 'samples': 0, 'metadata': self.metadata}):
+                with self.assertRaises(ValueError):
+                    render_variant('tree', self.root / 'set', 'tree-v1', self.source, self.collection, **kwargs)
+            with self.assertRaises(ValueError):
+                render_variant('tree', self.root / 'packs' / 'source', 'tree-v1', self.source,
+                               self.collection, seed=1, metadata=self.metadata)
+            run.assert_not_called()
+
+
+if __name__ == '__main__':
+    unittest.main()

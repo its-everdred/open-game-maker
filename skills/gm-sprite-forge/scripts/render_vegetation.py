@@ -1,0 +1,95 @@
+"""Render four vegetation views and export them with a source card and recipe.
+
+This command does not approve assets or bypass the required reference and creator
+review gates. Use it only for variants already approved for production.
+"""
+import argparse
+import json
+import hashlib
+import math
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+
+from vegetation_export import _outside_packs, export, validate_source
+
+RIG = Path(__file__).with_name('blender_iso_rig.py')
+SCENES = ('tree', 'bare', 'conifer', 'bush', 'plant')
+
+
+def render_variant(scene, output, slug, source_card, source_collection, *, seed, height=1.0,
+                   lean=0.1, canopy_scale=1.0, levels=2, count=6, extent=0.2,
+                   samples=8, dense=False, autumn=False, shadows=True, metadata=None):
+    """Run a seeded four-view render, then package its finished outputs."""
+    output = _outside_packs(output)
+    if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
+        raise ValueError('invalid scene or variant slug')
+    if (not all(math.isfinite(v) for v in (height, lean, canopy_scale, extent))
+            or height <= 0 or lean < 0 or canopy_scale <= 0 or extent < 0
+            or not isinstance(levels, int) or not 0 <= levels <= 5
+            or not isinstance(count, int) or not 1 <= count <= 100
+            or not isinstance(samples, int) or not 1 <= samples <= 256
+            or not isinstance(seed, int)):
+        raise ValueError('invalid render parameters')
+    validate_source(source_card, source_collection)
+    if (not isinstance(metadata, dict) or not isinstance(metadata.get('agent'), dict)
+            or not metadata['agent'].get('backend') or not metadata['agent'].get('model')
+            or not isinstance(metadata.get('skills'), list) or not metadata['skills']
+            or not isinstance(metadata.get('tool_versions'), dict) or not metadata['tool_versions'].get('blender')):
+        raise ValueError('metadata must include agent backend/model, skills and Blender version')
+    if (output / slug).exists() or (output / slug).is_symlink():
+        raise FileExistsError(f'variant already exists: {output / slug}')
+    params = {'seed': seed, 'height': height, 'lean': lean, 'canopy_scale': canopy_scale,
+              'levels': levels, 'count': count, 'extent': extent, 'samples': samples,
+              'dense': int(dense), 'autumn': int(autumn), 'shadows': int(shadows)}
+    with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
+        raw = Path(temp) / 'raw'
+        raw.mkdir()
+        cmd = ['nice', '-n', '10', 'blender', '-b', '--factory-startup', '--threads', '2',
+               '--python-exit-code', '1', '--python', str(RIG), '--', scene, str(raw)]
+        cmd.extend(f'{key}={value}' for key, value in params.items())
+        subprocess.run(cmd, check=True)
+        normalized = Path(temp) / 'views'
+        normalized.mkdir()
+        for view in 'NESW':
+            shutil.copyfile(raw / f'{scene}_{view}.png', normalized / f'{view}.png')
+        recipe = {**metadata, 'generator': 'gm-sprite-forge', 'scene': scene, 'rig': RIG.name,
+                  'rig_sha256': hashlib.sha256(RIG.read_bytes()).hexdigest(),
+                  'parameters': params, 'directions': list('NESW'),
+                  'materials': 'stepped toon foliage and bark; autumn palette when enabled'}
+        return export(normalized, output, slug, source_card, source_collection, recipe)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('scene', choices=SCENES)
+    parser.add_argument('set_dir', type=Path)
+    parser.add_argument('slug')
+    parser.add_argument('--source-card', type=Path, required=True)
+    parser.add_argument('--source-collection', type=Path, required=True)
+    parser.add_argument('--metadata', type=Path, required=True, help='JSON agent, skills and tool_versions provenance')
+    parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--height', type=float, default=1.0)
+    parser.add_argument('--lean', type=float, default=0.1)
+    parser.add_argument('--canopy-scale', type=float, default=1.0)
+    parser.add_argument('--levels', type=int, default=2)
+    parser.add_argument('--count', type=int, default=6)
+    parser.add_argument('--extent', type=float, default=0.2)
+    parser.add_argument('--samples', type=int, default=8)
+    parser.add_argument('--dense', action='store_true')
+    parser.add_argument('--autumn', action='store_true')
+    parser.add_argument('--shadowless', action='store_true')
+    args = parser.parse_args()
+    result = render_variant(args.scene, args.set_dir, args.slug,
+                            json.loads(args.source_card.read_text()), json.loads(args.source_collection.read_text()),
+                            seed=args.seed, height=args.height, lean=args.lean, canopy_scale=args.canopy_scale,
+                            levels=args.levels, count=args.count, extent=args.extent, samples=args.samples,
+                            dense=args.dense, autumn=args.autumn, shadows=not args.shadowless,
+                            metadata=json.loads(args.metadata.read_text()))
+    print(result)
+
+
+if __name__ == '__main__':
+    main()

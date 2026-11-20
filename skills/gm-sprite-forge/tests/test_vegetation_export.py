@@ -24,7 +24,7 @@ class VegetationExportTest(unittest.TestCase):
         for i, view in enumerate('NESW'):
             Image.new('RGBA', (256, 256), (30 + i, 80, 20, 255)).save(self.render / f'{view}.png')
         self.collection = json.loads((REPO / 'packages/contracts/fixtures/cards/collection-kenney-mini-dungeon.json').read_text())
-        self.source = {'id': 't1:kenney-mini-dungeon/tiles/tree@1.0', 'card_type': 'asset',
+        self.source = {'id': 't1:kenney-mini-dungeon/tiles/tree@2.0', 'card_type': 'asset',
                        'collection': self.collection['id']}
         self.output = self.root / 'sets' / 'smallscaleint-vegetation'
 
@@ -56,6 +56,8 @@ class VegetationExportTest(unittest.TestCase):
             export(self.render, self.output, '../bad', self.source, self.collection, {'seed': 1})
         with self.assertRaises(ValueError):
             export(self.render, self.output, 'tree-v1', {**self.source, 'collection': 'wrong'}, self.collection, {'seed': 1})
+        with self.assertRaises(ValueError):
+            export(self.render, self.output, 'tree-v1', {**self.source, 'id': 't1:kenney-mini-dungeon/tiles/tree@1.0'}, self.collection, {'seed': 1})
         (self.render / 'W.png').unlink()
         with self.assertRaises(FileNotFoundError):
             export(self.render, self.output, 'tree-v1', self.source, self.collection, {'seed': 1})

@@ -25,17 +25,29 @@ def _outside_packs(path):
     return resolved
 
 
+
+def validate_source(source_card, source_collection):
+    """Require an asset identifier belonging to the supplied rights collection."""
+    if source_card.get('card_type') != 'asset' or source_collection.get('card_type') != 'collection':
+        raise ValueError('source cards must be an asset and its collection')
+    collection_id = source_collection.get('id', '')
+    if source_card.get('collection') != collection_id or '@' not in collection_id:
+        raise ValueError('source card and source collection do not match')
+    prefix, version = collection_id.rsplit('@', 1)
+    asset_id = source_card.get('id', '')
+    if (not asset_id.startswith(prefix + '/') or not asset_id.endswith('@' + version)
+            or asset_id == prefix + '/@' + version):
+        raise ValueError('source asset ID does not belong to the collection')
+    if not source_collection.get('rights') or not source_collection.get('license'):
+        raise ValueError('source collection must contain confirmed rights and license')
+
+
 def export(render_dir, set_dir, slug, source_card, source_collection, recipe):
     """Create a new variant folder and cards without modifying any source file."""
     render_dir, set_dir = _outside_packs(render_dir), _outside_packs(set_dir)
     if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
         raise ValueError('invalid variant slug')
-    if source_card.get('collection') != source_collection.get('id'):
-        raise ValueError('source card and source collection do not match')
-    if source_card.get('card_type') != 'asset' or source_collection.get('card_type') != 'collection':
-        raise ValueError('source cards must be an asset and its collection')
-    if not source_collection.get('rights') or not source_collection.get('license'):
-        raise ValueError('source collection must contain confirmed rights and license')
+    validate_source(source_card, source_collection)
     if not isinstance(recipe, dict) or not recipe:
         raise ValueError('a nonempty render recipe is required')
     if set_dir == render_dir or set_dir.is_relative_to(render_dir) or render_dir.is_relative_to(set_dir):
