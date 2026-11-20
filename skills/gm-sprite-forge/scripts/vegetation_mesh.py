@@ -11,7 +11,7 @@ from vegetation_layout import branches, placements
 
 
 def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.0,
-         fanout=2, spread=(0.55, 0.85), bare=False):
+         fanout=2, spread=(0.55, 0.85), bare=False, dense=False, leaf_count=24000):
     """Create a tree with connected branches and a canopy at each outer tip."""
     skeleton = branches(seed, height=height, lean=lean, levels=levels, fanout=fanout, spread=spread)
     objects = []
@@ -25,7 +25,7 @@ def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.
         obj.rotation_euler = delta.to_track_quat('Z', 'Y').to_euler()
         obj.data.materials.append(bark)
         objects.append(obj)
-        if branch.depth == levels and not bare:
+        if branch.depth == levels and not bare and not dense:
             bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2,
                                                   radius=height * 0.18 * canopy_scale,
                                                   location=end)
@@ -33,6 +33,9 @@ def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.
             obj.data.materials.append(foliage)
             bpy.ops.object.shade_smooth()
             objects.append(obj)
+    if dense and not bare:
+        from vegetation_canopy import make_canopy
+        objects.append(make_canopy(seed, foliage, height=height, leaf_count=leaf_count, offset=skeleton[0].end[:2] + (0,)))
     return objects
 
 
