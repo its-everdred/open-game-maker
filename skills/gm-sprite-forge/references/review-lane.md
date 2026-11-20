@@ -25,3 +25,26 @@ python skills/gm-sprite-forge/scripts/compare.py review original.png image-gen.p
 ```
 
 The mock must have eight transparent-background views arranged horizontally. The sheet labels the original, image-gen option, previous 3D and current 3D for each direction. It fits each mock view to the original sprite's height and enlarges all cells with nearest-neighbour sampling at least 4×. It refuses a sheet if the first frame of any direction changes no more than 3% of the previous/current foreground union. Review the result by eye: that floor does not establish a meaningful change. Send one review Command with an independently judged card for each track; include the same sheet on each card, allow a note for changes, and state how the round addresses the creator's last feedback. Keep originals, generated mocks and review media outside the repository.
+## Review and calibration
+
+For each meaningful rebuild round, post a non-blocking `decision.requested` on the rebuild ticket. Include the comparison still, eight-direction still and animated GIF or MP4 as applicable, plus the score JSON and gates in force. Inspect the media first. Attach the same media to **both** options so either answer can be made from the Command:
+
+```json
+{
+  "question": "Does this rebuild match the original?",
+  "blocking": false,
+  "authority": "human_required",
+  "reversibility": "reversible",
+  "audience": "creator",
+  "context": {"authority_basis": "product", "short_summary": "Review this rebuild against its original.", "long_context_markdown": "Give a note with Needs changes. Include the round and gate scores here."},
+  "options": [
+    {"id": "matches", "label": "Matches", "description": "Accept this visual match.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and rebuild comparison"}]},
+    {"id": "changes", "label": "Needs changes", "description": "Describe what still differs.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and rebuild comparison"}]}
+  ],
+  "consequence_of_delay": "No answer: rebuilding continues while the verdict is pending."
+}
+```
+
+Add all applicable still and video entries to each option (local paths must be inside the workspace); do not upload pack assets to cloud services. Record only an identified, relayed verdict in `calibration.jsonl`, one JSON object per line: `asset`, `class` (a key in `gates.json`), `round`, `head` (the actual full commit SHA for that round), `scores` (the unmodified `score.py` JSON or `compare.py still` per-view JSON), `verdict` (`matches` or `needs changes`), `note`, and ISO 8601 `date`. Keep missing provenance unresolved rather than guessing it.
+
+Run `python skills/gm-sprite-forge/scripts/calibrate.py skills/gm-sprite-forge/calibration.jsonl > proposal.json`. The proposal is reviewable JSON, never an automatic edit of `gates.json`. For props, the strictest view of each metric is used. A matching verdict relaxes failed numeric gates; recorded gate snapshots determine whether a rejection passed (legacy reports without snapshots use the supplied baseline); a rejection that passes all gates tightens the numeric gate with the smallest relative passing margin, using the next representable value. Conflicting changes are reported and processed in timestamp order, with the later verdict winning. Equality gates cannot be calibrated numerically. Review the proposed changes and land approved gate changes in a PR; regenerate comparisons so they show the gates in force.

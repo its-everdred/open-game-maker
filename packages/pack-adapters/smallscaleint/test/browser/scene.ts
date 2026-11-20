@@ -25,10 +25,10 @@ function pieceTexture(color: [number, number, number], floor = false): HTMLCanva
   }
   g.fillStyle = floor ? '#536d42' : css;
   g.beginPath();
-  g.moveTo(128, 128);
-  g.lineTo(255, 192);
-  g.lineTo(128, 255);
-  g.lineTo(1, 192);
+  g.moveTo(128, 176);
+  g.lineTo(192, 208);
+  g.lineTo(128, 240);
+  g.lineTo(64, 208);
   g.closePath();
   g.fill();
   return canvas;

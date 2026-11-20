@@ -86,9 +86,10 @@ const animalActions: Fact<readonly string[]> = {
   verified: 'sheet file names of 2D Animals Mega Pack 1 (10 per species)',
 };
 
-const tile: Fact<{ piece: number; footprint: [number, number] }> = {
-  value: { piece: 256, footprint: [256, 128] },
-  verified: 'Environment/<Category> <Id>_<E|N|S|W>.png pieces are 256x256; the 2:1 diamond footprint is 256x128',
+const tile: Fact<{ piece: { widths: [number, number]; height: number }; footprint: [number, number] }> = {
+  value: { piece: { widths: [128, 256], height: 256 }, footprint: [128, 64] },
+  verified:
+    'Measured ground PNG alpha bounds: 128x64 top face centered at y=208; images are 128x256 or 256x256 (sprite-pipeline report §2.1)',
 };
 
 const facingSuffixes: Fact<Record<'E' | 'N' | 'S' | 'W', string>> = {

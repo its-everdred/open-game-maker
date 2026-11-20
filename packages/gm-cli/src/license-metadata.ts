@@ -97,12 +97,14 @@ function cardCreditFields(card: ResolvedCard, collection: ResolvedCard): CreditF
 function withCardFallback(pack: unknown, card: CreditFields): unknown {
   const fields = record(pack) as CreditFields | null;
   if (fields === null) return pack;
-  const licenseSource = fields.license_source === undefined ? fields.licenseSource : fields.license_source;
+  const fallback = (value: unknown, alternate: unknown): unknown =>
+    value == null || (typeof value === 'string' && value.trim() === '') ? alternate : value;
+  const licenseSource = fallback(fields.license_source, fields.licenseSource);
   return {
-    license: fields.license === undefined ? card.license : fields.license,
-    license_source: licenseSource === undefined ? (card.license_source ?? card.licenseSource) : licenseSource,
-    attribution: fields.attribution === undefined ? card.attribution : fields.attribution,
-    source: fields.source === undefined ? card.source : fields.source,
+    license: fallback(fields.license, card.license),
+    license_source: fallback(licenseSource, fallback(card.license_source, card.licenseSource)),
+    attribution: fallback(fields.attribution, card.attribution),
+    source: fallback(fields.source, card.source),
   };
 }
 
