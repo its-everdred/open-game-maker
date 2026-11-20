@@ -46,6 +46,8 @@ export function ReviewInbox({
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
   const [answeredTickets, setAnsweredTickets] = useState<ReadonlySet<string>>(() => new Set());
   const [current, setCurrent] = useState<WorkerReview | undefined>(initialReview);
+  const [newReviewKeys, setNewReviewKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const [newCommandKeys, setNewCommandKeys] = useState<ReadonlySet<string>>(() => new Set());
   const [command, setCommand] = useState<ReviewCommand | undefined>(initialCommand);
   const [sending, setSending] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -136,15 +138,26 @@ export function ReviewInbox({
           current.kind !== 'standalone-preview' &&
           replacement.round !== current.round) ||
         (replacement.kind !== 'round' && current.kind !== 'round' && replacement.preview !== current.preview)
-      )
+      ) {
+        if (revisionKeyOf(replacement) !== revisionKeyOf(current))
+          setNewReviewKeys((seen) => new Set(seen).add(revisionKeyOf(replacement)));
         setCurrent(replacement);
+      }
     } else if (command && !answered.has(commandKey(command))) {
-      const replacement = commands.find(
-        (item) => commandSource(item) === commandSource(command) && item.decision_id === command.decision_id,
-      );
+      const replacement =
+        commands.find(
+          (item) => commandSource(item) === commandSource(command) && item.decision_id === command.decision_id,
+        ) ??
+        (command.ticket
+          ? commands.find((item) => commandSource(item) === commandSource(command) && item.ticket === command.ticket)
+          : undefined);
       if (!replacement) {
         if (!incomplete && !error) show(queue[0]);
-      } else if (replacement !== command) setCommand(replacement);
+      } else if (replacement !== command) {
+        if (commandKey(replacement) !== commandKey(command))
+          setNewCommandKeys((seen) => new Set(seen).add(commandKey(replacement)));
+        setCommand(replacement);
+      }
     } else if (
       target &&
       !targets.some((item) => targetSource(item) === targetSource(target) && item.ticket === target.ticket)
@@ -193,6 +206,11 @@ export function ReviewInbox({
           ×
         </button>
         {queueControls}
+        {newCommandKeys.has(commandKey(command)) ? (
+          <p className="review-round-new" role="status">
+            New round
+          </p>
+        ) : null}
         <p role="alert">The playable preview is unavailable.</p>
       </Dialog>
     );
@@ -215,6 +233,11 @@ export function ReviewInbox({
         </button>
         <div className="decision-deck-body">
           {queueControls}
+          {newCommandKeys.has(commandKey(command)) ? (
+            <p className="review-round-new" role="status">
+              New round
+            </p>
+          ) : null}
           {error && <p role="alert">Could not load all reviews.</p>}
           <CommandReviewCard
             key={`${commandSource(command)}:${command.decision_id}`}
@@ -246,6 +269,11 @@ export function ReviewInbox({
           ×
         </button>
         {queueControls}
+        {newCommandKeys.has(commandKey(command)) ? (
+          <p className="review-round-new" role="status">
+            New round
+          </p>
+        ) : null}
         {missingStatus(`${commandPath(command)}/${encodeURIComponent(command.decision_id)}/missing-media`)}
       </Dialog>
     );
@@ -286,6 +314,11 @@ export function ReviewInbox({
       </button>
       <div className="decision-deck-body">
         {queueControls}
+        {newReviewKeys.has(revisionKeyOf(current)) ? (
+          <p className="review-round-new" role="status">
+            New round
+          </p>
+        ) : null}
         {answered.has(keyOf(current)) && (
           <p role="status">
             Ticket state:{' '}
@@ -336,6 +369,10 @@ export function ReviewInbox({
 
 function keyOf(review: WorkerReview): string {
   return `${review.gameId}:${review.kind}:${review.kind === 'round' ? review.round.id : review.preview.buildId}`;
+}
+
+function revisionKeyOf(review: WorkerReview): string {
+  return review.kind === 'preview' ? `${keyOf(review)}:${review.round.id}` : keyOf(review);
 }
 
 function commandKey(command: ReviewCommand): string {

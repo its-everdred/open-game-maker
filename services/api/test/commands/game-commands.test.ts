@@ -530,31 +530,31 @@ describe('a registered game’s own Commands', () => {
     expect(deps.lines.some((line) => line.event === 'game_commands_unavailable')).toBe(true);
   });
 
-  it('answers a Command with no job as the creator, under a grant for its ticket', async () => {
-    const { app, answerAsCreator } = await appWithAiur([decision()]);
-
-    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+  it('waits for aiur to accept a no-job Command answer before returning success', async () => {
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => (release = resolve));
+    const answerAsCreator = vi.fn(async (): Promise<undefined> => {
+      await hold;
+    });
+    const { app } = await appWithAiur([decision()], answerAsCreator);
+    const request = app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
       method: 'POST',
       headers: { ...asUser(ids.user), 'content-type': 'application/json' },
       body: JSON.stringify({ option_id: 'square', version: 2 }),
     });
-
+    await vi.waitFor(() => expect(answerAsCreator).toHaveBeenCalled());
+    let settled = false;
+    void request.then(() => (settled = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    release();
+    const response = await request;
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      status: 'answered',
-      decision_id: 'd_aiur_1',
-      option_id: 'square',
-    });
-    expect(answerAsCreator).toHaveBeenCalledWith(
+    expect(await response.json()).toEqual({ status: 'answered', decision_id: 'd_aiur_1', option_id: 'square' });
+    expect(answerAsCreator.mock.calls[0]).toMatchObject([
       'd_aiur_1',
-      expect.objectContaining({
-        ticket: '478',
-        principal: ids.user,
-        option: 'square',
-        expected_version: 2,
-        idempotency_key: 'd_aiur_1:2',
-      }),
-    );
+      { ticket: '478', principal: ids.user, option: 'square', expected_version: 2, idempotency_key: 'd_aiur_1:2' },
+    ]);
   });
 
   it('carries a review deck’s map into aiur and the ledger when no job owns the Command', async () => {
