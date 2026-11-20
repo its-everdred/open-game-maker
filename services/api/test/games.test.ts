@@ -332,10 +332,12 @@ describe('games routes', () => {
         description: 'Match colour blobs and drop blocks in a forest duel.',
         tags: ['Versus', 'Cozy'],
         loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
+        slotImages: { tile: { mode: 'per-ratio', variants: { 'phone-portrait': 'media/tile-portrait.png' } } },
         sharedUrls: Object.fromEntries(
           sharedFiles.map((sourcePath, index) => [sourcePath, `/a/${String(index + 1).repeat(64)}.png`]),
         ),
         images: {
+          'media/tile-portrait.png': { width: 640, height: 360, sources },
           'media/thumbnail.png': { width: 640, height: 360, sources },
           'media/logo.png': { width: 640, height: 360, sources },
           'media/loading-portrait.png': { width: 640, height: 360, sources },
@@ -353,6 +355,15 @@ describe('games routes', () => {
         },
       },
       logoImage: { height: 360 },
+      slotImages: {
+        tile: {
+          'phone-portrait': {
+            sources: {
+              avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+            },
+          },
+        },
+      },
     });
     const detail = await (await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) })).json();
     expect(detail).toMatchObject({
