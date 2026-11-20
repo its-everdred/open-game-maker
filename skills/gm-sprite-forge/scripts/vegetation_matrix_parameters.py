@@ -4,7 +4,7 @@ import math
 CONTROLS = {'height', 'lean', 'canopy_scale', 'levels', 'count', 'extent', 'fanout',
             'spread_min', 'spread_max', 'leaf_count', 'crown_width', 'crown_depth',
             'crown_height', 'dense', 'autumn', 'shadows', 'leafy', 'plant_height',
-            'leaves_per_cluster', 'leaf_shading', 'batch_size', 'batch_radius',
+            'leaves_per_cluster', 'leaf_width', 'leaf_shading', 'batch_size', 'batch_radius',
             'branched', 'tiers', 'spokes', 'samples'}
 
 
@@ -29,7 +29,7 @@ def matrix_parameters(job):
     for key, (low, high) in limits.items():
         if key in result and (type(result[key]) is not int or not low <= result[key] <= high):
             raise ValueError(f'invalid {key}')
-    positive = ('height', 'canopy_scale', 'crown_width', 'crown_depth', 'crown_height', 'plant_height')
+    positive = ('height', 'canopy_scale', 'crown_width', 'crown_depth', 'crown_height', 'plant_height', 'leaf_width')
     nonnegative = ('lean', 'extent', 'batch_radius')
     for key in positive + nonnegative + ('spread_min', 'spread_max', 'yaw0'):
         if key in result and (not isinstance(result[key], (int, float)) or not math.isfinite(result[key])):

@@ -67,6 +67,20 @@ class RenderVegetationTest(unittest.TestCase):
         self.assertIn('finish.py', recipe['generator_sha256'])
         self.assertTrue(all(len(value) == 64 for value in recipe['generator_sha256'].values()))
 
+    def test_plant_leaf_width_is_forwarded_and_recorded(self):
+        commands = []
+        def fake_blender(cmd, check):
+            commands.append(cmd)
+            raw = Path(cmd[cmd.index('--') + 2])
+            for view in 'NESW':
+                Image.new('RGBA', (256, 256), (20, 70, 10, 255)).save(raw / f'plant_{view}.png')
+        with patch('render_vegetation.subprocess.run', side_effect=fake_blender):
+            result = render_variant('plant', self.root / 'set', 'plant-v1', self.source, self.collection,
+                                    seed=7, leafy=True, leaf_width=0.25, metadata=self.metadata)
+        self.assertIn('leaf_width=0.25', commands[0])
+        recipe = json.loads((result / 'recipe.json').read_text())
+        self.assertEqual(recipe['parameters']['leaf_width'], 0.25)
+
     def test_branched_conifer_controls_are_forwarded_and_recorded(self):
         commands = []
         def fake_blender(cmd, check):
@@ -92,6 +106,7 @@ class RenderVegetationTest(unittest.TestCase):
                            {'seed': 1, 'spread_max': 1, 'metadata': self.metadata},
                            {'seed': 1, 'crown_width': 0, 'metadata': self.metadata},
                            {'seed': 1, 'plant_height': 0, 'metadata': self.metadata},
+                           {'seed': 1, 'leaf_width': 0, 'metadata': self.metadata},
                            {'seed': 1, 'batch_size': 0, 'metadata': self.metadata},
                            {'seed': 1, 'branched': True, 'metadata': self.metadata},
                            {'seed': 1, 'tiers': 1, 'metadata': self.metadata},

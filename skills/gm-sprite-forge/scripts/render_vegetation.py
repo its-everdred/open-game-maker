@@ -46,16 +46,16 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
                    samples=8, dense=False, autumn=False, shadows=True, metadata=None,
                    fanout=2, spread_min=0.55, spread_max=0.85, leaf_count=24000,
                    crown_width=1.0, crown_depth=1.0, crown_height=1.0, palette=None,
-                   leafy=False, plant_height=0.18, leaves_per_cluster=12, leaf_shading=False,
+                   leafy=False, plant_height=0.18, leaves_per_cluster=12, leaf_width=1.0, leaf_shading=False,
                    batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0):
     """Run a seeded four-view render, then package its finished outputs."""
     output = _outside_packs(output)
     if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
         raise ValueError('invalid scene or variant slug')
     if (not all(math.isfinite(v) for v in (height, lean, canopy_scale, extent, spread_min, spread_max,
-                                            crown_width, crown_depth, crown_height, plant_height, batch_radius, yaw))
+                                            crown_width, crown_depth, crown_height, plant_height, leaf_width, batch_radius, yaw))
             or height <= 0 or lean < 0 or canopy_scale <= 0 or extent < 0
-            or min(crown_width, crown_depth, crown_height, plant_height) <= 0
+            or min(crown_width, crown_depth, crown_height, plant_height, leaf_width) <= 0
             or not isinstance(leaves_per_cluster, int) or not 1 <= leaves_per_cluster <= 64
             or not isinstance(batch_size, int) or not 1 <= batch_size <= 16 or batch_radius < 0
             or not 0 <= spread_min <= spread_max < 1
@@ -85,7 +85,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
               'fanout': fanout, 'spread_min': spread_min, 'spread_max': spread_max,
               'leaf_count': leaf_count, 'crown_width': crown_width, 'crown_depth': crown_depth,
               'crown_height': crown_height, 'leafy': int(leafy), 'plant_height': plant_height,
-              'leaves_per_cluster': leaves_per_cluster, 'leaf_shading': int(leaf_shading),
+              'leaves_per_cluster': leaves_per_cluster, 'leaf_width': leaf_width, 'leaf_shading': int(leaf_shading),
               'batch_size': batch_size, 'batch_radius': batch_radius,
               'branched': int(branched), 'tiers': tiers, 'spokes': spokes, 'yaw0': yaw, **palette_values}
     with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
@@ -144,6 +144,7 @@ def main():
     parser.add_argument('--batch-radius', type=float, default=0.05)
     parser.add_argument('--plant-height', type=float, default=0.18)
     parser.add_argument('--leaves-per-cluster', type=int, default=12)
+    parser.add_argument('--leaf-width', type=float, default=1.0)
     parser.add_argument('--autumn', action='store_true')
     parser.add_argument('--shadowless', action='store_true')
     args = parser.parse_args()
@@ -156,7 +157,7 @@ def main():
                             spread_min=args.spread_min, spread_max=args.spread_max, leaf_count=args.leaf_count,
                             crown_width=args.crown_width, crown_depth=args.crown_depth, crown_height=args.crown_height,
                             palette=json.loads(args.palette.read_text()) if args.palette else None, leafy=args.leafy,
-                            plant_height=args.plant_height, leaves_per_cluster=args.leaves_per_cluster,
+                            plant_height=args.plant_height, leaves_per_cluster=args.leaves_per_cluster, leaf_width=args.leaf_width,
                             leaf_shading=args.leaf_shading, batch_size=args.batch_size, batch_radius=args.batch_radius,
                             branched=args.branched, tiers=args.tiers, spokes=args.spokes, yaw=args.yaw)
     print(result)
