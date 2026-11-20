@@ -62,6 +62,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
             or not isinstance(count, int) or not 1 <= count <= 100
             or not isinstance(samples, int) or not 1 <= samples <= 256
             or not isinstance(seed, int) or (leaf_shading and not leafy)
+            or (leafy and scene != 'plant') or (dense and scene != 'tree')
             or (branched and scene != 'conifer')
             or not isinstance(tiers, int) or not 2 <= tiers <= 24
             or not isinstance(spokes, int) or not 3 <= spokes <= 32):
