@@ -21,7 +21,10 @@ Usage:
   scripts/meta/review-loop-metric.py --hours 24 --rows   # plus one line per iteration
   options: --no-gh (skip GitHub comment lookups), --picks DIR, --transcript FILE, --now ISO (replay)
 
-The meta pass copies the `REVIEW_LOOP ...` lines into its `## Review loop` section and diffs them against the last pass.
+The meta pass copies the `REVIEW_LOOP ...` and `REVIEW_QUEUE ...` lines into its `## Review loop` section and diffs them
+against the last pass. REVIEW_QUEUE is what Kevin has to review right now: open creator Commands per game, and each
+game's decision inventory (`~/games/open-games/docs/<slug>/decisions.json`: open = not yet asked, asked, answered,
+defaulted). A pass where `waiting` is 0 for a game that still has `open` decisions is a miss to investigate.
 
 Sources (all local files; no daemon RPC, so a slow or restarting daemon cannot stall it):
   Commands        ~/.config/aiur/<instance>/<repo>/decisions.json (+ decisions.ndjson for delivery events)
@@ -44,6 +47,7 @@ GH_REPO = {"core": "its-everdred/open-game-maker", "open-games": "its-everdred/o
 PROJECT = "-home-orangekid-games-open-game-maker-2000"
 CACHE = os.path.join(HOME, ".cache/ogm/review-loop-publishes.json")
 STAGES = ["S3 relay", "S4 delivery", "S5 work", "S6 page wait"]
+OPEN_GAMES = os.path.join(HOME, "games/open-games")
 
 
 def ts(s):
@@ -77,6 +81,7 @@ def load_commands():
             if d.get("audience") not in ("creator", None) or d.get("route_policy") != "human_only":
                 continue
             c = {"id": d["decision_id"], "repo": repo, "ticket": str((d.get("ticket") or {}).get("identifier")),
+                 "waiting": d.get("decision_status") == "open" and not d.get("answer"),
                  "created": ts(d.get("created_at")), "question": d.get("question") or "",
                  "answered": ts((d.get("answer") or {}).get("accepted_at")), "delivered": None}
             if c["created"] is None:
@@ -273,6 +278,40 @@ def gh_comments(repo, ticket):
         return []
 
 
+def game_tickets(slug):
+    """Open-Games ticket numbers labelled game:<slug> (one gh call; empty on failure or --no-gh)."""
+    try:
+        r = subprocess.run(["gh", "issue", "list", "-R", GH_REPO["open-games"], "--label", f"game:{slug}", "--state", "all",
+                            "--limit", "1000", "--json", "number"], capture_output=True, text=True, timeout=20)
+        return {str(i["number"]) for i in json.loads(r.stdout)}
+    except Exception:
+        return set()
+
+
+def review_queue(cmds, no_gh):
+    """One REVIEW_QUEUE line per game: Commands waiting on Kevin and the inventory's status counts."""
+    waiting = [c for c in cmds.values() if c["waiting"]]
+    slugs = sorted(d for d in os.listdir(os.path.join(OPEN_GAMES, "games")) if os.path.isdir(os.path.join(OPEN_GAMES, "games", d))) \
+        if os.path.isdir(os.path.join(OPEN_GAMES, "games")) else []
+    left = [c for c in waiting if c["repo"] == "open-games"]
+    for slug in slugs:
+        mine = set() if no_gh else game_tickets(slug)
+        n = sum(1 for c in left if c["ticket"] in mine)
+        left = [c for c in left if c["ticket"] not in mine]
+        inv = "inventory=none"
+        try:
+            entries = json.load(open(os.path.join(OPEN_GAMES, "docs", slug, "decisions.json")))
+            count = {s: sum(1 for e in entries if e.get("status") == s) for s in ("open", "asked", "answered", "defaulted")}
+            inv = " ".join(f"{s}={v}" for s, v in count.items()) + f" total={len(entries)}"
+        except OSError:
+            pass
+        except (ValueError, AttributeError, TypeError) as e:
+            inv = f"inventory=unreadable ({type(e).__name__})"
+        print(f"REVIEW_QUEUE game={slug} waiting={'na' if no_gh else n} {inv}")
+    print(f"REVIEW_QUEUE game=(open-games, no game label{' lookup' if no_gh else ''}) waiting={len(left)}")
+    print(f"REVIEW_QUEUE game=(core) waiting={sum(1 for c in waiting if c['repo'] == 'core')}")
+
+
 def fmt(v):
     return "   -" if v is None else f"{v:4.0f}"
 
@@ -343,6 +382,8 @@ def main():
         if i:
             print()
         report(h, now, args, data)
+    print()
+    review_queue(load_commands()[0], args.no_gh)
 
 
 if __name__ == "__main__":
