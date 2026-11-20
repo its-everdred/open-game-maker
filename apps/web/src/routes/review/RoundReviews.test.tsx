@@ -93,6 +93,43 @@ it('shows the capture and sends the creator notes without trimming', async () =>
   );
 });
 
+it('shows published prototype details and lets the creator submit a verdict', async () => {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews
+        gameId="game"
+        rounds={[
+          {
+            id: 'published-round',
+            ticket: 'publish',
+            track: 'prototype-publish',
+            buildId: 'build_1',
+            playUrl: 'https://app.example/play/game',
+            question: 'Review the published build',
+            works: ['Walk around'],
+            limitations: ['No attack yet'],
+            decisionIds: ['enemy-lineup'],
+            clipStatus: 'unchecked',
+            media: [],
+          },
+        ]}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole('link', { name: 'Play this build' })).toHaveAttribute(
+    'href',
+    'https://app.example/play/game',
+  );
+  expect(screen.getByText('Walk around')).toBeVisible();
+  expect(screen.getByText('No attack yet')).toBeVisible();
+  expect(screen.getByText('enemy-lineup')).toBeVisible();
+  expect(screen.getByText('Clip: unchecked')).toBeVisible();
+  fireEvent.click(screen.getByText('Looks right'));
+  await waitFor(() =>
+    expect(send).toHaveBeenCalledWith('/games/game/review-rounds/published-round/answer', expect.anything()),
+  );
+});
+
 it('reports that the agent was sent the verdict only after the reconciler confirms delivery', async () => {
   send.mockImplementation(async (path: string) =>
     path.endsWith('/status')

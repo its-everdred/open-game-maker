@@ -8,9 +8,41 @@ import { eq } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 import { expect, it } from 'vitest';
 import { scanPreviewRelay } from '../../src/previews/relay.js';
+import { postRound } from '../../src/review-rounds/store.js';
 import roundRoutes from '../../src/review-rounds/routes.js';
 import { asUser } from '../helpers.js';
 import { ids, REPO, world } from '../builds/fixtures.js';
+
+it('shows a published prototype round in the default review list', async () => {
+  const { deps, app } = world();
+  app.route('/api/v1', roundRoutes);
+  postRound(deps.db, {
+    id: 'published-prototype-round',
+    gameId: ids.game,
+    track: 'prototype-publish',
+    phase: 'build',
+    category: 'gameplay',
+    round: 1,
+    ticket: 'publish',
+    sha: 'e'.repeat(40),
+    media: JSON.stringify([{ kind: 'build', ref: 'build_published' }]),
+    postedAt: '2026-11-20T00:00:00.000Z',
+  });
+
+  const response = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds`, {
+    headers: asUser(ids.user),
+  });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    rounds: [
+      expect.objectContaining({
+        track: 'prototype-publish',
+        playUrl: expect.stringContaining('/g/'),
+      }),
+    ],
+  });
+});
 
 it('accepts only the granted ticket for a worker review submission', async () => {
   const { deps, app } = world();

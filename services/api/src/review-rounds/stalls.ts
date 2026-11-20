@@ -13,9 +13,14 @@ export function reviewStalls(
 ): { worker: ReviewRound[]; creator: ReviewRound[]; missing: unknown[] } {
   const rounds = db.select().from(schema.reviewRounds).all();
   const latest = new Map<string, number>();
+  const latestPublished = new Map<string, ReviewRound>();
   for (const round of rounds) {
     const key = JSON.stringify([round.gameId, round.track, round.phase]);
     latest.set(key, Math.max(latest.get(key) ?? 0, round.round));
+    if (round.track === 'prototype-publish') {
+      const prior = latestPublished.get(round.gameId);
+      if (!prior || Date.parse(round.postedAt) > Date.parse(prior.postedAt)) latestPublished.set(round.gameId, round);
+    }
   }
   const missing = db
     .select()
@@ -26,6 +31,7 @@ export function reviewStalls(
   return {
     missing,
     worker: rounds.filter((round) => {
+      if (round.track === 'prototype-publish') return false;
       const key = JSON.stringify([round.gameId, round.track, round.phase]);
       return (
         round.verdict === 'needs_work' &&
@@ -35,7 +41,11 @@ export function reviewStalls(
       );
     }),
     creator: rounds.filter(
-      (round) => round.verdict === null && round.remindedAt === null && now - Date.parse(round.postedAt) >= DAY,
+      (round) =>
+        round.verdict === null &&
+        round.remindedAt === null &&
+        now - Date.parse(round.postedAt) >= DAY &&
+        (round.track !== 'prototype-publish' || latestPublished.get(round.gameId)?.id === round.id),
     ),
   };
 }

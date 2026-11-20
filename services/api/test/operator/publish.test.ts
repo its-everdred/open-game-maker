@@ -275,6 +275,77 @@ describe('operator publish', () => {
     expect(branchRow(deps).latestBuildId).not.toBeNull();
   });
 
+  it('records one idempotent prototype review for a published build', async () => {
+    const { app, deps } = operator();
+    const published = (await (await publish(app, 'castle-game', SHA, archiveOf(builtFiles()))).json()) as {
+      buildId: string;
+    };
+    expect(deps.db.select().from(schema.builds).get()).toMatchObject({ prototypeReviewState: 'pending' });
+    const pendingGaps = await app.request(`${operatorPrefix}/prototype-review-gaps`, {
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+    });
+    expect(await pendingGaps.json()).toEqual({ gaps: [{ slug: 'castle-game', buildId: published.buildId }] });
+    const submission = {
+      id: 'd9428888-122b-4b0e-b1c8-9f7900000001',
+      track: 'prototype-publish',
+      phase: 'build',
+      category: 'gameplay',
+      ticket: '42',
+      sourceTickets: ['42', '43'],
+      sha: SHA,
+      media: [{ kind: 'build', ref: published.buildId }],
+      question: 'Try the published build',
+      works: ['Walk around'],
+      limitations: ['No attack yet'],
+      decisionIds: ['enemy-lineup'],
+      clipStatus: 'unchecked',
+    };
+    const post = (body: unknown) =>
+      app.request(`${operatorPrefix}/games/castle-game/prototype-reviews`, {
+        method: 'POST',
+        headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const first = await post(submission);
+    expect(first.status).toBe(201);
+    const firstResult = (await first.json()) as { id: string; round: number; state: string };
+    expect(firstResult).toMatchObject({ round: 1, state: 'posted' });
+    const retry = await post({ ...submission, id: 'd9428888-122b-4b0e-b1c8-9f7900000002' });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ id: firstResult.id, round: 1, state: 'existing' });
+    expect(deps.db.select().from(schema.reviewRounds).all()).toHaveLength(1);
+    expect(deps.db.select().from(schema.reviewRounds).get()).toMatchObject({
+      works: '["Walk around"]',
+      limitations: '["No attack yet"]',
+      decisionIds: '["enemy-lineup"]',
+      sourceTickets: '["42","43"]',
+      clipStatus: 'unchecked',
+    });
+    expect(deps.db.select().from(schema.builds).get()).toMatchObject({ prototypeReviewState: 'posted' });
+    const clearedGaps = await app.request(`${operatorPrefix}/prototype-review-gaps`, {
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+    });
+    expect(await clearedGaps.json()).toEqual({ gaps: [] });
+  });
+
+  it('records an explicit no-round disposition so reconciliation does not alert', async () => {
+    const { app, deps } = operator();
+    const published = (await (await publish(app, 'castle-game', SHA, archiveOf(builtFiles()))).json()) as {
+      buildId: string;
+    };
+    const response = await app.request(
+      `${operatorPrefix}/games/castle-game/builds/${published.buildId}/prototype-review-check`,
+      { method: 'POST', headers: { 'x-ogm-internal': INTERNAL_TOKEN } },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ state: 'none' });
+    expect(deps.db.select().from(schema.builds).get()).toMatchObject({ prototypeReviewState: 'none' });
+    const gaps = await app.request(`${operatorPrefix}/prototype-review-gaps`, {
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+    });
+    expect(await gaps.json()).toEqual({ gaps: [] });
+  });
+
   it('refuses an archive it cannot unpack and leaves no unfinished job behind', async () => {
     const { app, deps } = operator();
     const response = await publish(app, 'castle-game', SHA, Buffer.from('not a gzip archive'));

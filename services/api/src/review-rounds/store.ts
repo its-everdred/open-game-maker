@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { ReviewSubmission } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
 
@@ -24,7 +24,22 @@ export function latestRoundForTicket(db: Db, gameId: string, ticket: string): Re
   return db
     .select()
     .from(schema.reviewRounds)
-    .where(and(eq(schema.reviewRounds.gameId, gameId), eq(schema.reviewRounds.ticket, ticket)))
+    .where(
+      and(
+        eq(schema.reviewRounds.gameId, gameId),
+        eq(schema.reviewRounds.ticket, ticket),
+        ne(schema.reviewRounds.track, 'prototype-publish'),
+      ),
+    )
+    .orderBy(desc(sql`julianday(${schema.reviewRounds.postedAt})`), desc(sql`rowid`))
+    .get();
+}
+
+export function latestPublishedPrototypeRound(db: Db, gameId: string): ReviewRound | undefined {
+  return db
+    .select()
+    .from(schema.reviewRounds)
+    .where(and(eq(schema.reviewRounds.gameId, gameId), eq(schema.reviewRounds.track, 'prototype-publish')))
     .orderBy(desc(sql`julianday(${schema.reviewRounds.postedAt})`), desc(sql`rowid`))
     .get();
 }
@@ -103,7 +118,12 @@ export function submitRound(
         existing.sha === submission.sha &&
         existing.prNumber === (submission.prNumber ?? null) &&
         existing.question === (submission.question ?? null) &&
-        existing.media === JSON.stringify(submission.media);
+        existing.media === JSON.stringify(submission.media) &&
+        existing.works === JSON.stringify(submission.works ?? []) &&
+        existing.limitations === JSON.stringify(submission.limitations ?? []) &&
+        existing.decisionIds === JSON.stringify(submission.decisionIds ?? []) &&
+        existing.sourceTickets === JSON.stringify(submission.sourceTickets ?? []) &&
+        existing.clipStatus === (submission.clipStatus ?? null);
       if (!matches) throw new Error('review_submission_conflict');
       if ((existing.effort === null && effort) || (audioVerified && !existing.audioVerified)) {
         const updated = {
@@ -145,7 +165,12 @@ export function submitRound(
       )
       .orderBy(desc(schema.reviewRounds.round))
       .get();
-    if (latest && (latest.verdict !== 'needs_work' || !latest.consumedByRun)) throw new Error('review_phase_not_ready');
+    if (
+      submission.track !== 'prototype-publish' &&
+      latest &&
+      (latest.verdict !== 'needs_work' || !latest.consumedByRun)
+    )
+      throw new Error('review_phase_not_ready');
     const row: NewReviewRound = {
       id: submission.id,
       gameId,
@@ -160,6 +185,11 @@ export function submitRound(
       prNumber: submission.prNumber ?? null,
       media: JSON.stringify(submission.media),
       question: submission.question ?? null,
+      works: JSON.stringify(submission.works ?? []),
+      limitations: JSON.stringify(submission.limitations ?? []),
+      decisionIds: JSON.stringify(submission.decisionIds ?? []),
+      sourceTickets: JSON.stringify(submission.sourceTickets ?? []),
+      clipStatus: submission.clipStatus ?? null,
       postedAt: new Date().toISOString(),
     };
     tx.insert(schema.reviewRounds).values(row).run();

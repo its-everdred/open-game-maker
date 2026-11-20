@@ -1,0 +1,13 @@
+[Unit]
+Description=OGM reconcile published prototype reviews
+After=network-online.target ogm-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Slice=ogm.slice
+EnvironmentFile=-%h/.config/ogm/env/qa-hook.env
+ExecStart=@REPO@/ops/bin/ogm-qa-review-hook --publish-sweep --repo @REPO@
+UMask=0077
+NoNewPrivileges=yes
+TimeoutStartSec=5min

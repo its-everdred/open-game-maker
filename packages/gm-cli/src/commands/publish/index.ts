@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { ConfigError, loadEnv } from '@ogm/config';
 
@@ -12,6 +13,7 @@ import { printJson } from '../../context.js';
 import { readLock } from '../../lock.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 import { scanReferences, unlisted } from '../../references.js';
+import { mergePrototypeReviews, parsePrototypeReview } from '../../prototype-review.js';
 
 /*
  * The operator's publish for a game registered against a repository whose own tickets are not Game Maker jobs: no
@@ -24,6 +26,7 @@ const ENV = {
   OGM_INTERNAL_TOKEN: { kind: 'secret', required: false },
   OGM_API_PORT: { kind: 'port', required: false },
   OGM_APP_ORIGIN: { kind: 'url', required: false },
+  OGM_GAMES_ORIGIN: { kind: 'url', required: false },
   OGM_ASSETS_ROOT: { kind: 'path', required: false },
 } as const;
 
@@ -31,7 +34,15 @@ const OUTPUT_BYTES = 64 * 1024 * 1024;
 // The archive the daemon's hook uploads: dist/ plus the repository's own manifest, base design and achievements.
 const FROM_REPO = ['manifest.json', 'design/design.json', 'achievements.json'];
 
-type Facts = { gameId: string; slug: string; repoPath: string; checkout: string };
+type Facts = {
+  gameId: string;
+  slug: string;
+  repoPath: string;
+  checkout: string;
+  repo: { owner: string; name: string };
+  lastReviewedSha: string | null;
+  previousBuildSha: string | null;
+};
 
 class RequestUncertain extends CommandError {}
 class RequestTimeout extends RequestUncertain {}
@@ -131,8 +142,14 @@ async function readFacts(api: string, token: string, slug: string): Promise<Fact
   if (status === 401) throw new UsageError(`the API at ${api} refused the internal token`, 'check api.env');
   if (status !== 200) throw new CommandError(`the API answered HTTP ${status} for game "${slug}": ${body}`);
   let answer: {
-    game?: { id?: string; slug?: string | null; repo?: { path?: string | null } };
+    game?: {
+      id?: string;
+      slug?: string | null;
+      repo?: { path?: string | null; owner?: string | null; name?: string | null };
+    };
     daemon?: { checkoutPath?: string | null } | null;
+    latestPrototypeReview?: { sha?: string } | null;
+    build?: { gitSha?: string } | null;
   };
   try {
     answer = JSON.parse(body) as typeof answer;
@@ -148,6 +165,9 @@ async function readFacts(api: string, token: string, slug: string): Promise<Fact
     slug: answer.game?.slug || slug,
     repoPath,
     checkout: answer.daemon?.checkoutPath ?? '',
+    repo: { owner: answer.game?.repo?.owner ?? '', name: answer.game?.repo?.name ?? '' },
+    lastReviewedSha: answer.latestPrototypeReview?.sha ?? null,
+    previousBuildSha: answer.build?.gitSha ?? null,
   };
 }
 
@@ -195,12 +215,19 @@ export const command: GmCommand = {
     // The build never sees the token; a fetch that wants credentials fails instead of prompting.
     const childEnv: Record<string, string | undefined> = { ...ctx.env, GIT_TERMINAL_PROMPT: '0' };
     delete childEnv.OGM_INTERNAL_TOKEN;
-    const exec = (cmd: string, cmdArgs: string[], cwd: string, extraEnv: Record<string, string> = {}) => {
+    const exec = (
+      cmd: string,
+      cmdArgs: string[],
+      cwd: string,
+      extraEnv: Record<string, string> = {},
+      timeout = 300_000,
+    ) => {
       const result = spawnSync(cmd, cmdArgs, {
         cwd,
         env: { ...childEnv, ...extraEnv },
         encoding: 'utf8',
         maxBuffer: OUTPUT_BYTES,
+        timeout,
       });
       return {
         ok: result.status === 0,
@@ -217,6 +244,7 @@ export const command: GmCommand = {
     };
 
     // The default is the remote's main as it is now: a stale instance checkout once built a broken old commit.
+    const previousOriginMainSha = revParse('refs/remotes/origin/main');
     let commit: string | null;
     if (typeof flags.sha === 'string') {
       commit = revParse(flags.sha);
@@ -345,9 +373,241 @@ export const command: GmCommand = {
       }
 
       if (upload.status === 201) {
-        const origin = env.OGM_APP_ORIGIN?.replace(/\/+$/, '') ?? '';
-        const play = `${origin}/play/${encodeURIComponent(facts.slug)}`;
         const buildId = String(answer.buildId ?? '');
+        const play = `${env.OGM_GAMES_ORIGIN?.replace(/\/+$/, '') ?? ''}/g/${encodeURIComponent(facts.gameId)}/${encodeURIComponent(buildId)}/`;
+        let reviewState: 'posted' | 'existing' | 'failed' | 'skipped' = 'skipped';
+        let reviewRoundId: string | undefined;
+        let publishAttention = '';
+        const retryBase =
+          facts.previousBuildSha === commit ? exec('git', ['rev-parse', `${commit}^`], checkout).out.trim() : null;
+        const base = facts.lastReviewedSha ?? retryBase ?? facts.previousBuildSha ?? previousOriginMainSha;
+        const reviewBodies: string[] = [];
+        const missingReviewPrs: string[] = [];
+        let sourceTickets: string[] = [];
+        let mergedPrCount = 0;
+        if (base && facts.repo.owner && facts.repo.name) {
+          const commits = git(['log', '--first-parent', '--reverse', '--format=%H%x09%s', `${base}..${commit}`]);
+          if (commits.ok) {
+            const commitLines = commits.out.trim().split('\n').filter(Boolean);
+            for (const line of commitLines) {
+              const [sha, subject] = line.split('\t', 2);
+              const number = subject?.match(/(?:Merge pull request #|\(#)(\d+)\)?/u)?.[1];
+              if (!number || !sha) continue;
+              mergedPrCount += 1;
+              const pr = exec(
+                'gh',
+                [
+                  'pr',
+                  'view',
+                  number,
+                  '--repo',
+                  `${facts.repo.owner}/${facts.repo.name}`,
+                  '--json',
+                  'body',
+                  '--jq',
+                  '.body',
+                ],
+                checkout,
+              );
+              if (!pr.ok) {
+                missingReviewPrs.push(`#${number} (could not read PR body)`);
+                reviewBodies.push('');
+                continue;
+              }
+              reviewBodies.push(pr.out);
+              if (parsePrototypeReview(pr.out).disposition === 'missing') missingReviewPrs.push(`#${number}`);
+              for (const match of pr.out.matchAll(/\b(?:closes?|fixes?|resolves?|refs?)\s+#([1-9]\d*)/giu))
+                sourceTickets.push(match[1]!);
+              void sha;
+            }
+            if (commitLines.length > 0 && mergedPrCount === 0)
+              publishAttention = 'Could not identify merged PRs in the published commit range.';
+          } else publishAttention = 'Could not inspect the merged commits since the last reviewed build.';
+        } else if (!facts.repo.owner || !facts.repo.name)
+          publishAttention = 'The game repository is not configured; merged PR review sections could not be checked.';
+        else if (!base) publishAttention = 'Could not find a baseline commit for the prototype review range.';
+        sourceTickets = [...new Set(sourceTickets)];
+        if (sourceTickets.length > 20) {
+          sourceTickets = sourceTickets.slice(0, 20);
+          publishAttention ||=
+            'The publish review references more than 20 source tickets; only the first 20 are attached.';
+        }
+        const review = mergePrototypeReviews(reviewBodies);
+        if (review.disposition === 'none' || (mergedPrCount === 0 && !publishAttention)) {
+          const checked = await request(
+            `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/builds/${encodeURIComponent(buildId)}/prototype-review-check`,
+            { method: 'POST', headers: { 'x-ogm-internal': token }, signal: AbortSignal.timeout(20_000) },
+          ).catch((error: unknown) => ({ status: 0, body: error instanceof Error ? error.message : String(error) }));
+          if (checked.status < 200 || checked.status >= 300)
+            publishAttention ||= `Published build ${buildId}, but its no-review disposition could not be recorded (HTTP ${checked.status}).`;
+        } else if (mergedPrCount > 0 || publishAttention) {
+          if (review.disposition === 'missing') {
+            const prs = missingReviewPrs.length ? missingReviewPrs.join(', ') : 'one or more merged PRs';
+            publishAttention ||= `${prs} lack a ## Prototype review section; posted the fallback review.`;
+          }
+          const inventory = base
+            ? git(['show', `${commit}:docs/${facts.slug}/decisions.json`])
+            : { ok: false, out: '' };
+          let decisionIds: string[] = [];
+          if (inventory.ok) {
+            try {
+              const entries = JSON.parse(inventory.out) as { id: string; status: string }[];
+              const statuses = new Map(entries.map((entry) => [entry.id, entry.status]));
+              const candidates = review.decisionIds
+                .filter((id) => /^[a-z0-9][a-z0-9_-]{0,63}$/u.test(id))
+                .filter((id) => ['open', 'asked'].includes(statuses.get(id) ?? ''));
+              const preferred = candidates.filter((id) => statuses.get(id) === 'asked');
+              const remaining = candidates.filter((id) => statuses.get(id) === 'open');
+              const ordered = [...preferred, ...remaining];
+              decisionIds = ordered.slice(0, 6);
+            } catch {
+              publishAttention ||= 'The decision inventory could not be read; posted without weigh-in ids.';
+            }
+          }
+          const media: { kind: 'build' | 'clip' | 'still'; ref: string; hasAudio?: boolean }[] = [
+            { kind: 'build', ref: buildId },
+          ];
+          let clipStatus: 'captured' | 'unchecked' = 'unchecked';
+          const gamesOrigin = env.OGM_GAMES_ORIGIN?.replace(/\/+$/, '');
+          const captureDir = join(workRoot, `${facts.slug}.review-${buildId}`);
+          const uploadMedia = async (path: string, mime: 'video/mp4' | 'image/png') => {
+            try {
+              const uploaded = await request(
+                `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/prototype-reviews/media`,
+                {
+                  method: 'POST',
+                  headers: { 'x-ogm-internal': token, 'content-type': mime },
+                  body: readFileSync(path),
+                  signal: AbortSignal.timeout(120_000),
+                },
+              );
+              if (uploaded.status !== 201) return null;
+              const stored = JSON.parse(uploaded.body) as { hash?: string };
+              return stored.hash ?? null;
+            } catch {
+              return null;
+            }
+          };
+          if (gamesOrigin) {
+            const url = `${gamesOrigin}/g/${encodeURIComponent(facts.gameId)}/${encodeURIComponent(buildId)}/`;
+            const coreRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
+            const qaExecutable = ctx.env?.OGM_QA_GM === 'true' ? 'true' : process.execPath;
+            const qaArgs =
+              qaExecutable === 'true'
+                ? []
+                : [
+                    join(coreRoot, 'packages/gm-cli/dist/index.js'),
+                    'qa',
+                    'playtest',
+                    game,
+                    '--all-modes',
+                    '--url',
+                    url,
+                    '--out',
+                    captureDir,
+                  ];
+            const capture = exec(qaExecutable, qaArgs, work, {}, 600_000);
+            if (!capture.ok)
+              publishAttention ||= `Prototype playtest capture failed for ${facts.slug}; posted with fallback media.`;
+            let clipPath: string | null = null;
+            if (existsSync(join(captureDir, 'playtest.json'))) {
+              try {
+                const runs = JSON.parse(readFileSync(join(captureDir, 'playtest.json'), 'utf8')) as { clip?: string }[];
+                const clip = runs.find((run) => run.clip)?.clip;
+                if (clip) clipPath = join(captureDir, clip);
+              } catch {
+                /* retain still fallback below */
+              }
+            }
+            if (clipPath && existsSync(clipPath)) {
+              const hash = await uploadMedia(clipPath, 'video/mp4');
+              if (hash) {
+                media.push({ kind: 'clip', ref: hash, hasAudio: false });
+                clipStatus = 'captured';
+              }
+            }
+            if (clipStatus === 'unchecked') {
+              const pngs: string[] = [];
+              const visit = (directory: string) => {
+                if (!existsSync(directory)) return;
+                for (const entry of readdirSync(directory, { withFileTypes: true })) {
+                  const path = join(directory, entry.name);
+                  if (entry.isDirectory()) visit(path);
+                  else if (/\.png$/iu.test(entry.name)) pngs.push(path);
+                }
+              };
+              visit(captureDir);
+              for (const still of pngs.slice(0, 15)) {
+                const hash = await uploadMedia(still, 'image/png');
+                if (hash) media.push({ kind: 'still', ref: hash });
+              }
+            }
+          } else publishAttention ||= 'The games origin is unavailable; published prototype capture was skipped.';
+          if (media.length === 1 && ctx.env?.OGM_QA_GM !== 'true')
+            publishAttention ||= `Prototype capture media could not be attached for ${facts.slug}; the playable build is attached without a clip or still.`;
+          const bounded = (items: string[], label: string): string[] => {
+            const result = [...new Set(items.map((item) => item.slice(0, 240)))].slice(0, 32);
+            if (result.length !== items.length || items.some((item) => item.length > 240))
+              publishAttention ||= `The publish review's ${label} summary exceeded storage limits and was shortened.`;
+            return result;
+          };
+          const works = bounded(review.works, 'works');
+          const limitations = bounded(review.limitations, 'limitations');
+          const submission = {
+            id: randomUUID(),
+            track: 'prototype-publish',
+            phase: 'build',
+            category: 'gameplay',
+            ticket: sourceTickets[0] ?? 'publish',
+            ...(sourceTickets.length ? { sourceTickets } : {}),
+            sha: commit,
+            media,
+            question: `Review the published ${facts.slug} build`,
+            works,
+            limitations: review.disposition === 'missing' ? ['Limitations not stated'] : limitations,
+            decisionIds,
+            clipStatus,
+          };
+          const posted = await request(
+            `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/prototype-reviews`,
+            {
+              method: 'POST',
+              headers: { 'x-ogm-internal': token, 'content-type': 'application/json' },
+              body: JSON.stringify(submission),
+              signal: AbortSignal.timeout(30_000),
+            },
+          ).catch((error: unknown) => ({ status: 0, body: error instanceof Error ? error.message : String(error) }));
+          if (posted.status < 200 || posted.status >= 300)
+            publishAttention ||= `Published build ${buildId}, but prototype review posting failed (HTTP ${posted.status}): ${posted.body}`;
+          else {
+            try {
+              const result = JSON.parse(posted.body) as { id?: string; state?: string };
+              reviewState = result.state === 'existing' ? 'existing' : 'posted';
+              reviewRoundId = result.id;
+            } catch {
+              reviewState = 'failed';
+            }
+          }
+          const coreRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
+          const hook = join(coreRoot, 'ops/bin/ogm-qa-review-hook');
+          const hookArgs = ['--game-publish', facts.slug, buildId, '--api', api, '--repo', coreRoot];
+          if (publishAttention) hookArgs.push('--attention-message', publishAttention);
+          if (ctx.env?.OGM_QA_ATTENTION) hookArgs.push('--attention', ctx.env.OGM_QA_ATTENTION);
+          const checked = exec(
+            hook,
+            hookArgs,
+            coreRoot,
+            env.OGM_INTERNAL_TOKEN ? { OGM_INTERNAL_TOKEN: env.OGM_INTERNAL_TOKEN } : {},
+            30_000,
+          );
+          if (publishAttention) ctx.err(`attention: ${publishAttention}`);
+          if (!checked.ok && checked.out.trim() && !ctx.json) ctx.out(checked.out.trim());
+          if (checked.ok && checked.out.trim() && !ctx.json && ctx.env?.OGM_QA_GM !== 'true')
+            ctx.out(checked.out.trim());
+          if (!checked.ok && !publishAttention)
+            ctx.err(`attention: ${checked.err.trim() || `prototype review hook failed for ${buildId}`}`);
+        }
+        rmSync(join(workRoot, `${facts.slug}.review-${buildId}`), { recursive: true, force: true });
         if (ctx.json) {
           printJson(ctx, {
             state: 'done',
@@ -357,6 +617,10 @@ export const command: GmCommand = {
             buildId,
             jobId: answer.jobId,
             play,
+            prototypeReview: {
+              state: reviewState,
+              ...(reviewRoundId ? { roundId: reviewRoundId } : {}),
+            },
           });
         } else {
           ctx.out(`published ${facts.repoPath} at ${commit}: build ${buildId}`);
