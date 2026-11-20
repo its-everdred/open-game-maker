@@ -32,3 +32,18 @@ class FootprintTest(unittest.TestCase):
             ImageDraw.Draw(image).rectangle((20, 20, 39, 39), fill=(0, 0, 0, 100))
             image.save(close)
             self.assertFalse(compare(reference, close)['pass'])
+
+    def test_nearly_invisible_and_dark_green_specks_are_not_ground_shadow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image = Image.new('RGBA', (32, 32))
+            ImageDraw.Draw(image).rectangle((4, 4, 27, 27), fill=(30, 100, 20, 255))
+            reference = root / 'ref.png'
+            candidate = root / 'candidate.png'
+            image.save(reference)
+            image.putpixel((8, 8), (0, 0, 0, 1))
+            image.putpixel((9, 9), (0, 8, 0, 173))
+            image.save(candidate)
+            result = compare(reference, candidate)
+            self.assertEqual(result['candidate']['shadow'], 0)
+            self.assertTrue(result['pass'])

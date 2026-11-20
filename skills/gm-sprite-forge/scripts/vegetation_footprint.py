@@ -18,8 +18,9 @@ def measure(path):
         raise ValueError(f'empty alpha mask: {path}')
     histogram = alpha.histogram()
     pixels = rgba.tobytes()
+    # Ignore nearly invisible alpha=1 specks and very dark green leaf pixels.
     shadow = sum(1 for r, g, b, a in zip(pixels[0::4], pixels[1::4], pixels[2::4], pixels[3::4])
-                 if 0 < a < 255 and max(r, g, b) <= 8)
+                 if 1 < a < 255 and max(r, g, b) <= 3)
     return {'bbox': list(bbox), 'width': bbox[2] - bbox[0], 'height': bbox[3] - bbox[1],
             'coverage': sum(histogram[1:]), 'shadow': shadow}
 
