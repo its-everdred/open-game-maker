@@ -6,7 +6,9 @@ import { printJson } from '../../context.js';
 import { withBrowser } from '../../qa.js';
 import {
   buildGamesCacheReport,
+  buildAfterPublishReport,
   matchesConfiguredOrigin,
+  type BuildCacheEntry,
   type CacheRun,
   type ResourceSample,
 } from '../../qa-games-cache.js';
@@ -25,11 +27,12 @@ type NetworkSample = {
 export const command: GmCommand = {
   name: 'qa games-cache',
   summary: 'measure the games-list logo, thumbnail and API on a same-session second load',
-  usage: '[--origin <app origin>] [--game <slug>] [--json]',
+  usage: '[--origin <app origin>] [--game <slug>] [--after-publish <buildId>] [--json]',
   example: 'qa games-cache --origin https://app.example.com --game blobs --json',
   flags: {
     origin: { type: 'string', help: 'production app origin (default OGM_APP_ORIGIN in api.env)' },
     game: { type: 'string', default: 'blobs', help: 'game slug to measure (default: blobs)' },
+    'after-publish': { type: 'string', help: 'compare this published build with the previous build' },
   },
   async run(ctx, args, flags) {
     if (args.length) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help qa games-cache');
@@ -183,6 +186,80 @@ export const command: GmCommand = {
           }, game);
         };
 
+        const afterPublish = flags['after-publish'] as string | undefined;
+        if (afterPublish) {
+          const gamesOrigin = api.OGM_GAMES_ORIGIN ?? ctx.env?.OGM_GAMES_ORIGIN;
+          if (!gamesOrigin) throw new UsageError('configure OGM_GAMES_ORIGIN in api.env', 'check api.env');
+          let gamesUrl: URL;
+          try {
+            gamesUrl = new URL(gamesOrigin);
+          } catch {
+            throw new UsageError('OGM_GAMES_ORIGIN must be an HTTP(S) URL', 'check api.env');
+          }
+          if (!['http:', 'https:'].includes(gamesUrl.protocol) || gamesUrl.username || gamesUrl.password)
+            throw new UsageError('OGM_GAMES_ORIGIN must be an HTTP(S) URL without credentials', 'check api.env');
+          await page.goto(`${origin}/games`, { waitUntil: 'networkidle', timeout: 60_000 });
+          const builds = await page.evaluate(async (slug) => {
+            const gamesResponse = await fetch('/api/v1/games');
+            if (!gamesResponse.ok) throw new Error(`games list returned HTTP ${gamesResponse.status}`);
+            const gamesBody = (await gamesResponse.json()) as { games?: Array<{ id: string; slug: string }> };
+            const selected = gamesBody.games?.find((item) => item.slug === slug);
+            if (!selected) throw new Error(`game "${slug}" was not found in the games list`);
+            const buildsResponse = await fetch(`/api/v1/games/${encodeURIComponent(selected.id)}/builds`);
+            if (!buildsResponse.ok) throw new Error(`build list returned HTTP ${buildsResponse.status}`);
+            const body = (await buildsResponse.json()) as {
+              builds?: Array<{ id: string; status: string; artifact: string }>;
+            };
+            return {
+              gameId: selected.id,
+              builds: (body.builds ?? []).filter((build) => build.status === 'tested' && build.artifact === 'present'),
+            };
+          }, game);
+          const targetIndex = builds.builds.findIndex((build) => build.id === afterPublish);
+          if (targetIndex < 1)
+            throw new UsageError(`build ${afterPublish} has no preceding tested build`, 'publish another build first');
+          const previousBuildId = builds.builds[targetIndex - 1]!.id;
+          const readPlan = async (buildId: string): Promise<BuildCacheEntry[]> => {
+            const url = new URL(
+              `/g/${encodeURIComponent(builds.gameId)}/${encodeURIComponent(buildId)}/assets/cache-plan.json`,
+              gamesUrl,
+            );
+            const response = await context.request.get(url.toString(), { timeout: 30_000 });
+            if (!response.ok()) throw new Error(`cache plan for ${buildId} returned HTTP ${response.status()}`);
+            const plan = (await response.json()) as {
+              entries?: Array<{ sourcePath?: string; url: string; bytes: number }>;
+            };
+            if (!Array.isArray(plan.entries)) throw new Error(`cache plan for ${buildId} has no entries`);
+            return plan.entries.map((entry) => ({
+              sourcePath: entry.sourcePath ?? entry.url,
+              url: entry.url,
+              bytes: entry.bytes,
+            }));
+          };
+          const previous = await readPlan(previousBuildId);
+          const current = await readPlan(afterPublish);
+          for (const buildId of [previousBuildId, afterPublish]) {
+            await page.goto(
+              new URL(`/g/${encodeURIComponent(builds.gameId)}/${encodeURIComponent(buildId)}/`, gamesUrl).toString(),
+              { waitUntil: 'networkidle', timeout: 60_000 },
+            );
+          }
+          const samples = current.map((entry) => {
+            const url = new URL(entry.url, gamesUrl).toString();
+            const captured = networkByUrl.get(url)?.at(-1);
+            return { url, transferSize: captured?.transferSize ?? 0 };
+          });
+          const report = buildAfterPublishReport({
+            game,
+            buildId: afterPublish,
+            previousBuildId,
+            previous: previous.map((entry) => ({ ...entry, url: new URL(entry.url, gamesUrl).toString() })),
+            current: current.map((entry) => ({ ...entry, url: new URL(entry.url, gamesUrl).toString() })),
+            samples,
+          });
+          return report;
+        }
+
         await page.goto(`${origin}/games`, { waitUntil: 'networkidle', timeout: 60_000 });
         const first = await waitForList();
         await page.reload({ waitUntil: 'networkidle', timeout: 60_000 });
@@ -222,6 +299,18 @@ export const command: GmCommand = {
         await context.close();
       }
     });
+    if ('totalBytesTransferred' in report) {
+      if (ctx.json) printJson(ctx, report);
+      else {
+        ctx.out(`publish cache: ${report.game} ${report.previousBuildId} -> ${report.buildId}`);
+        ctx.out(`game files transferred: ${report.totalBytesTransferred} bytes`);
+        for (const file of report.changedFiles) ctx.out(`changed: ${file.path} (${file.bytes} bytes)`);
+        for (const file of report.unexpectedChanges)
+          ctx.out(`unexpected changed URL: ${file.path} (${file.bytes} bytes)`);
+        for (const file of report.unexpectedTransfers) ctx.out(`unexpected transfer: ${file.path} ${file.bytes} bytes`);
+      }
+      return report.ok ? EXIT.ok : EXIT.failed;
+    }
     if (ctx.json) printJson(ctx, report);
     else {
       ctx.out(`second load: ${report.game} at ${report.viewport.width}x${report.viewport.height}`);

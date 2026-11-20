@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildGamesCacheReport,
+  buildAfterPublishReport,
   matchesConfiguredOrigin,
   selectGameImageUrls,
   type CacheRun,
@@ -15,6 +16,91 @@ const fixture = JSON.parse(
 ) as CacheRun;
 
 describe('gm qa games-cache report', () => {
+  it('counts only bytes for changed files after a no-op publish', () => {
+    const previous = [
+      { sourcePath: 'index.html', url: '/a/index-old.html', bytes: 120 },
+      { sourcePath: 'manifest.json', url: '/a/manifest-old.json', bytes: 80 },
+      { sourcePath: 'sprites/hero.png', url: '/a/hero.hash.png', bytes: 4096 },
+    ];
+    const current = [
+      { sourcePath: 'index.html', url: '/a/index-new.html', bytes: 120 },
+      { sourcePath: 'manifest.json', url: '/a/manifest-new.json', bytes: 80 },
+      { sourcePath: 'sprites/hero.png', url: '/a/hero.hash.png', bytes: 4096 },
+    ];
+    const report = buildAfterPublishReport({
+      game: 'blobs',
+      buildId: 'build-2',
+      previousBuildId: 'build-1',
+      previous,
+      current,
+      samples: [
+        { url: '/a/index-new.html', transferSize: 120 },
+        { url: '/a/manifest-new.json', transferSize: 80 },
+        { url: '/a/hero.hash.png', transferSize: 0 },
+      ],
+    });
+    expect(report).toMatchObject({
+      totalBytesTransferred: 200,
+      ok: true,
+      changedFiles: [{ path: 'index.html' }, { path: 'manifest.json' }],
+    });
+  });
+
+  it('fails a no-op check when a sprite URL changed and detects transfers for unchanged files', () => {
+    const report = buildAfterPublishReport({
+      game: 'blobs',
+      buildId: 'build-2',
+      previousBuildId: 'build-1',
+      previous: [
+        { sourcePath: 'index.html', url: '/a/index.html', bytes: 120 },
+        { sourcePath: 'sprites/hero.png', url: '/a/hero-old.png', bytes: 4096 },
+        { sourcePath: 'sprites/tree.png', url: '/a/tree.png', bytes: 2048 },
+      ],
+      current: [
+        { sourcePath: 'index.html', url: '/a/index.html', bytes: 120 },
+        { sourcePath: 'sprites/hero.png', url: '/a/hero-new.png', bytes: 4200 },
+        { sourcePath: 'sprites/tree.png', url: '/a/tree.png', bytes: 2048 },
+      ],
+      samples: [
+        { url: '/a/index.html', transferSize: 0 },
+        { url: '/a/hero-new.png', transferSize: 4200 },
+        { url: '/a/tree.png', transferSize: 0 },
+      ],
+    });
+    expect(report.totalBytesTransferred).toBe(4200);
+    expect(report.changedFiles).toMatchObject([{ path: 'sprites/hero.png', bytes: 4200 }]);
+    expect(report.unexpectedChanges).toMatchObject([{ path: 'sprites/hero.png', bytes: 4200 }]);
+    expect(report.unexpectedTransfers).toEqual([]);
+    expect(report.ok).toBe(false);
+  });
+
+  it('fails when an unchanged content URL transfers again', () => {
+    const report = buildAfterPublishReport({
+      game: 'blobs',
+      buildId: 'build-2',
+      previousBuildId: 'build-1',
+      previous: [{ sourcePath: 'sprites/tree.png', url: '/a/tree.png', bytes: 2048 }],
+      current: [{ sourcePath: 'sprites/tree.png', url: '/a/tree.png', bytes: 2048 }],
+      samples: [{ url: '/a/tree.png', transferSize: 2048 }],
+    });
+    expect(report.unexpectedTransfers).toMatchObject([{ path: 'sprites/tree.png', bytes: 2048 }]);
+    expect(report.ok).toBe(false);
+  });
+
+  it('fails when a no-op publish removes a game file', () => {
+    const report = buildAfterPublishReport({
+      game: 'blobs',
+      buildId: 'build-2',
+      previousBuildId: 'build-1',
+      previous: [{ sourcePath: 'sprites/hero.png', url: '/a/hero.png', bytes: 4096 }],
+      current: [],
+      samples: [],
+    });
+    expect(report.changedFiles).toMatchObject([{ path: 'sprites/hero.png', from: '/a/hero.png', to: null }]);
+    expect(report.unexpectedChanges).toEqual(report.changedFiles);
+    expect(report.ok).toBe(false);
+  });
+
   it('reports the second-load image and API evidence and passes only when both images are cached', () => {
     const report = buildGamesCacheReport(fixture);
     expect(report).toMatchObject({
