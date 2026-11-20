@@ -67,6 +67,25 @@ blob hashes as `ref`; media entries use `kind` and `ref`.
 To compare against a concept, include one still with `role: "target"` alongside the submitted work. The review shows
 the target and work side by side.
 
+## Publish a game
+
+```text
+gm publish <slug> [--sha <ref>] [--checkout <path>] [--api <url>]
+```
+
+After a successful publish, `gm publish` checks merged PRs since the last reviewed build and posts one prototype review
+for creator-visible changes. It captures the hosted build with `gm qa playtest --all-modes`; when capture fails, it
+posts any stills that were produced and marks the clip unchecked. A missing `## Prototype review` section posts the
+play link with “Limitations not stated” and reports the merged PRs that need review notes. If every PR says
+`Prototype review: none`, no round is posted. The review links to the published build and carries current works,
+limitations and eligible decision ids.
+
+The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link opens the exact published build.
+
+The post-publish check runs through `ops/bin/ogm-qa-review-hook`. For a direct check, use
+`gm qa publish-review-check <slug> <build-id>`; `gm qa publish-review-check --all` lists any published builds still
+waiting for a round. The host timer runs the sweep every ten minutes and records gaps in the configured QA attention file.
+
 ## Verify a game
 
 ```text

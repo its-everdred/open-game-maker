@@ -10,7 +10,7 @@ import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
 import { reviewMediaUrl } from '../blobs/review-url.js';
 import { currentPreview, listPreviews } from '../previews/store.js';
-import { answerRound, getRound, latestRoundForTicket } from './store.js';
+import { answerRound, getRound, latestPublishedPrototypeRound, latestRoundForTicket } from './store.js';
 import { bindReviewEpisode, markReviewAnswered, readReviewEpisode } from './answer-guard.js';
 import { logReviewFeedRefresh } from './feed-log.js';
 
@@ -35,7 +35,11 @@ export default new Hono<ApiBindings>()
           sql`NOT EXISTS (
             SELECT 1 FROM review_rounds AS newer
             WHERE newer.game_id = ${schema.reviewRounds.gameId}
-              AND newer.ticket = ${schema.reviewRounds.ticket}
+              AND (
+                (${schema.reviewRounds.track} = 'prototype-publish' AND newer.track = 'prototype-publish')
+                OR (${schema.reviewRounds.track} <> 'prototype-publish' AND newer.track <> 'prototype-publish'
+                  AND newer.ticket = ${schema.reviewRounds.ticket})
+              )
               AND (julianday(newer.posted_at) > julianday(${schema.reviewRounds.postedAt})
                 OR (julianday(newer.posted_at) = julianday(${schema.reviewRounds.postedAt}) AND newer.rowid > review_rounds.rowid))
           )`,
@@ -43,6 +47,7 @@ export default new Hono<ApiBindings>()
             ? undefined
             : or(
                 ne(schema.reviewRounds.category, 'gameplay'),
+                eq(schema.reviewRounds.track, 'prototype-publish'),
                 and(
                   eq(schema.reviewRounds.phase, 'mock'),
                   sql`NOT EXISTS (SELECT 1 FROM json_each(${schema.reviewRounds.media}) WHERE json_extract(value, '$.kind') = 'build')`,
@@ -74,9 +79,19 @@ export default new Hono<ApiBindings>()
         return {
           id: round.id,
           ticket: round.ticket,
+          track: round.track,
           category: round.category,
           ...(includeGameplay ? { buildId: media.find((item) => item.kind === 'build')?.ref ?? null } : {}),
           question: round.question,
+          works: JSON.parse(round.works) as string[],
+          limitations: JSON.parse(round.limitations) as string[],
+          decisionIds: JSON.parse(round.decisionIds) as string[],
+          clipStatus: round.clipStatus,
+          sourceTickets: JSON.parse(round.sourceTickets) as string[],
+          playUrl:
+            round.track === 'prototype-publish' && media.find((item) => item.kind === 'build') && game.slug
+              ? `${deps.config.gamesOrigin.replace(/\/$/u, '')}/g/${encodeURIComponent(game.id)}/${encodeURIComponent(media.find((item) => item.kind === 'build')!.ref)}/`
+              : null,
           media: items,
           postedAt: round.postedAt,
         };
@@ -106,7 +121,10 @@ export default new Hono<ApiBindings>()
       .from(schema.reviewPhaseOwners)
       .where(and(eq(schema.reviewPhaseOwners.gameId, game.id), eq(schema.reviewPhaseOwners.sourceRoundId, round.id)))
       .get();
-    const latest = latestRoundForTicket(deps.db, game.id, round.ticket);
+    const latest =
+      round.track === 'prototype-publish'
+        ? latestPublishedPrototypeRound(deps.db, game.id)
+        : latestRoundForTicket(deps.db, game.id, round.ticket);
     return c.json({
       status: !round.verdict
         ? 'open'
@@ -123,10 +141,15 @@ export default new Hono<ApiBindings>()
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
     if (!round || round.verdict !== null) throw new HttpError(404, 'review_round_not_found');
-    if (latestRoundForTicket(deps.db, game.id, round.ticket)?.id !== round.id)
+    if (
+      (round.track === 'prototype-publish'
+        ? latestPublishedPrototypeRound(deps.db, game.id)
+        : latestRoundForTicket(deps.db, game.id, round.ticket)
+      )?.id !== round.id
+    )
       throw new HttpError(409, 'review_round_superseded');
     const media = JSON.parse(round.media) as Media[];
-    if (c.req.query('kind') === 'build') {
+    if (c.req.query('kind') === 'build' && round.track !== 'prototype-publish') {
       const build = media.find((item) => item.kind === 'build' && item.ref !== '');
       if (!build) throw new HttpError(409, 'review_changed');
       const previews = await listPreviews(deps, game.id);
@@ -150,7 +173,12 @@ export default new Hono<ApiBindings>()
     const client = await deps.aiurClientForGame(game.id);
     const currentRound = getRound(deps.db, game.id, round.id);
     if (!currentRound || currentRound.verdict !== null) throw new HttpError(404, 'review_round_not_found');
-    if (latestRoundForTicket(deps.db, game.id, round.ticket)?.id !== round.id)
+    if (
+      (round.track === 'prototype-publish'
+        ? latestPublishedPrototypeRound(deps.db, game.id)
+        : latestRoundForTicket(deps.db, game.id, round.ticket)
+      )?.id !== round.id
+    )
       throw new HttpError(409, 'review_round_superseded');
     const receipt = await client.message(
       round.ticket,
@@ -169,12 +197,19 @@ export default new Hono<ApiBindings>()
     const round = getRound(deps.db, game.id, c.req.param('id'));
     if (
       !round ||
-      (round.category === 'gameplay' && (JSON.parse(round.media) as Media[]).some((item) => item.kind === 'build'))
+      (round.track !== 'prototype-publish' &&
+        round.category === 'gameplay' &&
+        (JSON.parse(round.media) as Media[]).some((item) => item.kind === 'build'))
     )
       throw new HttpError(404, 'review_round_not_found');
     let guard: string | undefined;
     const ok = deps.db.transaction((tx) => {
-      if (latestRoundForTicket(tx, game.id, round.ticket)?.id !== round.id)
+      if (
+        (round.track === 'prototype-publish'
+          ? latestPublishedPrototypeRound(tx, game.id)
+          : latestRoundForTicket(tx, game.id, round.ticket)
+        )?.id !== round.id
+      )
         throw new HttpError(409, 'review_round_superseded');
       const answered = answerRound(tx, game.id, round.id, {
         verdict: answer.verdict,
@@ -186,12 +221,15 @@ export default new Hono<ApiBindings>()
       return answered;
     });
     if (!ok) throw new HttpError(409, 'review_round_answered');
-    const episode = await readReviewEpisode(
-      deps.registry.reviewEpisode,
-      game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined,
-      round.ticket,
-      ['agent:human-review', ...(game.slug ? [`${game.slug}:human-review`] : [])],
-    );
+    const episode =
+      round.track === 'prototype-publish'
+        ? null
+        : await readReviewEpisode(
+            deps.registry.reviewEpisode,
+            game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined,
+            round.ticket,
+            ['agent:human-review', ...(game.slug ? [`${game.slug}:human-review`] : [])],
+          );
     if (guard) bindReviewEpisode(deps.db, game.id, round.ticket, guard, episode);
     return c.json({ status: 'answered' });
   });

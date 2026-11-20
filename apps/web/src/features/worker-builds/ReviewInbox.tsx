@@ -72,6 +72,7 @@ export function ReviewInbox({
   const missingPaths = [
     ...pendingReviews.flatMap((review) =>
       review.kind === 'round' &&
+      review.round.track !== 'prototype-publish' &&
       ((!review.round.media.some((item) => item.role !== 'target') && !review.round.buildId) ||
         Boolean(review.round.buildId))
         ? [

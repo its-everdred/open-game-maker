@@ -110,6 +110,7 @@ describe('command registry', () => {
       'qa new-game-e2e',
       'qa open',
       'qa playtest',
+      'qa publish-review-check',
       'qa review-e2e',
       'qa room',
       'qa voice-e2e',

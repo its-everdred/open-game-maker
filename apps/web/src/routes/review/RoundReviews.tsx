@@ -9,6 +9,13 @@ import { RoundMedia } from './RoundMedia';
 export type Round = {
   category?: 'art' | 'gameplay' | 'sound';
   buildId?: string | null;
+  track?: string;
+  works?: string[];
+  limitations?: string[];
+  decisionIds?: string[];
+  sourceTickets?: string[];
+  clipStatus?: 'captured' | 'unchecked' | null;
+  playUrl?: string | null;
   id: string;
   ticket: string;
   question: string | null;
@@ -86,7 +93,30 @@ export function RoundCard({
     <>
       <RoundMedia media={round.media} />
       {round.question ? <p>{round.question}</p> : null}
-      {round.buildId && <p role="alert">The playable review is unavailable. Try again later.</p>}
+      {round.playUrl ? (
+        <p>
+          <a href={round.playUrl} target="_blank" rel="noreferrer">
+            Play this build
+          </a>
+        </p>
+      ) : null}
+      {round.buildId && !round.playUrl && <p role="alert">The playable review is unavailable. Try again later.</p>}
+      {round.clipStatus === 'unchecked' ? <p>Clip: unchecked</p> : null}
+      {round.works?.length ? (
+        <p>
+          <strong>Works now:</strong> {round.works.join('; ')}
+        </p>
+      ) : null}
+      {round.limitations?.length ? (
+        <p>
+          <strong>Known limitations:</strong> {round.limitations.join('; ')}
+        </p>
+      ) : null}
+      {round.decisionIds?.length ? (
+        <p>
+          <strong>Weigh in on:</strong> {round.decisionIds.join(', ')}
+        </p>
+      ) : null}
     </>
   );
   return (
@@ -98,7 +128,9 @@ export function RoundCard({
       ) : null}
       {swipe ? (
         <SwipeVerdict
-          disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
+          disabled={
+            answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
+          }
           onPendingChange={onPendingChange}
           onSend={async (verdict, answerNote) => {
             await answer.mutateAsync({ verdict, note: answerNote });
@@ -112,7 +144,7 @@ export function RoundCard({
           <label>
             Note (optional)
             <textarea
-              disabled={Boolean(round.buildId)}
+              disabled={Boolean(round.buildId) && round.track !== 'prototype-publish'}
               value={note}
               maxLength={3900}
               onChange={(event) => setNote(event.target.value)}
@@ -121,14 +153,18 @@ export function RoundCard({
           <div className="review-deck-actions">
             <button
               type="button"
-              disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
+              disabled={
+                answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
+              }
               onClick={() => answer.mutate({ verdict: 'approved', note })}
             >
               Looks right
             </button>
             <button
               type="button"
-              disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
+              disabled={
+                answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
+              }
               onClick={() => answer.mutate({ verdict: 'needs_work', note })}
             >
               Needs work

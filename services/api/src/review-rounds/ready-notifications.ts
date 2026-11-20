@@ -5,7 +5,7 @@ import type { AppDeps } from '../app/types.js';
 import { listGameCommands } from '../commands/list.js';
 import type { GameRow } from '../games/games.js';
 import { insertNotification } from '../notify/store.js';
-import { latestRoundForTicket } from './store.js';
+import { latestPublishedPrototypeRound, latestRoundForTicket } from './store.js';
 import { REVIEW_NOTIFICATION_COOLDOWN_MS } from './notification-cooldown.js';
 
 type Candidate = { userId: string; key: string; ticketKey: string };
@@ -130,7 +130,12 @@ export function createReadyReviewNotifier(
       for (const game of deps.db.select().from(schema.games).all()) {
         if (!game.ownerId) continue;
         for (const round of rounds) {
-          if (round.gameId === game.id && latestRoundForTicket(deps.db, game.id, round.ticket)?.id === round.id)
+          if (
+            round.gameId === game.id &&
+            (round.track === 'prototype-publish'
+              ? latestPublishedPrototypeRound(deps.db, game.id)?.id === round.id
+              : latestRoundForTicket(deps.db, game.id, round.ticket)?.id === round.id)
+          )
             candidates.push({
               userId: game.ownerId,
               key: `round:${game.id}:${round.id}`,

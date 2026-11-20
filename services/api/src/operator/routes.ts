@@ -1,8 +1,8 @@
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
-import { reviewPath } from '@ogm/contracts';
+import { ReviewSubmission, reviewPath } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 
 import { HttpError } from '../app/errors.js';
@@ -22,6 +22,9 @@ import { phaseOwner } from '../review-rounds/owners.js';
 import { listTracks, reviewCheckout } from '../review-rounds/tracks.js';
 import { reviewDaemonForGame } from '../review-rounds/daemon.js';
 import { ensureCommit } from './ensure-commit.js';
+import { submitRound } from '../review-rounds/store.js';
+import { logReviewPublish } from '../review-rounds/feed-log.js';
+import { isReviewStill } from '../review-rounds/still.js';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
 // not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
@@ -73,6 +76,12 @@ function facts(deps: AppDeps, game: ReturnType<typeof gameFor>) {
         .where(eq(schema.builds.id, branch.latestBuildId))
         .get()
     : undefined;
+  const latestPrototypeReview = deps.db
+    .select({ id: schema.reviewRounds.id, sha: schema.reviewRounds.sha, postedAt: schema.reviewRounds.postedAt })
+    .from(schema.reviewRounds)
+    .where(and(eq(schema.reviewRounds.gameId, game.id), eq(schema.reviewRounds.track, 'prototype-publish')))
+    .orderBy(sql`julianday(${schema.reviewRounds.postedAt}) DESC`, sql`rowid DESC`)
+    .get();
   return {
     game: {
       id: game.id,
@@ -92,6 +101,7 @@ function facts(deps: AppDeps, game: ReturnType<typeof gameFor>) {
       : null,
     branch: branch ? { id: branch.id, name: 'main', latestBuildId: branch.latestBuildId } : null,
     build: build ?? null,
+    latestPrototypeReview: latestPrototypeReview ?? null,
   };
 }
 
@@ -150,6 +160,132 @@ const routes = new Hono<ApiBindings>()
     requireOperator(c);
     const result = registerOperatorGame(c.get('deps'), await parseBody(c, OperatorRegisterBody));
     return c.json(gameResponse(result.game), result.created ? 201 : 200);
+  })
+  .post(
+    '/games/:ref/prototype-reviews/media',
+    async (c, next) => {
+      requireOperator(c);
+      await next();
+    },
+    bodyLimit({ maxSize: 64 * 1024 * 1024, onError: (c) => c.json({ error: { code: 'media_too_large' } }, 413) }),
+    async (c) => {
+      const game = gameFor(c.get('deps'), c.req.param('ref'));
+      const mime = c.req.header('content-type')?.split(';')[0]?.trim();
+      if (mime !== 'video/mp4' && mime !== 'image/png') return c.json({ error: { code: 'invalid_media_type' } }, 415);
+      const bytes = Buffer.from(await c.req.arrayBuffer());
+      if (!bytes.length) return c.json({ error: { code: 'empty_media' } }, 400);
+      const { hash } = await c.get('deps').blobStore.put(bytes, mime);
+      return c.json({ gameId: game.id, hash, bytes: bytes.length }, 201);
+    },
+  )
+  .post('/games/:ref/prototype-reviews', async (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    const parsed = ReviewSubmission.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: { code: 'invalid_review', details: parsed.error.issues } }, 400);
+    const submission = parsed.data;
+    if (
+      submission.track !== 'prototype-publish' ||
+      submission.phase !== 'build' ||
+      submission.category !== 'gameplay' ||
+      (submission.sourceTickets?.length
+        ? submission.ticket !== submission.sourceTickets[0]
+        : submission.ticket !== 'publish')
+    )
+      return c.json({ error: { code: 'invalid_prototype_review' } }, 400);
+    const build = deps.db
+      .select()
+      .from(schema.builds)
+      .where(eq(schema.builds.id, String(submission.media.find((item) => item.kind === 'build')?.ref)))
+      .get();
+    if (!build || build.gameId !== game.id || build.gitSha !== submission.sha || build.status !== 'tested')
+      return c.json({ error: { code: 'published_build_not_found' } }, 404);
+    for (const media of submission.media) {
+      if (media.kind === 'clip') {
+        const stored = await deps.blobStore.head(media.ref as never);
+        if (!stored || stored.mime !== 'video/mp4') return c.json({ error: { code: 'review_media_invalid' } }, 422);
+      } else if (media.kind === 'still') {
+        const stored = await deps.blobStore.head(media.ref as never);
+        if (!stored || !(await isReviewStill(deps.blobStore, media.ref)))
+          return c.json({ error: { code: 'review_media_invalid' } }, 422);
+      }
+    }
+    const existing = deps.db
+      .select()
+      .from(schema.reviewRounds)
+      .where(
+        and(
+          eq(schema.reviewRounds.gameId, game.id),
+          eq(schema.reviewRounds.track, 'prototype-publish'),
+          sql`EXISTS (SELECT 1 FROM json_each(${schema.reviewRounds.media}) WHERE json_extract(value, '$.kind') = 'build' AND json_extract(value, '$.ref') = ${build.id})`,
+        ),
+      )
+      .get();
+    if (existing) {
+      deps.db.update(schema.builds).set({ prototypeReviewState: 'posted' }).where(eq(schema.builds.id, build.id)).run();
+      return c.json({ id: existing.id, round: existing.round, state: 'existing' });
+    }
+    const round = submitRound(deps.db, game.id, submission);
+    deps.db.update(schema.builds).set({ prototypeReviewState: 'posted' }).where(eq(schema.builds.id, build.id)).run();
+    await logReviewPublish(game.id, { ticket: submission.ticket, id: round.id, postedAt: round.postedAt }, deps.log);
+    return c.json({ id: round.id, round: round.round, state: 'posted' }, 201);
+  })
+  .post('/games/:ref/builds/:buildId/prototype-review-check', (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    const buildId = c.req.param('buildId');
+    const build = deps.db
+      .select()
+      .from(schema.builds)
+      .where(and(eq(schema.builds.id, buildId), eq(schema.builds.gameId, game.id)))
+      .get();
+    if (!build || build.status !== 'tested') throw new HttpError(404, 'published_build_not_found');
+    const hasRound = deps.db
+      .select({ id: schema.reviewRounds.id })
+      .from(schema.reviewRounds)
+      .where(
+        and(
+          eq(schema.reviewRounds.gameId, game.id),
+          eq(schema.reviewRounds.track, 'prototype-publish'),
+          sql`EXISTS (SELECT 1 FROM json_each(${schema.reviewRounds.media}) WHERE json_extract(value, '$.kind') = 'build' AND json_extract(value, '$.ref') = ${buildId})`,
+        ),
+      )
+      .get();
+    const state = hasRound ? 'posted' : 'none';
+    deps.db.update(schema.builds).set({ prototypeReviewState: state }).where(eq(schema.builds.id, buildId)).run();
+    return c.json({ state });
+  })
+  .get('/prototype-review-gaps', (c) => {
+    requireOperator(c);
+    const gaps = c
+      .get('deps')
+      .db.select({ slug: schema.games.slug, buildId: schema.builds.id })
+      .from(schema.builds)
+      .innerJoin(schema.games, eq(schema.games.id, schema.builds.gameId))
+      .where(and(eq(schema.builds.status, 'tested'), eq(schema.builds.prototypeReviewState, 'pending')))
+      .all()
+      .filter((gap): gap is { slug: string; buildId: string } => Boolean(gap.slug));
+    return c.json({ gaps });
+  })
+  .get('/games/:ref/builds/:buildId/prototype-review', (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    const buildId = c.req.param('buildId');
+    const round = deps.db
+      .select({ id: schema.reviewRounds.id, round: schema.reviewRounds.round })
+      .from(schema.reviewRounds)
+      .where(
+        and(
+          eq(schema.reviewRounds.gameId, game.id),
+          eq(schema.reviewRounds.track, 'prototype-publish'),
+          sql`EXISTS (SELECT 1 FROM json_each(${schema.reviewRounds.media}) WHERE json_extract(value, '$.kind') = 'build' AND json_extract(value, '$.ref') = ${buildId})`,
+        ),
+      )
+      .get();
+    return c.json({ recorded: Boolean(round), ...(round ? { roundId: round.id, round: round.round } : {}) });
   })
   .get('/games/:ref', (c) => {
     requireOperator(c);
@@ -218,9 +354,15 @@ const routes = new Hono<ApiBindings>()
         deps.log({ event: 'build_upload_refused', jobId: result.jobId, gameId: game.id, reason: result.reason });
         return c.json({ error: { code: result.reason } }, 422);
       }
-      return result.state === 'done'
-        ? c.json({ state: 'done', jobId: result.jobId, buildId: result.buildId }, 201)
-        : c.json({ state: 'failed', jobId: result.jobId, reason: result.reason }, 422);
+      if (result.state === 'done') {
+        deps.db
+          .update(schema.builds)
+          .set({ prototypeReviewState: 'pending' })
+          .where(and(eq(schema.builds.id, result.buildId), eq(schema.builds.prototypeReviewState, 'none')))
+          .run();
+        return c.json({ state: 'done', jobId: result.jobId, buildId: result.buildId }, 201);
+      }
+      return c.json({ state: 'failed', jobId: result.jobId, reason: result.reason }, 422);
     },
   );
 
