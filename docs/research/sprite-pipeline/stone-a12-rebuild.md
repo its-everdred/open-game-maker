@@ -38,3 +38,8 @@ A creator verdict of “Matches” was recorded without a round identifier. A
 later verdict requested more light shades on the original rock. The current
 candidate has not been submitted in the requested two-track comparison, so the
 unidentified verdict is not evidence that this candidate was approved.
+
+The added top bands are visible in all four rendered views. A local color audit
+of opaque, nearly neutral light pixels found values in the 120–128 range in
+round 99 and additional values up to about 140–144 in round 105. This confirms
+that the render changed; it does not replace the creator's visual verdict.
