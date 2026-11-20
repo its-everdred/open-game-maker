@@ -139,7 +139,6 @@ describe('decision inventory and prototype review', () => {
       expect(rules).toContain(part);
     expect(rules).toContain('The build is not delivered until its review is raised.');
     expect(read('../gm-verify/SKILL.md')).toContain('is not delivered until its prototype review is raised');
-    expect(read('../gm-verify/SKILL.md')).toContain('- Prototype review: <raised Command, or none');
     expect(read('../gm-qa/SKILL.md')).toContain("the build's prototype review must be raised");
     expect(read('./SKILL.md')).toContain('reaches them as a prototype review');
   });

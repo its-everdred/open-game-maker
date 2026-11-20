@@ -49,15 +49,8 @@ Set `IMPECCABLE_BIN="$HOME/.impeccable/bin/0.1.25/impeccable"` and `DO_NOT_TRACK
 **Ask, don't assume.** At any stage (a prototype, a failed review, a spec gap), before deciding anything a player would
 notice, ask with `gm decide`: a 2-5 word `--topic`, as many options as needed, each showing the thing itself (`--media`
 or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic; `design/decisions.json` refuses
-one already asked unless the creator reopens it (`--revisit`). At most three per edit beyond the ticket's inventory
-decisions; new games follow gm-new-game-design. Engineering and operations questions never go to the creator: decide
-them or tell the Executor.
-**You think of the decisions; the creator makes them.** The game's inventory, `docs/<slug>/decisions.json`, lists
-every product decision; your ticket names its ids under `## Creator decisions`. At the start, raise each `open` one
-(non-blocking, media on every option; pack assets as a real lineup), set it `asked`, build your recommendation and
-record the answer back. A decision you discover goes into the inventory first; never settle one silently. A playable
-build that changes what the creator can do or see is delivered only once its prototype review is raised (play link,
-clip, works now, known limitations, what to weigh in on). Format and rules: `references/decision-inventory.md`.
+one already asked unless the creator reopens it (`--revisit`). At most three per edit beyond the ticket's inventory decisions; new games follow
+gm-new-game-design. Engineering and operations questions never go to the creator: decide them or tell the Executor. **You think of the decisions; the creator makes them.** The game's inventory, `docs/<slug>/decisions.json`, lists every product decision, and your ticket names its ids under `## Creator decisions`: at the start, raise each `open` one (non-blocking, media on every option, pack assets as a real lineup), build your recommendation and record the answer back. A decision you discover goes into the inventory first; never settle one silently. A playable build that changes what the creator can do or see is delivered only once its prototype review is raised (play link, clip, works now, known limitations, what to weigh in on). Format and rules: `references/decision-inventory.md`.
 Build the choice. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked. Done means
 `gm check`, `gm test`, and `gm run` are green and the PR's checklist is answered from the evidence sheet; look first.
 
