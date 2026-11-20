@@ -63,7 +63,9 @@ function printReports(ctx: Parameters<GmCommand['run']>[0], reports: AssetBudget
     );
     for (const item of report.tier === budgetTier ? report.exceeded : []) {
       const setting = report.setting ? ` (set ${report.setting})` : '';
-      ctx.err(`${report.tier} budget exceeded: ${report.phase ?? 'boot'} ${item.metric} ${item.value} > ${item.limit}${setting}`);
+      ctx.err(
+        `${report.tier} budget exceeded: ${report.phase ?? 'boot'} ${item.metric} ${item.value} > ${item.limit}${setting}`,
+      );
     }
   }
 }
@@ -220,18 +222,22 @@ export const command: GmCommand = {
         const group = phase.slice('lazy:'.length);
         const groupKey = lazyBudgets[group] ? group : group.split('-')[0]!;
         const configured = lazyBudgets[groupKey];
-        const groupEntries = cachePlan.entries.filter((entry) => entry.ids?.some((id) => manifest.assets[id]?.phase === phase));
+        const groupEntries = cachePlan.entries.filter((entry) =>
+          entry.ids?.some((id) => manifest.assets[id]?.phase === phase),
+        );
         const streamOnly =
           groupEntries.some((entry) => entry.phase === 'stream') &&
           !groupEntries.some((entry) => entry.phase === 'ready');
-        const ceiling = streamOnly ? (tier === 'desktop' ? 64 : 32) : (tier === 'desktop' ? 4 : 1.5);
+        const ceiling = streamOnly ? (tier === 'desktop' ? 64 : 32) : tier === 'desktop' ? 4 : 1.5;
         const defaultLimit = tier === 'desktop' ? 4 : 1.5;
         const limit =
           phase === 'boot'
             ? undefined
             : (configured?.[tier === 'desktop' ? 'desktop' : 'mobile'] ?? defaultLimit * 1024 * 1024);
         if (limit !== undefined && (!Number.isFinite(limit) || limit < 0 || limit > ceiling * 1024 * 1024))
-          throw new Error(`Invalid gm.manifest.json assetBudgets.lazy.${group} ${tier} budget (maximum ${ceiling} MiB)`);
+          throw new Error(
+            `Invalid gm.manifest.json assetBudgets.lazy.${group} ${tier} budget (maximum ${ceiling} MiB)`,
+          );
         const report = budgetReport(manifest, details, tier, phase, limit, cachePlan);
         if (phase === 'boot') return report;
         const settingTier = tier === 'desktop' ? 'desktop' : 'mobile';

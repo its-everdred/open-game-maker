@@ -563,7 +563,10 @@ describe('gm build assets', () => {
     writeAsset(cwd, 'assets/image/a.png', await png(16, 16));
     writeLock(cwd, [{ id: 't3:fixture/a', path: 'assets/image/a.png' }]);
     updateLockEntry(cwd, 't3:fixture/a', { phase: 'lazy:backdrop-nim' });
-    writeFileSync(join(cwd, 'gm.manifest.json'), JSON.stringify({ assetBudgets: { lazy: { backdrop: { mobile: 0 } } } }));
+    writeFileSync(
+      join(cwd, 'gm.manifest.json'),
+      JSON.stringify({ assetBudgets: { lazy: { backdrop: { mobile: 0 } } } }),
+    );
     const first = await gm(['build', 'assets'], { cwd, env: {} });
     expect(first.code).toBe(1);
     expect(first.err.join('\n')).toContain('gm.manifest.json assetBudgets.lazy.backdrop.mobile');
@@ -571,9 +574,9 @@ describe('gm build assets', () => {
     const jsonReport = JSON.parse(jsonFirst.out[0]!) as {
       reports: Array<{ tier: string; phase: string; setting?: string }>;
     };
-    expect(jsonReport.reports.find((report) => report.tier === 'mobile' && report.phase === 'lazy:backdrop-nim')?.setting).toBe(
-      'gm.manifest.json assetBudgets.lazy.backdrop.mobile',
-    );
+    expect(
+      jsonReport.reports.find((report) => report.tier === 'mobile' && report.phase === 'lazy:backdrop-nim')?.setting,
+    ).toBe('gm.manifest.json assetBudgets.lazy.backdrop.mobile');
     const manifest = JSON.parse(readFileSync(join(cwd, 'public/assets/manifest.json'), 'utf8')) as AssetManifest;
     const reports = JSON.parse(readFileSync(join(cwd, 'public/assets/budget.json'), 'utf8')) as Array<{
       tier: string;
@@ -586,40 +589,47 @@ describe('gm build assets', () => {
     expect(
       reports.find((r) => r.tier === 'mobile' && r.phase === 'lazy:backdrop-nim')?.exceeded.map((x) => x.metric),
     ).toContain('bytes');
-    writeFileSync(join(cwd, 'gm.manifest.json'), JSON.stringify({ assetBudgets: { lazy: { backdrop: { mobile: 100000 } } } }));
+    writeFileSync(
+      join(cwd, 'gm.manifest.json'),
+      JSON.stringify({ assetBudgets: { lazy: { backdrop: { mobile: 100000 } } } }),
+    );
     const second = await gm(['build', 'assets', '--json'], { cwd, env: {} });
     expect(second.code).toBe(0);
   });
 
-  it.skipIf(!ffmpegAvailable)('builds a 3 MiB streamed music group with a tracked budget', async () => {
-    const cwd = tempDir('gm-build-music-budget-');
-    const assets = [0, 1, 2].map((index) => {
-      const path = `assets/audio/music-${index}.wav`;
-      writeAsset(cwd, path, noiseWav(120, index + 1));
-      return { id: `t3:fixture/music-${index}`, path };
-    });
-    writeLock(cwd, assets);
-    for (const asset of assets) updateLockEntry(cwd, asset.id, { phase: 'lazy:music-loop' });
+  it.skipIf(!ffmpegAvailable)(
+    'builds a 3 MiB streamed music group with a tracked budget',
+    async () => {
+      const cwd = tempDir('gm-build-music-budget-');
+      const assets = [0, 1, 2].map((index) => {
+        const path = `assets/audio/music-${index}.wav`;
+        writeAsset(cwd, path, noiseWav(120, index + 1));
+        return { id: `t3:fixture/music-${index}`, path };
+      });
+      writeLock(cwd, assets);
+      for (const asset of assets) updateLockEntry(cwd, asset.id, { phase: 'lazy:music-loop' });
 
-    const withoutSetting = await gm(['build', 'assets'], { cwd, env: {} });
-    expect(withoutSetting.code).toBe(1);
-    expect(withoutSetting.err.join('\n')).toContain('gm.manifest.json assetBudgets.lazy.music.mobile');
-    const failedReports = JSON.parse(readFileSync(join(cwd, 'public/assets/budget.json'), 'utf8')) as Array<{
-      tier: string;
-      phase: string;
-      bytes: number;
-    }>;
-    expect(failedReports.find((report) => report.tier === 'mobile' && report.phase === 'lazy:music-loop')?.bytes).toBeGreaterThan(
-      3 * 1024 * 1024,
-    );
+      const withoutSetting = await gm(['build', 'assets'], { cwd, env: {} });
+      expect(withoutSetting.code).toBe(1);
+      expect(withoutSetting.err.join('\n')).toContain('gm.manifest.json assetBudgets.lazy.music.mobile');
+      const failedReports = JSON.parse(readFileSync(join(cwd, 'public/assets/budget.json'), 'utf8')) as Array<{
+        tier: string;
+        phase: string;
+        bytes: number;
+      }>;
+      expect(
+        failedReports.find((report) => report.tier === 'mobile' && report.phase === 'lazy:music-loop')?.bytes,
+      ).toBeGreaterThan(3 * 1024 * 1024);
 
-    writeFileSync(
-      join(cwd, 'gm.manifest.json'),
-      JSON.stringify({ assetBudgets: { lazy: { music: { mobile: 8 * 1024 * 1024 } } } }),
-    );
-    const withSetting = await gm(['build', 'assets', '--json'], { cwd, env: {} });
-    expect(withSetting.code).toBe(0);
-  }, 120_000);
+      writeFileSync(
+        join(cwd, 'gm.manifest.json'),
+        JSON.stringify({ assetBudgets: { lazy: { music: { mobile: 8 * 1024 * 1024 } } } }),
+      );
+      const withSetting = await gm(['build', 'assets', '--json'], { cwd, env: {} });
+      expect(withSetting.code).toBe(0);
+    },
+    120_000,
+  );
 
   it.skipIf(toktxAvailable)('exits 2 and names toktx when --ktx2 cannot find the tool', async () => {
     const result = await gm(['build', 'assets', '--ktx2'], { env: {} });
