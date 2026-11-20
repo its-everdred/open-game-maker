@@ -80,4 +80,17 @@ describe('review contract', () => {
     expect(CommandReview.safeParse({ likes: ['v1'], dislikes: [], notes: '   ' }).success).toBe(false);
     expect(ReviewAnswerPayload.safeParse({ kind: 'question_answers', answers: [] }).success).toBe(true);
   });
+
+  it('accepts an optional note on a liked option and rejects notes for unliked options', () => {
+    expect(CommandReview.safeParse({
+      likes: ['v1'],
+      dislikes: [],
+      liked_notes: [{ option_id: 'v1', reason: 'Great tone' }],
+    }).success).toBe(true);
+    expect(CommandReview.safeParse({
+      likes: ['v1'],
+      dislikes: [],
+      liked_notes: [{ option_id: 'v2', reason: 'Not selected' }],
+    }).success).toBe(false);
+  });
 });

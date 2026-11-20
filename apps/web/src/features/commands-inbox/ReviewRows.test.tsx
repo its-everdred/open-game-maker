@@ -6,6 +6,7 @@ import type { GameCommand } from '@ogm/contracts';
 
 import { markSent, resetReviewDrafts, useDeckDraft } from './drafts';
 import { ReviewRows } from './ReviewRows';
+import { CommandOptions } from './CommandOptions';
 
 function command(overrides: Partial<GameCommand> = {}): GameCommand {
   return {
@@ -140,5 +141,15 @@ describe('ReviewRows', () => {
     const row = screen.getByRole('link', { name: 'Pick the roll, open' });
     expect(row.querySelector('.review-row-thumb video')).toHaveAttribute('src', 'https://media.example.test/roll.mp4');
     expect(row.querySelector('.review-row-thumb img')).toBeNull();
+  });
+
+  it('renders review videos muted, inline, autoplaying and looping', () => {
+    const clip = { url: 'https://media.example.test/roll.mp4', width: 64, height: 48, kind: 'video' as const };
+    render(<CommandOptions command={command({ options: [{ id: 'm1', label: 'Roll', media: clip }, { id: 'm2', label: 'Other' }] })} disabled={false} onAnswer={() => undefined} />);
+    const video = document.querySelector('video');
+    expect(video).toHaveProperty('autoplay', true);
+    expect(video).toHaveProperty('muted', true);
+    expect(video).toHaveProperty('loop', true);
+    expect(video).toHaveProperty('playsInline', true);
   });
 });

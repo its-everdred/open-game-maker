@@ -19,11 +19,18 @@ export const ReviewDislike = z
     reason: ReviewReason.optional(),
   })
   .strict();
+export const ReviewLikeNote = z
+  .object({
+    option_id: z.string().regex(/^[a-z0-9_-]{1,32}$/),
+    reason: ReviewReason,
+  })
+  .strict();
 
 export const CommandReview = z
   .object({
     likes: z.array(z.string().regex(/^[a-z0-9_-]{1,32}$/)).max(MAX_REVIEW_CARDS),
     dislikes: z.array(ReviewDislike).max(MAX_REVIEW_CARDS),
+    liked_notes: z.array(ReviewLikeNote).max(MAX_REVIEW_CARDS).optional(),
     // Anything that applies to the whole set rather than one card. Absent when the creator said nothing extra.
     notes: ReviewNotes.optional(),
   })
@@ -37,6 +44,10 @@ export const CommandReview = z
     for (const { option_id: id } of review.dislikes) {
       if (seen.has(id)) ctx.addIssue({ code: 'custom', path: ['dislikes'], message: `duplicate card ${id}` });
       seen.add(id);
+    }
+    for (const { option_id: id } of review.liked_notes ?? []) {
+      if (!review.likes.includes(id))
+        ctx.addIssue({ code: 'custom', path: ['liked_notes'], message: `note ${id} is not a liked card` });
     }
   });
 
@@ -90,6 +101,7 @@ export const ReviewAnswerPayload = z
             option_id: z.string().min(1).max(32),
             verdict: z.enum(['like', 'dislike']),
             reason: ReviewReason.optional(),
+            note: ReviewReason.optional(),
           })
           .strict(),
       )
@@ -102,6 +114,7 @@ export const ReviewAnswerPayload = z
 export const CommandReviewsPage = z.object({ reviews: z.array(CommandReviewEntry) });
 
 export type ReviewDislike = z.infer<typeof ReviewDislike>;
+export type ReviewLikeNote = z.infer<typeof ReviewLikeNote>;
 export type CommandReview = z.infer<typeof CommandReview>;
 export type CommandAnswerBody = z.infer<typeof CommandAnswerBody>;
 export type ReviewLedgerCard = z.infer<typeof ReviewLedgerCard>;

@@ -139,6 +139,23 @@ describe('review deck answers', () => {
     });
   });
 
+  it('sends notes attached to liked options in the worker answer', async () => {
+    const { app, deps, answers } = await setup();
+    insertOpenDesignCommand(deps);
+    const review = {
+      likes: ['wood'],
+      dislikes: [],
+      liked_notes: [{ option_id: 'wood', reason: 'Warm and readable' }],
+    };
+
+    expect((await answerReview(app, { option_id: 'wood', review })).status).toBe(200);
+    expect(JSON.parse(answers[0]!.response ?? 'null')).toEqual({
+      kind: 'question_answers',
+      answers: [{ option_id: 'wood', verdict: 'like', note: 'Warm and readable' }],
+    });
+    expect(answers[0]!.rationale).toContain("liked Wooden ('Warm and readable')");
+  });
+
   it('names the likes the creator passed over as aiur’s alternatives, never the chosen card', async () => {
     const { app, deps, answers } = await setup();
     insertOpenDesignCommand(deps, {
