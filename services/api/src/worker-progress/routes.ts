@@ -214,7 +214,8 @@ routes.get('/games/:gameId/tickets/completed', async (c) => {
   const deps = c.get('deps');
   if (isQaGame(deps.db, game.id)) return c.json({ tickets: qaCompleted(deps), stale: false });
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
-  if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_history_unavailable');
+  if (!repo) return c.json({ tickets: [], stale: false });
+  if (!game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_history_unavailable');
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
   const snapshot = await deps.registry.trackerTickets(repo, 'closed');
   const tickets = snapshot.tickets

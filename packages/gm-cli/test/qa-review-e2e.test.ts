@@ -512,6 +512,31 @@ describe('verdicts reaching aiur', () => {
     ).toBe('the Command answer is not B with its note');
   });
 
+  it('rejects extra judgments and missing or altered notes in a valid Command receipt', () => {
+    const receipt = (answers: unknown[], notes?: string) => ({
+      ...delivered,
+      received: [
+        {
+          kind: 'answer',
+          response: JSON.stringify({
+            kind: 'question_answers',
+            answers,
+            ...(notes === undefined ? {} : { notes }),
+          }),
+        },
+      ],
+    });
+    expect(
+      commandReached(receipt([{ option_id: 'b', verdict: 'like' }, { option_id: 'a', verdict: 'like' }], PICK_NOTE)),
+    ).toBe('the Command answer is not B with its note');
+    expect(commandReached(receipt([{ option_id: 'b', verdict: 'like' }]))).toBe(
+      'the Command answer is not B with its note',
+    );
+    expect(commandReached(receipt([{ option_id: 'b', verdict: 'like' }], `unexpected ${PICK_NOTE}`))).toBe(
+      'the Command answer is not B with its note',
+    );
+  });
+
   it('fails when the round verdict stayed in the app', () => {
     expect(reached({ ...delivered, received: delivered.received.filter((item) => item.kind !== 'rework') })).toBe(
       'the round verdict did not reach aiur',
