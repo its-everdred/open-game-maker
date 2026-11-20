@@ -106,6 +106,7 @@ describe('command registry', () => {
       'py',
       'py setup',
       'qa drive',
+      'qa games-cache',
       'qa look',
       'qa new-game-e2e',
       'qa open',

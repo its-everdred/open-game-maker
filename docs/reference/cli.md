@@ -88,6 +88,15 @@ waiting for a round. The host timer runs the sweep every ten minutes and records
 
 ## Verify a game
 
+Measure the second games-list load in a phone-sized browser with the QA account. The command reports the named game's
+logo and thumbnail URLs, HTTP status, transferred bytes, duration, response `Cache-Control`, and the games-list API
+duration. A zero transfer size means no network bytes were transferred; Chromium does not identify whether the source
+was memory or disk cache. The default game is `blobs`. `--origin` must match the app origin configured for the QA host.
+
+```text
+gm qa games-cache [--origin <app origin>] [--game <slug>] [--json]
+```
+
 ```text
 gm check [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
