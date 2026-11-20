@@ -40,7 +40,15 @@ export function AiurComposer({
   const admissionInFlight = useRef(false);
   const lastAdmittedJob = useRef<string | undefined>(undefined);
   const lastVoiceSession = useRef<string | undefined>(undefined);
-  const callbacks = useRef({ postText, startJob, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused });
+  const callbacks = useRef({
+    postText,
+    startJob,
+    onPosted,
+    onOptimistic,
+    onFailed,
+    uploadAttachment,
+    wasAdmissionReused,
+  });
   callbacks.current = { postText, startJob, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused };
   const [error, setError] = useState('');
   useEffect(
@@ -208,7 +216,8 @@ export function AiurComposer({
         : {}),
     };
     element.onSend = async (text, attachments) => {
-      const { startJob, postText, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused } = callbacks.current;
+      const { startJob, postText, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused } =
+        callbacks.current;
       const instruction = text.trim();
       let target: string | undefined = jobId;
       if (startJob) {
@@ -281,11 +290,7 @@ export function AiurComposer({
 
 let optimisticCount = 0;
 
-function optimisticMessage(
-  jobId: string,
-  text: string,
-  files: File[],
-): StreamedChatMessage {
+function optimisticMessage(jobId: string, text: string, files: File[]): StreamedChatMessage {
   const count = (optimisticCount += 1);
   return {
     id: `optimistic-${Date.now()}-${count}`,

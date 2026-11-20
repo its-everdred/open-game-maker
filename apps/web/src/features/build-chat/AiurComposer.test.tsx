@@ -77,17 +77,18 @@ it('posts a text instruction separately when admission reused an existing voice 
 it('uses a custom attachment uploader instead of the default uploader', async () => {
   fake.defaultUpload.mockReset();
   const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
-  const uploaded = { id: 'attachment-1', kind: 'text' as const, name: file.name, mime: 'text/plain' as const, bytes: 5 };
+  const uploaded = {
+    id: 'attachment-1',
+    kind: 'text' as const,
+    name: file.name,
+    mime: 'text/plain' as const,
+    bytes: 5,
+  };
   const uploadAttachment = vi.fn().mockResolvedValue(uploaded);
   const postText = vi.fn().mockResolvedValue(undefined);
   const onOptimistic = vi.fn();
   const { container, rerender } = render(
-    <AiurComposer
-      jobId="job-1"
-      postText={postText}
-      uploadAttachment={uploadAttachment}
-      onOptimistic={onOptimistic}
-    />,
+    <AiurComposer jobId="job-1" postText={postText} uploadAttachment={uploadAttachment} onOptimistic={onOptimistic} />,
   );
   const composer = container.querySelector('aiur-composer') as ComposerElement;
   await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
@@ -120,9 +121,7 @@ it('emits an optimistic message before the post resolves', async () => {
       }),
   );
   const onOptimistic = vi.fn();
-  const { container } = render(
-    <AiurComposer jobId="job-1" postText={postText} onOptimistic={onOptimistic} />,
-  );
+  const { container } = render(<AiurComposer jobId="job-1" postText={postText} onOptimistic={onOptimistic} />);
   const composer = container.querySelector('aiur-composer') as ComposerElement;
   await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
   composer.value = 'Make it brighter';
