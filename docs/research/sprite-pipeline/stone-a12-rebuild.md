@@ -33,3 +33,8 @@ face-color assignments did not remove it. Replacing the segment with a separate
 ellipsoid either changed the silhouette and shadow or made the stone appear
 missing. Those experiments are not accepted replacements; the visual issue
 remains open.
+
+A creator verdict of “Matches” was recorded without a round identifier. A
+later verdict requested more light shades on the original rock. The current
+candidate has not been submitted in the requested two-track comparison, so the
+unidentified verdict is not evidence that this candidate was approved.
