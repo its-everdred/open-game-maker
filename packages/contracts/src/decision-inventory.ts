@@ -35,20 +35,20 @@ export const CreatorDecision = z
       ctx.addIssue({ code: 'custom', path: ['answer'], message: 'answered decisions need answer and answered_at' });
     if (entry.status !== 'answered' && (entry.answer !== null || entry.answered_at !== null))
       ctx.addIssue({ code: 'custom', path: ['answer'], message: 'unanswered decisions need null answer fields' });
-    if (entry.answer && !entry.options.some((option) => entry.answer === option.label || entry.answer?.startsWith(`${option.label}:`)))
+    if (
+      entry.answer &&
+      !entry.options.some((option) => entry.answer === option.label || entry.answer?.startsWith(`${option.label}:`))
+    )
       ctx.addIssue({ code: 'custom', path: ['answer'], message: 'must match an option label' });
   });
 
-export const DecisionInventory = z
-  .array(CreatorDecision)
-  .superRefine((inventory, ctx) => {
-    const seen = new Set<string>();
-    inventory.forEach((entry, index) => {
-      if (seen.has(entry.id))
-        ctx.addIssue({ code: 'custom', path: [index, 'id'], message: `duplicate id ${entry.id}` });
-      seen.add(entry.id);
-    });
+export const DecisionInventory = z.array(CreatorDecision).superRefine((inventory, ctx) => {
+  const seen = new Set<string>();
+  inventory.forEach((entry, index) => {
+    if (seen.has(entry.id)) ctx.addIssue({ code: 'custom', path: [index, 'id'], message: `duplicate id ${entry.id}` });
+    seen.add(entry.id);
   });
+});
 
 export type CreatorDecision = z.infer<typeof CreatorDecision>;
 export type DecisionInventory = z.infer<typeof DecisionInventory>;

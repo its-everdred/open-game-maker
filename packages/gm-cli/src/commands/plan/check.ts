@@ -82,10 +82,11 @@ export const command: GmCommand = {
             for (const id of ids) {
               listed.add(id);
               const entry = inventory.find((candidate) => candidate.id === id);
-              if (!entry)
-                inventoryProblems.push(`#${ticket.number} lists unknown decision ${id}`);
+              if (!entry) inventoryProblems.push(`#${ticket.number} lists unknown decision ${id}`);
               else if (entry.ticket !== null && entry.ticket !== ticket.number)
-                inventoryProblems.push(`decision ${id} is assigned to ticket #${entry.ticket} but listed on #${ticket.number}`);
+                inventoryProblems.push(
+                  `decision ${id} is assigned to ticket #${entry.ticket} but listed on #${ticket.number}`,
+                );
             }
         }
         for (const decision of inventory)

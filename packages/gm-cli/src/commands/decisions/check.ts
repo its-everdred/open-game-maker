@@ -23,9 +23,7 @@ export const command: GmCommand = {
     }
     const stale = markdown !== renderInventory(inventory);
     if (ctx.json)
-      ctx.out(
-        JSON.stringify({ game: slug, ok: !stale, decisions: inventory.length, markdown: mdFile, stale }),
-      );
+      ctx.out(JSON.stringify({ game: slug, ok: !stale, decisions: inventory.length, markdown: mdFile, stale }));
     else if (stale) ctx.err(`decisions.md is stale; run gm decisions render for ${slug}`);
     else ctx.out(`decisions ok: ${inventory.length} entries for ${slug}`);
     return stale ? EXIT.failed : EXIT.ok;

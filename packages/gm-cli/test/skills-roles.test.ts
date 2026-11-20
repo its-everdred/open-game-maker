@@ -90,7 +90,10 @@ describe('gm plan check', () => {
         area: 'Enemies',
         question: 'Which enemies?',
         why: 'Sets the tone.',
-        options: [{ label: 'Slimes', media_needed: 'slime still' }, { label: 'Golems', media_needed: 'golem still' }],
+        options: [
+          { label: 'Slimes', media_needed: 'slime still' },
+          { label: 'Golems', media_needed: 'golem still' },
+        ],
         recommendation: 'Slimes: existing pack art.',
         sources: ['brief.md'],
         ticket: null,
@@ -109,16 +112,18 @@ describe('gm plan check', () => {
     expect(JSON.parse(missingBody.out[0]!).inventoryProblems).toContain(
       '#20 body missing; use gh issue list --json number,title,labels,body',
     );
-    const missingSection = await run([
-      { number: 20, body: 'No decision section.', labels: ['game:blobs', 'role:qa'] },
-    ]);
+    const missingSection = await run([{ number: 20, body: 'No decision section.', labels: ['game:blobs', 'role:qa'] }]);
     expect(JSON.parse(missingSection.out[0]!).inventoryProblems).toContain('#20 has no ## Creator decisions section');
     const unknownId = await run([
       { number: 20, body: '## Creator decisions\n- other-choice\n', labels: ['game:blobs', 'role:qa'] },
     ]);
     expect(JSON.parse(unknownId.out[0]!).inventoryProblems).toContain('#20 lists unknown decision other-choice');
-    const unassigned = await run([{ number: 20, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:qa'] }]);
-    expect(JSON.parse(unassigned.out[0]!).inventoryProblems).toContain('decision enemy-style is not listed on a game:blobs ticket');
+    const unassigned = await run([
+      { number: 20, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:qa'] },
+    ]);
+    expect(JSON.parse(unassigned.out[0]!).inventoryProblems).toContain(
+      'decision enemy-style is not listed on a game:blobs ticket',
+    );
     inventory[0]!.ticket = 21;
     writeFileSync(join(base, 'docs', 'blobs', 'decisions.json'), JSON.stringify(inventory));
     const wrongTicket = await run([
@@ -128,7 +133,9 @@ describe('gm plan check', () => {
       'decision enemy-style is assigned to ticket #21 but listed on #20',
     );
     writeFileSync(join(base, 'docs', 'blobs', 'decisions.json'), '{invalid');
-    const malformed = await run([{ number: 20, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:qa'] }]);
+    const malformed = await run([
+      { number: 20, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:qa'] },
+    ]);
     expect(malformed.code).toBe(1);
     expect(JSON.parse(malformed.out[0]!).inventoryProblems[0]).toContain('game blobs has no valid');
   });

@@ -25,7 +25,9 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
   try {
     ({ file } = inventoryPath(cwd));
   } catch (error) {
-    problems.push(`cannot locate the game decision inventory: ${error instanceof Error ? error.message : String(error)}`);
+    problems.push(
+      `cannot locate the game decision inventory: ${error instanceof Error ? error.message : String(error)}`,
+    );
     file = '';
   }
   let inventory: ReturnType<typeof readInventory> | null = null;
@@ -51,8 +53,7 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
   if (visiblePaths.length > 0 && !hasReview && !waivesReview)
     problems.push('creator-visible changes need a ## Prototype review section or Prototype review: none');
   if (hasReview) {
-    const field = (name: string) =>
-      new RegExp(`^${name}\\s*:\\s*(.+)$`, 'im').exec(reviewSection)?.[1]?.trim() ?? '';
+    const field = (name: string) => new RegExp(`^${name}\\s*:\\s*(.+)$`, 'im').exec(reviewSection)?.[1]?.trim() ?? '';
     for (const required of ['Play', 'Clip', 'Works now', 'Known limitations', 'Weigh in on'])
       if (!field(required)) problems.push(`Prototype review is missing ${required}`);
     const reviewedIds = field('Weigh in on').match(/[A-Za-z][A-Za-z0-9_-]*/g) ?? [];
@@ -60,7 +61,8 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
       problems.push('Prototype review must name 3–6 decision ids under Weigh in on');
     if (inventory) {
       const knownIds = new Set(inventory.map((decision) => decision.id));
-      for (const id of reviewedIds) if (!knownIds.has(id)) problems.push(`Prototype review names unknown decision ${id}`);
+      for (const id of reviewedIds)
+        if (!knownIds.has(id)) problems.push(`Prototype review names unknown decision ${id}`);
     }
   }
   return problems;

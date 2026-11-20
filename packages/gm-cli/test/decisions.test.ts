@@ -5,23 +5,23 @@ import { describe, expect, it } from 'vitest';
 import { gm, tempDir } from './helpers.js';
 
 const data = [
-    {
-      id: 'enemy-style',
-      area: 'Enemies',
-      question: 'Which enemies?',
-      why: 'Sets combat tone.',
-      options: [
-        { label: 'Slimes', media: 'chat-slimes' },
-        { label: 'Golems', media_needed: 'golem still' },
-      ],
-      recommendation: 'Slimes: the pack includes a walk and attack sheet.',
-      sources: ['brief.md'],
-      ticket: 71,
-      status: 'open',
-      answer: null,
-      answered_at: null,
-    },
-  ];
+  {
+    id: 'enemy-style',
+    area: 'Enemies',
+    question: 'Which enemies?',
+    why: 'Sets combat tone.',
+    options: [
+      { label: 'Slimes', media: 'chat-slimes' },
+      { label: 'Golems', media_needed: 'golem still' },
+    ],
+    recommendation: 'Slimes: the pack includes a walk and attack sheet.',
+    sources: ['brief.md'],
+    ticket: 71,
+    status: 'open',
+    answer: null,
+    answered_at: null,
+  },
+];
 const JOB_ID = 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 
 function game() {
@@ -115,7 +115,9 @@ describe('gm decisions', () => {
     expect(unasked.err.join('\n')).toContain('has not been asked');
     inventory[0]!.status = 'asked';
     writeFileSync(file, JSON.stringify(inventory));
-    const result = await gm(['decisions', 'answer', 'enemy-style', 'Golems', '--note', 'likes the darker look'], { cwd: root });
+    const result = await gm(['decisions', 'answer', 'enemy-style', 'Golems', '--note', 'likes the darker look'], {
+      cwd: root,
+    });
     expect(result.code).toBe(0);
     expect(JSON.parse(readFileSync(file, 'utf8'))[0]).toMatchObject({
       status: 'answered',
@@ -134,7 +136,29 @@ describe('gm decisions', () => {
       inventory[0]!.options[index] = { label, media: `chat:${posted.out[0]!}` };
     }
     const mediaIds = inventory[0]!.options.map((option) => option.media!.slice('chat:'.length));
-    const first = await gm(['decide', '--topic', 'Enemies choice', '--question', 'Which enemies?', '--option', 'slimes=Slimes', '--option', 'golems=Golems', '--media', `slimes=${mediaIds[0]}`, '--media', `golems=${mediaIds[1]}`, '--recommend', 'slimes', '--reason', 'Fits the pack.', '--json'], { cwd: root, env: { GM_JOB: JOB_ID } });
+    const first = await gm(
+      [
+        'decide',
+        '--topic',
+        'Enemies choice',
+        '--question',
+        'Which enemies?',
+        '--option',
+        'slimes=Slimes',
+        '--option',
+        'golems=Golems',
+        '--media',
+        `slimes=${mediaIds[0]}`,
+        '--media',
+        `golems=${mediaIds[1]}`,
+        '--recommend',
+        'slimes',
+        '--reason',
+        'Fits the pack.',
+        '--json',
+      ],
+      { cwd: root, env: { GM_JOB: JOB_ID } },
+    );
     expect(first.code, first.err.join('\n')).toBe(0);
     writeFileSync(file, JSON.stringify(inventory));
     const retry = await gm(['decisions', 'raise', 'enemy-style', '--json'], { cwd: root, env: { GM_JOB: JOB_ID } });

@@ -38,10 +38,17 @@ export function renderInventory(inventory: Inventory): string {
   for (const [area, decisions] of [...areas].sort(([a], [b]) => a.localeCompare(b))) {
     lines.push(`## ${area}`, '');
     if (lines.at(-1) !== '| ID | Question | Options | Recommendation | Status | Answer | Ticket |')
-      lines.push('| ID | Question | Options | Recommendation | Status | Answer | Ticket |', '| --- | --- | --- | --- | --- | --- | --- |');
+      lines.push(
+        '| ID | Question | Options | Recommendation | Status | Answer | Ticket |',
+        '| --- | --- | --- | --- | --- | --- | --- |',
+      );
     for (const decision of decisions) {
-      const options = decision.options.map((option) => `${option.label}${option.media ? ` (${option.media})` : ` (needs ${option.media_needed})`}`).join('<br>');
-      lines.push(`| ${decision.id} | ${decision.question} | ${options} | ${decision.recommendation} | ${decision.status} | ${decision.answer ?? ''} | ${decision.ticket ?? ''} |`);
+      const options = decision.options
+        .map((option) => `${option.label}${option.media ? ` (${option.media})` : ` (needs ${option.media_needed})`}`)
+        .join('<br>');
+      lines.push(
+        `| ${decision.id} | ${decision.question} | ${options} | ${decision.recommendation} | ${decision.status} | ${decision.answer ?? ''} | ${decision.ticket ?? ''} |`,
+      );
     }
     lines.push('');
   }
