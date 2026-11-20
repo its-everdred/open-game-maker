@@ -1,6 +1,7 @@
 import { EXIT, type GmCommand } from '../../command.js';
 import { gameDir } from '../../outbox.js';
 import { checkImageSlots } from '../../image-slots-check.js';
+import { checkLoading } from '../../loading-check.js';
 
 export const command: GmCommand = {
   name: 'check images',
@@ -16,7 +17,7 @@ export const command: GmCommand = {
     } catch {
       // Allow checking a game directory directly.
     }
-    const errors = await checkImageSlots(game);
+    const errors = [...(await checkLoading(game)), ...(await checkImageSlots(game))];
     if (ctx.json) ctx.out(JSON.stringify({ ok: errors.length === 0, errors }));
     else errors.forEach(ctx.err);
     return errors.length === 0 ? EXIT.ok : EXIT.failed;

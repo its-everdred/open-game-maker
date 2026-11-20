@@ -128,7 +128,8 @@ inventory continue with a reported gate line.
 
 `gm check images` validates creator-visible image slots against `@ogm/contracts`; `gm check` runs the same check for
 games with a manifest. It checks required viewport variants, display aspect ratios, layered safe areas, and phone text
-size and contrast. Games without shipped thumbnail, logo, loading art, or `images` slots pass without image checks.
+size and contrast. Legacy `loading.portrait` and `loading.landscape` keep their existing 9:16 and 16:9 checks. Games
+without shipped thumbnail, logo, loading art, or `images` slots pass without image checks.
 
 `gm decisions check` validates `docs/<slug>/decisions.json` and fails when its grouped `decisions.md` render is stale;
 `gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open

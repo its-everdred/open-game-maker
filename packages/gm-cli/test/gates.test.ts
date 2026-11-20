@@ -217,7 +217,45 @@ describe('gm check', () => {
     expect(result.code).toBe(1);
     const report = JSON.parse(result.out[0]!);
     expect(report.loadingErrors).toHaveLength(2);
-    expect(report.imageErrors).toContain('media/p.png: loading phone-portrait image is missing or unreadable');
+    expect(report.imageErrors).toEqual([]);
+  }, 60_000);
+
+  it('fails the complete check when only the image slot gate fails', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    writeFileSync(
+      join(root, 'gm.manifest.json'),
+      JSON.stringify({ images: { title: { mode: 'per-ratio', variants: {} } } }),
+    );
+    git('add', '-A');
+    git('commit', '-qm', 'fixture');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const result = await gm(['check', '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.out[0]!);
+    expect(report.loadingErrors).toEqual([]);
+    expect(report.imageErrors).toContain('images.title: missing variant for phone-portrait');
+    expect(report.ok).toBe(false);
+  }, 60_000);
+
+  it('keeps games without shipped creator images passing the image gate', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    writeFileSync(join(root, 'gm.manifest.json'), '{}');
+    git('add', '-A');
+    git('commit', '-qm', 'fixture');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const result = await gm(['check', '--json'], { cwd: root });
+    expect(result.code).toBe(0);
+    const report = JSON.parse(result.out[0]!);
+    expect(report.loadingErrors).toEqual([]);
+    expect(report.imageErrors).toEqual([]);
   }, 60_000);
 
   it('prints failures only as file:line diagnostics and exits one', async () => {
