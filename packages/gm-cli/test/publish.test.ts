@@ -139,6 +139,11 @@ beforeAll(async () => {
           }),
         );
       }
+      if (
+        request.method === 'GET' &&
+        request.url?.match(/^\/internal\/operator\/games\/blobs\/review-sha\/[0-9a-f]{40}$/)
+      )
+        return json(200, '{"recorded":false}');
       if (request.method === 'GET' && request.url?.startsWith('/internal/operator/games/blobs/builds/')) {
         return json(200, JSON.stringify({ state: 'failed', buildId: null }));
       }
@@ -205,6 +210,7 @@ describe('gm publish', () => {
     expect(run.code).toBe(0);
     expect(run.out).toEqual([
       `building games/blobs at ${remoteSha}`,
+      'review gate: no docs/blobs/decisions.json; prototype review is not configured',
       `published games/blobs at ${remoteSha}: build build_publish`,
       'play https://play.example/play/blobs',
     ]);
@@ -225,6 +231,22 @@ describe('gm publish', () => {
     // The scratch worktree and the archive are gone.
     expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  it('refuses to publish an inventoried game without a review round for the target SHA', async () => {
+    git(origin, 'switch', '-qc', 'inventory', 'main');
+    mkdirSync(join(origin, 'docs', 'blobs'), { recursive: true });
+    writeFileSync(join(origin, 'docs', 'blobs', 'decisions.json'), '{"decisions":[]}\n');
+    git(origin, 'add', '-A');
+    git(origin, 'commit', '-qm', 'add decision inventory');
+    const sha = git(origin, 'rev-parse', 'HEAD');
+
+    const run = await publish(['blobs', '--sha', sha, '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err).toEqual([`publish refused: no prototype review round is recorded for ${sha}`]);
+    expect(run.pnpm).toBe('');
+    expect(requests.map(({ url }) => url)).toContain(`/internal/operator/games/blobs/review-sha/${sha}`);
   });
 
   it('defaults the slug to the game folder it runs in and builds an explicit --sha', async () => {

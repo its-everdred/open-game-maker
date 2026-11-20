@@ -8,6 +8,10 @@ function card(id: string, kind: string, subkind: string, title: string): Resolve
 }
 
 describe('fallback editor palette', () => {
+  it('carries Game Maker provenance to the palette', () => {
+    const made = { ...card('rock', 'sprite', 'prop', 'Rock'), generated: { made_by: 'ogm' } } as ResolvedCard;
+    expect(fallbackEditorPalette(['rock'], [made], () => undefined).palette.items[0]?.madeByGameMaker).toBe(true);
+  });
   it('includes only locked assets, grouped from catalog types with caller-supplied thumbnails', () => {
     const cards = [
       card('tree', 'model', 'nature', 'Oak tree'),

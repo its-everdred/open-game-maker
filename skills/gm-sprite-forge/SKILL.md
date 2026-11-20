@@ -72,3 +72,5 @@ python skills/gm-sprite-forge/scripts/vegetation_matrix_media.py matrix.json rev
 ```
 
 The manifest has a `rows` array of 10–16 entries; each entry has an `id` slug, display `name`, `original` PNG path, five `variants` PNG paths and a `mock` PNG path. The tool writes individually labelled media and `options.json`, alongside the supplied recipe. It checks for duplicate variants and requires each finished render's alpha bounding-box width, height, coverage and ground-shadow coverage to be within 15% of the original. Ground-shadow coverage counts visible partial-alpha pixels with near-black RGB (0–3), excluding alpha-1 specks and dark-green foliage. Cells are enlarged 4×. It never submits the review or approves the assets. For a single row, check the five finished render paths with `python skills/gm-sprite-forge/scripts/vegetation_footprint.py original.png v1.png v2.png v3.png v4.png v5.png` before posting.
+
+For approved reusable assets, see the [generated library and recipe workflow](references/generated-library.md).

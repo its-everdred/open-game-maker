@@ -97,6 +97,49 @@ async function look(
 }
 
 describe('gm look check', { timeout: 60_000 }, () => {
+  it('warns for a provisional screen without an approved target before expiry and fails at that rung', async () => {
+    const root = game();
+    await look(root, 'prototype', { answer: 'VERDICT: pass' });
+    mkdirSync(join(root, 'review'), { recursive: true });
+    writeFileSync(
+      join(root, 'review/decisions.json'),
+      JSON.stringify({
+        screens: { play: { provisional: { owner: 'Kevin', until: 'build' } } },
+      }),
+    );
+
+    const prototype = await gm(['look', 'check', '--phase', 'prototype', '--json'], { cwd: root });
+    expect(prototype.code).toBe(0);
+    expect(JSON.parse(prototype.out.join('\n')).stills).toContainEqual(
+      expect.objectContaining({
+        status: 'warning',
+        detail: expect.stringContaining('approved look target still required'),
+      }),
+    );
+
+    const build = await gm(['look', 'check', '--phase', 'build', '--json'], { cwd: root });
+    expect(build.code).toBe(1);
+    expect(JSON.parse(build.out.join('\n')).stills).toContainEqual(
+      expect.objectContaining({ status: 'fail', detail: expect.stringContaining('expired at build') }),
+    );
+  });
+
+  it('rejects malformed provisional scope metadata', async () => {
+    const root = game();
+    mkdirSync(join(root, 'review'), { recursive: true });
+    writeFileSync(
+      join(root, 'review/decisions.json'),
+      JSON.stringify({
+        screens: { play: { target: 'design/target.png', provisional: { owner: '', until: 'build' } } },
+      }),
+    );
+    const result = await gm(['look', 'check', '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.out.join('\n')).stills).toContainEqual(
+      expect.objectContaining({ detail: expect.stringContaining('needs a non-empty owner and valid until rung') }),
+    );
+  });
+
   it('passes when the newest look at the committed still answers VERDICT: pass', async () => {
     const root = game();
     await look(root, 'first', { answer: 'Matches the target.\n\nVERDICT: pass\n' });

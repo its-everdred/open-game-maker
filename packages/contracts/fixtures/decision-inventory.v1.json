@@ -1,0 +1,18 @@
+[
+  {
+    "id": "enemy-style",
+    "area": "Enemies",
+    "question": "Which enemy style should appear?",
+    "why": "Sets the combat tone.",
+    "options": [
+      { "label": "Slimes", "media": "media/slimes.png" },
+      { "label": "Golems", "media_needed": "render a golem still" }
+    ],
+    "recommendation": "Slimes: the pack includes a walk and attack sheet.",
+    "sources": ["brief.md"],
+    "ticket": null,
+    "status": "open",
+    "answer": null,
+    "answered_at": null
+  }
+]

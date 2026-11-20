@@ -183,7 +183,13 @@ def rock(sc):
     if P['shape'] == 3:  # smaller pebbles, at the boulder's left/front foot
         pebbles = [((-0.40, -0.30, 0.05), 0.11, (128, 118, 102)), ((-0.18, -0.44, 0.04), 0.07, (100, 100, 96)),
                    ((-0.48, -0.05, 0.04), 0.07, (100, 100, 96))]
+    # Seed 3 preserves the calibrated baseline. Other seeds reposition the
+    # independently modelled pebbles so a rerun can produce a new sibling.
+    offsets = random.Random(int(P['seed']))
+    baseline = random.Random(3)
     for loc, r, rgb in pebbles:
+        loc = (loc[0] + (offsets.random() - baseline.random()) * 0.1,
+               loc[1] + (offsets.random() - baseline.random()) * 0.1, loc[2])
         bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=r, location=loc)
         p = bpy.context.object
         p.scale = (1.15, 1.0, 0.7)

@@ -71,6 +71,27 @@ def emit(record: dict, json_mode: bool = False, summary: bool = False):
     print(json.dumps(record), file=stream, flush=True)
 
 
+def hint_keywords(raw) -> list[str]:
+    """Map free-form pack hints to schema-compatible searchable keyword tags."""
+    keywords = []
+    for hint in P.normalize_hints(raw):
+        words = re.findall(r"[a-z0-9]+", hint.lower())
+        phrase = "-".join(words)
+        candidates = [phrase] if len(phrase) <= 40 and re.fullmatch(r"[a-z][a-z0-9-]*", phrase) else words
+        for keyword in candidates:
+            if len(keyword) <= 40 and re.fullmatch(r"[a-z][a-z0-9-]*", keyword) and keyword not in keywords:
+                keywords.append(keyword)
+    return keywords
+
+
+def apply_pack_hints(describe: dict, raw_hints) -> dict:
+    """Keep pack guidance searchable without writing the non-vendored `describe.hints` field."""
+    keywords = list(dict.fromkeys([*hint_keywords(raw_hints), *(describe.get("keywords") or [])]))[:12]
+    if keywords:
+        describe["keywords"] = keywords
+    return describe
+
+
 def stage_json(out: Path, payload: dict, indent=1) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     staged = out.with_name(out.name + ".part")
@@ -111,13 +132,29 @@ def preserve_locked(previous: dict, generated: dict) -> dict:
             merged[field] = copy.deepcopy(previous[field])
         else:
             merged.pop(field, None)
+    legacy_hints = None
+    legacy_hint_provenance = None
     for dotted, provenance in previous.get("provenance", {}).items():
         if not isinstance(provenance, dict) or not provenance.get("locked") or dotted == "*":
             continue
         value, present = _path_value(previous, dotted)
         if present:
+            if dotted == "describe.hints":
+                legacy_hints = value
+                legacy_hint_provenance = provenance
+                continue
             _set_path(merged, dotted, value)
             merged.setdefault("provenance", {})[dotted] = copy.deepcopy(provenance)
+    if legacy_hints is not None:
+        describe = merged.setdefault("describe", {})
+        describe["keywords"] = list(dict.fromkeys([*hint_keywords(legacy_hints), *(describe.get("keywords") or [])]))[:12]
+        provenance = merged.setdefault("provenance", {})
+        provenance.pop("describe.hints", None)
+        keyword_provenance = provenance.get("describe.keywords")
+        if legacy_hint_provenance is not None and not (
+            isinstance(keyword_provenance, dict) and keyword_provenance.get("locked")
+        ):
+            provenance["describe.keywords"] = copy.deepcopy(legacy_hint_provenance)
     return merged
 
 
@@ -398,6 +435,7 @@ def music_describe(d, lift, sets, a, subkind):
     keywords = keywords_of(d, [*moods, *genre, *instruments, *(L.ENVIRONMENTS[e] for e in envs)])
     if keywords:
         desc["keywords"] = keywords
+    apply_pack_hints(desc, d.get("hints", []))
     return desc, proposed
 
 
@@ -563,13 +601,16 @@ def build(rows, sets, means, packs: Path, update_counts=True, limit=0):
                 subkind = ("music/loop" if "loop" in pid else "music/stinger" if a["duration_s"] < 15 or "jingle" in pid else "music/track")
                 describe, proposed = music_describe(d, lift, sets, a, subkind)
                 hints = P.normalize_hints(d.get("hints", []))
-                if hints:
-                    describe["hints"] = hints
                 prov["describe"] = {"by": "model", "model": CLAP_ID, "tool": TOOL, "at": NOW, "confidence": MUSIC_CONF,
                                     "input": "CLAP embeddings of two 30 s excerpts vs label prompts, lift vs library; key/tempo not shown"}
                 prov["describe.description"] = {"by": "code", "tool": TOOL, "at": NOW, "input": "template from CLAP tags + measured audio"}
                 if hints:
-                    prov["describe.hints"] = {"by": "collection", "tool": TOOL, "at": NOW, "input": "pack.json hints"}
+                    prov["describe.keywords"] = {
+                        "by": "code",
+                        "tool": TOOL,
+                        "at": NOW,
+                        "input": "pack.json hints normalized to searchable tags and merged with filename words",
+                    }
                 flags += ["low-confidence", "mood-unverified"]
             else:
                 describe, subkind, conf, ev, pev = sfx_describe(d, lift, sets, a, stem, pid)

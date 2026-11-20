@@ -70,21 +70,38 @@ the target and work side by side.
 ## Verify a game
 
 ```text
-gm check [--json]
+gm check [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm check boot [--dist <dir>] [--viewport both|phone|tablet-landscape] [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--deadline <seconds>] [--serve <dir>] [--out <dir>] [--json]
 gm run [--verify-source] [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
 gm look sheet <screen> --still <png> [--target <png>]
-gm look check [--changed [<base>] | --all] [--screen <id> ...] [--json]
+gm look check [--changed [<base>] | --all] [--screen <id> ...] [--phase mock|prototype|build|polish] [--json]
 gm look scope add <screen> --still <png> [--still <png> ...] [--base <base>]
 gm look evidence --body <file> [--json]
+gm decisions check [--game <slug>]
+gm decisions render
+gm decisions next --ticket <n> [--body <file>]
+gm decisions raise <id>
+gm decisions answer <id> <option label> [--note <text>]
 ```
 
 `gm check` runs TypeScript, deterministic simulation-source, test-hook, and registered asset gates. Use `static` or
 `hooks` to select only that gate group. Failures name `file:line` where available and exit 1; `--json` emits the L0
-gate result.
+gate result. `--phase` supplies the current look rung when evaluating provisional look scopes; it defaults to
+`prototype` when no provisional scope is declared. A provisional scope requires the caller to pass the current rung, so
+expiry cannot remain green because a command defaulted to an earlier phase.
+In ticket PR mode, pass `--body <file>` and `--base <ref>` to also reject open creator decisions and
+creator-visible changes without a prototype review section (or `Prototype review: none` for code-only changes).
+`gm publish` requires a prototype review round for the commit when the game has a decision inventory; games without an
+inventory continue with a reported gate line.
+
+`gm decisions check` validates `docs/<slug>/decisions.json` and fails when its grouped `decisions.md` render is stale;
+`gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open
+decisions as JSON, including IDs linked from its `## Creator decisions` section when the inventory has no ticket number.
+Raise an entry with `gm decisions raise <id>` after every option has media, then record the creator's answer with
+`gm decisions answer <id> <option label> [--note <text>]`.
 
 `gm check boot` serves the build and checks readiness and visible frames at phone and landscape sizes. Frames with
 more than 98% of pixels near one color fail. It writes
@@ -147,6 +164,13 @@ still beside that target (`--target` overrides it) at one height in `look/<scree
 judges every such sheet like a still: a screen with no sheet, or whose sheet's newest look reads a mismatch, exits 1.
 Every PNG in `design/flow/screens/target/` must also be named as a target in that file; unrecorded targets fail the
 check and are listed by name.
+
+During prototype work, a screen may mark its look scope provisional with an owner and expiry rung, for example
+`{"screens":{"play":{"provisional":{"owner":"Kevin","until":"build"}}}}`.
+Before the expiry rung, `gm check` reports a visible warning and exits successfully for the missing approved target and
+sheet. At the expiry rung or later, it fails until the provisional declaration is replaced by an approved look target.
+Pass the active rung with `gm check --phase <rung>`; the phase does not auto-advance from the branch or ticket. While a
+provisional scope exists, omitting `--phase` fails closed and asks for the current rung.
 
 `gm look evidence --body <file>` reads a pull request body and exits 1 when it links a sheet, still or clip
 (`.png`, `.jpg`, `.gif`, `.webp`, `.mp4`, `.webm`) that is not committed at HEAD, from the repository root or the game
@@ -407,6 +431,9 @@ the local `profantasy-cc3` collection.
 Collections must allow `vision-input`; `processing: local-only` is honored. A run never downloads model weights, and
 fails when the required CLIP or CLAP cache is absent. A collection lock prevents simultaneous tag runs and is released automatically when a run exits. `--json` streams one record per changed card followed by a summary. Use `--only` when processing a single private pack, for example:
 
+A pack with `pack.json` but no `collection.card.json` is reported as a failure instead of being silently skipped; the
+JSON summary includes it in `failures`, and the command exits non-zero so intake can repair the pack.
+
 ```text
 gm packs tag --kind audio --only drive-barbarian-chiptune --workers 4 --json
 ```
@@ -425,6 +452,7 @@ attack in 8 directions" is `gm assets search orc attack --directions 8`. A sprit
 of its `sprite.directions` list, in the order its sheet rows or per-direction files are read.
 AI-generated assets are included by default. Text results carry an `AI-generated: <tool>` marker; JSON results expose
 the typed `generation: { "method": "ai", "tool": "..." }` object.
+Measured audio cards are searchable before model tagging and their text rows show `measured [low-confidence]`.
 `--exclude-ai-generated` removes every card with that typed marker. A game whose **AI-generated assets** setting is off
 applies the same filter automatically, and `gm assets use` refuses a flagged asset in that game.
 

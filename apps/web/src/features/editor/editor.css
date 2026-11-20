@@ -169,6 +169,11 @@
   object-fit: contain;
 }
 
+.palette-item .made-by-gm {
+  font: 700 10px/1.15 var(--body);
+  text-align: center;
+}
+
 .scenery-thumbnail {
   display: block;
   width: 72px;
