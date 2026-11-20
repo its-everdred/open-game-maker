@@ -233,12 +233,17 @@ def hull(sc):
 
 
 def vegetation(sc):
-    from vegetation_mesh import cluster, tree
-    green = toon_material('foliage', (102, 145, 63), (75, 113, 46), (40, 67, 28), noise=0.08)
+    from vegetation_mesh import bush, cluster, conifer, tree
+    palette = ((165, 111, 30), (123, 73, 17), (70, 41, 8)) if P.get('autumn', 0) else ((102, 145, 63), (75, 113, 46), (40, 67, 28))
+    green = toon_material('foliage', *palette, noise=0.08)
     if SCENE == 'plant':
         return cluster(int(P['seed']), green, count=int(P.get('count', 5)), extent=P.get('extent', 0.2))
+    if SCENE == 'bush':
+        return bush(int(P['seed']), green, scale=P.get('height', 1))
     bark = toon_material('bark', (117, 87, 56), (92, 65, 42), (52, 37, 25), noise=0.08)
-    return tree(int(P['seed']), bark, green, height=P.get('height', 1), lean=P.get('lean', 0.1),
+    if SCENE == 'conifer':
+        return conifer(int(P['seed']), bark, green, height=P.get('height', 1.2), lean=P.get('lean', 0.1))
+    return tree(int(P['seed']), bark, green, height=P.get('height', 1), lean=P.get('lean', 0.1), bare=SCENE == 'bare',
                 levels=int(P.get('levels', 3)), canopy_scale=P.get('canopy_scale', 1),
                 fanout=int(P.get('fanout', 2)),
                 spread=(P.get('spread_min', 0.55), P.get('spread_max', 0.85)))
@@ -248,7 +253,7 @@ def main():
     sc = reset()
     camera(sc)
     shadow_catcher(sc)
-    objs = {'tile': tile, 'rock': rock, 'hull': hull, 'cube': cube, 'blend': blend, 'tree': vegetation, 'plant': vegetation}[SCENE](sc)
+    objs = {'tile': tile, 'rock': rock, 'hull': hull, 'cube': cube, 'blend': blend, 'tree': vegetation, 'plant': vegetation, 'bush': vegetation, 'conifer': vegetation, 'bare': vegetation}[SCENE](sc)
     root = bpy.data.objects.new('root', None)
     sc.collection.objects.link(root)
     for o in objs:
@@ -273,4 +278,5 @@ def main():
         bpy.ops.render.render(write_still=True)
 
 
-main()
+if __name__ == '__main__':
+    main()

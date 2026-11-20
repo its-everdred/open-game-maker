@@ -1,0 +1,37 @@
+"""Render draft vegetation matrix candidates in one Blender process.
+
+Run with Blender: --python vegetation_matrix_render.py -- JOBS.json OUTPUT_DIR
+Jobs contain row, scene, seed, and numeric rig options. Outputs are raw diagnostic
+renders; finish and inspect them before any review. Never point at a pack directory.
+"""
+import json
+from pathlib import Path
+import re
+import sys
+
+args = sys.argv[sys.argv.index('--') + 1:]
+jobs_file, output = Path(args[0]), Path(args[1]).resolve()
+if 'packs' in output.parts:
+    raise ValueError('refusing to render inside a pack directory')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.argv = [sys.argv[0], '--', 'tree', str(output), 'samples=1', 'views=N']
+import blender_iso_rig as rig
+
+jobs = json.loads(jobs_file.read_text())
+for job in jobs:
+    row = job['row']
+    variant = job['variant']
+    scene = job['scene']
+    if not re.fullmatch(r'[a-z0-9-]+', row) or variant not in range(1, 6):
+        raise ValueError('invalid matrix row or variant')
+    if scene not in {'tree', 'bare', 'conifer', 'bush', 'plant'}:
+        raise ValueError('unknown vegetation scene')
+    rig.SCENE = scene
+    rig.OUT = str(output / row / f'v{variant}')
+    rig.P.update(seed=job['seed'], height=job.get('height', 1),
+                 lean=job.get('lean', 0.1), canopy_scale=job.get('canopy_scale', 1),
+                 levels=job.get('levels', 2), fanout=job.get('fanout', 2),
+                 count=job.get('count', 6), extent=job.get('extent', 0.2),
+                 yaw0=job.get('yaw', 0), autumn=job.get('autumn', 0))
+    rig.main()
+    print(f'MATRIX_DONE {row} V{variant}', flush=True)

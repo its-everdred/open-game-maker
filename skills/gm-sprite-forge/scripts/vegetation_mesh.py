@@ -11,7 +11,7 @@ from vegetation_layout import branches, placements
 
 
 def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.0,
-         fanout=2, spread=(0.55, 0.85)):
+         fanout=2, spread=(0.55, 0.85), bare=False):
     """Create a tree with connected branches and a canopy at each outer tip."""
     skeleton = branches(seed, height=height, lean=lean, levels=levels, fanout=fanout, spread=spread)
     objects = []
@@ -25,7 +25,7 @@ def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.
         obj.rotation_euler = delta.to_track_quat('Z', 'Y').to_euler()
         obj.data.materials.append(bark)
         objects.append(obj)
-        if branch.depth == levels:
+        if branch.depth == levels and not bare:
             bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2,
                                                   radius=height * 0.18 * canopy_scale,
                                                   location=end)
@@ -46,5 +46,42 @@ def cluster(seed, material, *, count=5, extent=0.2, height=0.18):
         obj = bpy.context.object
         obj.rotation_euler = (math.radians(12), 0, item.rotation)
         obj.data.materials.append(material)
+        objects.append(obj)
+    return objects
+
+
+def conifer(seed, bark, foliage, *, height=1.2, lean=0.1, tiers=5):
+    """Build a seeded tapered conifer from overlapping, rotated crown tiers."""
+    import random
+    rng = random.Random(seed)
+    bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=height * 0.055,
+                                    radius2=height * 0.025, depth=height,
+                                    location=(0, 0, height / 2))
+    trunk = bpy.context.object
+    trunk.rotation_euler.y = lean
+    trunk.data.materials.append(bark)
+    objects = [trunk]
+    for i in range(tiers):
+        z = height * (0.32 + 0.12 * i)
+        radius = height * (0.31 - i * 0.045) * rng.uniform(0.86, 1.12)
+        bpy.ops.mesh.primitive_cone_add(vertices=7, radius1=radius, radius2=0,
+                                        depth=height * 0.42, location=(lean * z, 0, z))
+        obj = bpy.context.object
+        obj.rotation_euler.z = rng.uniform(0, math.tau)
+        obj.data.materials.append(foliage)
+        objects.append(obj)
+    return objects
+
+
+def bush(seed, foliage, *, scale=1.0):
+    """Build a small seeded cluster of overlapping rounded shrub masses."""
+    objects = []
+    for item in placements(seed, 9, extent=0.16 * scale, min_scale=0.7, max_scale=1.2):
+        radius = 0.15 * scale * item.scale
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=radius,
+                                              location=(item.x, item.y, radius * 0.8))
+        obj = bpy.context.object
+        obj.data.materials.append(foliage)
+        bpy.ops.object.shade_smooth()
         objects.append(obj)
     return objects

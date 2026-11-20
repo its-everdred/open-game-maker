@@ -5,7 +5,7 @@ import sys
 import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from vegetation_mesh import cluster, tree
+from vegetation_mesh import bush, cluster, conifer, tree
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bark = bpy.data.materials.new('bark')
@@ -16,6 +16,10 @@ assert sum(bark in list(obj.data.materials) for obj in objects) == 7
 assert sum(foliage in list(obj.data.materials) for obj in objects) == 4
 wide_tree = tree(7, bark, foliage, levels=1, fanout=3, spread=(0.7, 0.8))
 assert len(wide_tree) == 7  # trunk, three branches, three canopies
+assert len(conifer(7, bark, foliage, tiers=5)) == 6
+assert len(bush(7, foliage)) == 9
+bare = tree(7, bark, foliage, levels=2, bare=True)
+assert len(bare) == 7 and all(bark in list(obj.data.materials) for obj in bare)
 plants = cluster(7, foliage, count=6, extent=0.25)
 assert len(plants) == 6
 assert all(abs(obj.location.x) <= 0.25 and abs(obj.location.y) <= 0.25 for obj in plants)
