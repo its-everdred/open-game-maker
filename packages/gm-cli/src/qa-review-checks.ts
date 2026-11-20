@@ -2,6 +2,17 @@ type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
 type Locator = ReturnType<Page['locator']>;
 
+// The production E2E runs on a busy NUC and a click that opens ticket details can schedule navigation while the host
+// is under load. Keep this longer than ordinary hit-target waits so the test reports a real interaction failure.
+export const SLOW_HOST_ACTION_TIMEOUT_MS = 60_000;
+// Saving a full-resolution browser frame can take longer than Playwright's 30s default while review media is active.
+export const QA_SCREENSHOT_TIMEOUT_MS = 90_000;
+
+/** Capture evidence without failing a healthy viewport solely because the host is busy encoding its screenshot. */
+export async function captureQaStill(page: Page, path: string, timeout = QA_SCREENSHOT_TIMEOUT_MS): Promise<void> {
+  await page.screenshot({ path, timeout });
+}
+
 async function reviewStep<T>(name: string, run: () => Promise<T>): Promise<T> {
   try {
     return await run();
@@ -51,7 +62,7 @@ export async function openTicketBuilds(page: Page, timeout = 20_000) {
   await reviewStep('wait for Builds panel', () => page.getByRole('region', { name: 'Builds' }).waitFor({ timeout }));
 }
 
-export async function openRunningTicket(page: Page, title: string, timeout = 20_000) {
+export async function openRunningTicket(page: Page, title: string, timeout = SLOW_HOST_ACTION_TIMEOUT_MS) {
   const panel = page.getByRole('region', { name: 'Builds' });
   const row = panel.getByRole('button', { name: new RegExp(`^${title}`, 'u') });
   await row.click({ timeout });

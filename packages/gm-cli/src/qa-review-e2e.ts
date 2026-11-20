@@ -6,6 +6,7 @@ import { swipeReviewMedia as swipe } from './qa-review-touch.js';
 
 import {
   mediaFailures,
+  captureQaStill,
   openReviewDeck,
   openReviewItem,
   optionFailures,
@@ -146,7 +147,7 @@ async function runViewport(
     await step('open a running and a closed ticket', () =>
       ticketDetailSteps(ticketActive, config.origin, async (label) => {
         const file = join(config.out, `${name}-${stills.length + 1}-${label}.png`);
-        await ticketActive.screenshot({ path: file });
+        await captureQaStill(ticketActive, file);
         stills.push(file);
       }),
     );
@@ -184,7 +185,7 @@ async function runViewport(
     reviewPage = page;
     const still = async (label: string) => {
       const file = join(config.out, `${name}-${stills.length + 1}-${label}.png`);
-      await page.screenshot({ path: file });
+      await captureQaStill(page, file);
       stills.push(file);
     };
     const dialog = page.getByRole('dialog', { name: 'Needs Review' });
@@ -309,7 +310,8 @@ async function runViewport(
     if (failedPage) {
       const file = join(config.out, `${name}-${stills.length + 1}-${ticketPage ? 'ticket' : 'review'}-failure.png`);
       try {
-        await failedPage.screenshot({ path: file });
+        // Failure diagnostics should not add another long wait after a viewport has already failed.
+        await captureQaStill(failedPage, file, 5_000);
         stills.push(file);
       } catch (captureError) {
         failure += `\nScreenshot failed: ${String(captureError)}`;
