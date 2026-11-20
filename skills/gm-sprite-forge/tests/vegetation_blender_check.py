@@ -40,6 +40,14 @@ different = leaf_clusters(8, foliage, count=3, extent=0.25, leaves_per_cluster=8
 assert len(leafy) == 3 and len(leafy[0].data.vertices) == 40 and len(leafy[0].data.polygons) == 32
 assert list(leafy[0].data.vertices[0].co) == list(repeat[0].data.vertices[0].co)
 assert list(leafy[0].data.vertices[0].co) != list(different[0].data.vertices[0].co)
+foliage.node_tree.nodes.new('ShaderNodeValToRGB')
+shaded = leaf_clusters(7, foliage, count=3, extent=0.25, leaves_per_cluster=8, shade_variation=True)
+shaded_again = leaf_clusters(7, foliage, count=3, extent=0.25, leaves_per_cluster=8, shade_variation=True)
+assert list(leafy[0].data.vertices[0].co) == list(shaded[0].data.vertices[0].co)
+indices = [face.material_index for face in shaded[0].data.polygons]
+assert len(set(indices)) > 1
+assert indices == [face.material_index for face in shaded_again[0].data.polygons]
+assert all(len(set(indices[i:i+4])) == 1 for i in range(0, len(indices), 4))
 assert len(cluster(7, foliage, count=2, leafy=True, leaves_per_cluster=8)) == 2
 assert leaf_clusters(7, foliage, count=0) == []
 plants = cluster(7, foliage, count=6, extent=0.25)

@@ -8,16 +8,35 @@ from mathutils import Vector
 from vegetation_layout import placements
 
 
-def leaf_clusters(seed, material, *, count=5, extent=0.2, height=0.18, leaves_per_cluster=12):
+def leaf_clusters(seed, material, *, count=5, extent=0.2, height=0.18, leaves_per_cluster=12,
+                  shade_variation=False):
     """Build independently rotated clumps of folded, pointed leaves."""
     if (not math.isfinite(height) or height <= 0 or not isinstance(leaves_per_cluster, int)
             or not 1 <= leaves_per_cluster <= 64):
         raise ValueError('height must be positive and leaves per cluster must be 1..64')
     rng = random.Random(seed ^ 0x1EA5)
+    shade_rng = random.Random(seed ^ 0x5ADE)
+    shades = [material]
+    if shade_variation:
+        if not material.use_nodes or material.node_tree is None:
+            raise ValueError('shaded foliage requires a node material with a color ramp')
+        ramps = [node for node in material.node_tree.nodes if node.type == 'VALTORGB']
+        if not ramps:
+            raise ValueError('shaded foliage requires a node material with a color ramp')
+        shades = []
+        for factor in (0.14, 0.25, 0.4, 0.58, 0.76, 1.0):
+            shade = material.copy()
+            for node in shade.node_tree.nodes:
+                if node.type == 'VALTORGB':
+                    for element in node.color_ramp.elements:
+                        c = element.color
+                        element.color = (c[0] * factor, c[1] * factor, c[2] * factor, 1)
+            shades.append(shade)
     objects = []
     for index, item in enumerate(placements(seed, count, extent=extent)):
-        vertices, faces = [], []
+        vertices, faces, leaf_shades = [], [], []
         for leaf in range(leaves_per_cluster):
+            leaf_shades.append(shade_rng.randrange(len(shades)))
             angle = item.rotation + math.tau * (leaf / leaves_per_cluster + rng.uniform(-0.04, 0.04))
             direction = Vector((math.cos(angle), math.sin(angle), 0))
             side = Vector((-direction.y, direction.x, 0))
@@ -35,6 +54,9 @@ def leaf_clusters(seed, material, *, count=5, extent=0.2, height=0.18, leaves_pe
         mesh.update()
         obj = bpy.data.objects.new(f'leaf-cluster-{index}', mesh)
         bpy.context.scene.collection.objects.link(obj)
-        mesh.materials.append(material)
+        for shade in shades:
+            mesh.materials.append(shade)
+        for face in mesh.polygons:
+            face.material_index = leaf_shades[face.index // 4]
         objects.append(obj)
     return objects

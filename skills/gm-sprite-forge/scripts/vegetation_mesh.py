@@ -55,12 +55,12 @@ def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.
     return objects
 
 
-def cluster(seed, material, *, count=5, extent=0.2, height=0.18, leafy=False, leaves_per_cluster=12):
+def cluster(seed, material, *, count=5, extent=0.2, height=0.18, leafy=False, leaves_per_cluster=12, leaf_shading=False):
     """Create independently rotated plant blades in a cluster or tile scatter."""
     if leafy:
         from vegetation_leaves import leaf_clusters
         return leaf_clusters(seed, material, count=count, extent=extent, height=height,
-                             leaves_per_cluster=leaves_per_cluster)
+                             leaves_per_cluster=leaves_per_cluster, shade_variation=leaf_shading)
     objects = []
     for item in placements(seed, count, extent=extent):
         bpy.ops.mesh.primitive_cone_add(vertices=5, radius1=height * 0.12 * item.scale,

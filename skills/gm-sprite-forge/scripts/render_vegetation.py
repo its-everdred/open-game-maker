@@ -43,7 +43,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
                    samples=8, dense=False, autumn=False, shadows=True, metadata=None,
                    fanout=2, spread_min=0.55, spread_max=0.85, leaf_count=24000,
                    crown_width=1.0, crown_depth=1.0, crown_height=1.0, palette=None,
-                   leafy=False, plant_height=0.18, leaves_per_cluster=12):
+                   leafy=False, plant_height=0.18, leaves_per_cluster=12, leaf_shading=False):
     """Run a seeded four-view render, then package its finished outputs."""
     output = _outside_packs(output)
     if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
@@ -59,7 +59,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
             or not isinstance(levels, int) or not 0 <= levels <= 5
             or not isinstance(count, int) or not 1 <= count <= 100
             or not isinstance(samples, int) or not 1 <= samples <= 256
-            or not isinstance(seed, int)):
+            or not isinstance(seed, int) or (leaf_shading and not leafy)):
         raise ValueError('invalid render parameters')
     validate_source(source_card, source_collection)
     if (not isinstance(metadata, dict) or not isinstance(metadata.get('agent'), dict)
@@ -76,7 +76,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
               'fanout': fanout, 'spread_min': spread_min, 'spread_max': spread_max,
               'leaf_count': leaf_count, 'crown_width': crown_width, 'crown_depth': crown_depth,
               'crown_height': crown_height, 'leafy': int(leafy), 'plant_height': plant_height,
-              'leaves_per_cluster': leaves_per_cluster, **palette_values}
+              'leaves_per_cluster': leaves_per_cluster, 'leaf_shading': int(leaf_shading), **palette_values}
     with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
         raw = Path(temp) / 'raw'
         raw.mkdir()
@@ -122,6 +122,7 @@ def main():
     parser.add_argument('--crown-height', type=float, default=1.0)
     parser.add_argument('--dense', action='store_true')
     parser.add_argument('--leafy', action='store_true')
+    parser.add_argument('--leaf-shading', action='store_true')
     parser.add_argument('--plant-height', type=float, default=0.18)
     parser.add_argument('--leaves-per-cluster', type=int, default=12)
     parser.add_argument('--autumn', action='store_true')
@@ -136,7 +137,8 @@ def main():
                             spread_min=args.spread_min, spread_max=args.spread_max, leaf_count=args.leaf_count,
                             crown_width=args.crown_width, crown_depth=args.crown_depth, crown_height=args.crown_height,
                             palette=json.loads(args.palette.read_text()) if args.palette else None, leafy=args.leafy,
-                            plant_height=args.plant_height, leaves_per_cluster=args.leaves_per_cluster)
+                            plant_height=args.plant_height, leaves_per_cluster=args.leaves_per_cluster,
+                            leaf_shading=args.leaf_shading)
     print(result)
 
 

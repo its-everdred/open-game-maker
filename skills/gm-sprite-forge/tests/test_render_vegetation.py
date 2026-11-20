@@ -39,7 +39,7 @@ class RenderVegetationTest(unittest.TestCase):
             result = render_variant('tree', self.root / 'set', 'tree-v1', self.source, self.collection,
                                     seed=42, dense=True, shadows=False, metadata=self.metadata, fanout=3,
                                     spread_min=0.3, crown_width=1.4, leaf_count=64, palette=self.palette,
-                                    leafy=True, plant_height=0.22, leaves_per_cluster=8)
+                                    leafy=True, plant_height=0.22, leaves_per_cluster=8, leaf_shading=True)
         self.assertEqual(len(commands), 1)
         self.assertIn('seed=42', commands[0])
         self.assertIn('shadows=0', commands[0])
@@ -49,6 +49,7 @@ class RenderVegetationTest(unittest.TestCase):
         self.assertIn('foliage_hi_r=97', commands[0])
         self.assertIn('bark_lo_b=25', commands[0])
         self.assertIn('leafy=1', commands[0])
+        self.assertIn('leaf_shading=1', commands[0])
         self.assertIn('plant_height=0.22', commands[0])
         self.assertIn('leaves_per_cluster=8', commands[0])
         card = json.loads((result / 'tree-v1.card.json').read_text())
@@ -58,6 +59,7 @@ class RenderVegetationTest(unittest.TestCase):
         self.assertEqual(recipe['parameters']['crown_width'], 1.4)
         self.assertEqual(recipe['materials']['palette'], self.palette)
         self.assertEqual(recipe['parameters']['leaves_per_cluster'], 8)
+        self.assertEqual(recipe['parameters']['leaf_shading'], 1)
         self.assertEqual(recipe['derived_from'], self.source['id'])
         self.assertTrue(recipe['ai_generated'])
         self.assertEqual(recipe['agent'], self.metadata['agent'])
@@ -71,6 +73,7 @@ class RenderVegetationTest(unittest.TestCase):
                            {'seed': 1, 'spread_max': 1, 'metadata': self.metadata},
                            {'seed': 1, 'crown_width': 0, 'metadata': self.metadata},
                            {'seed': 1, 'plant_height': 0, 'metadata': self.metadata},
+                           {'seed': 1, 'leaf_shading': True, 'metadata': self.metadata},
                            {'seed': 1, 'leaves_per_cluster': 65, 'metadata': self.metadata},
                            {'seed': 1, 'palette': {'foliage': {}}, 'metadata': self.metadata},
                            {'seed': 1, 'palette': {**self.palette, 'bark': {'hi': [0, 0, 300], 'mid': [0, 0, 0], 'lo': [0, 0, 0]}}, 'metadata': self.metadata}):
