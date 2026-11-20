@@ -26,3 +26,10 @@ All measured values pass the prop gates in each view. The 3D comparison is
 awaiting a two-track review sheet. The requested flat image
 option cannot use the original as a cloud reference under the local-only pack
 rule. No creator verdict has been received for this candidate.
+
+A subsequent 4× inspection found that the tan stone still has a thin broken
+edge where it meets the boulder, despite the passing scores. Smoothing isolated
+face-color assignments did not remove it. Replacing the segment with a separate
+ellipsoid either changed the silhouette and shadow or made the stone appear
+missing. Those experiments are not accepted replacements; the visual issue
+remains open.
