@@ -26,10 +26,11 @@ class Placement:
 
 def branches(seed: int, *, height: float = 1.0, radius: float = 0.07,
              lean: float = 0.1, levels: int = 3, fanout: int = 2,
-             spread: tuple[float, float] = (0.55, 0.85)) -> list[Branch]:
+             spread: tuple[float, float] = (0.55, 0.85), attachment_min: float = 0.55) -> list[Branch]:
     """Make a connected branching skeleton; each child starts on its parent."""
-    if (not all(math.isfinite(v) for v in (height, radius, lean, *spread))
+    if (not all(math.isfinite(v) for v in (height, radius, lean, *spread, attachment_min))
             or height <= 0 or radius <= 0 or lean < 0
+            or not 0 <= attachment_min <= 0.95
             or not isinstance(levels, int) or not 0 <= levels <= 5
             or not isinstance(fanout, int) or not 1 <= fanout <= 4
             or not 0 <= spread[0] <= spread[1] < 1):
@@ -43,7 +44,7 @@ def branches(seed: int, *, height: float = 1.0, radius: float = 0.07,
         for parent in frontier:
             length = math.dist(parent.start, parent.end) * rng.uniform(0.48, 0.68)
             for _ in range(fanout):
-                t = rng.uniform(0.55, 0.95)
+                t = rng.uniform(attachment_min, 0.95)
                 start = tuple(a + t * (b - a) for a, b in zip(parent.start, parent.end))
                 angle = rng.uniform(0, math.tau)
                 radial = rng.uniform(*spread)

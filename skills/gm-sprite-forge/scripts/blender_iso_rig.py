@@ -271,6 +271,7 @@ def vegetation(sc):
         return conifer(int(P['seed']), bark, green, height=P.get('height', 1.2), lean=P.get('lean', 0.1))
     return tree(int(P['seed']), bark, green, height=P.get('height', 1), lean=P.get('lean', 0.1), bare=SCENE == 'bare', dense=bool(P.get('dense', 0)), leaf_count=int(P.get('leaf_count', 24000)),
                 branch_radius=P.get('branch_radius', 0.07),
+                attachment_min=P.get('attachment_min', 0.55),
                 crown_shape=(P.get('crown_width', 1), P.get('crown_depth', 1), P.get('crown_height', 1)),
                 levels=int(P.get('levels', 3)), canopy_scale=P.get('canopy_scale', 1),
                 fanout=int(P.get('fanout', 2)),

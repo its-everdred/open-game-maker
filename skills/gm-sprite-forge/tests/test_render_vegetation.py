@@ -104,12 +104,14 @@ class RenderVegetationTest(unittest.TestCase):
                 Image.new('RGBA', (256, 256), (20, 70, 10, 255)).save(raw / f'bare_{view}.png')
         with patch('render_vegetation.subprocess.run', side_effect=fake_blender):
             result = render_variant('bare', self.root / 'set', 'bare-v1', self.source, self.collection,
-                                    seed=7, branch_width=1.4, branch_radius=0.05, metadata=self.metadata)
+                                    seed=7, branch_width=1.4, branch_radius=0.05, attachment_min=0.3, metadata=self.metadata)
         self.assertIn('branch_width=1.4', commands[0])
         self.assertIn('branch_radius=0.05', commands[0])
+        self.assertIn('attachment_min=0.3', commands[0])
         recipe = json.loads((result / 'recipe.json').read_text())
         self.assertEqual(recipe['parameters']['branch_width'], 1.4)
         self.assertEqual(recipe['parameters']['branch_radius'], 0.05)
+        self.assertEqual(recipe['parameters']['attachment_min'], 0.3)
 
     def test_branched_conifer_controls_are_forwarded_and_recorded(self):
         commands = []

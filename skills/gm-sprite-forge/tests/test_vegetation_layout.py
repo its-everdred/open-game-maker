@@ -9,6 +9,15 @@ from vegetation_layout import branches, clustered_placements, placements
 
 
 class VegetationLayoutTest(unittest.TestCase):
+    def test_attachment_min_moves_seeded_branches_down_the_trunk(self):
+        baseline = branches(17, levels=1, lean=0)
+        lower = branches(17, levels=1, lean=0, attachment_min=0.30)
+        self.assertEqual(lower, branches(17, levels=1, lean=0, attachment_min=0.30))
+        self.assertEqual(baseline[0], lower[0])
+        self.assertTrue(all(a.start[2] > b.start[2] for a, b in zip(baseline[1:], lower[1:])))
+        with self.assertRaises(ValueError):
+            branches(17, attachment_min=0.96)
+
     def test_branch_tree_is_seeded_and_connected(self):
         tree = branches(17, height=2, levels=3)
         self.assertEqual(tree, branches(17, height=2, levels=3))
