@@ -65,18 +65,35 @@ describe('games cache', () => {
       {
         ...games[0]!,
         coverUrl: '/original.png',
-        slotImages: { tile: { 'phone-portrait': image('/portrait'), 'phone-landscape': image('/landscape') } },
+        slotImages: {
+          tile: {
+            'phone-portrait': image('/phone-portrait'),
+            'phone-landscape': image('/phone-landscape'),
+            'tablet-portrait': image('/tablet-portrait'),
+            'tablet-landscape': image('/tablet-landscape'),
+            desktop: image('/desktop'),
+          },
+        },
       },
     ]);
     preloadGames('one');
-    expect(document.head.querySelector('link[rel="preload"][media*="portrait"]')).toHaveAttribute(
-      'imagesrcset',
-      '/portrait.avif 390w',
-    );
-    expect(document.head.querySelector('link[rel="preload"][media*="landscape"]')).toHaveAttribute(
-      'imagesrcset',
-      '/landscape.avif 390w',
-    );
-    expect(document.head.querySelectorAll('link[rel="preload"][media]')).toHaveLength(2);
+    const expectedPreloads = [
+      ['/phone-portrait.avif 390w', '(max-width: 600px) and (orientation: portrait)'],
+      ['/phone-landscape.avif 390w', '(max-width: 1000px) and (orientation: landscape)'],
+      ['/tablet-portrait.avif 390w', '(min-width: 601px) and (max-width: 1000px) and (orientation: portrait)'],
+      ['/tablet-landscape.avif 390w', '(min-width: 1001px) and (max-width: 1439px) and (orientation: landscape)'],
+      ['/desktop.avif 390w', '(min-width: 1440px)'],
+    ];
+    for (const [srcSet, media] of expectedPreloads) {
+      const link = [...document.head.querySelectorAll<HTMLLinkElement>('link[rel="preload"][media]')].find(
+        (entry) => entry.media === media,
+      );
+      expect(link).toHaveAttribute('imagesrcset', srcSet);
+    }
+    expect(document.head.querySelectorAll('link[rel="preload"][media]')).toHaveLength(5);
+
+    saveGames('two', [{ ...games[0]!, coverUrl: '/fallback.png' }]);
+    preloadGames('two');
+    expect(document.head.querySelector('link[rel="preload"][href="/fallback.png"]')).toBeInTheDocument();
   });
 });
