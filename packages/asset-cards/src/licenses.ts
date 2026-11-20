@@ -77,6 +77,15 @@ export const LICENSES: LicenseRow[] = [
     note: 'An itch.io purchase whose terms have not been read yet; the strict default applies until Kevin confirms a row.',
   },
   {
+    id: 'LicenseRef-kevin-owned',
+    aliases: ['unknown-owned'],
+    ceiling: { uses: ALL_USES, audience: 'private', redistribution: 'in-build', attribution: null },
+    processing: 'local-only',
+    ref: 'Kevin owner confirmation',
+    note: 'Owner-confirmed pack; private use, in-build redistribution only, and local-only processing.',
+    confirmed: { by: 'kevin', on: '2026-11-20' },
+  },
+  {
     id: 'LicenseRef-limezu-commercial',
     aliases: ['LimeZu-commercial'],
     ceiling: { uses: PIXEL_USES, audience: 'private', redistribution: 'in-build', attribution: 'LimeZu' },

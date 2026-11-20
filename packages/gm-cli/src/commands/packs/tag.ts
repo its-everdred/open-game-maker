@@ -120,13 +120,16 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
     throw new CommandError(error instanceof Error ? error.message : String(error));
   });
   for (const refusal of discovery.refusals) ctx.err(refusal);
+  for (const failure of discovery.failures) ctx.err(failure);
   let targets =
     kind === 'map' ? discovery.targets.filter((target) => target.slug === 'profantasy-cc3') : discovery.targets;
   if (targets.length === 0) {
     if (kind === 'map' && discovery.targets.length > 0) ctx.err('map: the local worker supports profantasy-cc3 only');
     if (discovery.refusals.length === 0 && discovery.targets.length === 0)
       ctx.err(`no eligible ${kind} cards matched ${only}`);
-    return EXIT.usage;
+    if (ctx.json && discovery.failures.length > 0)
+      printJson(ctx, { summary: { kind, only, collections: 0, cards: 0, failures: discovery.failures } });
+    return discovery.failures.length > 0 ? EXIT.failed : EXIT.usage;
   }
 
   const unlock = await lockTargets(targets).catch((error: unknown) => {
@@ -164,6 +167,7 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
         only,
         collections: targets.length,
         cards,
+        failures: discovery.failures,
         workers: { requested: requestedWorkers, effective: workers },
         pages,
         renderers: [...new Set(renderers)].sort(),
@@ -173,7 +177,7 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
       for (const record of records) if (record.card) visibleRecord(ctx, kind, record);
       if (ctx.json) printJson(ctx, { summary });
       else ctx.out(`${cards} ${kind} card(s) tagged across ${targets.length} collection(s); workers ${workers}`);
-      return EXIT.ok;
+      return discovery.failures.length > 0 ? EXIT.failed : EXIT.ok;
     } catch (error) {
       if (committed) {
         throw new CommandError(`tagging completed but output failed: ${String(error)}`);

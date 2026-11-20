@@ -407,6 +407,9 @@ the local `profantasy-cc3` collection.
 Collections must allow `vision-input`; `processing: local-only` is honored. A run never downloads model weights, and
 fails when the required CLIP or CLAP cache is absent. A collection lock prevents simultaneous tag runs and is released automatically when a run exits. `--json` streams one record per changed card followed by a summary. Use `--only` when processing a single private pack, for example:
 
+A pack with `pack.json` but no `collection.card.json` is reported as a failure instead of being silently skipped; the
+JSON summary includes it in `failures`, and the command exits non-zero so intake can repair the pack.
+
 ```text
 gm packs tag --kind audio --only drive-barbarian-chiptune --workers 4 --json
 ```
@@ -425,6 +428,7 @@ attack in 8 directions" is `gm assets search orc attack --directions 8`. A sprit
 of its `sprite.directions` list, in the order its sheet rows or per-direction files are read.
 AI-generated assets are included by default. Text results carry an `AI-generated: <tool>` marker; JSON results expose
 the typed `generation: { "method": "ai", "tool": "..." }` object.
+Measured audio cards are searchable before model tagging and their text rows show `measured [low-confidence]`.
 `--exclude-ai-generated` removes every card with that typed marker. A game whose **AI-generated assets** setting is off
 applies the same filter automatically, and `gm assets use` refuses a flagged asset in that game.
 
