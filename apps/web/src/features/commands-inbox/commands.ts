@@ -10,6 +10,7 @@ import type { CoreReviewCommand, ReviewTarget } from '../worker-builds/review-co
 // The game's open aiur Commands (M3). Polling matches the build list: a Command opened by a running agent shows up
 // without a reload.
 const POLL_MS = 30_000;
+export const REVIEW_POLL_MS = 15_000;
 const EMPTY: GameCommand[] = [];
 
 export const gameCommandsQueryKey = (gameId: string) => ['game-commands', gameId] as const;
@@ -54,7 +55,7 @@ export function useCreatorReviewCommands(creatorId: string | undefined) {
     queryKey: [...creatorCommandsQueryKey, creatorId, 'review'],
     enabled: Boolean(creatorId),
     queryFn: () => api<CreatorCommandsPage & { unavailable?: boolean }>('/me/commands?includeQuestions=1'),
-    refetchInterval: POLL_MS,
+    refetchInterval: REVIEW_POLL_MS,
     retry: false,
   });
   return {
@@ -76,7 +77,7 @@ export function useCoreReviewCommands(creatorId: string | undefined) {
         if (error instanceof ApiError && error.status === 403) return { commands: [], targets: [] };
         throw error;
       }),
-    refetchInterval: POLL_MS,
+    refetchInterval: REVIEW_POLL_MS,
     retry: false,
   });
   return {

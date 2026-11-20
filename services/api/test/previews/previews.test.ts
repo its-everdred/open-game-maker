@@ -32,6 +32,7 @@ const archive = () => execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', 
 function setup() {
   const { deps } = world();
   const app = createApp(deps);
+  const publishLog = vi.fn(async () => {});
   app.route(
     '/internal',
     buildRoutes({
@@ -44,6 +45,7 @@ function setup() {
           { id: id === 'mock-game' ? 'mock' : id === 'sound' ? 'cue' : 'concept', ticket: '12', template: 'next' },
         ],
       }),
+      publishLog,
     }),
   );
   const [owner, repo] = REPO.split('/');
@@ -68,7 +70,7 @@ function setup() {
       headers: { ...asUser(ids.user), 'content-type': 'application/json' },
       body: JSON.stringify({ buildId, verdict: 'looks right', note }),
     });
-  return { deps, app, upload, list, editorList, answer, message };
+  return { deps, app, upload, list, editorList, answer, message, publishLog };
 }
 
 function enableTracks(deps: ReturnType<typeof setup>['deps']) {
@@ -634,7 +636,7 @@ describe('review round previews', () => {
     expect(response.status).toBe(422);
   });
   it('records a verdict against the posted build and retains the prior build', async () => {
-    const { deps, app, upload, answer, message } = setup();
+    const { deps, app, upload, answer, message, publishLog } = setup();
     enableTracks(deps);
     const first = (await (await upload()).json()) as { buildId: string };
     const posted = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
@@ -652,6 +654,7 @@ describe('review round previews', () => {
       }),
     });
     expect(posted.status).toBe(201);
+    expect(publishLog).toHaveBeenCalledOnce();
     expect((await answer(first.buildId, '  Keep this\nexactly.  ')).status).toBe(200);
     expect(message).not.toHaveBeenCalled();
     expect(deps.db.select().from(schema.reviewRounds).get()).toMatchObject({
