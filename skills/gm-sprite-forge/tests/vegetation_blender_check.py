@@ -48,7 +48,7 @@ indices = [face.material_index for face in shaded[0].data.polygons]
 assert len(set(indices)) > 1
 assert indices == [face.material_index for face in shaded_again[0].data.polygons]
 assert all(len(set(indices[i:i+4])) == 1 for i in range(0, len(indices), 4))
-assert len(cluster(7, foliage, count=2, leafy=True, leaves_per_cluster=8)) == 2
+assert len(cluster(7, foliage, count=5, leafy=True, leaves_per_cluster=8, batch_size=3, batch_radius=0.04)) == 5
 assert leaf_clusters(7, foliage, count=0) == []
 plants = cluster(7, foliage, count=6, extent=0.25)
 assert len(plants) == 6

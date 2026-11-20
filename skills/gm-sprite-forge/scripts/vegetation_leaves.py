@@ -5,11 +5,11 @@ import random
 import bpy
 from mathutils import Vector
 
-from vegetation_layout import placements
+from vegetation_layout import clustered_placements
 
 
 def leaf_clusters(seed, material, *, count=5, extent=0.2, height=0.18, leaves_per_cluster=12,
-                  shade_variation=False):
+                  shade_variation=False, batch_size=1, batch_radius=0.05):
     """Build independently rotated clumps of folded, pointed leaves."""
     if (not math.isfinite(height) or height <= 0 or not isinstance(leaves_per_cluster, int)
             or not 1 <= leaves_per_cluster <= 64):
@@ -33,7 +33,8 @@ def leaf_clusters(seed, material, *, count=5, extent=0.2, height=0.18, leaves_pe
                         element.color = (c[0] * factor, c[1] * factor, c[2] * factor, 1)
             shades.append(shade)
     objects = []
-    for index, item in enumerate(placements(seed, count, extent=extent)):
+    for index, item in enumerate(clustered_placements(seed, count, extent=extent,
+                                                       batch_size=batch_size, batch_radius=batch_radius)):
         vertices, faces, leaf_shades = [], [], []
         for leaf in range(leaves_per_cluster):
             leaf_shades.append(shade_rng.randrange(len(shades)))

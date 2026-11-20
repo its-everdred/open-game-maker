@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from vegetation_layout import branches, placements
+from vegetation_layout import branches, clustered_placements, placements
 
 
 class VegetationLayoutTest(unittest.TestCase):
@@ -33,6 +33,24 @@ class VegetationLayoutTest(unittest.TestCase):
             self.assertTrue(0 <= p.rotation < math.tau)
             self.assertTrue(0.7 <= p.scale <= 0.9)
         self.assertEqual(placements(1, 0), [])
+
+    def test_grouped_scatter_is_seeded_bounded_and_keeps_batches_together(self):
+        grouped = clustered_placements(9, 11, extent=0.4, batch_size=3, batch_radius=0.06)
+        self.assertEqual(grouped, clustered_placements(9, 11, extent=0.4, batch_size=3, batch_radius=0.06))
+        self.assertNotEqual(grouped, clustered_placements(10, 11, extent=0.4, batch_size=3, batch_radius=0.06))
+        self.assertEqual(clustered_placements(9, 11, extent=0.4), placements(9, 11, extent=0.4))
+        self.assertEqual(len(grouped), 11)
+        for p in grouped:
+            self.assertLessEqual(max(abs(p.x), abs(p.y)), 0.4)
+        for start in range(0, len(grouped), 3):
+            batch = grouped[start:start+3]
+            for a in batch:
+                for b in batch:
+                    self.assertLessEqual(math.hypot(a.x-b.x, a.y-b.y), 0.120000001)
+        self.assertEqual(clustered_placements(9, 0, batch_size=3), [])
+        for kwargs in ({'batch_size': 0}, {'batch_radius': -1}, {'batch_radius': float('nan')}):
+            with self.assertRaises(ValueError):
+                clustered_placements(9, 3, **kwargs)
 
     def test_rejects_invalid_ranges(self):
         for kwargs in ({'height': 0}, {'lean': -1}, {'levels': 6}, {'fanout': 0},

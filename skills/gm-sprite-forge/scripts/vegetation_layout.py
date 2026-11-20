@@ -67,3 +67,26 @@ def placements(seed: int, count: int, *, extent: float = 0.5,
     return [Placement(rng.uniform(-extent, extent), rng.uniform(-extent, extent),
                       rng.uniform(0, math.tau), rng.uniform(min_scale, max_scale))
             for _ in range(count)]
+
+
+def clustered_placements(seed: int, count: int, *, extent: float = 0.5,
+                         batch_size: int = 1, batch_radius: float = 0.05) -> list[Placement]:
+    """Scatter small groups within a tile, with an independent rotation per plant."""
+    if (not isinstance(batch_size, int) or not 1 <= batch_size <= 16
+            or not math.isfinite(batch_radius) or batch_radius < 0):
+        raise ValueError('invalid batch size or radius')
+    if batch_size == 1:
+        return placements(seed, count, extent=extent)
+    # placements validates count and extent even when no groups are needed.
+    placements(seed, 0 if count == 0 else count, extent=extent)
+    centres = placements(seed, (count + batch_size - 1) // batch_size, extent=extent)
+    rng = random.Random(seed ^ 0xBA7C)
+    result = []
+    for centre in centres:
+        for _ in range(min(batch_size, count - len(result))):
+            angle = rng.uniform(0, math.tau)
+            distance = batch_radius * math.sqrt(rng.random())
+            x = max(-extent, min(extent, centre.x + math.cos(angle) * distance))
+            y = max(-extent, min(extent, centre.y + math.sin(angle) * distance))
+            result.append(Placement(x, y, rng.uniform(0, math.tau), rng.uniform(0.8, 1.2)))
+    return result
