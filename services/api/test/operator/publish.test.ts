@@ -46,6 +46,28 @@ function branchRow(deps: ReturnType<typeof operator>['deps']) {
   return deps.db.select().from(schema.branches).where(eq(schema.branches.id, ids.main)).get()!;
 }
 
+it('reports whether a prototype review round exists for a build SHA', async () => {
+  const { app, deps } = operator();
+  const lookup = (sha: string, headers = { 'x-ogm-internal': INTERNAL_TOKEN }) =>
+    app.request(`${operatorPrefix}/games/castle-game/review-sha/${sha}`, { headers });
+  expect(await (await lookup(SHA)).json()).toEqual({ recorded: false });
+  expect((await app.request(`${operatorPrefix}/games/castle-game/review-sha/${SHA}`)).status).toBe(401);
+  postRound(deps.db, {
+    id: 'prototype-review',
+    gameId: ids.game,
+    track: 'art',
+    phase: 'concept',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha: SHA,
+    media: '[]',
+    postedAt: '2026-01-01T00:00:00Z',
+  });
+  expect(await (await lookup(SHA)).json()).toEqual({ recorded: true });
+  expect((await lookup('invalid')).status).toBe(400);
+});
+
 describe('operator review stalls', () => {
   it('requires the internal credential', async () => {
     const { app } = operator();

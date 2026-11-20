@@ -80,6 +80,11 @@ gm look sheet <screen> --still <png> [--target <png>]
 gm look check [--changed [<base>] | --all] [--screen <id> ...] [--phase mock|prototype|build|polish] [--json]
 gm look scope add <screen> --still <png> [--still <png> ...] [--base <base>]
 gm look evidence --body <file> [--json]
+gm decisions check [--game <slug>]
+gm decisions render
+gm decisions next --ticket <n> [--body <file>]
+gm decisions raise <id>
+gm decisions answer <id> <option label> [--note <text>]
 ```
 
 `gm check` runs TypeScript, deterministic simulation-source, test-hook, and registered asset gates. Use `static` or
@@ -87,6 +92,16 @@ gm look evidence --body <file> [--json]
 gate result. `--phase` supplies the current look rung when evaluating provisional look scopes; it defaults to
 `prototype` when no provisional scope is declared. A provisional scope requires the caller to pass the current rung, so
 expiry cannot remain green because a command defaulted to an earlier phase.
+In ticket PR mode, pass `--body <file>` and `--base <ref>` to also reject open creator decisions and
+creator-visible changes without a prototype review section (or `Prototype review: none` for code-only changes).
+`gm publish` requires a prototype review round for the commit when the game has a decision inventory; games without an
+inventory continue with a reported gate line.
+
+`gm decisions check` validates `docs/<slug>/decisions.json` and fails when its grouped `decisions.md` render is stale;
+`gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open
+decisions as JSON, including IDs linked from its `## Creator decisions` section when the inventory has no ticket number.
+Raise an entry with `gm decisions raise <id>` after every option has media, then record the creator's answer with
+`gm decisions answer <id> <option label> [--note <text>]`.
 
 `gm check boot` serves the build and checks readiness and visible frames at phone and landscape sizes. Frames with
 more than 98% of pixels near one color fail. It writes
