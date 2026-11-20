@@ -82,15 +82,19 @@ describe('review contract', () => {
   });
 
   it('accepts an optional note on a liked option and rejects notes for unliked options', () => {
-    expect(CommandReview.safeParse({
-      likes: ['v1'],
-      dislikes: [],
-      liked_notes: [{ option_id: 'v1', reason: 'Great tone' }],
-    }).success).toBe(true);
-    expect(CommandReview.safeParse({
-      likes: ['v1'],
-      dislikes: [],
-      liked_notes: [{ option_id: 'v2', reason: 'Not selected' }],
-    }).success).toBe(false);
+    expect(
+      CommandReview.safeParse({
+        likes: ['v1'],
+        dislikes: [],
+        liked_notes: [{ option_id: 'v1', reason: 'Great tone' }],
+      }).success,
+    ).toBe(true);
+    expect(
+      CommandReview.safeParse({
+        likes: ['v1'],
+        dislikes: [],
+        liked_notes: [{ option_id: 'v2', reason: 'Not selected' }],
+      }).success,
+    ).toBe(false);
   });
 });

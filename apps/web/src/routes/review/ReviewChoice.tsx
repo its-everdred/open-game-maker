@@ -12,7 +12,13 @@ export function ReviewChoice({ gameId, command }: { gameId: string; command: Gam
   const [votes, setVotes] = useState<Record<string, 'like' | 'dislike'>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const answer = useMutation({
-    mutationFn: async ({ optionId, review }: { optionId: string; review?: import('@ogm/contracts/browser').CommandReview }) => {
+    mutationFn: async ({
+      optionId,
+      review,
+    }: {
+      optionId: string;
+      review?: import('@ogm/contracts/browser').CommandReview;
+    }) => {
       if (command.pick === 'many') {
         await answerCommand(gameId, command, optionId, review);
         return;
@@ -34,7 +40,9 @@ export function ReviewChoice({ gameId, command }: { gameId: string; command: Gam
       <div className="review-choice">
         {command.options.map((option) => (
           <fieldset className="review-choice-vote" key={option.id}>
-            <legend>{letterOf(command.options, option.id)}: {withoutLinks(option.label)}</legend>
+            <legend>
+              {letterOf(command.options, option.id)}: {withoutLinks(option.label)}
+            </legend>
             <button
               type="button"
               aria-pressed={votes[option.id] === 'like'}

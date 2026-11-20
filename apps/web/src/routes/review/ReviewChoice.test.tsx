@@ -24,7 +24,11 @@ const command: GameCommand = {
   blocking: false,
   opened_at: '2026-11-13T00:00:00.000Z',
 };
-const multiCommand: GameCommand = { ...command, pick: 'many', options: [...command.options, { id: 'green', label: 'Green' }] };
+const multiCommand: GameCommand = {
+  ...command,
+  pick: 'many',
+  options: [...command.options, { id: 'green', label: 'Green' }],
+};
 afterEach(() => {
   resetReviewDrafts();
   answer.mockClear();

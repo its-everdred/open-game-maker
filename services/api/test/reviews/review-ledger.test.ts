@@ -203,7 +203,9 @@ describe('review deck answers', () => {
     insertOpenDesignCommand(deps);
     const review = { likes: ['wood'], dislikes: [], liked_notes: [{ option_id: 'wood', reason: 'Warm' }] };
     expect((await answerReview(app, { option_id: 'wood', review })).status).toBe(200);
-    expect(listReviews(deps.db, GAME)[0]).toMatchObject({ likes: [{ option_id: 'wood', label: 'Wooden', note: 'Warm' }] });
+    expect(listReviews(deps.db, GAME)[0]).toMatchObject({
+      likes: [{ option_id: 'wood', label: 'Wooden', note: 'Warm' }],
+    });
   });
 
   it('takes a half-judged review, since Send is always on, and records only the cards judged', async () => {

@@ -145,7 +145,18 @@ describe('ReviewRows', () => {
 
   it('renders review videos muted, inline, autoplaying and looping', () => {
     const clip = { url: 'https://media.example.test/roll.mp4', width: 64, height: 48, kind: 'video' as const };
-    render(<CommandOptions command={command({ options: [{ id: 'm1', label: 'Roll', media: clip }, { id: 'm2', label: 'Other' }] })} disabled={false} onAnswer={() => undefined} />);
+    render(
+      <CommandOptions
+        command={command({
+          options: [
+            { id: 'm1', label: 'Roll', media: clip },
+            { id: 'm2', label: 'Other' },
+          ],
+        })}
+        disabled={false}
+        onAnswer={() => undefined}
+      />,
+    );
     const video = document.querySelector('video');
     expect(video).toHaveProperty('autoplay', false);
     expect(video).toHaveProperty('muted', true);
@@ -167,7 +178,12 @@ describe('ReviewRows', () => {
     const clip = { url: 'https://media.example.test/roll.mp4', width: 64, height: 48, kind: 'video' as const };
     const { unmount } = render(
       <CommandOptions
-        command={command({ options: [{ id: 'm1', label: 'Roll', media: clip }, { id: 'm2', label: 'Other' }] })}
+        command={command({
+          options: [
+            { id: 'm1', label: 'Roll', media: clip },
+            { id: 'm2', label: 'Other' },
+          ],
+        })}
         disabled={false}
         onAnswer={() => undefined}
       />,
@@ -176,9 +192,15 @@ describe('ReviewRows', () => {
     const play = vi.fn().mockResolvedValue(undefined);
     const pause = vi.fn();
     Object.defineProperties(video, { play: { value: play }, pause: { value: pause } });
-    callbackRef!([{ target: video, isIntersecting: true } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
+    callbackRef!(
+      [{ target: video, isIntersecting: true } as unknown as IntersectionObserverEntry],
+      {} as IntersectionObserver,
+    );
     expect(play).toHaveBeenCalledOnce();
-    callbackRef!([{ target: video, isIntersecting: false } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
+    callbackRef!(
+      [{ target: video, isIntersecting: false } as unknown as IntersectionObserverEntry],
+      {} as IntersectionObserver,
+    );
     expect(pause).toHaveBeenCalledOnce();
     unmount();
     expect(disconnect).toHaveBeenCalledOnce();
