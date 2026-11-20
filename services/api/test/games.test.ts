@@ -259,6 +259,57 @@ describe('games routes', () => {
       join(directory, 'manifest.json'),
       JSON.stringify({ description: 'Published description', tags: ['Cozy'] }),
     );
+    mkdirSync(join(directory, 'assets'), { recursive: true });
+    const sharedFiles = [
+      'media/logo.png',
+      'media/thumbnail.png',
+      'media/loading-portrait.png',
+      'media/loading-landscape.png',
+    ];
+    const phases = () => ({
+      boot: { bytes: 0, files: 0 },
+      ready: { bytes: 0, files: 0 },
+      stream: { bytes: 0, files: 0 },
+    });
+    writeFileSync(
+      join(directory, 'assets/cache-plan.json'),
+      JSON.stringify({
+        version: 1,
+        gameId: id,
+        buildId: 'build1',
+        built: now,
+        sdkVersion: '1',
+        tiers: ['desktop'],
+        entries: sharedFiles.map((sourcePath, index) => ({
+          sha256: String(index + 1).repeat(64),
+          url: `/a/${String(index + 1).repeat(64)}.png`,
+          sourcePath,
+          bytes: 10,
+          kind: 'sprite',
+          phase: 'boot',
+          tiers: ['*'],
+        })),
+        totals: { desktop: phases(), mobile: phases(), low: phases() },
+      }),
+    );
+    writeFileSync(
+      join(directory, '.ogm-display.json'),
+      JSON.stringify({
+        logo: 'media/logo.png',
+        genres: ['puzzle'],
+        loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
+        sharedUrls: Object.fromEntries(
+          sharedFiles.map((sourcePath, index) => [sourcePath, `/a/${String(index + 1).repeat(64)}.png`]),
+        ),
+      }),
+    );
+    const pendingMedia = await list();
+    expect(pendingMedia.logoUrl).toBe('https://games.example.test/a/' + `${'1'.repeat(64)}.png`);
+    expect(pendingMedia.coverUrl).toBe('https://games.example.test/a/' + `${'2'.repeat(64)}.png`);
+    expect(pendingMedia.loadingUrls).toMatchObject({
+      portrait: `https://games.example.test/a/${'3'.repeat(64)}.png`,
+      landscape: `https://games.example.test/a/${'4'.repeat(64)}.png`,
+    });
     expect(await list()).toMatchObject({
       tagline: 'Published description',
       tags: ['Cozy'],
@@ -281,6 +332,9 @@ describe('games routes', () => {
         description: 'Match colour blobs and drop blocks in a forest duel.',
         tags: ['Versus', 'Cozy'],
         loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
+        sharedUrls: Object.fromEntries(
+          sharedFiles.map((sourcePath, index) => [sourcePath, `/a/${String(index + 1).repeat(64)}.png`]),
+        ),
         images: {
           'media/thumbnail.png': { width: 640, height: 360, sources },
           'media/logo.png': { width: 640, height: 360, sources },
@@ -302,7 +356,7 @@ describe('games routes', () => {
     });
     const detail = await (await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) })).json();
     expect(detail).toMatchObject({
-      loadingUrls: { portrait: `https://games.example.test/g/${id}/build1/media/loading-portrait.png` },
+      loadingUrls: { portrait: `https://games.example.test/a/${'3'.repeat(64)}.png` },
       loadingImages: {
         portrait: {
           sources: {
@@ -317,8 +371,8 @@ describe('games routes', () => {
       tagline: 'Match colour blobs and drop blocks in a forest duel.',
       tags: ['Versus', 'Cozy'],
       loadingUrls: {
-        portrait: `https://games.example.test/g/${id}/build1/media/loading-portrait.png`,
-        landscape: `https://games.example.test/g/${id}/build1/media/loading-landscape.png`,
+        portrait: `https://games.example.test/a/${'3'.repeat(64)}.png`,
+        landscape: `https://games.example.test/a/${'4'.repeat(64)}.png`,
       },
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
     });
@@ -336,12 +390,13 @@ describe('games routes', () => {
         join(directory, '.ogm-display.json'),
         JSON.stringify({
           logo: 'media/logo.png',
+          sharedUrls: { 'media/thumbnail.png': `/a/${'2'.repeat(64)}.png` },
           images: { 'media/thumbnail.png': badImage },
         }),
       );
       const game = await list();
       expect(game).not.toHaveProperty('coverImage');
-      expect(game.coverUrl).toBe(`https://games.example.test/g/${id}/build1/media/thumbnail.png`);
+      expect(game.coverUrl).toBe(`https://games.example.test/a/${'2'.repeat(64)}.png`);
     }
   });
 

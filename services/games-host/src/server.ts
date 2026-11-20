@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { constants as zlib, createBrotliCompress, createGzip } from 'node:zlib';
 
 import { Hono, type Context, type Handler, type MiddlewareHandler } from 'hono';
+import { cachePlanSchema } from '@ogm/contracts';
 
 import { gameHeaders, healthHeaders } from './headers.js';
 import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-observer.js';
@@ -83,6 +84,25 @@ export function createApp(options: GamesHostOptions): Hono {
 
     const urlPath = new URL(context.req.url).pathname.split('/').slice(4).join('/');
     const isPreview = new URL(context.req.url).pathname.startsWith('/p/');
+    if (
+      !isPreview &&
+      (urlPath === '' || urlPath === 'index.html') &&
+      !new URL(context.req.url).searchParams.has('frameObserver')
+    ) {
+      const raw = await readFile(join(directory, 'assets/cache-plan.json'), 'utf8').catch(() => null);
+      if (raw !== null) {
+        try {
+          const plan = cachePlanSchema.safeParse(JSON.parse(raw) as unknown);
+          const entry = plan.success
+            ? plan.data.entries.find(({ sourcePath }) => sourcePath === 'index.html')
+            : undefined;
+          const address = entry && /^\/a\/([0-9a-f]{64})\.[a-z0-9]{1,12}$/u.exec(entry.url);
+          if (entry && address?.[1] === entry.sha256) return context.redirect(entry.url, 308);
+        } catch {
+          // A malformed optional cache plan must not make an otherwise servable legacy build unavailable.
+        }
+      }
+    }
     if (urlPath === FRAME_OBSERVER_FILE)
       return context.body(FRAME_OBSERVER, 200, { 'content-type': 'text/javascript; charset=utf-8' });
     if (isPreview && urlPath === PREVIEW_BOOTSTRAP_FILE)

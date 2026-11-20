@@ -43,7 +43,7 @@ export function builtFiles(
   parts: { manifest?: boolean; design?: boolean; credits?: boolean } = {},
 ) {
   mkdirSync(join(dir, 'assets'), { recursive: true });
-  writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Fixture</title>\n');
+  writeFileSync(join(dir, 'index.html'), '<!doctype html><script src="./assets/main.js"></script><title>Fixture</title>\n');
   writeFileSync(join(dir, 'assets', 'main.js'), 'console.log("fixture");\n');
   if (parts.manifest ?? true) writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest()));
   if (parts.design ?? true) {

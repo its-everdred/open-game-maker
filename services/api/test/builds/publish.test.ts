@@ -169,7 +169,13 @@ describe('publishing a merged build', () => {
     expect(image.sources.avif.map((item: { width: number }) => item.width)).toEqual([320, 640]);
     expect(display.images['media/p.png'].sources.webp[0].width).toBe(320);
     expect(display.images['media/l.png'].sources.avif[0].width).toBe(320);
-    expect(existsSync(join(build, image.sources.avif[0].path))).toBe(true);
+    const imagePath = image.sources.avif[0].path as string;
+    expect(imagePath).toMatch(/^\/a\/[0-9a-f]{64}\.avif$/u);
+    expect(existsSync(join(deps.config.gamesRoot, '_a', imagePath.slice('/a/'.length)))).toBe(true);
+    const cachePlan = JSON.parse(readFileSync(join(build, 'assets', 'cache-plan.json'), 'utf8')) as {
+      entries: Array<{ url: string }>;
+    };
+    expect(cachePlan.entries).toContainEqual(expect.objectContaining({ url: imagePath }));
     expect(existsSync(join(build, '.complete'))).toBe(true);
   });
 

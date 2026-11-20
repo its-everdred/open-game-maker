@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { mkdtemp, mkdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -56,6 +57,49 @@ describe('games-host server', () => {
     expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
     expect(response.headers.get('content-length')).toBe(String(Buffer.byteLength('<h1>demo</h1>')));
     expect(await response.text()).toBe('<h1>demo</h1>');
+  });
+
+  it('redirects a published build entry document to its stable shared content URL', async () => {
+    const content = '<!doctype html><h1>shared</h1>';
+    const hash = createHash('sha256').update(content).digest('hex');
+    await writeFile(join(root, '_a', `${hash}.html`), content);
+    await writeFile(
+      join(build, 'assets', 'cache-plan.json'),
+      JSON.stringify({
+        version: 1,
+        gameId: 'demo',
+        buildId: 'b1',
+        built: '2026-11-01T00:00:00.000Z',
+        sdkVersion: '1',
+        tiers: ['desktop'],
+        entries: [
+          {
+            sha256: hash,
+            url: `/a/${hash}.html`,
+            sourcePath: 'index.html',
+            bytes: Buffer.byteLength(content),
+            kind: 'code',
+            phase: 'boot',
+            tiers: ['*'],
+          },
+        ],
+        totals: {
+          desktop: {
+            boot: { bytes: Buffer.byteLength(content), files: 1 },
+            ready: { bytes: 0, files: 0 },
+            stream: { bytes: 0, files: 0 },
+          },
+          mobile: { boot: { bytes: 0, files: 0 }, ready: { bytes: 0, files: 0 }, stream: { bytes: 0, files: 0 } },
+          low: { boot: { bytes: 0, files: 0 }, ready: { bytes: 0, files: 0 }, stream: { bytes: 0, files: 0 } },
+        },
+      }),
+    );
+    const entry = await app().request('/g/demo/b1/');
+    expect(entry.status).toBe(308);
+    expect(entry.headers.get('location')).toBe(`/a/${hash}.html`);
+    const shared = await app().request(`/a/${hash}.html`);
+    expect(shared.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(await shared.text()).toBe('<!doctype html><h1>shared</h1>');
   });
 
   it('installs the versioned frame observer before game scripts only when requested', async () => {
