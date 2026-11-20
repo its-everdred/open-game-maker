@@ -38,6 +38,11 @@ export const command: GmCommand = {
           `review/decisions.json has no approved target for "${screen}"`,
           `gm look sheet ${screen} --still <png> --target <approved render>`,
         );
+      if (!found.target)
+        throw new UsageError(
+          `review/decisions.json has no approved target for provisional screen "${screen}"`,
+          `replace the provisional scope with an approved target before running gm look sheet ${screen}`,
+        );
       target = resolve(game, found.target);
     }
     const still = resolve(ctx.cwd, flags.still);

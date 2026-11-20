@@ -26,6 +26,8 @@ export const command: GmCommand = {
     const game = gameDir(ctx.cwd, root);
     const screen = reviewScreens(game).find((item) => item.name === name);
     if (!screen) throw new UsageError(`no approved target for "${name}"`, 'record the screen in review/decisions.json');
+    if (!screen.target)
+      throw new UsageError(`screen "${name}" has only a provisional look scope`, 'record an approved target first');
     const target = resolve(game, screen.target);
     const sheet = join(game, sheetPath(name));
     if (!existsSync(target) || !existsSync(sheet) || !existsSync(`${sheet}.json`))
