@@ -171,7 +171,7 @@ def review_sheet(orig, mock, previous, rebuild, cell, out, zoom=4):
         bounds = view.getchannel('A').point(lambda alpha: 255 if alpha >= 128 else 0).getbbox()
         if bounds is None:
             raise ValueError(f'image-gen view {direction + 1} is empty')
-        target = Image.fromarray(o).getchannel('A').getbbox()
+        target = Image.fromarray(o).getchannel('A').point(lambda alpha: 255 if alpha >= 128 else 0).getbbox()
         if target is None:
             raise ValueError(f'original view {direction + 1} is empty')
         crop = view.crop(bounds)
