@@ -47,13 +47,13 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
                    fanout=2, spread_min=0.55, spread_max=0.85, leaf_count=24000,
                    crown_width=1.0, crown_depth=1.0, crown_height=1.0, palette=None,
                    leafy=False, plant_height=0.18, leaves_per_cluster=12, leaf_width=1.0, leaf_shading=False,
-                   batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0, branch_width=1.0, branch_radius=0.07, bush_vertical_scale=1.0, attachment_min=0.55, bush_leaf_detail=False, bush_mass_count=9, bush_mass_radius=0.15):
+                   batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0, branch_width=1.0, branch_radius=0.07, bush_vertical_scale=1.0, attachment_min=0.55, bush_leaf_detail=False, bush_mass_count=9, bush_mass_radius=0.15, sun_elev=65.0):
     """Run a seeded four-view render, then package its finished outputs."""
     output = _outside_packs(output)
     if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
         raise ValueError('invalid scene or variant slug')
     if (not all(math.isfinite(v) for v in (height, lean, canopy_scale, extent, spread_min, spread_max,
-                                            crown_width, crown_depth, crown_height, plant_height, leaf_width, batch_radius, yaw, branch_width, branch_radius, bush_vertical_scale, attachment_min, bush_mass_radius))
+                                            crown_width, crown_depth, crown_height, plant_height, leaf_width, batch_radius, yaw, branch_width, branch_radius, bush_vertical_scale, attachment_min, bush_mass_radius, sun_elev))
             or height <= 0 or lean < 0 or canopy_scale <= 0 or extent < 0
             or min(crown_width, crown_depth, crown_height, plant_height, leaf_width, branch_width, branch_radius, bush_vertical_scale) <= 0
             or not isinstance(leaves_per_cluster, int) or not 1 <= leaves_per_cluster <= 64
@@ -72,6 +72,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
             or (bush_vertical_scale != 1.0 and scene != 'bush')
             or (bush_leaf_detail and scene != 'bush')
             or not isinstance(bush_mass_count, int) or not 1 <= bush_mass_count <= 64 or bush_mass_radius <= 0
+            or not 0 < sun_elev <= 90
             or ((bush_mass_count != 9 or bush_mass_radius != .15) and scene != 'bush')
             or (branch_radius != 0.07 and scene not in ('bare', 'tree'))
             or (branched and scene != 'conifer')
@@ -96,7 +97,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
               'leaves_per_cluster': leaves_per_cluster, 'leaf_width': leaf_width, 'leaf_shading': int(leaf_shading),
               'batch_size': batch_size, 'batch_radius': batch_radius,
               'branched': int(branched), 'tiers': tiers, 'spokes': spokes, 'yaw0': yaw,
-              'branch_width': branch_width, 'branch_radius': branch_radius, 'bush_vertical_scale': bush_vertical_scale, 'attachment_min': attachment_min, 'bush_leaf_detail': int(bush_leaf_detail), 'bush_mass_count': bush_mass_count, 'bush_mass_radius': bush_mass_radius, **palette_values}
+              'branch_width': branch_width, 'branch_radius': branch_radius, 'bush_vertical_scale': bush_vertical_scale, 'attachment_min': attachment_min, 'bush_leaf_detail': int(bush_leaf_detail), 'bush_mass_count': bush_mass_count, 'bush_mass_radius': bush_mass_radius, 'sun_elev': sun_elev, **palette_values}
     with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
         raw = Path(temp) / 'raw'
         raw.mkdir()
@@ -135,6 +136,7 @@ def main():
     parser.add_argument('--bush-leaf-detail', action='store_true')
     parser.add_argument('--bush-mass-count', type=int, default=9)
     parser.add_argument('--bush-mass-radius', type=float, default=0.15)
+    parser.add_argument('--sun-elev', type=float, default=65.0)
     parser.add_argument('--attachment-min', type=float, default=0.55)
     parser.add_argument('--height', type=float, default=1.0)
     parser.add_argument('--lean', type=float, default=0.1)
@@ -179,7 +181,7 @@ def main():
                             branch_width=args.branch_width, branch_radius=args.branch_radius,
                             bush_vertical_scale=args.bush_vertical_scale, attachment_min=args.attachment_min,
                             bush_leaf_detail=args.bush_leaf_detail, bush_mass_count=args.bush_mass_count,
-                            bush_mass_radius=args.bush_mass_radius)
+                            bush_mass_radius=args.bush_mass_radius, sun_elev=args.sun_elev)
     print(result)
 
 
