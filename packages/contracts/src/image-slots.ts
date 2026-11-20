@@ -34,8 +34,8 @@ const displayBoxes = (width: number, height: number): Record<ViewportId, Display
 export const IMAGE_SLOTS: Record<SlotId, ImageSlot> = {
   // Cover.tsx uses 45vw phone, 25vw tablet and 240px desktop; games tiles use a 3:2 host box.
   tile: { viewports: REVIEW_VIEWPORTS, display: { 'phone-portrait': { width: 175.5, height: 117 }, 'phone-landscape': { width: 380, height: 253.333 }, 'tablet-portrait': { width: 205, height: 136.667 }, 'tablet-landscape': { width: 295, height: 196.667 }, desktop: { width: 240, height: 160 } } },
-  // gamesCache.ts preloads logos at 55vw on phones and 320px otherwise; CSS caps them at 65% of the cover width.
-  logo: { viewports: allViewports, display: { 'phone-portrait': { width: 114.075, height: 114.075 }, 'phone-landscape': { width: 208, height: 208 }, 'tablet-portrait': { width: 133.25, height: 133.25 }, 'tablet-landscape': { width: 191.75, height: 191.75 }, desktop: { width: 156, height: 156 } } },
+  // gamesCache.ts preloads logos at 55vw on phones and 320px otherwise; logos are square image boxes.
+  logo: { viewports: allViewports, display: { 'phone-portrait': { width: 214.5, height: 214.5 }, 'phone-landscape': { width: 320, height: 320 }, 'tablet-portrait': { width: 320, height: 320 }, 'tablet-landscape': { width: 320, height: 320 }, desktop: { width: 320, height: 320 } } },
   // Full viewport display boxes.
   loading: { viewports: allViewports, display: { ...VIEWPORTS } },
   // Full viewport display boxes.
