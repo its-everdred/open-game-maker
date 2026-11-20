@@ -61,7 +61,7 @@ export async function storeDisplayImageBlobs(
       }
     }
   }
-  await writeFile(path, `${JSON.stringify(plan, null, 2)}\n`);
+  await writePlanAtomically(path, cachePlanSchema.parse(plan));
 }
 
 export async function completeBuildCache(input: {
@@ -115,11 +115,15 @@ export async function completeBuildCache(input: {
   }
 
   const parsed = cachePlanSchema.parse(completed);
+  await writePlanAtomically(planFile, parsed);
+}
+
+async function writePlanAtomically(planFile: string, plan: CachePlan): Promise<void> {
   const temporary = `${planFile}.${randomUUID()}.tmp`;
   try {
     const handle = await open(temporary, 'wx');
     try {
-      await handle.writeFile(`${JSON.stringify(parsed, null, 2)}\n`);
+      await handle.writeFile(`${JSON.stringify(plan, null, 2)}\n`);
       await handle.sync();
     } finally {
       await handle.close();
