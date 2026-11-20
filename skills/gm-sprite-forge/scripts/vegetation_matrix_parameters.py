@@ -5,7 +5,7 @@ CONTROLS = {'height', 'lean', 'canopy_scale', 'levels', 'count', 'extent', 'fano
             'spread_min', 'spread_max', 'leaf_count', 'crown_width', 'crown_depth',
             'crown_height', 'dense', 'autumn', 'shadows', 'leafy', 'plant_height',
             'leaves_per_cluster', 'leaf_width', 'leaf_shading', 'batch_size', 'batch_radius',
-            'branched', 'tiers', 'spokes', 'samples'}
+            'branched', 'tiers', 'spokes', 'samples', 'branch_width', 'branch_radius'}
 
 
 def matrix_parameters(job):
@@ -21,6 +21,8 @@ def matrix_parameters(job):
         raise ValueError('invalid seed')
     if ((result.get('leafy') and scene != 'plant') or (result.get('dense') and scene != 'tree')
             or (result.get('branched') and scene != 'conifer')
+            or (result.get('branch_width', 1) != 1 and scene != 'bare')
+            or (result.get('branch_radius', 0.07) != 0.07 and scene not in ('bare', 'tree'))
             or (result.get('leaf_width', 1) != 1 and not result.get('leafy'))
             or (result.get('leaf_shading') and not result.get('leafy'))):
         raise ValueError('style option does not apply to scene')
@@ -30,7 +32,7 @@ def matrix_parameters(job):
     for key, (low, high) in limits.items():
         if key in result and (type(result[key]) is not int or not low <= result[key] <= high):
             raise ValueError(f'invalid {key}')
-    positive = ('height', 'canopy_scale', 'crown_width', 'crown_depth', 'crown_height', 'plant_height', 'leaf_width')
+    positive = ('height', 'canopy_scale', 'crown_width', 'crown_depth', 'crown_height', 'plant_height', 'leaf_width', 'branch_width', 'branch_radius')
     nonnegative = ('lean', 'extent', 'batch_radius')
     for key in positive + nonnegative + ('spread_min', 'spread_max', 'yaw0'):
         if key in result and (not isinstance(result[key], (int, float)) or not math.isfinite(result[key])):

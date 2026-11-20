@@ -20,6 +20,8 @@ class MatrixParametersTest(unittest.TestCase):
             matrix_parameters({'seed': 42, 'misspelled_control': 1})
         for job in ({'scene': 'tree', 'seed': 1, 'leafy': 1},
                     {'scene': 'tree', 'seed': 1, 'levels': 6},
-                    {'scene': 'tree', 'seed': 1, 'leaf_width': 0.25}):
+                    {'scene': 'tree', 'seed': 1, 'leaf_width': 0.25},
+                    {'scene': 'tree', 'seed': 1, 'branch_width': 1.4}):
             with self.subTest(job=job), self.assertRaises(ValueError):
                 matrix_parameters(job)
+        self.assertEqual(matrix_parameters({'scene': 'bare', 'seed': 1, 'branch_width': 1.4, 'branch_radius': 0.05})['branch_radius'], 0.05)
