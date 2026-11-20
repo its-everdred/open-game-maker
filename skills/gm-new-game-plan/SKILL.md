@@ -44,6 +44,9 @@ this section adds what is specific to games.
 7. **Non-blocking picks.** Give every option its media and ship the recommended provisional choice while the
    creator decides. Silence is not approval. For feel, supply playable slices (`gm decide --playable
    <id>=<scenario query>`); incorporate later answers on the same ticket.
+   Before queueing tickets, render and validate `docs/<slug>/decisions.json` with `gm decisions render` and
+   `gm decisions check --game <slug>`. Every ticket body must list its IDs under `## Creator decisions`; verify the
+   tickets with `gm plan check --tickets <issues.json> --game <slug>`.
 
 ## Always audio from stage 1
 

@@ -54,6 +54,13 @@ gm-new-game-design. Engineering and operations questions never go to the creator
 Build the choice. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked. Done means
 `gm check`, `gm test`, and `gm run` are green and the PR's checklist is answered from the evidence sheet; look first.
 
+For planned creator decisions, save the ticket body and run `gm decisions next --ticket <n> --body <ticket-body.md>` before
+implementation, then raise each open entry with `gm decisions raise <id>`. The command checks option media and records
+the Command in `design/decisions.json`.
+After a `gm-decision-answer`, read the `gm-decision-answer` JSON block, use its exact `option_label`, and copy any
+creator note into `--note` (JSON-stringify a structured response). Run `gm decisions answer <id> <label> [--note <text>]`
+before changing the build.
+
 ## Energy
 Run `gm energy` at the start. `save` means a cheaper model, lower effort, and optional work deferred. `best` means the
 strongest model and effort. `balanced` is in between. When Energy is `limited` or `critical`, propose any scope cut as a

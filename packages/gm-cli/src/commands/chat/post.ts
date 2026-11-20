@@ -11,11 +11,11 @@ export type PostChatOptions = {
   image?: string;
   clip?: string;
   poster?: string;
+  emit?: (event: string, payload: unknown, jobId?: string) => void;
 };
 
 type WriteChatPostOptions = PostChatOptions & {
   environmentJob?: string | null;
-  emit?: (event: string, payload: unknown, jobId?: string) => void;
 };
 
 async function writeChatPost(options: WriteChatPostOptions): Promise<AgentOutboxLine> {
