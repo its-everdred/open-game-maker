@@ -124,6 +124,27 @@ def test_review_sheet_requires_visible_change_in_every_view(tmp_path):
         compare.review_sheet(original, generated, previous, candidate, 16, out, zoom=3)
 
 
+def test_review_sheet_fits_mock_to_visible_original_not_alpha_noise(tmp_path):
+    original = np.zeros((8 * 16, 16, 4), dtype=np.uint8)
+    generated = np.zeros((16, 8 * 16, 4), dtype=np.uint8)
+    for row in range(8):
+        original[row * 16, 0] = [1, 1, 1, 1]
+        original[row * 16 + 4:row * 16 + 8, 4:8] = [40, 40, 40, 255]
+        generated[2:14, row * 16 + 2:row * 16 + 14] = [255, 255, 255, 255]
+    updated = original.copy()
+    for row in range(8):
+        updated[row * 16 + 4, 4:8] = [80, 80, 80, 255]
+    paths = [tmp_path / name for name in ('original.png', 'generated.png', 'updated.png')]
+    for path, pixels in zip(paths, (original, generated, updated)):
+        Image.fromarray(pixels).save(path)
+    out = tmp_path / 'comparison.png'
+    compare.review_sheet(paths[0], paths[1], paths[0], paths[2], 16, out)
+    panel = np.asarray(Image.open(out))[56:120, 128:192, :3]
+    white = np.all(panel == 255, axis=2)
+    ys, xs = np.where(white)
+    assert (xs.min(), ys.min(), xs.max(), ys.max()) == (16, 16, 31, 31)
+
+
 @pytest.mark.skipif(not shutil.which('ffmpeg') or not shutil.which('ffprobe'), reason='ffmpeg and ffprobe required')
 def test_sheet_outputs_phone_safe_media_and_scores(tmp_path):
     pixels = np.zeros((32, 240, 4), dtype=np.uint8)
