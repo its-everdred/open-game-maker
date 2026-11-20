@@ -68,3 +68,6 @@ exercise gm-input devices and `hud-clear` proves gm-ui-hud's clear corners. The 
 - Name the worst visible defect first, from the stills and the clip, not from the step list.
 - A room run proves rooms between browsers on one host. List WAN latency and a real phone as unchecked.
 - `unchecked` in the report (no ffmpeg, an unanswered look) is not green: say what was not checked.
+- After a publish that changes what the creator can do or see, the build's prototype review must be raised with
+  this hosted build's play link and the run's clip, and its works and limitation lines must hold on the hosted
+  build (`../gm-core/references/decision-inventory.md`). None raised is a fail line: raise it, or tell the Executor.

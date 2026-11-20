@@ -12,6 +12,7 @@ import { reviewMediaUrl } from '../blobs/review-url.js';
 import { currentPreview, listPreviews } from '../previews/store.js';
 import { answerRound, getRound, latestRoundForTicket } from './store.js';
 import { bindReviewEpisode, markReviewAnswered, readReviewEpisode } from './answer-guard.js';
+import { logReviewFeedRefresh } from './feed-log.js';
 
 export const prefix = '/api/v1';
 const Answer = z
@@ -80,6 +81,12 @@ export default new Hono<ApiBindings>()
           postedAt: round.postedAt,
         };
       }),
+    );
+    await logReviewFeedRefresh(
+      'rounds',
+      game.id,
+      result.map((round) => ({ ticket: round.ticket, id: round.id, postedAt: round.postedAt })),
+      deps.log,
     );
     return c.json({ rounds: result });
   })

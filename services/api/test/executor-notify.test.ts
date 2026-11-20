@@ -58,6 +58,16 @@ describe('executor notices', () => {
     expect(stored[0]).toMatchObject({ userId: OWNER, url: '/all' });
   });
 
+  it('limits core review-ready pushes to one per ticket per ten minutes', async () => {
+    const { deliver, notify } = setup([
+      page([notice(9, 'review_ready'), notice(10, 'review_ready')]),
+      page([notice(11, 'review_ready')]),
+    ]);
+    await notify();
+    await notify();
+    expect(deliver).toHaveBeenCalledOnce();
+  });
+
   it('skips old notices and topics it does not know, so a restart is not a flood', async () => {
     const { deliver, notify } = setup([page([notice(9, 'live', '2026-11-18T03:00:00.000Z'), notice(10, 'deploy')])]);
     await notify();
