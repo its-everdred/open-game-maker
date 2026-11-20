@@ -256,6 +256,11 @@ def vegetation(sc):
         return bush(int(P['seed']), green, scale=P.get('height', 1))
     bark = toon_material('bark', *vegetation_palette('bark', ((117, 87, 56), (92, 65, 42), (52, 37, 25))), noise=0.08)
     if SCENE == 'conifer':
+        if P.get('branched', 0):
+            from vegetation_conifer import conifer_boughs
+            return conifer_boughs(int(P['seed']), bark, green, height=P.get('height', 1.2),
+                                  lean=P.get('lean', 0.1), tiers=int(P.get('tiers', 14)),
+                                  spokes=int(P.get('spokes', 8)))
         return conifer(int(P['seed']), bark, green, height=P.get('height', 1.2), lean=P.get('lean', 0.1))
     return tree(int(P['seed']), bark, green, height=P.get('height', 1), lean=P.get('lean', 0.1), bare=SCENE == 'bare', dense=bool(P.get('dense', 0)), leaf_count=int(P.get('leaf_count', 24000)),
                 crown_shape=(P.get('crown_width', 1), P.get('crown_depth', 1), P.get('crown_height', 1)),

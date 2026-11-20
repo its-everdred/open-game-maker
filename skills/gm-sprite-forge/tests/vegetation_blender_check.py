@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from vegetation_mesh import bush, cluster, conifer, tree
 from vegetation_canopy import make_canopy
 from vegetation_leaves import leaf_clusters
+from vegetation_conifer import conifer_boughs
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bark = bpy.data.materials.new('bark')
@@ -41,6 +42,13 @@ assert len(leafy) == 3 and len(leafy[0].data.vertices) == 40 and len(leafy[0].da
 assert list(leafy[0].data.vertices[0].co) == list(repeat[0].data.vertices[0].co)
 assert list(leafy[0].data.vertices[0].co) != list(different[0].data.vertices[0].co)
 foliage.node_tree.nodes.new('ShaderNodeValToRGB')
+fir = conifer_boughs(7, bark, foliage, height=1, lean=0.1, tiers=4, spokes=5)
+fir_repeat = conifer_boughs(7, bark, foliage, height=1, lean=0.1, tiers=4, spokes=5)
+fir_other = conifer_boughs(8, bark, foliage, height=1, lean=0.1, tiers=4, spokes=5)
+assert len(fir) == 2 and len(fir[1].data.polygons) == 4 * 5 * 4
+assert list(fir[1].data.vertices[2].co) == list(fir_repeat[1].data.vertices[2].co)
+assert list(fir[1].data.vertices[2].co) != list(fir_other[1].data.vertices[2].co)
+assert len(set(face.material_index for face in fir[1].data.polygons)) > 1
 shaded = leaf_clusters(7, foliage, count=3, extent=0.25, leaves_per_cluster=8, shade_variation=True)
 shaded_again = leaf_clusters(7, foliage, count=3, extent=0.25, leaves_per_cluster=8, shade_variation=True)
 assert list(leafy[0].data.vertices[0].co) == list(shaded[0].data.vertices[0].co)

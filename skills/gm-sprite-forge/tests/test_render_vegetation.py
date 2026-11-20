@@ -69,6 +69,23 @@ class RenderVegetationTest(unittest.TestCase):
         self.assertEqual(recipe['agent'], self.metadata['agent'])
         self.assertEqual(len(recipe['rig_sha256']), 64)
 
+    def test_branched_conifer_controls_are_forwarded_and_recorded(self):
+        commands = []
+        def fake_blender(cmd, check):
+            commands.append(cmd)
+            raw = Path(cmd[cmd.index('--') + 2])
+            for view in 'NESW':
+                Image.new('RGBA', (256, 256), (20, 70, 10, 255)).save(raw / f'conifer_{view}.png')
+        with patch('render_vegetation.subprocess.run', side_effect=fake_blender):
+            result = render_variant('conifer', self.root / 'set', 'fir-v1', self.source, self.collection,
+                                    seed=7, branched=True, tiers=10, spokes=6, metadata=self.metadata)
+        self.assertIn('branched=1', commands[0])
+        self.assertIn('tiers=10', commands[0])
+        self.assertIn('spokes=6', commands[0])
+        recipe = json.loads((result / 'recipe.json').read_text())
+        self.assertEqual(recipe['parameters']['tiers'], 10)
+        self.assertEqual(recipe['parameters']['spokes'], 6)
+
     def test_invalid_inputs_do_not_invoke_blender(self):
         with patch('render_vegetation.subprocess.run') as run:
             for kwargs in ({'seed': 1, 'height': 0}, {'seed': 1, 'metadata': {}},
@@ -78,6 +95,9 @@ class RenderVegetationTest(unittest.TestCase):
                            {'seed': 1, 'crown_width': 0, 'metadata': self.metadata},
                            {'seed': 1, 'plant_height': 0, 'metadata': self.metadata},
                            {'seed': 1, 'batch_size': 0, 'metadata': self.metadata},
+                           {'seed': 1, 'branched': True, 'metadata': self.metadata},
+                           {'seed': 1, 'tiers': 1, 'metadata': self.metadata},
+                           {'seed': 1, 'spokes': 2, 'metadata': self.metadata},
                            {'seed': 1, 'batch_radius': -0.1, 'metadata': self.metadata},
                            {'seed': 1, 'leaf_shading': True, 'metadata': self.metadata},
                            {'seed': 1, 'leaves_per_cluster': 65, 'metadata': self.metadata},
