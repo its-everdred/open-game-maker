@@ -47,15 +47,15 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
                    fanout=2, spread_min=0.55, spread_max=0.85, leaf_count=24000,
                    crown_width=1.0, crown_depth=1.0, crown_height=1.0, palette=None,
                    leafy=False, plant_height=0.18, leaves_per_cluster=12, leaf_width=1.0, leaf_shading=False,
-                   batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0, branch_width=1.0, branch_radius=0.07):
+                   batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0, branch_width=1.0, branch_radius=0.07, bush_vertical_scale=1.0):
     """Run a seeded four-view render, then package its finished outputs."""
     output = _outside_packs(output)
     if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
         raise ValueError('invalid scene or variant slug')
     if (not all(math.isfinite(v) for v in (height, lean, canopy_scale, extent, spread_min, spread_max,
-                                            crown_width, crown_depth, crown_height, plant_height, leaf_width, batch_radius, yaw, branch_width, branch_radius))
+                                            crown_width, crown_depth, crown_height, plant_height, leaf_width, batch_radius, yaw, branch_width, branch_radius, bush_vertical_scale))
             or height <= 0 or lean < 0 or canopy_scale <= 0 or extent < 0
-            or min(crown_width, crown_depth, crown_height, plant_height, leaf_width, branch_width, branch_radius) <= 0
+            or min(crown_width, crown_depth, crown_height, plant_height, leaf_width, branch_width, branch_radius, bush_vertical_scale) <= 0
             or not isinstance(leaves_per_cluster, int) or not 1 <= leaves_per_cluster <= 64
             or not isinstance(batch_size, int) or not 1 <= batch_size <= 16 or batch_radius < 0
             or not 0 <= spread_min <= spread_max < 1
@@ -68,6 +68,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
             or (leaf_width != 1.0 and not leafy)
             or (leafy and scene != 'plant') or (dense and scene != 'tree')
             or (branch_width != 1.0 and scene != 'bare')
+            or (bush_vertical_scale != 1.0 and scene != 'bush')
             or (branch_radius != 0.07 and scene not in ('bare', 'tree'))
             or (branched and scene != 'conifer')
             or not isinstance(tiers, int) or not 2 <= tiers <= 24
@@ -91,7 +92,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
               'leaves_per_cluster': leaves_per_cluster, 'leaf_width': leaf_width, 'leaf_shading': int(leaf_shading),
               'batch_size': batch_size, 'batch_radius': batch_radius,
               'branched': int(branched), 'tiers': tiers, 'spokes': spokes, 'yaw0': yaw,
-              'branch_width': branch_width, 'branch_radius': branch_radius, **palette_values}
+              'branch_width': branch_width, 'branch_radius': branch_radius, 'bush_vertical_scale': bush_vertical_scale, **palette_values}
     with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
         raw = Path(temp) / 'raw'
         raw.mkdir()
@@ -126,6 +127,7 @@ def main():
     parser.add_argument('--yaw', type=float, default=0.0)
     parser.add_argument('--branch-width', type=float, default=1.0)
     parser.add_argument('--branch-radius', type=float, default=0.07)
+    parser.add_argument('--bush-vertical-scale', type=float, default=1.0)
     parser.add_argument('--height', type=float, default=1.0)
     parser.add_argument('--lean', type=float, default=0.1)
     parser.add_argument('--canopy-scale', type=float, default=1.0)
@@ -166,7 +168,8 @@ def main():
                             plant_height=args.plant_height, leaves_per_cluster=args.leaves_per_cluster, leaf_width=args.leaf_width,
                             leaf_shading=args.leaf_shading, batch_size=args.batch_size, batch_radius=args.batch_radius,
                             branched=args.branched, tiers=args.tiers, spokes=args.spokes, yaw=args.yaw,
-                            branch_width=args.branch_width, branch_radius=args.branch_radius)
+                            branch_width=args.branch_width, branch_radius=args.branch_radius,
+                            bush_vertical_scale=args.bush_vertical_scale)
     print(result)
 
 

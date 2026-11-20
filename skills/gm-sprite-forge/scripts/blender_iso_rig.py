@@ -290,6 +290,11 @@ def main():
         if not math.isfinite(spread) or spread <= 0:
             raise ValueError('branch_width must be positive and finite')
         root.scale = (spread, spread, 1.0)
+    if SCENE == 'bush':
+        vertical_scale = P.get('bush_vertical_scale', 1.0)
+        if not math.isfinite(vertical_scale) or vertical_scale <= 0:
+            raise ValueError('bush_vertical_scale must be positive and finite')
+        root.scale = (1.0, 1.0, vertical_scale)
     for o in objs:
         o.parent = root
     os.makedirs(OUT, exist_ok=True)

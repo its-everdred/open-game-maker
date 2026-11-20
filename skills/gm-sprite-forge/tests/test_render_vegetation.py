@@ -81,6 +81,20 @@ class RenderVegetationTest(unittest.TestCase):
         recipe = json.loads((result / 'recipe.json').read_text())
         self.assertEqual(recipe['parameters']['leaf_width'], 0.25)
 
+    def test_bush_vertical_scale_is_forwarded_and_recorded(self):
+        commands = []
+        def fake_blender(cmd, check):
+            commands.append(cmd)
+            raw = Path(cmd[cmd.index('--') + 2])
+            for view in 'NESW':
+                Image.new('RGBA', (256, 256), (20, 70, 10, 255)).save(raw / f'bush_{view}.png')
+        with patch('render_vegetation.subprocess.run', side_effect=fake_blender):
+            result = render_variant('bush', self.root / 'set', 'bush-v1', self.source, self.collection,
+                                    seed=7, bush_vertical_scale=1.2, metadata=self.metadata)
+        self.assertIn('bush_vertical_scale=1.2', commands[0])
+        recipe = json.loads((result / 'recipe.json').read_text())
+        self.assertEqual(recipe['parameters']['bush_vertical_scale'], 1.2)
+
     def test_bare_branch_width_is_forwarded_and_recorded(self):
         commands = []
         def fake_blender(cmd, check):
