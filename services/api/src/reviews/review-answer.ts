@@ -27,6 +27,9 @@ export function reviewProblem(cards: readonly { id: string }[], review: CommandR
     if (seen.has(id)) return `card ${id} is judged twice`;
     seen.add(id);
   }
+  for (const { option_id: id } of review.liked_notes ?? []) {
+    if (!known.has(id)) return `note ${id} is not a card of this Command`;
+  }
   return null;
 }
 
@@ -36,7 +39,10 @@ export function reviewPayload(review: CommandReview): string {
   const payload: ReviewAnswerPayload = {
     kind: 'question_answers',
     answers: [
-      ...review.likes.map((option_id) => ({ option_id, verdict: 'like' as const })),
+      ...review.likes.map((option_id) => {
+        const note = review.liked_notes?.find((item) => item.option_id === option_id)?.reason;
+        return { option_id, verdict: 'like' as const, ...(note === undefined ? {} : { note }) };
+      }),
       ...review.dislikes.map(({ option_id, reason }) => ({
         option_id,
         verdict: 'dislike' as const,
@@ -56,7 +62,12 @@ export function reviewDecisionFields(
   optionId: string,
 ): ReviewDecisionFields {
   const label = (id: string) => cards.find(({ id: candidate }) => candidate === id)?.label ?? id;
-  const liked = review.likes.map(label).join(', ');
+  const liked = review.likes
+    .map((id) => {
+      const reason = review.liked_notes?.find((item) => item.option_id === id)?.reason;
+      return reason === undefined ? label(id) : `${label(id)} ('${reason}')`;
+    })
+    .join(', ');
   const disliked = review.dislikes
     .map(({ option_id: id, reason }) => (reason === undefined ? label(id) : `${label(id)} ('${reason}')`))
     .join(', ');

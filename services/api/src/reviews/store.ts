@@ -20,7 +20,10 @@ export type RecordReviewInput = {
 // A review answer lands in the game's ledger beside the decision it answered. Repeating the same answer for the same
 // Command records nothing, so a retried request cannot write the creator's reasons twice.
 export function recordReview(db: Db, input: RecordReviewInput): CommandReviewEntry | null {
-  const likes = cards(input.command, input.review.likes);
+  const likes = cards(input.command, input.review.likes).map((like) => {
+    const reason = input.review.liked_notes?.find(({ option_id }) => option_id === like.option_id)?.reason;
+    return reason === undefined ? like : { ...like, note: reason };
+  });
   const dislikes = input.review.dislikes.map(({ option_id: id, reason }) => ({
     ...card(input.command, id),
     reason: reason ?? null,
