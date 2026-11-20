@@ -61,6 +61,9 @@ class RenderVegetationTest(unittest.TestCase):
         self.assertTrue(recipe['ai_generated'])
         self.assertEqual(recipe['agent'], self.metadata['agent'])
         self.assertEqual(len(recipe['rig_sha256']), 64)
+        self.assertIn('vegetation_mesh.py', recipe['generator_sha256'])
+        self.assertIn('finish.py', recipe['generator_sha256'])
+        self.assertTrue(all(len(value) == 64 for value in recipe['generator_sha256'].values()))
 
     def test_branched_conifer_controls_are_forwarded_and_recorded(self):
         commands = []

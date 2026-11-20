@@ -16,6 +16,9 @@ import tempfile
 from vegetation_export import _outside_packs, export, validate_source
 
 RIG = Path(__file__).with_name('blender_iso_rig.py')
+GENERATOR_FILES = ('render_vegetation.py', 'blender_iso_rig.py', 'vegetation_mesh.py', 'vegetation_layout.py',
+                   'vegetation_canopy.py', 'vegetation_leaves.py', 'vegetation_conifer.py',
+                   'vegetation_export.py', 'vegetation_card.py', 'finish.py', 'spritemetrics.py')
 SCENES = ('tree', 'bare', 'conifer', 'bush', 'plant')
 BANDS = ('hi', 'mid', 'lo')
 
@@ -98,6 +101,8 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
             shutil.copyfile(raw / f'{scene}_{view}.png', normalized / f'{view}.png')
         recipe = {**metadata, 'generator': 'gm-sprite-forge', 'scene': scene, 'rig': RIG.name,
                   'rig_sha256': hashlib.sha256(RIG.read_bytes()).hexdigest(),
+                  'generator_sha256': {name: hashlib.sha256(RIG.with_name(name).read_bytes()).hexdigest()
+                                       for name in GENERATOR_FILES},
                   'parameters': params, 'directions': list('NESW'),
                   'materials': {'palette': palette, 'default': 'autumn' if autumn else 'green',
                                 'shading': 'stepped toon foliage and bark'}}
