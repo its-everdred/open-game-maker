@@ -2,6 +2,12 @@
 
 These observations describe the studied packs, not universal rules for pixel art. Measurements came from the 2026-11-19 sprite pipeline study. `study.py` is the research script; `measure_sheet.py` and its shared `spritemetrics.py` are in this skill. The research also used `blender_iso_rig.py` and `carve_hull.py` to verify the projection.
 
+## Knight rebuild: approved visual round
+
+Kevin marked round 74 of the Knight 64 Walk rebuild as matching. Its experimental camera fit used a 50° tilt and 45° yaw, with an orthographic span of approximately 2.83 world units. The light setup used a 65° elevation, -30° azimuth relative to camera yaw, and sun strength 3. The shadowless sheet has eight directions and 15 frames per direction in 64 px cells. These are settings for this particular hand-built rig, not a replacement for the measured projection below.
+
+The visual verdict does not imply the quantitative gates passed. Round 74 measured silhouette IoU 0.636 (target ≥ 0.80), pixel similarity 0.803 (≥ 0.93), palette distance 0.868 (≤ 6), edge F1 0.807 (≥ 0.60), and luminance histogram distance 0.591 (≤ 0.25). Frame counts matched. Motion correlations by direction E, SE, S, SW, W, NW, N, NE were 0.385, 0.540, 0.512, 0.677, 0.588, 0.583, 0.836, 0.556 (target ≥ 0.70 in every direction). The local experiment holds the generated sheet, rig and comparison media under `assets-local/experiments/sprite-pipeline/knight-1012/`; library files are not committed.
+
 - **Projection:** Ground A1 has a 128 × 64 px diamond in a 256 px image, with origin (128, 208). The orthographic camera is 60° from vertical and yaw 45°; the tile is 16 px thick. The tile silhouette was measured by `study.py` using `spritemetrics.py`; projection was checked with `blender_iso_rig.py` and `carve_hull.py`.
 - **Sheets:** Knight 64 uses 64 px cells in a 960 × 512 sheet; Goblin 01 uses 128 px cells in a 1920 × 1024 sheet. Both have 15 columns and 8 direction rows. Rows are E, SE, S, SW, W, NW, N, NE, matched against the named angle folders. Measured with `measure_sheet.py` and `study.py`.
 - **Characters:** Knight 64 Walk Shadowless has 27 sheet colours, binary alpha, a typical 14 × 22 px bounding box and foot y 42. Goblin 01 Walk has 374 sheet colours, a typical 29 × 34 px box and foot y 90. Measured with `measure_sheet.py` / `spritemetrics.py` and summarized by `study.py`.
