@@ -13,6 +13,7 @@ import { hostQaCleanup } from '../../qa-new-game-cleanup-host.js';
 import { qaGitHubRequest } from '../../qa-new-game-gh-request.js';
 import { QaCreateFenceClient } from '../../qa-new-game-fence.js';
 import { newGameParents } from '../../qa-new-game-github.js';
+import { readNewGameDecisionInventory } from '../../qa-new-game-decisions.js';
 import { runNewGameQa, type NewGameCaptureResult } from '../../qa-new-game-run.js';
 import { newGameViewport } from '../../qa-new-game-viewport.js';
 import { verifyNewGame } from '../../qa-new-game-verify.js';
@@ -188,8 +189,17 @@ export const command: GmCommand = {
                     out,
                     viewport,
                     onCreated: created,
-                    verify: (page, gameId, requestId) =>
-                      verifyNewGame(page, gameId, requestId, repo, api, (r, id) => newGameParents(r, id, request)),
+                    verify: (page, gameId, requestId, finishedAt) =>
+                      verifyNewGame(
+                        page,
+                        gameId,
+                        requestId,
+                        repo,
+                        api,
+                        (r, id) => newGameParents(r, id, request),
+                        (r, slug) => readNewGameDecisionInventory(r, slug, request),
+                        finishedAt,
+                      ),
                     // The durable manifest owns cleanup after the browser slot has been released.
                     cleanup: async () => undefined,
                   });

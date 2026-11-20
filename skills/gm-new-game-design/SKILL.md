@@ -76,17 +76,37 @@ raw words, voice transcript and pastes in private storage only; the spec and eve
 summary and an opaque reference.
 
 A detail you did not ask because a default covers it is still the creator's to decide later: list it under the
-spec's open questions with its default. The Executor turns the decision log and every open question into the game's
-decision inventory (`../gm-core/references/decision-inventory.md`), so nothing you heard or assumed is decided silently.
+spec's open questions with its default. The initial decision inventory is created in this scope job before it is
+finished; the Executor later expands it from the full plan and deep dives. Nothing you heard or assumed is decided
+silently.
 
 ## Finish
 
-When the player says it's ready, or the important decisions are answered or defaulted, write the spec using
-`references/spec-template.md` and hand it to the Executor (the new-game parent issue's private context). The Executor
-plans the whole game with `gm-new-game-plan`; you do not create tickets. The spec's loops and screens
-are the first draft of the game's flow diagram (`../gm-new-game-plan/references/flow-diagram.md`).
+When the player says it's ready, or the important decisions are answered or defaulted, complete the following in
+order before finishing the scope ticket:
+
+1. Write the spec using `references/spec-template.md` and preserve the decision log, open questions and defaults.
+2. Create the first `docs/<slug>/decisions.json` inventory from the form choices, private scope conversation,
+   transcript and attachments, spec decision log, and open questions. Keep raw player words and transcripts in private
+   storage; `sources` must be privacy-safe summaries. Include at least 15 distinct player-facing decisions spanning at
+   least five areas. Include every important open choice and every settled choice as `answered`.
+3. Make at least the first five decisions immediately reviewable. Use real asset pack lineups and existing media from
+   `gm assets search` / `gm assets sheet` where they fit; attach a still or clip to every option. Do not use generated
+   stand-ins when the packs contain suitable assets. Keep later or unavailable media options `media_needed` and open;
+   never raise those until every option has real media. Do not ask about engine, libraries, packages, implementation,
+   data structures, or other engineering choices.
+4. Run `gm decisions render` and `gm decisions check --game <slug>`. Raise five to eight open, media-backed decisions
+   with `gm decisions raise <id>` while this scope job is current. Confirm the Commands are visible in the game's
+   queue, then finish the scope ticket with `gm scope done`.
+5. Hand the spec and opaque private-context reference to the Executor. The Executor runs `gm-new-game-plan`, merges
+   the fuller plan and deep-dive decisions into this inventory, and continues raising later batches as real media is
+   ready. The spec's loops and screens are the first draft of the game's flow diagram
+   (`../gm-new-game-plan/references/flow-diagram.md`).
+
+Use `../gm-core/references/decision-inventory.md` as the canonical inventory contract; `decisions.md` is rendered, not
+hand edited.
 
 A spec is complete when the Executor can plan without a second interview: core loop, controls, camera, world and
 levels, progression, win and loss, the features that climb the prototype ladder (the screens and moments the creator
 reviews, each with its flow node), acceptance criteria, and the open questions with their defaults. Characters, style picks, UI and audio may hold only a direction: their stages decide
-them later.
+them later. The first inventory is an initial review batch, not a promise that every later-stage detail is ready.

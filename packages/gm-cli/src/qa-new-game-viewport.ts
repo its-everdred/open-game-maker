@@ -15,7 +15,7 @@ export type NewGameViewportConfig = {
   out: string;
   viewport: Viewport;
   onCreated?: (game: CreatedGame) => Promise<void>;
-  verify: (page: Page, gameId: string, requestId: string) => Promise<void>;
+  verify: (page: Page, gameId: string, requestId: string, finishedAt: number) => Promise<void>;
   cleanup: (game: CreatedGame) => Promise<void>;
 };
 
@@ -65,7 +65,7 @@ export async function newGameViewport(
       await config.onCreated?.(value);
       game = value;
     });
-    await config.verify(page, result.gameId, result.requestId);
+    await config.verify(page, result.gameId, result.requestId, result.finishedAt);
     await still('progress');
   } catch (error) {
     failures.push(error instanceof Error ? error.message.split('\n')[0]! : 'browser run failed');

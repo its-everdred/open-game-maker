@@ -116,11 +116,26 @@ describe('decision inventory and prototype review', () => {
 
   it('makes planning write the inventory before queueing and stamp its ids on every ticket', () => {
     const plan = read('./SKILL.md');
-    expect(plan).toContain('**Decision inventory (required).** Before queueing any ticket');
+    expect(plan).toContain(
+      '**Decision inventory (required).** The scope job has already committed an initial inventory',
+    );
+    expect(plan).toContain('Before queueing any ticket, merge into');
+    expect(plan).toContain('gm decisions answer <id> <label>');
+    expect(plan).toContain('Run `gm plan premises` with the current issue list and decision history');
     expect(plan).toContain('a `## Creator decisions` section listing the inventory ids');
     expect(plan).toContain(`\`${REF}\``);
     expect(read('../gm-scope-options/SKILL.md')).toContain("## List the feature's decisions");
     expect(read('../gm-new-game-design/SKILL.md')).toContain(REF);
+  });
+
+  it('raises the first media-backed review batch in the scope job before planning and keeps player words private', () => {
+    const design = read('../gm-new-game-design/SKILL.md');
+    expect(design).toContain('before finishing the scope ticket');
+    expect(design).toContain('at least 15 distinct player-facing decisions');
+    expect(design).toContain('at least five areas');
+    expect(design).toContain('Raise five to eight open, media-backed decisions');
+    expect(design).toContain('Keep raw player words and transcripts in private');
+    expect(design).toContain('Do not ask about engine, libraries, packages, implementation');
   });
 
   it('makes every worker raise open decisions first, build the recommendation and never decide silently', () => {
