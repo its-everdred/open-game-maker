@@ -544,7 +544,15 @@ describe('verdicts reaching aiur', () => {
       ],
     });
     expect(
-      commandReached(receipt([{ option_id: 'b', verdict: 'like' }, { option_id: 'a', verdict: 'like' }], PICK_NOTE)),
+      commandReached(
+        receipt(
+          [
+            { option_id: 'b', verdict: 'like' },
+            { option_id: 'a', verdict: 'like' },
+          ],
+          PICK_NOTE,
+        ),
+      ),
     ).toBe('the Command answer is not B with its note');
     expect(commandReached(receipt([{ option_id: 'b', verdict: 'like' }]))).toBe(
       'the Command answer is not B with its note',
