@@ -148,6 +148,26 @@ class Library(unittest.TestCase):
         self.assertEqual(set_provenance["by"], "code")
         self.assertEqual(set_provenance["input"], "packages/asset-cards/data/style-families.json")
 
+    def test_owner_confirmed_audio_licence_builds_a_private_local_collection_card(self):
+        pack = add_pack(
+            self.root,
+            "drive-barbarian-chiptune",
+            "kevin",
+            "unknown-owned",
+            {"01.wav": b"RIFF"},
+            ver="v1",
+        )
+
+        report = bcc.run(self.root, only="drive-barbarian-chiptune")
+
+        self.assertEqual(report["failures"], {})
+        self.assertTrue(validator_ok(pack / "collection.card.json"))
+        card = card_of(self.root, "drive-barbarian-chiptune")
+        self.assertEqual(card["license"], "LicenseRef-kevin-owned")
+        self.assertEqual(card["rights"]["audience"], "private")
+        self.assertEqual(card["rights"]["redistribution"], "in-build")
+        self.assertEqual(card["rights"]["processing"], "local-only")
+
     def test_untagged_pack_is_a_draft_seeded_from_its_title(self):
         """No describe tags are invented for packs the tags file does not cover."""
         bcc.run(self.root)

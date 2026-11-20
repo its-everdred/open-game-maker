@@ -69,6 +69,16 @@ describe('search', () => {
     expect(ids({ words: [], kind: 'audio', includeDraft: true })).toEqual([LOOP, DRAFT_LOOP, MUSIC]);
   });
 
+  it('includes measured audio and labels it low-confidence in search rows', () => {
+    const base = index.cards.find((card) => card.id === LOOP);
+    if (!base) throw new Error('fixture music loop missing');
+    const measured = { ...base, status: 'measured' as const };
+
+    expect(statusAllowed('audio', 'measured')).toBe(true);
+    expect(search({ ...index, cards: [measured] }, { words: [] })).toEqual([measured]);
+    expect(formatRow(measured)).toContain('measured [low-confidence]');
+  });
+
   it('hides every card in a quarantined collection, even with --include-draft and a matching use', () => {
     expect(ids({ words: ['door'], use: 'vision-input', includeDraft: true })).not.toContain(QUARANTINED);
     expect(ids({ words: [], use: 'vision-input', includeDraft: true })).not.toContain(
@@ -367,7 +377,7 @@ describe('statusAllowed', () => {
   it('encodes the per-kind defaults', () => {
     expect(statusAllowed('model', 'draft')).toBe(true);
     expect(statusAllowed('sprite', 'draft')).toBe(true);
-    expect(statusAllowed('audio', 'measured')).toBe(false);
+    expect(statusAllowed('audio', 'measured')).toBe(true);
     expect(statusAllowed('inspiration', 'draft')).toBe(false);
     expect(statusAllowed('texture', 'measured')).toBe(true);
     expect(statusAllowed('texture', 'draft')).toBe(false);
