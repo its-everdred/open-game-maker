@@ -90,6 +90,106 @@ it('discovers an open creator Command through the production game inbox', async 
   expect(JSON.parse(String(notification!.data!.keys))).toContain(`command:${GAME}:${DECISION_ID}:2`);
 });
 
+it('limits review-ready notifications to one per ticket per ten minutes', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const row = {
+    gameId: GAME,
+    track: 'art',
+    phase: 'mock',
+    category: 'art' as const,
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: NOW,
+  };
+  postRound(deps.db, { ...row, id: 'first' });
+  const deliver = vi.fn(async () => {});
+  let now = new Date('2026-11-05T00:00:00Z');
+  const notify = createReadyReviewNotifier(deps, { commands: async () => [], deliver, now: () => now });
+  await notify();
+  postRound(deps.db, { ...row, id: 'replacement', round: 2, postedAt: '2026-11-05T00:02:00.000Z' });
+  now = new Date('2026-11-05T00:05:00Z');
+  await notify();
+  expect(deliver).toHaveBeenCalledOnce();
+  now = new Date('2026-11-05T00:10:01Z');
+  await notify();
+  expect(deliver).toHaveBeenCalledTimes(2);
+});
+
+it('keeps same-numbered tickets in separate games on independent cooldowns', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  const otherGame = 'g_9f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e98';
+  deps.db
+    .insert(schema.games)
+    .values({
+      id: otherGame,
+      familyId: FAMILY,
+      ownerId: OWNER,
+      title: 'Other',
+      visibility: 'private',
+      repoVisibility: 'private',
+      createdAt: NOW,
+    })
+    .run();
+  const row = {
+    track: 'art',
+    phase: 'mock',
+    category: 'art' as const,
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: NOW,
+  };
+  postRound(deps.db, { ...row, gameId: GAME, id: 'first' });
+  const deliver = vi.fn(async () => {});
+  const notify = createReadyReviewNotifier(deps, { commands: async () => [], deliver });
+  await notify();
+  postRound(deps.db, { ...row, gameId: otherGame, id: 'other-game' });
+  await notify();
+  expect(deliver).toHaveBeenCalledTimes(2);
+  const [secondNotification, firstNotification] = listNotifications(deps.sqlite, OWNER, {});
+  expect(JSON.parse(String(firstNotification!.data!.ticketKeys))).toEqual([`${GAME}:42`]);
+  expect(JSON.parse(String(secondNotification!.data!.ticketKeys))).toEqual([`${otherGame}:42`]);
+});
+
+it('batches round and Command notifications for the same ticket', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  postRound(deps.db, {
+    id: 'round-42',
+    gameId: GAME,
+    track: 'art',
+    phase: 'mock',
+    category: 'art',
+    round: 1,
+    ticket: '42',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: NOW,
+  });
+  let now = new Date('2026-11-05T00:00:00Z');
+  const deliver = vi.fn(async () => {});
+  const notify = createReadyReviewNotifier(deps, {
+    commands: async () => [{ decision_id: 'decision-42', version: 1, ticket: '42' }],
+    deliver,
+    now: () => now,
+  });
+  await notify();
+  const [notification] = listNotifications(deps.sqlite, OWNER, {});
+  expect(JSON.parse(String(notification!.data!.keys))).toEqual([
+    `round:${GAME}:round-42`,
+    `command:${GAME}:decision-42:1`,
+  ]);
+  expect(JSON.parse(String(notification!.data!.ticketKeys))).toEqual([`${GAME}:42`]);
+  now = new Date('2026-11-05T00:10:01Z');
+  await notify();
+  expect(deliver).toHaveBeenCalledOnce();
+});
+
 it('still notifies for rounds when a game command scan fails and retries the scan later', async () => {
   const deps = makeDeps();
   seedDesignGame(deps);

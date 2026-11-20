@@ -24,6 +24,21 @@ it('offers playback for an audio mock', () => {
   expect(screen.getByLabelText('Review audio').getAttribute('src')).toBe('/cue.wav');
 });
 
+it('marks a replacement review round as new while the screen is open', async () => {
+  const { rerender } = render(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews gameId="game" rounds={[{ id: 'first', ticket: '42', question: null, media: [] }]} />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByText('New round')).toBeNull();
+  rerender(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews gameId="game" rounds={[{ id: 'replacement', ticket: '42', question: null, media: [] }]} />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('New round')).toBeVisible();
+});
+
 it('shows a named concept target beside the submitted image', () => {
   render(
     <QueryClientProvider client={queryClient}>
