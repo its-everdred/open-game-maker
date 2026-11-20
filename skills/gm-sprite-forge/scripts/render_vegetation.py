@@ -21,13 +21,20 @@ SCENES = ('tree', 'bare', 'conifer', 'bush', 'plant')
 
 def render_variant(scene, output, slug, source_card, source_collection, *, seed, height=1.0,
                    lean=0.1, canopy_scale=1.0, levels=2, count=6, extent=0.2,
-                   samples=8, dense=False, autumn=False, shadows=True, metadata=None):
+                   samples=8, dense=False, autumn=False, shadows=True, metadata=None,
+                   fanout=2, spread_min=0.55, spread_max=0.85, leaf_count=24000,
+                   crown_width=1.0, crown_depth=1.0, crown_height=1.0):
     """Run a seeded four-view render, then package its finished outputs."""
     output = _outside_packs(output)
     if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
         raise ValueError('invalid scene or variant slug')
-    if (not all(math.isfinite(v) for v in (height, lean, canopy_scale, extent))
+    if (not all(math.isfinite(v) for v in (height, lean, canopy_scale, extent, spread_min, spread_max,
+                                            crown_width, crown_depth, crown_height))
             or height <= 0 or lean < 0 or canopy_scale <= 0 or extent < 0
+            or min(crown_width, crown_depth, crown_height) <= 0
+            or not 0 <= spread_min <= spread_max < 1
+            or not isinstance(fanout, int) or not 1 <= fanout <= 4
+            or not isinstance(leaf_count, int) or not 1 <= leaf_count <= 100000
             or not isinstance(levels, int) or not 0 <= levels <= 5
             or not isinstance(count, int) or not 1 <= count <= 100
             or not isinstance(samples, int) or not 1 <= samples <= 256
@@ -43,7 +50,10 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
         raise FileExistsError(f'variant already exists: {output / slug}')
     params = {'seed': seed, 'height': height, 'lean': lean, 'canopy_scale': canopy_scale,
               'levels': levels, 'count': count, 'extent': extent, 'samples': samples,
-              'dense': int(dense), 'autumn': int(autumn), 'shadows': int(shadows)}
+              'dense': int(dense), 'autumn': int(autumn), 'shadows': int(shadows),
+              'fanout': fanout, 'spread_min': spread_min, 'spread_max': spread_max,
+              'leaf_count': leaf_count, 'crown_width': crown_width, 'crown_depth': crown_depth,
+              'crown_height': crown_height}
     with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
         raw = Path(temp) / 'raw'
         raw.mkdir()
@@ -78,6 +88,13 @@ def main():
     parser.add_argument('--count', type=int, default=6)
     parser.add_argument('--extent', type=float, default=0.2)
     parser.add_argument('--samples', type=int, default=8)
+    parser.add_argument('--fanout', type=int, default=2)
+    parser.add_argument('--spread-min', type=float, default=0.55)
+    parser.add_argument('--spread-max', type=float, default=0.85)
+    parser.add_argument('--leaf-count', type=int, default=24000)
+    parser.add_argument('--crown-width', type=float, default=1.0)
+    parser.add_argument('--crown-depth', type=float, default=1.0)
+    parser.add_argument('--crown-height', type=float, default=1.0)
     parser.add_argument('--dense', action='store_true')
     parser.add_argument('--autumn', action='store_true')
     parser.add_argument('--shadowless', action='store_true')
@@ -87,7 +104,9 @@ def main():
                             seed=args.seed, height=args.height, lean=args.lean, canopy_scale=args.canopy_scale,
                             levels=args.levels, count=args.count, extent=args.extent, samples=args.samples,
                             dense=args.dense, autumn=args.autumn, shadows=not args.shadowless,
-                            metadata=json.loads(args.metadata.read_text()))
+                            metadata=json.loads(args.metadata.read_text()), fanout=args.fanout,
+                            spread_min=args.spread_min, spread_max=args.spread_max, leaf_count=args.leaf_count,
+                            crown_width=args.crown_width, crown_depth=args.crown_depth, crown_height=args.crown_height)
     print(result)
 
 
