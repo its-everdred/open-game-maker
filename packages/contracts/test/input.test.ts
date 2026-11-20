@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { actionFrameSchema, viewIdSchema } from '../src/input.js';
+import { actionFrameSchema, rigInputMappingSchema, viewIdSchema } from '../src/input.js';
 import { loadJson } from './helpers.js';
 import { emittedValidator } from './json-schema.js';
 
@@ -24,6 +24,13 @@ describe('input contract', () => {
     expect(actionFrameSchema.safeParse({ ...frame(), actions }).success).toBe(false);
     delete actions.a32;
     expect(actionFrameSchema.safeParse({ ...frame(), actions }).success).toBe(true);
+  });
+
+  it('validates optional pointer button mappings', () => {
+    const mapping = { keyboard: {}, touch: 'stick', gamepad: {}, pointerLock: false };
+    expect(rigInputMappingSchema.safeParse({ ...mapping, pointer: { buttons: { '0': 'attack' } } }).success).toBe(true);
+    expect(rigInputMappingSchema.safeParse({ ...mapping, pointer: { buttons: { '0': 1 } } }).success).toBe(false);
+    expect(rigInputMappingSchema.safeParse(mapping).success).toBe(true);
   });
 
   it('rejects unknown sources and views', () => {

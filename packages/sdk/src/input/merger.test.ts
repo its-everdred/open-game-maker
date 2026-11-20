@@ -117,6 +117,63 @@ describe('InputMerger', () => {
     expect(merger.sample(1)).toEqual([{ playerIndex: 1, tick: 1, source: 'keyboard', actions: {} }]);
   });
 
+  it('does not replay stale directional vectors after other keys change', () => {
+    const { canvas, merger } = setup();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }));
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyA' }));
+    expect(merger.sample(0)[0]!.actions.move).toEqual({ x: -1, y: 0 });
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS' }));
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }));
+    expect(merger.sample(1)[0]!.actions.move).toEqual({ x: 0, y: -1 });
+    merger.setKeyboardMapping({ KeyW: 'move.up', KeyJ: 'jump' });
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    merger.sample(2);
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' }));
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }));
+    expect(merger.sample(3)[0]!.actions.move).toBeUndefined();
+  });
+
+  it('keeps opposing held directions neutral', () => {
+    const { canvas, merger } = setup();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }));
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyA' }));
+    expect(merger.sample(0)[0]!.actions.move).toEqual({ x: -1, y: 0 });
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS' }));
+    expect(merger.sample(1)[0]!.actions.move).toEqual({ x: 0, y: 0 });
+  });
+
+  it('latches a directional key tapped between samples', () => {
+    const { canvas, merger } = setup();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }));
+    expect(merger.sample(1)[0]!.actions.move).toEqual({ x: 0, y: 1 });
+    expect(merger.sample(2)[0]!.actions.move).toBeUndefined();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    merger.sample(3);
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }));
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyA' }));
+    expect(merger.sample(4)[0]!.actions.move).toEqual({ x: -1, y: 1 });
+    expect(merger.sample(5)[0]!.actions.move).toEqual({ x: 0, y: 1 });
+  });
+
+  it('latches short keyboard and host presses once while preserving held keys', () => {
+    const { canvas, host, merger } = setup();
+    merger.setKeyboardMapping({ KeyJ: 'jump' });
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' }));
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyJ' }));
+    host({ playerIndex: 0, tick: 0, source: 'gamepad', actions: { fire: true } });
+    host({ playerIndex: 0, tick: 1, source: 'gamepad', actions: { fire: false } });
+    expect(merger.sample(1)[0]!.actions).toEqual({ jump: true, fire: true });
+    expect(merger.sample(2)[0]!.actions).toEqual({ fire: false });
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' }));
+    expect(merger.sample(3)[0]!.actions.jump).toBe(true);
+    expect(merger.sample(4)[0]!.actions.jump).toBe(true);
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyJ' }));
+    expect(merger.sample(5)[0]!.actions.jump).toBeUndefined();
+  });
+
   it('forwards Escape as a raw key without producing an action', () => {
     const { canvas, merger, send } = setup();
     canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
