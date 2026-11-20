@@ -122,6 +122,30 @@ function wav(): Buffer {
   return bytes;
 }
 
+function noiseWav(seconds: number, seed: number): Buffer {
+  const sampleRate = 44_100;
+  const samples = sampleRate * seconds;
+  const dataBytes = samples * 2;
+  const bytes = Buffer.alloc(44 + dataBytes);
+  bytes.write('RIFF', 0);
+  bytes.writeUInt32LE(36 + dataBytes, 4);
+  bytes.write('WAVEfmt ', 8);
+  bytes.writeUInt32LE(16, 16);
+  bytes.writeUInt16LE(1, 20);
+  bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(sampleRate, 24);
+  bytes.writeUInt32LE(sampleRate * 2, 28);
+  bytes.writeUInt16LE(2, 32);
+  bytes.writeUInt16LE(16, 34);
+  bytes.write('data', 36);
+  bytes.writeUInt32LE(dataBytes, 40);
+  for (let index = 0; index < samples; index += 1) {
+    seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
+    bytes.writeInt16LE((seed >>> 16) - 32_768, 44 + index * 2);
+  }
+  return bytes;
+}
+
 async function glb(width: number, height: number, texture?: Buffer, rigged = false, animated = false): Promise<Buffer> {
   const document = new Document();
   const buffer = document.createBuffer();
@@ -539,23 +563,63 @@ describe('gm build assets', () => {
     writeAsset(cwd, 'assets/image/a.png', await png(16, 16));
     writeLock(cwd, [{ id: 't3:fixture/a', path: 'assets/image/a.png' }]);
     updateLockEntry(cwd, 't3:fixture/a', { phase: 'lazy:backdrop-nim' });
-    mkdirSync(join(cwd, '.gm'), { recursive: true });
-    writeFileSync(join(cwd, '.gm/game.json'), JSON.stringify({ budgets: { lazy: { backdrop: { mobile: 0 } } } }));
-    const first = await gm(['build', 'assets', '--json'], { cwd, env: {} });
+    writeFileSync(join(cwd, 'gm.manifest.json'), JSON.stringify({ assetBudgets: { lazy: { backdrop: { mobile: 0 } } } }));
+    const first = await gm(['build', 'assets'], { cwd, env: {} });
     expect(first.code).toBe(1);
-    const output = JSON.parse(first.out[0]!) as {
-      manifest: AssetManifest;
-      reports: Array<{ tier: string; phase?: string; bytes: number; exceeded: Array<{ metric: string }> }>;
+    expect(first.err.join('\n')).toContain('gm.manifest.json assetBudgets.lazy.backdrop.mobile');
+    const jsonFirst = await gm(['build', 'assets', '--json'], { cwd, env: {} });
+    const jsonReport = JSON.parse(jsonFirst.out[0]!) as {
+      reports: Array<{ tier: string; phase: string; setting?: string }>;
     };
-    expect(output.manifest.assets['t3:fixture/a']?.phase).toBe('lazy:backdrop-nim');
-    expect(output.reports.find((r) => r.tier === 'mobile' && r.phase === 'boot')?.bytes).toBe(0);
+    expect(jsonReport.reports.find((report) => report.tier === 'mobile' && report.phase === 'lazy:backdrop-nim')?.setting).toBe(
+      'gm.manifest.json assetBudgets.lazy.backdrop.mobile',
+    );
+    const manifest = JSON.parse(readFileSync(join(cwd, 'public/assets/manifest.json'), 'utf8')) as AssetManifest;
+    const reports = JSON.parse(readFileSync(join(cwd, 'public/assets/budget.json'), 'utf8')) as Array<{
+      tier: string;
+      phase?: string;
+      bytes: number;
+      exceeded: Array<{ metric: string }>;
+    }>;
+    expect(manifest.assets['t3:fixture/a']?.phase).toBe('lazy:backdrop-nim');
+    expect(reports.find((r) => r.tier === 'mobile' && r.phase === 'boot')?.bytes).toBe(0);
     expect(
-      output.reports.find((r) => r.tier === 'mobile' && r.phase === 'lazy:backdrop-nim')?.exceeded.map((x) => x.metric),
+      reports.find((r) => r.tier === 'mobile' && r.phase === 'lazy:backdrop-nim')?.exceeded.map((x) => x.metric),
     ).toContain('bytes');
-    writeFileSync(join(cwd, '.gm/game.json'), JSON.stringify({ budgets: { lazy: { backdrop: { mobile: 100000 } } } }));
+    writeFileSync(join(cwd, 'gm.manifest.json'), JSON.stringify({ assetBudgets: { lazy: { backdrop: { mobile: 100000 } } } }));
     const second = await gm(['build', 'assets', '--json'], { cwd, env: {} });
     expect(second.code).toBe(0);
   });
+
+  it.skipIf(!ffmpegAvailable)('builds a 3 MiB streamed music group with a tracked budget', async () => {
+    const cwd = tempDir('gm-build-music-budget-');
+    const assets = [0, 1, 2].map((index) => {
+      const path = `assets/audio/music-${index}.wav`;
+      writeAsset(cwd, path, noiseWav(120, index + 1));
+      return { id: `t3:fixture/music-${index}`, path };
+    });
+    writeLock(cwd, assets);
+    for (const asset of assets) updateLockEntry(cwd, asset.id, { phase: 'lazy:music-loop' });
+
+    const withoutSetting = await gm(['build', 'assets'], { cwd, env: {} });
+    expect(withoutSetting.code).toBe(1);
+    expect(withoutSetting.err.join('\n')).toContain('gm.manifest.json assetBudgets.lazy.music.mobile');
+    const failedReports = JSON.parse(readFileSync(join(cwd, 'public/assets/budget.json'), 'utf8')) as Array<{
+      tier: string;
+      phase: string;
+      bytes: number;
+    }>;
+    expect(failedReports.find((report) => report.tier === 'mobile' && report.phase === 'lazy:music-loop')?.bytes).toBeGreaterThan(
+      3 * 1024 * 1024,
+    );
+
+    writeFileSync(
+      join(cwd, 'gm.manifest.json'),
+      JSON.stringify({ assetBudgets: { lazy: { music: { mobile: 8 * 1024 * 1024 } } } }),
+    );
+    const withSetting = await gm(['build', 'assets', '--json'], { cwd, env: {} });
+    expect(withSetting.code).toBe(0);
+  }, 120_000);
 
   it.skipIf(toktxAvailable)('exits 2 and names toktx when --ktx2 cannot find the tool', async () => {
     const result = await gm(['build', 'assets', '--ktx2'], { env: {} });

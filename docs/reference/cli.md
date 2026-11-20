@@ -391,6 +391,11 @@ Models receive tiered geometry and texture limits; small prop collections that s
 combined into a single kit GLB. Sprite and pixel-art images keep their source dimensions and use lossless WebP
 encoding.
 
+Lazy groups in `assets.lock.json` are budgeted independently. Set tracked overrides in `gm.manifest.json` under
+`assetBudgets.lazy.<group>` with `mobile` and/or `desktop` byte counts. Stream-only music/voice groups allow up to 32 MiB
+on mobile/low and 64 MiB on desktop; groups with preloaded assets allow 1.5 MiB and 4 MiB. `budget.json` reports measured bytes
+and the selected build budget fails when a group exceeds its limit.
+
 A sprite card that lists several sheets — a SmallScaleInt character's action sheets, for instance — publishes every
 sheet its `meta.sprite` names, not only the primary file. Each one appears in the manifest's `files` record and in the
 cache plan under the asset's id, and the manifest's `meta.sprite` paths are rewritten from the card's own sheet paths

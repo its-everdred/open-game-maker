@@ -62,7 +62,8 @@ function printReports(ctx: Parameters<GmCommand['run']>[0], reports: AssetBudget
       `${report.tier} ${report.phase ?? 'boot'}  ${report.bytes}  ${report.files}  ${report.tris}  ${report.gpuTexMB.toFixed(2)}  ${report.maxTexture}`,
     );
     for (const item of report.tier === budgetTier ? report.exceeded : []) {
-      ctx.err(`${report.tier} budget exceeded: ${report.phase ?? 'boot'} ${item.metric} ${item.value} > ${item.limit}`);
+      const setting = report.setting ? ` (set ${report.setting})` : '';
+      ctx.err(`${report.tier} budget exceeded: ${report.phase ?? 'boot'} ${item.metric} ${item.value} > ${item.limit}${setting}`);
     }
   }
 }
@@ -199,10 +200,10 @@ export const command: GmCommand = {
     );
     let lazyBudgets: Record<string, { mobile?: number; desktop?: number }> = {};
     try {
-      const game = JSON.parse(await readFile(join(ctx.cwd, '.gm/game.json'), 'utf8')) as {
-        budgets?: { lazy?: typeof lazyBudgets };
+      const game = JSON.parse(await readFile(join(ctx.cwd, 'gm.manifest.json'), 'utf8')) as {
+        assetBudgets?: { lazy?: typeof lazyBudgets };
       };
-      lazyBudgets = game.budgets?.lazy ?? {};
+      lazyBudgets = game.assetBudgets?.lazy ?? {};
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -217,16 +218,24 @@ export const command: GmCommand = {
     const reports = tiers.flatMap((tier) =>
       phases.map((phase) => {
         const group = phase.slice('lazy:'.length);
-        const configured = lazyBudgets[group] ?? lazyBudgets[group.split('-')[0]!];
+        const groupKey = lazyBudgets[group] ? group : group.split('-')[0]!;
+        const configured = lazyBudgets[groupKey];
+        const groupEntries = cachePlan.entries.filter((entry) => entry.ids?.some((id) => manifest.assets[id]?.phase === phase));
+        const streamOnly =
+          groupEntries.some((entry) => entry.phase === 'stream') &&
+          !groupEntries.some((entry) => entry.phase === 'ready');
+        const ceiling = streamOnly ? (tier === 'desktop' ? 64 : 32) : (tier === 'desktop' ? 4 : 1.5);
+        const defaultLimit = tier === 'desktop' ? 4 : 1.5;
         const limit =
           phase === 'boot'
             ? undefined
-            : tier === 'desktop'
-              ? (configured?.desktop ?? 4 * 1024 * 1024)
-              : (configured?.mobile ?? 1.5 * 1024 * 1024);
-        if (limit !== undefined && (!Number.isFinite(limit) || limit < 0))
-          throw new Error(`Invalid budget for ${phase}`);
-        return budgetReport(manifest, details, tier, phase, limit, cachePlan);
+            : (configured?.[tier === 'desktop' ? 'desktop' : 'mobile'] ?? defaultLimit * 1024 * 1024);
+        if (limit !== undefined && (!Number.isFinite(limit) || limit < 0 || limit > ceiling * 1024 * 1024))
+          throw new Error(`Invalid gm.manifest.json assetBudgets.lazy.${group} ${tier} budget (maximum ${ceiling} MiB)`);
+        const report = budgetReport(manifest, details, tier, phase, limit, cachePlan);
+        if (phase === 'boot') return report;
+        const settingTier = tier === 'desktop' ? 'desktop' : 'mobile';
+        return { ...report, setting: `gm.manifest.json assetBudgets.lazy.${groupKey}.${settingTier}` };
       }),
     );
     await writeIfChanged(join(manifestDir, 'budget.json'), `${JSON.stringify(reports, null, 2)}\n`, ctx.cwd);
