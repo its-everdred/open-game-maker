@@ -316,14 +316,14 @@ describe('games routes', () => {
       choices: { genre: ['puzzle'] },
       tagline: 'Match colour blobs and drop blocks in a forest duel.',
       tags: ['Versus', 'Cozy'],
-      logoUrl: `https://games.example.test/g/${id}/build1/media/logo.png`,
-      coverUrl: `https://games.example.test/g/${id}/build1/media/thumbnail.png`,
       loadingUrls: {
         portrait: `https://games.example.test/g/${id}/build1/media/loading-portrait.png`,
         landscape: `https://games.example.test/g/${id}/build1/media/loading-landscape.png`,
       },
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
     });
+    expect((await list()).logoUrl).toBeUndefined();
+    expect((await list()).coverUrl).toBeUndefined();
     // An older build's portrait cut is never offered: every game shows its one 16:9 trailer.
     expect(await list()).not.toHaveProperty('portraitTrailerUrl');
     for (const badImage of [
