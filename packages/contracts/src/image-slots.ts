@@ -32,8 +32,8 @@ const displayBoxes = (width: number, height: number): Record<ViewportId, Display
 
 // Display boxes follow Cover.tsx's responsive sizes; safe area is CSS env(safe-area-inset-*) plus safeMargin on each edge.
 export const IMAGE_SLOTS: Record<SlotId, ImageSlot> = {
-  // Cover.tsx uses 45vw phone, 25vw tablet and 240px desktop; games tiles use a 3:2 host box.
-  tile: { viewports: REVIEW_VIEWPORTS, display: { 'phone-portrait': { width: 175.5, height: 117 }, 'phone-landscape': { width: 380, height: 253.333 }, 'tablet-portrait': { width: 205, height: 136.667 }, 'tablet-landscape': { width: 295, height: 196.667 }, desktop: { width: 240, height: 160 } } },
+  // Cover.tsx uses 45vw phone, 25vw tablet and 240px desktop; tiles are 16:9 today.
+  tile: { viewports: REVIEW_VIEWPORTS, display: { 'phone-portrait': { width: 175.5, height: 98.719 }, 'phone-landscape': { width: 380, height: 213.75 }, 'tablet-portrait': { width: 205, height: 115.313 }, 'tablet-landscape': { width: 295, height: 165.938 }, desktop: { width: 240, height: 135 } } },
   // gamesCache.ts preloads logos at 55vw on phones and 320px otherwise; logos are square image boxes.
   logo: { viewports: allViewports, display: { 'phone-portrait': { width: 214.5, height: 214.5 }, 'phone-landscape': { width: 320, height: 320 }, 'tablet-portrait': { width: 320, height: 320 }, 'tablet-landscape': { width: 320, height: 320 }, desktop: { width: 320, height: 320 } } },
   // Full viewport display boxes.
