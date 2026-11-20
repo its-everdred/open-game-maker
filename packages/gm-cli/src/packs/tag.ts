@@ -21,7 +21,7 @@ export type TagTarget = {
   cards: Array<{ path: string; card: AssetCard; restrictions?: AssetCard[] }>;
 };
 
-export type TargetDiscovery = { targets: TagTarget[]; refusals: string[] };
+export type TargetDiscovery = { targets: TagTarget[]; refusals: string[]; failures: string[] };
 
 export type Snapshot = {
   roots: string[];
@@ -87,6 +87,7 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
   const pattern = glob(only);
   const targets: TagTarget[] = [];
   const refusals: string[] = [];
+  const failures: string[] = [];
   let entries: Dirent<string>[];
   try {
     if ((await lstat(top)).isSymbolicLink() || !inside(await realpath(assetsRoot), await realpath(top))) {
@@ -94,7 +95,7 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
     }
     entries = await readdir(top, { withFileTypes: true, encoding: 'utf8' });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { targets, refusals };
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { targets, refusals, failures };
     throw error;
   }
   entries.sort((left, right) => left.name.localeCompare(right.name));
@@ -110,7 +111,15 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
       if (!parsed.ok || parsed.card.card_type !== 'collection') continue;
       collection = parsed.card;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        try {
+          await lstat(join(root, 'pack.json'));
+          failures.push(`${entry.name}: pack.json exists but collection.card.json is missing`);
+        } catch (manifestError) {
+          if ((manifestError as NodeJS.ErrnoException).code !== 'ENOENT') throw manifestError;
+        }
+        continue;
+      }
       throw error;
     }
     if (
@@ -202,7 +211,7 @@ export async function discoverTagTargets(assetsRoot: string, kind: TagKind, only
       targets.push({ id: collection.id, slug: entry.name, root, collectionPath, collection, cards });
     }
   }
-  return { targets, refusals };
+  return { targets, refusals, failures };
 }
 
 export async function snapshotTargets(targets: readonly TagTarget[]): Promise<Snapshot> {
