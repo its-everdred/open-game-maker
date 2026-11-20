@@ -253,7 +253,6 @@ describe('games routes', () => {
         logo: 'media/logo.png',
         genres: ['puzzle'],
         loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
-        slotImages: { tile: { mode: 'per-ratio', variants: { 'phone-portrait': 'media/tile-portrait.png' } } },
       }),
     );
     writeFileSync(
@@ -333,6 +332,7 @@ describe('games routes', () => {
         description: 'Match colour blobs and drop blocks in a forest duel.',
         tags: ['Versus', 'Cozy'],
         loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
+        slotImages: { tile: { mode: 'per-ratio', variants: { 'phone-portrait': 'media/tile-portrait.png' } } },
         slotImages: {
           tile: { mode: 'per-ratio', variants: { 'phone-portrait': 'media/tile-portrait.png' } },
         },
