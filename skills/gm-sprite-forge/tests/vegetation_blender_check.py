@@ -26,7 +26,8 @@ first = make_canopy(7, foliage, leaf_count=32)
 second = make_canopy(7, foliage, leaf_count=32)
 other = make_canopy(8, foliage, leaf_count=32)
 dense_tree = tree(7, bark, foliage, levels=1, dense=True, leaf_count=32)
-assert len(dense_tree) == 4 and len(dense_tree[-1].data.polygons) == 256
+assert len(dense_tree) == 10 and len(dense_tree[-1].data.polygons) == 256
+assert all(bark in list(obj.data.materials) for obj in dense_tree[3:9])
 assert len(first.data.vertices) == 192 and len(first.data.polygons) == 256
 assert list(first.data.vertices[0].co) == list(second.data.vertices[0].co)
 assert list(first.data.vertices[0].co) != list(other.data.vertices[0].co)

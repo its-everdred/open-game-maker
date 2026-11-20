@@ -3,6 +3,7 @@
 This is a blockout primitive, not a fitted or approved pack style.
 """
 import math
+import random
 
 import bpy
 from mathutils import Vector
@@ -35,7 +36,21 @@ def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.
             objects.append(obj)
     if dense and not bare:
         from vegetation_canopy import make_canopy
-        objects.append(make_canopy(seed, foliage, height=height, leaf_count=leaf_count, offset=skeleton[0].end[:2] + (0,)))
+        rng = random.Random(seed + 4181)
+        for i in range(6):
+            angle = math.tau * (i / 6 + rng.uniform(-0.04, 0.04))
+            end = Vector((math.cos(angle) * height * rng.uniform(0.12, 0.20),
+                          math.sin(angle) * height * rng.uniform(0.12, 0.20), 0.02))
+            start = Vector((0, 0, height * 0.10))
+            delta = end - start
+            bpy.ops.mesh.primitive_cone_add(vertices=7, radius1=height * 0.045, radius2=0,
+                                            depth=delta.length, location=(start + end) / 2)
+            root = bpy.context.object
+            root.rotation_euler = delta.to_track_quat('Z', 'Y').to_euler()
+            root.data.materials.append(bark)
+            objects.append(root)
+        objects.append(make_canopy(seed, foliage, height=height, leaf_count=leaf_count,
+                                   offset=skeleton[0].end[:2] + (0,)))
     return objects
 
 
