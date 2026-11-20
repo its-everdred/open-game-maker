@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,8 +22,9 @@ vi.mock('./jobs', () => ({
   myJobsQueryKey: ['build-chat', 'jobs'],
 }));
 
-vi.mock('./Chat', () => ({
-  Chat: ({ jobId }: { jobId?: string }) => <p>conversation {jobId}</p>,
+vi.mock('./stream', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./stream')>()),
+  subscribeChat: vi.fn(() => () => undefined),
 }));
 
 const calls: Array<{ url: string; method: string; body: unknown }> = [];
@@ -55,50 +57,38 @@ afterEach(() => {
 
 describe('JobConversationModal', () => {
   it('stays closed until a job is opened', () => {
-    render(<JobConversationModal />);
-
+    renderModal();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('opens the job conversation in a dialog named after the job', () => {
+  it('opens the job conversation with the aiur composer', () => {
     useConversation.getState().open('j_1');
-    render(<JobConversationModal />);
-
+    renderModal();
     expect(screen.getByRole('dialog', { name: 'Moon gate' })).toBeVisible();
-    expect(screen.getByText('conversation j_1')).toBeVisible();
+    expect(document.querySelector('aiur-composer')).not.toBeNull();
   });
 
   it('closes on Escape and on the close button', () => {
     useConversation.getState().open('j_1');
-    render(<JobConversationModal />);
-
+    renderModal();
     fireEvent.keyDown(screen.getByRole('dialog', { name: 'Moon gate' }), { key: 'Escape' });
     expect(useConversation.getState().jobId).toBeUndefined();
   });
 
   it('closes when the close button is pressed', () => {
     useConversation.getState().open('j_1');
-    render(<JobConversationModal />);
-
+    renderModal();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-
     expect(useConversation.getState().jobId).toBeUndefined();
   });
 
-  // Once aiur's conversation element is installed it replaces the markup, and its answers take the same route.
   it('forwards an answer from aiur’s conversation element to the job command route', async () => {
-    if (!customElements.get(AIUR_CONVERSATION_TAG)) {
-      customElements.define(AIUR_CONVERSATION_TAG, class extends HTMLElement {});
-    }
+    if (!customElements.get(AIUR_CONVERSATION_TAG)) customElements.define(AIUR_CONVERSATION_TAG, class extends HTMLElement {});
     useConversation.getState().open('j_1');
-    render(<JobConversationModal />);
-
-    document
-      .querySelector(AIUR_CONVERSATION_TAG)!
-      .dispatchEvent(
-        new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', command_id: 'm_3', option_id: 'stone' } }),
-      );
-
+    renderModal();
+    document.querySelector(AIUR_CONVERSATION_TAG)!.dispatchEvent(
+      new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', command_id: 'm_3', option_id: 'stone' } }),
+    );
     await waitFor(() =>
       expect(calls).toContainEqual({
         url: '/api/v1/jobs/j_1/commands/m_3/answer',
@@ -108,3 +98,11 @@ describe('JobConversationModal', () => {
     );
   });
 });
+
+function renderModal() {
+  return render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <JobConversationModal />
+    </QueryClientProvider>,
+  );
+}

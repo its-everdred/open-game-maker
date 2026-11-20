@@ -196,7 +196,9 @@ export function Chat({
           postText={postChatText}
           startJob={canPost ? undefined : (text) => admit(text, 'now')}
           wasAdmissionReused={() => admissionReused.current}
+          onOptimistic={addMessage}
           onPosted={addMessage}
+          onFailed={removeMessage}
         />
       ) : (
         <Composer
