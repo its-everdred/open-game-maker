@@ -20,7 +20,7 @@ def measure(path):
     pixels = rgba.tobytes()
     shadow = sum(1 for r, g, b, a in zip(pixels[0::4], pixels[1::4], pixels[2::4], pixels[3::4])
                  if 0 < a < 255 and max(r, g, b) <= 8)
-    return {'width': bbox[2] - bbox[0], 'height': bbox[3] - bbox[1],
+    return {'bbox': list(bbox), 'width': bbox[2] - bbox[0], 'height': bbox[3] - bbox[1],
             'coverage': sum(histogram[1:]), 'shadow': shadow}
 
 
@@ -29,9 +29,12 @@ def compare(reference, candidate, tolerance=0.15):
         raise ValueError('invalid tolerance')
     base, actual = measure(reference), measure(candidate)
     ratios = {key: (actual[key] / base[key] if base[key] else (1.0 if not actual[key] else None))
-              for key in base}
+              for key in ('width', 'height', 'coverage', 'shadow')}
+    offsets = [actual['bbox'][i] - base['bbox'][i] for i in range(4)]
+    positioned = all(abs(offsets[i]) <= tolerance * base['width' if i % 2 == 0 else 'height']
+                     for i in range(4))
     return {'reference': base, 'candidate': actual, 'ratios': ratios,
-            'pass': all(value is not None and 1 - tolerance <= value <= 1 + tolerance
+            'bbox_offsets': offsets, 'pass': positioned and all(value is not None and 1 - tolerance <= value <= 1 + tolerance
                         for value in ratios.values())}
 
 

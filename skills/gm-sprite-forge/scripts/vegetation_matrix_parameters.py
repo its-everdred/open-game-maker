@@ -21,6 +21,7 @@ def matrix_parameters(job):
         raise ValueError('invalid seed')
     if ((result.get('leafy') and scene != 'plant') or (result.get('dense') and scene != 'tree')
             or (result.get('branched') and scene != 'conifer')
+            or (result.get('leaf_width', 1) != 1 and not result.get('leafy'))
             or (result.get('leaf_shading') and not result.get('leafy'))):
         raise ValueError('style option does not apply to scene')
     limits = {'levels': (0, 5), 'count': (1, 100), 'fanout': (1, 4), 'leaf_count': (1, 100000),

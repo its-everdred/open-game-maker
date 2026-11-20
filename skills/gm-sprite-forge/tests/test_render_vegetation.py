@@ -107,6 +107,7 @@ class RenderVegetationTest(unittest.TestCase):
                            {'seed': 1, 'crown_width': 0, 'metadata': self.metadata},
                            {'seed': 1, 'plant_height': 0, 'metadata': self.metadata},
                            {'seed': 1, 'leaf_width': 0, 'metadata': self.metadata},
+                           {'seed': 1, 'leaf_width': 0.25, 'metadata': self.metadata},
                            {'seed': 1, 'batch_size': 0, 'metadata': self.metadata},
                            {'seed': 1, 'branched': True, 'metadata': self.metadata},
                            {'seed': 1, 'tiers': 1, 'metadata': self.metadata},
