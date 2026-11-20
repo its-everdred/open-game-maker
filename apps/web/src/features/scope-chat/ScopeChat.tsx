@@ -7,11 +7,11 @@ import type { BudgetStatus, ScopeChoices } from '@ogm/contracts';
 import { api } from '../../lib/api/client';
 import { useSession } from '../../lib/api/session';
 import { answerJobCommand } from '../build-chat/commands';
+import { AiurComposer } from '../build-chat/AiurComposer';
 import { formatUnits } from '../build-chat/units';
 import { AiurConversation, jobScope, type AiurCommandAnswer } from '../aiur/embed';
 import { admitNewGame, type AdmissionResult, type SupportedOffer } from './admit';
 import { Captions } from './Captions';
-import { Composer } from './Composer';
 import { energyRefusalText } from '../energy/api';
 import { Offers } from './Offers';
 import { useScopeSession } from './useScopeSession';
@@ -104,7 +104,7 @@ export function ScopeChat({
     <>
       <Captions turns={scopeSession.turns} status={scopeSession.status} />
       {scopeSession.jobId ? (
-        <Composer
+        <AiurComposer
           jobId={scopeSession.jobId}
           voiceTarget={voiceTarget}
           postText={(_jobId, text, attachments) => scopeSession.send(text, attachments)}
