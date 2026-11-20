@@ -98,11 +98,13 @@ def conifer(seed, bark, foliage, *, height=1.2, lean=0.1, tiers=5):
     return objects
 
 
-def bush(seed, foliage, *, scale=1.0):
+def bush(seed, foliage, *, scale=1.0, count=9, mass_radius=0.15):
     """Build a small seeded cluster of overlapping rounded shrub masses."""
+    if not isinstance(count, int) or not 1 <= count <= 64 or not math.isfinite(mass_radius) or mass_radius <= 0:
+        raise ValueError('invalid shrub mass count or radius')
     objects = []
-    for item in placements(seed, 9, extent=0.16 * scale, min_scale=0.7, max_scale=1.2):
-        radius = 0.15 * scale * item.scale
+    for item in placements(seed, count, extent=0.16 * scale, min_scale=0.7, max_scale=1.2):
+        radius = mass_radius * scale * item.scale
         bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=radius,
                                               location=(item.x, item.y, radius * 0.8))
         obj = bpy.context.object

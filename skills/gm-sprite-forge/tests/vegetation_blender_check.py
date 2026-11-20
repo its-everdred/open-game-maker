@@ -22,6 +22,9 @@ wide_tree = tree(7, bark, foliage, levels=1, fanout=3, spread=(0.7, 0.8))
 assert len(wide_tree) == 7  # trunk, three branches, three canopies
 assert len(conifer(7, bark, foliage, tiers=5)) == 6
 assert len(bush(7, foliage)) == 9
+compact = bush(7, foliage, count=15, mass_radius=.12)
+assert len(compact) == 15
+assert max(v.co.length for v in compact[0].data.vertices) < max(v.co.length for v in bush(7, foliage)[0].data.vertices)
 shrub = bush(7, foliage)
 detail = leaf_cards(shrub, (foliage, foliage, foliage), 7, per_mass=12)
 assert len(detail.data.polygons) == 12 * len(shrub)

@@ -260,7 +260,8 @@ def vegetation(sc):
                        leaf_shading=bool(P.get('leaf_shading', 0)), batch_size=int(P.get('batch_size', 1)),
                        batch_radius=P.get('batch_radius', 0.05))
     if SCENE == 'bush':
-        masses = bush(int(P['seed']), green, scale=P.get('height', 1))
+        masses = bush(int(P['seed']), green, scale=P.get('height', 1),
+                      count=int(P.get('bush_mass_count', 9)), mass_radius=P.get('bush_mass_radius', .15))
         if P.get('bush_leaf_detail', 0):
             from vegetation_bush_detail import leaf_cards
             def shade(factor):
