@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -71,6 +72,19 @@ class VegetationExportTest(unittest.TestCase):
                 export(self.render, self.output, 'tree-v1', {**self.source, **override},
                        self.collection, {'seed': 1})
             self.assertFalse(self.output.exists())
+
+    def test_rechecks_collection_created_during_export(self):
+        import shutil
+        copy = shutil.copy2
+        def concurrent_collection(source, dest):
+            path = self.output / 'collection.card.json'
+            if not path.exists():
+                path.write_text(json.dumps({'id': 'other-collection'}))
+            return copy(source, dest)
+        with patch('vegetation_export.shutil.copy2', side_effect=concurrent_collection):
+            with self.assertRaises(ValueError):
+                export(self.render, self.output, 'tree-v1', self.source, self.collection, {'seed': 1})
+        self.assertFalse((self.output / 'tree-v1').exists())
 
 
 if __name__ == '__main__':

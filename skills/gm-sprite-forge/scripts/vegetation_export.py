@@ -48,6 +48,14 @@ def validate_source(source_card, source_collection):
         raise ValueError('asset-specific license requires rights resolution before export')
 
 
+def validate_collection(collection, source_collection):
+    if (collection.get('id') != 't1:smallscaleint-vegetation@1'
+            or collection.get('rights') != source_collection['rights']
+            or collection.get('license') != source_collection['license']
+            or source_collection['id'] not in collection.get('collection_info', {}).get('requires', [])):
+        raise ValueError('existing collection does not preserve source rights')
+
+
 def export(render_dir, set_dir, slug, source_card, source_collection, recipe):
     """Create a new variant folder and cards without modifying any source file."""
     render_dir, set_dir = _outside_packs(render_dir), _outside_packs(set_dir)
@@ -62,11 +70,7 @@ def export(render_dir, set_dir, slug, source_card, source_collection, recipe):
     collection_path = set_dir / 'collection.card.json'
     if collection_path.exists():
         collection = json.loads(collection_path.read_text())
-        if (collection.get('id') != 't1:smallscaleint-vegetation@1'
-                or collection.get('rights') != source_collection['rights']
-                or collection.get('license') != source_collection['license']
-                or source_collection['id'] not in collection.get('collection_info', {}).get('requires', [])):
-            raise ValueError('existing collection does not preserve source rights')
+        validate_collection(collection, source_collection)
     else:
         collection = {
             'schema': 'ogm.asset-card/1.0', 'vocab': '2026-10-27',
@@ -105,9 +109,11 @@ def export(render_dir, set_dir, slug, source_card, source_collection, recipe):
             for path in staged.iterdir():
                 if path != card_path:
                     shutil.copy2(path, target / path.name)
-            if not collection_path.exists():
+            try:
                 with collection_path.open('x') as f:
                     f.write(json.dumps(collection, indent=2) + '\n')
+            except FileExistsError:
+                validate_collection(json.loads(collection_path.read_text()), source_collection)
             # Publish the card last, after its files and recipe exist.
             shutil.copy2(card_path, target / card_path.name)
         except Exception:
