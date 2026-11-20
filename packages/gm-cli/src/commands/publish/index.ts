@@ -275,26 +275,8 @@ export const command: GmCommand = {
       if (!existsSync(join(game, 'package.json'))) {
         throw new CommandError(`${facts.repoPath} has no package.json in ${checkout} at ${commit}`);
       }
-      const inventory = join(work, 'docs', facts.slug, 'decisions.json');
-      if (!existsSync(inventory)) {
+      if (!existsSync(join(work, 'docs', facts.slug, 'decisions.json')))
         say(`review gate: no docs/${facts.slug}/decisions.json; prototype review is not configured`);
-      } else {
-        const review = await request(
-          `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/review-sha/${commit}`,
-          { headers: { 'x-ogm-internal': token }, signal: AbortSignal.timeout(20_000) },
-        );
-        if (review.status !== 200)
-          throw new CommandError(`cannot check prototype review for ${commit} (HTTP ${review.status})`);
-        let recorded = false;
-        try {
-          recorded = (JSON.parse(review.body) as { recorded?: unknown }).recorded === true;
-        } catch {
-          /* invalid response below */
-        }
-        if (!recorded) throw new CommandError(`publish refused: no prototype review round is recorded for ${commit}`);
-        say(`review gate: prototype review recorded for ${commit}`);
-      }
-
       // The game's own build script is its production build; a script that already names a base or a mode keeps it.
       // The base stays relative because the games host serves every build under /g/<gameId>/<buildId>/.
       // The asset list is what ships: refuse before building when the code names an asset the list lacks.

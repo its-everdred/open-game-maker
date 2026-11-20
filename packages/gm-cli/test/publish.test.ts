@@ -231,7 +231,6 @@ describe('gm publish', () => {
     expect(run.code).toBe(0);
     expect(run.out).toEqual([
       `building games/blobs at ${remoteSha}`,
-      'review gate: no docs/blobs/decisions.json; prototype review is not configured',
       `published games/blobs at ${remoteSha}: build build_publish`,
       'play https://games.example/g/g_blobs/build_publish/',
     ]);
@@ -286,7 +285,7 @@ describe('gm publish', () => {
     expect(ReviewSubmission.safeParse(JSON.parse(review.body.toString())).success).toBe(true);
   });
 
-  it('refuses to publish an inventoried game without a review round for the target SHA', async () => {
+  it('publishes an inventoried SHA and records its review after the build is available', async () => {
     git(origin, 'switch', '-qc', 'inventory', 'main');
     mkdirSync(join(origin, 'docs', 'blobs'), { recursive: true });
     writeFileSync(join(origin, 'docs', 'blobs', 'decisions.json'), '{"decisions":[]}\n');
@@ -296,10 +295,11 @@ describe('gm publish', () => {
 
     const run = await publish(['blobs', '--sha', sha, '--api', api]);
 
-    expect(run.code).toBe(1);
-    expect(run.err).toEqual([`publish refused: no prototype review round is recorded for ${sha}`]);
-    expect(run.pnpm).toBe('');
-    expect(requests.map(({ url }) => url)).toContain(`/internal/operator/games/blobs/review-sha/${sha}`);
+    expect(run.code).toBe(0);
+    const upload = requests.find(({ url }) => url.endsWith('/builds'))!;
+    const review = requests.find(({ url }) => url.endsWith('/prototype-reviews'))!;
+    expect(upload.sha).toBe(sha);
+    expect(JSON.parse(review.body.toString())).toMatchObject({ sha });
   });
 
   it('defaults the slug to the game folder it runs in and builds an explicit --sha', async () => {
