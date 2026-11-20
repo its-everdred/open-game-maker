@@ -45,8 +45,8 @@ round 99 and additional values up to about 140–144 in round 105. This confirms
 that the render changed; it does not replace the creator's visual verdict.
 
 Each saved round now has a provisional local `recipe.json`. The 16 rounds whose
-candidate scripts can be reconstructed record their rig settings and source
-files; 97 earlier records explicitly leave unavailable provenance unknown.
+candidate scripts can be reconstructed record rig settings, material
+definitions and input hashes; 97 earlier records explicitly leave unavailable provenance unknown.
 Issue #1036 defines the final recipe schema and promotion workflow. A newer
 “Matches” answer has been acknowledged, but the available answer does not name
 the reviewed round, so no output has been promoted on that basis.
