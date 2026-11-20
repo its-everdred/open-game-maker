@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@t
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CreatorCommand } from '@ogm/contracts/browser';
+import type { AiurComposer as ComposerElement } from '@aiur/conversation';
 
 import { ExecutorThread } from './ExecutorThread';
 import { pull, threadMessages, useThreadStore, useUnreadReplies, type ThreadMessage } from './thread';
@@ -98,8 +99,10 @@ describe('executor thread', () => {
         onOpenCommand={vi.fn()}
       />,
     );
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Make Endless the big button' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const composer = document.querySelector('aiur-composer') as ComposerElement;
+    await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+    composer.value = 'Make Endless the big button';
+    await composer.send();
     await waitFor(() => expect(calls.some((call) => call.method === 'POST')).toBe(true));
     const sent = calls.find((call) => call.method === 'POST')!;
     expect(sent.url).toBe('/api/v1/me/executor/thread/messages');
@@ -124,10 +127,12 @@ describe('executor thread', () => {
       return original(input, init);
     });
     render(<ExecutorThread creatorId={OWNER} title="Blobs" context={{}} commands={[]} onOpenCommand={vi.fn()} />);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Ship it' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('Ship it'));
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const composer = document.querySelector('aiur-composer') as ComposerElement;
+    await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+    composer.value = 'Ship it';
+    await composer.send();
+    await waitFor(() => expect(composer.value).toBe('Ship it'));
+    await composer.send();
     await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(2));
     const [first, second] = calls.filter((call) => call.method === 'POST') as Array<{
       body: { client_request_id: string };
@@ -137,18 +142,34 @@ describe('executor thread', () => {
 
   it('uploads a screenshot to the thread and sends it as an attachment', async () => {
     render(<ExecutorThread creatorId={OWNER} title="Blobs" context={{}} commands={[]} onOpenCommand={vi.fn()} />);
-    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
-    fireEvent.change(input, {
-      target: { files: [new File([new Uint8Array([1])], 'shot.png', { type: 'image/png' })] },
-    });
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'This button' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const composer = document.querySelector('aiur-composer') as ComposerElement;
+    await waitFor(() => expect(composer.adapters.upload).toBeTypeOf('function'));
+    const file = new File([new Uint8Array([1])], 'shot.png', { type: 'image/png' });
+    const attachment = await composer.adapters.upload!(file);
+    composer.value = 'This button';
+    await composer.onSend!('This button', [attachment]);
     await waitFor(() =>
       expect(calls.some((call) => call.url.endsWith('/messages') && call.method === 'POST')).toBe(true),
     );
     expect(calls.find((call) => call.url.endsWith('/uploads'))).toBeTruthy();
     expect(calls.find((call) => call.url.endsWith('/messages') && call.method === 'POST')!.body).toMatchObject({
       attachments: [{ upload_id: 'up_1', kind: 'image', mime_type: 'image/png' }],
+    });
+  });
+
+  it('routes uploads through the thread upload callback', async () => {
+    render(<ExecutorThread creatorId={OWNER} title="Blobs" context={{}} commands={[]} onOpenCommand={vi.fn()} />);
+    const composer = document.querySelector('aiur-composer') as ComposerElement;
+    await waitFor(() => expect(composer.adapters.upload).toBeTypeOf('function'));
+    const file = new File(['note text'], 'notes.txt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () => 'note text' });
+    const attachment = await composer.adapters.upload!(file);
+    composer.value = 'Please read';
+    await composer.onSend!('Please read', [attachment]);
+    await waitFor(() => expect(calls.some((call) => call.url.endsWith('/messages') && call.method === 'POST')).toBe(true));
+    expect(calls.some((call) => call.url.endsWith('/uploads') && call.method === 'POST')).toBe(false);
+    expect(calls.find((call) => call.url.endsWith('/messages') && call.method === 'POST')!.body).toMatchObject({
+      text: 'Please read\n\nnotes.txt:\nnote text',
     });
   });
 
