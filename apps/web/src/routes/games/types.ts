@@ -1,6 +1,6 @@
 import { ICONS } from '../../icons';
 import type { Showcase } from './showcase';
-import type { Branch, Job, JobKind, JobState } from '@ogm/contracts';
+import type { Branch, Job, JobKind, JobState, SlotId, ViewportId } from '@ogm/contracts';
 
 export type { Branch };
 
@@ -30,6 +30,7 @@ export type GameSummary = {
   logoUrl?: string | null;
   logoImage?: DisplayImage | null;
   coverImage?: DisplayImage | null;
+  slotImages?: Partial<Record<SlotId, Partial<Record<ViewportId, DisplayImage>>>>;
   loadingUrls?: { portrait: string; landscape: string };
   loadingImages?: { portrait: DisplayImage; landscape: DisplayImage };
   coverUrl?: string | null;

@@ -24,7 +24,12 @@ export function saveGames(userId: string | undefined, games: GameSummary[]): voi
 
 export function preloadGames(userId: string | undefined): void {
   for (const game of readGames(userId) ?? []) {
-    preloadDisplayImage(game.coverImage, game.coverUrl, '(max-width: 600px) 45vw, (max-width: 1000px) 25vw, 240px');
+    preloadDisplayImage(
+      game.coverImage,
+      game.coverUrl,
+      '(max-width: 600px) 45vw, (max-width: 1000px) 25vw, 240px',
+      game.slotImages?.tile,
+    );
     preloadDisplayImage(game.logoImage, game.logoUrl, '(max-width: 600px) 55vw, 320px');
   }
 }
@@ -86,6 +91,40 @@ function isCachedGame(value: unknown): value is GameSummary {
       })
     )
       return false;
+  }
+  if (game.slotImages != null) {
+    if (typeof game.slotImages !== 'object' || Array.isArray(game.slotImages)) return false;
+    const slots = game.slotImages as Record<string, unknown>;
+    for (const [slot, value] of Object.entries(slots)) {
+      if (!['tile', 'logo', 'loading', 'title', 'store-icon', 'review-media', 'hud-panel', 'background'].includes(slot))
+        return false;
+      if (value == null || typeof value !== 'object' || Array.isArray(value)) return false;
+      for (const [viewport, image] of Object.entries(value)) {
+        if (!['phone-portrait', 'phone-landscape', 'tablet-portrait', 'tablet-landscape', 'desktop'].includes(viewport))
+          return false;
+        if (image == null || typeof image !== 'object' || Array.isArray(image)) return false;
+        const data = image as Record<string, unknown>;
+        const sources = data.sources as Record<string, unknown> | undefined;
+        if (
+          typeof data.width !== 'number' ||
+          typeof data.height !== 'number' ||
+          !sources ||
+          !['avif', 'webp', 'png'].every((format) => {
+            const entries = sources[format];
+            return (
+              Array.isArray(entries) &&
+              entries.length > 0 &&
+              entries.every(
+                (entry: unknown) =>
+                  !!entry && typeof entry === 'object' && typeof (entry as Record<string, unknown>).path === 'string' &&
+                  typeof (entry as Record<string, unknown>).width === 'number',
+              )
+            );
+          })
+        )
+          return false;
+      }
+    }
   }
   return true;
 }
