@@ -51,4 +51,10 @@ python skills/gm-sprite-forge/scripts/score.py original.png rebuild.png --cell 6
 
 The sheet report includes each occupied frame, row counts and motion correlations; gates apply to the mean metrics and require matching frame positions. A missing palette or undefined motion correlation fails its gate. The shift is the displacement applied to the rebuild to align it with the original. `--json` writes the numeric report and gate results; the console also prints PASS or FAIL per gate.
 
-For side-by-side stills, animations and gate verdicts, follow the [comparison media instructions](references/review-lane.md).
+For side-by-side stills, animations and gate verdicts, follow the [comparison media instructions](references/review-lane.md). To prepare seven-column vegetation review cells, run:
+
+```sh
+python skills/gm-sprite-forge/scripts/vegetation_matrix_media.py matrix.json review-output/ --recipe recipe.json
+```
+
+The manifest has a `rows` array of 10–16 entries; each entry has an `id` slug, display `name`, `original` PNG path, five `variants` PNG paths and a `mock` PNG path. The tool writes individually labelled media and `options.json`, alongside the supplied recipe. It checks for duplicate variant images and never submits the review or approves the assets.
