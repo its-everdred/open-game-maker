@@ -666,6 +666,7 @@ export type AssetCard = SubkindByKind & {
   collection?: string;
   license?: SpdxExpression;
   rights?: Rights;
+  generated?: Generated;
   generation?: Generation;
   source?: Source;
   variants?: Variant[];
@@ -855,6 +856,39 @@ export interface Rights {
    * @minItems 1
    */
   basis: [RightsBasis, ...RightsBasis[]];
+}
+/**
+ * Provenance for an asset made by Game Maker.
+ */
+export interface Generated {
+  made_by: "ogm";
+  method: "3d-render" | "image-gen" | "2d-edit" | "procedural";
+  derived_from: string[];
+  agent: {
+    backend: string;
+    model: string;
+    effort: string;
+  };
+  skills: {
+    name: string;
+    version: string;
+  }[];
+  tools: {
+    name: string;
+    version: string;
+  }[];
+  recipe: {
+    path: string;
+    seed: number;
+    parameters: {};
+  };
+  scores: {
+    [k: string]: number | undefined;
+  };
+  ticket: number;
+  created_at: string;
+  approved_by_creator: boolean;
+  verdict_quote?: string;
 }
 /**
  * How the asset content was generated. Collection values are inherited by member assets.

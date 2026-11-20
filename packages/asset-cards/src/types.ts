@@ -53,6 +53,8 @@ export type SearchQuery = {
   includeDraft?: boolean;
   /** Hide assets whose typed generation marker says they were AI-generated. */
   excludeAiGenerated?: boolean;
+  /** Only assets made by Game Maker. */
+  generated?: boolean;
   tier?: number;
   /** Exact facing count a directional sprite must carry (`sprite.directions` length). */
   directions?: number;

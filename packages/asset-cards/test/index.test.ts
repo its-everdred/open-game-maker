@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,13 @@ import { FIXTURE, libraryCopy } from './helpers.js';
 const ORC = 't1:kenney-mini-dungeon/character-orc@2.0';
 
 describe('buildIndex', () => {
+  it('indexes collections stored in the shared sets directory', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'asset-set-index-'));
+    mkdirSync(join(root, 'sets'), { recursive: true });
+    cpSync(join(FIXTURE, 'packs/kenney-mini-dungeon'), join(root, 'sets/kenney-mini-dungeon'), { recursive: true });
+    expect((await buildIndex(root)).cards.some((card) => card.id === ORC)).toBe(true);
+    expect((await buildPackIndex(root, ['kenney-mini-dungeon'])).cards.some((card) => card.id === ORC)).toBe(true);
+  });
   it('indexes every valid card and lists the invalid ones without failing', async () => {
     const index = await buildIndex(FIXTURE);
     expect(index.cards).toHaveLength(19);
