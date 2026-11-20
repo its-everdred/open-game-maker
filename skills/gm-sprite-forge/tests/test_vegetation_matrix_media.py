@@ -37,7 +37,7 @@ class VegetationMatrixMediaTest(unittest.TestCase):
         for option in options:
             self.assertEqual(len(option['media']), 1)
             with Image.open(option['media'][0]['locator']) as cell:
-                self.assertEqual(cell.size, (512, 512))
+                self.assertEqual(cell.size, (1024, 1024))
         self.assertEqual(Image.open(self.paths[0]).getpixel((0, 0)), (10, 50, 20, 255))
         with self.assertRaises(FileExistsError):
             assemble({'rows': self.rows}, self.output, {'round': 1})
@@ -53,6 +53,12 @@ class VegetationMatrixMediaTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             assemble({'rows': self.rows}, self.root / 'packs' / 'review', {'round': 1})
         self.assertFalse((self.root / 'packs').exists())
+
+    def test_rejects_candidate_outside_footprint_gate(self):
+        Image.new('RGBA', (256, 256), (0, 0, 0, 0)).save(self.paths[1])
+        with self.assertRaises(ValueError):
+            assemble({'rows': self.rows}, self.output, {'round': 1})
+        self.assertFalse(self.output.exists())
 
 
 if __name__ == '__main__':

@@ -16,6 +16,7 @@ from PIL import Image
 
 from finish import finish
 from vegetation_export import _outside_packs
+from vegetation_footprint import compare
 
 
 def assemble(manifest, output, recipe):
@@ -66,10 +67,12 @@ def assemble(manifest, output, recipe):
                     elif index:
                         rgba = Image.fromarray(finish(np.asarray(rgba)))
                 if 1 <= index <= 5:
+                    if not compare(row['original'], rgba)['pass']:
+                        raise ValueError(f'{row["name"]} / {label} fails the 15% footprint and shadow gate')
                     variant_hashes.add(hashlib.sha256(rgba.tobytes()).digest())
                 background = Image.new('RGBA', (256, 256), (78, 78, 78, 255))
                 background.alpha_composite(rgba)
-                cell = background.convert('RGB').resize((512, 512), Image.Resampling.NEAREST)
+                cell = background.convert('RGB').resize((1024, 1024), Image.Resampling.NEAREST)
                 filename = f'{row["id"]}-{label.lower()}.png'
                 cell.save(stage / filename)
                 options.append({'id': f'{row["id"]}-{label.lower()}', 'label': f'{row["name"]} / {label}',
