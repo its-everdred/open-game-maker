@@ -41,6 +41,14 @@ describe('search', () => {
     const only = { ...index, cards: [base, made] };
     expect(search(only, { generated: true })).toEqual([made]);
     expect(formatRow(made)).toContain('[Made by Game Maker]');
+    const compatible = {
+      ...made,
+      id: 't1:smallscaleint-generated/rock@1',
+      resolved: { ...made.resolved, set: 'smallscaleint', style_family: 'pixel-art' },
+    };
+    expect(search({ ...index, cards: [compatible] }, { gameFamily: 'pixel-art', gameSets: ['smallscaleint'] })).toEqual(
+      [compatible],
+    );
   });
   it('ranks the Mini Dungeon orc first for "orc" and prints the contract row', () => {
     const hits = search(index, { words: ['orc'] });

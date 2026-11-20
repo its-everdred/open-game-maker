@@ -7,7 +7,7 @@ import { resolve } from './resolve.js';
 import type { CardIndex, IndexError, ResolvedCard } from './types.js';
 
 export const INDEX_PATH = join('index', 'cards.index.json');
-export const CARD_INDEX_VERSION = 2;
+export const CARD_INDEX_VERSION = 3;
 const TOPS = ['packs', 'inspiration', 'sets'];
 const INDEX_IGNORE = '.indexignore';
 const PACK_ID = /^[a-z0-9][a-z0-9-]*$/;

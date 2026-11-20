@@ -248,6 +248,9 @@
               "aiGenerated": {
                 "type": "boolean"
               },
+              "madeByGameMaker": {
+                "type": "boolean"
+              },
               "hint": {
                 "type": "string",
                 "maxLength": 200

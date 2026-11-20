@@ -146,7 +146,7 @@ export function passes(index: CardIndex, card: ResolvedCard, q: SearchQuery): bo
   }
   const needsSet = q.set !== undefined || Boolean(q.gameSets?.length);
   const pack = needsSet ? packOf(card.id) : undefined;
-  const set = pack ? setFor(pack)?.id : undefined;
+  const set = (pack ? setFor(pack)?.id : undefined) ?? (card.generated ? card.resolved.set : undefined);
   if (q.set !== undefined) {
     if (set !== q.set) return false;
   }

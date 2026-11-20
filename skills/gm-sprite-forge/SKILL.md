@@ -34,3 +34,5 @@ python skills/gm-sprite-forge/scripts/score.py original.png rebuild.png --cell 6
 The sheet report includes each occupied frame, row counts and motion correlations; gates apply to the mean metrics and require matching frame positions. A missing palette or undefined motion correlation fails its gate. The shift is the displacement applied to the rebuild to align it with the original. `--json` writes the numeric report and gate results; the console also prints PASS or FAIL per gate.
 
 For every rebuild or variation review, prepare both an image-gen option and a 3D pipeline option for each original, and follow the [comparison media instructions](references/review-lane.md). Use the free Codex image generation route with a permitted reference. Generated images are review options, not production sprites.
+
+For approved reusable assets, see the [generated library and recipe workflow](references/generated-library.md).

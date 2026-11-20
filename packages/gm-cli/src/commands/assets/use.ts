@@ -106,6 +106,7 @@ function metadataFor(card: ResolvedCard): AssetMetadata | undefined {
     ...(card.kit === undefined ? {} : { kit: card.kit }),
     ...(card.geometry === undefined ? {} : { geometry: card.geometry }),
     ...(card.generation === undefined ? {} : { generation: card.generation }),
+    ...(card.generated === undefined ? {} : { generated: card.generated }),
   };
   return Object.keys(meta).length === 0 ? undefined : meta;
 }

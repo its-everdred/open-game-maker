@@ -18,7 +18,7 @@ export type ResolvedCard = AssetCard & {
 export type IndexError = { path: string; errors: string[] };
 
 export type CardIndex = {
-  version: 2;
+  version: 3;
   built: string;
   vocab: string;
   cards: ResolvedCard[];

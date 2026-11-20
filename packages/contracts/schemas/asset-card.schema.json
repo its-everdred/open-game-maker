@@ -48,6 +48,10 @@
   "additionalProperties": false,
   "allOf": [
     {
+      "if": { "required": ["generated"], "properties": { "generated": { "required": ["approved_by_creator"], "properties": { "approved_by_creator": { "const": true } } } } },
+      "then": { "properties": { "generated": { "required": ["verdict_quote"] } } }
+    },
+    {
       "if": { "properties": { "card_type": { "const": "asset" } } },
       "then": {
         "required": ["kind", "subkind", "collection", "source"],
