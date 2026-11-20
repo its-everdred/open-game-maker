@@ -257,6 +257,7 @@ def vegetation(sc):
                        height=P.get('plant_height', 0.18), leafy=bool(P.get('leafy', 0)),
                        leaves_per_cluster=int(P.get('leaves_per_cluster', 12)),
                        leaf_width=P.get('leaf_width', 1),
+                       leaf_length_scale=P.get('leaf_length_scale', 1),
                        leaf_shading=bool(P.get('leaf_shading', 0)), batch_size=int(P.get('batch_size', 1)),
                        batch_radius=P.get('batch_radius', 0.05))
     if SCENE == 'bush':

@@ -8,11 +8,12 @@ from mathutils import Vector
 from vegetation_layout import clustered_placements
 
 
-def leaf_clusters(seed, material, *, count=5, extent=0.2, height=0.18, leaves_per_cluster=12, leaf_width=1.0,
+def leaf_clusters(seed, material, *, count=5, extent=0.2, height=0.18, leaves_per_cluster=12, leaf_width=1.0, leaf_length_scale=1.0,
                   shade_variation=False, batch_size=1, batch_radius=0.05):
     """Build independently rotated clumps of folded, pointed leaves."""
     if (not math.isfinite(height) or height <= 0 or not isinstance(leaves_per_cluster, int)
-            or not 1 <= leaves_per_cluster <= 64 or not math.isfinite(leaf_width) or leaf_width <= 0):
+            or not 1 <= leaves_per_cluster <= 64 or not math.isfinite(leaf_width) or leaf_width <= 0
+            or not math.isfinite(leaf_length_scale) or leaf_length_scale <= 0):
         raise ValueError('height must be positive and leaves per cluster must be 1..64')
     rng = random.Random(seed ^ 0x1EA5)
     shade_rng = random.Random(seed ^ 0x5ADE)
@@ -41,7 +42,7 @@ def leaf_clusters(seed, material, *, count=5, extent=0.2, height=0.18, leaves_pe
             angle = item.rotation + math.tau * (leaf / leaves_per_cluster + rng.uniform(-0.04, 0.04))
             direction = Vector((math.cos(angle), math.sin(angle), 0))
             side = Vector((-direction.y, direction.x, 0))
-            length = height * item.scale * rng.uniform(0.65, 1.15)
+            length = height * item.scale * rng.uniform(0.65, 1.15) * leaf_length_scale
             width = length * rng.uniform(0.20, 0.34) * leaf_width
             base = Vector((item.x, item.y, height * 0.08))
             middle = base + direction * length * 0.50 + Vector((0, 0, height * rng.uniform(0.22, 0.45)))
