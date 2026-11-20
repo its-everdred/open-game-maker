@@ -1,6 +1,7 @@
 """Propose sprite gates from dated creator verdicts; never edits gates.json."""
 import argparse
 import copy
+from datetime import datetime, timezone
 import json
 import math
 import sys
@@ -11,11 +12,17 @@ import score
 GATES = Path(__file__).resolve().parent.parent / 'gates.json'
 
 
+def timestamp(record):
+    value = datetime.fromisoformat(record['date'].replace('Z', '+00:00'))
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def calibrate(gates, records):
     proposed = copy.deepcopy(gates)
     conflicts = []
     history = {}
-    for record in sorted(records, key=lambda r: r['date']):
+    accepted = {}
+    for record in sorted(records, key=timestamp):
         cls = record['class']
         if cls not in proposed:
             raise ValueError(f'unknown class: {cls}')
@@ -39,7 +46,23 @@ def calibrate(gates, records):
                     scores[metric] = all(value == rule['equals'] for value in values)
         else:
             scores = raw_scores
-        results = score.gate_results(scores, rules)
+            views = [raw_scores]
+        # Recorded gate results describe the thresholds in force at review time.
+        # Legacy reports without snapshots use the supplied baseline, never a
+        # proposal produced while replaying an earlier verdict.
+        snapshot_rules = []
+        for view in views:
+            snapshot = view.get('gates')
+            if snapshot is not None:
+                if set(snapshot) != set(rules):
+                    raise ValueError('incomplete gate snapshot')
+                snapshot_rules.append({metric: item['rule'] for metric, item in snapshot.items()})
+            else:
+                snapshot_rules.append(gates[cls])
+        if any(snapshot != snapshot_rules[0] for snapshot in snapshot_rules[1:]):
+            raise ValueError('inconsistent gate snapshots across views')
+        round_rules = snapshot_rules[0]
+        results = [score.gate_results(view, snapshot) for view, snapshot in zip(views, snapshot_rules)]
         changes = []
         if verdict == 'matches':
             for metric, rule in rules.items():
@@ -49,9 +72,9 @@ def calibrate(gates, records):
                         changes.append((metric, 'min', value))
                     elif 'max' in rule and value > rule['max']:
                         changes.append((metric, 'max', value))
-        elif all(result['pass'] for result in results.values()):
+        elif all(result['pass'] for view in results for result in view.values()):
             candidates = []
-            for metric, rule in rules.items():
+            for metric, rule in round_rules.items():
                 value = scores.get(metric)
                 if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
                     for op in ('min', 'max'):
@@ -65,10 +88,21 @@ def calibrate(gates, records):
         for metric, op, value in changes:
             key = (cls, metric, op)
             previous = history.get(key)
+            if verdict == 'needs changes':
+                for earlier in accepted.get(key, []):
+                    if (op == 'min' and earlier['score'] < value) or (op == 'max' and earlier['score'] > value):
+                        conflicts.append({'class': cls, 'metric': metric, 'earlier': earlier, 'later': {'verdict': verdict, 'date': record['date'], 'round': record['round']}})
             if previous and previous['verdict'] != verdict:
                 conflicts.append({'class': cls, 'metric': metric, 'earlier': previous, 'later': {'verdict': verdict, 'date': record['date'], 'round': record['round']}})
             rules[metric][op] = value
             history[key] = {'verdict': verdict, 'date': record['date'], 'round': record['round']}
+        if verdict == 'matches':
+            for metric, rule in rules.items():
+                value = scores.get(metric)
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                    for op in ('min', 'max'):
+                        if op in rule:
+                            accepted.setdefault((cls, metric, op), []).append({'verdict': verdict, 'date': record['date'], 'round': record['round'], 'score': value})
     return {'gates': proposed, 'conflicts': conflicts}
 
 

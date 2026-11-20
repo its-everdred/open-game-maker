@@ -51,3 +51,32 @@ def test_failing_rejection_does_not_tighten_a_passing_view():
     views = {'N': SCORES, 'E': {**SCORES, 'shadow_iou': .5}}
     result = calibrate.calibrate(GATES, [{**record('needs changes', '2026-01-01'), 'scores': views}])
     assert result['gates'] == GATES
+
+
+def test_passing_match_conflicts_with_later_rejection():
+    result = calibrate.calibrate(GATES, [record('matches', '2026-01-01'), record('needs changes', '2026-01-02')])
+    assert result['gates']['prop']['pixel_similarity']['min'] > .96
+    assert result['conflicts'][0]['earlier']['verdict'] == 'matches'
+
+
+def test_rejection_uses_original_gates_not_prior_proposal():
+    result = calibrate.calibrate(GATES, [record('matches', '2026-01-01', silhouette_iou=.8),
+                                        record('needs changes', '2026-01-02', silhouette_iou=.85)])
+    assert result['gates']['prop']['silhouette_iou']['min'] == .8
+    assert result['gates']['prop']['pixel_similarity']['min'] == .95
+
+
+def test_dates_are_sorted_by_instant():
+    later = record('matches', '2026-01-02T00:00:00Z', pixel_similarity=.96)
+    earlier = record('needs changes', '2026-01-02T01:00:00+02:00')
+    result = calibrate.calibrate(GATES, [later, earlier])
+    assert result['gates']['prop']['pixel_similarity']['min'] == .96
+    assert result['conflicts']
+
+
+def test_rejection_honors_recorded_gate_snapshot():
+    snapshot = copy.deepcopy(GATES['prop'])
+    snapshot['silhouette_iou']['min'] = .99
+    scored = {**SCORES, 'gates': {key: {'rule': rule} for key, rule in snapshot.items()}}
+    result = calibrate.calibrate(GATES, [{**record('needs changes', '2026-01-01'), 'scores': scored}])
+    assert result['gates'] == GATES
