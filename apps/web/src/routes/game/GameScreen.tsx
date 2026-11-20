@@ -97,6 +97,7 @@ export function GameScreen() {
   const { open: menuOpen, setOpen: setMenuOpen, setMoreHost, setCloseLocked } = useGameMenu();
   const branch = searchParams.get('v')?.trim() || 'main';
   const roomId = searchParams.get('room')?.trim() || undefined;
+  const scenario = searchParams.get('scenario');
   const isGameRoute = useMatch('/g/:gameId') !== null;
   const mode: 'play' | 'edit' = searchParams.get('mode') === 'edit' ? 'edit' : 'play';
   const gamesOrigin = import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000';
@@ -407,6 +408,7 @@ export function GameScreen() {
               buildId: activePreview?.accessId ?? snapshot.buildId,
               ...(activePreview ? { preview: true } : {}),
               mode: mode === 'edit' ? 'play' : mode,
+              ...(scenario === null ? {} : { params: { scenario } }),
               ...(restoreOnStart ? saveOptions(gameId, roomIdRef, menuOpenRef, away, awayHold) : {}),
               design: activePreview ? previewDesign.data! : snapshot,
               build,
@@ -435,6 +437,7 @@ export function GameScreen() {
     frameAttempt,
     gameId,
     gamesOrigin,
+    scenario,
     reportGameLoad,
     room.handleGameMessage,
     previewSource,
