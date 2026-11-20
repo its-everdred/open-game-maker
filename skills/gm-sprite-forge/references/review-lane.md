@@ -27,7 +27,7 @@ python skills/gm-sprite-forge/scripts/compare.py review original.png image-gen.p
 The mock must have eight transparent-background views arranged horizontally. The sheet labels the original, image-gen option, previous 3D and current 3D for each direction. It fits each mock view to the original sprite's height and enlarges all cells with nearest-neighbour sampling at least 4×. It refuses a sheet if the first frame of any direction changes no more than 3% of the previous/current foreground union. Review the result by eye: that floor does not establish a meaningful change. Send one review Command with an independently judged card for each track; include the same sheet on each card, allow a note for changes, and state how the round addresses the creator's last feedback. Keep originals, generated mocks and review media outside the repository.
 ## Review and calibration
 
-For each meaningful rebuild round, post a non-blocking `decision.requested` on the rebuild ticket. Include the comparison still, eight-direction still and animated GIF or MP4 as applicable, plus the score JSON and gates in force. Inspect the media first. Attach the same media to **both** options so either answer can be made from the Command:
+For each meaningful rebuild round, post a non-blocking `decision.requested` on the rebuild ticket. Include the comparison still, eight-direction still, an automatically looping GIF of the animation, plus the score JSON and gates in force. An MP4 may accompany the GIF, but does not replace it: Kevin needs to see the motion without repeatedly pressing play. Inspect the media first and verify that the GIF loops indefinitely. Attach the same media to **both** options so either answer can be made from the Command:
 
 ```json
 {
