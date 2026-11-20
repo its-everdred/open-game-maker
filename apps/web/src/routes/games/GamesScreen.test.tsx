@@ -215,12 +215,6 @@ it('sorts by last played or created time, with real games ahead of curated place
       'showcase:skyward-squadron',
       'showcase:powder-rush',
       'showcase:little-fronts',
-      'showcase:crypt-crawlers',
-      'showcase:nebula-run',
-      'showcase:turbo-tumble',
-      'showcase:brick-bloom',
-      'showcase:lantern-hollow',
-      'showcase:frostbite-peaks',
       'showcase:puddle-postal',
     ]);
   });
