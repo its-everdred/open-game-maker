@@ -15,12 +15,6 @@ const sceneArt: Record<string, string> = {
   'skyward-squadron': 'shmup-tiles.png',
   'powder-rush': 'ski.png',
   'little-fronts': 'battle.png',
-  'crypt-crawlers': 'dungeon.png',
-  'nebula-run': 'space-bg.png',
-  'turbo-tumble': 'race-car_red_1.png',
-  'brick-bloom': 'puz-element_red_rectangle_glossy.png',
-  'lantern-hollow': 'dungeon.png',
-  'frostbite-peaks': 'pp-tiles.png',
 };
 function availableArt(name: string): Promise<boolean> {
   return new Promise((resolve) => {
