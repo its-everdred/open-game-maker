@@ -44,6 +44,8 @@ const tierOrWildcardSchema = z.enum([...tierSchema.options, '*']);
 export const cachePlanEntrySchema = z.looseObject({
   sha256: digestSchema,
   url: z.string().min(1),
+  /** Original build-relative path for publisher and host lookup; `url` is the shared content address. */
+  sourcePath: z.string().min(1).optional(),
   bytes: z.number().int().min(0),
   kind: cacheEntryKindSchema,
   phase: loadPhaseSchema,

@@ -40,8 +40,8 @@ export function DisplayImage({ image, src, className, sizes, priority = false }:
       <source type="image/webp" srcSet={srcSet(image.sources.webp)} sizes={sizes} />
       <img
         className={className}
-        src={image.sources.png[0]!.path}
-        srcSet={srcSet(image.sources.png)}
+        src={image.sources.webp[0]!.path}
+        srcSet={srcSet(image.sources.webp)}
         sizes={sizes}
         width={image.width}
         height={image.height}

@@ -46,6 +46,8 @@ async function manifestMedia(directory: string): Promise<{
   description?: string;
   tags?: string[];
   images?: Record<string, DisplayImage>;
+  sharedUrls?: Record<string, string>;
+  pending?: boolean;
   loading?: { portrait: string; landscape: string };
 }> {
   try {
@@ -60,6 +62,7 @@ async function manifestMedia(directory: string): Promise<{
       description?: unknown;
       tags?: unknown;
       images?: Record<string, DisplayImage>;
+      sharedUrls?: Record<string, string>;
       loading?: unknown;
     };
     const logo = manifest.logo;
@@ -74,14 +77,24 @@ async function manifestMedia(directory: string): Promise<{
     const portrait = loading?.portrait;
     const landscape = loading?.landscape;
     const loadingValid = (await validLoading(portrait)) && (await validLoading(landscape));
+    const images =
+      sidecar?.pending === true
+        ? undefined
+        : manifest.images && typeof manifest.images === 'object'
+          ? manifest.images
+          : undefined;
     return {
+      ...(sidecar?.pending === true ? { pending: true } : {}),
       ...(loadingValid ? { loading: { portrait: portrait as string, landscape: landscape as string } } : {}),
       ...(typeof logo === 'string' &&
       /^media\/[a-zA-Z0-9_-]+\.(png|webp|svg)$/u.test(logo) &&
       (await exists(join(directory, logo)))
         ? { logo }
         : {}),
-      ...(manifest.images && typeof manifest.images === 'object' ? { images: manifest.images } : {}),
+      ...(images ? { images } : {}),
+      ...(sidecar?.sharedUrls && typeof sidecar.sharedUrls === 'object'
+        ? { sharedUrls: sidecar.sharedUrls as Record<string, string> }
+        : {}),
       ...(names(genres, 4) ? { genres } : {}),
       ...(typeof description === 'string' && description.length > 0 && description.length <= 160
         ? { description }
@@ -93,7 +106,7 @@ async function manifestMedia(directory: string): Promise<{
   }
 }
 
-/** Media belongs to the current main build, so a new publish updates both URLs atomically. */
+/** Media belongs to the current main build; display variants have their own content address. */
 export async function gameMedia(deps: AppDeps, gameIds: string[]) {
   if (!gameIds.length) return new Map();
   const branches = deps.db
@@ -138,6 +151,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
           const origin = deps.config.gamesOrigin.replace(/\/$/, '');
           const base = `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/media`;
           const image = (key: string | undefined): DisplayImage | undefined => {
+            if (manifest.pending) return undefined;
             const value = key && manifest.images?.[key];
             if (
               !value ||
@@ -160,7 +174,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                     Number.isSafeInteger(entry.width) &&
                     entry.width > 0 &&
                     typeof entry.path === 'string' &&
-                    new RegExp(`^media/ogm-variants/[a-f0-9]{64}\\.${format}$`, 'u').test(entry.path),
+                    new RegExp(`^(?:/a/|media/ogm-variants/)[a-f0-9]{64}\\.${format}$`, 'u').test(entry.path),
                 )
               )
                 return undefined;
@@ -171,7 +185,10 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               sources: Object.fromEntries(
                 (['avif', 'webp', 'png'] as const).map((format) => [
                   format,
-                  sources[format].map((entry) => ({ ...entry, path: prefix + entry.path })),
+                  sources[format].map((entry) => ({
+                    ...entry,
+                    path: entry.path.startsWith('/a/') ? `${origin}${entry.path}` : prefix + entry.path,
+                  })),
                 ]),
               ) as DisplayImage['sources'],
             };
@@ -185,7 +202,13 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
             {
               ...(manifest.logo
                 ? {
-                    logoUrl: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
+                    ...(logoImage
+                      ? {}
+                      : {
+                          logoUrl: manifest.sharedUrls?.[manifest.logo]
+                            ? `${origin}${manifest.sharedUrls[manifest.logo]}`
+                            : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
+                        }),
                   }
                 : {}),
               ...(coverImage ? { coverImage } : {}),
@@ -193,8 +216,12 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               ...(manifest.loading
                 ? {
                     loadingUrls: {
-                      portrait: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.portrait}`,
-                      landscape: `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.landscape}`,
+                      portrait: manifest.sharedUrls?.[manifest.loading.portrait]
+                        ? `${origin}${manifest.sharedUrls[manifest.loading.portrait]}`
+                        : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.portrait}`,
+                      landscape: manifest.sharedUrls?.[manifest.loading.landscape]
+                        ? `${origin}${manifest.sharedUrls[manifest.loading.landscape]}`
+                        : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.landscape}`,
                     },
                   }
                 : {}),
@@ -204,7 +231,15 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
               ...(manifest.description ? { tagline: manifest.description } : {}),
               ...(manifest.tags ? { tags: manifest.tags } : {}),
-              ...(cover ? { coverUrl: `${base}/thumbnail.png` } : {}),
+              ...(coverImage
+                ? {}
+                : cover
+                  ? {
+                      coverUrl: manifest.sharedUrls?.['media/thumbnail.png']
+                        ? `${origin}${manifest.sharedUrls['media/thumbnail.png']}`
+                        : `${base}/thumbnail.png`,
+                    }
+                  : {}),
               ...(trailer ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
             },
           ] as const;

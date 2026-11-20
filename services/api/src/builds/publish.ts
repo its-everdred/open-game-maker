@@ -20,7 +20,7 @@ import { markTerminal } from '../jobs/spend-cap.js';
 import { releaseRuntimeFor } from '../releases/routes.js';
 import { registerBuild, updateBuild } from '../releases/service.js';
 import { withArtifactMutation } from './artifact-lock.js';
-import { BuildCacheError, completeBuildCache } from './cache-plan.js';
+import { BuildCacheError, completeBuildCache, sharedBuildFileUrls, storeDisplayImageBlobs } from './cache-plan.js';
 import { untarGz } from './untar.js';
 import { makeDisplayImages } from './display-images.js';
 
@@ -136,6 +136,11 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
         previousBuildId,
         sdkVersion: manifest.data.sdk,
       });
+      const sharedUrls = await sharedBuildFileUrls(files, [
+        'media/thumbnail.png',
+        ...(manifest.data.logo ? [manifest.data.logo] : []),
+        ...(manifest.data.loading ? [manifest.data.loading.portrait, manifest.data.loading.landscape] : []),
+      ]);
       await rename(files, buildTarget);
       await writeFile(
         join(buildTarget, '.ogm-display.json'),
@@ -145,6 +150,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
           genres: manifest.data.genres,
           description: manifest.data.description,
           tags: manifest.data.tags,
+          sharedUrls,
           pending: true,
         }),
       );
@@ -189,6 +195,7 @@ type DisplayManifest = {
   genres?: string[];
   description?: string;
   tags?: string[];
+  sharedUrls?: Record<string, string>;
 };
 const deriving = new Set<string>();
 
@@ -202,7 +209,7 @@ function scheduleDisplayImages(
   // Limit expensive encoders to one build at a time; the sweep picks up the remainder.
   if (deriving.size > 0) return;
   deriving.add(target);
-  void writeDisplayImages(target, manifest)
+  void writeDisplayImages(deps, target, manifest)
     .then(() => rm(marker, { force: true }))
     .catch((error: unknown) => deps.log({ event: 'build_display_images_failed', reason: errorName(error) }))
     .finally(() => {
@@ -246,12 +253,16 @@ async function retryDisplayImages(deps: AppDeps, attempted = new Set<string>()):
 }
 
 // Publish the metadata atomically only after every referenced variant exists. Until then readers use originals.
-async function writeDisplayImages(target: string, manifest: DisplayManifest): Promise<void> {
+async function writeDisplayImages(deps: AppDeps, target: string, manifest: DisplayManifest): Promise<void> {
   const images = await makeDisplayImages(
     target,
     manifest.logo,
     manifest.loading ? [manifest.loading.portrait, manifest.loading.landscape] : [],
   );
+  await withArtifactMutation(() => storeDisplayImageBlobs(deps.config.gamesRoot, target, images));
+  for (const image of Object.values(images))
+    for (const format of ['avif', 'webp', 'png'] as const)
+      for (const entry of image.sources[format]) entry.path = `/a/${entry.path.split('/').at(-1)}`;
   const temporary = join(target, `.ogm-display-${randomUUID()}.tmp`);
   try {
     await writeFile(
@@ -262,6 +273,7 @@ async function writeDisplayImages(target: string, manifest: DisplayManifest): Pr
         genres: manifest.genres,
         description: manifest.description,
         tags: manifest.tags,
+        sharedUrls: manifest.sharedUrls,
         images,
       }),
     );

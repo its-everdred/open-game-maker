@@ -7,7 +7,7 @@ import { pid } from 'node:process';
 import { cachePlanSchema, StableIdSchema } from '@ogm/contracts';
 
 const LEGACY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
-const BLOB_FILE_RE = /^[0-9a-f]{64}\.(?:glb|webp|png|mp3|ogg|woff2|ktx2|json)$/u;
+const BLOB_FILE_RE = /^[0-9a-f]{64}\.[a-z0-9]{1,12}$/u;
 
 /* The API's ULID ids (StableIdSchema), plus the lowercase ids (build hashes) already on disk. */
 export function isServableId(id: string): boolean {
@@ -35,8 +35,8 @@ export function blobPath(root: string, file: string): string {
   return join(root, '_a', file);
 }
 
-export async function putBlob(root: string, source: string): Promise<string> {
-  const destination = blobPath(root, basename(source));
+export async function putBlob(root: string, source: string, address = basename(source)): Promise<string> {
+  const destination = blobPath(root, address);
   if (await isFile(destination)) {
     return destination;
   }
@@ -47,7 +47,7 @@ export async function putBlob(root: string, source: string): Promise<string> {
     return destination;
   }
 
-  const temporary = join(directory, `.${basename(source)}.${pid}.${randomUUID()}.tmp`);
+  const temporary = join(directory, `.${basename(address)}.${pid}.${randomUUID()}.tmp`);
   try {
     try {
       await link(source, temporary);
