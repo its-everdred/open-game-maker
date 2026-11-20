@@ -39,9 +39,10 @@ class RenderVegetationTest(unittest.TestCase):
             result = render_variant('tree', self.root / 'set', 'tree-v1', self.source, self.collection,
                                     seed=42, dense=True, shadows=False, metadata=self.metadata, fanout=3,
                                     spread_min=0.3, crown_width=1.4, leaf_count=64, palette=self.palette,
-                                    batch_size=3, batch_radius=0.04)
+                                    batch_size=3, batch_radius=0.04, yaw=45)
         self.assertEqual(len(commands), 1)
         self.assertIn('seed=42', commands[0])
+        self.assertIn('yaw0=45', commands[0])
         self.assertIn('shadows=0', commands[0])
         self.assertIn('fanout=3', commands[0])
         self.assertIn('crown_width=1.4', commands[0])
@@ -54,6 +55,7 @@ class RenderVegetationTest(unittest.TestCase):
         recipe = json.loads((result / 'recipe.json').read_text())
         self.assertEqual(set(card['sprite']['facings']), set('NESW'))
         self.assertEqual(recipe['parameters']['seed'], 42)
+        self.assertEqual(recipe['parameters']['yaw0'], 45)
         self.assertEqual(recipe['parameters']['crown_width'], 1.4)
         self.assertEqual(recipe['materials']['palette'], self.palette)
         self.assertEqual(recipe['parameters']['batch_size'], 3)
