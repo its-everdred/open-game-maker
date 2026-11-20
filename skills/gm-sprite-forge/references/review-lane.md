@@ -34,7 +34,7 @@ python skills/gm-sprite-forge/scripts/compare.py sheet original.png rebuild.png 
 
 The directory contains a GIF and phone-compatible H.264 MP4 per row, `still-8dir.png` with the gate and scores, and `scores.json` with per-frame scores and gate results. The still uses the first frame of each row, original above rebuild. `--zoom` controls pixel enlargement (default 4). Sheet dimensions must match and be divisible by the cell size. Undefined metrics fail their gates; the verdict does not replace visual review.
 
-For a creator rebuild round, first generate a flat image mock using the original as reference, subject to its confirmed processing rights. Then use the actual previous round the creator saw:
+For a creator rebuild round, first generate a flat image mock with the original attached as reference (always permitted; see SKILL.md). Then use the actual previous round the creator saw:
 
 ```sh
 python skills/gm-sprite-forge/scripts/compare.py review original.png image-gen.png previous.png rebuild.png --cell 64 --out review.png
