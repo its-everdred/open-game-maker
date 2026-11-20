@@ -70,3 +70,6 @@ unchosen ideas separately instead of quietly blending them into the build.
 For a scope ticket, encode the same agreement in `.gm/scope/<session-id>.json`, including explicit included and
 excluded lists plus ticket acceptance criteria, then run
 `gm scope done --file .gm/scope/<session-id>.json`. Do not start game implementation until the agreed scope is filed.
+For the dedicated New Game flow, `gm-new-game-design` is also loaded on the scope ticket: finish its initial inventory
+and raise the first five to eight media-backed decisions before running `gm scope done`. The planner expands that
+inventory after Finish; the creator should already have a review queue when the game opens.

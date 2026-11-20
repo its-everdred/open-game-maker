@@ -29,7 +29,7 @@ else { button('New game', genre); }
 </script></body></html>`;
 
 beforeAll(async () => {
-  browser = await (await import('@ogm/gm-verify')).launch(process.env.GM_VERIFY_SOFTWARE_GL === '1');
+  browser = await (await import('@ogm/gm-verify')).launch(true);
 }, 60_000);
 afterAll(async () => {
   await browser?.close();
@@ -83,7 +83,8 @@ async function journey(status: number) {
 describe('New Game browser steps', () => {
   it('finishes after two builder replies and records the choice screens', async () => {
     const result = await journey(201);
-    expect(result.result).toEqual({ value: { gameId: 'g_123', requestId: 'j_123' } });
+    expect(result.result).toMatchObject({ value: { gameId: 'g_123', requestId: 'j_123' } });
+    expect('value' in result.result ? result.result.value.finishedAt : undefined).toEqual(expect.any(Number));
     expect(result.created).toEqual([{ id: 'g_123', status: 201, ok: true }]);
     expect(result.stills).toContain('conversation');
     expect(result.stills).toContain('library');

@@ -19,6 +19,20 @@ chat, voice transcript, attachments), the instance repo (`games/`, `packages/`),
 The general rules for cutting tickets, typing dependencies, waves and the critical path are in the `build-order` skill;
 this section adds what is specific to games.
 
+### Start from the creator's first review queue
+
+The scope job creates the first inventory and raises its first five to eight media-backed product decisions before it
+finishes. At the start of planning, read that committed inventory and the private context; preserve its IDs, answers,
+defaults, source summaries and asked status. Merge in the complete spec, settled decision log, open questions, and
+planning discoveries. Do not wait until ticket cutting to give the creator a first queue. Render and validate the
+merged inventory (`gm decisions render`; `gm decisions check --game <slug>`), then raise any newly media-ready open
+decisions in batches of five to eight with `gm decisions raise <id>`. Never re-raise asked decisions or leave the
+creator's queue empty while open decisions with real media are available. After each answer or provisional default,
+read the private design-decision history, sync the chosen label into the inventory with `gm decisions answer <id> <label>`,
+then render and run `gm decisions check --game <slug>`. Keep free-form creator wording private and store only a
+privacy-safe answer summary. Run `gm plan premises` with the current issue list and decision history before dispatching
+or revising tickets so the answer changes the plan.
+
 1. **Architecture.** Lay out the game's skeleton before any ticket: folder layout under `games/<name>/`, the systems
    (input, player, world/map, entities, UI, audio, saves, progression), their interfaces and the seams where tickets
    meet. Prefer existing SDK modules, pack adapters and `packages/` code; note likely shared pieces, but do not promote
@@ -47,7 +61,8 @@ this section adds what is specific to games.
    Before queueing tickets, render and validate `docs/<slug>/decisions.json` with `gm decisions render` and
    `gm decisions check --game <slug>`. Every ticket body must list its IDs under `## Creator decisions`; verify the
    tickets with `gm plan check --tickets <issues.json> --game <slug>`.
-8. **Decision inventory (required).** Before queueing any ticket, write `docs/<slug>/decisions.json` and its
+8. **Decision inventory (required).** The scope job has already committed an initial inventory before the New Game
+   Finish action. Before queueing any ticket, merge into `docs/<slug>/decisions.json` and its
    `decisions.md`: every product decision the form choices, the conversation, the spec's decision log and open
    questions, and each ticket's spec hold (enemies, town, classes, loot, upgrades, inventory and HUD, bosses,
    biomes, audio, townsfolk, run structure, look), fine-grained, each with options, a recommendation and its
