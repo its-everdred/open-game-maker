@@ -16,6 +16,7 @@ if 'packs' in output.parts:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.argv = [sys.argv[0], '--', 'tree', str(output), 'samples=1', 'views=N']
 import blender_iso_rig as rig
+from vegetation_destination import variant_destination
 
 jobs = json.loads(jobs_file.read_text())
 for job in jobs:
@@ -27,7 +28,7 @@ for job in jobs:
     if scene not in {'tree', 'bare', 'conifer', 'bush', 'plant'}:
         raise ValueError('unknown vegetation scene')
     rig.SCENE = scene
-    rig.OUT = str(output / row / f'v{variant}')
+    rig.OUT = str(variant_destination(output, row, variant))
     rig.P.update(seed=job['seed'], height=job.get('height', 1),
                  lean=job.get('lean', 0.1), canopy_scale=job.get('canopy_scale', 1),
                  levels=job.get('levels', 2), fanout=job.get('fanout', 2),
