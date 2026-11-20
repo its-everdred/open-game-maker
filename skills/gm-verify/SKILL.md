@@ -42,6 +42,13 @@ library or layout, not another layer or parameter on the same one); if that stal
 and raise one Command with the scored sheet (Blobs #309 ran 40 trials at 4.2-5.4 and #310 58 at SSIM 0.12, 2026-11-11). Choosing the next technique is yours: if you can name a recommended option, take it and note it in the workpad (#310 raised five blocking Commands in 90 minutes, each with a sound recommendation, 2026-11-12). After judging, rerun `gm look score` to include the cached default-run `judge_spread` in its JSON; it is null until that judgment exists. The spread is the largest absolute deviation from each tier median among the sampled runs, not a guarantee for a new image. Ready posts include the score JSON and side-by-side. Do not ask the Executor or
 creator to judge differences the scorer can judge. Follow the look broker's consent and licence restrictions.
 
+## Prototype review
+
+A playable build that changes what the creator can do or see is not delivered until its prototype review is
+raised (`../gm-core/references/decision-inventory.md`): play link, a phone-playable MP4 from this run, **Works
+now**, **Known limitations** and 3–6 inventory decisions to **Weigh in on**. Check every works and limitation line
+in the build you captured; list what a player hits in the first minute (no attack, no walk animation, no setting).
+
 ## Binary visual checklist
 
 Copy this into the PR and answer every line from the sheet:
@@ -59,6 +66,8 @@ Copy this into the PR and answer every line from the sheet:
 - Animation and movement speed disagree? yes/no
 - Worst visible defect: <one sentence>
 - Evidence sheet: <committed path under review/<ticket>/>
+- Prototype review: <raised Command, or none: no creator-visible change>
+- Creator decisions still open (not asked): <ids, or none>
 - Unchecked: iPhone Safari, sound, <anything else not run>
 ```
 
