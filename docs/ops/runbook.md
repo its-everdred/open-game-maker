@@ -466,6 +466,12 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    in `~/.config/ogm/env/qa-hook.env`. Check the timer and its journal with `systemctl --user status
    ogm-qa-new-game.timer` and `journalctl --user -u ogm-qa-new-game.service`.
 
+   Changes to the games host, games/build API or games route also run `gm qa games-cache --game blobs --json` after a
+   fresh QA session; its log is `~/.local/state/ogm/qa/games-cache/<sha>.log`, and a failed cache check appends an
+   attention line. After publishing a build, compare it with its predecessor using `gm qa games-cache --game blobs
+   --after-publish <buildId> --json`; this reports transferred bytes for the game's files and fails if an unchanged
+   content URL transfers again. The publish comparison uses the configured QA account and game origins.
+
    `ops/bin/ogm-host-setup.sh` also installs `ogm-qa-publish-review.timer`, which runs `gm qa publish-review-check
    --all` every ten minutes. It finds published builds whose review state is still pending and appends one line per
    sweep to the configured QA attention file; explicit `Prototype review: none` results are recorded as complete and

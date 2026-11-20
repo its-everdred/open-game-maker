@@ -25,6 +25,19 @@ export type CacheRun = {
   api: GamesCacheReport['gamesListApi'];
 };
 
+export type BuildCacheEntry = { sourcePath: string; url: string; bytes: number };
+export type BuildCacheSample = { url: string; transferSize: number };
+export type AfterPublishReport = {
+  game: string;
+  buildId: string;
+  previousBuildId: string;
+  totalBytesTransferred: number;
+  changedFiles: Array<{ path: string; from: string | null; to: string | null; bytes: number }>;
+  unexpectedChanges: Array<{ path: string; from: string | null; to: string | null; bytes: number }>;
+  unexpectedTransfers: Array<{ path: string; url: string; bytes: number }>;
+  ok: boolean;
+};
+
 export function matchesConfiguredOrigin(requested: string, configured: string | undefined): boolean {
   if (!configured) return false;
   try {
@@ -79,5 +92,53 @@ export function buildGamesCacheReport(run: CacheRun): GamesCacheReport {
       logo.transferSize === 0 &&
       thumbnail.transferSize === 0,
     ),
+  };
+}
+
+/** Compare a published build with its predecessor; content-addressed unchanged files must stay cached. */
+export function buildAfterPublishReport(input: {
+  game: string;
+  buildId: string;
+  previousBuildId: string;
+  previous: readonly BuildCacheEntry[];
+  current: readonly BuildCacheEntry[];
+  samples: readonly BuildCacheSample[];
+}): AfterPublishReport {
+  const previous = new Map(input.previous.map((entry) => [entry.sourcePath, entry]));
+  const previousUrls = new Set(input.previous.map((entry) => entry.url));
+  const currentPaths = new Set(input.current.map((entry) => entry.sourcePath));
+  const currentUrls = new Set(input.current.map((entry) => entry.url));
+  const transferred = new Map(input.samples.map((sample) => [sample.url, sample.transferSize]));
+  const addedOrChanged = input.current.flatMap((entry) => {
+    const old = previous.get(entry.sourcePath);
+    return previousUrls.has(entry.url)
+      ? []
+      : [{ path: entry.sourcePath, from: old?.url ?? null, to: entry.url, bytes: transferred.get(entry.url) ?? 0 }];
+  });
+  const removed = input.previous.flatMap((entry) =>
+    !currentPaths.has(entry.sourcePath) && !currentUrls.has(entry.url)
+      ? [{ path: entry.sourcePath, from: entry.url, to: null, bytes: 0 }]
+      : [],
+  );
+  const changedFiles = [...addedOrChanged, ...removed];
+  const unexpectedTransfers = input.current.flatMap((entry) => {
+    const bytes = transferred.get(entry.url) ?? 0;
+    return previousUrls.has(entry.url) && bytes > 0 ? [{ path: entry.sourcePath, url: entry.url, bytes }] : [];
+  });
+  const unexpectedChanges = changedFiles.filter(
+    ({ path }) => path !== 'index.html' && path !== 'manifest.json' && path !== 'assets/manifest.json',
+  );
+  return {
+    game: input.game,
+    buildId: input.buildId,
+    previousBuildId: input.previousBuildId,
+    totalBytesTransferred: [...new Set(input.current.map((entry) => entry.url))].reduce(
+      (total, url) => total + (transferred.get(url) ?? 0),
+      0,
+    ),
+    changedFiles,
+    unexpectedChanges,
+    unexpectedTransfers,
+    ok: unexpectedChanges.length === 0 && unexpectedTransfers.length === 0,
   };
 }

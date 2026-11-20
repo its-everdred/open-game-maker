@@ -92,9 +92,13 @@ Measure the second games-list load in a phone-sized browser with the QA account.
 logo and thumbnail URLs, HTTP status, transferred bytes, duration, response `Cache-Control`, and the games-list API
 duration. A zero transfer size means no network bytes were transferred; Chromium does not identify whether the source
 was memory or disk cache. The default game is `blobs`. `--origin` must match the app origin configured for the QA host.
+After a no-op `gm publish`, pass its build ID with `--after-publish`; the command loads that build and its predecessor
+in one browser context, totals bytes transferred for the game's files, and fails if a file other than the build
+manifest or `index.html` changed URL, or if an unchanged URL transferred bytes. This mode also needs
+`OGM_GAMES_ORIGIN` in the QA host's `api.env`.
 
 ```text
-gm qa games-cache [--origin <app origin>] [--game <slug>] [--json]
+gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buildId>] [--json]
 ```
 
 ```text
