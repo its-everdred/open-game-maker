@@ -5,6 +5,7 @@ Which skill or method wins for each kind of work, and the evidence. The hourly m
 
 | Kind of work | Candidates | Compared? | Winner | Evidence |
 |---|---|---|---|---|
+| Sprite rebuild from multi-direction packs (foliage / character) | A procedural Blender model + iso render; B high-detail CC0 model + shared rig; C GPU image-to-3D; D direct 2D generation with original attached | Partial; issue #1094 generated four-view CPU concepts for Tree E3, Flora B1 and a static Goblin proxy. A failed prop gates; B/C assets unavailable; D mock broker timed out; GPU absent | — | `#1094`: `/tmp/ogm-1094/recipe.json`; A prop gate fails (Tree E3 silhouette IoU 0.27–0.28, pixel similarity 0.61–0.62; Flora B1 silhouette IoU 0.009–0.016, pixel similarity 0.75). No winner; compare exact GPU + other arms on the RTX 4080 before routing. |
 | Concept image → 3D character from a pack (KayKit) | (A) three.js kitbash: `gm-asset-variants` + `scripts/style-check.py`; (B) Blender headless: `gm-3d`; (C) pack parts only: `gm-assets` search, then reshape or recolour | Bake-off running on Mossbeard (open-games #286, 2026-11-10) | — | #149 used A with no skill loaded: flat-shaded, flat-colour parts (3.00 verts/tri vs KayKit 0.7–1.0) |
 | Concept image → 2D sprite from a pack | `gm-asset-variants` (sprite op), `agent-sprite-forge` (generation: ask Kevin first) | No | — | — |
 | Image mock of a screen (not a game asset) | `gm-image-mock` | Partly: open-games #119 compared 3 styles × 3 image models × 3 tools | See #119 | — |
