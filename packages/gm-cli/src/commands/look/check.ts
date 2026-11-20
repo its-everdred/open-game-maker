@@ -20,7 +20,7 @@ export type Look = {
   error?: string;
 };
 
-type Status = 'pass' | 'fail' | 'missing' | 'blocked';
+type Status = 'pass' | 'fail' | 'missing' | 'blocked' | 'warning';
 type StillResult = { path: string; status: Status; detail: string };
 
 // The whole last non-empty line of the answer: a verdict followed by more text (a retraction) is not a verdict.
@@ -140,20 +140,33 @@ export function judge(root: string, still: { path: string; blob: string }, looks
  * Each screen with an approved target in review/decisions.json needs its sheet (`gm look sheet`), judged like a still:
  * a passing look answer for the sheet's bytes on disk, so a look that reads a mismatch with the target fails the check.
  */
-function sheets(root: string, game: string, looks: Look[]): StillResult[] {
+function sheets(root: string, game: string, looks: Look[], phase: string): StillResult[] {
   let screens;
   try {
     screens = reviewScreens(game);
   } catch (error) {
     return [
-      { path: 'review/decisions.json', status: 'fail', detail: error instanceof Error ? error.message : String(error) },
+      {
+        path: relative(root, join(game, 'review/decisions.json')).split(sep).join('/'),
+        status: 'fail',
+        detail: error instanceof Error ? error.message : String(error),
+      },
     ];
   }
   const targetDir = join(game, 'design/flow/screens/target');
+  const phases = ['mock', 'prototype', 'build', 'polish'];
+  const provisionalNames = new Set(
+    screens
+      .filter((screen) => screen.provisional && phases.indexOf(phase) < phases.indexOf(screen.provisional.until))
+      .map((screen) => screen.name),
+  );
   const unrecorded: StillResult[] = existsSync(targetDir)
     ? readdirSync(targetDir, { withFileTypes: true })
         .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && /\.png$/i.test(entry.name))
-        .filter((entry) => !screens.some((screen) => resolve(game, screen.target) === resolve(targetDir, entry.name)))
+        .filter(
+          (entry) =>
+            !screens.some((screen) => screen.target && resolve(game, screen.target) === resolve(targetDir, entry.name)),
+        )
         .map((entry) => ({
           path: relative(root, join(targetDir, entry.name)).split(sep).join('/'),
           status: 'missing',
@@ -161,18 +174,20 @@ function sheets(root: string, game: string, looks: Look[]): StillResult[] {
         }))
     : [];
   return [
-    ...unrecorded,
-    ...screens.map((screen) => {
-      const file = join(game, sheetPath(screen.name));
-      const path = relative(root, file).split(sep).join('/');
-      if (!existsSync(file))
-        return {
-          path,
-          status: 'missing' as const,
-          detail: `no sheet of "${screen.name}" beside its target: gm look sheet ${screen.name} --still <png>`,
-        };
-      return judge(root, { path, blob: blobId(readFileSync(file)) }, looks);
-    }),
+    ...unrecorded.filter((item) => ![...provisionalNames].some((name) => item.path.endsWith(`/target/${name}.png`))),
+    ...screens
+      .filter((screen) => !provisionalNames.has(screen.name))
+      .map((screen) => {
+        const file = join(game, sheetPath(screen.name));
+        const path = relative(root, file).split(sep).join('/');
+        if (!existsSync(file))
+          return {
+            path,
+            status: 'missing' as const,
+            detail: `no sheet of "${screen.name}" beside its target: gm look sheet ${screen.name} --still <png>`,
+          };
+        return judge(root, { path, blob: blobId(readFileSync(file)) }, looks);
+      }),
   ];
 }
 
@@ -185,18 +200,50 @@ export const command: GmCommand = {
     changed: { type: 'boolean', help: 'check changes against base (default origin/main)' },
     all: { type: 'boolean', help: 'audit every still and screen' },
     screen: { type: 'string', multiple: true, help: 'also check a named screen' },
+    phase: { type: 'string', help: 'current look rung: mock, prototype, build, or polish (default prototype)' },
   },
   async run(ctx, args, flags) {
     if (args.length > (flags.changed ? 1 : 0) || (flags.changed && flags.all))
       throw new UsageError('invalid look check arguments', 'gm help look check');
     const named = (flags.screen as string[] | undefined) ?? [];
     if (named.some((name) => !SCREEN.test(name))) throw new UsageError('invalid screen id', 'gm help look check');
+    const rungs = ['mock', 'prototype', 'build', 'polish'];
+    const requestedPhase = flags.phase as string | undefined;
+    if (requestedPhase !== undefined && !rungs.includes(requestedPhase))
+      throw new UsageError(`invalid look phase "${requestedPhase}"`, 'use --phase mock|prototype|build|polish');
     const root = workspaceRoot(ctx.cwd);
     const looks = readLooks(root);
     const game = gameDir(ctx.cwd, root);
     const committed = committedStills(game);
     const stills = committed.length > 0 ? committed : renderedStills(root, game);
-    const results = [...stills.map((still) => judge(root, still, looks)), ...sheets(root, game, looks)];
+    const decisionsPath = relative(root, join(game, 'review/decisions.json')).split(sep).join('/');
+    let decisions: ReturnType<typeof reviewScreens>;
+    try {
+      decisions = reviewScreens(game);
+    } catch {
+      decisions = [];
+    }
+    if (requestedPhase === undefined && decisions.some((screen) => screen.provisional))
+      throw new UsageError(
+        'a current rung is required while a provisional look scope is declared',
+        'run gm check --phase prototype (or the current rung)',
+      );
+    const phase = requestedPhase ?? 'prototype';
+    const results = [...stills.map((still) => judge(root, still, looks)), ...sheets(root, game, looks, phase)];
+    const warnings = decisions.flatMap((screen) => {
+      if (!screen.provisional) return [];
+      const expired = rungs.indexOf(phase) >= rungs.indexOf(screen.provisional.until);
+      return [
+        {
+          path: decisionsPath,
+          status: expired ? ('fail' as const) : ('warning' as const),
+          detail: expired
+            ? `provisional look scope for "${screen.name}" expired at ${screen.provisional.until} (owner: ${screen.provisional.owner})`
+            : `provisional look scope for "${screen.name}" through ${screen.provisional.until} (owner: ${screen.provisional.owner}); approved look target still required`,
+        },
+      ];
+    });
+    results.push(...warnings);
     let selected = results;
     let inherited: StillResult[] = [];
     if (flags.changed) {
@@ -276,7 +323,6 @@ export const command: GmCommand = {
         });
         scope = undefined;
       }
-      const decisionsPath = relative(root, join(game, 'review/decisions.json')).split(sep).join('/');
       if (
         changed.includes(decisionsPath) &&
         existsSync(join(game, 'review/decisions.json')) &&
@@ -305,9 +351,9 @@ export const command: GmCommand = {
         }
       }
       for (const screen of screens) {
-        const paths = [screen.target, sheetPath(screen.name)].map((path) =>
-          relative(root, resolve(game, path)).split(sep).join('/'),
-        );
+        const paths = [screen.target, sheetPath(screen.name)]
+          .filter((path): path is string => path !== undefined)
+          .map((path) => relative(root, resolve(game, path)).split(sep).join('/'));
         if (paths.some((path) => changed.includes(path))) screenNames.add(screen.name);
       }
       const targetDir = relative(root, join(game, 'design/flow/screens/target')).split(sep).join('/') + '/';
@@ -322,6 +368,7 @@ export const command: GmCommand = {
       // selects the renders belonging to this ticket; other renders remain inherited.
       for (const still of captures) selectedPaths.add(still.path);
       for (const screen of screens) {
+        if (!screen.target) continue;
         const target = resolve(game, screen.target);
         if (!screenNames.has(screen.name)) continue;
         const sheet = join(game, sheetPath(screen.name));
@@ -391,11 +438,12 @@ export const command: GmCommand = {
           try {
             const image = Buffer.from(entry.sheet, 'base64');
             const last = entry.answer.trimEnd().split('\n').at(-1) ?? '';
-            const targetPath = screen ? relative(root, resolve(game, screen.target)).split(sep).join('/') : '';
+            const targetPath = screen?.target ? relative(root, resolve(game, screen.target)).split(sep).join('/') : '';
             const committedTargetMatches = trackedTargetMatches(root, scope.source, targetPath, entry.targetHash);
             const valid =
               screen &&
               committedTargetMatches &&
+              screen.target !== undefined &&
               entry.target === screen.target &&
               sha256(Buffer.from(entry.targetImage, 'base64')) === entry.targetHash &&
               (!existsSync(resolve(game, screen.target)) ||
@@ -480,12 +528,14 @@ export const command: GmCommand = {
           }
         }
       }
-      selected = results.filter((result) => selectedPaths.has(result.path) || result.path === 'review/decisions.json');
+      selected = results.filter((result) => selectedPaths.has(result.path) || result.path === decisionsPath);
       inherited = results.filter((result) => !selected.includes(result) && result.status !== 'pass');
     }
     const blocked = selected.some((result) => result.status === 'blocked');
     // A full audit must judge something; a changed scope can legitimately be empty.
-    const ok = (flags.changed || selected.length > 0) && selected.every((result) => result.status === 'pass');
+    const ok =
+      (flags.changed || selected.length > 0) &&
+      selected.every((result) => result.status === 'pass' || result.status === 'warning');
     if (ctx.json) printJson(ctx, { ok, blocked, stills: selected, ...(flags.changed ? { inherited } : {}) });
     else {
       for (const result of selected.filter((r) => r.status !== 'pass'))
@@ -497,8 +547,12 @@ export const command: GmCommand = {
       if (!flags.changed && results.length === 0)
         ctx.err('no tN.png stills to judge: run gm run, then look at its stills');
       if (blocked) ctx.err('look gate blocked: the look broker failed; report the PR as blocked, never as a pass');
-      else if (ok)
-        ctx.out(`look ok: ${selected.length} ${committed.length > 0 ? 'committed' : 'rendered'} stills pass`);
+      else if (ok) {
+        const warnings = selected.filter((result) => result.status === 'warning').length;
+        ctx.out(
+          `look ok: ${selected.length} ${committed.length > 0 ? 'committed' : 'rendered'} stills pass${warnings ? ` (${warnings} provisional warning${warnings === 1 ? '' : 's'})` : ''}`,
+        );
+      }
     }
     return ok ? EXIT.ok : EXIT.failed;
   },

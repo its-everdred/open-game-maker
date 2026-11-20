@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ReviewAnswerPayload } from '@ogm/contracts';
 import { reviewOptionImageReady, reviewRoundMediaReady } from './qa-review-media.js';
 import { swipeReviewMedia as swipe } from './qa-review-touch.js';
 
@@ -78,21 +79,15 @@ export function commandReached(report: Report): string | null {
   } catch {
     return 'the Command answer is not B with its note';
   }
-  if (typeof payload !== 'object' || payload === null) return 'the Command answer is not B with its note';
-  const response = payload as { kind?: unknown; answers?: unknown; notes?: unknown };
-  const picked =
-    response.kind === 'question_answers' &&
-    Array.isArray(response.answers) &&
-    response.answers.some(
-      (card: unknown) =>
-        typeof card === 'object' &&
-        card !== null &&
-        'option_id' in card &&
-        card.option_id === 'b' &&
-        'verdict' in card &&
-        card.verdict === 'like',
-    );
-  if (!picked || response.notes !== PICK_NOTE) return 'the Command answer is not B with its note';
+  const response = ReviewAnswerPayload.safeParse(payload);
+  if (
+    !response.success ||
+    response.data.answers.length !== 1 ||
+    response.data.answers[0]?.option_id !== 'b' ||
+    response.data.answers[0]?.verdict !== 'like' ||
+    response.data.notes !== PICK_NOTE
+  )
+    return 'the Command answer is not B with its note';
   return null;
 }
 

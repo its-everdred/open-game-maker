@@ -1,10 +1,19 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { INDEX_PATH, buildIndex, buildPackIndex, isStale, loadIndex, resolve, writeIndex } from '../src/index.js';
 import { FIXTURE, libraryCopy } from './helpers.js';
@@ -148,6 +157,42 @@ describe('loadIndex', () => {
     const rebuilt = await loadIndex(root);
     expect(rebuilt.version).toBe(2);
     expect(rebuilt.vocab).not.toBe('old-cache');
+  });
+
+  it('serves the rebuilt index when the stale index directory is read-only', async () => {
+    const root = libraryCopy();
+    const cards = join(root, 'packs/kenney-mini-dungeon/cards');
+    const newCard = join(cards, 'new-worker-card.card.json');
+    const template = JSON.parse(readFileSync(join(cards, 'wall.card.json'), 'utf8')) as Record<string, unknown>;
+    template.id = 't1:kenney-mini-dungeon/new-worker-card@1.0';
+    writeFileSync(newCard, JSON.stringify(template));
+    const existing = await loadIndex(root);
+    const indexFile = join(root, INDEX_PATH);
+    const future = new Date(Date.now() + 60_000);
+    utimesSync(newCard, future, future);
+    const indexDir = join(root, 'index');
+    chmodSync(indexDir, 0o555);
+
+    try {
+      const warning = vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined);
+      const rebuilt = await loadIndex(root);
+      expect(rebuilt.cards.some((card) => card.id === template.id)).toBe(true);
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning.mock.calls[0]?.[0]).toContain('using a fresh in-memory index');
+      expect(JSON.parse(readFileSync(indexFile, 'utf8')).cards).toEqual(existing.cards);
+      warning.mockRestore();
+    } finally {
+      chmodSync(indexDir, 0o755);
+    }
+  });
+
+  it('writes the index through a same-directory temporary file and leaves no temporary files', async () => {
+    const root = libraryCopy();
+    const index = await buildIndex(root);
+    const destination = await writeIndex(root, index);
+
+    expect(JSON.parse(readFileSync(destination, 'utf8')).cards).toHaveLength(index.cards.length);
+    expect(readdirSync(join(root, 'index'))).toEqual(['cards.index.json']);
   });
 
   it('keeps card trees marked indexignore out of the general index', async () => {

@@ -33,14 +33,18 @@ export async function runSelected(ctx: GmContext, checks: RunL0Options): Promise
 export const command: GmCommand = {
   name: 'check',
   summary: 'run deterministic static, hook, and asset gates',
-  usage: '[--body <file>] [--base <ref>] [--json]',
+  usage: '[--body <file>] [--base <ref>] [--phase <mock|prototype|build|polish>] [--json]',
   example: 'check',
   flags: {
     body: { type: 'string', help: 'pull request body markdown for ticket PR gates' },
     base: { type: 'string', help: 'base ref for changed-file detection (default origin/main)' },
+    phase: { type: 'string', help: 'current look rung: mock, prototype, build, or polish' },
   },
   async run(ctx, args, flags) {
     if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help check');
+    const phase = flags.phase as string | undefined;
+    if (phase !== undefined && !['mock', 'prototype', 'build', 'polish'].includes(phase))
+      throw new UsageError(`invalid look phase "${phase}"`, 'use --phase mock|prototype|build|polish');
     const verify = await import('@ogm/gm-verify');
     const gate = verify.runL0(ctx.cwd);
 
@@ -77,6 +81,7 @@ export const command: GmCommand = {
       const lookOut: string[] = [];
       lookCode = await lookCommand.run({ ...ctx, json: true, fields: null, out: (line) => lookOut.push(line) }, [], {
         changed: true,
+        phase,
       });
       lookReport = JSON.parse(lookOut.join('\n'));
       if (!ctx.json) {
@@ -84,8 +89,10 @@ export const command: GmCommand = {
           stills: { status: string; path: string; detail: string }[];
           inherited: { status: string; path: string; detail: string }[];
         };
+        for (const item of report.stills.filter((item) => item.status === 'warning'))
+          ctx.err(`warning ${item.path}: ${item.detail}`);
         for (const item of report.stills.filter((item) => item.status !== 'pass'))
-          ctx.err(`${item.status} ${item.path}: ${item.detail}`);
+          if (item.status !== 'warning') ctx.err(`${item.status} ${item.path}: ${item.detail}`);
         if (report.inherited.length > 0) {
           ctx.err('inherited:');
           for (const item of report.inherited) ctx.err(`${item.status} ${item.path}: ${item.detail}`);

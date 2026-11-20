@@ -195,6 +195,7 @@ it.each(['image', 'video', 'audio', 'option'] as const)(
 async function runAnswerReceiptCase(
   delivery: 'late' | 'immediate',
   routeAnswer: { status: string; option_id: string } = { status: 'answered', option_id: 'b' },
+  responseStatus = 200,
 ) {
   let reportReads = 0;
   let responseWaitRegistered = false;
@@ -207,8 +208,8 @@ async function runAnswerReceiptCase(
   const fakeAnswerResponse: FakeAnswerResponse = {
     request: () => ({ method: () => 'POST' }),
     url: () => `https://app.example.test${answerPath}`,
-    ok: () => true,
-    status: () => 200,
+    ok: () => responseStatus >= 200 && responseStatus < 300,
+    status: () => responseStatus,
     json: async () => {
       responseBodyRead = true;
       return routeAnswer;
@@ -408,6 +409,22 @@ describe('Command answer receipt timing', () => {
       true,
     );
   });
+
+  it('rejects a non-success direct answer response even when its body confirms B', async () => {
+    const { results } = await runAnswerReceiptCase('immediate', { status: 'answered', option_id: 'b' }, 503);
+    expect(results).toHaveLength(4);
+    expect(
+      results.every((result) => !result.ok && result.failure?.includes('the Command answer route returned 503')),
+    ).toBe(true);
+  });
+
+  it('rejects a direct answer response that is not answered', async () => {
+    const { results } = await runAnswerReceiptCase('immediate', { status: 'pending', option_id: 'b' });
+    expect(results).toHaveLength(4);
+    expect(
+      results.every((result) => !result.ok && result.failure === 'the Command answer route did not confirm choice B'),
+    ).toBe(true);
+  });
 });
 
 function host(qa: string) {
@@ -510,6 +527,39 @@ describe('verdicts reaching aiur', () => {
         ],
       }),
     ).toBe('the Command answer is not B with its note');
+  });
+
+  it('rejects extra judgments and missing or altered notes in a valid Command receipt', () => {
+    const receipt = (answers: unknown[], notes?: string) => ({
+      ...delivered,
+      received: [
+        {
+          kind: 'answer',
+          response: JSON.stringify({
+            kind: 'question_answers',
+            answers,
+            ...(notes === undefined ? {} : { notes }),
+          }),
+        },
+      ],
+    });
+    expect(
+      commandReached(
+        receipt(
+          [
+            { option_id: 'b', verdict: 'like' },
+            { option_id: 'a', verdict: 'like' },
+          ],
+          PICK_NOTE,
+        ),
+      ),
+    ).toBe('the Command answer is not B with its note');
+    expect(commandReached(receipt([{ option_id: 'b', verdict: 'like' }]))).toBe(
+      'the Command answer is not B with its note',
+    );
+    expect(commandReached(receipt([{ option_id: 'b', verdict: 'like' }], `unexpected ${PICK_NOTE}`))).toBe(
+      'the Command answer is not B with its note',
+    );
   });
 
   it('fails when the round verdict stayed in the app', () => {
