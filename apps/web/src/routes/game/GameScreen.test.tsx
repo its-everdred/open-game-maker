@@ -20,6 +20,7 @@ type MockMountOptions = {
   onState?(state: MockFrameState): void;
   onLoadDone?(measurement: { ms: number; fetchedBytes: number; cachedBytes: number }): void;
   onLoadStalled?(measurement: { ms: number; fetchedBytes: number; cachedBytes: number }): void;
+  params?: Record<string, string>;
 };
 
 const editorApi = vi.hoisted(() => ({
@@ -298,6 +299,18 @@ describe('GameScreen', () => {
     expect(screen.getByRole('button', { name: 'Ask for a change' })).toBeVisible();
     fireEvent.click(play);
     await waitFor(() => expect(container.querySelector('.game-screen.is-playing')).toBeVisible());
+  });
+  it('forwards only the scenario to the game while retaining edit mode', async () => {
+    const { container } = renderGame('/g/game?scenario=combat-chain&mode=edit&room=room-1');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    expect(host.mountGameFrame.mock.calls.at(-1)?.[0]?.params).toEqual({ scenario: 'combat-chain' });
+    expect(container.querySelector('.game-screen.is-playing')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
+    cleanup();
+    host.mountGameFrame.mockClear();
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    expect(host.mountGameFrame.mock.calls.at(-1)?.[0]).not.toHaveProperty('params');
   });
   it('passes the ready manifest button theme to the play menu', async () => {
     renderGame();
