@@ -16,7 +16,7 @@ mesh.from_pydata(vertices, [], faces)
 mesh.update()
 obj = bpy.data.objects.new('cloth', mesh)
 bpy.context.collection.objects.link(obj)
-bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, .58))
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, .86))
 floor = bpy.context.object
 floor.dimensions = (2, 2, .1)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
@@ -24,7 +24,7 @@ bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 temporary = floor.modifiers.new('setup', 'COLLISION')
 floor.collision.thickness_outer = .073
 floor.modifiers.remove(temporary)
-bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, .82))
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, .945))
 unrelated = bpy.context.object
 unrelated.dimensions = (2, 2, .05)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
@@ -33,6 +33,8 @@ unrelated.modifiers.remove(unrelated_collision)
 copy_mesh = obj.data.copy()
 baseline = bpy.data.objects.new('baseline', copy_mesh)
 bpy.context.collection.objects.link(baseline)
+expected = bpy.data.objects.new('expected', obj.data.copy())
+bpy.context.collection.objects.link(expected)
 pins = [0, n, n*(n+1), (n+1)*(n+1)-1]
 original = [obj.data.vertices[i].co.copy() for i in pins]
 scene = bpy.context.scene
@@ -45,13 +47,16 @@ except ValueError:
 else:
     raise AssertionError('invalid pin accepted')
 assert len(obj.modifiers) == 0 and len(floor.modifiers) == 0
-drape(baseline, pins, [floor], frames=35, quality=5)
+drape(baseline, pins, [], frames=35, quality=5)
+drape(expected, pins, [floor], frames=35, quality=5)
 unrelated.modifiers.new('unrelated collision', 'COLLISION')
 assert drape(obj, pins, [floor], frames=35, quality=5) == obj
 assert all((obj.data.vertices[i].co - v).length < .01 for i, v in zip(pins, original))
 centre = obj.data.vertices[(n//2)*(n+1)+n//2].co.z
-assert .60 < centre < .96, centre
-assert abs(centre - baseline.data.vertices[(n//2)*(n+1)+n//2].co.z) < .001
+baseline_centre = baseline.data.vertices[(n//2)*(n+1)+n//2].co.z
+assert centre > baseline_centre + .005, (centre, baseline_centre)
+assert abs(centre - expected.data.vertices[(n//2)*(n+1)+n//2].co.z) < .001
+assert centre < .95, centre
 assert abs(floor.collision.thickness_outer - .073) < .0001
 assert len(unrelated.modifiers) == 1
 assert len(obj.modifiers) == 0 and len(floor.modifiers) == 0 and len(obj.vertex_groups) == 0
