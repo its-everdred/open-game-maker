@@ -21,17 +21,26 @@ export async function makeDisplayImages(
 ): Promise<Record<string, DisplayImage>> {
   const media = join(root, 'media');
   const output = join(media, 'ogm-variants');
-  const entries = await readdir(media, { withFileTypes: true }).catch(() => []);
+  const entries: { name: string; path: string; isFile: boolean }[] = [];
+  const scan = async (directory: string, prefix: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
+      if (prefix === '' && entry.name === 'ogm-variants') continue;
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await scan(join(directory, entry.name), relative);
+      else entries.push({ name: relative, path: join(directory, entry.name), isFile: entry.isFile() });
+    }
+  };
+  await scan(media, '');
   const images: Record<string, DisplayImage> = {};
   let outputCreated = false;
   for (const entry of entries) {
     if (
-      !entry.isFile() ||
+      !entry.isFile ||
       (entry.name !== 'thumbnail.png' && `media/${entry.name}` !== logo && !loading.includes(`media/${entry.name}`) && !variants.includes(`media/${entry.name}`)) ||
       !['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(extname(entry.name).toLowerCase())
     )
       continue;
-    const input = await readFile(join(media, entry.name));
+    const input = await readFile(entry.path);
     const meta = await sharp(input, { limitInputPixels: 40_000_000 }).metadata();
     if (!meta.width || !meta.height) throw new Error('display_image_invalid');
     const { width: sourceWidth, height: sourceHeight } = meta.autoOrient ?? meta;
