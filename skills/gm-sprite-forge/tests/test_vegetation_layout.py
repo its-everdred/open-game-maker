@@ -68,6 +68,29 @@ class VegetationBlenderTest(unittest.TestCase):
                 else:
                     self.assertEqual(shadow_pixels, 0)
 
+    def test_custom_palette_changes_rendered_foliage(self):
+        import subprocess
+        import tempfile
+        import numpy as np
+        from PIL import Image
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp:
+            dominant = []
+            for name, rgb in (('red', (220, 20, 20)), ('blue', (20, 20, 220))):
+                out = Path(temp) / name
+                options = [f'foliage_{band}_{channel}={value}'
+                           for band in ('hi', 'mid', 'lo') for channel, value in zip('rgb', rgb)]
+                subprocess.run(['blender', '-b', '--factory-startup', '--threads', '2',
+                                '--python-exit-code', '1', '--python',
+                                str(root / 'scripts/blender_iso_rig.py'), '--', 'plant', str(out),
+                                'samples=1', 'views=N', 'shadows=0', *options],
+                               check=True, stdout=subprocess.DEVNULL)
+                with Image.open(out / 'plant_N.png') as image:
+                    pixels = np.asarray(image.convert('RGBA'))
+                    dominant.append(pixels[..., :3][pixels[..., 3] == 255].mean(axis=0))
+            self.assertGreater(dominant[0][0], dominant[0][2] * 2)
+            self.assertGreater(dominant[1][2], dominant[1][0] * 2)
+
     def test_geometry_builds_in_blender(self):
         import subprocess
         root = Path(__file__).resolve().parents[1]

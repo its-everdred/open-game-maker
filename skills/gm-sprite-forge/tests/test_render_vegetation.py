@@ -22,6 +22,8 @@ class RenderVegetationTest(unittest.TestCase):
         self.collection = json.loads((REPO / 'packages/contracts/fixtures/cards/collection-kenney-mini-dungeon.json').read_text())
         self.source = {'id': 't1:kenney-mini-dungeon/tiles/tree@2.0', 'card_type': 'asset',
                        'collection': self.collection['id']}
+        self.palette = {'foliage': {'hi': [97, 136, 51], 'mid': [58, 90, 27], 'lo': [29, 53, 10]},
+                        'bark': {'hi': [117, 87, 56], 'mid': [92, 65, 42], 'lo': [52, 37, 25]}}
         self.metadata = {'agent': {'backend': 'test', 'model': 'synthetic'},
                          'skills': ['gm-sprite-forge'], 'tool_versions': {'blender': 'test'}}
 
@@ -36,18 +38,21 @@ class RenderVegetationTest(unittest.TestCase):
         with patch('render_vegetation.subprocess.run', side_effect=fake_blender):
             result = render_variant('tree', self.root / 'set', 'tree-v1', self.source, self.collection,
                                     seed=42, dense=True, shadows=False, metadata=self.metadata, fanout=3,
-                                    spread_min=0.3, crown_width=1.4, leaf_count=64)
+                                    spread_min=0.3, crown_width=1.4, leaf_count=64, palette=self.palette)
         self.assertEqual(len(commands), 1)
         self.assertIn('seed=42', commands[0])
         self.assertIn('shadows=0', commands[0])
         self.assertIn('fanout=3', commands[0])
         self.assertIn('crown_width=1.4', commands[0])
         self.assertIn('leaf_count=64', commands[0])
+        self.assertIn('foliage_hi_r=97', commands[0])
+        self.assertIn('bark_lo_b=25', commands[0])
         card = json.loads((result / 'tree-v1.card.json').read_text())
         recipe = json.loads((result / 'recipe.json').read_text())
         self.assertEqual(set(card['sprite']['facings']), set('NESW'))
         self.assertEqual(recipe['parameters']['seed'], 42)
         self.assertEqual(recipe['parameters']['crown_width'], 1.4)
+        self.assertEqual(recipe['materials']['palette'], self.palette)
         self.assertEqual(recipe['derived_from'], self.source['id'])
         self.assertTrue(recipe['ai_generated'])
         self.assertEqual(recipe['agent'], self.metadata['agent'])
@@ -59,7 +64,9 @@ class RenderVegetationTest(unittest.TestCase):
                            {'seed': 1, 'samples': 0, 'metadata': self.metadata},
                            {'seed': 1, 'fanout': 0, 'metadata': self.metadata},
                            {'seed': 1, 'spread_max': 1, 'metadata': self.metadata},
-                           {'seed': 1, 'crown_width': 0, 'metadata': self.metadata}):
+                           {'seed': 1, 'crown_width': 0, 'metadata': self.metadata},
+                           {'seed': 1, 'palette': {'foliage': {}}, 'metadata': self.metadata},
+                           {'seed': 1, 'palette': {**self.palette, 'bark': {'hi': [0, 0, 300], 'mid': [0, 0, 0], 'lo': [0, 0, 0]}}, 'metadata': self.metadata}):
                 with self.assertRaises(ValueError):
                     render_variant('tree', self.root / 'set', 'tree-v1', self.source, self.collection, **kwargs)
             with self.assertRaises(ValueError):

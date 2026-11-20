@@ -17,13 +17,32 @@ from vegetation_export import _outside_packs, export, validate_source
 
 RIG = Path(__file__).with_name('blender_iso_rig.py')
 SCENES = ('tree', 'bare', 'conifer', 'bush', 'plant')
+BANDS = ('hi', 'mid', 'lo')
+
+
+def palette_parameters(palette):
+    """Validate a complete foliage and bark palette for reproducible renders."""
+    if not isinstance(palette, dict) or set(palette) != {'foliage', 'bark'}:
+        raise ValueError('palette must contain foliage and bark')
+    result = {}
+    for material in ('foliage', 'bark'):
+        bands = palette[material]
+        if not isinstance(bands, dict) or set(bands) != set(BANDS):
+            raise ValueError('each material needs hi, mid and lo RGB bands')
+        for band in BANDS:
+            rgb = bands[band]
+            if (not isinstance(rgb, list) or len(rgb) != 3
+                    or any(type(value) is not int or not 0 <= value <= 255 for value in rgb)):
+                raise ValueError('palette bands must be three integers in 0..255')
+            result.update({f'{material}_{band}_{channel}': value for channel, value in zip('rgb', rgb)})
+    return result
 
 
 def render_variant(scene, output, slug, source_card, source_collection, *, seed, height=1.0,
                    lean=0.1, canopy_scale=1.0, levels=2, count=6, extent=0.2,
                    samples=8, dense=False, autumn=False, shadows=True, metadata=None,
                    fanout=2, spread_min=0.55, spread_max=0.85, leaf_count=24000,
-                   crown_width=1.0, crown_depth=1.0, crown_height=1.0):
+                   crown_width=1.0, crown_depth=1.0, crown_height=1.0, palette=None):
     """Run a seeded four-view render, then package its finished outputs."""
     output = _outside_packs(output)
     if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
@@ -46,6 +65,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
             or not isinstance(metadata.get('skills'), list) or not metadata['skills']
             or not isinstance(metadata.get('tool_versions'), dict) or not metadata['tool_versions'].get('blender')):
         raise ValueError('metadata must include agent backend/model, skills and Blender version')
+    palette_values = palette_parameters(palette) if palette is not None else {}
     if (output / slug).exists() or (output / slug).is_symlink():
         raise FileExistsError(f'variant already exists: {output / slug}')
     params = {'seed': seed, 'height': height, 'lean': lean, 'canopy_scale': canopy_scale,
@@ -53,7 +73,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
               'dense': int(dense), 'autumn': int(autumn), 'shadows': int(shadows),
               'fanout': fanout, 'spread_min': spread_min, 'spread_max': spread_max,
               'leaf_count': leaf_count, 'crown_width': crown_width, 'crown_depth': crown_depth,
-              'crown_height': crown_height}
+              'crown_height': crown_height, **palette_values}
     with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
         raw = Path(temp) / 'raw'
         raw.mkdir()
@@ -68,7 +88,8 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
         recipe = {**metadata, 'generator': 'gm-sprite-forge', 'scene': scene, 'rig': RIG.name,
                   'rig_sha256': hashlib.sha256(RIG.read_bytes()).hexdigest(),
                   'parameters': params, 'directions': list('NESW'),
-                  'materials': 'stepped toon foliage and bark; autumn palette when enabled'}
+                  'materials': {'palette': palette, 'default': 'autumn' if autumn else 'green',
+                                'shading': 'stepped toon foliage and bark'}}
         return export(normalized, output, slug, source_card, source_collection, recipe)
 
 
@@ -80,6 +101,7 @@ def main():
     parser.add_argument('--source-card', type=Path, required=True)
     parser.add_argument('--source-collection', type=Path, required=True)
     parser.add_argument('--metadata', type=Path, required=True, help='JSON agent, skills and tool_versions provenance')
+    parser.add_argument('--palette', type=Path, help='JSON foliage and bark hi/mid/lo RGB palette')
     parser.add_argument('--seed', type=int, required=True)
     parser.add_argument('--height', type=float, default=1.0)
     parser.add_argument('--lean', type=float, default=0.1)
@@ -106,7 +128,8 @@ def main():
                             dense=args.dense, autumn=args.autumn, shadows=not args.shadowless,
                             metadata=json.loads(args.metadata.read_text()), fanout=args.fanout,
                             spread_min=args.spread_min, spread_max=args.spread_max, leaf_count=args.leaf_count,
-                            crown_width=args.crown_width, crown_depth=args.crown_depth, crown_height=args.crown_height)
+                            crown_width=args.crown_width, crown_depth=args.crown_depth, crown_height=args.crown_height,
+                            palette=json.loads(args.palette.read_text()) if args.palette else None)
     print(result)
 
 

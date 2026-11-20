@@ -232,15 +232,25 @@ def hull(sc):
     return [h]
 
 
+def vegetation_palette(name, defaults):
+    palette = tuple(tuple(P.get(f'{name}_{band}_{channel}', colour[index])
+                          for index, channel in enumerate('rgb'))
+                    for band, colour in zip(('hi', 'mid', 'lo'), defaults))
+    if any(not math.isfinite(c) or not 0 <= c <= 255 for colour in palette for c in colour):
+        raise ValueError('vegetation palette channels must be in 0..255')
+    return palette
+
+
 def vegetation(sc):
     from vegetation_mesh import bush, cluster, conifer, tree
-    palette = ((165, 111, 30), (123, 73, 17), (70, 41, 8)) if P.get('autumn', 0) else ((102, 145, 63), (75, 113, 46), (40, 67, 28))
+    defaults = ((165, 111, 30), (123, 73, 17), (70, 41, 8)) if P.get('autumn', 0) else ((102, 145, 63), (75, 113, 46), (40, 67, 28))
+    palette = vegetation_palette('foliage', defaults)
     green = toon_material('foliage', *palette, noise=0.08)
     if SCENE == 'plant':
         return cluster(int(P['seed']), green, count=int(P.get('count', 5)), extent=P.get('extent', 0.2))
     if SCENE == 'bush':
         return bush(int(P['seed']), green, scale=P.get('height', 1))
-    bark = toon_material('bark', (117, 87, 56), (92, 65, 42), (52, 37, 25), noise=0.08)
+    bark = toon_material('bark', *vegetation_palette('bark', ((117, 87, 56), (92, 65, 42), (52, 37, 25))), noise=0.08)
     if SCENE == 'conifer':
         return conifer(int(P['seed']), bark, green, height=P.get('height', 1.2), lean=P.get('lean', 0.1))
     return tree(int(P['seed']), bark, green, height=P.get('height', 1), lean=P.get('lean', 0.1), bare=SCENE == 'bare', dense=bool(P.get('dense', 0)), leaf_count=int(P.get('leaf_count', 24000)),
