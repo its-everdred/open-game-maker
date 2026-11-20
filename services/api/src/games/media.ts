@@ -204,7 +204,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
           const loadingLandscape = image(manifest.loading?.landscape);
           const slots = ImageSlots.safeParse(manifest.slotImages);
           const slotImages = slots.success
-            ? Object.fromEntries(
+            ? (Object.fromEntries(
                 Object.entries(slots.data).map(([slotId, entry]) => [
                   slotId,
                   Object.fromEntries(
@@ -214,7 +214,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                     }),
                   ),
                 ]),
-              ) as Partial<Record<SlotId, Partial<Record<ViewportId, DisplayImage>>>>
+              ) as Partial<Record<SlotId, Partial<Record<ViewportId, DisplayImage>>>>)
             : undefined;
           return [
             gameId,
