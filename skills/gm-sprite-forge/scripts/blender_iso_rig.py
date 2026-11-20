@@ -16,6 +16,8 @@ import math
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import bpy
 from mathutils import Vector
 
@@ -230,11 +232,21 @@ def hull(sc):
     return [h]
 
 
+def vegetation(sc):
+    from vegetation_mesh import cluster, tree
+    green = toon_material('foliage', (102, 145, 63), (75, 113, 46), (40, 67, 28), noise=0.08)
+    if SCENE == 'plant':
+        return cluster(int(P['seed']), green, count=int(P.get('count', 5)), extent=P.get('extent', 0.2))
+    bark = toon_material('bark', (117, 87, 56), (92, 65, 42), (52, 37, 25), noise=0.08)
+    return tree(int(P['seed']), bark, green, height=P.get('height', 1), lean=P.get('lean', 0.1),
+                levels=int(P.get('levels', 3)), canopy_scale=P.get('canopy_scale', 1))
+
+
 def main():
     sc = reset()
     camera(sc)
     shadow_catcher(sc)
-    objs = {'tile': tile, 'rock': rock, 'hull': hull, 'cube': cube, 'blend': blend}[SCENE](sc)
+    objs = {'tile': tile, 'rock': rock, 'hull': hull, 'cube': cube, 'blend': blend, 'tree': vegetation, 'plant': vegetation}[SCENE](sc)
     root = bpy.data.objects.new('root', None)
     sc.collection.objects.link(root)
     for o in objs:

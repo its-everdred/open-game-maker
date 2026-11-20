@@ -1,0 +1,54 @@
+"""Behavioral tests for the seeded vegetation layout primitives."""
+import math
+from pathlib import Path
+import sys
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from vegetation_layout import branches, placements
+
+
+class VegetationLayoutTest(unittest.TestCase):
+    def test_branch_tree_is_seeded_and_connected(self):
+        tree = branches(17, height=2, levels=3)
+        self.assertEqual(tree, branches(17, height=2, levels=3))
+        self.assertNotEqual(tree, branches(18, height=2, levels=3))
+        self.assertEqual(len(tree), 15)
+        self.assertEqual(tree[0].start, (0, 0, 0))
+        for child in tree[1:]:
+            parents = [p for p in tree if p.depth == child.depth - 1]
+            self.assertTrue(any(abs(math.dist(p.start, child.start) + math.dist(child.start, p.end)
+                                    - math.dist(p.start, p.end)) < 1e-9 for p in parents))
+            self.assertGreater(child.end[2], child.start[2])
+
+    def test_placements_are_seeded_and_bounded(self):
+        cluster = placements(5, 20, extent=0.3, min_scale=0.7, max_scale=0.9)
+        self.assertEqual(cluster, placements(5, 20, extent=0.3, min_scale=0.7, max_scale=0.9))
+        self.assertNotEqual(cluster, placements(6, 20, extent=0.3, min_scale=0.7, max_scale=0.9))
+        for p in cluster:
+            self.assertLessEqual(max(abs(p.x), abs(p.y)), 0.3)
+            self.assertTrue(0 <= p.rotation < math.tau)
+            self.assertTrue(0.7 <= p.scale <= 0.9)
+        self.assertEqual(placements(1, 0), [])
+
+    def test_rejects_invalid_ranges(self):
+        for kwargs in ({'height': 0}, {'lean': -1}, {'levels': 6}):
+            with self.assertRaises(ValueError):
+                branches(0, **kwargs)
+        for kwargs in ({'count': -1}, {'count': 1, 'extent': -1},
+                       {'count': 1, 'min_scale': 2, 'max_scale': 1}):
+            with self.assertRaises(ValueError):
+                placements(0, **kwargs)
+
+class VegetationBlenderTest(unittest.TestCase):
+    def test_geometry_builds_in_blender(self):
+        import subprocess
+        root = Path(__file__).resolve().parents[1]
+        subprocess.run(['blender', '-b', '--factory-startup', '--threads', '2',
+                        '--python-exit-code', '1', '--python',
+                        str(root / 'tests/vegetation_blender_check.py')],
+                       check=True, stdout=subprocess.DEVNULL)
+
+
+if __name__ == '__main__':
+    unittest.main()
