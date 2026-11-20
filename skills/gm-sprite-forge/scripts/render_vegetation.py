@@ -18,7 +18,7 @@ from vegetation_export import _outside_packs, export, validate_source
 RIG = Path(__file__).with_name('blender_iso_rig.py')
 GENERATOR_FILES = ('render_vegetation.py', 'blender_iso_rig.py', 'vegetation_mesh.py', 'vegetation_layout.py',
                    'vegetation_canopy.py', 'vegetation_leaves.py', 'vegetation_conifer.py',
-                   'vegetation_export.py', 'vegetation_card.py', 'finish.py', 'spritemetrics.py')
+                   'vegetation_export.py', 'vegetation_card.py', 'vegetation_bush_detail.py', 'finish.py', 'spritemetrics.py')
 SCENES = ('tree', 'bare', 'conifer', 'bush', 'plant')
 BANDS = ('hi', 'mid', 'lo')
 
@@ -47,7 +47,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
                    fanout=2, spread_min=0.55, spread_max=0.85, leaf_count=24000,
                    crown_width=1.0, crown_depth=1.0, crown_height=1.0, palette=None,
                    leafy=False, plant_height=0.18, leaves_per_cluster=12, leaf_width=1.0, leaf_shading=False,
-                   batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0, branch_width=1.0, branch_radius=0.07, bush_vertical_scale=1.0, attachment_min=0.55):
+                   batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0, branch_width=1.0, branch_radius=0.07, bush_vertical_scale=1.0, attachment_min=0.55, bush_leaf_detail=False):
     """Run a seeded four-view render, then package its finished outputs."""
     output = _outside_packs(output)
     if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
@@ -70,6 +70,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
             or (branch_width != 1.0 and scene != 'bare')
             or not 0 <= attachment_min <= 0.95 or (attachment_min != 0.55 and scene not in ('bare', 'tree'))
             or (bush_vertical_scale != 1.0 and scene != 'bush')
+            or (bush_leaf_detail and scene != 'bush')
             or (branch_radius != 0.07 and scene not in ('bare', 'tree'))
             or (branched and scene != 'conifer')
             or not isinstance(tiers, int) or not 2 <= tiers <= 24
@@ -93,7 +94,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
               'leaves_per_cluster': leaves_per_cluster, 'leaf_width': leaf_width, 'leaf_shading': int(leaf_shading),
               'batch_size': batch_size, 'batch_radius': batch_radius,
               'branched': int(branched), 'tiers': tiers, 'spokes': spokes, 'yaw0': yaw,
-              'branch_width': branch_width, 'branch_radius': branch_radius, 'bush_vertical_scale': bush_vertical_scale, 'attachment_min': attachment_min, **palette_values}
+              'branch_width': branch_width, 'branch_radius': branch_radius, 'bush_vertical_scale': bush_vertical_scale, 'attachment_min': attachment_min, 'bush_leaf_detail': int(bush_leaf_detail), **palette_values}
     with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
         raw = Path(temp) / 'raw'
         raw.mkdir()
@@ -129,6 +130,7 @@ def main():
     parser.add_argument('--branch-width', type=float, default=1.0)
     parser.add_argument('--branch-radius', type=float, default=0.07)
     parser.add_argument('--bush-vertical-scale', type=float, default=1.0)
+    parser.add_argument('--bush-leaf-detail', action='store_true')
     parser.add_argument('--attachment-min', type=float, default=0.55)
     parser.add_argument('--height', type=float, default=1.0)
     parser.add_argument('--lean', type=float, default=0.1)
@@ -171,7 +173,8 @@ def main():
                             leaf_shading=args.leaf_shading, batch_size=args.batch_size, batch_radius=args.batch_radius,
                             branched=args.branched, tiers=args.tiers, spokes=args.spokes, yaw=args.yaw,
                             branch_width=args.branch_width, branch_radius=args.branch_radius,
-                            bush_vertical_scale=args.bush_vertical_scale, attachment_min=args.attachment_min)
+                            bush_vertical_scale=args.bush_vertical_scale, attachment_min=args.attachment_min,
+                            bush_leaf_detail=args.bush_leaf_detail)
     print(result)
 
 

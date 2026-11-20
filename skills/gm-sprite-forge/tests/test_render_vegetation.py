@@ -90,10 +90,12 @@ class RenderVegetationTest(unittest.TestCase):
                 Image.new('RGBA', (256, 256), (20, 70, 10, 255)).save(raw / f'bush_{view}.png')
         with patch('render_vegetation.subprocess.run', side_effect=fake_blender):
             result = render_variant('bush', self.root / 'set', 'bush-v1', self.source, self.collection,
-                                    seed=7, bush_vertical_scale=1.2, metadata=self.metadata)
+                                    seed=7, bush_vertical_scale=1.2, bush_leaf_detail=True, metadata=self.metadata)
         self.assertIn('bush_vertical_scale=1.2', commands[0])
+        self.assertIn('bush_leaf_detail=1', commands[0])
         recipe = json.loads((result / 'recipe.json').read_text())
         self.assertEqual(recipe['parameters']['bush_vertical_scale'], 1.2)
+        self.assertEqual(recipe['parameters']['bush_leaf_detail'], 1)
 
     def test_bare_branch_width_is_forwarded_and_recorded(self):
         commands = []
@@ -141,6 +143,7 @@ class RenderVegetationTest(unittest.TestCase):
                            {'seed': 1, 'leaf_width': 0, 'metadata': self.metadata},
                            {'seed': 1, 'leaf_width': 0.25, 'metadata': self.metadata},
                            {'seed': 1, 'branch_width': 1.4, 'metadata': self.metadata},
+                           {'seed': 1, 'bush_leaf_detail': True, 'metadata': self.metadata},
                            {'seed': 1, 'batch_size': 0, 'metadata': self.metadata},
                            {'seed': 1, 'branched': True, 'metadata': self.metadata},
                            {'seed': 1, 'tiers': 1, 'metadata': self.metadata},

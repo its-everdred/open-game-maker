@@ -260,7 +260,15 @@ def vegetation(sc):
                        leaf_shading=bool(P.get('leaf_shading', 0)), batch_size=int(P.get('batch_size', 1)),
                        batch_radius=P.get('batch_radius', 0.05))
     if SCENE == 'bush':
-        return bush(int(P['seed']), green, scale=P.get('height', 1))
+        masses = bush(int(P['seed']), green, scale=P.get('height', 1))
+        if P.get('bush_leaf_detail', 0):
+            from vegetation_bush_detail import leaf_cards
+            def shade(factor):
+                return tuple(tuple(min(255, c * factor) for c in band) for band in palette)
+            bright = toon_material('leaf-bright', *shade(1.35))
+            dark = toon_material('leaf-dark', *shade(.70))
+            masses.append(leaf_cards(masses, (green, bright, dark), int(P['seed'])))
+        return masses
     bark = toon_material('bark', *vegetation_palette('bark', ((117, 87, 56), (92, 65, 42), (52, 37, 25))), noise=0.08)
     if SCENE == 'conifer':
         if P.get('branched', 0):

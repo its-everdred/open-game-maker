@@ -9,6 +9,7 @@ from vegetation_mesh import bush, cluster, conifer, tree
 from vegetation_canopy import make_canopy
 from vegetation_leaves import leaf_clusters
 from vegetation_conifer import conifer_boughs
+from vegetation_bush_detail import leaf_cards
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bark = bpy.data.materials.new('bark')
@@ -21,6 +22,12 @@ wide_tree = tree(7, bark, foliage, levels=1, fanout=3, spread=(0.7, 0.8))
 assert len(wide_tree) == 7  # trunk, three branches, three canopies
 assert len(conifer(7, bark, foliage, tiers=5)) == 6
 assert len(bush(7, foliage)) == 9
+shrub = bush(7, foliage)
+detail = leaf_cards(shrub, (foliage, foliage, foliage), 7, per_mass=12)
+assert len(detail.data.polygons) == 12 * len(shrub)
+assert detail.visible_shadow is False
+detail_again = leaf_cards(shrub, (foliage, foliage, foliage), 7, per_mass=12)
+assert list(detail.data.vertices[0].co) == list(detail_again.data.vertices[0].co)
 bare = tree(7, bark, foliage, levels=2, bare=True)
 assert len(bare) == 7 and all(bark in list(obj.data.materials) for obj in bare)
 foliage.use_nodes = True
