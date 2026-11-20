@@ -2,14 +2,18 @@ import { createElement, useEffect, useRef, useState, type ComponentProps } from 
 import { Dictation, VoiceClient } from '@ogm/voice-client';
 import type { VoiceTarget } from '@ogm/contracts';
 import { defineComposer, type AiurComposer as ComposerElement } from '@aiur/conversation';
-import { attachmentType, uploadChatAttachment } from './attachments';
+import { attachmentType, uploadChatAttachment, type UploadAttachment } from './attachments';
 import type { Composer } from './Composer';
 import { connectDictation, probeVoice, type VoiceAvailability } from './voice';
+import type { StreamedChatMessage } from './stream';
 
 type Props = Pick<ComponentProps<typeof Composer>, 'jobId' | 'voiceTarget' | 'postText' | 'startJob' | 'onPosted'> & {
   reading?: 'inline' | 'stacked';
   dictationTarget?: VoiceTarget;
   wasAdmissionReused?: () => boolean;
+  onOptimistic?: (message: StreamedChatMessage) => void;
+  onFailed?: (messageId: string) => void;
+  uploadAttachment?: UploadAttachment;
 };
 
 /** Host adapters for the pinned upstream composer; no provider credentials enter the component. */
@@ -21,6 +25,9 @@ export function AiurComposer({
   postText,
   startJob,
   onPosted,
+  onOptimistic,
+  onFailed,
+  uploadAttachment = uploadChatAttachment,
   reading = 'inline',
 }: Props) {
   const ref = useRef<ComposerElement>(null);
@@ -33,8 +40,16 @@ export function AiurComposer({
   const admissionInFlight = useRef(false);
   const lastAdmittedJob = useRef<string | undefined>(undefined);
   const lastVoiceSession = useRef<string | undefined>(undefined);
-  const callbacks = useRef({ postText, startJob, onPosted, wasAdmissionReused });
-  callbacks.current = { postText, startJob, onPosted, wasAdmissionReused };
+  const callbacks = useRef({
+    postText,
+    startJob,
+    onPosted,
+    onOptimistic,
+    onFailed,
+    uploadAttachment,
+    wasAdmissionReused,
+  });
+  callbacks.current = { postText, startJob, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused };
   const [error, setError] = useState('');
   useEffect(
     () => () => {
@@ -201,7 +216,8 @@ export function AiurComposer({
         : {}),
     };
     element.onSend = async (text, attachments) => {
-      const { startJob, postText, onPosted, wasAdmissionReused } = callbacks.current;
+      const { startJob, postText, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused } =
+        callbacks.current;
       const instruction = text.trim();
       let target: string | undefined = jobId;
       if (startJob) {
@@ -225,18 +241,29 @@ export function AiurComposer({
           if (!(file instanceof File)) throw new Error('Invalid attachment');
           const type = attachmentType(file);
           if (!type) throw new Error('Unsupported attachment');
-          return uploadChatAttachment(target, file, type);
+          return uploadAttachment(target, file, type);
         }),
       );
       const separateText = !startJob || wasAdmissionReused?.() === true;
       if ((separateText && text.trim()) || uploaded.length) {
-        const posted = await postText(
+        const optimistic = optimisticMessage(
           target,
           separateText ? text.trim() : '',
-          uploaded.length ? uploaded.map(({ id }) => id) : undefined,
+          attachments.map(({ file }) => file as File),
         );
-        if (posted && typeof posted === 'object' && 'id' in posted)
-          onPosted?.(posted as Parameters<NonNullable<Props['onPosted']>>[0]);
+        onOptimistic?.(optimistic);
+        try {
+          const posted = await postText(
+            target,
+            separateText ? text.trim() : '',
+            uploaded.length ? uploaded.map(({ id }) => id) : undefined,
+          );
+          if (posted && typeof posted === 'object' && 'id' in posted)
+            onPosted?.(posted as Parameters<NonNullable<Props['onPosted']>>[0]);
+        } catch (error) {
+          onFailed?.(optimistic.id);
+          throw error;
+        }
       }
       pendingAdmission.current = undefined;
       setError('');
@@ -259,4 +286,33 @@ export function AiurComposer({
       {error && <p role="alert">{error}</p>}
     </>
   );
+}
+
+let optimisticCount = 0;
+
+function optimisticMessage(jobId: string, text: string, files: File[]): StreamedChatMessage {
+  const count = (optimisticCount += 1);
+  return {
+    id: `optimistic-${Date.now()}-${count}`,
+    job_id: jobId,
+    at: new Date().toISOString(),
+    actor: 'creator',
+    kind: 'text',
+    ...(text ? { text } : {}),
+    ...(files.length === 0
+      ? {}
+      : {
+          attachments: files.map((file, index) => {
+            const type = attachmentType(file)!;
+            return {
+              id: `optimistic-${count}-${index}`,
+              kind: type.startsWith('image/') ? ('image' as const) : ('text' as const),
+              name: file.name,
+              mime: type.startsWith('image/') ? ('image/webp' as const) : (type as 'text/plain'),
+              bytes: file.size,
+            };
+          }),
+        }),
+    optimistic: true,
+  };
 }
