@@ -188,8 +188,20 @@ afterEach(() => {
 
 it('sorts by last played or created time, with real games ahead of curated placeholders', async () => {
   gamesResponse = [
-    { ...games[0]!, id: 'g_4', title: 'Newest unplayed', createdAt: '2026-11-05T00:00:00Z', updatedAt: '2026-11-20T00:00:00Z' },
-    { ...games[0]!, id: 'g_5', title: 'Older unplayed', createdAt: '2026-11-02T00:00:00Z', updatedAt: '2026-11-19T00:00:00Z' },
+    {
+      ...games[0]!,
+      id: 'g_4',
+      title: 'Newest unplayed',
+      createdAt: '2026-11-05T00:00:00Z',
+      updatedAt: '2026-11-20T00:00:00Z',
+    },
+    {
+      ...games[0]!,
+      id: 'g_5',
+      title: 'Older unplayed',
+      createdAt: '2026-11-02T00:00:00Z',
+      updatedAt: '2026-11-19T00:00:00Z',
+    },
     { ...games[2]!, lastPlayedAt: '2026-11-03T00:00:00Z' },
     { ...games[1]!, lastPlayedAt: '2026-11-04T00:00:00Z' },
   ];
