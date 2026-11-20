@@ -8,6 +8,11 @@ const fake = vi.hoisted(() => ({
   end: vi.fn(),
   sendText: vi.fn(),
   start: vi.fn().mockResolvedValue(undefined),
+  defaultUpload: vi.fn(),
+}));
+vi.mock('./attachments', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./attachments')>()),
+  uploadChatAttachment: fake.defaultUpload,
 }));
 vi.mock('@ogm/voice-client', () => ({
   Dictation: class {
@@ -67,6 +72,87 @@ it('posts a text instruction separately when admission reused an existing voice 
   composer.value = 'Add a bridge';
   await composer.send();
   expect(postText).toHaveBeenCalledWith('job-1', 'Add a bridge', undefined);
+});
+
+it('uses a custom attachment uploader instead of the default uploader', async () => {
+  fake.defaultUpload.mockReset();
+  const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
+  const uploaded = { id: 'attachment-1', kind: 'text' as const, name: file.name, mime: 'text/plain' as const, bytes: 5 };
+  const uploadAttachment = vi.fn().mockResolvedValue(uploaded);
+  const postText = vi.fn().mockResolvedValue(undefined);
+  const onOptimistic = vi.fn();
+  const { container, rerender } = render(
+    <AiurComposer
+      jobId="job-1"
+      postText={postText}
+      uploadAttachment={uploadAttachment}
+      onOptimistic={onOptimistic}
+    />,
+  );
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+  await composer.onSend!('', [{ name: file.name, file }]);
+  expect(uploadAttachment).toHaveBeenCalledWith('job-1', file, 'text/plain');
+  expect(fake.defaultUpload).not.toHaveBeenCalled();
+  expect(postText).toHaveBeenCalledWith('job-1', '', ['attachment-1']);
+  expect(onOptimistic.mock.calls[0][0].attachments).toEqual([
+    { id: expect.stringMatching(/^optimistic-/), kind: 'text', name: 'note.txt', mime: 'text/plain', bytes: 5 },
+  ]);
+  fake.defaultUpload.mockResolvedValue({
+    id: 'attachment-2',
+    kind: 'text',
+    name: file.name,
+    mime: 'text/plain',
+    bytes: 5,
+  });
+  rerender(<AiurComposer jobId="job-1" postText={postText} onOptimistic={onOptimistic} />);
+  await composer.onSend!('', [{ name: file.name, file }]);
+  expect(fake.defaultUpload).toHaveBeenCalledWith('job-1', file, 'text/plain');
+  expect(postText).toHaveBeenCalledWith('job-1', '', ['attachment-2']);
+});
+
+it('emits an optimistic message before the post resolves', async () => {
+  let resolvePost: (value: undefined) => void = () => {};
+  const postText = vi.fn(
+    () =>
+      new Promise<undefined>((resolve) => {
+        resolvePost = resolve;
+      }),
+  );
+  const onOptimistic = vi.fn();
+  const { container } = render(
+    <AiurComposer jobId="job-1" postText={postText} onOptimistic={onOptimistic} />,
+  );
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+  composer.value = 'Make it brighter';
+  const sending = composer.send();
+  await waitFor(() => expect(postText).toHaveBeenCalledWith('job-1', 'Make it brighter', undefined));
+  expect(onOptimistic).toHaveBeenCalledOnce();
+  expect(onOptimistic.mock.calls[0][0]).toMatchObject({
+    job_id: 'job-1',
+    actor: 'creator',
+    text: 'Make it brighter',
+    optimistic: true,
+  });
+  resolvePost(undefined);
+  await sending;
+});
+
+it('reports the optimistic message id when posting rejects', async () => {
+  const postText = vi.fn().mockRejectedValue(new Error('post failed'));
+  const onOptimistic = vi.fn();
+  const onFailed = vi.fn();
+  const { container } = render(
+    <AiurComposer jobId="job-1" postText={postText} onOptimistic={onOptimistic} onFailed={onFailed} />,
+  );
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+  composer.value = 'Make it brighter';
+  const sent = await composer.send();
+  expect(sent).toBe(false);
+  expect(onFailed).toHaveBeenCalledWith(onOptimistic.mock.calls[0][0].id);
+  expect(composer.value).toBe('Make it brighter');
 });
 
 it('reports microphone errors that arrive before dictation stops', async () => {
