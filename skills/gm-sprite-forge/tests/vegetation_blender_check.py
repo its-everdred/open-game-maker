@@ -7,6 +7,7 @@ import bpy
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from vegetation_mesh import bush, cluster, conifer, tree
 from vegetation_canopy import make_canopy
+from vegetation_leaves import leaf_clusters
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bark = bpy.data.materials.new('bark')
@@ -33,6 +34,14 @@ assert all(bark in list(obj.data.materials) for obj in dense_tree[3:9])
 assert len(first.data.vertices) == 192 and len(first.data.polygons) == 256
 assert list(first.data.vertices[0].co) == list(second.data.vertices[0].co)
 assert list(first.data.vertices[0].co) != list(other.data.vertices[0].co)
+leafy = leaf_clusters(7, foliage, count=3, extent=0.25, leaves_per_cluster=8)
+repeat = leaf_clusters(7, foliage, count=3, extent=0.25, leaves_per_cluster=8)
+different = leaf_clusters(8, foliage, count=3, extent=0.25, leaves_per_cluster=8)
+assert len(leafy) == 3 and len(leafy[0].data.vertices) == 40 and len(leafy[0].data.polygons) == 32
+assert list(leafy[0].data.vertices[0].co) == list(repeat[0].data.vertices[0].co)
+assert list(leafy[0].data.vertices[0].co) != list(different[0].data.vertices[0].co)
+assert len(cluster(7, foliage, count=2, leafy=True, leaves_per_cluster=8)) == 2
+assert leaf_clusters(7, foliage, count=0) == []
 plants = cluster(7, foliage, count=6, extent=0.25)
 assert len(plants) == 6
 assert all(abs(obj.location.x) <= 0.25 and abs(obj.location.y) <= 0.25 for obj in plants)

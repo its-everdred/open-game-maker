@@ -247,7 +247,9 @@ def vegetation(sc):
     palette = vegetation_palette('foliage', defaults)
     green = toon_material('foliage', *palette, noise=0.08)
     if SCENE == 'plant':
-        return cluster(int(P['seed']), green, count=int(P.get('count', 5)), extent=P.get('extent', 0.2))
+        return cluster(int(P['seed']), green, count=int(P.get('count', 5)), extent=P.get('extent', 0.2),
+                       height=P.get('plant_height', 0.18), leafy=bool(P.get('leafy', 0)),
+                       leaves_per_cluster=int(P.get('leaves_per_cluster', 12)))
     if SCENE == 'bush':
         return bush(int(P['seed']), green, scale=P.get('height', 1))
     bark = toon_material('bark', *vegetation_palette('bark', ((117, 87, 56), (92, 65, 42), (52, 37, 25))), noise=0.08)
