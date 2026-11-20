@@ -7,7 +7,9 @@ import { reviewOptionImageReady, reviewRoundMediaReady } from '../src/qa-review-
 import { gm, tempDir } from './helpers.js';
 
 const openDeck = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock('../src/qa-review-checks.js', () => ({
+const screenshotTimeouts = vi.hoisted(() => vi.fn());
+vi.mock('../src/qa-review-checks.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/qa-review-checks.js')>()),
   settleMedia: async () => {},
   openReviewDeck: openDeck,
   openReviewItem: async () => {},
@@ -19,10 +21,17 @@ vi.mock('../src/qa-review-touch.js', () => ({ swipeReviewMedia: async () => {} }
 
 // The hammer's ticket-detail steps (#873) run first in each size and have their own browser test; this suite drives the
 // review deck.
-const ticketSteps = vi.hoisted(() => vi.fn(async () => {}));
+const ticketSteps = vi.hoisted(() =>
+  vi.fn(async (_page: unknown, _origin: string, capture?: (label: string) => Promise<void>) => {
+    if (capture) await capture('ticket-running');
+  }),
+);
 vi.mock('../src/qa-ticket-detail-e2e.js', () => ({ ticketDetailSteps: ticketSteps }));
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  screenshotTimeouts.mockClear();
+});
 
 it('captures the shared ticket step failure and its URL at each size', async () => {
   ticketSteps.mockImplementation(async () => {
@@ -34,7 +43,10 @@ it('captures the shared ticket step failure and its URL at each size', async () 
   );
   const page = {
     url: () => 'https://app.example.test/all',
-    screenshot: async ({ path }: { path: string }) => writeFileSync(path, 'still'),
+    screenshot: async ({ path, timeout }: { path: string; timeout: number }) => {
+      screenshotTimeouts(timeout);
+      writeFileSync(path, 'still');
+    },
   };
   const context = { addCookies: async () => {}, newPage: async () => page, close: async () => {} };
   const browser = { newContext: async () => context } as unknown as Parameters<typeof reviewE2e>[0];
@@ -55,8 +67,9 @@ it('captures the shared ticket step failure and its URL at each size', async () 
       expect(result.failure).toContain('waiting for Details');
       expect(result.stills).toHaveLength(1);
     }
+    expect(screenshotTimeouts.mock.calls.map(([timeout]) => timeout)).toEqual([5_000, 5_000, 5_000, 5_000]);
   } finally {
-    ticketSteps.mockImplementation(async () => {});
+    ticketSteps.mockReset();
   }
 });
 
@@ -70,7 +83,10 @@ it('captures the review page and named wait when opening the deck fails', async 
     url: () => 'https://app.example.test/all',
     goto: async () => {},
     close: async () => {},
-    screenshot: async ({ path }: { path: string }) => writeFileSync(path, 'still'),
+    screenshot: async ({ path, timeout }: { path: string; timeout: number }) => {
+      screenshotTimeouts(timeout);
+      writeFileSync(path, 'still');
+    },
     getByRole: () => ({}),
   };
   const context = { addCookies: async () => {}, newPage: async () => page, close: async () => {} };
@@ -86,8 +102,9 @@ it('captures the review page and named wait when opening the deck fails', async 
     stamp: 'test',
   });
   expect(results[0]?.failure).toContain('wait for review row QA review: timeout');
-  expect(results[0]?.stills[0]).toMatch(/review-failure\.png$/u);
+  expect(results[0]?.stills.some((still) => /review-failure\.png$/u.test(still))).toBe(true);
   expect(results[0]?.url).toBe('https://app.example.test/all');
+  expect(screenshotTimeouts.mock.calls.some(([timeout]) => timeout === 5_000)).toBe(true);
 });
 
 it('rejects broken images and unloaded video or audio in the production readiness gate', () => {
@@ -326,7 +343,10 @@ async function runAnswerReceiptCase(
     url: () => 'https://app.example.test/all',
     goto: async () => {},
     close: async () => {},
-    screenshot: async ({ path }: { path: string }) => writeFileSync(path, 'still'),
+    screenshot: async ({ path, timeout }: { path: string; timeout: number }) => {
+      screenshotTimeouts(timeout);
+      writeFileSync(path, 'still');
+    },
     getByRole: (_role: string, options?: { name?: string | RegExp }) => makeLocator(String(options?.name ?? '')),
     getByLabel: () => makeLocator(),
     locator: () => makeLocator(),
@@ -397,8 +417,11 @@ describe('Command answer receipt timing', () => {
     const { results, responseOrdering, roundPollCounts } = await runAnswerReceiptCase('immediate');
     expect(results).toHaveLength(4);
     expect(results.every((result) => result.ok)).toBe(true);
+    expect(results.every((result) => result.stills.some((still) => still.includes('ticket-running')))).toBe(true);
     expect(responseOrdering).toEqual([true, true, true, true]);
     expect(roundPollCounts).toEqual([1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3]);
+    expect(screenshotTimeouts.mock.calls.length).toBeGreaterThan(0);
+    expect(screenshotTimeouts.mock.calls.every(([timeout]) => timeout === 90_000)).toBe(true);
   });
 
   it('rejects a route response for a different option even when the report contains B', async () => {
