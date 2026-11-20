@@ -4,10 +4,10 @@ import { z } from 'zod';
 
 import { type Layer } from './conventions.js';
 
-const TILE_WIDTH = 256;
-const TILE_HEIGHT = 128;
+const TILE_WIDTH = 128;
+const TILE_HEIGHT = 64;
 const GID_MASK = 0x1fffffff;
-const PHASER_ISOMETRIC_ORIENTATION = 1;
+let floorTextureSerial = 0;
 const LAYERS = ['floor', 'wall', 'decor', 'roof'] as const satisfies readonly Layer[];
 const FACINGS = { 0: 'E', 90: 'N', 180: 'W', 270: 'S' } as const;
 const LAYER_DEPTH: Record<Layer, number> = { floor: 0, wall: 0.1, decor: 0.2, roof: 0.3 };
@@ -102,7 +102,7 @@ function property(properties: z.infer<typeof propertySchema>[] | undefined, name
   return properties?.find((candidate) => candidate.name === name)?.value;
 }
 
-/** Top point of an isometric tile in an origin-free 256x128 diamond projection. */
+/** Top point of an isometric tile in an origin-free 128x64 diamond projection. */
 export function isoToWorld(x: number, y: number): IsoPoint {
   return { x: (x - y) * (TILE_WIDTH / 2), y: (x + y) * (TILE_HEIGHT / 2) };
 }
@@ -165,7 +165,7 @@ export class IsoMap {
     if (map.orientation !== 'isometric') throw new Error('map orientation must be isometric');
     if (map.infinite === true) throw new Error('map must be finite');
     if (map.tilewidth !== TILE_WIDTH || map.tileheight !== TILE_HEIGHT) {
-      throw new Error(`map tiles are ${map.tilewidth}x${map.tileheight}; SmallScaleInt maps must be 256x128`);
+      throw new Error(`map tiles are ${map.tilewidth}x${map.tileheight}; SmallScaleInt maps must be 128x64`);
     }
     this.width = map.width;
     this.height = map.height;
@@ -334,26 +334,55 @@ export class IsoMap {
     const floorPieces = all.filter((piece) => piece.layer === 'floor');
     let floor: Phaser.Tilemaps.TilemapLayer | undefined;
     if (floorPieces.length > 0) {
-      const tilemap = scene.make.tilemap({
-        tileWidth: TILE_WIDTH,
-        tileHeight: TILE_HEIGHT,
-        width: this.width,
-        height: this.height,
+      // Phaser caches coordinate-conversion functions in its Tilemap constructor.
+      // Seed a minimal Tiled map so isometric conversion and culling agree with the layer.
+      const serial = floorTextureSerial++;
+      const mapKey = `smallscaleint-map:${serial}`;
+      scene.cache.tilemap.add(mapKey, {
+        format: 1, // Phaser.Tilemaps.Formats.TILED_JSON
+        data: {
+          orientation: 'isometric',
+          width: this.width,
+          height: this.height,
+          tilewidth: TILE_WIDTH,
+          tileheight: TILE_HEIGHT,
+          layers: [],
+          tilesets: [],
+        },
       });
-      // Blank maps have no orientation option. Phaser's declaration says string, but its runtime enum is numeric.
-      (tilemap as unknown as { orientation: number }).orientation = PHASER_ISOMETRIC_ORIENTATION;
+      let tilemap: Phaser.Tilemaps.Tilemap;
+      try {
+        tilemap = scene.make.tilemap({ key: mapKey });
+      } finally {
+        scene.cache.tilemap.remove(mapKey);
+      }
+      // The map has no predeclared Tiled tilesets; allow addTilesetImage to bind
+      // the runtime textures while retaining the constructor's isometric converters.
+      tilemap.format = 2; // Phaser.Tilemaps.Formats.ARRAY_2D
       const byGid = new Map<number, IsoPiece>();
       for (const piece of floorPieces) if (!byGid.has(piece.gid)) byGid.set(piece.gid, piece);
-      const tilesets = [...byGid.values()].map((piece) => {
-        const tileset = tilemap.addTilesetImage(
-          `gid-${piece.gid}`,
-          `${piece.asset}:${piece.facing}`,
-          TILE_WIDTH,
-          TILE_WIDTH,
-          0,
-          0,
-          piece.gid,
-        );
+      const sources = [...byGid.values()].map((piece) => ({
+        piece,
+        texture: scene.textures.get(`${piece.asset}:${piece.facing}`),
+      }));
+      const imageWidth = sources.reduce((width, source) => Math.max(width, source.texture.getSourceImage().width), 0);
+      const imageHeight = sources.reduce(
+        (height, source) => Math.max(height, source.texture.getSourceImage().height),
+        0,
+      );
+      const textureKeys: string[] = [];
+      const tilesets = sources.map(({ piece, texture }) => {
+        const image = texture.getSourceImage();
+        // Phaser handles tile offsets differently in Canvas and WebGL, and its WebGL
+        // offsets do not scale with the layer. Center each source on a common canvas.
+        const key = `smallscaleint-floor:${serial}:${piece.gid}`;
+        const normalized = scene.textures.createCanvas(key, imageWidth, imageHeight);
+        if (!normalized) throw new Error(`could not create texture for tile gid ${piece.gid}`);
+        textureKeys.push(key);
+        normalized.getContext().drawImage(image as CanvasImageSource, (imageWidth - image.width) / 2, 0);
+        normalized.refresh();
+        normalized.setFilter(texture.source[0]!.scaleMode);
+        const tileset = tilemap.addTilesetImage(`gid-${piece.gid}`, key, imageWidth, imageHeight, 0, 0, piece.gid);
         if (!tileset) throw new Error(`texture for tile gid ${piece.gid} is not loaded`);
         return tileset;
       });
@@ -362,7 +391,12 @@ export class IsoMap {
       const rows = Array.from({ length: this.height }, () => Array<number>(this.width).fill(-1));
       for (const piece of floorPieces) if (piece.visible) rows[piece.y]![piece.x] = piece.gid;
       floor.putTilesAt(rows, 0, 0);
-      floor.setPosition(this.height * (TILE_WIDTH / 2), TILE_HEIGHT / 2).setDepth(-1);
+      floor.setPosition(this.height * (TILE_WIDTH / 2) - imageWidth / 2, TILE_HEIGHT - 208).setDepth(-1);
+      // The layer origin is the image's top-left; include the full image in camera culling.
+      floor.setCullPadding(Math.ceil(imageWidth / TILE_WIDTH) + 1, Math.ceil(imageHeight / TILE_HEIGHT) + 1);
+      floor.once('destroy', () => {
+        for (const key of textureKeys) scene.textures.remove(key);
+      });
       this.#floor = floor;
     }
 
@@ -373,7 +407,7 @@ export class IsoMap {
         const point = isoToWorld(piece.x, piece.y);
         const object = scene.add
           .image(this.height * (TILE_WIDTH / 2) + point.x, TILE_HEIGHT + point.y, `${piece.asset}:${piece.facing}`)
-          .setOrigin(0.5, 0.75)
+          .setOrigin(0.5, 208 / scene.textures.get(`${piece.asset}:${piece.facing}`).getSourceImage().height)
           .setDepth(piece.depth)
           .setVisible(piece.visible);
         this.#rendered.set(piece.key, object);

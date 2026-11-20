@@ -23,8 +23,8 @@ export function fixtureMap4x4() {
     orientation: 'isometric' as const,
     width: 4,
     height: 4,
-    tilewidth: 256,
-    tileheight: 128,
+    tilewidth: 128,
+    tileheight: 64,
     infinite: false,
     tilesets: [
       {
