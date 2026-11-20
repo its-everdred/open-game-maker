@@ -602,6 +602,30 @@ describe('a registered game’s own Commands', () => {
     ]);
   });
 
+  it('carries a liked option note even when that is the only vote', async () => {
+    const { app, answerAsCreator } = await appWithAiur([decision()]);
+    const response = await app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        option_id: 'round',
+        version: 2,
+        review: { likes: ['round'], dislikes: [], liked_notes: [{ option_id: 'round', reason: 'Favorite' }] },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(answerAsCreator).toHaveBeenCalledWith(
+      'd_aiur_1',
+      expect.objectContaining({
+        response: JSON.stringify({
+          kind: 'question_answers',
+          answers: [{ option_id: 'round', verdict: 'like', note: 'Favorite' }],
+        }),
+      }),
+    );
+  });
+
   it('records a keyed round change request with its notes', async () => {
     const item = decision({
       options: [

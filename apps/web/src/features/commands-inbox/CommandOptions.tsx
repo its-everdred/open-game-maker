@@ -53,7 +53,6 @@ export function CommandOptions({
                 <img alt="" src={option.media.url} />
               ) : (
                 <video
-                  autoPlay
                   data-review-loop
                   loop
                   muted

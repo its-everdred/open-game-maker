@@ -27,6 +27,9 @@ export function reviewProblem(cards: readonly { id: string }[], review: CommandR
     if (seen.has(id)) return `card ${id} is judged twice`;
     seen.add(id);
   }
+  for (const { option_id: id } of review.liked_notes ?? []) {
+    if (!known.has(id)) return `note ${id} is not a card of this Command`;
+  }
   return null;
 }
 

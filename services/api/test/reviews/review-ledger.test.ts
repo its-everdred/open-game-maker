@@ -188,6 +188,7 @@ describe('review deck answers', () => {
       notes: 'All of these read too cold for the lantern room.',
     });
     expect(listReviews(deps.db, GAME)[0]).toMatchObject({
+      likes: [{ option_id: 'wood', label: 'Wooden' }],
       notes: 'All of these read too cold for the lantern room.',
       dislikes: [{ option_id: 'iron', label: 'Iron', reason: 'Too cold for the lantern room' }],
     });
@@ -195,6 +196,14 @@ describe('review deck answers', () => {
       status: 'answered',
       review: { notes: 'All of these read too cold for the lantern room.' },
     });
+  });
+
+  it('persists liked-option notes in the review ledger', async () => {
+    const { app, deps } = await setup();
+    insertOpenDesignCommand(deps);
+    const review = { likes: ['wood'], dislikes: [], liked_notes: [{ option_id: 'wood', reason: 'Warm' }] };
+    expect((await answerReview(app, { option_id: 'wood', review })).status).toBe(200);
+    expect(listReviews(deps.db, GAME)[0]).toMatchObject({ likes: [{ option_id: 'wood', label: 'Wooden', note: 'Warm' }] });
   });
 
   it('takes a half-judged review, since Send is always on, and records only the cards judged', async () => {
@@ -220,6 +229,18 @@ describe('review deck answers', () => {
       review: { likes: ['wood', 'lava'], dislikes: [{ option_id: 'iron' }] },
     });
 
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'command_review_invalid' });
+    expect(listReviews(deps.db, GAME)).toEqual([]);
+  });
+
+  it('refuses a liked-option note for a card the Command does not have', async () => {
+    const { app, deps } = await setup();
+    insertOpenDesignCommand(deps);
+    const response = await answerReview(app, {
+      option_id: 'wood',
+      review: { likes: ['wood', 'lava'], dislikes: [], liked_notes: [{ option_id: 'lava', reason: 'Not real' }] },
+    });
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: 'command_review_invalid' });
     expect(listReviews(deps.db, GAME)).toEqual([]);

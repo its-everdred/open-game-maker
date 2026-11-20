@@ -121,6 +121,7 @@ export default new Hono<ApiBindings>()
       body.review.likes.length === 1 &&
       body.review.likes[0] === body.option_id &&
       body.review.dislikes.length === 0 &&
+      body.review.liked_notes === undefined &&
       body.review.notes === undefined;
     const deps = c.get('deps');
     const guard = body.review

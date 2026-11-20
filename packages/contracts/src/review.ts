@@ -64,6 +64,7 @@ export const CommandAnswerBody = z
 export const ReviewLedgerCard = z.object({
   option_id: z.string().min(1).max(32),
   label: z.string().min(1).max(200),
+  note: ReviewReason.optional(),
 });
 
 export const ReviewLedgerDislike = ReviewLedgerCard.extend({ reason: ReviewReason.nullable() });
