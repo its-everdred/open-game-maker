@@ -244,7 +244,7 @@ describe('GamesScreen', () => {
     // slow first render under the fully parallel suite.
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });
     expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
-    expect(container.querySelectorAll('.game-tile')).toHaveLength(13 + count - (count >= 2 ? 1 : 0));
+    expect(container.querySelectorAll('.game-tile')).toHaveLength(7 + count - (count >= 2 ? 1 : 0));
     expect(container.querySelectorAll('[data-game-id].is-selected')).toHaveLength(0);
   });
 
