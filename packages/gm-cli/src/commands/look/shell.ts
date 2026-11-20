@@ -19,8 +19,9 @@ import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js
 import { printJson, resolveContainedPath } from '../../context.js';
 import { rejectSymlinkDirectories, runChild } from '../capture/shell.js';
 import { findPlayAreaConfig } from '../../play-area-config.js';
+import { REVIEW_VIEWPORTS, VIEWPORTS } from '@ogm/contracts';
 
-const sizes = ['390x844', '844x390', '820x1180', '1180x820'];
+const sizes = REVIEW_VIEWPORTS.map((id) => `${VIEWPORTS[id].width}x${VIEWPORTS[id].height}`);
 
 /** Honor explicitly selected symlinked roots (such as assets-local) while checking the resolved path. */
 function outputPath(path: string): string {
