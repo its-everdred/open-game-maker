@@ -26,16 +26,20 @@ describe('gm plan check', () => {
   });
 
   it('fails a ticket filed without a role, without its game, with two games or with a role not in roles.md', async () => {
-    const result = await check(
-      [
-        { number: 4, labels: ['game:blobs'] },
+    const root = tempDir('gm-plan-check-');
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    mkdirSync(join(root, 'docs', 'blobs'), { recursive: true });
+    writeFileSync(join(root, 'docs', 'blobs', 'decisions.json'), JSON.stringify([]));
+    writeFileSync(
+      join(root, 'issues.json'),
+      JSON.stringify([
+        { number: 4, body: '## Creator decisions\n- None\n', labels: ['game:blobs'] },
         { number: 5, labels: ['role:audio'] },
-        { number: 6, labels: ['game:blobs', 'role:painter'] },
-        { number: 7, labels: ['game:blobs', 'game:castle', 'role:qa'] },
-      ],
-      '--game',
-      'blobs',
+        { number: 6, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:painter'] },
+        { number: 7, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'game:castle', 'role:qa'] },
+      ]),
     );
+    const result = await gm(['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs'], { cwd: root });
     expect(result.code).toBe(1);
     expect(result.out).toEqual([
       '#4: no role:* label from gm-core/references/roles.md',

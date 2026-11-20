@@ -15,11 +15,7 @@ Play spends no paid API unless `gm policy` says an admin turned it on (default o
 
 ## Keep the layers honest
 
-Pack facts go on asset cards or in the set adapter, never in the game. Call the adapter for rendering, collision,
-and maps; keep gameplay in `src/features/`. If the second game on the same set would copy a rule unchanged, note it
-under `## Promote` for L2. If the second set or dimension would reuse adapter code unchanged, propose it for L1.
-Until that evidence exists, write the rule once in L3 before promoting it. Pattern cards stay copyable guidance,
-and an ejected adapter becomes game-owned L3 code until the package can serve the game again.
+Pack facts go on asset cards or in the set adapter, never in the game. Call adapters for rendering, collision, and maps; keep gameplay in `src/features/`. If the second game on the same set would copy a rule unchanged, note it under `## Promote` for L2. If the second set or dimension reuses adapter code unchanged, propose L1. Until that evidence exists, write the rule once in L3 before promoting it. Pattern cards stay copyable guidance; an ejected adapter becomes game-owned L3 until its package can serve the game again.
 
 ## Choose assets before making them
 
@@ -46,20 +42,15 @@ Set `IMPECCABLE_BIN="$HOME/.impeccable/bin/0.1.25/impeccable"` and `DO_NOT_TRACK
 
 ## Build loop
 
-**Ask, don't assume.** At any stage (a prototype, a failed review, a spec gap), before deciding anything a player would
-notice, ask with `gm decide`: a 2-5 word `--topic`, as many options as needed, each showing the thing itself (`--media`
-or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic; `design/decisions.json` refuses
-one already asked unless the creator reopens it (`--revisit`). At most three per edit beyond the ticket's inventory decisions; new games follow
-gm-new-game-design. Engineering and operations questions never go to the creator: decide them or tell the Executor. **You think of the decisions; the creator makes them.** The game's inventory, `docs/<slug>/decisions.json`, lists every product decision, and your ticket names its ids under `## Creator decisions`: at the start, raise each `open` one (non-blocking, media on every option, pack assets as a real lineup), build your recommendation and record the answer back. A decision you discover goes into the inventory first; never settle one silently. A playable build that changes what the creator can do or see is delivered only once its prototype review is raised (play link, clip, works now, known limitations, what to weigh in on). Format and rules: `references/decision-inventory.md`.
+**Ask, don't assume.** At any stage (prototype, failed review, spec gap), before deciding anything a player would notice, ask with `gm decide`: a 2-5 word `--topic`, options showing the thing itself (`--media` or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic; `design/decisions.json` refuses repeats unless reopened with `--revisit`. At most three per edit beyond ticket inventory; new games follow gm-new-game-design. Engineering or operations questions never go to the creator: decide or tell the Executor. **You think of the decisions; the creator makes them.** `docs/<slug>/decisions.json` lists every product decision, and tickets name ids under `## Creator decisions`: at the start, raise each `open` one non-blocking, with media on every option and pack assets as a real lineup; build your recommendation and record the answer. Add discovered decisions to inventory first; never settle one silently.
+Deliver a playable build that changes what the creator can do or see only after prototype review is raised (play link, clip, works now, known limitations, what to weigh in on). Format and rules: `references/decision-inventory.md`.
 Build the choice. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked. Done means
 `gm check`, `gm test`, and `gm run` are green and the PR's checklist is answered from the evidence sheet; look first.
 
-For planned creator decisions, save the ticket body and run `gm decisions next --ticket <n> --body <ticket-body.md>` before
-implementation, then raise each open entry with `gm decisions raise <id>`. The command checks option media and records
-the Command in `design/decisions.json`.
-After a `gm-decision-answer`, read the `gm-decision-answer` JSON block, use its exact `option_label`, and copy any
-creator note into `--note` (JSON-stringify a structured response). Run `gm decisions answer <id> <label> [--note <text>]`
-before changing the build.
+For planned creator decisions, save the ticket body; run `gm decisions next --ticket <n> --body <ticket-body.md>` and
+raise each open entry with `gm decisions raise <id>` (validates option media and records the Command). After a
+`gm-decision-answer`, use its exact `option_label`, pass any creator note via `--note` (JSON-stringify structured text),
+and run `gm decisions answer <id> <label> [--note <text>]` before changing the build.
 
 ## Energy
 Run `gm energy` at the start. `save` means a cheaper model, lower effort, and optional work deferred. `best` means the
