@@ -75,6 +75,10 @@ recommended option, origin (player or provisional default), time, and the spec s
 raw words, voice transcript and pastes in private storage only; the spec and every GitHub issue carry a privacy-safe
 summary and an opaque reference.
 
+A detail you did not ask because a default covers it is still the creator's to decide later: list it under the
+spec's open questions with its default. The Executor turns the decision log and every open question into the game's
+decision inventory (`../gm-core/references/decision-inventory.md`), so nothing you heard or assumed is decided silently.
+
 ## Finish
 
 When the player says it's ready, or the important decisions are answered or defaulted, write the spec using

@@ -51,6 +51,9 @@ describe('worker progress route', () => {
     const progress = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
     expect(progress.status).toBe(200);
     expect(await progress.json()).toMatchObject({ workers: [], daemonUnavailable: false, trackerStale: false });
+    const completed = await app.request(`/api/v1/games/${game}/tickets/completed`, { headers: asUser(user) });
+    expect(completed.status).toBe(200);
+    expect(await completed.json()).toEqual({ tickets: [], stale: false });
     const commands = await app.request('/api/v1/me/commands?includeQuestions=1', { headers: asUser(user) });
     expect(commands.status).toBe(200);
     const commandBody = await commands.json();

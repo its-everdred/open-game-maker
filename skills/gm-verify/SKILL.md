@@ -62,7 +62,7 @@ Copy this into the PR and answer every line from the sheet:
 - Unchecked: iPhone Safari, sound, <anything else not run>
 ```
 
-The scoped visual gate, `gm check`, `gm test`, console errors, and budgets block.
+The scoped visual gate, `gm check`, `gm test`, console errors, and budgets block. A playable build that changes what the creator can do or see is not delivered until its prototype review is raised and copied into the PR body (`../gm-core/references/decision-inventory.md`): play link, a phone-playable MP4 from this run, works now, known limitations and 3–6 inventory decisions to weigh in on. Check every works and limitation line in the build you captured, and list what a player hits in the first minute (no attack, no walk animation, no setting).
 
 Run `gm look score` and `gm look judge` on your changed screens against their targets. Fix failures; inherited gaps do not block. Experiment tickets also post captures on the issue.
 
