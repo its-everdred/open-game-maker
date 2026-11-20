@@ -11,6 +11,7 @@ type Variant = {
   text?: { capHeight: number; color?: string; background?: string };
 };
 type LayerSource = { slot: SlotId; path: string; anchors: Partial<Record<ViewportId, { x: number; y: number; width: number }>> };
+const NUMERIC_EPSILON = 1e-12;
 
 /** Validate creator-visible image variants against the shared viewport and legibility contract. */
 export async function checkImageSlots(game: string): Promise<string[]> {
@@ -50,11 +51,33 @@ export async function checkImageSlots(game: string): Promise<string[]> {
       variants: Object.fromEntries(IMAGE_SLOTS.logo.viewports.map((viewport) => [viewport, manifest.logo])),
     };
   }
-  // Legacy loading portrait/landscape fields keep their existing 9:16 and 16:9 contract.
-  // Explicit images.loading entries use the viewport-specific slot contract below.
+  // Legacy loading fields keep their own source checks; viewport outputs belong to images.loading.
+  if (typeof manifest.loading === 'object' && manifest.loading !== null && !Array.isArray(manifest.loading)) {
+    required.loading = { mode: 'per-ratio', variants: {} };
+  }
   if (declaredImages && declaredImages.success) Object.assign(required, declaredImages.data);
 
-  const rules = imageRules(manifest as Parameters<typeof imageRules>[0]);
+  const defaultRules = imageRules({});
+  let rules = defaultRules;
+  if (manifest.imageRules !== undefined) {
+    if (typeof manifest.imageRules !== 'object' || manifest.imageRules === null || Array.isArray(manifest.imageRules)) {
+      errors.push('gm.manifest.json: imageRules must be an object of numeric overrides');
+    } else {
+      const overrides: Partial<typeof defaultRules> = {};
+      for (const [name, value] of Object.entries(manifest.imageRules as Record<string, unknown>)) {
+        if (!Object.hasOwn(defaultRules, name)) {
+          errors.push(`gm.manifest.json: imageRules.${name} is not a known rule`);
+        } else if (typeof value !== 'number' || !Number.isFinite(value)) {
+          errors.push(`gm.manifest.json: imageRules.${name} must be a finite number`);
+        } else if (value < 0 || (name === 'safeMargin' && value >= 0.5)) {
+          errors.push(`gm.manifest.json: imageRules.${name} is outside its valid range`);
+        } else {
+          overrides[name as keyof typeof defaultRules] = value;
+        }
+      }
+      rules = imageRules({ imageRules: overrides });
+    }
+  }
   const variants: Variant[] = [];
   const layerSources: LayerSource[] = [];
   for (const slot of Object.keys(required) as SlotId[]) {
@@ -95,7 +118,8 @@ export async function checkImageSlots(game: string): Promise<string[]> {
         errors.push(`${path}: images.${subject} must be inside public`);
         return undefined;
       }
-      const { width = 0, height = 0 } = await sharp(realFile).metadata();
+      const metadata = await sharp(realFile).metadata();
+      const { width = 0, height = 0 } = metadata.autoOrient ?? metadata;
       if (width <= 0 || height <= 0) throw new Error('image has no dimensions');
       return { width, height };
     } catch {
@@ -109,7 +133,7 @@ export async function checkImageSlots(game: string): Promise<string[]> {
     if (!dimensions) continue;
     const { width, height } = dimensions;
     const display = IMAGE_SLOTS[variant.slot].display[variant.viewport];
-    if (Math.abs(width / height / (display.width / display.height) - 1) > 0.01)
+    if (Math.abs(width / height / (display.width / display.height) - 1) > 0.01 + NUMERIC_EPSILON)
       errors.push(
         `${variant.path}: ${variant.slot} ${variant.viewport} is ${width}:${height}, needs the ${display.width}:${display.height} display box`,
       );
@@ -140,10 +164,10 @@ export async function checkImageSlots(game: string): Promise<string[]> {
       const halfHeight = heightFraction / 2;
       const margin = rules.safeMargin;
       if (
-        anchor.x - halfWidth < margin ||
-        anchor.x + halfWidth > 1 - margin ||
-        anchor.y - halfHeight < margin ||
-        anchor.y + halfHeight > 1 - margin
+        anchor.x - halfWidth < margin - NUMERIC_EPSILON ||
+        anchor.x + halfWidth > 1 - margin + NUMERIC_EPSILON ||
+        anchor.y - halfHeight < margin - NUMERIC_EPSILON ||
+        anchor.y + halfHeight > 1 - margin + NUMERIC_EPSILON
       ) {
         errors.push(`${layer.path}: images.${layer.slot} ${viewport} anchor leaves the safe area`);
       }

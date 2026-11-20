@@ -1,4 +1,4 @@
-import { EXIT, type GmCommand } from '../../command.js';
+import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { gameDir } from '../../outbox.js';
 import { checkImageSlots } from '../../image-slots-check.js';
 import { checkLoading } from '../../loading-check.js';
@@ -10,7 +10,7 @@ export const command: GmCommand = {
   example: 'check images',
   flags: {},
   async run(ctx, args) {
-    if (args.length > 0) return EXIT.usage;
+    if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help check images');
     let game = ctx.cwd;
     try {
       game = gameDir(ctx.cwd);

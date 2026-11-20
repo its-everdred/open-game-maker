@@ -217,7 +217,7 @@ describe('gm check', () => {
     expect(result.code).toBe(1);
     const report = JSON.parse(result.out[0]!);
     expect(report.loadingErrors).toHaveLength(2);
-    expect(report.imageErrors).toEqual([]);
+    expect(report.imageErrors).toContain('images.loading: missing variant for phone-portrait');
   }, 60_000);
 
   it('fails the complete check when only the image slot gate fails', async () => {

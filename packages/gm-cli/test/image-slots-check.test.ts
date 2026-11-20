@@ -58,6 +58,15 @@ describe('creator-visible image slots', () => {
     expect((await checkImageSlots(root)).some((error) => error.includes('is 1920:1200'))).toBe(true);
   });
 
+  it('allows exactly one percent aspect variance and rejects values beyond it', async () => {
+    const root = tempDir();
+    await image(root, 'media/logo.png', 101, 100);
+    manifest(root, { logo: 'media/logo.png' });
+    expect(await checkImageSlots(root)).toEqual([]);
+    await image(root, 'media/logo.png', 102, 100);
+    expect((await checkImageSlots(root)).some((error) => error.includes('logo desktop is 102:100'))).toBe(true);
+  });
+
   it('rejects a layered anchor outside the safe area using center and source dimensions', async () => {
     const root = tempDir();
     await image(root, 'media/layer.png', 100, 100);
@@ -71,6 +80,43 @@ describe('creator-visible image slots', () => {
       },
     });
     expect(await checkImageSlots(root)).toContain('media/layer.png: images.title phone-portrait anchor leaves the safe area');
+  });
+
+  it('rejects vertical clipping caused by a tall layer source', async () => {
+    const root = tempDir();
+    await image(root, 'media/tall.png', 100, 300);
+    await image(root, 'media/output.png', 320, 320);
+    const variants = Object.fromEntries(VIEWPORT_IDS.map((viewport) => [viewport, 'media/output.png']));
+    manifest(root, {
+      images: {
+        logo: {
+          mode: 'layered',
+          variants,
+          layers: [{ src: 'media/tall.png', anchors: { 'phone-portrait': { x: 0.5, y: 0.2, width: 0.3 } } }],
+        },
+      },
+    });
+    expect(await checkImageSlots(root)).toContain('media/tall.png: images.logo phone-portrait anchor leaves the safe area');
+  });
+
+  it('accepts a centered layer that exactly fits the safe margin', async () => {
+    const root = tempDir();
+    await image(root, 'media/layer.png', 100, 100);
+    await image(root, 'media/output.png', 320, 320);
+    const variants = Object.fromEntries(VIEWPORT_IDS.map((viewport) => [viewport, 'media/output.png']));
+    const anchors = Object.fromEntries(VIEWPORT_IDS.map((viewport) => [viewport, { x: 0.5, y: 0.5, width: 0.9 }]));
+    manifest(root, { images: { logo: { mode: 'layered', variants, layers: [{ src: 'media/layer.png', anchors }] } } });
+    expect(await checkImageSlots(root)).toEqual([]);
+    manifest(root, {
+      images: {
+        logo: {
+          mode: 'layered',
+          variants,
+          layers: [{ src: 'media/layer.png', anchors: Object.fromEntries(VIEWPORT_IDS.map((viewport) => [viewport, { x: 0.5, y: 0.5, width: 0.9001 }])) }],
+        },
+      },
+    });
+    expect((await checkImageSlots(root)).some((error) => error.includes('anchor leaves the safe area'))).toBe(true);
   });
 
   it('accepts complete per-ratio and layered output sets', async () => {
@@ -103,7 +149,19 @@ describe('creator-visible image slots', () => {
     expect((await checkImageSlots(root)).some((error) => error.includes('images'))).toBe(true);
   });
 
-  it('rejects phone text that is too small and text with low contrast', async () => {
+  it('rejects malformed image rule overrides instead of weakening checks', async () => {
+    const root = tempDir();
+    const variants = await viewportVariants(root);
+    manifest(root, {
+      imageRules: { minTextPx: '16px' },
+      images: { title: { mode: 'per-ratio', variants, text: { capHeight: 0.01 } } },
+    });
+    expect(await checkImageSlots(root)).toContain('gm.manifest.json: imageRules.minTextPx must be a finite number');
+    manifest(root, { imageRules: { safeMargin: -0.05 }, images: { title: { mode: 'per-ratio', variants } } });
+    expect(await checkImageSlots(root)).toContain('gm.manifest.json: imageRules.safeMargin is outside its valid range');
+  });
+
+  it('rejects phone text that is too small and applies distinct contrast thresholds and overrides', async () => {
     const root = tempDir();
     const variants = await viewportVariants(root);
     manifest(root, {
@@ -122,17 +180,32 @@ describe('creator-visible image slots', () => {
         title: {
           mode: 'per-ratio',
           variants,
-          text: { capHeight: 0.1, color: '#111111', background: '#000000' },
+          text: { capHeight: 0.05, color: '#666666', background: '#000000' },
         },
       },
     });
-    expect((await checkImageSlots(root)).some((error) => error.includes('contrast is below'))).toBe(true);
+    const contrastErrors = await checkImageSlots(root);
+    expect(contrastErrors).toEqual([
+      'media/phone-landscape.png: title phone-landscape text contrast is below the required ratio',
+    ]);
+    manifest(root, {
+      imageRules: { minContrastText: 3.5 },
+      images: {
+        title: {
+          mode: 'per-ratio',
+          variants,
+          text: { capHeight: 0.05, color: '#666666', background: '#000000' },
+        },
+      },
+    });
+    expect(await checkImageSlots(root)).toEqual([]);
   });
 
-  it('runs the standalone command and keeps legacy loading artwork on its two-ratio check', async () => {
+  it('runs the standalone command with legacy sources and a complete viewport set', async () => {
     const root = tempDir();
     mkdirSync(join(root, 'public/media'), { recursive: true });
-    manifest(root, { loading: { portrait: 'media/p.png', landscape: 'media/l.png' } });
+    const variants = await viewportVariants(root, 'loading');
+    manifest(root, { loading: { portrait: 'media/p.png', landscape: 'media/l.png' }, images: { loading: { mode: 'per-ratio', variants } } });
     await image(root, 'media/p.png', 1440, 2560);
     await image(root, 'media/l.png', 2560, 1440);
     expect(await gm(['check', 'images', '--json'], { cwd: root })).toEqual({
@@ -140,6 +213,39 @@ describe('creator-visible image slots', () => {
       out: ['{"ok":true,"errors":[]}'],
       err: [],
     });
+    const invalidArgs = await gm(['check', 'images', 'unexpected'], { cwd: root });
+    expect(invalidArgs.code).toBe(2);
+    expect(invalidArgs.err.join('\n')).toContain('gm help check images');
+  });
+
+  it('requires viewport variants when legacy loading artwork is shipped', async () => {
+    const root = tempDir();
+    mkdirSync(join(root, 'public/media'), { recursive: true });
+    manifest(root, { loading: { portrait: 'media/p.png', landscape: 'media/l.png' } });
+    await image(root, 'media/p.png', 1440, 2560);
+    await image(root, 'media/l.png', 2560, 1440);
+    const result = await gm(['check', 'images', '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(result.out[0]).toContain('images.loading: missing variant for phone-portrait');
+  });
+
+  it('uses EXIF-oriented dimensions when validating JPEG variants', async () => {
+    const root = tempDir();
+    const path = join(root, 'public/media/portrait.jpg');
+    mkdirSync(dirname(path), { recursive: true });
+    await sharp({ create: { width: 844, height: 390, channels: 3, background: 'black' } })
+      .jpeg()
+      .withMetadata({ orientation: 6 })
+      .toFile(path);
+    expect((await sharp(path).metadata()).autoOrient).toMatchObject({ width: 390, height: 844 });
+    const variants = await viewportVariants(root);
+    variants['phone-portrait'] = 'media/portrait.jpg';
+    manifest(root, { images: { title: { mode: 'per-ratio', variants } } });
+    expect(await checkImageSlots(root)).toEqual([]);
+    await sharp({ create: { width: 844, height: 390, channels: 3, background: 'black' } }).jpeg().toFile(path);
+    expect(await checkImageSlots(root)).toContain(
+      'media/portrait.jpg: title phone-portrait is 844:390, needs the 390:844 display box',
+    );
   });
 
   it('fails the standalone command for an incomplete image set', async () => {
