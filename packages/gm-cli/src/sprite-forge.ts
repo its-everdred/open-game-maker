@@ -36,7 +36,9 @@ export const recipeSchema = z
     set: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*-generated$/),
     slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     version: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
-    scene: z.enum(['tile', 'rock', 'cube', 'hull', 'blend']),
+    // Blend files can reference unpacked textures and linked libraries, so they
+    // cannot be reproduced from a single hashed input without dependency capture.
+    scene: z.enum(['tile', 'rock', 'cube', 'hull']),
     seed: z.number().int().safe(),
     parameters,
     views: z.string().regex(/^[NWSE]+$/),
@@ -55,7 +57,7 @@ export const recipeSchema = z
     blender_version: nonempty,
     derived_from: z.array(nonempty),
     agent: z.strictObject({ backend: nonempty, model: nonempty, effort: nonempty }),
-    skills: z.array(versioned).min(1),
+    skills: z.array(versioned),
     tools: z.array(versioned).min(1),
     scores: z.record(z.string(), z.number().finite()),
     ticket: z.number().int().positive(),
@@ -68,14 +70,11 @@ export const recipeSchema = z
     prompt: z.string().nullable(),
   })
   .superRefine((recipe, ctx) => {
-    if (
-      (recipe.scene === 'hull' || recipe.scene === 'blend') !==
-      (recipe.input !== undefined && recipe.input_sha256 !== undefined)
-    )
+    if ((recipe.scene === 'hull') !== (recipe.input !== undefined && recipe.input_sha256 !== undefined))
       ctx.addIssue({
         code: 'custom',
         path: ['input'],
-        message: 'hull and blend require an input; other scenes do not',
+        message: 'hull requires an input; other scenes do not',
       });
     if (
       recipe.input &&
@@ -93,6 +92,12 @@ export const recipeSchema = z
       ctx.addIssue({ code: 'custom', path: ['output'], message: 'output must name a rendered view of this scene' });
     if (recipe.approved_by_creator && !recipe.verdict_quote)
       ctx.addIssue({ code: 'custom', path: ['verdict_quote'], message: 'approved assets need the creator verdict' });
+    if (recipe.approved_by_creator && (Object.values(recipe.agent).includes('unknown') || recipe.skills.length === 0))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['agent'],
+        message: 'approved assets need their actual agent and skill provenance',
+      });
   });
 export type Recipe = z.infer<typeof recipeSchema>;
 
@@ -186,7 +191,7 @@ export async function renderRecipe(
       await mkdir(dirname(target), { recursive: true });
       await copyFile(source, target);
       if ((await sha256(target)) !== recipe.input_sha256) throw new Error('recipe input changed during copying');
-      env[recipe.scene === 'hull' ? 'SPRITE_OBJ' : 'SPRITE_BLEND'] = target;
+      env.SPRITE_OBJ = target;
     }
     const args = Object.entries(recipe.parameters).map(([key, value]) => `${key}=${value}`);
     if (recipe.sheet)
@@ -270,6 +275,9 @@ export function variation(value: unknown, recipe: Recipe): Recipe[] {
   return Array.from({ length: count }, (_, index) => ({
     ...recipe,
     slug: `${recipe.slug}-v${index + 1}`,
+    agent: { backend: 'unknown', model: 'unknown', effort: 'unknown' },
+    skills: [],
+    created_at: new Date().toISOString(),
     approved_by_creator: false,
     verdict_quote: undefined,
     scores: {},

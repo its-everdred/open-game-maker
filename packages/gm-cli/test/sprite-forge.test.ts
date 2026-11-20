@@ -98,6 +98,12 @@ describe('sprite forge', () => {
     const recipe = makeRecipe();
     expect(recipeSchema.safeParse(recipe).success).toBe(true);
     expect(recipeSchema.safeParse({ ...recipe, version: '..' }).success).toBe(false);
+    expect(
+      recipeSchema.safeParse({ ...recipe, agent: { backend: 'unknown', model: 'unknown', effort: 'unknown' } }).success,
+    ).toBe(false);
+    expect(
+      recipeSchema.safeParse({ ...recipe, scene: 'blend', input: 'model.blend', input_sha256: 'a'.repeat(64) }).success,
+    ).toBe(false);
     expect(recipeSchema.safeParse({ ...recipe, approved_by_creator: true, verdict_quote: undefined }).success).toBe(
       false,
     );
@@ -232,6 +238,8 @@ it.skipIf(blender.status !== 0)(
     expect(JSON.parse(readFileSync(join(root, 'sibling/recipe.json'), 'utf8'))).toMatchObject({
       seed: 4,
       approved_by_creator: false,
+      agent: { backend: 'unknown', model: 'unknown', effort: 'unknown' },
+      skills: [],
     });
   },
   300000,

@@ -20,6 +20,15 @@ export const command: GmCommand = {
     const path = resolve(ctx.cwd, args[0]!);
     let recipe = await readRecipe(path);
     const originalSeed = recipe.seed;
+    recipe = {
+      ...recipe,
+      agent: { backend: 'unknown', model: 'unknown', effort: 'unknown' },
+      skills: [],
+      created_at: new Date().toISOString(),
+      approved_by_creator: false,
+      verdict_quote: undefined,
+      scores: {},
+    };
     if (flags.seed !== undefined) {
       if (!Number.isSafeInteger(flags.seed))
         throw new UsageError('seed must be a safe integer', 'gm help sprite-forge rerun');

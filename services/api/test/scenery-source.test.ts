@@ -178,12 +178,34 @@ describe('no-build scenery source', () => {
     expect((await app.request(url)).status).toBe(401);
     expect((await app.request(url, { headers: asUser(ids.other) })).status).toBe(403);
     const fallbackUrl = `/api/v1/games/${ids.game}/editor/fallback`;
+    const fallbackLockPath = join(game, 'assets.lock.json');
+    const fallbackLock = JSON.parse(readFileSync(fallbackLockPath, 'utf8'));
+    fallbackLock.assets[0].meta = {
+      generated: {
+        made_by: 'ogm',
+        method: 'procedural',
+        derived_from: [],
+        agent: { backend: 'codex', model: 'test', effort: 'high' },
+        skills: [],
+        tools: [],
+        recipe: { path: 'recipe.json', seed: 1, parameters: {} },
+        scores: {},
+        ticket: 1036,
+        created_at: '2026-11-20T00:00:00Z',
+        approved_by_creator: true,
+        verdict_quote: 'Matches',
+      },
+    };
+    writeFileSync(fallbackLockPath, JSON.stringify(fallbackLock));
     expect((await app.request(fallbackUrl)).status).toBe(401);
     expect((await app.request(fallbackUrl, { headers: asUser(ids.other) })).status).toBe(403);
     const fallback = await app.request(fallbackUrl, { headers: asUser(ids.creator) });
     expect(fallback.status).toBe(200);
     const fallbackBody = await fallback.json();
-    expect(fallbackBody).toMatchObject({ mode: 'request', palette: { items: [{ prefab: 't3:fixture/models/tree' }] } });
+    expect(fallbackBody).toMatchObject({
+      mode: 'request',
+      palette: { items: [{ prefab: 't3:fixture/models/tree', madeByGameMaker: true }] },
+    });
     expect(JSON.stringify(fallbackBody)).not.toContain(root);
     const response = await app.request(url, { headers: asUser(ids.creator) });
     expect(response.status).toBe(200);
