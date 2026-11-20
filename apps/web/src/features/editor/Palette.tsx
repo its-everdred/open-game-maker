@@ -71,7 +71,7 @@ export function Palette({
                 className="palette-item tap-primary"
                 type="button"
                 key={item.prefab}
-                aria-label={withAiGeneratedLabel(item.label, item.aiGenerated)}
+                aria-label={`${withAiGeneratedLabel(item.label, item.aiGenerated)}${item.madeByGameMaker ? ', Made by Game Maker' : ''}`}
                 title={item.hint}
                 onPointerDown={() => onPick(item.prefab)}
                 onClick={(event) => {
@@ -89,6 +89,7 @@ export function Palette({
                 )}
                 {item.aiGenerated ? <AiBadge /> : null}
                 <span>{item.label}</span>
+                {item.madeByGameMaker ? <span className="made-by-gm">Made by Game Maker</span> : null}
               </button>
             );
           })}

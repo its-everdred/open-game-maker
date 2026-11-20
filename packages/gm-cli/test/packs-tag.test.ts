@@ -141,6 +141,52 @@ describe('gm packs tag', () => {
     expect(targets[0].cards).toEqual([]);
   });
 
+  it('reports a pack manifest without a collection card as a non-zero JSON result', async () => {
+    const assetsRoot = tagLibrary();
+    const root = join(assetsRoot, 'packs/kenney-music-loops');
+    await rm(join(root, 'collection.card.json'));
+    await writeFile(join(root, 'pack.json'), JSON.stringify({ current: 'test-version' }));
+
+    const discovery = await discoverTagTargets(assetsRoot, 'audio', 'kenney-music-loops');
+    expect(discovery.failures).toEqual(['kenney-music-loops: pack.json exists but collection.card.json is missing']);
+
+    const result = await gm(['packs', 'tag', '--kind', 'audio', '--only', 'kenney-music-loops', '--json'], {
+      env: { OGM_ASSETS_ROOT: assetsRoot },
+    });
+    expect(result.code).toBe(1);
+    expect(result.err.join('\n')).toContain('collection.card.json is missing');
+    expect(result.out.map((line) => JSON.parse(line))).toContainEqual({
+      summary: {
+        kind: 'audio',
+        only: 'kenney-music-loops',
+        collections: 0,
+        cards: 0,
+        failures: ['kenney-music-loops: pack.json exists but collection.card.json is missing'],
+      },
+    });
+  });
+
+  it('processes eligible packs and still exits non-zero for a missing collection card', async () => {
+    successfulWorkers();
+    const assetsRoot = tagLibrary();
+    const missing = join(assetsRoot, 'packs/missing-collection-card');
+    await mkdir(missing, { recursive: true });
+    await writeFile(join(missing, 'pack.json'), JSON.stringify({ current: 'test-version' }));
+
+    const result = await gm(['packs', 'tag', '--kind', 'audio', '--only', '*', '--json'], {
+      env: { OGM_ASSETS_ROOT: assetsRoot },
+    });
+
+    expect(result.code).toBe(1);
+    expect(worker.run).toHaveBeenCalled();
+    const summary = JSON.parse(result.out.at(-1) ?? '{}') as { summary: Record<string, unknown> };
+    expect(summary.summary).toMatchObject({
+      collections: 3,
+      cards: 1,
+      failures: ['missing-collection-card: pack.json exists but collection.card.json is missing'],
+    });
+  });
+
   it('does not report committed cards when event publication fails', async () => {
     successfulWorkers();
     const assetsRoot = tagLibrary();

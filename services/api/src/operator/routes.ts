@@ -292,6 +292,19 @@ const routes = new Hono<ApiBindings>()
     const deps = c.get('deps');
     return c.json(facts(deps, gameFor(deps, c.req.param('ref'))));
   })
+  .get('/games/:ref/review-sha/:sha', (c) => {
+    requireOperator(c);
+    const game = gameFor(c.get('deps'), c.req.param('ref'));
+    const sha = c.req.param('sha');
+    if (!SHA.test(sha)) throw new HttpError(400, 'invalid_sha');
+    const round = c
+      .get('deps')
+      .db.select({ id: schema.reviewRounds.id })
+      .from(schema.reviewRounds)
+      .where(and(eq(schema.reviewRounds.gameId, game.id), eq(schema.reviewRounds.sha, sha)))
+      .get();
+    return c.json({ recorded: round !== undefined });
+  })
   // The Executor's link builder (#591): the short `/<slug>/review/<n>` path for one of the game's aiur decisions. A
   // decision not shown before takes the game's next number here, so the link it pushes is the one the inbox shows.
   .get('/games/:ref/reviews/:decisionId', (c) => {

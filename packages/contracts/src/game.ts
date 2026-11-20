@@ -160,6 +160,7 @@ export const gameManifestSchema = z.looseObject({
         /** Short creator-facing descriptor, such as "easy" or "tough". */
         tag: z.string().min(1).max(32).optional(),
         aiGenerated: z.boolean().optional(),
+        madeByGameMaker: z.boolean().optional(),
         hint: help.optional(),
         category: z.string().min(1),
       }),

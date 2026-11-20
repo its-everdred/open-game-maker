@@ -183,7 +183,13 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       palette.palette.items = palette.palette.items.map((item) => {
         const thumbnail = item.thumbnail ?? thumbnails.get(packOf(item.prefab) ?? '');
         const generated = item.aiGenerated || locked.get(item.prefab)?.meta?.generation?.method === 'ai';
-        return { ...item, ...(thumbnail ? { thumbnail } : {}), ...(generated ? { aiGenerated: true } : {}) };
+        const madeByGameMaker = item.madeByGameMaker || locked.get(item.prefab)?.meta?.generated?.made_by === 'ogm';
+        return {
+          ...item,
+          ...(thumbnail ? { thumbnail } : {}),
+          ...(generated ? { aiGenerated: true } : {}),
+          ...(madeByGameMaker ? { madeByGameMaker: true } : {}),
+        };
       });
       const scopeRow = deps.db
         .select()

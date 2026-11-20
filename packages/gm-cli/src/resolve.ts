@@ -44,6 +44,7 @@ export function libraryRoot(assetsRoot: string, id: string, collection?: Resolve
     ...(fromManifest ? [join(assetsRoot, dirname(fromManifest), version, 'extracted')] : []),
     join(assetsRoot, 'packs', slug, version, 'extracted'),
     join(assetsRoot, 'inspiration', slug, version, 'extracted'),
+    join(assetsRoot, 'sets', slug, version, 'extracted'),
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
 }

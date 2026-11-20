@@ -29,6 +29,13 @@ edit stays narrow: use the existing acceptance list plus the requested delta, an
 Ask only when the answer materially changes code, assets, tests, player count, point of view, or the core loop. Keep
 working when a sensible reversible default does not change those things.
 
+## List the feature's decisions
+
+A feature added to an existing game holds creator decisions too (which enemy, what the chest drops, where the
+button sits). Before building, add each one to the game's inventory, `docs/<slug>/decisions.json`, with options,
+media or a real pack lineup, a recommendation and its sources, and list the ids under `## Creator decisions` in the
+ticket body. Product only, fine-grained. Format and how they are raised: `../gm-core/references/decision-inventory.md`.
+
 ## Offer one bounded choice
 
 For a vague creation brief, offer three clearly different takes in one question. Give each take one line with its
@@ -43,9 +50,13 @@ gm options check --option "a=Gather and craft" --option "b=Race and deliver" --o
 gm decide --topic "Core game loop" --question "Which game loop should I build?" --option "a=Gather and craft" --option "b=Race and deliver" --option "c=Defend and repair" --media a=<msg> --media b=<msg> --media c=<msg> --recommend a --reason "Fits the cozy pitch" --provenance a=@provenance/a.json --provenance b=@provenance/b.json --provenance c=@provenance/c.json --blocking
 ```
 
-Open at most three Commands during an edit or a single-ticket build. A new game from the New Game flow follows `gm-new-game-design` instead (no cap). Pass `--blocking` on every creator Command: aiur retires a
+Open at most three Commands during an edit or a single-ticket build, not counting the ticket's inventory decisions
+and its prototype review, which are always non-blocking (ship the recommendation meanwhile). A new game from the New Game flow follows `gm-new-game-design` instead (no cap). Pass `--blocking` on every other creator Command: aiur retires a
 non-blocking one 5 minutes after the ticket has no running agent, so the creator's pick expires unseen (`gm decide`
 and `gm command request` raise it blocking regardless). Revert this to non-blocking once aiur #7872 is deployed.
+For inventory decisions, save the ticket body, use `gm decisions next --ticket <n> --body <ticket-body.md>` and
+`gm decisions raise <id>`; inventory Commands are
+non-blocking and require media for every option.
 Continue independent work either way. When the ticket cannot go on without the answer, give the Command a key
 (`gm decide --key <game>/<topic>`) and park on it (`gm build park <ticket> --on <key>`); the answer queues the ticket
 again with a `gm-decision-answer` comment holding the pick and any per-option notes. Apply that answer first.

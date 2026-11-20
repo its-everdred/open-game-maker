@@ -143,13 +143,54 @@ def test_locked_human_set_and_hints_survive_a_generated_card_merge():
         },
     }
     generated = {
-        "describe": {"set": "model-set", "hints": ["manifest"]},
-        "provenance": {"describe.set": {"by": "model"}, "describe.hints": {"by": "collection"}},
+        "describe": {"set": "model-set", "keywords": ["model"]},
+        "provenance": {"describe.set": {"by": "model"}},
     }
     merged = b.preserve_locked(previous, generated)
     assert merged["describe"]["set"] == "kevin-set"
-    assert merged["describe"]["hints"] == ["hand-picked"]
+    assert "hints" not in merged["describe"]
+    assert "hand-picked" in merged["describe"]["keywords"]
+    assert "describe.hints" not in merged["provenance"]
+    assert merged["provenance"]["describe.keywords"]["locked"] is True
     assert merged["provenance"]["describe.set"]["locked"] is True
+
+
+def test_locked_legacy_hints_precede_generated_keywords_at_limit():
+    previous = {
+        "describe": {"hints": ["distinct locked hint"]},
+        "provenance": {"describe.hints": {"locked": True}},
+    }
+    generated = {"describe": {"keywords": [f"generated-{index}" for index in range(12)]}}
+    merged = b.preserve_locked(previous, generated)
+    assert merged["describe"]["keywords"] == ["distinct-locked-hint", *[f"generated-{index}" for index in range(11)]]
+
+
+def test_writer_hints_validate_against_the_shipped_asset_card_schema(tmp_path):
+    sets = b.prompts()
+    probabilities = {key: np.ones(len(values[0])) for key, values in sets.items()}
+    item = {
+        "_pack": "drive-barbarian-chiptune",
+        "_eq": 0.5,
+        "hints": ["Dark retro", "Chiptune", "8-bit"],
+        "_p": probabilities,
+    }
+    measured = {"duration_s": 60.0}
+    describe, _ = b.music_describe(item, probabilities, sets, measured, "music/track")
+    assert "hints" not in describe
+    assert {"dark-retro", "chiptune", "bit"}.issubset(describe["keywords"])
+
+    card = json.loads((b.REPO / "packages/contracts/fixtures/cards/audio-music-kenney-infinite-descent.json").read_text())
+    card["describe"] = describe
+    card["provenance"].update({
+        "describe": {"by": "model", "model": b.CLAP_ID, "tool": b.TOOL, "at": b.NOW, "confidence": b.MUSIC_CONF},
+        "describe.keywords": {"by": "code", "tool": b.TOOL, "at": b.NOW, "input": "pack.json hints normalized to searchable tags"},
+    })
+    output = tmp_path / "writer-card.json"
+    output.write_text(json.dumps(card))
+    result = subprocess.run(
+        ["node", str(b.VALIDATOR), "--no-fixtures", str(output)], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_existing_card_keeps_rights_license_and_source_when_retagged():

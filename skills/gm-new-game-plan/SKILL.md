@@ -10,8 +10,8 @@ The parent issue is a planning record, never a worker ticket. Only the Executor 
 
 ## Inputs
 
-The parent issue's public summary, its private context (spec from `gm-new-game-design`, chat, voice transcript,
-attachments), the instance repo (`games/`, `packages/`), `gm-core`, the set skill for the chosen style, and
+The parent issue's public summary, its private context (the New Game form choices, spec from `gm-new-game-design`,
+chat, voice transcript, attachments), the instance repo (`games/`, `packages/`), `gm-core`, the set skill for the chosen style, and
 `../gm-new-game-design/references/resources.md`. Open questions still pending stay pending; plan around them.
 
 ## Plan the whole game, prototype first
@@ -44,6 +44,16 @@ this section adds what is specific to games.
 7. **Non-blocking picks.** Give every option its media and ship the recommended provisional choice while the
    creator decides. Silence is not approval. For feel, supply playable slices (`gm decide --playable
    <id>=<scenario query>`); incorporate later answers on the same ticket.
+   Before queueing tickets, render and validate `docs/<slug>/decisions.json` with `gm decisions render` and
+   `gm decisions check --game <slug>`. Every ticket body must list its IDs under `## Creator decisions`; verify the
+   tickets with `gm plan check --tickets <issues.json> --game <slug>`.
+8. **Decision inventory (required).** Before queueing any ticket, write `docs/<slug>/decisions.json` and its
+   `decisions.md`: every product decision the form choices, the conversation, the spec's decision log and open
+   questions, and each ticket's spec hold (enemies, town, classes, loot, upgrades, inventory and HUD, bosses,
+   biomes, audio, townsfolk, run structure, look), fine-grained, each with options, a recommendation and its
+   sources. Options the packs already hold are lineups of the real assets. Nothing engineering-level. What the
+   creator already settled enters as `answered`. Format: `../gm-core/references/decision-inventory.md`. Update it
+   in every re-plan and after each deep dive; a plan with no inventory is not a plan.
 
 ## Always audio from stage 1
 
@@ -81,6 +91,8 @@ A ticket changing art direction, logo, board or scene look, core gameplay, or ad
 
 - Child issues in the instance repo, each linking the parent, with: goal, owned files, interface contract, acceptance
   checks, skills to load, assets chosen, the decisions it relies on (by id) and its flow node or loop. No raw player text: summaries only.
+  Each body has a `## Creator decisions` section listing the inventory ids the ticket builds (or `none`), and each
+  listed entry's `ticket` names it; an inventory entry no ticket lists is a missing ticket or a missing line.
 - `aiur-main feature create` for the game (once) and `aiur-main epic set` per lane; GitHub native blocked-by edges for
   dependencies; priority labels (prototype tickets `priority:1`).
 - **Roles on every ticket.** Each child carries `game:<slug>` and one or more `role:*` labels chosen by its work type
@@ -94,7 +106,8 @@ A ticket changing art direction, logo, board or scene look, core gameplay, or ad
   (run from the instance root) into its `agent.skills`.
 - Build Order: the parent issue is its root; confirm with `aiur-main build-orders <root>` that every child appears with
   the right edges, then queue the unblocked children (`aiur-main --todo`).
-- Post the plan summary on the parent: architecture sketch, ticket list by lane, prototype set, open decisions.
+- Post the plan summary on the parent: architecture sketch, ticket list by lane, prototype set, and the inventory's
+  counts by area with its link. The first batch of `open` decisions is the creator's first review queue.
 
 ## Deep-dive every ticket before implementation (always, unasked)
 
@@ -108,21 +121,25 @@ tickets rewritten for a weaker implementer). Game specifics on top of it:
   private detail stays in the game's private context and is referenced, never copied.
 - Feature tickets are deep-dived when the decision they build on exists (`references/prototype-ladder.md`);
   mock work is researched up front.
+- Each deep dive ends by adding the creator decisions its spec found to the inventory and to its ticket's
+  `## Creator decisions`; a spec never settles one by itself.
 - Give each research agent the game skills its lane needs (a biome ticket gets the set and asset skills, a combat ticket
   gets input and effects skills), and the rest by name only.
 
 ## Keep it moving
 
-- Apply provisional defaults to open Commands after about five minutes; record them as decisions (origin: default).
+- Apply provisional defaults to open Commands after about five minutes; record them as decisions (origin: default)
+  and set the inventory entry `defaulted`. A defaulted decision stays on the creator's queue: a later answer wins.
 - When a decision changes (a late answer), find the affected tickets and merged code, then re-plan: edit open tickets,
   rework the affected feature tickets in place, revert only what the change requires, and message running agents with `aiur-main message`.
   Answers that reach beyond the asking ticket, the pair-confirm pattern and the premise sweep:
   `references/answer-routing.md`.
 - Schedule with the instance's normal limits and queue; small edits to other games may jump ahead of a large build.
-- When a stage 4 or 5 slice merges, tell the player its play link and scenarios are ready (never open the game for
-  them).
+- Every playable build that changes what the creator can do or see reaches them as a prototype review (play link,
+  clip, works now, known limitations, 3–6 decisions to weigh in on; same reference), never as a bare "it's ready"
+  (and never open the game for them). A published build with no review raised is the Executor's to raise that hour.
 
 ## Done
 
 All children merged, the flow diagram in `design/flow/` matches the game, the game passes `gm check`, `gm test`, `gm run` and the spec's acceptance criteria, the parent
-issue has the final summary, and reuse candidates are noted under `## Promote` for later.
+issue has the final summary, no inventory entry is still `open`, and reuse candidates are noted under `## Promote` for later.

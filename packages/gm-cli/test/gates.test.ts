@@ -68,6 +68,11 @@ vi.mock('../src/commands/check/boot.js', async (original) => ({
   },
 }));
 
+vi.mock('../src/play-area-check.js', async (original) => ({
+  ...(await original<typeof import('../src/play-area-check.js')>()),
+  checkPlayArea: async () => ({ ok: true, output: [] }),
+}));
+
 vi.mock('@ogm/gm-verify', async (original) => ({
   ...(await original()),
   runL0: (_root: string, options: unknown) => {
@@ -152,6 +157,47 @@ describe('gm check', () => {
     expect(text.code).toBe(1);
     expect(text.err.join('\n')).toContain('inherited:');
     expect(text.err.join('\n')).toContain('shots/a/t2.png');
+  }, 60_000);
+
+  it('keeps an unapproved provisional screen visible in gm check until its expiry rung', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    const game = join(root, 'games/prototype');
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    mkdirSync(join(game, 'review'), { recursive: true });
+    writeFileSync(join(game, 'gm.manifest.json'), '{}');
+    writeFileSync(
+      join(game, 'review/decisions.json'),
+      JSON.stringify({ screens: { play: { provisional: { owner: 'Kevin', until: 'build' } } } }),
+    );
+    git('add', '-A');
+    git('commit', '-qm', 'provisional scope');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+
+    const unspecified = await gm(['check', '--json'], { cwd: game });
+    expect(unspecified.code).toBe(2);
+    expect(unspecified.err.join('\n')).toContain('a current rung is required');
+
+    const prototype = await gm(['check', '--phase', 'prototype', '--json'], { cwd: game });
+    expect(prototype.code, JSON.stringify(prototype)).toBe(0);
+    expect(JSON.parse(prototype.out[0]!).look.stills).toContainEqual(
+      expect.objectContaining({
+        path: 'games/prototype/review/decisions.json',
+        status: 'warning',
+        detail: expect.stringContaining('approved look target still required'),
+      }),
+    );
+    const plain = await gm(['check', '--phase', 'prototype'], { cwd: game });
+    expect(plain.code).toBe(0);
+    expect(plain.err.join('\n')).toContain('warning games/prototype/review/decisions.json:');
+
+    const build = await gm(['check', '--phase', 'build', '--json'], { cwd: game });
+    expect(build.code).toBe(1);
+    expect(JSON.parse(build.out[0]!).look.stills).toContainEqual(
+      expect.objectContaining({ status: 'fail', detail: expect.stringContaining('expired at build') }),
+    );
   }, 60_000);
 
   it('fails the complete check when declared loading images are missing', async () => {

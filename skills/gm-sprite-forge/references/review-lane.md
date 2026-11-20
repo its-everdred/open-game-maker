@@ -34,16 +34,31 @@ python skills/gm-sprite-forge/scripts/compare.py sheet original.png rebuild.png 
 
 The directory contains a GIF and phone-compatible H.264 MP4 per row, `still-8dir.png` with the gate and scores, and `scores.json` with per-frame scores and gate results. The still uses the first frame of each row, original above rebuild. `--zoom` controls pixel enlargement (default 4). Sheet dimensions must match and be divisible by the cell size. Undefined metrics fail their gates; the verdict does not replace visual review.
 
-For a creator rebuild round, first generate a flat image mock using the original as reference, subject to its confirmed processing rights. Then use the actual previous round the creator saw:
+For a creator rebuild round, first generate a flat image mock with the original attached as reference (always permitted; see SKILL.md). Then use the actual previous round the creator saw:
 
 ```sh
 python skills/gm-sprite-forge/scripts/compare.py review original.png image-gen.png previous.png rebuild.png --cell 64 --out review.png
 ```
 
 The mock must have eight transparent-background views arranged horizontally. The sheet labels the original, image-gen option, previous 3D and current 3D for each direction. It fits each mock view to the original sprite's height and enlarges all cells with nearest-neighbour sampling at least 4×. It refuses a sheet if the first frame of any direction changes no more than 3% of the previous/current foreground union. Review the result by eye: that floor does not establish a meaningful change. Send one review Command with an independently judged card for each track; include the same sheet on each card, allow a note for changes, and state how the round addresses the creator's last feedback. Keep originals, generated mocks and review media outside the repository.
+
+## Review checkpoints
+
+Keep every render and score in `round-N/` and append scores to the local `scores.json`; internal rounds do not create Commands. Maintain exactly one open review Command per ticket. Never replace a Command younger than 10 minutes. Once it is at least 10 minutes old, create the next Command only when a checkpoint occurs:
+
+- a gate passes for the first time;
+- the best score improves by the configured margin since the last round Kevin saw; or
+- 10 rounds or 20 minutes have elapsed since the last Command, whichever comes first.
+
+If a verdict includes a note, wait until the first round that changes the part it names. Its question must say which part of the note changed, and its comparison must show the judged round beside the new round. Do not send an unrelated round as the response to the note.
+
+When choosing a direction, put up to three candidates (A/B/C) with their media into one Command. Do not raise a separate Command for each candidate.
+
+On “Matches”, record the identified verdict in `calibration.jsonl` as below, apply U9 gate calibration, stop raising Commands for that asset, and finish the PR. Do not continue generating review rounds after acceptance.
+
 ## Review and calibration
 
-For each meaningful rebuild round, post one non-blocking Command on the rebuild ticket. Ask separately whether image gen matches and whether the 3D pipeline matches. The Command schema has one question and at most three suggested responses, so put both questions in that field and use the three outcomes below; when one needs changes, identify that track in the note. Ask for a note on each track needing changes. Include the round sheet, eight-direction still and animated GIF or MP4 as applicable, plus the score JSON and gates in force. In the Command text list each point from Kevin's last note and what changed for it, one line per point. Inspect the media first. Attach the same media to every option:
+At each checkpoint above, post one non-blocking Command on the rebuild ticket. Ask separately whether image gen matches and whether the 3D pipeline matches. The Command schema has one question and at most three suggested responses, so put both questions in that field and use the three outcomes below; when one needs changes, identify that track in the note. Ask for a note on each track needing changes. Include the round sheet, eight-direction still and animated GIF or MP4 as applicable, plus the score JSON and gates in force. In the Command text list each point from Kevin's last note and what changed for it, one line per point. Inspect the media first. Attach the same media to every option:
 
 ```json
 {
@@ -58,10 +73,12 @@ For each meaningful rebuild round, post one non-blocking Command on the rebuild 
     {"id": "one-changes", "label": "One needs changes", "description": "Name the track needing changes in your note; the other matches.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and both options"}]},
     {"id": "both-change", "label": "Both need changes", "description": "Image gen and 3D pipeline need changes.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and both options"}]}
   ],
-  "consequence_of_delay": "No answer: rebuilding continues while the verdict is pending."
+  "consequence_of_delay": "No answer: internal rounds continue; the open Command stays available."
 }
 ```
 
-Add all applicable still and video entries to each option (local paths must be inside the workspace); do not upload pack assets to cloud services. Record only an identified, relayed verdict in `calibration.jsonl`, one JSON object per line: `asset`, `class` (a key in `gates.json`), `round`, `head` (the actual full commit SHA for that round), `scores` (the unmodified `score.py` JSON or `compare.py still` per-view JSON), `verdict` (`matches` or `needs changes`), `note`, and ISO 8601 `date`. Keep missing provenance unresolved rather than guessing it.
+Add all applicable still and video entries to each option (local paths must be inside the workspace); do not upload pack assets to cloud services. A variant choice uses up to three labeled candidates with their media and scores, alongside the verdict choices. Record only an identified, relayed verdict in `calibration.jsonl`, one JSON object per line: `asset`, `class` (a key in `gates.json`), `round`, `head` (the actual full commit SHA for that round), `scores` (the unmodified `score.py` JSON or `compare.py still` per-view JSON), `verdict` (`matches` or `needs changes`), `note`, and ISO 8601 `date`. Keep missing provenance unresolved rather than guessing it.
+
+Use `skills/gm-sprite-forge/scripts/review_checkpoints.py` as the reference checkpoint policy. Its fixture test scripts 30 local rounds and asserts at most four Commands, with at least 10 minutes between them.
 
 Run `python skills/gm-sprite-forge/scripts/calibrate.py skills/gm-sprite-forge/calibration.jsonl > proposal.json`. The proposal is reviewable JSON, never an automatic edit of `gates.json`. For props, the strictest view of each metric is used. A matching verdict relaxes failed numeric gates; recorded gate snapshots determine whether a rejection passed (legacy reports without snapshots use the supplied baseline); a rejection that passes all gates tightens the numeric gate with the smallest relative passing margin, using the next representable value. Conflicting changes are reported and processed in timestamp order, with the later verdict winning. Equality gates cannot be calibrated numerically. Review the proposed changes and land approved gate changes in a PR; regenerate comparisons so they show the gates in force.
