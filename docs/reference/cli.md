@@ -101,6 +101,7 @@ gm qa games-cache [--origin <app origin>] [--game <slug>] [--json]
 gm check [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
 gm check hooks [--json]
+gm check images [--json]
 gm check boot [--dist <dir>] [--viewport both|phone|tablet-landscape] [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--deadline <seconds>] [--serve <dir>] [--out <dir>] [--json]
 gm run [--verify-source] [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
@@ -124,6 +125,10 @@ In ticket PR mode, pass `--body <file>` and `--base <ref>` to also reject open c
 creator-visible changes without a prototype review section (or `Prototype review: none` for code-only changes).
 `gm publish` requires a prototype review round for the commit when the game has a decision inventory; games without an
 inventory continue with a reported gate line.
+
+`gm check images` validates creator-visible image slots against `@ogm/contracts`; `gm check` runs the same check for
+games with a manifest. It checks required viewport variants, display aspect ratios, layered safe areas, and phone text
+size and contrast. Games without shipped thumbnail, logo, loading art, or `images` slots pass without image checks.
 
 `gm decisions check` validates `docs/<slug>/decisions.json` and fails when its grouped `decisions.md` render is stale;
 `gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open

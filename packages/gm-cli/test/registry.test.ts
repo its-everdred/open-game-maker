@@ -63,6 +63,7 @@ describe('command registry', () => {
       'check assets',
       'check boot',
       'check hooks',
+      'check images',
       'check static',
       'checkpoint open',
       'checkpoint wait',

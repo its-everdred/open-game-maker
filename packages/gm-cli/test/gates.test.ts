@@ -215,7 +215,9 @@ describe('gm check', () => {
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     const result = await gm(['check', '--json'], { cwd: root });
     expect(result.code).toBe(1);
-    expect(JSON.parse(result.out[0]!).loadingErrors).toHaveLength(2);
+    const report = JSON.parse(result.out[0]!);
+    expect(report.loadingErrors).toHaveLength(2);
+    expect(report.imageErrors).toContain('media/p.png: loading phone-portrait image is missing or unreadable');
   }, 60_000);
 
   it('prints failures only as file:line diagnostics and exits one', async () => {
