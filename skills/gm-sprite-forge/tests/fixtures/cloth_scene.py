@@ -38,7 +38,7 @@ bpy.context.collection.objects.link(expected)
 pins = [0, n, n*(n+1), (n+1)*(n+1)-1]
 original = [obj.data.vertices[i].co.copy() for i in pins]
 scene = bpy.context.scene
-scene.frame_set(3)
+scene.frame_set(3, subframe=.25)
 end = scene.frame_end
 try:
     drape(obj, [len(vertices)], [floor], frames=20)
@@ -60,4 +60,4 @@ assert centre < .95, centre
 assert abs(floor.collision.thickness_outer - .073) < .0001
 assert len(unrelated.modifiers) == 1
 assert len(obj.modifiers) == 0 and len(floor.modifiers) == 0 and len(obj.vertex_groups) == 0
-assert scene.frame_current == 3 and scene.frame_end == end
+assert scene.frame_current == 3 and abs(scene.frame_subframe - .25) < .0001 and scene.frame_end == end

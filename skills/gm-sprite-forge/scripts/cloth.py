@@ -31,7 +31,7 @@ def drape(obj, pin_indices, colliders, *, frames=45, quality=8, thickness=0.01):
         raise ValueError('colliders must not already have collision modifiers')
 
     scene = bpy.context.scene
-    previous_frame, previous_end = scene.frame_current, scene.frame_end
+    previous_frame, previous_subframe, previous_end = scene.frame_current, scene.frame_subframe, scene.frame_end
     previous_active = bpy.context.view_layer.objects.active
     selected = list(bpy.context.selected_objects)
     group = obj.vertex_groups.new(name='drape pins')
@@ -76,7 +76,7 @@ def drape(obj, pin_indices, colliders, *, frames=45, quality=8, thickness=0.01):
         if remaining_group is not None:
             obj.vertex_groups.remove(remaining_group)
         scene.frame_end = previous_end
-        scene.frame_set(previous_frame)
+        scene.frame_set(previous_frame, subframe=previous_subframe)
         bpy.ops.object.select_all(action='DESELECT')
         for item in selected:
             item.select_set(True)
