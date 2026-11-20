@@ -9,7 +9,7 @@ import { gm, tempDir } from './helpers.js';
 const openDeck = vi.hoisted(() => vi.fn(async () => {}));
 const screenshotTimeouts = vi.hoisted(() => vi.fn());
 vi.mock('../src/qa-review-checks.js', async (importOriginal) => ({
-  ...await importOriginal<typeof import('../src/qa-review-checks.js')>(),
+  ...(await importOriginal<typeof import('../src/qa-review-checks.js')>()),
   settleMedia: async () => {},
   openReviewDeck: openDeck,
   openReviewItem: async () => {},
