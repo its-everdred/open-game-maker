@@ -26,6 +26,9 @@ const parameterNames = [
   'ramp_mid',
   'ramp_hi',
   'shape',
+  'smooth',
+  'shadow_az',
+  'shadow_elev',
 ] as const;
 const parameters = z.partialRecord(z.enum(parameterNames), z.number().finite());
 
@@ -38,7 +41,7 @@ export const recipeSchema = z
     version: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
     // Blend files can reference unpacked textures and linked libraries, so they
     // cannot be reproduced from a single hashed input without dependency capture.
-    scene: z.enum(['tile', 'rock', 'cube', 'hull']),
+    scene: z.enum(['tile', 'rock', 'cube', 'hull', 'historical']),
     seed: z.number().int().safe(),
     parameters,
     views: z.string().regex(/^[NWSE]+$/),
@@ -47,7 +50,22 @@ export const recipeSchema = z
       .string()
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
-    output: z.string().regex(/^(?:(?:tile|rock|cube|hull|blend)_[NWSE]|sheet)\.png$/),
+    output: z.string().regex(/^(?:(?:tile|rock|cube|hull|blend|rebuild)_[NWSE]|sheet)\.png$/),
+    archive: z
+      .strictObject({
+        record: relativePath,
+        record_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+        round: z.number().int().positive(),
+        files: z.array(
+          z.strictObject({
+            path: z.string().regex(/^rebuild_[NWSE]\.png$/),
+            sha256: z.string().regex(/^[a-f0-9]{64}$/),
+          }),
+        ),
+        gm_rerun_supported: z.literal(false),
+        created_at_basis: z.literal('archive_capture'),
+      })
+      .optional(),
     sheet: z
       .strictObject({ cell: z.union([z.literal(64), z.literal(128)]), start: z.number().int(), end: z.number().int() })
       .optional(),
@@ -76,6 +94,45 @@ export const recipeSchema = z
         path: ['input'],
         message: 'hull requires an input; other scenes do not',
       });
+    if ((recipe.scene === 'historical') !== (recipe.archive !== undefined))
+      ctx.addIssue({ code: 'custom', path: ['archive'], message: 'historical recipes require an archival record' });
+    if (
+      recipe.scene !== 'historical' &&
+      (recipe.parameters.shadow_az !== undefined || recipe.parameters.shadow_elev !== undefined)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['parameters'],
+        message: 'shadow_az and shadow_elev are archival-only settings',
+      });
+    if (recipe.scene !== 'historical' && recipe.scene !== 'hull' && recipe.parameters.smooth !== undefined)
+      ctx.addIssue({ code: 'custom', path: ['parameters'], message: 'smooth is supported only for hull scenes' });
+    if (
+      recipe.archive &&
+      [
+        recipe.output,
+        'recipe.json',
+        'asset.card.json',
+        'collection.card.json',
+        ...recipe.archive.files.map((file) => file.path),
+      ].some((name) => recipe.archive!.record === name || recipe.archive!.record.startsWith(`${name}/`))
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['archive', 'record'],
+        message: 'archival record conflicts with an output',
+      });
+    if (
+      recipe.archive &&
+      (new Set(recipe.archive.files.map((file) => file.path)).size !== recipe.archive.files.length ||
+        recipe.archive.files.some((file) => file.path === recipe.output) ||
+        new Set(recipe.views).size !== recipe.views.length ||
+        [...recipe.views].some(
+          (view) => ![recipe.output, ...recipe.archive!.files.map((file) => file.path)].includes(`rebuild_${view}.png`),
+        ) ||
+        recipe.archive.files.some((file) => !recipe.views.includes(file.path.at(-5)!)))
+    )
+      ctx.addIssue({ code: 'custom', path: ['archive', 'files'], message: 'archival companion files must be unique' });
     if (
       recipe.input &&
       ['recipe.json', 'asset.card.json', 'collection.card.json', recipe.output].some(
@@ -87,9 +144,15 @@ export const recipeSchema = z
       ctx.addIssue({ code: 'custom', path: ['sheet'], message: 'sheet requires sheet.png and an ordered frame range' });
     if (
       !recipe.sheet &&
+      recipe.scene !== 'historical' &&
       (!recipe.output.startsWith(`${recipe.scene}_`) || !recipe.views.includes(recipe.output.at(-5)!))
     )
       ctx.addIssue({ code: 'custom', path: ['output'], message: 'output must name a rendered view of this scene' });
+    if (
+      recipe.scene === 'historical' &&
+      (recipe.sheet || !recipe.output.startsWith('rebuild_') || !recipe.views.includes(recipe.output.at(-5)!))
+    )
+      ctx.addIssue({ code: 'custom', path: ['output'], message: 'historical output must name an archived view' });
     if (recipe.approved_by_creator && !recipe.verdict_quote)
       ctx.addIssue({ code: 'custom', path: ['verdict_quote'], message: 'approved assets need the creator verdict' });
     if (recipe.approved_by_creator && (Object.values(recipe.agent).includes('unknown') || recipe.skills.length === 0))
@@ -173,6 +236,7 @@ export async function renderRecipe(
   verifyPixels: boolean,
   inheritedEnv: Record<string, string | undefined>,
 ): Promise<void> {
+  if (recipe.scene === 'historical') throw new Error('historical recipe is archival and cannot be rerun');
   if ((await sha256(rig)) !== recipe.rig_sha256) throw new Error('installed sprite rig differs from the recipe');
   const version = (await exec('blender', ['--version'], { timeout: 15_000, env: inheritedEnv })).stdout
     .split('\n')[0]

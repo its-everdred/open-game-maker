@@ -19,6 +19,11 @@ export const command: GmCommand = {
     if (args.length !== 1) throw new UsageError('provide one recipe', 'gm help sprite-forge rerun');
     const path = resolve(ctx.cwd, args[0]!);
     let recipe = await readRecipe(path);
+    if (recipe.scene === 'historical')
+      throw new UsageError(
+        'historical recipe is archival and cannot be rerun',
+        'capture and verify the historical rig first',
+      );
     const originalSeed = recipe.seed;
     recipe = {
       ...recipe,

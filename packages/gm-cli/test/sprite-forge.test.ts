@@ -98,6 +98,8 @@ describe('sprite forge', () => {
     const recipe = makeRecipe();
     expect(recipeSchema.safeParse(recipe).success).toBe(true);
     expect(recipeSchema.safeParse({ ...recipe, version: '..' }).success).toBe(false);
+    expect(recipeSchema.safeParse({ ...recipe, parameters: { shadow_az: 80 } }).success).toBe(false);
+    expect(recipeSchema.safeParse({ ...recipe, parameters: { smooth: 4 } }).success).toBe(false);
     expect(
       recipeSchema.safeParse({ ...recipe, agent: { backend: 'unknown', model: 'unknown', effort: 'unknown' } }).success,
     ).toBe(false);
@@ -187,6 +189,81 @@ describe('sprite forge', () => {
     const result = await gm(['sprite-forge', 'promote', dir], { env: { OGM_ASSETS_ROOT: root } });
     expect(result.code).toBe(2);
     expect(result.err.join(' ')).toContain('source rights prohibit redistribution');
+  }, 30000);
+  it('promotes a verified historical round without claiming it can rerun', async () => {
+    const root = library();
+    const dir = round(root);
+    const record = Buffer.from(
+      JSON.stringify({
+        schema: 'provisional-local-recipe',
+        round: 103,
+        source_pack: 'kenney-mini-dungeon',
+        agent: { backend: 'codex', model: 'test' },
+        rig: { script: 'rig.py', seed: 3, settings: { scene: 'rock', samples: 1, shape: 1 } },
+        tools: { blender: '4.3.2' },
+        skills_loaded: ['gm-sprite-forge'],
+        inputs_sha256: { 'rig.py': hash(readFileSync(rig)) },
+        outputs: { 'rebuild_N.png': hash(png), 'rebuild_E.png': hash(png) },
+      }),
+    );
+    writeFileSync(join(dir, 'historical.json'), record);
+    writeFileSync(join(dir, 'rebuild_N.png'), png);
+    writeFileSync(join(dir, 'rebuild_E.png'), png);
+    const recipe = {
+      ...makeRecipe(),
+      scene: 'historical',
+      agent: { backend: 'codex', model: 'test', effort: 'not recorded' },
+      skills: [{ name: 'gm-sprite-forge', version: 'not recorded' }],
+      tools: [
+        { name: 'Blender', version: '4.3.2' },
+        { name: 'historical rig', version: `sha256:${hash(readFileSync(rig))}` },
+      ],
+      output: 'rebuild_N.png',
+      views: 'NE',
+      archive: {
+        record: 'historical.json',
+        record_sha256: hash(record),
+        round: 103,
+        files: [{ path: 'rebuild_E.png', sha256: hash(png) }],
+        gm_rerun_supported: false,
+        created_at_basis: 'archive_capture',
+      },
+    };
+    expect(recipeSchema.safeParse({ ...recipe, archive: { ...recipe.archive, record: 'rebuild_E.png' } }).success).toBe(
+      false,
+    );
+    expect(recipeSchema.safeParse({ ...recipe, views: 'NES' }).success).toBe(false);
+    json(join(dir, 'recipe.json'), { ...recipe, archive: { ...recipe.archive, round: 104 } });
+    expect((await gm(['sprite-forge', 'promote', dir], { env: { OGM_ASSETS_ROOT: root } })).code).toBe(2);
+    const wrongSettings = JSON.parse(record.toString());
+    wrongSettings.rig.settings.samples = 2;
+    const wrongRecord = Buffer.from(JSON.stringify(wrongSettings));
+    writeFileSync(join(dir, 'historical.json'), wrongRecord);
+    json(join(dir, 'recipe.json'), { ...recipe, archive: { ...recipe.archive, record_sha256: hash(wrongRecord) } });
+    expect((await gm(['sprite-forge', 'promote', dir], { env: { OGM_ASSETS_ROOT: root } })).code).toBe(2);
+    const mismatched = JSON.parse(record.toString());
+    mismatched.outputs['rebuild_E.png'] = '0'.repeat(64);
+    const altered = Buffer.from(JSON.stringify(mismatched));
+    writeFileSync(join(dir, 'historical.json'), altered);
+    json(join(dir, 'recipe.json'), { ...recipe, archive: { ...recipe.archive, record_sha256: hash(altered) } });
+    expect((await gm(['sprite-forge', 'promote', dir], { env: { OGM_ASSETS_ROOT: root } })).code).toBe(2);
+    writeFileSync(join(dir, 'historical.json'), record);
+    json(join(dir, 'recipe.json'), recipe);
+    const result = await gm(['sprite-forge', 'promote', dir], { env: { OGM_ASSETS_ROOT: root } });
+    expect(result.code, result.err.join('\n')).toBe(0);
+    const base = join(root, 'sets/example-generated/1/extracted/rock');
+    expect(readFileSync(join(base, 'historical.json'))).toEqual(record);
+    expect(readFileSync(join(base, 'rebuild_E.png'))).toEqual(png);
+    const card = JSON.parse(readFileSync(join(root, 'sets/example-generated/cards/rock.card.json'), 'utf8'));
+    expect(card.generated.recipe.parameters).toMatchObject({
+      archival: true,
+      gm_rerun_supported: false,
+      created_at_basis: 'archive_capture',
+    });
+    expect(card.sprite.facings).toEqual({ N: 'rock/rebuild_N.png', E: 'rock/rebuild_E.png' });
+    const rerun = await gm(['sprite-forge', 'rerun', join(base, 'recipe.json')]);
+    expect(rerun.code).toBe(2);
+    expect(rerun.err.join(' ')).toContain('archival and cannot be rerun');
   }, 30000);
 });
 

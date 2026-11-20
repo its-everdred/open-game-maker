@@ -116,6 +116,97 @@ export const command: GmCommand = {
     )
       throw new UsageError('recipe cannot discard an AI-generated source marker', 'set ai_generated to true');
     const output = await containedFile(round, recipe.output);
+    const historicalRecord = recipe.archive ? await containedFile(round, recipe.archive.record) : undefined;
+    if (historicalRecord && (await sha256(historicalRecord)) !== recipe.archive!.record_sha256)
+      throw new Error('historical provenance record hash does not match');
+    const companions = await Promise.all(
+      (recipe.archive?.files ?? []).map(async (file) => {
+        const absolute = await containedFile(round, file.path);
+        if ((await sha256(absolute)) !== file.sha256)
+          throw new Error(`historical companion hash does not match: ${file.path}`);
+        return { ...file, absolute, bytes: (await stat(absolute)).size };
+      }),
+    );
+    if (historicalRecord && recipe.archive) {
+      let record: {
+        schema?: unknown;
+        round?: unknown;
+        source_pack?: unknown;
+        agent?: { backend?: unknown; model?: unknown; effort?: unknown };
+        rig?: { script?: unknown; seed?: unknown; settings?: Record<string, unknown> };
+        tools?: { blender?: unknown; python?: unknown };
+        skills_loaded?: unknown;
+        inputs_sha256?: Record<string, unknown>;
+        outputs?: Record<string, unknown>;
+      };
+      try {
+        const value: unknown = JSON.parse(await readFile(historicalRecord, 'utf8'));
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('expected an object');
+        record = value as typeof record;
+      } catch {
+        throw new UsageError('historical provenance record is invalid JSON', 'provide the original round record');
+      }
+      const sourcesMatch =
+        typeof record.source_pack === 'string' &&
+        recipe.derived_from.some((id) => id.startsWith(`t1:${record.source_pack}/`));
+      const modelMatch =
+        typeof record.agent?.model === 'string' &&
+        (recipe.agent.model === record.agent.model ||
+          recipe.agent.model === `${record.agent.model} (exact variant not recorded)`);
+      const outputsMatch =
+        record.outputs?.[recipe.output] === recipe.output_sha256 &&
+        companions.every((file) => record.outputs?.[file.path] === file.sha256);
+      const rigMatches =
+        typeof record.rig?.script === 'string' &&
+        record.inputs_sha256?.[record.rig.script] === recipe.rig_sha256 &&
+        record.rig.seed === recipe.seed;
+      const blenderMatches =
+        typeof record.tools?.blender === 'string' && recipe.blender_version === `Blender ${record.tools.blender}`;
+      const settings = record.rig?.settings;
+      const settingsEntries =
+        settings && typeof settings === 'object' && !Array.isArray(settings)
+          ? Object.entries(settings).filter(([key]) => key !== 'scene')
+          : [];
+      const settingsMatch =
+        !!settings &&
+        settingsEntries.length === Object.keys(recipe.parameters).length &&
+        settingsEntries.every(
+          ([key, value]) => (recipe.parameters as Record<string, number | undefined>)[key] === value,
+        );
+      const recordedSkills: unknown[] = Array.isArray(record.skills_loaded) ? record.skills_loaded : [];
+      const skillsMatch =
+        Array.isArray(record.skills_loaded) &&
+        recordedSkills.length === recipe.skills.length &&
+        new Set(recordedSkills).size === recordedSkills.length &&
+        recipe.skills.every((skill) => skill.version === 'not recorded' && recordedSkills.includes(skill.name));
+      const expectedTools: Record<string, unknown> = {
+        Blender: record.tools?.blender,
+        ...(typeof record.tools?.python === 'string' ? { Python: record.tools.python } : {}),
+        'historical rig': `sha256:${recipe.rig_sha256}`,
+      };
+      const toolsMatch =
+        recipe.tools.length === Object.keys(expectedTools).length &&
+        new Set(recipe.tools.map((tool) => tool.name)).size === recipe.tools.length &&
+        recipe.tools.every((tool) => expectedTools[tool.name] === tool.version);
+      if (
+        record.schema !== 'provisional-local-recipe' ||
+        record.round !== recipe.archive.round ||
+        !sourcesMatch ||
+        record.agent?.backend !== recipe.agent.backend ||
+        !modelMatch ||
+        recipe.agent.effort !== (record.agent?.effort ?? 'not recorded') ||
+        !rigMatches ||
+        !blenderMatches ||
+        !settingsMatch ||
+        !skillsMatch ||
+        !toolsMatch ||
+        !outputsMatch
+      )
+        throw new UsageError(
+          'historical record does not match the recipe, source, rig or outputs',
+          'provide the matching original round record',
+        );
+    }
     const input = recipe.input ? await containedFile(round, recipe.input) : undefined;
     if (input && (await sha256(input)) !== recipe.input_sha256) throw new Error('recipe input hash does not match');
     const hash = await sha256(output);
@@ -131,7 +222,16 @@ export const command: GmCommand = {
       agent: recipe.agent,
       skills: recipe.skills,
       tools: recipe.tools,
-      recipe: { path: `${recipe.slug}/recipe.json`, seed: recipe.seed, parameters: recipe.parameters },
+      recipe: {
+        path: `${recipe.slug}/recipe.json`,
+        seed: recipe.seed,
+        parameters: {
+          ...recipe.parameters,
+          ...(recipe.archive
+            ? { archival: true, gm_rerun_supported: false, created_at_basis: recipe.archive.created_at_basis }
+            : {}),
+        },
+      },
       scores: recipe.scores,
       ticket: recipe.ticket,
       created_at: recipe.created_at,
@@ -145,10 +245,32 @@ export const command: GmCommand = {
       ...baseCard,
       previews: {},
       source: {
-        files: [{ path: filePath, sha256: `sha256:${hash}`, bytes, format: 'png', role: 'primary' }],
+        files: [
+          { path: filePath, sha256: `sha256:${hash}`, bytes, format: 'png', role: 'primary' },
+          ...companions.map((file) => ({
+            path: `${recipe.slug}/${file.path}`,
+            sha256: `sha256:${file.sha256}`,
+            bytes: file.bytes,
+            format: 'png',
+            role: 'companion',
+          })),
+        ],
         content_hash: `sha256:${hash}`,
       },
       generated,
+      ...(recipe.archive
+        ? {
+            sprite: {
+              ...template.sprite,
+              facings: Object.fromEntries(
+                [recipe.output, ...companions.map((file) => file.path)].map((name) => [
+                  name.at(-5),
+                  `${recipe.slug}/${name}`,
+                ]),
+              ),
+            },
+          }
+        : {}),
       ...(recipe.ai_generated ? { generation: { method: 'ai' as const, tool: recipe.agent.backend } } : {}),
     };
     const parsed = validateCard(card);
@@ -187,11 +309,23 @@ export const command: GmCommand = {
     try {
       await copyFile(output, join(destination, recipe.output));
       if ((await sha256(join(destination, recipe.output))) !== hash) throw new Error('sprite changed during promotion');
+      for (const file of companions) {
+        const target = join(destination, file.path);
+        await copyFile(file.absolute, target);
+        if ((await sha256(target)) !== file.sha256) throw new Error('historical companion changed during promotion');
+      }
       await writeFile(join(destination, 'recipe.json'), `${JSON.stringify(recipe, null, 2)}\n`, { flag: 'wx' });
       await writeFile(join(destination, 'collection.card.json'), collectionText, { flag: 'wx' });
       await writeFile(join(destination, 'asset.card.json'), `${JSON.stringify(parsed.card, null, 2)}\n`, {
         flag: 'wx',
       });
+      if (historicalRecord && recipe.archive) {
+        const target = join(destination, recipe.archive.record);
+        await mkdir(dirname(target), { recursive: true });
+        await copyFile(historicalRecord, target);
+        if ((await sha256(target)) !== recipe.archive.record_sha256)
+          throw new Error('historical provenance record changed during promotion');
+      }
       if (input && recipe.input) {
         const target = join(destination, recipe.input);
         await mkdir(dirname(target), { recursive: true });
