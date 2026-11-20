@@ -20,6 +20,7 @@ import { isReviewStill } from '../review-rounds/still.js';
 import { readTrack, reviewCheckout } from '../review-rounds/tracks.js';
 import { phaseOwner } from '../review-rounds/owners.js';
 import { reviewDaemonForGame } from '../review-rounds/daemon.js';
+import { logReviewPublish } from '../review-rounds/feed-log.js';
 import { BuildCacheError } from './cache-plan.js';
 import { awaitsBuild, isPublishing, publishStaged, runCompleted, stageArtifact } from './publish.js';
 import { ARCHIVE_LIMITS, BadArchive } from './untar.js';
@@ -34,6 +35,7 @@ export function buildRoutes(opts: {
   gameForSecret?: HookGameResolver;
   trackFor?: (checkout: string, gamePath: string, sha: string, track: string) => Promise<ReviewTrack>;
   authorizedAudio?: ReadonlySet<string>;
+  publishLog?: typeof logReviewPublish;
   submitReview?: (
     deps: import('../app/types.js').AppDeps,
     gameId: string,
@@ -242,6 +244,7 @@ export function buildRoutes(opts: {
       try {
         const index = track.phases.findIndex((phase) => phase.id === parsed.data.phase);
         const effort = phaseEffort(track.phases[index]!, index);
+        const wasPublished = getRound(deps.db, game.id, parsed.data.id) !== undefined;
         const round = await (opts.submitReview ?? submitReviewRound)(
           deps,
           game.id,
@@ -249,6 +252,12 @@ export function buildRoutes(opts: {
           effort,
           audioItems.length > 0,
         );
+        if (!wasPublished)
+          await (opts.publishLog ?? logReviewPublish)(
+            game.id,
+            { ticket: parsed.data.ticket, id: round.id, postedAt: new Date().toISOString() },
+            deps.log,
+          );
         return c.json({ id: round.id, round: round.round }, 201);
       } catch (error) {
         if (error instanceof Error && error.message === 'preview_not_found')

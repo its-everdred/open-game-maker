@@ -2,6 +2,7 @@ import type { Notification } from '@ogm/contracts';
 
 import type { AppDeps } from '../app/types.js';
 import { insertNotification } from '../notify/store.js';
+import { hasRecentReviewNotification } from '../review-rounds/notification-cooldown.js';
 
 // "Your review is ready", "X is live" and "stalled: cause, action, ETA" reach the owner's phone as one push each
 // (#854 Notify). aiur publishes them on the core daemon as `operator.notify.<kind>` (aiur-team/aiur#8034); this reads
@@ -63,6 +64,11 @@ export function createExecutorNotifier(
           const key = `${page.instance}:${record.id}`;
           if (sent(deps, key)) continue;
           const ticket = record.payload.ticket;
+          const reviewTicketKey =
+            kind === 'review_ready' && (typeof ticket === 'string' || typeof ticket === 'number')
+              ? `core:${String(ticket)}`
+              : undefined;
+          if (reviewTicketKey && hasRecentReviewNotification(deps.db, owner, reviewTicketKey, now)) continue;
           const notification = insertNotification(
             deps.sqlite,
             {
@@ -76,6 +82,7 @@ export function createExecutorNotifier(
                 eventKey: key,
                 notice: kind,
                 ...(typeof ticket === 'string' || typeof ticket === 'number' ? { ticket: String(ticket) } : {}),
+                ...(reviewTicketKey ? { reviewTicketKey } : {}),
               },
             },
             { now },
