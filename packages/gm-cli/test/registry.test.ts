@@ -123,6 +123,8 @@ describe('command registry', () => {
       'skills search',
       'skills show',
       'skills sync',
+      'sprite-forge promote',
+      'sprite-forge rerun',
       'test',
       'trailer',
       'verify serve',

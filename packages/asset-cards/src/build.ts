@@ -9,8 +9,8 @@ import { resolve } from './resolve.js';
 import type { CardIndex, IndexError, ResolvedCard } from './types.js';
 
 export const INDEX_PATH = join('index', 'cards.index.json');
-export const CARD_INDEX_VERSION = 2;
-const TOPS = ['packs', 'inspiration'];
+export const CARD_INDEX_VERSION = 3;
+const TOPS = ['packs', 'inspiration', 'sets'];
 const INDEX_IGNORE = '.indexignore';
 const PACK_ID = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -101,6 +101,7 @@ export async function buildPackIndex(root: string, packIds: readonly string[]): 
   const files: string[] = [];
   for (const id of [...new Set(packIds)].filter((candidate) => PACK_ID.test(candidate)).sort()) {
     files.push(...(await cardFilesFor(root, 'packs', id)));
+    files.push(...(await cardFilesFor(root, 'sets', id)));
   }
   return buildFromFiles(root, files);
 }

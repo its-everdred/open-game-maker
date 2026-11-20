@@ -126,6 +126,7 @@ export function passes(index: CardIndex, card: ResolvedCard, q: SearchQuery): bo
   if (card.status === 'quarantined' || card.status === 'rejected') return false;
   if (collectionOf(index, card)?.status === 'quarantined') return false;
   if (q.excludeAiGenerated && card.generation?.method === 'ai') return false;
+  if (q.generated && !card.generated) return false;
   if (!card.resolved.rights.uses.includes(use)) return false;
   if ((use === 'in-game' || use === 'placeholder') && kindsOf(card).includes('inspiration')) return false;
 
@@ -147,7 +148,7 @@ export function passes(index: CardIndex, card: ResolvedCard, q: SearchQuery): bo
   }
   const needsSet = q.set !== undefined || Boolean(q.gameSets?.length);
   const pack = needsSet ? packOf(card.id) : undefined;
-  const set = pack ? setFor(pack)?.id : undefined;
+  const set = (pack ? setFor(pack)?.id : undefined) ?? (card.generated ? card.resolved.set : undefined);
   if (q.set !== undefined) {
     if (set !== q.set) return false;
   }
@@ -231,7 +232,8 @@ export function formatRow(card: ResolvedCard): string {
       })
       .join('');
   const generation = card.generation?.method === 'ai' ? `  [AI-generated: ${safe(card.generation.tool)}]` : '';
+  const madeBy = card.generated ? '  [Made by Game Maker]' : '';
   const status =
     card.status === 'measured' && kindsOf(card).includes('audio') ? 'measured [low-confidence]' : card.status;
-  return `${[card.id, kind, status, card.resolved.style_family ?? '-', card.title].map(safe).join('  ')}${generation}`;
+  return `${[card.id, kind, status, card.resolved.style_family ?? '-', card.title].map(safe).join('  ')}${generation}${madeBy}`;
 }

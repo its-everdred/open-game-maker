@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -15,12 +16,40 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { INDEX_PATH, buildIndex, buildPackIndex, isStale, loadIndex, resolve, writeIndex } from '../src/index.js';
+import {
+  CARD_INDEX_VERSION,
+  INDEX_PATH,
+  buildIndex,
+  buildPackIndex,
+  isStale,
+  loadIndex,
+  resolve,
+  writeIndex,
+} from '../src/index.js';
 import { FIXTURE, libraryCopy } from './helpers.js';
 
 const ORC = 't1:kenney-mini-dungeon/character-orc@2.0';
 
 describe('buildIndex', () => {
+  it('indexes collections stored in the shared sets directory', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'asset-set-index-'));
+    mkdirSync(join(root, 'sets'), { recursive: true });
+    cpSync(join(FIXTURE, 'packs/kenney-mini-dungeon'), join(root, 'sets/kenney-mini-dungeon'), { recursive: true });
+    expect((await buildIndex(root)).cards.some((card) => card.id === ORC)).toBe(true);
+    expect((await buildPackIndex(root, ['kenney-mini-dungeon'])).cards.some((card) => card.id === ORC)).toBe(true);
+  });
+
+  it('rebuilds old cached indexes that predate set discovery', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'asset-set-cache-'));
+    mkdirSync(join(root, 'sets'), { recursive: true });
+    cpSync(join(FIXTURE, 'packs/kenney-mini-dungeon'), join(root, 'sets/kenney-mini-dungeon'), { recursive: true });
+    mkdirSync(join(root, 'index'));
+    writeFileSync(
+      join(root, INDEX_PATH),
+      JSON.stringify({ version: 2, built: '', vocab: '', cards: [], collections: {}, errors: [] }),
+    );
+    expect((await loadIndex(root)).cards.some((card) => card.id === ORC)).toBe(true);
+  });
   it('indexes every valid card and lists the invalid ones without failing', async () => {
     const index = await buildIndex(FIXTURE);
     expect(index.cards).toHaveLength(19);
@@ -155,7 +184,7 @@ describe('loadIndex', () => {
 
     expect(await isStale(root)).toBe(true);
     const rebuilt = await loadIndex(root);
-    expect(rebuilt.version).toBe(2);
+    expect(rebuilt.version).toBe(CARD_INDEX_VERSION);
     expect(rebuilt.vocab).not.toBe('old-cache');
   });
 

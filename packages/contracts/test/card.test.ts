@@ -5,6 +5,31 @@ import type { Sprite } from '../src/card.generated.js';
 import { cardFixtureDocs, negativeFixture } from './helpers.js';
 
 describe('card schemas', () => {
+  it('validates Game Maker provenance and confines recipe paths', () => {
+    const card = structuredClone(
+      cardFixtureDocs().find(({ file }) => file === 'sprite-kenney-tiny-dungeon-knight.json')?.doc,
+    ) as Record<string, unknown>;
+    card.generated = {
+      made_by: 'ogm',
+      method: '3d-render',
+      derived_from: ['t1:source/knight@1'],
+      agent: { backend: 'codex', model: 'example', effort: 'high' },
+      skills: [{ name: 'gm-sprite-forge', version: '1' }],
+      tools: [{ name: 'Blender', version: '4.3' }],
+      recipe: { path: 'recipe.json', seed: 42, parameters: {} },
+      scores: { iou: 0.8 },
+      ticket: 1036,
+      created_at: '2026-11-20T00:00:00Z',
+      approved_by_creator: true,
+      verdict_quote: 'Matches',
+    };
+    expect(validateCard(card)).toMatchObject({ ok: true });
+    (card.generated as { recipe: { path: string } }).recipe.path = '../recipe.json';
+    expect(validateCard(card)).toMatchObject({ ok: false });
+    (card.generated as { recipe: { path: string }; method: string }).recipe.path = 'recipe.json';
+    (card.generated as { method: string }).method = 'unknown';
+    expect(validateCard(card)).toMatchObject({ ok: false });
+  });
   it('accepts all 16 moved C3 fixtures', () => {
     for (const { file, doc } of cardFixtureDocs()) {
       const schema = (doc as { schema?: string }).schema;
