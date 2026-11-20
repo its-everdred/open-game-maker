@@ -17,8 +17,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.argv = [sys.argv[0], '--', 'tree', str(output), 'samples=1', 'views=N']
 import blender_iso_rig as rig
 from vegetation_destination import variant_destination
+from vegetation_matrix_parameters import matrix_parameters
 
 jobs = json.loads(jobs_file.read_text())
+defaults = rig.P.copy()
 for job in jobs:
     row = job['row']
     variant = job['variant']
@@ -29,10 +31,8 @@ for job in jobs:
         raise ValueError('unknown vegetation scene')
     rig.SCENE = scene
     rig.OUT = str(variant_destination(output, row, variant))
-    rig.P.update(seed=job['seed'], height=job.get('height', 1),
-                 lean=job.get('lean', 0.1), canopy_scale=job.get('canopy_scale', 1),
-                 levels=job.get('levels', 2), fanout=job.get('fanout', 2),
-                 count=job.get('count', 6), extent=job.get('extent', 0.2),
-                 yaw0=job.get('yaw', 0), autumn=job.get('autumn', 0))
+    rig.P.clear()
+    rig.P.update(defaults)
+    rig.P.update(matrix_parameters(job))
     rig.main()
     print(f'MATRIX_DONE {row} V{variant}', flush=True)
