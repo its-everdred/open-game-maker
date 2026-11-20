@@ -28,6 +28,7 @@ test('renders prototype showcase art and opens a detail sheet', async ({ page })
     expect(firstBox).not.toBeNull();
     expect(nextBox!.y).toBeGreaterThan(firstBox!.y);
   }
+  await tile.scrollIntoViewIfNeeded();
   await expect(tile.locator('canvas')).toHaveAttribute('data-painted', 'true');
   const colours = await tile.locator('canvas').evaluate((element) => {
     const canvas = element as HTMLCanvasElement;

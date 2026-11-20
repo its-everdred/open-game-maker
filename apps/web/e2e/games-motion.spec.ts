@@ -80,7 +80,6 @@ test('keeps the cover moving through selection and browser Back', async ({ page 
   await page.goto('/all?test', { waitUntil: 'domcontentloaded' });
   const tile = page.locator('[data-game-id="g_2"] .game-tile');
   await expect(tile).toBeVisible();
-  await tile.hover();
   const cover = page.locator('[data-game-id="g_2"] .game-cover-host');
   const rect = () =>
     cover.evaluate((element) => {
@@ -88,7 +87,8 @@ test('keeps the cover moving through selection and browser Back', async ({ page 
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     });
   const before = await rect();
-  await tile.click();
+  // Keep hover scaling from adding a second transform to the measured selection glide.
+  await tile.evaluate((element: HTMLElement) => element.click());
   await expect(page).toHaveURL(/spotlight=g_2/);
   await expect(page.getByRole('button', { name: 'Close game' })).toBeVisible();
   await expect
