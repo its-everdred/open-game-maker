@@ -36,7 +36,7 @@ The directory contains a GIF and phone-compatible H.264 MP4 per row, `still-8dir
 
 ## Review and calibration
 
-For each meaningful rebuild round, post one non-blocking Command on the rebuild ticket. Ask separately whether image gen matches and whether the 3D pipeline matches. The Command schema has one question and one choice, so put both questions in that field and use the four combinations below to record independent verdicts; ask for a note on each track needing changes. Include the round sheet, eight-direction still and animated GIF or MP4 as applicable, plus the score JSON and gates in force. In the Command text list each point from Kevin's last note and what changed for it, one line per point. Inspect the media first. Attach the same media to every option:
+For each meaningful rebuild round, post one non-blocking Command on the rebuild ticket. Ask separately whether image gen matches and whether the 3D pipeline matches. The Command schema has one question and at most three suggested responses, so put both questions in that field and use the three outcomes below; when one needs changes, identify that track in the note. Ask for a note on each track needing changes. Include the round sheet, eight-direction still and animated GIF or MP4 as applicable, plus the score JSON and gates in force. In the Command text list each point from Kevin's last note and what changed for it, one line per point. Inspect the media first. Attach the same media to every option:
 
 ```json
 {
@@ -48,8 +48,7 @@ For each meaningful rebuild round, post one non-blocking Command on the rebuild 
   "context": {"authority_basis": "product", "short_summary": "Review this rebuild against its original.", "long_context_markdown": "Give a note with Needs changes. Include the round and gate scores here."},
   "options": [
     {"id": "both-match", "label": "Both match", "description": "Image gen matches; 3D pipeline matches.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and both options"}]},
-    {"id": "image-match", "label": "Image matches", "description": "Image gen matches; 3D pipeline needs changes.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and both options"}]},
-    {"id": "pipeline-match", "label": "3D matches", "description": "Image gen needs changes; 3D pipeline matches.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and both options"}]},
+    {"id": "one-changes", "label": "One needs changes", "description": "Name the track needing changes in your note; the other matches.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and both options"}]},
     {"id": "both-change", "label": "Both need changes", "description": "Image gen and 3D pipeline need changes.", "media": [{"kind": "image", "mime_type": "image/png", "locator": "/absolute/workspace/path/compare.png", "alt_text": "Original and both options"}]}
   ],
   "consequence_of_delay": "No answer: rebuilding continues while the verdict is pending."
