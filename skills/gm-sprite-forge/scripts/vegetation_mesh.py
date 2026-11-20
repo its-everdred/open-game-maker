@@ -10,9 +10,10 @@ from mathutils import Vector
 from vegetation_layout import branches, placements
 
 
-def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.0):
+def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.0,
+         fanout=2, spread=(0.55, 0.85)):
     """Create a tree with connected branches and a canopy at each outer tip."""
-    skeleton = branches(seed, height=height, lean=lean, levels=levels)
+    skeleton = branches(seed, height=height, lean=lean, levels=levels, fanout=fanout, spread=spread)
     objects = []
     for branch in skeleton:
         start, end = Vector(branch.start), Vector(branch.end)

@@ -14,6 +14,9 @@ class VegetationLayoutTest(unittest.TestCase):
         self.assertEqual(tree, branches(17, height=2, levels=3))
         self.assertNotEqual(tree, branches(18, height=2, levels=3))
         self.assertEqual(len(tree), 15)
+        self.assertEqual(len(branches(17, levels=2, fanout=3)), 13)
+        narrow = branches(17, levels=1, spread=(0, 0))
+        self.assertTrue(all(b.start[:2] == b.end[:2] for b in narrow[1:]))
         self.assertEqual(tree[0].start, (0, 0, 0))
         for child in tree[1:]:
             parents = [p for p in tree if p.depth == child.depth - 1]
@@ -32,7 +35,8 @@ class VegetationLayoutTest(unittest.TestCase):
         self.assertEqual(placements(1, 0), [])
 
     def test_rejects_invalid_ranges(self):
-        for kwargs in ({'height': 0}, {'lean': -1}, {'levels': 6}):
+        for kwargs in ({'height': 0}, {'lean': -1}, {'levels': 6}, {'fanout': 0},
+                       {'spread': (0, 1)}, {'height': float('nan')}):
             with self.assertRaises(ValueError):
                 branches(0, **kwargs)
         for kwargs in ({'count': -1}, {'count': 1, 'extent': -1},

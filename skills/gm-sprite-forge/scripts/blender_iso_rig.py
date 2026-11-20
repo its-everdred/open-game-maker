@@ -239,7 +239,9 @@ def vegetation(sc):
         return cluster(int(P['seed']), green, count=int(P.get('count', 5)), extent=P.get('extent', 0.2))
     bark = toon_material('bark', (117, 87, 56), (92, 65, 42), (52, 37, 25), noise=0.08)
     return tree(int(P['seed']), bark, green, height=P.get('height', 1), lean=P.get('lean', 0.1),
-                levels=int(P.get('levels', 3)), canopy_scale=P.get('canopy_scale', 1))
+                levels=int(P.get('levels', 3)), canopy_scale=P.get('canopy_scale', 1),
+                fanout=int(P.get('fanout', 2)),
+                spread=(P.get('spread_min', 0.55), P.get('spread_max', 0.85)))
 
 
 def main():
