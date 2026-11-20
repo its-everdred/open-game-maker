@@ -1,12 +1,8 @@
 /** The pure half of `gm qa playtest`: the seeded bot's moves and the verdict, kept out of the browser runner. */
+import { REVIEW_VIEWPORTS, VIEWPORTS } from '@ogm/contracts';
 
 /** The four touch sizes every playtest covers: phone and tablet, portrait and landscape. */
-export const PLAYTEST_SIZES = [
-  [390, 844],
-  [844, 390],
-  [820, 1180],
-  [1180, 820],
-] as const;
+export const PLAYTEST_SIZES = REVIEW_VIEWPORTS.map((id) => [VIEWPORTS[id].width, VIEWPORTS[id].height] as const);
 
 export const PLAYTEST_RESULT = 'playtest.json';
 
