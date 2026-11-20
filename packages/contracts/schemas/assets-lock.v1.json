@@ -933,6 +933,160 @@
                   "tool"
                 ],
                 "additionalProperties": false
+              },
+              "generated": {
+                "type": "object",
+                "properties": {
+                  "made_by": {
+                    "type": "string",
+                    "const": "ogm"
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "3d-render",
+                      "image-gen",
+                      "2d-edit",
+                      "procedural"
+                    ]
+                  },
+                  "derived_from": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "agent": {
+                    "type": "object",
+                    "properties": {
+                      "backend": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "model": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "effort": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "backend",
+                      "model",
+                      "effort"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "skills": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recipe": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/|\\\\|[A-Za-z]:|~)(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+                      },
+                      "seed": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "seed",
+                      "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "scores": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  },
+                  "ticket": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "approved_by_creator": {
+                    "type": "boolean"
+                  },
+                  "verdict_quote": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "made_by",
+                  "method",
+                  "derived_from",
+                  "agent",
+                  "skills",
+                  "tools",
+                  "recipe",
+                  "scores",
+                  "ticket",
+                  "created_at",
+                  "approved_by_creator"
+                ],
+                "additionalProperties": false
               }
             },
             "additionalProperties": false

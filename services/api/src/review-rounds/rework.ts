@@ -7,7 +7,7 @@ export const reworkMarker = (roundId: string) => `<!-- gm-review-verdict:${round
 export type ReworkDelivery = {
   // Null means the lookup succeeded and neither queued input nor latest rework contains the marker.
   // A found marker may precede a run, in which case runId remains null and the next pass looks again.
-  findMarker(ticket: string, marker: string): Promise<{ runId: string | null } | null>;
+  findMarker(ticket: string, marker: string): Promise<{ runId: string | null; pending?: boolean } | null>;
   rework(ticket: string, reason: string): Promise<void>;
 };
 

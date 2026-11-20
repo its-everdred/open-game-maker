@@ -14,6 +14,7 @@ import { inspectReviewOwners } from './monitor.js';
 import { syncCommandVerdicts } from './command-verdicts.js';
 import { queueReviewReminders } from './reminders.js';
 import { stopReview } from './kill.js';
+import { dispatchPublishedPrototypeVerdict } from './publish-verdict.js';
 
 export function createReviewSync(deps: {
   db: Db;
@@ -51,6 +52,15 @@ export function createReviewSync(deps: {
     for (const round of rounds) {
       try {
         const client = await deps.clientForGame(round.gameId);
+        if (round.track === 'prototype-publish') {
+          await dispatchPublishedPrototypeVerdict(
+            deps.db,
+            round,
+            aiurReworkDelivery(client, round.id, round.verdictAt ?? new Date(now()).toISOString()),
+            () => new Date(now()).toISOString(),
+          );
+          continue;
+        }
         if (round.verdict === 'needs_work') {
           if (otherPhaseInProgress(deps.db, round)) continue;
           const shared = deps.db

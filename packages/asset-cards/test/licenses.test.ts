@@ -53,6 +53,12 @@ describe('licence table', () => {
       ceiling: { audience: 'private', redistribution: 'in-build', attribution: null },
     });
     expect(licenseFor('smallscaleint-itch')?.id).toBe('LicenseRef-smallscaleint-itch');
+    expect(licenseFor('unknown-owned')).toMatchObject({
+      id: 'LicenseRef-kevin-owned',
+      processing: 'local-only',
+      ceiling: { audience: 'private', redistribution: 'in-build' },
+      confirmed: { by: 'kevin', on: '2026-11-20' },
+    });
     expect(licenseFor('ansimuz-free-commercial')?.id).toBe('LicenseRef-ansimuz-free');
     expect(licenseFor('custom-commercial-ok')?.id).toBe('LicenseRef-hattap-commercial');
     expect(licenseFor('CC0-1.0')?.id).toBe('CC0-1.0');

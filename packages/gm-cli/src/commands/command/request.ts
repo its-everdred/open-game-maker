@@ -193,7 +193,13 @@ export function buildEmitEvent(payload: CommandRequestPayload, decide?: DecideCo
 }
 
 /** How strictly one Command checks the options: `command request` keeps its 2-5, `decide` asks for what it needs. */
-export type CommandRules = { name: string; maxOptions: number; mediaOnEveryOption: boolean; topic?: string };
+export type CommandRules = {
+  name: string;
+  maxOptions: number;
+  mediaOnEveryOption: boolean;
+  topic?: string;
+  blocking?: boolean;
+};
 
 /** Validate the option flags, gate them through the feedback ledger and write the Command to the outbox (when a
  * build job is named). */
@@ -307,10 +313,7 @@ export async function requestCommand(
     question,
     options,
     ...(recommend ? { recommend } : {}),
-    // Every Command is a creator Command, and aiur retires a non-blocking one 5 minutes after its ticket has no
-    // running agent, so the creator's pick expired unseen. Raise them all blocking; revert to `flags.blocking === true`
-    // once aiur #7872 (decisions from the user never expire) is deployed.
-    blocking: true,
+    blocking: rules.blocking ?? true,
     ...(rules.topic === undefined ? {} : { topic: rules.topic }),
   };
   if (jobId !== null) {

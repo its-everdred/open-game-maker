@@ -98,7 +98,7 @@ preview before asking the agent.
 
 ## Track review rounds
 
-The Review view shows open art and sound rounds posted with `gm review post`, using their stored stills, capture clips, or mock audio. Gameplay mocks may use a still or clip; later gameplay rounds use a playable preview.
+The Review view shows open art and sound rounds posted with `gm review post`, using their stored stills, capture clips, or mock audio. Gameplay mocks may use a still or clip; later gameplay rounds use a playable preview. A host publish also posts one prototype round for the published build when its merged PRs include creator-visible work; the card links to that exact build and shows the merged works, known limitations, decision ids and capture status. Every 10 minutes, the deployed QA review hook checks that a published build has a recorded round and raises an operator attention when it does not.
 Mock audio must be uploaded as a local file through the ticket-scoped preview relay.
 The game owner can answer Looks right or Needs work with a note; the answer is recorded against that round. Gameplay
 rounds appear as playable previews and include their design question.

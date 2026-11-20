@@ -29,6 +29,7 @@ export const FILTER_FLAGS: FlagSpec = {
   'same-rig-as': { type: 'string', help: 'only cards sharing or retargeting to the rig of this card id' },
   'include-draft': { type: 'boolean', default: false, help: 'also match draft cards of every kind' },
   'exclude-ai-generated': { type: 'boolean', default: false, help: 'hide assets marked as AI-generated' },
+  generated: { type: 'boolean', default: false, help: 'only assets made by Game Maker' },
   tier: { type: 'number', help: 'library tier 1, 2 or 3' },
   directions: { type: 'number', help: 'exact facing count of a directional sprite (8)' },
   collection: { type: 'string', help: 'only this collection id' },
@@ -57,6 +58,7 @@ export function toQuery(name: string, words: string[], flags: Record<string, unk
     use: use as Use,
     includeDraft: flags['include-draft'] === true,
     excludeAiGenerated: flags['exclude-ai-generated'] === true,
+    generated: flags.generated === true,
   };
   if (typeof flags.kind === 'string') {
     const [kind, ...sub] = flags.kind.split('/');

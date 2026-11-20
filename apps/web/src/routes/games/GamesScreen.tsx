@@ -19,7 +19,7 @@ import { startTrailer, stopOtherTrailers, stopTrailers } from './trailerVideo';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
 import { TransitionGrid } from './TransitionGrid';
-import { gameUpdatedAt, type GameSummary, type JobView } from './types';
+import { type GameSummary, type JobView } from './types';
 import { indexActiveJobs, useActiveJobs } from './useActiveJobs';
 import { useBranches } from './useBranches';
 import { useGames } from './useGames';
@@ -296,14 +296,15 @@ function isSpotlightDismissed(state: unknown): boolean {
 
 function sortGames(games: GameSummary[], jobs: ReadonlyMap<string, JobView>): GameSummary[] {
   return [...games].sort((left, right) => {
-    if (left.lastPlayedAt || right.lastPlayedAt) {
-      return (right.lastPlayedAt ?? '').localeCompare(left.lastPlayedAt ?? '');
-    }
-    if (left.showcase && right.showcase) return 0;
-    if (left.showcase) return -1;
-    if (right.showcase) return 1;
+    const leftPlaceholder = left.id.startsWith('showcase:');
+    const rightPlaceholder = right.id.startsWith('showcase:');
+    if (leftPlaceholder && rightPlaceholder) return 0;
+    if (leftPlaceholder) return 1;
+    if (rightPlaceholder) return -1;
+    const recency = (right.lastPlayedAt ?? right.createdAt).localeCompare(left.lastPlayedAt ?? left.createdAt);
+    if (recency) return recency;
     const building = Number(jobs.has(right.id)) - Number(jobs.has(left.id));
-    return building || gameUpdatedAt(right).localeCompare(gameUpdatedAt(left));
+    return building || right.createdAt.localeCompare(left.createdAt) || left.title.localeCompare(right.title);
   });
 }
 

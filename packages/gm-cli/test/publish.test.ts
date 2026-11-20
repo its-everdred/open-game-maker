@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { gm, tempDir } from './helpers.js';
+import { ReviewSubmission } from '@ogm/contracts';
 
 const TOKEN = 'internal-token-for-publish-tests';
 
@@ -66,13 +67,22 @@ beforeAll(async () => {
   mkdirSync(origin);
   git(origin, 'init', '-q', '-b', 'main');
   writeGame(origin, 'old');
+  mkdirSync(join(origin, 'docs', 'blobs'), { recursive: true });
+  writeFileSync(
+    join(origin, 'docs', 'blobs', 'decisions.json'),
+    JSON.stringify([
+      { id: 'enemies-first', status: 'open' },
+      { id: 'loot-drop', status: 'asked' },
+      { id: 'town-shop', status: 'open' },
+    ]),
+  );
   git(origin, 'add', '-A');
   git(origin, 'commit', '-qm', 'old');
   staleSha = git(origin, 'rev-parse', 'HEAD');
   checkout = join(root, 'checkout');
   execFileSync('git', ['clone', '-q', origin, checkout]);
   writeGame(origin, 'new');
-  git(origin, 'commit', '-qam', 'new');
+  git(origin, 'commit', '-qam', 'new (#42)');
   remoteSha = git(origin, 'rev-parse', 'HEAD');
   // A commit only origin has, on a side branch, whose build fails.
   git(origin, 'switch', '-qc', 'broken');
@@ -106,6 +116,11 @@ beforeAll(async () => {
     ].join('\n'),
   );
   chmodSync(join(bin, 'pnpm'), 0o755);
+  writeFileSync(
+    join(bin, 'gh'),
+    '#!/usr/bin/env bash\nif [[ ${GH_FAIL_PR:-} == "${3:-}" ]]; then exit 1; fi\nif [[ ${GH_NONE_PR:-} == "${3:-}" ]]; then printf "%s\\n" "Prototype review: none"; exit 0; fi\nprintf "%s\\n" "Closes #42" "## Prototype review" "**Works now:** walk around" "**Known limitations:** no attack yet" "**Weigh in on:** enemies-first, loot-drop, town-shop"\n',
+  );
+  chmodSync(join(bin, 'gh'), 0o755);
 
   server = createServer((request, response) => {
     const chunks: Buffer[] = [];
@@ -139,6 +154,11 @@ beforeAll(async () => {
           }),
         );
       }
+      if (
+        request.method === 'GET' &&
+        request.url?.match(/^\/internal\/operator\/games\/blobs\/review-sha\/[0-9a-f]{40}$/)
+      )
+        return json(200, '{"recorded":false}');
       if (request.method === 'GET' && request.url?.startsWith('/internal/operator/games/blobs/builds/')) {
         return json(200, JSON.stringify({ state: 'failed', buildId: null }));
       }
@@ -155,6 +175,10 @@ beforeAll(async () => {
         }
         return json(uploadAnswer.status, uploadAnswer.body);
       }
+      if (request.method === 'POST' && request.url === '/internal/operator/games/blobs/prototype-reviews')
+        return json(201, '{"id":"review-1","round":1,"state":"posted"}');
+      if (request.method === 'GET' && request.url?.includes('/prototype-review'))
+        return json(200, '{"recorded":true,"roundId":"review-1","round":1}');
       return json(404, '{"error":{"code":"game_not_found"}}');
     });
   });
@@ -168,7 +192,7 @@ afterAll(async () => {
 });
 
 function hostHome(
-  apiEnv = `OGM_INTERNAL_TOKEN=${TOKEN}\nOGM_API_PORT=1\nOGM_APP_ORIGIN=https://play.example\n`,
+  apiEnv = `OGM_INTERNAL_TOKEN=${TOKEN}\nOGM_API_PORT=1\nOGM_APP_ORIGIN=https://play.example\nOGM_GAMES_ORIGIN=https://games.example\n`,
 ): string {
   const home = tempDir('gm-publish-home-');
   mkdirSync(join(home, '.config', 'ogm', 'env'), { recursive: true });
@@ -185,6 +209,8 @@ async function publish(argv: string[], options: { home?: string; cwd?: string; e
     BUILD_ARGS_LOG: join(logs, 'args'),
     BUILD_ENV_LOG: join(logs, 'env'),
     OGM_ASSETS_ROOT: join(root, 'assets-local'),
+    OGM_QA_GM: 'true',
+    GITHUB_TOKEN: 'test-token',
     ...options.env,
   };
   requests = [];
@@ -206,10 +232,20 @@ describe('gm publish', () => {
     expect(run.out).toEqual([
       `building games/blobs at ${remoteSha}`,
       `published games/blobs at ${remoteSha}: build build_publish`,
-      'play https://play.example/play/blobs',
+      'play https://games.example/g/g_blobs/build_publish/',
     ]);
     const upload = requests.find((r) => r.method === 'POST')!;
     expect(upload).toMatchObject({ url: '/internal/operator/games/blobs/builds', token: TOKEN, sha: remoteSha });
+    const review = requests.find((r) => r.url.endsWith('/prototype-reviews'))!;
+    expect(JSON.parse(review.body.toString())).toMatchObject({
+      track: 'prototype-publish',
+      sourceTickets: ['42'],
+      works: ['walk around'],
+      limitations: ['no attack yet'],
+      decisionIds: ['loot-drop', 'enemies-first', 'town-shop'],
+      clipStatus: 'unchecked',
+    });
+    expect(ReviewSubmission.safeParse(JSON.parse(review.body.toString())).success).toBe(true);
     // The production build: relative base, published mode, the asset library, and never the operator's token.
     expect(run.pnpm).toContain('install --frozen-lockfile');
     expect(run.args.trim()).toBe('--base=./ --mode=published');
@@ -227,6 +263,45 @@ describe('gm publish', () => {
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
   });
 
+  it('posts fallback content and reports an attention when a merged PR body cannot be read', async () => {
+    git(origin, 'switch', '-q', 'main');
+    git(origin, 'commit', '--allow-empty', '-qm', 'prototype review: none (#42)');
+    git(origin, 'commit', '--allow-empty', '-qm', 'follow-up (#43)');
+    remoteSha = git(origin, 'rev-parse', 'HEAD');
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_missing_pr","buildId":"build_missing_pr"}' };
+    const run = await publish(['blobs', '--api', api], {
+      env: { OGM_INTERNAL_TOKEN: TOKEN, GH_FAIL_PR: '43', GH_NONE_PR: '42' },
+    });
+
+    expect(run.code).toBe(0);
+    expect(run.err.join('\n')).toContain('could not read PR body');
+    const review = requests.find((request) => request.url.endsWith('/prototype-reviews'))!;
+    expect(JSON.parse(review.body.toString())).toMatchObject({
+      track: 'prototype-publish',
+      ticket: 'publish',
+      works: [],
+      limitations: ['Limitations not stated'],
+    });
+    expect(ReviewSubmission.safeParse(JSON.parse(review.body.toString())).success).toBe(true);
+  });
+
+  it('publishes an inventoried SHA and records its review after the build is available', async () => {
+    git(origin, 'switch', '-qc', 'inventory', 'main');
+    mkdirSync(join(origin, 'docs', 'blobs'), { recursive: true });
+    writeFileSync(join(origin, 'docs', 'blobs', 'decisions.json'), '{"decisions":[]}\n');
+    git(origin, 'add', '-A');
+    git(origin, 'commit', '-qm', 'add decision inventory');
+    const sha = git(origin, 'rev-parse', 'HEAD');
+
+    const run = await publish(['blobs', '--sha', sha, '--api', api]);
+
+    expect(run.code).toBe(0);
+    const upload = requests.find(({ url }) => url.endsWith('/builds'))!;
+    const review = requests.find(({ url }) => url.endsWith('/prototype-reviews'))!;
+    expect(upload.sha).toBe(sha);
+    expect(JSON.parse(review.body.toString())).toMatchObject({ sha });
+  });
+
   it('defaults the slug to the game folder it runs in and builds an explicit --sha', async () => {
     uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_2","buildId":"build_2"}' };
 
@@ -236,6 +311,7 @@ describe('gm publish', () => {
     expect(requests.map((r) => `${r.method} ${r.url}`)).toEqual([
       'GET /internal/operator/games/blobs',
       'POST /internal/operator/games/blobs/builds',
+      'POST /internal/operator/games/blobs/builds/build_2/prototype-review-check',
     ]);
     expect(requests[1]!.sha).toBe(staleSha);
     expect(run.out.map((line) => JSON.parse(line) as unknown)).toEqual([
@@ -246,7 +322,8 @@ describe('gm publish', () => {
         sha: staleSha,
         buildId: 'build_2',
         jobId: 'j_2',
-        play: 'https://play.example/play/blobs',
+        play: 'https://games.example/g/g_blobs/build_2/',
+        prototypeReview: { state: 'skipped' },
       },
     ]);
   });
@@ -272,7 +349,7 @@ describe('gm publish', () => {
     expect(run.err).toEqual([]);
     expect(run.code).toBe(0);
     expect(run.out).toContain(`published games/blobs at ${remoteSha}: build build_3`);
-    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST']);
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST', 'POST']);
   });
 
   it('exits 1 naming the socket error when the upload drops twice, so a publish chain stops', async () => {

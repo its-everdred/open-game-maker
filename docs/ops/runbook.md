@@ -316,8 +316,8 @@ gm publish [<game-slug>] [--sha <ref>] [--checkout <path>] [--api <url>] [--keep
 ```
 
 Run from a game folder, the slug defaults to that game (the folder of the nearest `gm.manifest.json`). It reads the
-internal token, the API port and the app origin from `~/.config/ogm/env/api.env` (or `$OGM_ENV_DIR/api.env`;
-`OGM_INTERNAL_TOKEN`, `OGM_API_PORT`, `OGM_APP_ORIGIN`; the same names in the environment win), asks the API for the game's facts — its folder in the
+internal token, API port, app origin and games origin from `~/.config/ogm/env/api.env` (or `$OGM_ENV_DIR/api.env`;
+`OGM_INTERNAL_TOKEN`, `OGM_API_PORT`, `OGM_APP_ORIGIN`, `OGM_GAMES_ORIGIN`; the same names in the environment win), asks the API for the game's facts — its folder in the
 instance repository and the checkout its daemon row names — and checks the commit out into a scratch git worktree
 under `~/.local/state/ogm/publish`. It refuses before building when the game's code names an asset its
 `assets.lock.json` does not list. Without `--sha` the commit is the repository's remote `main` as fetched now, never
@@ -335,7 +335,7 @@ cd games/blobs && gm publish     # the same, from the game's folder
 gm publish blobs --sha <sha>     # build a specific commit
 gm publish blobs --keep          # keep the worktree and the archive for inspection
 gm publish blobs --dry-run       # confirm registration without building or publishing
-gm publish blobs --json          # one JSON line: state, slug, gameId, sha, buildId, jobId, play
+gm publish blobs --json          # one JSON line with build details, exact-build play URL and prototypeReview status
 ```
 
 Re-run it with a newer SHA to publish the next release; the previous build stays playable until the new one is
@@ -465,6 +465,12 @@ the app sends to aiur for it is recorded on the host instead of starting an agen
    The hook remembers the attention file passed by auto-update for the timer; alternatively set `OGM_QA_ATTENTION`
    in `~/.config/ogm/env/qa-hook.env`. Check the timer and its journal with `systemctl --user status
    ogm-qa-new-game.timer` and `journalctl --user -u ogm-qa-new-game.service`.
+
+   `ops/bin/ogm-host-setup.sh` also installs `ogm-qa-publish-review.timer`, which runs `gm qa publish-review-check
+   --all` every ten minutes. It finds published builds whose review state is still pending and appends one line per
+   sweep to the configured QA attention file; explicit `Prototype review: none` results are recorded as complete and
+   do not alert. Check it with `systemctl --user status ogm-qa-publish-review.timer` and `journalctl --user -u
+   ogm-qa-publish-review.service`.
 
 The host routes behind it, `/internal/qa/session`, `/internal/qa/review-fixtures[/<run>]`,
 `/internal/qa/ticket-fixtures[/<run>]` and `/internal/qa/voice-fixtures[/<run>]`, take only the internal

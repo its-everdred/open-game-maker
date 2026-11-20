@@ -88,3 +88,73 @@ describe('ticket roles', () => {
     expect(read('../gm-core/references/roles.md')).toContain('`game:<slug>` maps to `gm-core` and the set skill');
   });
 });
+
+/* Kevin 2026-11-20: reviewing is the core loop; agents think of the decisions so the creator doesn't have to. A playable
+   Dusk Helm build was published and never shown to him, and tickets settled enemies, loot and inventory silently. */
+describe('decision inventory and prototype review', () => {
+  const REF = '../gm-core/references/decision-inventory.md';
+
+  it('keeps one contract for the inventory: path, fields, statuses, product-only, real pack lineups', () => {
+    const rules = read(REF);
+    expect(rules).toContain('`docs/<slug>/decisions.json`');
+    for (const field of [
+      'id',
+      'area',
+      'question',
+      'why',
+      'options[]',
+      'recommendation',
+      'sources[]',
+      'ticket',
+      'status',
+    ])
+      expect(rules).toContain(`| \`${field}\` |`);
+    for (const status of ['open', 'asked', 'answered', 'defaulted']) expect(rules).toContain(`\`${status}\``);
+    expect(rules).toContain('**Product only.**');
+    expect(rules).toContain('a lineup of those real assets');
+  });
+
+  it('makes planning write the inventory before queueing and stamp its ids on every ticket', () => {
+    const plan = read('./SKILL.md');
+    expect(plan).toContain(
+      '**Decision inventory (required).** The scope job has already committed an initial inventory',
+    );
+    expect(plan).toContain('Before queueing any ticket, merge into');
+    expect(plan).toContain('gm decisions answer <id> <label>');
+    expect(plan).toContain('Run `gm plan premises` with the current issue list and decision history');
+    expect(plan).toContain('a `## Creator decisions` section listing the inventory ids');
+    expect(plan).toContain(`\`${REF}\``);
+    expect(read('../gm-scope-options/SKILL.md')).toContain("## List the feature's decisions");
+    expect(read('../gm-new-game-design/SKILL.md')).toContain(REF);
+  });
+
+  it('raises the first media-backed review batch in the scope job before planning and keeps player words private', () => {
+    const design = read('../gm-new-game-design/SKILL.md');
+    expect(design).toContain('before finishing the scope ticket');
+    expect(design).toContain('at least 15 distinct player-facing decisions');
+    expect(design).toContain('at least five areas');
+    expect(design).toContain('Raise five to eight open, media-backed decisions');
+    expect(design).toContain('Keep raw player words and transcripts in private');
+    expect(design).toContain('Do not ask about engine, libraries, packages, implementation');
+  });
+
+  it('makes every worker raise open decisions first, build the recommendation and never decide silently', () => {
+    const core = read('../gm-core/SKILL.md');
+    expect(core).toContain('raise each `open` one');
+    expect(core).toContain('never settle one silently');
+    expect(core).toContain('`references/decision-inventory.md`');
+    const prototype = read('../gm-prototype/SKILL.md');
+    expect(prototype).toContain("raise the ticket's `open` inventory decisions");
+    expect(prototype).toContain('never settle an inventory decision silently');
+  });
+
+  it('counts a playable build as delivered only with its prototype review: limitations and what to weigh in on', () => {
+    const rules = read(REF);
+    for (const part of ['Play:', '**Works now:**', '**Known limitations:**', '**Weigh in on:**'])
+      expect(rules).toContain(part);
+    expect(rules).toContain('The build is not delivered until its review is raised.');
+    expect(read('../gm-verify/SKILL.md')).toContain('is not delivered until its prototype review is raised');
+    expect(read('../gm-qa/SKILL.md')).toContain("the build's prototype review must be raised");
+    expect(read('./SKILL.md')).toContain('reaches them as a prototype review');
+  });
+});

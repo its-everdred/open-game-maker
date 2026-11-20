@@ -28,6 +28,7 @@ const NAMESPACED_COMMANDS = new Set([
   'verify',
   'qa',
   'look',
+  'decisions',
 ]);
 
 function inlineSpans(markdown: string): InlineSpan[] {

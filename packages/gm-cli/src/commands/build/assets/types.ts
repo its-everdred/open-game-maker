@@ -77,6 +77,7 @@ export type BuildFailure = { id: string; message: string };
 export type AssetBudgetReport = {
   tier: Tier;
   phase: string;
+  setting?: string;
   bytes: number;
   files: number;
   tris: number;

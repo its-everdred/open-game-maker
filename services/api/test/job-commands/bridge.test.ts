@@ -134,6 +134,7 @@ describe('command outbox and budget', () => {
     });
     expect(publish).toHaveBeenCalledWith(JOB_ID);
     expect(commandBudget(deps.sqlite, JOB_ID, 'new_game')).toEqual({ used: 1, max: 3 });
+    expect(commandBudget(deps.sqlite, JOB_ID, 'scope')).toEqual({ used: 1, max: 8 });
   });
 
   // A playable option (#608) is played in the card, so its slice and provenance survive when stray media is dropped.

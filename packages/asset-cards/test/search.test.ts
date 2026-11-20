@@ -20,6 +20,36 @@ beforeAll(async () => {
 });
 
 describe('search', () => {
+  it('filters and labels assets made by Game Maker', () => {
+    const base = index.cards.find((card) => card.id === ORC)!;
+    const made = {
+      ...base,
+      generated: {
+        made_by: 'ogm' as const,
+        method: 'procedural' as const,
+        derived_from: [],
+        agent: { backend: 'test', model: 'test', effort: 'test' },
+        skills: [],
+        tools: [],
+        recipe: { path: 'recipe.json', seed: 1, parameters: {} },
+        scores: {},
+        ticket: 1036,
+        created_at: '2026-11-20T00:00:00Z',
+        approved_by_creator: true,
+      },
+    };
+    const only = { ...index, cards: [base, made] };
+    expect(search(only, { generated: true })).toEqual([made]);
+    expect(formatRow(made)).toContain('[Made by Game Maker]');
+    const compatible = {
+      ...made,
+      id: 't1:smallscaleint-generated/rock@1',
+      resolved: { ...made.resolved, set: 'smallscaleint', style_family: 'pixel-art' },
+    };
+    expect(search({ ...index, cards: [compatible] }, { gameFamily: 'pixel-art', gameSets: ['smallscaleint'] })).toEqual(
+      [compatible],
+    );
+  });
   it('ranks the Mini Dungeon orc first for "orc" and prints the contract row', () => {
     const hits = search(index, { words: ['orc'] });
     expect(hits[0].id).toBe(ORC);
@@ -67,6 +97,16 @@ describe('search', () => {
     expect(ids({ words: ['torch'] })).toEqual([TORCH]);
     expect(ids({ words: [], kind: 'audio' })).toEqual([LOOP, MUSIC]);
     expect(ids({ words: [], kind: 'audio', includeDraft: true })).toEqual([LOOP, DRAFT_LOOP, MUSIC]);
+  });
+
+  it('includes measured audio and labels it low-confidence in search rows', () => {
+    const base = index.cards.find((card) => card.id === LOOP);
+    if (!base) throw new Error('fixture music loop missing');
+    const measured = { ...base, status: 'measured' as const };
+
+    expect(statusAllowed('audio', 'measured')).toBe(true);
+    expect(search({ ...index, cards: [measured] }, { words: [] })).toEqual([measured]);
+    expect(formatRow(measured)).toContain('measured [low-confidence]');
   });
 
   it('hides every card in a quarantined collection, even with --include-draft and a matching use', () => {
@@ -367,7 +407,7 @@ describe('statusAllowed', () => {
   it('encodes the per-kind defaults', () => {
     expect(statusAllowed('model', 'draft')).toBe(true);
     expect(statusAllowed('sprite', 'draft')).toBe(true);
-    expect(statusAllowed('audio', 'measured')).toBe(false);
+    expect(statusAllowed('audio', 'measured')).toBe(true);
     expect(statusAllowed('inspiration', 'draft')).toBe(false);
     expect(statusAllowed('texture', 'measured')).toBe(true);
     expect(statusAllowed('texture', 'draft')).toBe(false);

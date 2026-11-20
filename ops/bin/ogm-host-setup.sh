@@ -24,7 +24,7 @@ systemctl=${OGM_SYSTEMCTL:-systemctl}
 config_home=${XDG_CONFIG_HOME:-$HOME/.config}
 unit_dir=$config_home/systemd/user
 ogm_config_dir=$HOME/.config/ogm
-units=(ogm-api ogm-review-watchdog ogm-rooms ogm-games ogm-commit ogm-voice-host ogm-intake ogm-drive-sync ogm-backup.timer ogm-core-bump.timer ogm-qa-new-game.timer)
+units=(ogm-api ogm-review-watchdog ogm-rooms ogm-games ogm-commit ogm-voice-host ogm-intake ogm-drive-sync ogm-backup.timer ogm-core-bump.timer ogm-qa-new-game.timer ogm-qa-publish-review.timer)
 
 if [[ $mode == stop ]]; then
   "$systemctl" --user disable --now "${units[@]}"

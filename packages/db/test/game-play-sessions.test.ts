@@ -24,7 +24,11 @@ it('preserves historical aggregate play counts when upgrading', () => {
         ('g', '2026-11-02', 'release', 'plays', '', 4),
         ('g', '2026-11-02', '', 'players', '', 2);
     `);
-    expect(migrate({ sqlite }).applied).toEqual([migration]);
+    expect(migrate({ sqlite }).applied).toEqual([
+      migration,
+      '20261120131223_prototype_review_content.sql',
+      '20261120140217_prototype_review_sweep_state.sql',
+    ]);
     expect(sqlite.prepare('SELECT game_id, plays FROM game_play_totals').all()).toEqual([{ game_id: 'g', plays: 7 }]);
     expect(migrate({ sqlite }).applied).toEqual([]);
   } finally {

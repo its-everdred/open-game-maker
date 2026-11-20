@@ -76,6 +76,69 @@ def still(pairs, labels, out, zoom):
     return {label: result for label, _, result in rows}
 
 
+def review_round(views, labels, out, zoom, first_round=False):
+    """Render both tracks and reject imperceptible follow-up changes."""
+    if zoom < 4:
+        raise ValueError('review rounds require zoom of at least 4')
+    if not views or len(views) != len(labels) or len(set(labels)) != len(labels):
+        raise ValueError('provide a unique label for each view')
+    rows = []
+    for paths, label in zip(views, labels):
+        if len(paths) != (3 if first_round else 5):
+            raise ValueError(f'{label}: wrong number of images')
+        arrays = [sm.load(path) for path in paths]
+        if any(a.shape != arrays[0].shape for a in arrays):
+            raise ValueError(f'{label}: image sizes must match')
+        fractions = {}
+        if not first_round:
+            for name, previous, current in [('image gen', arrays[3], arrays[1]),
+                                             ('3D pipeline', arrays[4], arrays[2])]:
+                before = np.asarray(on_bg(previous, 1).convert('RGB'))
+                after = np.asarray(on_bg(current, 1).convert('RGB'))
+                fraction = float(np.any(before != after, axis=2).mean())
+                fractions[name] = fraction
+                if fraction <= 0.03:
+                    raise ValueError(f'{label} {name}: {fraction:.2%} changed; must exceed 3%')
+        rows.append((label, [on_bg(a, zoom) for a in arrays], fractions))
+    gap, line = 10, 18
+    columns = 3 if first_round else 4
+    width = max(720, max(columns * (max(images[0].width, 150) + gap) + gap for _, images, _ in rows))
+    height = sum(images[0].height * (1 if first_round else 2) + line * (2 if first_round else 4) + gap
+                 for _, images, _ in rows)
+    canvas = Image.new('RGB', (width, height), (24, 24, 24))
+    draw = ImageDraw.Draw(canvas)
+    y = 0
+    for label, images, _ in rows:
+        step = max(images[0].width, 150) + gap
+        draw.text((gap, y), label, fill='white')
+        y += line
+        x = gap
+        for name, image in zip(('original', 'image gen', '3D pipeline'), images[:3]):
+            draw.text((x, y), name, fill='white')
+            x += step
+        y += line
+        x = gap
+        for image in images[:3]:
+            canvas.paste(image, (x, y))
+            x += step
+        y += images[0].height
+        if not first_round:
+            x = gap
+            for name, image in zip(('previous image gen', 'this image gen', 'previous 3D pipeline', 'this 3D pipeline'),
+                                   (images[3], images[1], images[4], images[2])):
+                draw.text((x, y), name, fill='white')
+                x += step
+            y += line
+            x = gap
+            for image in (images[3], images[1], images[4], images[2]):
+                canvas.paste(image, (x, y))
+                x += step
+            y += images[0].height + line
+        y += gap
+    canvas.save(out)
+    return {label: fractions for label, _, fractions in rows}
+
+
 def write_gif(frames, path, fps):
     # Write each frame explicitly: Pillow's save_all merges identical holds.
     with path.open('wb') as output:
@@ -207,6 +270,12 @@ def main():
     prop.add_argument('--labels', help='comma-separated view labels')
     prop.add_argument('--out', required=True)
     prop.add_argument('--zoom', type=int, default=4)
+    review = sub.add_parser('round')
+    review.add_argument('--views', nargs='+', required=True, metavar='ORIGINAL:IMAGE:PIPELINE[:PREV_IMAGE:PREV_PIPELINE]')
+    review.add_argument('--labels', required=True)
+    review.add_argument('--out', required=True)
+    review.add_argument('--zoom', type=int, default=4)
+    review.add_argument('--first-round', action='store_true')
     sheet = sub.add_parser('sheet')
     sheet.add_argument('orig')
     sheet.add_argument('rebuild')
@@ -226,7 +295,13 @@ def main():
     args = parser.parse_args()
     if args.zoom <= 0 or (args.mode == 'sheet' and not 1 <= args.fps <= 100):
         parser.error('zoom must be positive and fps must be between 1 and 100')
-    if args.mode == 'still':
+    if args.mode == 'round':
+        try:
+            result = review_round([view.split(':') for view in args.views], args.labels.split(','),
+                                  args.out, args.zoom, args.first_round)
+        except ValueError as error:
+            parser.error(str(error))
+    elif args.mode == 'still':
         pairs = [pair.split(':') for pair in args.pairs]
         labels = args.labels.split(',') if args.labels else [str(i) for i in range(len(pairs))]
         if any(len(pair) != 2 or not all(pair) for pair in pairs) or len(labels) != len(pairs):

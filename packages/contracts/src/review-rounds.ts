@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const Key = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u);
 const Ticket = z.string().regex(/^[1-9]\d{0,15}$/u);
+const ReviewTicket = z.union([Ticket, z.literal('publish')]);
 
 export const FidelityPhase = z.enum(['mock', 'prototype', 'build', 'polish']);
 export const ReviewEffort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
@@ -62,14 +63,32 @@ export const ReviewSubmission = z
     track: Key,
     phase: Key,
     category: z.enum(['art', 'gameplay', 'sound']),
-    ticket: Ticket,
+    ticket: ReviewTicket,
     sha: z.string().regex(/^[a-f0-9]{40}$/u),
     prNumber: z.number().int().positive().optional(),
     media: z.array(ReviewMedia).min(1).max(16),
     question: z.string().trim().min(1).optional(),
+    works: z.array(z.string().trim().min(1).max(240)).max(32).optional(),
+    limitations: z.array(z.string().trim().min(1).max(240)).max(32).optional(),
+    decisionIds: z.array(Key).max(6).optional(),
+    sourceTickets: z.array(Ticket).min(1).max(20).optional(),
+    clipStatus: z.enum(['captured', 'unchecked']).optional(),
   })
   .strict()
   .superRefine((round, ctx) => {
+    for (const field of ['works', 'limitations', 'decisionIds', 'sourceTickets'] as const) {
+      const values = round[field];
+      if (values && new Set(values).size !== values.length)
+        ctx.addIssue({ code: 'custom', message: `${field} must be unique`, path: [field] });
+    }
+    if (round.ticket === 'publish' && round.track !== 'prototype-publish')
+      ctx.addIssue({
+        code: 'custom',
+        message: 'publish ticket is reserved for published prototype rounds',
+        path: ['ticket'],
+      });
+    if (round.track === 'prototype-publish' && round.sourceTickets?.length && round.ticket !== round.sourceTickets[0])
+      ctx.addIssue({ code: 'custom', message: 'ticket must be the first source ticket', path: ['ticket'] });
     if (round.media.filter((media) => media.kind === 'still' && media.role === 'target').length > 1)
       ctx.addIssue({ code: 'custom', message: 'only one concept target is allowed', path: ['media'] });
     if (

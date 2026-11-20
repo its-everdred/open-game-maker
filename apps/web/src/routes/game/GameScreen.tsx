@@ -38,6 +38,7 @@ import type { EditorSessionState } from '../../features/editor/session';
 import { useEditorSession } from '../../features/editor/use-editor-session';
 import { mountSceneryPreview } from '../../features/editor/scenery-preview';
 import { resolvePaletteThumbnails } from '../../features/editor/palette-thumbnails';
+import { annotateGeneratedPalette } from '../../features/editor/palette-generated';
 import { starterPalette } from '../../features/editor/starter-palette';
 import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
@@ -228,7 +229,7 @@ export function GameScreen() {
   const fallback = useQuery({
     queryKey: ['editor-fallback', gameId],
     queryFn: () => getFallbackPalette(gameId),
-    enabled: gameId !== '' && mode === 'edit' && nativePaletteEmpty,
+    enabled: gameId !== '' && mode === 'edit' && nativePalette !== undefined,
     retry: false,
   });
   const fallbackActive = nativePaletteEmpty && fallback.isSuccess;
@@ -245,7 +246,12 @@ export function GameScreen() {
   const requestOnly = fallbackActive || (noBuild && !sidePreview);
   const editorManifest = useMemo(() => {
     if (!frameState.manifest) return undefined;
-    const manifest = fallbackActive ? { ...frameState.manifest, palette: fallbackPalette } : frameState.manifest;
+    const native = frameState.manifest;
+    const manifest = fallbackActive
+      ? { ...native, palette: fallbackPalette }
+      : native.palette
+        ? { ...native, palette: annotateGeneratedPalette(native.palette, fallback.data?.palette) }
+        : native;
     const buildId = activePreview?.accessId ?? activeSnapshot?.buildId;
     if (mode !== 'edit' || fallbackActive || !buildId || (noBuild && !activePreview)) return manifest;
     return resolvePaletteThumbnails(manifest, gamesOrigin, gameId, buildId, !!activePreview);
@@ -253,6 +259,7 @@ export function GameScreen() {
     frameState.manifest,
     fallbackActive,
     fallbackPalette,
+    fallback.data,
     activePreview,
     activeSnapshot?.buildId,
     noBuild,

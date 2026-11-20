@@ -21,6 +21,9 @@ export const builds = sqliteTable(
     migratesFromSchema: integer('migrates_from_schema'),
     achievementCatalogHash: text('achievement_catalog_hash').notNull(),
     status: text('status', { enum: ['building', 'tested', 'failed'] }).notNull(),
+    prototypeReviewState: text('prototype_review_state', { enum: ['pending', 'posted', 'none'] })
+      .notNull()
+      .default('none'),
     artifact: text('artifact', { enum: ['present', 'gc'] }).notNull(),
     artifactPath: text('artifact_path').notNull(),
     createdAt: text('created_at').notNull(),
@@ -33,6 +36,7 @@ export const builds = sqliteTable(
       sql`${table.migratesFromSchema} IS NULL OR ${table.migratesFromSchema} >= 0`,
     ),
     check('builds_status_check', sql`${table.status} IN ('building', 'tested', 'failed')`),
+    check('builds_prototype_review_state_check', sql`${table.prototypeReviewState} IN ('pending', 'posted', 'none')`),
     check('builds_artifact_check', sql`${table.artifact} IN ('present', 'gc')`),
   ],
 );

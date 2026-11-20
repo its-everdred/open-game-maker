@@ -111,10 +111,12 @@ const routes = new Hono<ApiBindings>()
             tickets: [
               {
                 key: 'scope',
-                skills: ['gm-scope-options'],
+                skills: ['gm-scope-options', 'gm-new-game-design'],
                 dependsOn: [],
                 acceptanceCriteria: [
                   `.gm/scope/${sessionId}.json written with gm scope done and committed in this pull request`,
+                  'docs/<slug>/decisions.json and decisions.md committed, schema-valid, with at least 15 product decisions across five areas',
+                  'five to eight open, media-backed product decisions raised as creator Commands before this scope ticket is finished',
                 ],
               },
             ],

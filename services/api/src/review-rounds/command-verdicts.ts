@@ -61,6 +61,7 @@ export async function syncCommandVerdicts(
 ): Promise<void> {
   const rounds = db.select().from(schema.reviewRounds).where(isNull(schema.reviewRounds.verdict)).all();
   for (const round of rounds) {
+    if (round.track === 'prototype-publish') continue;
     try {
       const game = db.select().from(schema.games).where(eq(schema.games.id, round.gameId)).get();
       if (!game?.ownerId) continue;
