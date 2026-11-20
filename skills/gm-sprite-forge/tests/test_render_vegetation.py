@@ -39,7 +39,7 @@ class RenderVegetationTest(unittest.TestCase):
             result = render_variant('tree', self.root / 'set', 'tree-v1', self.source, self.collection,
                                     seed=42, dense=True, shadows=False, metadata=self.metadata, fanout=3,
                                     spread_min=0.3, crown_width=1.4, leaf_count=64, palette=self.palette,
-                                    batch_size=3, batch_radius=0.04, yaw=45)
+                                    batch_size=3, batch_radius=0.04, yaw=45, fine_canopy=True)
         self.assertEqual(len(commands), 1)
         self.assertIn('seed=42', commands[0])
         self.assertIn('yaw0=45', commands[0])
@@ -47,6 +47,7 @@ class RenderVegetationTest(unittest.TestCase):
         self.assertIn('fanout=3', commands[0])
         self.assertIn('crown_width=1.4', commands[0])
         self.assertIn('leaf_count=64', commands[0])
+        self.assertIn('fine_canopy=1', commands[0])
         self.assertIn('foliage_hi_r=97', commands[0])
         self.assertIn('bark_lo_b=25', commands[0])
         self.assertIn('batch_size=3', commands[0])
@@ -57,6 +58,7 @@ class RenderVegetationTest(unittest.TestCase):
         self.assertEqual(recipe['parameters']['seed'], 42)
         self.assertEqual(recipe['parameters']['yaw0'], 45)
         self.assertEqual(recipe['parameters']['crown_width'], 1.4)
+        self.assertEqual(recipe['parameters']['fine_canopy'], 1)
         self.assertEqual(recipe['materials']['palette'], self.palette)
         self.assertEqual(recipe['parameters']['batch_size'], 3)
         self.assertEqual(recipe['derived_from'], self.source['id'])
@@ -164,6 +166,7 @@ class RenderVegetationTest(unittest.TestCase):
                            {'seed': 1, 'leaf_length_scale': .65, 'metadata': self.metadata},
                            {'seed': 1, 'branch_width': 1.4, 'metadata': self.metadata},
                            {'seed': 1, 'organic_bare': True, 'metadata': self.metadata},
+                           {'seed': 1, 'fine_canopy': True, 'metadata': self.metadata},
                            {'seed': 1, 'bush_leaf_detail': True, 'metadata': self.metadata},
                            {'seed': 1, 'bush_mass_count': 0, 'metadata': self.metadata},
                            {'seed': 1, 'sun_elev': 91, 'metadata': self.metadata},

@@ -12,7 +12,7 @@ from vegetation_layout import branches, clustered_placements, placements, organi
 
 
 def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.0, branch_radius=0.07, attachment_min=0.55,
-         fanout=2, spread=(0.55, 0.85), bare=False, dense=False, leaf_count=24000, crown_shape=(1.0, 1.0, 1.0), organic_bare=False):
+         fanout=2, spread=(0.55, 0.85), bare=False, dense=False, leaf_count=24000, crown_shape=(1.0, 1.0, 1.0), organic_bare=False, fine_canopy=False):
     """Create a tree with connected branches and a canopy at each outer tip."""
     skeleton = (organic_bare_branches(seed, height=height, radius=branch_radius) if organic_bare else
                 branches(seed, height=height, radius=branch_radius, lean=lean, levels=levels, fanout=fanout, spread=spread, attachment_min=attachment_min))
@@ -52,7 +52,7 @@ def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.
             objects.append(root)
         objects.append(make_canopy(seed, foliage, height=height, leaf_count=leaf_count,
                                    offset=skeleton[0].end[:2] + (0,),
-                                   shape=tuple(canopy_scale * v for v in crown_shape)))
+                                   shape=tuple(canopy_scale * v for v in crown_shape), fine=fine_canopy))
     return objects
 
 
