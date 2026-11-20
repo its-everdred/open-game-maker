@@ -64,6 +64,14 @@ class VegetationExportTest(unittest.TestCase):
         self.assertFalse((self.output / 'tree-v1').exists())
         self.assertFalse((self.output / 'collection.card.json').exists())
 
+    def test_refuses_to_broaden_asset_specific_rights_or_license(self):
+        for override in ({'rights': {**self.collection['rights'], 'redistribution': 'none'}},
+                         {'license': {'spdx': 'restricted'}}):
+            with self.subTest(override=override), self.assertRaises(ValueError):
+                export(self.render, self.output, 'tree-v1', {**self.source, **override},
+                       self.collection, {'seed': 1})
+            self.assertFalse(self.output.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

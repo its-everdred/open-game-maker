@@ -40,6 +40,12 @@ def validate_source(source_card, source_collection):
         raise ValueError('source asset ID does not belong to the collection')
     if not source_collection.get('rights') or not source_collection.get('license'):
         raise ValueError('source collection must contain confirmed rights and license')
+    # Asset-specific rights can narrow collection rights. Until this exporter
+    # can resolve their intersection, refuse differences rather than broaden it.
+    if source_card.get('rights') and source_card['rights'] != source_collection['rights']:
+        raise ValueError('asset-specific rights require rights resolution before export')
+    if source_card.get('license') and source_card['license'] != source_collection['license']:
+        raise ValueError('asset-specific license requires rights resolution before export')
 
 
 def export(render_dir, set_dir, slug, source_card, source_collection, recipe):
