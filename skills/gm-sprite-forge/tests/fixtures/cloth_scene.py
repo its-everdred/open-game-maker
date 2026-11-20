@@ -61,3 +61,20 @@ assert abs(floor.collision.thickness_outer - .073) < .0001
 assert len(unrelated.modifiers) == 1
 assert len(obj.modifiers) == 0 and len(floor.modifiers) == 0 and len(obj.vertex_groups) == 0
 assert scene.frame_current == 3 and abs(scene.frame_subframe - .25) < .0001 and scene.frame_end == end
+
+# Blender refuses to apply a modifier to a mesh with shape keys. The helper
+# must remove all temporary state even when applying the simulation fails.
+failure = bpy.data.objects.new('failure', copy_mesh.copy())
+bpy.context.collection.objects.link(failure)
+failure.shape_key_add(name='Basis')
+failure.shape_key_add(name='Key')
+try:
+    drape(failure, pins, [floor], frames=2, quality=1)
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('expected Blender to reject applying cloth to shape keys')
+assert len(failure.modifiers) == 0 and len(failure.vertex_groups) == 0
+assert len(floor.modifiers) == 0 and abs(floor.collision.thickness_outer - .073) < .0001
+assert scene.frame_current == 3 and abs(scene.frame_subframe - .25) < .0001
+assert bpy.data.collections.get('drape colliders') is None
