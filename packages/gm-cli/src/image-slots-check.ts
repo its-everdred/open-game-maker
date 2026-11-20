@@ -10,7 +10,11 @@ type Variant = {
   path: string;
   text?: { capHeight: number; color?: string; background?: string };
 };
-type LayerSource = { slot: SlotId; path: string; anchors: Partial<Record<ViewportId, { x: number; y: number; width: number }>> };
+type LayerSource = {
+  slot: SlotId;
+  path: string;
+  anchors: Partial<Record<ViewportId, { x: number; y: number; width: number }>>;
+};
 const NUMERIC_EPSILON = 1e-12;
 
 /** Validate creator-visible image variants against the shared viewport and legibility contract. */
@@ -86,9 +90,16 @@ export async function checkImageSlots(game: string): Promise<string[]> {
     const viewports = [...new Set([...IMAGE_SLOTS[slot].viewports, ...declaredViewports])];
     const hasDefaultOutputs = entry.mode === 'layered' && entry.variants === undefined;
     for (const viewport of viewports) {
-      const path = entry.variants?.[viewport] ?? (hasDefaultOutputs ? `media/slots/${slot}-${viewport}.png` : undefined);
+      const path =
+        entry.variants?.[viewport] ?? (hasDefaultOutputs ? `media/slots/${slot}-${viewport}.png` : undefined);
       if (!path) errors.push(`images.${slot}: missing variant for ${viewport}`);
-      else variants.push({ slot, viewport, path, ...(entry.mode === 'per-ratio' && entry.text ? { text: entry.text } : {}) });
+      else
+        variants.push({
+          slot,
+          viewport,
+          path,
+          ...(entry.mode === 'per-ratio' && entry.text ? { text: entry.text } : {}),
+        });
     }
     if (entry.mode === 'layered') {
       for (const layer of entry.layers) layerSources.push({ slot, path: layer.src, anchors: layer.anchors });
@@ -140,7 +151,9 @@ export async function checkImageSlots(game: string): Promise<string[]> {
     if (variant.viewport.startsWith('phone') && variant.text) {
       const capHeight = variant.text.capHeight * display.height;
       if (capHeight < rules.minTextPx)
-        errors.push(`${variant.path}: ${variant.slot} ${variant.viewport} text is ${capHeight}px tall, needs ${rules.minTextPx}px`);
+        errors.push(
+          `${variant.path}: ${variant.slot} ${variant.viewport} text is ${capHeight}px tall, needs ${rules.minTextPx}px`,
+        );
       if (
         variant.text.color &&
         variant.text.background &&
@@ -157,7 +170,10 @@ export async function checkImageSlots(game: string): Promise<string[]> {
     const sourceViewport = layerViewports[0] ?? IMAGE_SLOTS[layer.slot].viewports[0];
     const dimensions = await metadata(layer.path, layer.slot, sourceViewport);
     if (!dimensions) continue;
-    for (const [viewport, anchor] of Object.entries(layer.anchors) as [ViewportId, NonNullable<LayerSource['anchors'][ViewportId]>][]) {
+    for (const [viewport, anchor] of Object.entries(layer.anchors) as [
+      ViewportId,
+      NonNullable<LayerSource['anchors'][ViewportId]>,
+    ][]) {
       const display = IMAGE_SLOTS[layer.slot].display[viewport];
       const halfWidth = anchor.width / 2;
       const heightFraction = (anchor.width * display.width * dimensions.height) / (display.height * dimensions.width);

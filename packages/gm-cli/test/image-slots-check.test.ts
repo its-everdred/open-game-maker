@@ -11,7 +11,9 @@ import { gm, tempDir } from './helpers.js';
 async function image(root: string, name: string, width: number, height: number) {
   const path = join(root, 'public', name);
   mkdirSync(dirname(path), { recursive: true });
-  await sharp({ create: { width, height, channels: 3, background: 'black' } }).png().toFile(path);
+  await sharp({ create: { width, height, channels: 3, background: 'black' } })
+    .png()
+    .toFile(path);
 }
 
 function manifest(root: string, data: unknown) {
@@ -48,7 +50,9 @@ describe('creator-visible image slots', () => {
     const paths = await viewportVariants(root, 'tile');
     paths.desktop = 'media/missing-desktop.png';
     manifest(root, { images: { tile: { mode: 'per-ratio', variants: paths } } });
-    expect(await checkImageSlots(root)).toContain('media/missing-desktop.png: images.tile desktop image is missing or unreadable');
+    expect(await checkImageSlots(root)).toContain(
+      'media/missing-desktop.png: images.tile desktop image is missing or unreadable',
+    );
   });
 
   it('rejects a stretched variant', async () => {
@@ -79,7 +83,9 @@ describe('creator-visible image slots', () => {
         },
       },
     });
-    expect(await checkImageSlots(root)).toContain('media/layer.png: images.title phone-portrait anchor leaves the safe area');
+    expect(await checkImageSlots(root)).toContain(
+      'media/layer.png: images.title phone-portrait anchor leaves the safe area',
+    );
   });
 
   it('rejects vertical clipping caused by a tall layer source', async () => {
@@ -96,7 +102,9 @@ describe('creator-visible image slots', () => {
         },
       },
     });
-    expect(await checkImageSlots(root)).toContain('media/tall.png: images.logo phone-portrait anchor leaves the safe area');
+    expect(await checkImageSlots(root)).toContain(
+      'media/tall.png: images.logo phone-portrait anchor leaves the safe area',
+    );
   });
 
   it('accepts a centered layer that exactly fits the safe margin', async () => {
@@ -112,7 +120,14 @@ describe('creator-visible image slots', () => {
         logo: {
           mode: 'layered',
           variants,
-          layers: [{ src: 'media/layer.png', anchors: Object.fromEntries(VIEWPORT_IDS.map((viewport) => [viewport, { x: 0.5, y: 0.5, width: 0.9001 }])) }],
+          layers: [
+            {
+              src: 'media/layer.png',
+              anchors: Object.fromEntries(
+                VIEWPORT_IDS.map((viewport) => [viewport, { x: 0.5, y: 0.5, width: 0.9001 }]),
+              ),
+            },
+          ],
         },
       },
     });
@@ -136,7 +151,12 @@ describe('creator-visible image slots', () => {
         title: {
           mode: 'layered',
           plate: 'media/plate.png',
-          layers: [{ src: 'media/mark.png', anchors: Object.fromEntries(VIEWPORT_IDS.map((viewport) => [viewport, { x: 0.5, y: 0.5, width: 0.3 }])) }],
+          layers: [
+            {
+              src: 'media/mark.png',
+              anchors: Object.fromEntries(VIEWPORT_IDS.map((viewport) => [viewport, { x: 0.5, y: 0.5, width: 0.3 }])),
+            },
+          ],
         },
       },
     });
@@ -205,7 +225,10 @@ describe('creator-visible image slots', () => {
     const root = tempDir();
     mkdirSync(join(root, 'public/media'), { recursive: true });
     const variants = await viewportVariants(root, 'loading');
-    manifest(root, { loading: { portrait: 'media/p.png', landscape: 'media/l.png' }, images: { loading: { mode: 'per-ratio', variants } } });
+    manifest(root, {
+      loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
+      images: { loading: { mode: 'per-ratio', variants } },
+    });
     await image(root, 'media/p.png', 1440, 2560);
     await image(root, 'media/l.png', 2560, 1440);
     expect(await gm(['check', 'images', '--json'], { cwd: root })).toEqual({
@@ -242,7 +265,9 @@ describe('creator-visible image slots', () => {
     variants['phone-portrait'] = 'media/portrait.jpg';
     manifest(root, { images: { title: { mode: 'per-ratio', variants } } });
     expect(await checkImageSlots(root)).toEqual([]);
-    await sharp({ create: { width: 844, height: 390, channels: 3, background: 'black' } }).jpeg().toFile(path);
+    await sharp({ create: { width: 844, height: 390, channels: 3, background: 'black' } })
+      .jpeg()
+      .toFile(path);
     expect(await checkImageSlots(root)).toContain(
       'media/portrait.jpg: title phone-portrait is 844:390, needs the 390:844 display box',
     );
