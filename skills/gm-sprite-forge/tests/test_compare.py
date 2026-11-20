@@ -31,6 +31,35 @@ def test_identical_heatmap_is_green_and_still_has_gate_text(tmp_path, monkeypatc
     assert (tmp_path / 'still.png').is_file()
 
 
+def test_review_sheet_requires_visible_change_in_every_view(tmp_path):
+    sheet = np.zeros((8 * 16, 16, 4), dtype=np.uint8)
+    mock = np.zeros((16, 8 * 16, 4), dtype=np.uint8)
+    for row in range(8):
+        sheet[row * 16 + 2:row * 16 + 12, 2:12] = [67, 67, 67, 255]
+        mock[3:13, row * 16 + 3:row * 16 + 13] = [90, 90, 90, 255]
+    original = tmp_path / 'original.png'
+    previous = tmp_path / 'previous.png'
+    generated = tmp_path / 'mock.png'
+    candidate = tmp_path / 'candidate.png'
+    for path, pixels in ((original, sheet), (previous, sheet), (generated, mock)):
+        Image.fromarray(pixels).save(path)
+    updated = sheet.copy()
+    for row in range(8):
+        updated[row * 16 + 2, 2:6] = [1, 1, 1, 255]
+    Image.fromarray(updated).save(candidate)
+    out = tmp_path / 'review.png'
+    result = compare.review_sheet(original, generated, previous, candidate, 16, out)
+    assert result['changed_fraction_by_view'] == pytest.approx([.04] * 8)
+    assert Image.open(out).size == (64 + 4 * 16 * 4, 56 + 8 * (16 * 4 + 24))
+    updated[7 * 16 + 2, 2:6] = sheet[7 * 16 + 2, 2:6]
+    Image.fromarray(updated).save(candidate)
+    with pytest.raises(ValueError, match='direction 8 changed'):
+        compare.review_sheet(original, generated, previous, candidate, 16, tmp_path / 'rejected.png')
+    assert not (tmp_path / 'rejected.png').exists()
+    with pytest.raises(ValueError, match='zoom must be at least 4'):
+        compare.review_sheet(original, generated, previous, candidate, 16, out, zoom=3)
+
+
 @pytest.mark.skipif(not shutil.which('ffmpeg') or not shutil.which('ffprobe'), reason='ffmpeg and ffprobe required')
 def test_sheet_outputs_phone_safe_media_and_scores(tmp_path):
     pixels = np.zeros((32, 240, 4), dtype=np.uint8)
