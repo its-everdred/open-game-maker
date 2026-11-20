@@ -43,6 +43,7 @@ export const rigInputMappingSchema = z.looseObject({
   touch: z.enum(['stick', 'two-stick', 'tap']),
   gamepad: z.record(z.string(), z.string()),
   pointerLock: z.boolean(),
+  pointer: z.object({ buttons: z.record(z.string(), z.string()) }).optional(),
 });
 export type RigInputMapping = z.infer<typeof rigInputMappingSchema>;
 

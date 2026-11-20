@@ -13,7 +13,7 @@ interface FakeImage {
   setVisible(visible: boolean): FakeImage;
 }
 
-export function fakeIsoScene(missing: readonly string[] = []) {
+export function fakeIsoScene(missing: readonly string[] = [], width = 256, renderer = 2) {
   const loaded = new Map<string, string>();
   const pending: [string, string][] = [];
   const listeners = new Map<string, ((arg?: unknown) => void)[]>();
@@ -30,7 +30,14 @@ export function fakeIsoScene(missing: readonly string[] = []) {
     for (const listener of listeners.get(event) ?? []) listener(arg);
   };
   const scene = {
-    textures: { exists: (key: string) => loaded.has(key) },
+    game: { renderer: { type: renderer } },
+    cache: { tilemap: { add() {}, remove() {} } },
+    textures: {
+      exists: (key: string) => loaded.has(key),
+      get: () => ({ getSourceImage: () => ({ width, height: 256 }), source: [{ scaleMode: 0 }] }),
+      createCanvas: () => ({ getContext: () => ({ drawImage() {} }), refresh() {}, setFilter() {} }),
+      remove() {},
+    },
     load: {
       image(key: string, url: string) {
         pending.push([key, url]);
@@ -61,7 +68,7 @@ export function fakeIsoScene(missing: readonly string[] = []) {
     },
     make: {
       tilemap() {
-        const record = { orientation: 0, tilesets: [] as unknown[][] };
+        const record = { orientation: 1, tilesets: [] as unknown[][] };
         tilemaps.push(record);
         return {
           get orientation() {
@@ -82,9 +89,23 @@ export function fakeIsoScene(missing: readonly string[] = []) {
               },
               putTileAt(gid: number, x: number, y: number) {
                 record.tiles![y]![x] = gid;
+                return { x, y, pixelX: 0, pixelY: 0 };
+              },
+              forEachTile(callback: (tile: { x: number; y: number; pixelX: number; pixelY: number }) => void) {
+                for (let y = 0; y < record.tiles!.length; y++)
+                  for (let x = 0; x < record.tiles![y]!.length; x++) callback({ x, y, pixelX: 0, pixelY: 0 });
               },
               removeTileAt(x: number, y: number) {
                 record.tiles![y]![x] = -1;
+              },
+              setCullPadding() {
+                return this;
+              },
+              once() {
+                return this;
+              },
+              setVisible() {
+                return this;
               },
               setDepth(depth: number) {
                 record.depth = depth;

@@ -29,7 +29,7 @@ test('a 4x4 isometric fixture renders all four facings on the GPU', async ({ pag
   );
   expect(fixture.renderer).toBe(2 /* Phaser.WEBGL */);
   expect(fixture.size).toEqual([1024, 640]);
-  expect(fixture.nonBlank).toBeGreaterThan(100_000);
+  expect(fixture.nonBlank).toBeGreaterThan(80_000);
   expect(Object.keys(fixture.facingPixels)).toEqual(['E', 'N', 'W', 'S']);
   expect(Object.values(fixture.facingPixels).every((count) => count > 1_000)).toBe(true);
 

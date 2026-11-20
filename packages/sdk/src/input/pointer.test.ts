@@ -17,6 +17,79 @@ afterEach(() => {
 });
 
 describe('pointer input', () => {
+  it('binds mouse buttons, latches taps, and ignores touch', () => {
+    const canvas = document.createElement('canvas');
+    const merger = new InputMerger({
+      localPlayerIndex: 0,
+      mapping: { ...mapping, pointer: { buttons: { '0': 'attack', '2': 'dodge' } } },
+      canvas,
+    });
+    canvas.dispatchEvent(new MouseEvent('pointerdown', { button: 0 }));
+    expect(merger.sample(1)[0]!.actions.attack).toBe(true);
+    canvas.dispatchEvent(new MouseEvent('pointerup', { button: 0 }));
+    expect(merger.sample(2)[0]!.actions.attack).toBeUndefined();
+    canvas.dispatchEvent(new MouseEvent('pointerdown', { button: 2 }));
+    canvas.dispatchEvent(new MouseEvent('pointerup', { button: 2 }));
+    expect(merger.sample(3)[0]!.actions.dodge).toBe(true);
+    expect(merger.sample(4)[0]!.actions.dodge).toBeUndefined();
+    const entering = new MouseEvent('pointermove', { buttons: 1 });
+    Object.defineProperty(entering, 'pointerType', { value: 'mouse' });
+    canvas.dispatchEvent(entering);
+    expect(merger.sample(5)[0]!.actions.attack).toBeUndefined();
+    canvas.dispatchEvent(new MouseEvent('pointerdown', { button: 0 }));
+    const chord = new MouseEvent('pointermove', { buttons: 3 });
+    Object.defineProperty(chord, 'pointerType', { value: 'mouse' });
+    canvas.dispatchEvent(chord);
+    expect(merger.sample(5)[0]!.actions).toMatchObject({ attack: true, dodge: true });
+    const release = new MouseEvent('pointermove', { buttons: 1 });
+    Object.defineProperty(release, 'pointerType', { value: 'mouse' });
+    canvas.dispatchEvent(release);
+    expect(merger.sample(6)[0]!.actions.dodge).toBeUndefined();
+    canvas.dispatchEvent(new Event('lostpointercapture'));
+    canvas.dispatchEvent(entering);
+    expect(merger.sample(7)[0]!.actions.attack).toBeUndefined();
+    const menu = new MouseEvent('contextmenu', { cancelable: true });
+    canvas.dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(true);
+    const touch = new MouseEvent('pointerdown', { button: 0 });
+    Object.defineProperty(touch, 'pointerType', { value: 'touch' });
+    canvas.dispatchEvent(touch);
+    expect(merger.sample(8)[0]!.actions.attack).toBeUndefined();
+    merger.dispose();
+  });
+
+  it('retains a held button when pointer lock releases capture', () => {
+    const canvas = document.createElement('canvas');
+    const merger = new InputMerger({
+      localPlayerIndex: 0,
+      mapping: { ...mapping, pointer: { buttons: { '0': 'attack' } } },
+      canvas,
+    });
+    canvas.dispatchEvent(new MouseEvent('pointerdown', { button: 0 }));
+    Object.defineProperty(document, 'pointerLockElement', { configurable: true, value: canvas });
+    canvas.dispatchEvent(new Event('lostpointercapture'));
+    expect(merger.sample(1)[0]!.actions.attack).toBe(true);
+    expect(merger.sample(2)[0]!.actions.attack).toBe(true);
+    merger.dispose();
+  });
+
+  it('does not transfer a held pointer to a new local player', () => {
+    const canvas = document.createElement('canvas');
+    const merger = new InputMerger({
+      localPlayerIndex: 0,
+      mapping: { ...mapping, pointer: { buttons: { '0': 'attack' } } },
+      canvas,
+    });
+    canvas.dispatchEvent(new MouseEvent('pointerdown', { button: 0 }));
+    expect(merger.sample(1)[0]!.actions.attack).toBe(true);
+    merger.setLocalPlayerIndex(1);
+    const move = new MouseEvent('pointermove', { buttons: 1 });
+    Object.defineProperty(move, 'pointerType', { value: 'mouse' });
+    canvas.dispatchEvent(move);
+    expect(merger.sample(2)[0]!.actions.attack).toBeUndefined();
+    merger.dispose();
+  });
+
   it('requests pointer lock only from pointerdown on fine pointers', () => {
     const canvas = document.createElement('canvas');
     const requestPointerLock = vi.fn();

@@ -5,7 +5,8 @@ import { facingLoader, fakeIsoScene } from './fake-iso-scene.js';
 import { fixtureMap4x4 } from './fixtures/map-4x4.js';
 
 describe('isometric projection', () => {
-  it('round trips tile coordinates through the 256x128 diamond', () => {
+  it('round trips tile coordinates through the 128x64 diamond', () => {
+    expect(isoToWorld(1, 0)).toEqual({ x: 64, y: 32 });
     for (const [x, y] of [
       [0, 0],
       [1, 0],
@@ -60,10 +61,10 @@ describe('IsoMap', () => {
     expect(map.spawns).toEqual([{ id: 1, name: 'player', prefab: 'hero', x: 0, y: 128 }]);
   });
 
-  it('rejects maps outside the finite 256x128 subset and unresolved gids', () => {
+  it('rejects maps outside the finite 128x64 subset and unresolved gids', () => {
     expect(() => new IsoMap({ ...fixtureMap4x4(), orientation: 'orthogonal' })).toThrow(/isometric/);
     expect(() => new IsoMap({ ...fixtureMap4x4(), infinite: true })).toThrow(/finite/);
-    expect(() => new IsoMap({ ...fixtureMap4x4(), tileheight: 256 })).toThrow(/256x128/);
+    expect(() => new IsoMap({ ...fixtureMap4x4(), tileheight: 256 })).toThrow(/128x64/);
 
     const missing = fixtureMap4x4();
     missing.layers[0]!.data[0] = 99;
@@ -100,7 +101,15 @@ describe('IsoMap', () => {
     expect(fake.tilemaps).toHaveLength(1);
     expect(fake.tilemaps[0]).toMatchObject({ orientationAtCreate: 1, depth: -1 });
     expect(fake.tilemaps[0]!.tiles).toEqual(Array.from({ length: 4 }, () => [1, 1, 1, 1]));
-    expect(fake.tilemaps[0]!.tilesets[0]).toEqual(['gid-1', 'ground-01:E', 256, 256, 0, 0, 1]);
+    expect(fake.tilemaps[0]!.tilesets[0]).toEqual([
+      'gid-1',
+      expect.stringMatching(/^smallscaleint-floor:/),
+      256,
+      256,
+      0,
+      0,
+      1,
+    ]);
     expect(rendered.sprites).toHaveLength(7);
     expect(fake.images.filter((image) => image.texture.startsWith('chest:')).map((image) => image.texture)).toEqual([
       'chest:E',
@@ -123,6 +132,21 @@ describe('IsoMap', () => {
     map.sync({ [floor.key]: { visible: true } });
     expect(fake.tilemaps[0]!.tiles![0]![0]).toBe(floor.gid);
     expect(map.hasFloor(0, 0)).toBe(true);
+  });
+
+  it.each([128, 256])('anchors a %i-wide floor image at the cell centre', async (width) => {
+    const fake = fakeIsoScene([], width);
+    await new IsoMap(fixtureMap4x4()).render(fake.scene, facingLoader());
+    expect(fake.tilemaps[0]!.tilesets[0]).toEqual([
+      'gid-1',
+      expect.stringMatching(/^smallscaleint-floor:/),
+      width,
+      256,
+      0,
+      0,
+      1,
+    ]);
+    expect(fake.tilemaps[0]!.position).toEqual([256 - width / 2, -144]);
   });
 
   it('rejects a piece whose selected facing is absent from its card', async () => {

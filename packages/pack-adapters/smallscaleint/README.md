@@ -11,8 +11,8 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   rest play once and hold their last frame. Sheets are fetched beside the asset's file: the manifest names each
   generated sheet there (`gm build assets` publishes every sheet a card lists), so the same lookup serves a built game.
 - `facing8(vx, vy, hold?)`: the nearest of 8 facings for a screen velocity, with hysteresis on sector edges.
-- `IsoMap(json)`: the finite Tiled isometric subset (256×128 tiles; `floor`, `wall`, `decor`, `roof`, and `spawns`).
-  `render(scene, loader)` draws the floor with Phaser's isometric Tilemap orientation and taller pieces as
+- `IsoMap(json)`: the finite Tiled isometric subset (128×64 tiles; `floor`, `wall`, `decor`, `roof`, and `spawns`).
+  `render(scene, loader)` anchors 128×256 and 256×256 ground images on the 128×64 cell and draws taller pieces as
   depth-sorted facing sprites. `sync()` accepts game-owned `solid` and `visible` overrides; `collisionGrid()` and
   `roofTilesAbove()` expose simulation and cutaway inputs without implementing either policy.
 - `isoToWorld` / `worldToIso`: origin-free projection helpers for the set's 2:1 diamond.
@@ -34,5 +34,6 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
 ## Verified
 
 `pnpm --filter @gm/pack-smallscaleint test` draws numbered synthetic 128 px and 64 px sheets, checks every action,
-direction and frame lands on its cell, and exercises a generated 4×4 map and synthetic palette cards. The package's
-Playwright test renders that map through Phaser WebGL and verifies the four facing textures in the captured still.
+direction and frame lands on its cell, exercises a generated 4×4 map, and checks the shared edges of a 2×2 floor
+using a committed diamond and, when available, a library tile. Playwright renders the floor and an actor through
+Phaser WebGL and checks Canvas rendering and the four facing textures.
