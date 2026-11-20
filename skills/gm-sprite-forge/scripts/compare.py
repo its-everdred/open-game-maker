@@ -137,6 +137,68 @@ def sheet_media(orig, rebuild, cell, outdir, zoom, fps, gate):
     return result
 
 
+def review_sheet(orig, mock, previous, rebuild, cell, out, zoom=4):
+    """Make one eight-view, two-track review, rejecting imperceptible changes."""
+    if cell <= 4 or zoom < 4:
+        raise ValueError('cell must exceed 4 and zoom must be at least 4')
+    original, before, after = (sm.load(path) for path in (orig, previous, rebuild))
+    if original.shape != before.shape or original.shape != after.shape:
+        raise ValueError('original, previous and rebuild sheets must have the same dimensions')
+    if original.shape[0] != 8 * cell or original.shape[1] % cell:
+        raise ValueError('character sheets must contain eight rows of complete cells')
+    generated = Image.open(mock).convert('RGBA')
+    if generated.width < 8:
+        raise ValueError('image-gen mock must contain eight horizontal views')
+    if generated.getchannel('A').getextrema()[0] != 0:
+        raise ValueError('image-gen mock must have a transparent background')
+    rows = []
+    changes = []
+    for direction in range(8):
+        start = direction * cell
+        o, b, a = (sheet[start:start + cell, :cell] for sheet in (original, before, after))
+        before_occupied, after_occupied = b[..., 3] >= 128, a[..., 3] >= 128
+        occupied = before_occupied | after_occupied
+        if not before_occupied.any() or not after_occupied.any():
+            raise ValueError(f'direction {direction + 1} has no previous or current sprite')
+        changed = np.any(b != a, axis=2) & occupied
+        fraction = float(changed.sum() / occupied.sum())
+        changes.append(fraction)
+        if fraction <= .03:
+            raise ValueError(f'direction {direction + 1} changed {fraction:.1%}; more than 3% is required')
+        left = round(direction * generated.width / 8)
+        right = round((direction + 1) * generated.width / 8)
+        view = generated.crop((left, 0, right, generated.height))
+        bounds = view.getchannel('A').point(lambda alpha: 255 if alpha >= 128 else 0).getbbox()
+        if bounds is None:
+            raise ValueError(f'image-gen view {direction + 1} is empty')
+        target = Image.fromarray(o).getchannel('A').getbbox()
+        if target is None:
+            raise ValueError(f'original view {direction + 1} is empty')
+        crop = view.crop(bounds)
+        width, height = target[2] - target[0], target[3] - target[1]
+        scale = min((cell - 4) / crop.width, height / crop.height)
+        fitted = crop.resize((max(1, round(crop.width * scale)), max(1, round(crop.height * scale))),
+                             Image.Resampling.NEAREST)
+        mock_cell = Image.new('RGBA', (cell, cell))
+        x = max(0, min(cell - fitted.width, target[0] + (width - fitted.width) // 2))
+        mock_cell.alpha_composite(fitted, (x, target[1] + (height - fitted.height) // 2))
+        rows.append((o, np.asarray(mock_cell), b, a))
+    tile = cell * zoom
+    margin, header, row_gap = 64, 56, 24
+    canvas = Image.new('RGB', (margin + 4 * tile, header + 8 * (tile + row_gap)), (24, 24, 24))
+    draw = ImageDraw.Draw(canvas)
+    for column, label in enumerate(('Original', 'image gen (AI)', 'Previous 3D', '3D pipeline (AI)')):
+        draw.text((margin + column * tile + 4, 8), label, fill='white')
+    draw.text((margin, 28), 'Image gen is fitted to the original sprite size; previous and current are adjacent.', fill='white')
+    for direction, row in enumerate(rows):
+        y = header + direction * (tile + row_gap)
+        draw.text((4, y + 4), f'View {direction + 1}', fill='white')
+        for column, image in enumerate(row):
+            canvas.paste(on_bg(image, zoom), (margin + column * tile, y))
+    canvas.save(out)
+    return {'changed_fraction_by_view': changes, 'zoom': zoom}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='mode', required=True)
@@ -153,6 +215,14 @@ def main():
     sheet.add_argument('--zoom', type=int, default=4)
     sheet.add_argument('--fps', type=int, default=12)
     sheet.add_argument('--gates', choices=['character-64', 'character-128'], required=True)
+    review = sub.add_parser('review')
+    review.add_argument('orig')
+    review.add_argument('mock')
+    review.add_argument('previous')
+    review.add_argument('rebuild')
+    review.add_argument('--cell', type=int, required=True)
+    review.add_argument('--out', required=True)
+    review.add_argument('--zoom', type=int, default=4)
     args = parser.parse_args()
     if args.zoom <= 0 or (args.mode == 'sheet' and not 1 <= args.fps <= 100):
         parser.error('zoom must be positive and fps must be between 1 and 100')
@@ -162,8 +232,10 @@ def main():
         if any(len(pair) != 2 or not all(pair) for pair in pairs) or len(labels) != len(pairs):
             parser.error('provide one ORIGINAL:REBUILD pair per label')
         result = still(pairs, labels, args.out, args.zoom)
-    else:
+    elif args.mode == 'sheet':
         result = sheet_media(args.orig, args.rebuild, args.cell, args.out, args.zoom, args.fps, args.gates)
+    else:
+        result = review_sheet(args.orig, args.mock, args.previous, args.rebuild, args.cell, args.out, args.zoom)
     print(json.dumps(result, indent=1, allow_nan=False))
 
 
