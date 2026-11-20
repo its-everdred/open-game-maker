@@ -202,9 +202,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
           const logoImage = image(manifest.logo);
           const loadingPortrait = image(manifest.loading?.portrait);
           const loadingLandscape = image(manifest.loading?.landscape);
-          const slots = ImageSlots.safeParse(
-            manifest.slotImages,
-          );
+          const slots = ImageSlots.safeParse(manifest.slotImages);
           const slotImages = slots.success
             ? Object.fromEntries(
                 Object.entries(slots.data).map(([slotId, entry]) => [

@@ -276,6 +276,7 @@ async function writeDisplayImages(deps: AppDeps, target: string, manifest: Displ
         description: manifest.description,
         tags: manifest.tags,
         sharedUrls: manifest.sharedUrls,
+        slotImages: manifest.images,
         images,
       }),
     );
