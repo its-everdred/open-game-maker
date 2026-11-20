@@ -8,6 +8,7 @@ import { App } from '../../app/App';
 import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 import { GamesScreen } from './GamesScreen';
 import { startTrailer } from './trailerVideo';
+import type { GameSummary } from './types';
 
 const session = vi.hoisted(() => ({ userId: undefined as string | undefined }));
 vi.mock('../../lib/api/session', () => ({
@@ -55,7 +56,7 @@ const games = [
   },
 ];
 
-let gamesResponse = games;
+let gamesResponse: GameSummary[] = games;
 
 const jobs = [
   {
@@ -185,19 +186,50 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('orders played games newest first ahead of the existing unplayed order', async () => {
-  gamesResponse = [...games, { ...games[0]!, id: 'g_4', title: 'Fourth', updatedAt: '2026-01-01T00:00:00Z' }].map(
-    (game) => ({
-      ...game,
-      lastPlayedAt: game.id === 'g_3' ? '2026-11-03T00:00:00Z' : game.id === 'g_1' ? '2026-11-04T00:00:00Z' : null,
-    }),
-  );
+it('sorts by last played or created time, with real games ahead of curated placeholders', async () => {
+  gamesResponse = [
+    {
+      ...games[0]!,
+      id: 'g_4',
+      title: 'Newest unplayed',
+      createdAt: '2026-11-05T00:00:00Z',
+      updatedAt: '2026-11-20T00:00:00Z',
+    },
+    {
+      ...games[0]!,
+      id: 'g_5',
+      title: 'Older unplayed',
+      createdAt: '2026-11-02T00:00:00Z',
+      updatedAt: '2026-11-19T00:00:00Z',
+    },
+    { ...games[2]!, lastPlayedAt: '2026-11-03T00:00:00Z' },
+    { ...games[1]!, lastPlayedAt: '2026-11-04T00:00:00Z' },
+  ];
   renderGames();
   await waitFor(() => {
     const ids = [...document.querySelectorAll('[data-game-id]')].map((node) => node.getAttribute('data-game-id'));
-    expect(ids.slice(0, 2)).toEqual(['g_1', 'g_3']);
-    expect(ids.indexOf('g_2')).toBeGreaterThan(1);
-    expect(ids.indexOf('g_4')).toBeGreaterThan(ids.indexOf('g_2'));
+    expect(ids.slice(0, 4)).toEqual(['g_4', 'g_2', 'g_3', 'g_5']);
+    expect(ids.slice(4)).toEqual([
+      'showcase:restorebound',
+      'showcase:mossy-leap',
+      'showcase:skyward-squadron',
+      'showcase:powder-rush',
+      'showcase:little-fronts',
+      'showcase:puddle-postal',
+    ]);
+  });
+});
+
+it('moves an older game to first when it is played most recently', async () => {
+  gamesResponse = [
+    { ...games[0]!, id: 'g_4', title: 'New game', createdAt: '2026-11-05T00:00:00Z', lastPlayedAt: null },
+    { ...games[2]!, lastPlayedAt: '2026-11-19T00:00:00Z' },
+    { ...games[1]!, lastPlayedAt: '2026-11-20T00:00:00Z' },
+  ];
+  renderGames();
+  await waitFor(() => {
+    const ids = [...document.querySelectorAll('[data-game-id]')].map((node) => node.getAttribute('data-game-id'));
+    expect(ids.slice(0, 3)).toEqual(['g_2', 'g_3', 'g_4']);
   });
 });
 
@@ -359,7 +391,7 @@ describe('GamesScreen', () => {
 
     expect(await screen.findByText('Building 40%')).toBeVisible();
     expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
-    expect(container.querySelector<HTMLElement>('[data-game-id]')?.dataset.gameId).toBe('g_2');
+    expect(container.querySelector<HTMLElement>('[data-game-id]')?.dataset.gameId).toBe('g_1');
   });
 
   it('renders real tiles, prioritizes the building game, and shows its friendly progress', async () => {
@@ -367,8 +399,7 @@ describe('GamesScreen', () => {
 
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });
     const tiles = [...container.querySelectorAll<HTMLElement>('[data-game-id]')];
-    expect(tiles[0]?.dataset.gameId).toBe('g_2');
-    expect(tiles.slice(-2).map((tile) => tile.dataset.gameId)).toEqual(['g_1', 'g_3']);
+    expect(tiles.slice(0, 3).map((tile) => tile.dataset.gameId)).toEqual(['g_1', 'g_3', 'g_2']);
     expect(screen.getByText('Building 40%')).toBeVisible();
     expect(screen.getAllByText('New').length).toBeGreaterThanOrEqual(2);
   }, 10_000);
@@ -417,7 +448,7 @@ describe('GamesScreen', () => {
         <App router={router} />
       </QueryClientProvider>,
     );
-    const tile = await screen.findByRole('button', { name: /^Goblin Cellar/ });
+    const tile = await screen.findByRole('button', { name: /^Midnight Crumbs/ });
     act(() => {
       tile.focus();
       tile.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
