@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
@@ -26,10 +26,20 @@ export function useReviewRounds(gameId: string) {
 }
 
 export function RoundReviews({ gameId, rounds }: { gameId: string; rounds: Round[] }) {
+  const previous = useRef(new Map<string, string>());
+  const [newRounds, setNewRounds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const next = new Map(rounds.map((round) => [round.ticket, round.id]));
+    const replaced = rounds
+      .filter((round) => previous.current.has(round.ticket) && previous.current.get(round.ticket) !== round.id)
+      .map((round) => round.id);
+    if (replaced.length) setNewRounds((current) => new Set([...current, ...replaced]));
+    previous.current = next;
+  }, [rounds]);
   return (
     <>
       {rounds.map((round) => (
-        <RoundCard key={round.id} gameId={gameId} round={round} />
+        <RoundCard key={round.id} gameId={gameId} round={round} isNew={newRounds.has(round.id)} />
       ))}
     </>
   );
@@ -41,12 +51,14 @@ export function RoundCard({
   onAnswered,
   swipe = false,
   onPendingChange,
+  isNew = false,
 }: {
   gameId: string;
   round: Round;
   onAnswered?(): void;
   swipe?: boolean;
   onPendingChange?(pending: boolean): void;
+  isNew?: boolean;
 }) {
   const [note, setNote] = useState('');
   const answer = useMutation({
@@ -79,6 +91,11 @@ export function RoundCard({
   );
   return (
     <section className="review-deck" aria-label={`Review for ticket ${round.ticket}`}>
+      {isNew ? (
+        <p className="review-round-new" role="status">
+          New round
+        </p>
+      ) : null}
       {swipe ? (
         <SwipeVerdict
           disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}

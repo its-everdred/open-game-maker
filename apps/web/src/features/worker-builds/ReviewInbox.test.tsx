@@ -147,6 +147,7 @@ it('replaces a superseded round for the same ticket while the queue is open', ()
   );
   expect(screen.getByText('New?')).toBeVisible();
   expect(screen.queryByText('Old?')).toBeNull();
+  expect(screen.getByText('New round')).toBeVisible();
 });
 
 it('refreshes media on the open round when polling supplies it', async () => {
@@ -406,6 +407,80 @@ it('refreshes the version and options of the open command', () => {
   expect(screen.getByRole('button', { name: 'Pick A: New' })).toBeVisible();
   expect(screen.queryByRole('dialog', { name: 'Pick A: Old' })).toBeNull();
   expect(screen.getByLabelText('Note (optional)')).toHaveValue('Keep my note');
+});
+
+it('keeps a superseding Command active for the same ticket and marks it new', () => {
+  const first = {
+    source: 'core' as const,
+    job_id: null,
+    ticket: '45',
+    title: 'Question',
+    command_id: 'c1',
+    decision_id: 'd1',
+    version: 1,
+    question: 'Old command?',
+    blocking: true,
+    opened_at: '2026-01-01T00:00:00Z',
+    options: [{ id: 'a', label: 'Old', media: { url: '/a.png', width: 10, height: 10 } }],
+  };
+  const replacement = {
+    ...first,
+    command_id: 'c2',
+    decision_id: 'd2',
+    question: 'Replacement command?',
+    options: [{ id: 'a', label: 'New', media: { url: '/new.png', width: 10, height: 10 } }],
+  };
+  const unrelated = { ...first, ticket: '46', decision_id: 'd3', question: 'Unrelated command?' };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[first]} reviews={[]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('Old command?')).toBeVisible();
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[replacement, unrelated]} reviews={[]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('Replacement command?')).toBeVisible();
+  expect(screen.getByText('New round')).toBeVisible();
+  expect(screen.queryByText('Unrelated command?')).toBeNull();
+});
+
+it('marks a replacement playable preview as new while it is open', () => {
+  api.mockImplementation(() => new Promise(() => {}));
+  const first = {
+    kind: 'standalone-preview' as const,
+    gameId: 'g',
+    preview: {
+      ticket: '12',
+      buildId: 'old',
+      accessId: 'old-access',
+      createdAt: '2026-01-01T00:00:00Z',
+      question: 'Old build?',
+    },
+  };
+  const replacement = {
+    ...first,
+    preview: {
+      ...first.preview,
+      buildId: 'new',
+      accessId: 'new-access',
+      question: 'New build?',
+    },
+  };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} reviews={[first]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox commands={[]} reviews={[replacement]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('New build?')).toBeVisible();
+  expect(screen.getByText('New round')).toBeVisible();
 });
 
 it('keeps a command open while an answer is sending', async () => {

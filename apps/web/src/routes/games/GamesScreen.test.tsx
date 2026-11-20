@@ -282,7 +282,7 @@ describe('GamesScreen', () => {
     // slow first render under the fully parallel suite.
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });
     expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
-    expect(container.querySelectorAll('.game-tile')).toHaveLength(13 + count - (count >= 2 ? 1 : 0));
+    expect(container.querySelectorAll('.game-tile')).toHaveLength(7 + count - (count >= 2 ? 1 : 0));
     expect(container.querySelectorAll('[data-game-id].is-selected')).toHaveLength(0);
   });
 
@@ -294,7 +294,7 @@ describe('GamesScreen', () => {
     await screen.findByRole('button', { name: 'Fourth Game' });
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
     expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
-    expect(container.querySelectorAll('.game-tile')).toHaveLength(16);
+    expect(container.querySelectorAll('.game-tile')).toHaveLength(10);
   });
 
   it('starts a selected trailer during the tile click and adopts that video', async () => {
@@ -559,7 +559,7 @@ describe('GamesScreen', () => {
     const { container } = renderGames('/all', client);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh the library');
-    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(15);
+    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(9);
     expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
   });
 
@@ -574,7 +574,7 @@ describe('GamesScreen', () => {
     const { container } = renderGames();
 
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });
-    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(15);
+    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(9);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 

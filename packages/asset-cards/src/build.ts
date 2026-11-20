@@ -1,5 +1,7 @@
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { join, relative } from 'node:path';
+import process from 'node:process';
 
 import { validateCard, type AssetCard } from '@ogm/contracts';
 
@@ -105,8 +107,16 @@ export async function buildPackIndex(root: string, packIds: readonly string[]): 
 
 export async function writeIndex(root: string, index: CardIndex): Promise<string> {
   const path = join(root, INDEX_PATH);
-  await mkdir(join(root, 'index'), { recursive: true });
-  await writeFile(path, `${JSON.stringify(index)}\n`);
+  const directory = join(root, 'index');
+  const temporary = join(directory, `.cards.index.${process.pid}.${randomUUID()}.tmp`);
+  await mkdir(directory, { recursive: true });
+  try {
+    await writeFile(temporary, `${JSON.stringify(index)}\n`);
+    await rename(temporary, path);
+  } catch (error) {
+    await unlink(temporary).catch(() => undefined);
+    throw error;
+  }
   return path;
 }
 
@@ -149,11 +159,18 @@ export async function isStale(root: string): Promise<boolean> {
   return (await freshIndex(root)) === null;
 }
 
-/** Read the index, rebuilding and writing it first when it is missing or stale. */
+/** Read the index, rebuilding it when missing or stale; read-only workers use the fresh in-memory result. */
 export async function loadIndex(root: string): Promise<CardIndex> {
   const current = await freshIndex(root);
   if (current) return current;
   const index = await buildIndex(root);
-  await writeIndex(root, index);
+  try {
+    await writeIndex(root, index);
+  } catch (error) {
+    process.emitWarning(
+      `asset card index is stale and could not be written; using a fresh in-memory index (${error instanceof Error ? error.message : String(error)})`,
+      { code: 'OGM_ASSET_INDEX_READ_ONLY' },
+    );
+  }
   return index;
 }
