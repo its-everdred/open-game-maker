@@ -5,10 +5,20 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from vegetation_layout import branches, clustered_placements, placements
+from vegetation_layout import branches, clustered_placements, placements, organic_bare_branches
 
 
 class VegetationLayoutTest(unittest.TestCase):
+    def test_organic_bare_tree_is_seeded_and_rooted(self):
+        tree = organic_bare_branches(3, height=1.5, radius=.06)
+        self.assertEqual(tree, organic_bare_branches(3, height=1.5, radius=.06))
+        self.assertNotEqual(tree, organic_bare_branches(4, height=1.5, radius=.06))
+        self.assertEqual(tree[0].start, (0, 0, 0))
+        self.assertTrue(any(b.end[2] < 0 for b in tree))
+        self.assertTrue(any(b.depth == 3 for b in tree))
+        with self.assertRaises(ValueError):
+            organic_bare_branches(3, height=0)
+
     def test_attachment_min_moves_seeded_branches_down_the_trunk(self):
         baseline = branches(17, levels=1, lean=0)
         lower = branches(17, levels=1, lean=0, attachment_min=0.30)

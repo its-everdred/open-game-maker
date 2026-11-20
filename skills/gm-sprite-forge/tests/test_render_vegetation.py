@@ -123,6 +123,16 @@ class RenderVegetationTest(unittest.TestCase):
         self.assertEqual(recipe['parameters']['branch_width'], 1.4)
         self.assertEqual(recipe['parameters']['branch_radius'], 0.05)
         self.assertEqual(recipe['parameters']['attachment_min'], 0.3)
+        with patch('render_vegetation.subprocess.run', side_effect=fake_blender):
+            result = render_variant('bare', self.root / 'set', 'bare-organic', self.source, self.collection,
+                                    seed=7, organic_bare=True, metadata=self.metadata)
+        self.assertIn('organic_bare=1', commands[-1])
+        self.assertEqual(json.loads((result / 'recipe.json').read_text())['parameters']['organic_bare'], 1)
+        with patch('render_vegetation.subprocess.run') as run:
+            with self.assertRaises(ValueError):
+                render_variant('bare', self.root / 'set', 'invalid', self.source, self.collection,
+                               seed=7, organic_bare=True, attachment_min=.3, metadata=self.metadata)
+            run.assert_not_called()
 
     def test_branched_conifer_controls_are_forwarded_and_recorded(self):
         commands = []
@@ -153,6 +163,7 @@ class RenderVegetationTest(unittest.TestCase):
                            {'seed': 1, 'leaf_width': 0.25, 'metadata': self.metadata},
                            {'seed': 1, 'leaf_length_scale': .65, 'metadata': self.metadata},
                            {'seed': 1, 'branch_width': 1.4, 'metadata': self.metadata},
+                           {'seed': 1, 'organic_bare': True, 'metadata': self.metadata},
                            {'seed': 1, 'bush_leaf_detail': True, 'metadata': self.metadata},
                            {'seed': 1, 'bush_mass_count': 0, 'metadata': self.metadata},
                            {'seed': 1, 'sun_elev': 91, 'metadata': self.metadata},

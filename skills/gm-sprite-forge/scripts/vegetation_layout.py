@@ -24,6 +24,42 @@ class Placement:
     scale: float
 
 
+def organic_bare_branches(seed: int, *, height: float = 1.0, radius: float = 0.07) -> list[Branch]:
+    """Build a seeded trunk, roots and tapering multi-segment bare limbs."""
+    if not all(math.isfinite(v) and v > 0 for v in (height, radius)):
+        raise ValueError('height and radius must be positive and finite')
+    rng = random.Random(seed)
+    result = [Branch((0, 0, 0), (.02, 0, height), radius, 0)]
+    for i in range(6):
+        angle = i * math.tau / 6
+        result.append(Branch((0, 0, .06), (math.cos(angle) * .16, math.sin(angle) * .16, -.03), radius * .32, 1))
+    for i in range(20):
+        z = height * (.24 + i * .033)
+        angle = i * 2.399 + rng.uniform(-.65, .65)
+        length = height * (.62 - .27 * i / 19) * rng.uniform(.82, 1.15)
+        start = (.02 * z / height, 0, z)
+        previous = start
+        for j in range(1, 5):
+            t = j / 4
+            point = (start[0] + math.cos(angle) * length * t,
+                     start[1] + math.sin(angle) * length * t,
+                     z + length * (.18 * t + .38 * t * t))
+            r = radius * (.55 * (1 - t) + .08)
+            result.append(Branch(previous, point, r, 1))
+            previous = point
+            for direction in (-1, 1):
+                a = angle + direction * rng.uniform(.35, .8)
+                size = length * rng.uniform(.15, .31)
+                end = (point[0] + math.cos(a) * size, point[1] + math.sin(a) * size,
+                       point[2] + size * rng.uniform(.35, .85))
+                result.append(Branch(point, end, r * .48, 2))
+                tip = (end[0] + math.cos(a + direction * .25) * size * .4,
+                       end[1] + math.sin(a + direction * .25) * size * .4,
+                       end[2] + size * .35)
+                result.append(Branch(end, tip, r * .24, 3))
+    return result
+
+
 def branches(seed: int, *, height: float = 1.0, radius: float = 0.07,
              lean: float = 0.1, levels: int = 3, fanout: int = 2,
              spread: tuple[float, float] = (0.55, 0.85), attachment_min: float = 0.55) -> list[Branch]:

@@ -47,7 +47,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
                    fanout=2, spread_min=0.55, spread_max=0.85, leaf_count=24000,
                    crown_width=1.0, crown_depth=1.0, crown_height=1.0, palette=None,
                    leafy=False, plant_height=0.18, leaves_per_cluster=12, leaf_width=1.0, leaf_shading=False,
-                   batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0, branch_width=1.0, branch_radius=0.07, bush_vertical_scale=1.0, attachment_min=0.55, bush_leaf_detail=False, bush_mass_count=9, bush_mass_radius=0.15, sun_elev=65.0, leaf_length_scale=1.0):
+                   batch_size=1, batch_radius=0.05, branched=False, tiers=14, spokes=8, yaw=0.0, branch_width=1.0, branch_radius=0.07, bush_vertical_scale=1.0, attachment_min=0.55, bush_leaf_detail=False, bush_mass_count=9, bush_mass_radius=0.15, sun_elev=65.0, leaf_length_scale=1.0, organic_bare=False):
     """Run a seeded four-view render, then package its finished outputs."""
     output = _outside_packs(output)
     if scene not in SCENES or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', slug):
@@ -69,6 +69,8 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
             or (leaf_length_scale != 1.0 and not leafy)
             or (leafy and scene != 'plant') or (dense and scene != 'tree')
             or (branch_width != 1.0 and scene != 'bare')
+            or (organic_bare and (scene != 'bare' or lean != .1 or levels != 2 or fanout != 2
+                                  or spread_min != .55 or spread_max != .85 or attachment_min != .55))
             or not 0 <= attachment_min <= 0.95 or (attachment_min != 0.55 and scene not in ('bare', 'tree'))
             or (bush_vertical_scale != 1.0 and scene != 'bush')
             or (bush_leaf_detail and scene != 'bush')
@@ -98,7 +100,7 @@ def render_variant(scene, output, slug, source_card, source_collection, *, seed,
               'leaves_per_cluster': leaves_per_cluster, 'leaf_width': leaf_width, 'leaf_shading': int(leaf_shading),
               'batch_size': batch_size, 'batch_radius': batch_radius,
               'branched': int(branched), 'tiers': tiers, 'spokes': spokes, 'yaw0': yaw,
-              'branch_width': branch_width, 'branch_radius': branch_radius, 'bush_vertical_scale': bush_vertical_scale, 'attachment_min': attachment_min, 'bush_leaf_detail': int(bush_leaf_detail), 'bush_mass_count': bush_mass_count, 'bush_mass_radius': bush_mass_radius, 'sun_elev': sun_elev, 'leaf_length_scale': leaf_length_scale, **palette_values}
+              'branch_width': branch_width, 'branch_radius': branch_radius, 'bush_vertical_scale': bush_vertical_scale, 'attachment_min': attachment_min, 'bush_leaf_detail': int(bush_leaf_detail), 'bush_mass_count': bush_mass_count, 'bush_mass_radius': bush_mass_radius, 'sun_elev': sun_elev, 'leaf_length_scale': leaf_length_scale, 'organic_bare': int(organic_bare), **palette_values}
     with tempfile.TemporaryDirectory(prefix='vegetation-render-') as temp:
         raw = Path(temp) / 'raw'
         raw.mkdir()
@@ -139,6 +141,7 @@ def main():
     parser.add_argument('--bush-mass-radius', type=float, default=0.15)
     parser.add_argument('--sun-elev', type=float, default=65.0)
     parser.add_argument('--attachment-min', type=float, default=0.55)
+    parser.add_argument('--organic-bare', action='store_true', help='Use rooted, segmented bare-tree branches')
     parser.add_argument('--height', type=float, default=1.0)
     parser.add_argument('--lean', type=float, default=0.1)
     parser.add_argument('--canopy-scale', type=float, default=1.0)
@@ -184,7 +187,7 @@ def main():
                             bush_vertical_scale=args.bush_vertical_scale, attachment_min=args.attachment_min,
                             bush_leaf_detail=args.bush_leaf_detail, bush_mass_count=args.bush_mass_count,
                             bush_mass_radius=args.bush_mass_radius, sun_elev=args.sun_elev,
-                            leaf_length_scale=args.leaf_length_scale)
+                            leaf_length_scale=args.leaf_length_scale, organic_bare=args.organic_bare)
     print(result)
 
 

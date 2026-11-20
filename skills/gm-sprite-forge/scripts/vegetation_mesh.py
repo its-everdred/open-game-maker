@@ -8,13 +8,14 @@ import random
 import bpy
 from mathutils import Vector
 
-from vegetation_layout import branches, clustered_placements, placements
+from vegetation_layout import branches, clustered_placements, placements, organic_bare_branches
 
 
 def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.0, branch_radius=0.07, attachment_min=0.55,
-         fanout=2, spread=(0.55, 0.85), bare=False, dense=False, leaf_count=24000, crown_shape=(1.0, 1.0, 1.0)):
+         fanout=2, spread=(0.55, 0.85), bare=False, dense=False, leaf_count=24000, crown_shape=(1.0, 1.0, 1.0), organic_bare=False):
     """Create a tree with connected branches and a canopy at each outer tip."""
-    skeleton = branches(seed, height=height, radius=branch_radius, lean=lean, levels=levels, fanout=fanout, spread=spread, attachment_min=attachment_min)
+    skeleton = (organic_bare_branches(seed, height=height, radius=branch_radius) if organic_bare else
+                branches(seed, height=height, radius=branch_radius, lean=lean, levels=levels, fanout=fanout, spread=spread, attachment_min=attachment_min))
     objects = []
     for branch in skeleton:
         start, end = Vector(branch.start), Vector(branch.end)
