@@ -157,7 +157,8 @@ export const assetCardMetaDefs: Record<string, object> = {
             "type": "integer"
           },
           "parameters": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": true
           }
         },
         "additionalProperties": false
@@ -1025,7 +1026,9 @@ export interface Generated {
   recipe: {
     path: string;
     seed: number;
-    parameters: {};
+    parameters: {
+      [k: string]: unknown | undefined;
+    };
   };
   scores: {
     [k: string]: number | undefined;
