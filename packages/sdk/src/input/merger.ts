@@ -32,6 +32,7 @@ function mergeInto(target: Actions, source: Actions): void {
 export class InputMerger {
   dropped = 0;
   private readonly held = new Map<number, Map<Source, Actions>>();
+  private readonly pendingPresses = new Map<number, Map<Source, Actions>>();
   private readonly transient = new Map<number, Map<Source, Actions>>();
   private readonly maxLocalPlayers: number;
   private readonly keyboard?: KeyboardInput;
@@ -58,6 +59,8 @@ export class InputMerger {
       this.pointer = new PointerInput({
         canvas: options.canvas,
         pointerLock: options.mapping.pointerLock,
+        buttons: options.mapping.pointer?.buttons,
+        setHeld: (actions) => this.setHeld(this.localPlayerIndex, 'pointer', actions),
         emit: (actions) => this.addTransient(this.localPlayerIndex, 'pointer', actions),
         aim: options.pointerAim,
       });
@@ -76,6 +79,7 @@ export class InputMerger {
   }
 
   setKeyboardMapping(mapping: RigInputMapping['keyboard']): void {
+    this.pendingPresses.get(this.localPlayerIndex)?.delete('keyboard');
     this.keyboard?.setMapping(mapping);
   }
 
@@ -89,14 +93,22 @@ export class InputMerger {
 
   discardTransient(): void {
     this.transient.clear();
+    this.pendingPresses.clear();
+    this.keyboard?.clearPending();
     this.held.clear();
   }
 
   setLocalPlayerIndex(playerIndex: number): void {
     if (!this.validPlayer(playerIndex)) throw new RangeError('localPlayerIndex is outside the local player count');
     if (playerIndex === this.localPlayerIndex) return;
+    this.pointer?.reset();
+    this.keyboard?.clearPending();
     const previousHeld = this.held.get(this.localPlayerIndex);
     previousHeld?.delete('keyboard');
+    previousHeld?.delete('pointer');
+    this.pendingPresses.get(this.localPlayerIndex)?.delete('keyboard');
+    this.pendingPresses.get(this.localPlayerIndex)?.delete('pointer');
+    if (this.pendingPresses.get(this.localPlayerIndex)?.size === 0) this.pendingPresses.delete(this.localPlayerIndex);
     if (previousHeld?.size === 0) this.held.delete(this.localPlayerIndex);
     const previousTransient = this.transient.get(this.localPlayerIndex);
     previousTransient?.delete('keyboard');
@@ -107,7 +119,13 @@ export class InputMerger {
   }
 
   sample(tick: number): ActionFrame[] {
-    const players = new Set<number>([this.localPlayerIndex, ...this.held.keys(), ...this.transient.keys()]);
+    const keyboardSample = this.keyboard?.sample();
+    const players = new Set<number>([
+      this.localPlayerIndex,
+      ...this.held.keys(),
+      ...this.transient.keys(),
+      ...this.pendingPresses.keys(),
+    ]);
     const frames = [...players]
       .sort((left, right) => left - right)
       .map((playerIndex): ActionFrame => {
@@ -118,16 +136,25 @@ export class InputMerger {
           const held = this.held.get(playerIndex)?.get(candidate);
           const transient = this.transient.get(playerIndex)?.get(candidate);
           if (held) mergeInto(actions, held);
+          if (candidate === 'keyboard' && playerIndex === this.localPlayerIndex && keyboardSample)
+            mergeInto(actions, keyboardSample);
+          const pending = this.pendingPresses.get(playerIndex)?.get(candidate);
+          if (pending) mergeInto(actions, pending);
           if (transient) mergeInto(actions, transient);
           if (held && 'look' in held) lookSource = candidate;
           if (transient && 'look' in transient) lookSource = candidate;
-          if ((held && Object.keys(held).length > 0) || (transient && Object.keys(transient).length > 0))
+          if (
+            (held && Object.keys(held).length > 0) ||
+            (pending && Object.keys(pending).length > 0) ||
+            (transient && Object.keys(transient).length > 0)
+          )
             source = candidate;
         }
         const frame = { playerIndex, tick, source: lookSource ?? source, actions } satisfies ActionFrame;
         return this.options.mapFrame?.(frame) ?? frame;
       });
     this.transient.clear();
+    this.pendingPresses.clear();
     return frames;
   }
 
@@ -141,6 +168,7 @@ export class InputMerger {
     this.touch?.dispose();
     this.cleanupBridge?.();
     this.held.clear();
+    this.pendingPresses.clear();
     this.transient.clear();
   }
 
@@ -150,6 +178,16 @@ export class InputMerger {
 
   private setHeld(playerIndex: number, source: Source, actions: Actions): void {
     const bySource = this.held.get(playerIndex) ?? new Map<Source, Actions>();
+    const previous = bySource.get(source) ?? {};
+    const presses: Actions = {};
+    for (const [action, value] of Object.entries(actions)) {
+      if (value === true && previous[action] !== true) presses[action] = true;
+    }
+    if (Object.keys(presses).length) {
+      const pending = this.pendingPresses.get(playerIndex) ?? new Map<Source, Actions>();
+      pending.set(source, { ...pending.get(source), ...presses });
+      this.pendingPresses.set(playerIndex, pending);
+    }
     bySource.set(source, structuredClone(actions));
     this.held.set(playerIndex, bySource);
   }

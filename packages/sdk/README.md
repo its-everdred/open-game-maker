@@ -40,6 +40,13 @@ them to its keyboard input. Games using their own input handling must apply that
 hotkey and cannot be rebound in the shared menu. List any additional `runtime.attachInput` hotkeys in the manifest's
 `controlReservedKeys` array so the menu does not offer them as bindings.
 
+## Mouse button bindings
+
+Pass an optional `pointer.buttons` map in the `runtime.attachInput` mapping, for example
+`pointer: { buttons: { "0": "attack", "2": "dodge" } }`. Keys are `PointerEvent.button` numbers;
+the SDK suppresses the canvas context menu when button 2 is bound. Touch pointers do not trigger these bindings.
+A button press and release between fixed input samples is delivered as a press in the next sample.
+
 ## Lazy asset groups
 
 Register assets with `--phase lazy:backdrop-nim`; unmarked assets belong to boot. During the match countdown, call

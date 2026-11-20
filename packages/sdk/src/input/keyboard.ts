@@ -19,6 +19,8 @@ export interface RawKey {
 
 export class KeyboardInput {
   private readonly pressed = new Set<string>();
+  private readonly sinceSample = new Set<string>();
+  private readonly taps = new Set<string>();
   private readonly hotkeys: Set<string>;
 
   constructor(
@@ -44,6 +46,7 @@ export class KeyboardInput {
 
   setMapping(mapping: RigInputMapping['keyboard']): void {
     this.pressed.clear();
+    this.clearPending();
     this.mapping = { ...mapping };
     this.emit();
   }
@@ -61,6 +64,7 @@ export class KeyboardInput {
       return;
     }
     if (!this.mapping[event.code]) return;
+    if (!this.pressed.has(event.code)) this.sinceSample.add(event.code);
     this.pressed.add(event.code);
     this.emit();
   };
@@ -72,19 +76,46 @@ export class KeyboardInput {
       return;
     }
     if (!this.mapping[event.code]) return;
+    if (this.sinceSample.has(event.code) && /\.(up|down|left|right)$/.test(this.mapping[event.code]!))
+      this.taps.add(event.code);
     this.pressed.delete(event.code);
     this.emit();
   };
 
   private readonly onBlur = () => {
     this.pressed.clear();
+    this.clearPending();
     this.emit();
   };
 
+  clearPending(): void {
+    this.sinceSample.clear();
+    this.taps.clear();
+  }
+
+  sample(): Record<string, ActionValue> | undefined {
+    const codes = new Set(this.pressed);
+    const opposite: Record<string, string> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+    for (const code of this.taps) {
+      const action = this.mapping[code];
+      const match = action && /^(.*)\.(up|down|left|right)$/.exec(action);
+      if (!match) continue;
+      const inverse = `${match[1]}.${opposite[match[2]!]}`;
+      if (![...this.pressed].some((held) => this.mapping[held] === inverse)) codes.add(code);
+    }
+    const hasTaps = codes.size !== this.pressed.size;
+    this.clearPending();
+    return hasTaps ? this.actionsFor(codes) : undefined;
+  }
+
   private emit(): void {
+    this.onActions(this.actionsFor(this.pressed));
+  }
+
+  private actionsFor(codes: Set<string>): Record<string, ActionValue> {
     const actions: Record<string, ActionValue> = {};
     const vectors = new Map<string, { x: number; y: number }>();
-    for (const code of this.pressed) {
+    for (const code of codes) {
       const action = this.mapping[code];
       if (!action) continue;
       const directional = /^(.*)\.(up|down|left|right)$/.exec(action);
@@ -103,6 +134,6 @@ export class KeyboardInput {
       vectors.set(name, vector);
     }
     for (const [name, vector] of vectors) actions[name] = vector;
-    this.onActions(actions);
+    return actions;
   }
 }
