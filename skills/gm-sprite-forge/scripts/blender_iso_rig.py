@@ -252,7 +252,8 @@ def vegetation(sc):
 def main():
     sc = reset()
     camera(sc)
-    shadow_catcher(sc)
+    if P.get('shadows', 1):
+        shadow_catcher(sc)
     objs = {'tile': tile, 'rock': rock, 'hull': hull, 'cube': cube, 'blend': blend, 'tree': vegetation, 'plant': vegetation, 'bush': vegetation, 'conifer': vegetation, 'bare': vegetation}[SCENE](sc)
     root = bpy.data.objects.new('root', None)
     sc.collection.objects.link(root)

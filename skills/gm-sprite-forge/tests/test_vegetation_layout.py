@@ -45,6 +45,29 @@ class VegetationLayoutTest(unittest.TestCase):
                 placements(0, **kwargs)
 
 class VegetationBlenderTest(unittest.TestCase):
+    def test_shadowless_render_has_no_shadow_pixels(self):
+        import subprocess
+        import tempfile
+        from PIL import Image
+        import numpy as np
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp:
+            for enabled in (0, 1):
+                out = Path(temp) / str(enabled)
+                subprocess.run(['blender', '-b', '--factory-startup', '--threads', '2',
+                                '--python-exit-code', '1', '--python',
+                                str(root / 'scripts/blender_iso_rig.py'), '--', 'cube', str(out),
+                                'samples=1', 'views=N', f'shadows={enabled}'],
+                               check=True, stdout=subprocess.DEVNULL)
+                with Image.open(out / 'cube_N.png') as image:
+                    pixels = np.asarray(image.convert('RGBA'))
+                    alpha = pixels[..., 3]
+                    shadow_pixels = int(((alpha > 0) & (alpha < 255) & (pixels[..., :3].max(axis=2) <= 8)).sum())
+                if enabled:
+                    self.assertGreater(shadow_pixels, 0)
+                else:
+                    self.assertEqual(shadow_pixels, 0)
+
     def test_geometry_builds_in_blender(self):
         import subprocess
         root = Path(__file__).resolve().parents[1]
