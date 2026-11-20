@@ -6,10 +6,13 @@ import bpy
 from mathutils import Vector
 
 
-def make_canopy(seed, material, *, height=1.35, leaf_count=24000, offset=(0, 0, 0)):
+def make_canopy(seed, material, *, height=1.35, leaf_count=24000, offset=(0, 0, 0),
+                shape=(1.0, 1.0, 1.0)):
     """Build an irregular crown as a single mesh with grouped leaf shades."""
     if not math.isfinite(height) or height <= 0 or not isinstance(leaf_count, int) or not 1 <= leaf_count <= 100000:
         raise ValueError('height must be positive and leaf count must be 1..100000')
+    if len(shape) != 3 or any(not math.isfinite(v) or v <= 0 for v in shape):
+        raise ValueError('canopy shape needs three positive finite scales')
     if not material.use_nodes or material.node_tree is None:
         raise ValueError('foliage material must use nodes')
     rng = random.Random(seed + 7291)
@@ -18,9 +21,9 @@ def make_canopy(seed, material, *, height=1.35, leaf_count=24000, offset=(0, 0, 
         direction = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1)))
         direction.normalize()
         radial = rng.random() ** (1 / 3)
-        centres.append(Vector((direction.x * radial * height * 0.52 + offset[0],
-                               direction.y * radial * height * 0.46 + offset[1],
-                               direction.z * radial * height * 0.48 + height + offset[2])))
+        centres.append(Vector((direction.x * radial * height * 0.52 * shape[0] + offset[0],
+                               direction.y * radial * height * 0.46 * shape[1] + offset[1],
+                               direction.z * radial * height * 0.48 * shape[2] + height + offset[2])))
     vertices, faces = [], []
     for i in range(leaf_count):
         direction = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1)))

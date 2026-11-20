@@ -24,7 +24,7 @@ python skills/gm-sprite-forge/scripts/render_sheet.py blend output/walk.png --me
 
 The Blender import keeps mesh materials and animation, but ignores source cameras and lights; prepare the mesh with the desired materials before rendering. The script samples the inclusive animation range evenly, renders at lowered CPU priority, and writes a JSON manifest beside the sheet. Add `--ai-generated` when the source or output is AI-assisted. `cube`, `rock`, and `hull` are also available; `hull` takes an OBJ via `--mesh`. The separate shadow sheet contains black partial-alpha shadow pixels; without it, those pixels remain in the main sheet. For four 256-pixel prop views or the tile calibration, run `blender -b --python skills/gm-sprite-forge/scripts/blender_iso_rig.py -- tile output/ samples=1`. The hull carver and finisher expose their arguments with `--help`. Never write into a pack directory.
 
-The experimental `tree` rig scene accepts `dense=1` for a seeded clustered canopy and `leaf_count` (1–100000, default 24000) to control its detail. This is a blockout and has not passed the vegetation reference gates. Set `shadows=0` on the rig when the reference has no cast-shadow pixels. Render and score against the relevant original before using it.
+The experimental `tree` rig scene accepts `dense=1` for a seeded clustered canopy and `leaf_count` (1–100000, default 24000) to control its detail. `canopy_scale`, `crown_width`, `crown_depth` and `crown_height` adjust the crown proportions. This is a blockout and has not passed the vegetation reference gates. Set `shadows=0` on the rig when the reference has no cast-shadow pixels. Render and score against the relevant original before using it.
 
 Score a rebuild against its original with the same dependencies:
 

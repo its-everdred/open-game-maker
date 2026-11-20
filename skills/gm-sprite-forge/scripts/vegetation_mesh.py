@@ -12,7 +12,7 @@ from vegetation_layout import branches, placements
 
 
 def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.0,
-         fanout=2, spread=(0.55, 0.85), bare=False, dense=False, leaf_count=24000):
+         fanout=2, spread=(0.55, 0.85), bare=False, dense=False, leaf_count=24000, crown_shape=(1.0, 1.0, 1.0)):
     """Create a tree with connected branches and a canopy at each outer tip."""
     skeleton = branches(seed, height=height, lean=lean, levels=levels, fanout=fanout, spread=spread)
     objects = []
@@ -50,7 +50,8 @@ def tree(seed, bark, foliage, *, height=1.0, lean=0.1, levels=3, canopy_scale=1.
             root.data.materials.append(bark)
             objects.append(root)
         objects.append(make_canopy(seed, foliage, height=height, leaf_count=leaf_count,
-                                   offset=skeleton[0].end[:2] + (0,)))
+                                   offset=skeleton[0].end[:2] + (0,),
+                                   shape=tuple(canopy_scale * v for v in crown_shape)))
     return objects
 
 
