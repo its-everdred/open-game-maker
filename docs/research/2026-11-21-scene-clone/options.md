@@ -76,3 +76,7 @@ The prompt requested an isometric pixel-art medieval trading courtyard at dusk, 
 ## Motion diagnostic
 
 The exploratory region scene was captured from actual test-clock engine frames as a three-second, 10 fps H.264 clip. In the first traversal, the first house's cutaway left a floating door and also hid the second façade. A scratch-only change narrowed the cutaway to the first house's own parts; the inspected second timeline shows the character moving and the second façade remaining visible. The local clip is `assets-local/review/1154/regions-motion-v2-draft.mp4` (Main profile, level 4.1). This is not a pass: the house is a façade, and the gateway, lighting, clutter and framing still diverge from the reference. No clip has been submitted as a review round.
+
+## Placement integration probe
+
+The placement-plan helper was also exercised with the actual local CLIP vectors for the stall, cart and door crops, the 25 kit candidates, a reviewed door selection outside the top three, and a seeded dressing field with reserved columns. It preserved the selected door and returned the same three visual rankings as the local retrieval probe. For this plumbing check only, the four anchors mapped the image viewport to an arbitrary 8 × 8 square. Those are not verified ground-plane correspondences: the returned coordinates are diagnostic values, not a game map, and no placement accuracy or bake-off score is claimed from them. Candidate eligibility must be checked by the eventual caller before passing assets to this helper.
