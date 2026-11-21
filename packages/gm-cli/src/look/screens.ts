@@ -9,17 +9,24 @@ import { join } from 'node:path';
 export const DECISIONS = join('review', 'decisions.json');
 export const SCREEN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-export type Screen = { name: string; target?: string; provisional?: { owner: string; until: string } };
+export type Screen = {
+  name: string;
+  target?: string;
+  phase?: 'mock' | 'prototype' | 'build' | 'polish';
+  provisional?: { owner: string; until: string };
+};
 
 /** The screens with an approved target, sorted; [] when the game has no decisions file yet. */
 export function reviewScreens(game: string): Screen[] {
   const file = join(game, DECISIONS);
   if (!existsSync(file)) return [];
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as {
-    screens?: Record<string, { target?: unknown; provisional?: unknown }>;
+    screens?: Record<string, { target?: unknown; phase?: unknown; provisional?: unknown }>;
   };
   const screens = Object.entries(parsed.screens ?? {}).map(([name, entry]) => {
     if (!SCREEN.test(name)) throw new Error(`${DECISIONS}: screen "${name}" must be lowercase letters, digits and -`);
+    if (entry.phase !== undefined && !['mock', 'prototype', 'build', 'polish'].includes(String(entry.phase)))
+      throw new Error(`${DECISIONS}: screen "${name}" has an invalid approval phase`);
     let provisional: Screen['provisional'];
     if (entry.provisional !== undefined) {
       const value = entry.provisional;
@@ -39,7 +46,12 @@ export function reviewScreens(game: string): Screen[] {
     const target = typeof entry?.target === 'string' && entry.target !== '' ? entry.target : undefined;
     if (!target && !provisional)
       throw new Error(`${DECISIONS}: screen "${name}" has no target render or provisional scope`);
-    return { name, ...(target ? { target } : {}), ...(provisional ? { provisional } : {}) };
+    return {
+      name,
+      ...(target ? { target } : {}),
+      ...(entry.phase ? { phase: entry.phase as Screen['phase'] } : {}),
+      ...(provisional ? { provisional } : {}),
+    };
   });
   return screens.sort((a, b) => a.name.localeCompare(b.name));
 }

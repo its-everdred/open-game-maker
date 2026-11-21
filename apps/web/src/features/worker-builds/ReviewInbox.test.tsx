@@ -9,6 +9,8 @@ vi.mock('../../lib/api/client', () => ({ api }));
 afterEach(() => {
   cleanup();
   queryClient.clear();
+  sessionStorage.removeItem('ogm:answered-review-commands');
+  sessionStorage.removeItem('ogm:answered-review-game-ids');
   vi.clearAllMocks();
   vi.useRealTimers();
 });
@@ -46,7 +48,7 @@ it('answers a ledger round with a note and advances to the next review', async (
     </QueryClientProvider>,
   );
   expect(screen.getByText('2 left')).toBeVisible();
-  expect(screen.getByText('First?')).toBeVisible();
+  expect(screen.getAllByText('First?').length).toBeGreaterThan(0);
   expect(screen.queryByText('Second?')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Needs changes' }));
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'More contrast' } });
@@ -63,10 +65,103 @@ it('answers a ledger round with a note and advances to the next review', async (
     { timeout: 7000 },
   );
   await screen.findByText('Saved · sending to agent');
+  const answeredRow = screen.getByRole('button', { name: /First\?.*Answered in this session/ });
+  expect(answeredRow).toBeVisible();
+  fireEvent.click(answeredRow);
+  expect(screen.getAllByText('First?').length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(screen.getByText('Second?')).toBeVisible();
   expect(screen.getByText('1 left')).toBeVisible();
 }, 10000);
+
+it('restores a saved Command answer and resends its still-live Command', async () => {
+  const saved = {
+    id: 'r_1',
+    game_id: 'g',
+    job_id: null,
+    ticket: '45',
+    title: 'Castle',
+    command_id: 'c',
+    decision_id: 'd',
+    question: 'Which colors?',
+    option_id: 'b',
+    likes: [{ option_id: 'b', label: 'Blue' }],
+    dislikes: [{ option_id: 'a', label: 'Red', reason: 'Too dark' }],
+    notes: 'Keep the trim',
+    at: '2026-01-01T00:00:00Z',
+  };
+  api.mockImplementation((path: string) =>
+    Promise.resolve(path.endsWith('/reviews') ? { reviews: [saved] } : { status: 'answered' }),
+  );
+  const command = {
+    game_id: 'g',
+    game_title: 'Game',
+    job_id: null,
+    ticket: '45',
+    title: 'Castle',
+    command_id: 'c',
+    decision_id: 'd',
+    version: 2,
+    question: 'Which colors?',
+    blocking: true,
+    opened_at: '2026-01-01T00:00:00Z',
+    options: [
+      { id: 'a', label: 'Red', media: { url: '/red.png', width: 10, height: 10 } },
+      { id: 'b', label: 'Blue', media: { url: '/blue.png', width: 10, height: 10 } },
+    ],
+  };
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox reviews={[]} commands={[command]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(await screen.findByRole('button', { name: /Liked Blue.*disliked Red: Too dark.*Keep the trim/ }));
+  expect(screen.getByRole('button', { name: 'Pick A: Red' })).toBeVisible();
+  expect(screen.getByLabelText('Note (optional)')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Pick A: Red' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Send choice' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', expect.objectContaining({ method: 'POST' })),
+  );
+});
+
+it('keeps a core Command answer when the deck closes and reopens in the same session', async () => {
+  api.mockResolvedValue({ status: 'answered' });
+  const command = {
+    source: 'core' as const,
+    job_id: null,
+    ticket: '45',
+    title: 'Castle',
+    command_id: 'c',
+    decision_id: 'core-d',
+    version: 2,
+    question: 'Which colors?',
+    blocking: true,
+    opened_at: '2026-01-01T00:00:00Z',
+    options: [{ id: 'a', label: 'Red', media: { url: '/red.png', width: 10, height: 10 } }],
+  };
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox reviews={[]} commands={[command]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Pick A: Red' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Send choice' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/core/commands/core-d/answer', expect.objectContaining({ method: 'POST' })),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  view.unmount();
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox reviews={[]} commands={[]} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole('button', { name: /Answer saved in this session/ })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: /Answer saved in this session/ }));
+  expect(screen.getByText('Answer saved in this session.')).toBeVisible();
+  expect(screen.getByText('The worker already has this answer.')).toBeVisible();
+});
 
 it('opens the selected review while keeping the rest of the queue', () => {
   const first = {
@@ -323,7 +418,9 @@ it('asks for missing media on later cards without waiting for the creator to ope
   await waitFor(() => expect(api).toHaveBeenCalledWith('/games/g/review-rounds/b/missing-media', { method: 'POST' }));
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(await screen.findByText('Asked the agent for media in the next round.')).toBeVisible();
-  expect(api).toHaveBeenCalledTimes(1);
+  expect(api.mock.calls.filter(([path]) => typeof path === 'string' && path.endsWith('/missing-media'))).toHaveLength(
+    1,
+  );
 });
 
 it('lists a review-stage ticket without an artifact and asks its worker for media', async () => {

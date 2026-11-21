@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HD-2D · Pixel leaves</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #17231d; }
+    body { display: grid; place-items: center; }
+    #game { width: min(100vw, 960px); height: min(100vh, 600px); image-rendering: pixelated; }
+    canvas { image-rendering: pixelated; }
+    .caption { position: fixed; left: 16px; bottom: 12px; color: #d8dfc2; font: 12px ui-monospace, monospace; opacity: .72; }
+  </style>
+  <script src="../../node_modules/.pnpm/phaser@4.2.1/node_modules/phaser/dist/phaser.js"></script>
+</head>
+<body>
+  <div id="game"></div>
+  <div class="caption">PROCEDURAL PROOF · PHASER 4 · WIND-FIELD LEAVES</div>
+  <script>
+    const W = 480, H = 300;
+    class Leaves extends Phaser.Scene {
+      constructor() { super('leaves'); this.phase = 0; }
+      create() {
+        const g = this.add.graphics();
+        g.fillStyle(0x596a51, 1); g.fillRect(0, 0, W, H);
+        g.fillStyle(0x344a38, 1); g.fillEllipse(240, 195, 410, 175);
+        g.fillStyle(0x1e332b, 1); g.fillEllipse(240, 210, 250, 95);
+        for (let i = 0; i < 18; i++) {
+          const x = (i * 71) % W, y = 30 + (i * 37) % 155;
+          g.fillStyle(i % 2 ? 0x50684b : 0x708252, 0.28);
+          g.fillRect(x, y, 2, 44 + i % 28);
+        }
+        const leaf = this.textures.createCanvas('leaf', 8, 8);
+        const ctx = leaf.getContext();
+        ctx.imageSmoothingEnabled = false;
+        ctx.fillStyle = '#d7a84d'; ctx.fillRect(2, 0, 4, 2); ctx.fillRect(1, 2, 6, 3); ctx.fillRect(2, 5, 4, 2);
+        ctx.fillStyle = '#8b5935'; ctx.fillRect(3, 2, 1, 4); leaf.refresh();
+        this.leaves = this.add.particles(0, 0, 'leaf', {
+          x: { min: -20, max: W + 20 }, y: -12,
+          lifespan: { min: 4200, max: 7600 }, speedX: { min: -10, max: 14 },
+          speedY: { min: 18, max: 36 }, gravityY: 2, quantity: 1,
+          frequency: 150, scale: { start: 1.5, end: 1 }, alpha: { start: 1, end: 0.8 },
+          rotate: { min: 0, max: 360 }, tint: [0xe6bd63, 0xb77843, 0x82934e],
+          blendMode: 'NORMAL'
+        });
+      }
+      update(time, delta) {
+        this.phase += delta * 0.00038;
+        const gust = Math.sin(this.phase) * 22 + Math.sin(this.phase * 0.37) * 9;
+        this.leaves.setParticleSpeed(gust - 8, 24);
+      }
+    }
+    new Phaser.Game({ type: Phaser.CANVAS, parent: 'game', width: W, height: H,
+      backgroundColor: '#243a31', pixelArt: true, antialias: false,
+      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      scene: [Leaves] });
+  </script>
+</body>
+</html>

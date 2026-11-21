@@ -299,6 +299,7 @@ export const DecisionMediaSchema = z
 export const DecisionSchema = z
   .object({
     decision_id: z.string(),
+    route: z.string().nullable().optional(),
     version: z.number().int().positive(),
     ticket: z.object({ identifier: z.string() }).loose(),
     kind: z.string().nullable(),
@@ -323,6 +324,7 @@ export const DecisionSchema = z
       .optional(),
     context: z
       .object({
+        route: z.string().nullable().optional(),
         short_summary: z.string().nullable().optional(),
         long_context_markdown: z.string().nullable().optional(),
       })

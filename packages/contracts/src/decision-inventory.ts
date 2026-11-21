@@ -14,12 +14,18 @@ const DecisionOption = z
 export const CreatorDecision = z
   .object({
     id: z.string().trim().min(1).max(80),
+    command_id: z
+      .string()
+      .regex(/^cp_[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+      .nullable()
+      .optional(),
     area: z.string().trim().min(1).max(120),
     question: z.string().trim().min(1).max(120),
     why: z.string().trim().min(1).max(500),
     options: z.array(DecisionOption).min(2),
     recommendation: z.string().trim().min(1),
     sources: z.array(z.string().trim().min(1)),
+    phase: z.enum(['mock', 'prototype', 'build', 'polish']).optional(),
     ticket: z.number().int().positive().nullable(),
     status: z.enum(['open', 'asked', 'answered', 'defaulted']),
     answer: z.string().trim().min(1).nullable(),
@@ -35,10 +41,11 @@ export const CreatorDecision = z
       ctx.addIssue({ code: 'custom', path: ['answer'], message: 'answered decisions need answer and answered_at' });
     if (entry.status !== 'answered' && (entry.answer !== null || entry.answered_at !== null))
       ctx.addIssue({ code: 'custom', path: ['answer'], message: 'unanswered decisions need null answer fields' });
-    if (
+    const optionAnswer =
       entry.answer &&
-      !entry.options.some((option) => entry.answer === option.label || entry.answer?.startsWith(`${option.label}:`))
-    )
+      entry.options.some((option) => entry.answer === option.label || entry.answer?.startsWith(`${option.label}:`));
+    const noteOnlyAnswer = entry.status === 'answered' && entry.answer !== null && !optionAnswer;
+    if (entry.answer && !optionAnswer && !noteOnlyAnswer)
       ctx.addIssue({ code: 'custom', path: ['answer'], message: 'must match an option label' });
   });
 

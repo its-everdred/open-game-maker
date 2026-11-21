@@ -17,7 +17,7 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
 | Rung (label) | Effort | Deliver | Never |
 |---|---|---|---|
 | `phase:mock` | low | The cheapest thing the creator can judge: image mocks (imagegen), rough sound takes, a clip or paper mock of the gameplay. Each one is built from the real concept, cast and screen. | Production code, hand-coded SVG logos, generic stand-ins |
-| `phase:prototype` | medium | The approved mock, in context: rendered in the real scene, sound on its event, a playable greybox slice, a clickable screen in the shell | Polishing; drifting from the approved mock |
+| `phase:prototype` | medium | Three in-engine variations (A/B/C) of the approved mock, in context: rendered in the real scene, sound on its event, a playable greybox slice, a clickable screen in the shell | Polishing; drifting from the approved mock |
 | `phase:build` | xhigh | The real thing in the game, at every screen size, carrying the approved rung over exactly | Re-designing; dropping any approval note |
 | `phase:polish` | high | Rounds on the live build until the creator approves | Re-asking for a build he already judged |
 
@@ -35,7 +35,7 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
    close-ups (each item at least 150 px). Motion goes up as MP4 or GIF, sound as audio. Options must differ on what
    matters. Each must be a visible step toward the concept, never a near-copy of the current screen. For a look
    he dislikes, give five rendered options (A–E), starting from other games' screens. A round that mocks several
-   screens gives each screen its own option set; never one option that bundles screens together.
+   screens gives each screen its own option set; never one option that bundles screens together. At `phase:prototype`, deliver exactly three in-engine variations (A/B/C) of the approved mock in one round. Vary a meaningful visual axis such as palette, frame weight, or density; show each phone-first still or clip beside the approved mock and caption the decision it represents. For UI, use the web-design skills mapped to the visual lane (Impeccable) together with the game's art direction. Put all three media-backed options in one non-blocking Command; keep building and ship your recommendation as provisional while the creator decides.
 5. **Verify in the real game before posting:** app-shell stills of a fresh production build at all four sizes
    (390x844, 844x390, 820x1180 and 1180x820). Every in-game still must show the board filling the screen. For
    motion or sound, a `gm run` scenario clip. Never post estimates, fixture tests or a still that stopped short of

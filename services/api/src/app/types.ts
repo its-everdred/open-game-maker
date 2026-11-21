@@ -28,6 +28,7 @@ export interface AppDeps {
     instanceRepo: { owner: string; name: string };
     qaInstanceRepo?: { owner: string; name: string };
     coreRepo?: { owner: string; name: string };
+    pcCoreRepo?: { owner: string; name: string };
     instanceOwnerId?: string;
     gamesRoot: string;
     vapidKeyFile: string;

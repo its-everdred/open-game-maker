@@ -6,6 +6,7 @@ import { queryClient } from '../../app/query';
 import { api, ApiError } from '../../lib/api/client';
 import { answerJobCommand } from '../build-chat/commands';
 import type { CoreReviewCommand, ReviewTarget } from '../worker-builds/review-command';
+import { useMissingMedia } from '../worker-builds/MissingMedia';
 
 // The game's open aiur Commands (M3). Polling matches the build list: a Command opened by a running agent shows up
 // without a reload.
@@ -23,6 +24,11 @@ export function useGameCommands(gameId: string | null | undefined) {
     refetchInterval: POLL_MS,
     retry: false,
   });
+  const missingMediaPaths = (query.data?.missing_media_commands ?? []).map(
+    ({ game_id, decision_id }) =>
+      `/games/${encodeURIComponent(game_id)}/commands/${encodeURIComponent(decision_id)}/missing-media`,
+  );
+  useMissingMedia(missingMediaPaths);
   return { ...query, commands: query.data?.commands ?? EMPTY };
 }
 
@@ -58,6 +64,13 @@ export function useCreatorReviewCommands(creatorId: string | undefined) {
     refetchInterval: REVIEW_POLL_MS,
     retry: false,
   });
+  const missingMediaPaths = creatorId
+    ? (query.data?.missing_media_commands ?? []).map(
+        ({ game_id, decision_id }) =>
+          `/games/${encodeURIComponent(game_id)}/commands/${encodeURIComponent(decision_id)}/missing-media`,
+      )
+    : [];
+  useMissingMedia(missingMediaPaths);
   return {
     commands: creatorId ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS,
     error: query.isError || query.data?.unavailable === true,

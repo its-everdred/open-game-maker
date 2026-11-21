@@ -5,6 +5,11 @@ description: Load when a creation brief is vague or a choice could materially ch
 
 # Scope and options
 
+When creating tickets for creative work (towns, settings, screens, HUD, menus, title/loading/end screens, logos or
+thumbnails), file each ticket with `lane:creative phase:mock`. File sprite rebuild and variation tickets with
+`lane:clone`. Keep the phase label at the current deliverable rung; creative implementation starts only after the
+mock is approved.
+
 ## Recover the source of truth
 
 Read the job's scope ticket, current Agent Workpad, and `gm.lock.json` before proposing anything. The scope ticket

@@ -44,13 +44,26 @@ function game(): string {
   return root;
 }
 
-function requestCommand(root: string, argv: string[]) {
+function requestCommand(root: string) {
   const raw = execFileSync('cat', [join(root, '.gm', 'outbox', 'command.jsonl')], { encoding: 'utf8' })
     .split('\n')
     .filter((line) => line.trim())
     .map((line) => AgentOutboxLine.parse(JSON.parse(line)));
   const last = raw[raw.length - 1];
   return CommandRequestPayload.parse(last.payload);
+}
+
+async function mediaFlags(root: string, options: string[]): Promise<string[]> {
+  const flags: string[] = [];
+  for (const option of options) {
+    const image = join(root, `${option}.png`);
+    writeFileSync(image, `preview ${option}`);
+    const post = await gm(['chat', 'post', '--job', JOB_ID, '--text', `${option} preview`, '--image', image], {
+      cwd: root,
+    });
+    flags.push('--media', `${option}=${post.out[0]}`);
+  }
+  return flags;
 }
 
 /**
@@ -61,6 +74,7 @@ function requestCommand(root: string, argv: string[]) {
 describe('a rejected option never comes back', () => {
   it('withdraws the sibling Command and refuses the same options in a new session', async () => {
     const root = game();
+    const characterMedia = await mediaFlags(root, ['a', 'b']);
 
     // Session 1: the characters Command and the A–D look Command are both built on the same stand-ins.
     const characters = await gm(
@@ -75,6 +89,7 @@ describe('a rejected option never comes back', () => {
         'a=Stand-in A',
         '--option',
         'b=Stand-in B',
+        ...characterMedia,
         '--provenance',
         'a=@provenance/stand-in.json',
         '--provenance',
@@ -83,9 +98,10 @@ describe('a rejected option never comes back', () => {
       { cwd: root },
     );
     expect(characters).toMatchObject({ code: 0, err: [] });
-    const charactersCommand = requestCommand(root, []);
+    const charactersCommand = requestCommand(root);
     expect(charactersCommand.options[0]).toMatchObject({ id: 'a', provenance: { packs: ['stand-in'] } });
 
+    const lookMedia = await mediaFlags(root, ['a', 'b', 'c', 'd']);
     const look = await gm(
       [
         'command',
@@ -102,6 +118,7 @@ describe('a rejected option never comes back', () => {
         'c=Chunky 3D',
         '--option',
         'd=Flat 3D',
+        ...lookMedia,
         '--provenance',
         'a=@provenance/stand-in.json',
         '--provenance',
@@ -114,7 +131,7 @@ describe('a rejected option never comes back', () => {
       { cwd: root },
     );
     expect(look).toMatchObject({ code: 0, err: [] });
-    const lookCommand = requestCommand(root, []);
+    const lookCommand = requestCommand(root);
 
     // The creator's rejection: "those are not characters", because they were stand-ins, not KayKit.
     const rejection = await gm(
@@ -249,6 +266,7 @@ describe('a rejected option never comes back', () => {
     });
 
     // Asking for options again: the same four are refused at open time...
+    const refusedMedia = await mediaFlags(root, ['a', 'b']);
     const refused = await gm(
       [
         'command',
@@ -261,6 +279,7 @@ describe('a rejected option never comes back', () => {
         'a=Chunky',
         '--option',
         'b=Flat',
+        ...refusedMedia,
         '--provenance',
         'a=@provenance/stand-in.json',
         '--provenance',
@@ -290,6 +309,7 @@ describe('a rejected option never comes back', () => {
     expect(fresh).toMatchObject({ code: 0, err: [] });
     expect(fresh.out[0]).toContain('options ok');
 
+    const reopenedMedia = await mediaFlags(root, ['e', 'f']);
     const reopened = await gm(
       [
         'command',
@@ -302,6 +322,7 @@ describe('a rejected option never comes back', () => {
         'e=KayKit chunky',
         '--option',
         'f=KayKit flat',
+        ...reopenedMedia,
         '--provenance',
         'e=@provenance/kaykit.json',
         '--provenance',
@@ -310,6 +331,6 @@ describe('a rejected option never comes back', () => {
       { cwd: root },
     );
     expect(reopened).toMatchObject({ code: 0, err: [] });
-    expect(requestCommand(root, []).options.map((option) => option.id)).toEqual(['e', 'f']);
+    expect(requestCommand(root).options.map((option) => option.id)).toEqual(['e', 'f']);
   }, 60_000);
 });

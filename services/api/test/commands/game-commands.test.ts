@@ -1,5 +1,5 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
-import { CREATOR_AUDIENCE_MARKER, decisionKeyMarker, type OptionPlayable } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, decisionKeyMarker, playableMarker, type OptionPlayable } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -134,8 +134,8 @@ function command(
       decision_id: overrides.decision_id ?? `d_${id.slice(-6)}`,
       question: 'Which door?',
       options: overrides.options ?? [
-        { id: 'wood', label: 'Wooden door' },
-        { id: 'iron', label: 'Iron door' },
+        { id: 'wood', label: 'Wooden door', playable: { scenario: 'door=wood', seconds: 8 } },
+        { id: 'iron', label: 'Iron door', playable: { scenario: 'door=iron', seconds: 8 } },
       ],
       recommend: 'wood',
       blocking: true,
@@ -187,8 +187,8 @@ describe('game commands inbox', () => {
       version: 3,
     });
     expect(body.commands[0]!.options).toEqual([
-      { id: 'wood', label: 'Wooden door' },
-      { id: 'iron', label: 'Iron door' },
+      { id: 'wood', label: 'Wooden door', playable: { scenario: 'door=wood', seconds: 8 } },
+      { id: 'iron', label: 'Iron door', playable: { scenario: 'door=iron', seconds: 8 } },
     ]);
   });
 
@@ -267,7 +267,12 @@ describe('game commands inbox', () => {
     });
     command(deps, ids.job, ULID, {
       options: [
-        { id: 'wood', label: 'Wooden door', media_id: '01JBX2Q7M3K8V5N4R6T9W0YZAE' },
+        {
+          id: 'wood',
+          label: 'Wooden door',
+          media_id: '01JBX2Q7M3K8V5N4R6T9W0YZAE',
+          playable: { scenario: 'door=wood', seconds: 8 },
+        },
         { id: 'iron', label: 'Iron door', media_id: '01JBX2Q7M3K8V5N4R6T9W0YZAF' },
       ],
     });
@@ -279,11 +284,26 @@ describe('game commands inbox', () => {
       }>;
     };
 
-    expect(body.commands[0]!.ticket).toBe('478');
-    expect(body.commands[0]!.options[0]!.media).toMatchObject({ width: 320 });
-    expect(body.commands[0]!.options[0]!.media?.url).toContain('/blobs/');
-    // A media id that names no row in this job leaves the option without media.
-    expect(body.commands[0]!.options[1]).toEqual({ id: 'iron', label: 'Iron door' });
+    // A media id that names no row in this job makes the whole Command incomplete.
+    expect(body.commands).toEqual([]);
+
+    insertChatRow(deps.sqlite, {
+      id: '01JBX2Q7M3K8V5N4R6T9W0YZAF',
+      jobId: ids.job,
+      actor: 'agent',
+      kind: 'image',
+      media: { hash: `sha256:${'b'.repeat(64)}`, width: 240, height: 160 },
+    });
+    const complete = (await (await get(app, ids.game)).json()) as {
+      commands: Array<{
+        ticket: string | null;
+        options: Array<{ id: string; media?: { url: string; width: number } }>;
+      }>;
+    };
+    expect(complete.commands[0]!.ticket).toBe('478');
+    expect(complete.commands[0]!.options[0]!.media).toMatchObject({ width: 320 });
+    expect(complete.commands[0]!.options[0]!.media?.url).toContain('/blobs/');
+    expect(complete.commands[0]!.options[1]!.media).toMatchObject({ width: 240 });
   });
 
   // A gameplay-feel question (#608) is answered by playing each option, so the card needs the scenario the agent set.
@@ -309,8 +329,8 @@ describe('game commands inbox', () => {
     const { app, deps } = await appWithJobs();
     command(deps, ids.job, ULID, {
       options: [
-        { id: 'generated', label: 'Generated mock', aiGenerated: true },
-        { id: 'authored', label: 'Authored mock' },
+        { id: 'generated', label: 'Generated mock', aiGenerated: true, playable: { scenario: 'a=a', seconds: 8 } },
+        { id: 'authored', label: 'Authored mock', playable: { scenario: 'b=b', seconds: 8 } },
       ],
     });
 
@@ -319,8 +339,8 @@ describe('game commands inbox', () => {
     };
 
     expect(body.commands[0]!.options).toEqual([
-      { id: 'generated', label: 'Generated mock', aiGenerated: true },
-      { id: 'authored', label: 'Authored mock' },
+      { id: 'generated', label: 'Generated mock', aiGenerated: true, playable: { scenario: 'a=a', seconds: 8 } },
+      { id: 'authored', label: 'Authored mock', playable: { scenario: 'b=b', seconds: 8 } },
     ]);
   });
 
@@ -396,7 +416,15 @@ const decision = (overrides: Partial<Decision> = {}): Decision => ({
     { id: 'square', label: 'Square blobs' },
   ],
   recommendation: { option_id: 'round' },
-  context: { short_summary: 'Blobs look', long_context_markdown: CREATOR_AUDIENCE_MARKER },
+  context: {
+    short_summary: 'Blobs look',
+    long_context_markdown: `${CREATOR_AUDIENCE_MARKER}\n${playableMarker(
+      new Map([
+        ['round', { scenario: 'blobs=round', seconds: 8 }],
+        ['square', { scenario: 'blobs=square', seconds: 8 }],
+      ]),
+    )}`,
+  },
   answer: null,
   active_answer: null,
   created_at: '2026-11-04T12:00:00.000Z',
@@ -558,7 +586,9 @@ describe('a registered game’s own Commands', () => {
   });
 
   it('carries a review deck’s map into aiur and the ledger when no job owns the Command', async () => {
-    const { app, deps, answerAsCreator } = await appWithAiur([decision()]);
+    const { app, deps, answerAsCreator } = await appWithAiur([
+      decision({ context: { long_context_markdown: CREATOR_AUDIENCE_MARKER } }),
+    ]);
     const review = {
       likes: ['round'],
       dislikes: [{ option_id: 'square', reason: 'Too boxy for blobs' }],
@@ -592,7 +622,7 @@ describe('a registered game’s own Commands', () => {
       expect.objectContaining({
         game_id: ids.game,
         job_id: null,
-        title: 'Blobs look',
+        title: 'Which blobs?',
         command_id: 'd_aiur_1',
         option_id: 'round',
         likes: [{ option_id: 'round', label: 'Round blobs' }],
@@ -798,7 +828,9 @@ describe('a registered game’s own Commands', () => {
   });
 
   it('retains the owning job when a creator answers its review', async () => {
-    const { app, deps, answerAsCreator } = await appWithAiur([decision()]);
+    const { app, deps, answerAsCreator } = await appWithAiur([
+      decision({ context: { long_context_markdown: CREATOR_AUDIENCE_MARKER } }),
+    ]);
     job(deps, ids.job, ids.game, AT);
     deps.db.update(schema.jobs).set({ aiurIssueNumber: 478 }).run();
     command(deps, ids.job, ULID, {
@@ -904,12 +936,24 @@ describe('a registered game’s own Commands', () => {
   });
 });
 
-it('asks the owning worker once by stable message id when a command has no media', async () => {
-  const { app, deps } = await appWithAiur([decision()]);
+it('omits a Command with options missing media from the creator inbox', async () => {
+  const incomplete = decision({ context: { long_context_markdown: CREATOR_AUDIENCE_MARKER } });
+  const { app, deps } = await appWithAiur([incomplete]);
   const message = vi.fn().mockResolvedValue({ request_id: 'r' });
   deps.aiurClientForGame = async () =>
-    ({ decisions: async () => [decision()], decision: async () => decision(), message }) as unknown as AiurClient;
+    ({ decisions: async () => [incomplete], decision: async () => incomplete, message }) as unknown as AiurClient;
   const path = `/api/v1/games/${ids.game}/commands/d_aiur_1/missing-media`;
+  const inbox = (await (await get(app, ids.game)).json()) as {
+    commands: unknown[];
+    missing_media_commands: Array<{ game_id: string; decision_id: string }>;
+  };
+  expect(inbox.commands).toEqual([]);
+  expect(inbox.missing_media_commands).toContainEqual({ game_id: ids.game, decision_id: 'd_aiur_1' });
+  const reviewFeed = (await (
+    await app.request('/api/v1/me/commands?includeQuestions=1', { headers: asUser(ids.user) })
+  ).json()) as { commands: unknown[]; missing_media_commands: Array<{ game_id: string; decision_id: string }> };
+  expect(reviewFeed.commands).toEqual([]);
+  expect(reviewFeed.missing_media_commands).toContainEqual({ game_id: ids.game, decision_id: 'd_aiur_1' });
   expect((await app.request(path, { method: 'POST', headers: asUser(ids.outsider) })).status).toBeGreaterThanOrEqual(
     400,
   );
@@ -921,6 +965,27 @@ it('asks the owning worker once by stable message id when a command has no media
     'review-media:d_aiur_1:2',
     expect.any(AbortSignal),
   );
+});
+
+it('does not advertise ticketless incomplete Commands as media-repair actions', async () => {
+  const ticketless = decision({
+    ticket: null,
+    context: { long_context_markdown: CREATOR_AUDIENCE_MARKER },
+  });
+  const { app } = await appWithAiur([ticketless]);
+  const reviewFeed = (await (
+    await app.request('/api/v1/me/commands?includeQuestions=1', { headers: asUser(ids.user) })
+  ).json()) as { missing_media_commands: Array<{ game_id: string; decision_id: string }> };
+  expect(reviewFeed.missing_media_commands).toEqual([]);
+});
+
+it('keeps playable-only reviews out of the missing-media repair feed', async () => {
+  const { app } = await appWithAiur([decision()]);
+  const reviewFeed = (await (
+    await app.request('/api/v1/me/commands?includeQuestions=1', { headers: asUser(ids.user) })
+  ).json()) as { commands: Array<{ decision_id: string }>; missing_media_commands: unknown[] };
+  expect(reviewFeed.commands).toContainEqual(expect.objectContaining({ decision_id: 'd_aiur_1' }));
+  expect(reviewFeed.missing_media_commands).toEqual([]);
 });
 
 it('lists and answers core Commands only for the instance owner', async () => {
@@ -973,23 +1038,64 @@ it('lists and answers core Commands only for the instance owner', async () => {
     answerAsCreator,
     message,
   } as unknown as AiurClient;
+  const pcDecision = decision({ decision_id: 'd_pc_9', ticket: { identifier: '7' } });
+  const pcAnswer = vi.fn().mockResolvedValue(undefined);
+  deps.registry.coreAiurClients = [
+    { id: 'core', client: deps.registry.coreAiurClient, repo: deps.config.coreRepo },
+    {
+      id: 'pc',
+      client: {
+        decisions: vi.fn().mockResolvedValue([pcDecision]),
+        decision: vi.fn().mockResolvedValue(pcDecision),
+        issue: vi.fn().mockResolvedValue({ status: 'open' }),
+        answerAsCreator: pcAnswer,
+      } as unknown as AiurClient,
+      repo: { owner: 'fixture', name: 'pc-core' },
+    },
+  ];
   expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.outsider) })).status).toBe(403);
   const page = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
-  expect(await page.json()).toMatchObject({
-    targets: [{ source: 'core', ticket: '479', title: 'Review core build' }],
-    commands: [
-      {
-        source: 'core',
-        decision_id: 'd_aiur_1',
-        options: [{ media: { url: 'https://example.test/a.png' } }, { media: { url: 'https://example.test/b.png' } }],
-      },
-    ],
+  const pageBody = await page.json();
+  expect(pageBody).toMatchObject({
+    targets: expect.arrayContaining([
+      expect.objectContaining({ source: 'core', daemon: 'core', ticket: '479', title: 'Review core build' }),
+    ]),
+    commands: expect.arrayContaining([
+      expect.objectContaining({ source: 'core', daemon: 'core', decision_id: 'd_aiur_1' }),
+    ]),
   });
+  expect(pageBody.commands).toEqual(
+    expect.arrayContaining([expect.objectContaining({ decision_id: 'd_pc_9', daemon: 'pc' })]),
+  );
+  expect(
+    await (await app.request('/api/v1/core/tickets/7/state?daemon=pc', { headers: asUser(ids.user) })).json(),
+  ).toEqual({ state: 'open' });
+  const pcAnswerResponse = await app.request('/api/v1/core/commands/d_pc_9/answer?daemon=pc', {
+    method: 'POST',
+    headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+    body: JSON.stringify({ option_id: 'round', version: 2 }),
+  });
+  expect(pcAnswerResponse.status).toBe(200);
+  expect(pcAnswer).toHaveBeenCalled();
+  const pcEntry = deps.registry.coreAiurClients[1]!;
+  deps.registry.coreAiurClients[1] = {
+    ...pcEntry,
+    client: { decisions: vi.fn().mockRejectedValue(new AiurHttpError(503, 'unavailable')) } as unknown as AiurClient,
+  };
+  const pcDown = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
+  expect(pcDown).toMatchObject({
+    targetsUnavailable: true,
+    commands: expect.arrayContaining([expect.objectContaining({ daemon: 'core' })]),
+  });
+  deps.registry.coreAiurClients[1] = pcEntry;
   deps.registry.reviewEpisode = async () => '100@2026-01-01T00:00:00Z';
   const originalTracker = deps.registry.trackerTickets!;
   deps.registry.trackerTickets = async () => ({ stale: true, tickets: [] });
   const partial = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
-  expect(partial).toMatchObject({ targetsUnavailable: true, commands: [{ decision_id: 'd_aiur_1' }] });
+  expect(partial).toMatchObject({
+    targetsUnavailable: true,
+    commands: expect.arrayContaining([expect.objectContaining({ decision_id: 'd_aiur_1' })]),
+  });
   expect(
     (await app.request('/api/v1/core/tickets/479/missing-review', { method: 'POST', headers: asUser(ids.user) }))
       .status,
@@ -1066,6 +1172,7 @@ it('lists and answers core Commands only for the instance owner', async () => {
   });
   expect(pending.status).toBe(409);
   deps.registry.coreAiurClient = null;
+  deps.registry.coreAiurClients = [];
   expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).status).toBe(503);
 });
 

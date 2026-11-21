@@ -84,7 +84,6 @@ export const command: GmCommand = {
     const payload = await requestCommand(ctx, flags, {
       name: 'decide',
       maxOptions: MAX_COMMAND_OPTIONS,
-      mediaOnEveryOption: true,
       topic,
       blocking: flags.blocking === true,
     });

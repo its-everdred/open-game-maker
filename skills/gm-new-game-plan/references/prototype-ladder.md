@@ -20,7 +20,7 @@ build with it. A stage that is only judged against the stage before it can never
 | 4 | **Video to real gameplay** | The approved clips implemented as playable slices that look and sound like the clips; the video-to-game study and compare scripts make the side-by-side | Play-then-vote cards beside the approved clip (`gm decide --playable`) | role:gameplay, role:qa |
 | 5 | **Gameplay iterations** | Tuned snippets (feel, speed, difficulty, modes) as playable variants | Play-then-vote per variant, one feature at a time | role:gameplay, role:qa |
 
-One feature ticket carries the union of roles needed across its activities, plus `game:<slug>`. The five activities map to the four `gm-prototype` phases: concepts to mock, dioramas and clips to prototype, playable slices to build, and iterations to polish.
+One feature ticket carries the union of roles needed across its activities, plus `game:<slug>`. The five activities map to the four `gm-prototype` phases: concepts to mock, dioramas and clips to prototype, playable slices to build, and iterations to polish. Every `phase:prototype` round delivers three in-engine variations (A/B/C) of the approved mock; for UI, use the mapped web-design skills and the game's art direction. Show each phone-first still or clip beside the approved mock with its own decision caption in one non-blocking Command, and continue building the recommended option while the creator decides.
 
 ## Rules
 

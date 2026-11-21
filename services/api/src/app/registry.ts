@@ -91,6 +91,11 @@ export interface Registry {
   chatJobs: ChatJobDirectory | null;
   aiurClientFor: AiurClientResolver | null;
   coreAiurClient: import('@ogm/aiur-client').AiurClient | null;
+  coreAiurClients: {
+    id: 'core' | 'pc';
+    client: import('@ogm/aiur-client').AiurClient;
+    repo?: { owner: string; name: string };
+  }[];
   workerWorkpad: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   workerTitle: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   trackerTickets:
@@ -132,6 +137,7 @@ export function createRegistry(): Registry {
     chatJobs: null,
     aiurClientFor: null,
     coreAiurClient: null,
+    coreAiurClients: [],
     workerWorkpad: null,
     workerTitle: null,
     trackerTickets: null,

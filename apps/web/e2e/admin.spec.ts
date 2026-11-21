@@ -155,8 +155,9 @@ test('persists confirmed admin changes, retries failures, and refetches their vi
   await activate(page.getByRole('button', { name: 'Confirm' }));
   expect((await delistResponse).status()).toBe(204);
   await expect.poll(() => requests.delists).toBe(1);
-  await expect(page.getByRole('row').filter({ hasText: game.title })).toContainText('delisted');
+  // The dialog closes only after the refetch, so wait for it before reading the row.
   await expect(page.getByRole('alertdialog')).not.toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('row').filter({ hasText: game.title })).toContainText('delisted');
 
   const buildsBeforeFlag = requests.buildGets;
   requests.holdFlags = true;

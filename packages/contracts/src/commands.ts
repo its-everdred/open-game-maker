@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { Id, IsoTime } from './api.js';
 import { ChatMedia, OptionPlayable } from './chat.js';
+import { MediaMeta, MediaLayout } from './media-meta.js';
 
 // The per-game Commands inbox (M3, A2a): one game's open aiur Commands in the shape the embeddable
 // `<aiur-commands>` component consumes (aiur#7487). A Command is one open aiur decision; a job's Command is answered
@@ -13,6 +14,8 @@ export const CommandOption = z.object({
   // Present when the option carries media (A1 rich Commands). OGM signs the same blob URLs the chat uses. `kind` is set
   // when the media names its type (an aiur Command's media does): a clip with no poster is still a clip.
   media: ChatMedia.extend({ kind: z.enum(['image', 'video', 'audio']).optional() }).optional(),
+  meta: MediaMeta.optional(),
+  layout: MediaLayout.optional(),
   // A sound that goes with a picture: a character card shows its portrait in `media` and plays its voice from here.
   audio: ChatMedia.optional(),
   // Additional sound samples attached to the same option.
@@ -68,9 +71,14 @@ export const GameCommand = z.object({
   text_only: z.boolean().optional(),
 });
 
+export const MissingMediaCommand = z.object({ game_id: Id, decision_id: z.string().min(1) });
+
 // GET /api/v1/games/:gameId/commands → the open Commands of every job the caller can edit in that game, plus the
 // Commands its own aiur instance holds for it when no job owns them.
-export const GameCommandsPage = z.object({ commands: z.array(GameCommand) });
+export const GameCommandsPage = z.object({
+  commands: z.array(GameCommand),
+  missing_media_commands: z.array(MissingMediaCommand).optional(),
+});
 
 // GET /api/v1/me/commands → the open player-facing Commands of every game the caller can edit, for the menu's decision
 // inbox: blocking first, then the longest waiting. Each names its game so the deck answers through that game's route.
@@ -90,12 +98,14 @@ export const QuestionSession = z.object({
 export const CreatorCommandsPage = z.object({
   commands: z.array(CreatorCommand),
   question_sessions: z.array(QuestionSession).optional(),
+  missing_media_commands: z.array(MissingMediaCommand).optional(),
 });
 
 export type CommandOption = z.infer<typeof CommandOption>;
 export type GameCommand = z.infer<typeof GameCommand>;
 export type GameCommandsPage = z.infer<typeof GameCommandsPage>;
 export type CreatorCommand = z.infer<typeof CreatorCommand>;
+export type MissingMediaCommand = z.infer<typeof MissingMediaCommand>;
 export type QuestionSession = z.infer<typeof QuestionSession>;
 export type CreatorCommandsPage = z.infer<typeof CreatorCommandsPage>;
 

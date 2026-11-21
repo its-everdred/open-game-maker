@@ -20,6 +20,8 @@ describe('gm-scope-options skill', () => {
     expect(text).toContain('## Acceptance');
     expect(text).toContain('observable keep and kill criteria');
     expect(text).toContain("defaults I'd reach for");
+    expect(text).toContain('`lane:creative phase:mock`');
+    expect(text).toContain('`lane:clone`');
     expect(checkSkill(SKILL, { commands, sdkExports: {} })).toEqual({ commands: [], sdk: [] });
   }, 30_000);
 });

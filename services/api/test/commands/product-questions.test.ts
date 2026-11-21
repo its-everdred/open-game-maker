@@ -126,13 +126,13 @@ describe('the product-question queue', () => {
     });
 
     const menu = await read(deps, '/me/commands');
-    expect(menu.commands.map(({ decision_id }) => decision_id)).toEqual(['d_look']);
+    expect(menu.commands.map(({ decision_id }) => decision_id)).toEqual([]);
     const review = await read(deps, '/me/commands?includeQuestions=1');
-    expect(review.commands).toHaveLength(10);
+    expect(review.commands).toHaveLength(9);
     // Castle has four: below the threshold, so nothing is offered for it yet.
     expect(menu.question_sessions).toEqual([{ game_id: ids.blobs, game_title: 'Blobs', count: 5 }]);
     const inbox = await read(deps, `/games/${ids.blobs}/commands`);
-    expect(inbox.commands.map(({ decision_id }) => decision_id)).toEqual(['d_look']);
+    expect(inbox.commands.map(({ decision_id }) => decision_id)).toEqual([]);
   });
 
   // Without a voice host there is no voice chat to ask them in, so they must not vanish: they show like any decision.

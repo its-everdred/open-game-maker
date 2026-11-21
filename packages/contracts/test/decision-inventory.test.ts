@@ -29,4 +29,21 @@ describe('creator decision inventory', () => {
       DecisionInventory.safeParse([{ ...entry, status: 'answered', answer: 'Slimes', answered_at: null }]).success,
     ).toBe(false);
   });
+
+  it('accepts note-only answers and preserves note text containing colons', () => {
+    const parsed = DecisionInventory.safeParse([
+      {
+        ...entry,
+        status: 'answered',
+        answer: 'Kevin: use the blue one',
+        answered_at: '2026-11-21T00:00:00.000Z',
+      },
+    ]);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('accepts only a known approval phase', () => {
+    expect(DecisionInventory.safeParse([{ ...entry, phase: 'prototype' }]).success).toBe(true);
+    expect(DecisionInventory.safeParse([{ ...entry, phase: 'review' }]).success).toBe(false);
+  });
 });

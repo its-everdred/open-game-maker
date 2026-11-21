@@ -66,6 +66,58 @@ class Library(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_unconfirmed_drop_licenses_keep_strict_rights(self):
+        for vendor, licence in [('caseportman', 'caseportman-royalty-free'), ('tinyrpg', 'unknown-itch-free')]:
+            pid = vendor + '-test'
+            add_pack(self.root, pid, vendor, licence, {'sample.png': png(1, 1)})
+            self.assertEqual(bcc.run(self.root, only=pid)['failures'], {})
+            rights = card_of(self.root, pid)['rights']
+            self.assertEqual(rights['uses'], ['vision-input'])
+            self.assertEqual(rights['audience'], 'private')
+            self.assertEqual(rights['redistribution'], 'none')
+            self.assertEqual(rights['processing'], 'local-only')
+
+    def test_rebuild_keeps_only_matching_licence_confirmation(self):
+        pid = 'caseportman-test'
+        pack = add_pack(self.root, pid, 'caseportman', 'caseportman-royalty-free', {'sample.png': png(1, 1)})
+        self.assertEqual(bcc.run(self.root, only=pid)['failures'], {})
+        card = card_of(self.root, pid)
+        licence = card['rights']['basis'][0]
+        licence['confirmed_by'] = 'kevin'
+        card['rights']['basis'] = [licence]
+        (pack / 'collection.card.json').write_text(json.dumps(card))
+        self.assertEqual(bcc.run(self.root, only=pid)['failures'], {})
+        self.assertEqual(card_of(self.root, pid)['rights']['audience'], 'public')
+        self.assertIn('confirmed 2026-10-30 (prior collection)', card_of(self.root, pid)['provenance']['rights']['input'])
+        manifest = json.loads((pack / 'pack.json').read_text())
+        manifest['current'] = '2.0'
+        manifest['versions']['2.0'] = manifest['versions']['1.0']
+        (pack / 'pack.json').write_text(json.dumps(manifest))
+        self.assertEqual(bcc.run(self.root, only=pid)['failures'], {})
+        self.assertEqual(card_of(self.root, pid)['rights']['audience'], 'private')
+        manifest['current'] = '1.0'
+        (pack / 'pack.json').write_text(json.dumps(manifest))
+        # Restore the confirmed old version to check changed evidence separately.
+        (pack / 'collection.card.json').write_text(json.dumps(card))
+        card = card_of(self.root, pid)
+        card['rights']['basis'][0]['ref'] = 'different-evidence.txt'
+        (pack / 'collection.card.json').write_text(json.dumps(card))
+        self.assertEqual(bcc.run(self.root, only=pid)['failures'], {})
+        self.assertEqual(card_of(self.root, pid)['rights']['audience'], 'private')
+
+    def test_tinyrpg_reader_measures_animation_strips(self):
+        paths = {f'Characters(100x100 split)/Orc/Orc/Orc_{action}.png': png(frames * 100, 100)
+                 for action, frames in [('Idle', 6), ('Walk', 8), ('Attack01', 6),
+                                        ('Attack02', 6), ('Hurt', 4), ('Death', 4)]}
+        paths['Characters(100x100 split)/Orc/Orc with shadows/Orc_Idle.png'] = png(600, 100)
+        pack = add_pack(self.root, 'tinyrpg-characters-01-soldier-orc', 'tinyrpg', 'unknown-itch-free', paths)
+        self.assertEqual(bcc.run(self.root, only=pack.name)['failures'], {})
+        item, = (pack / 'cards').rglob('*.card.json')
+        card = json.loads(item.read_text())
+        self.assertTrue(validator_ok(item, pack / 'collection.card.json'))
+        self.assertEqual(len(card['sprite']['animations'][1]['frames']), 8)
+        self.assertEqual(len(card['sprite']['animations'][0]['sheets']), 2)
+
     def test_limezu_reader_writes_valid_item_cards_from_canonical_size(self):
         pack = add_pack(self.root, 'limezu-modern-farm', 'limezu', 'limezu-standard', {
             '32x32/Animated_32x32/Animated_sheets_32x32/Cow_32x32.png': png(32, 32),

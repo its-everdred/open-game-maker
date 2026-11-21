@@ -95,6 +95,7 @@ const deps: AppDeps = {
     instanceRepo: parseRepositoryName(env.OGM_INSTANCE_REPO),
     qaInstanceRepo: env.OGM_QA_INSTANCE_REPO ? parseRepositoryName(env.OGM_QA_INSTANCE_REPO) : undefined,
     coreRepo: env.OGM_CORE_BUMP_CORE_REPO ? parseRepositoryName(env.OGM_CORE_BUMP_CORE_REPO) : undefined,
+    pcCoreRepo: env.OGM_CORE_PC_REPO ? parseRepositoryName(env.OGM_CORE_PC_REPO) : undefined,
     instanceOwnerId: env.OGM_INSTANCE_OWNER_ID,
     gamesRoot: env.OGM_GAMES_ROOT ?? join(env.OGM_DATA_DIR, '..', 'games'),
     vapidKeyFile: env.OGM_VAPID_KEY_FILE,
@@ -136,6 +137,18 @@ if (env.AIUR_API_URL && env.AIUR_API_TOKEN) {
     baseUrl: env.AIUR_API_URL,
     token: env.AIUR_API_TOKEN,
     supervisorToken: env.AIUR_API_TOKEN,
+  });
+  deps.registry.coreAiurClients.push({ id: 'core', client: deps.registry.coreAiurClient, repo: deps.config.coreRepo });
+}
+if (env.OGM_CORE_PC_AIUR_URL && env.OGM_CORE_PC_AIUR_TOKEN) {
+  deps.registry.coreAiurClients.push({
+    id: 'pc',
+    client: createAiurClient({
+      baseUrl: env.OGM_CORE_PC_AIUR_URL,
+      token: env.OGM_CORE_PC_AIUR_TOKEN,
+      supervisorToken: env.OGM_CORE_PC_AIUR_TOKEN,
+    }),
+    repo: deps.config.pcCoreRepo,
   });
 }
 deps.registry.draftScopeAssistant = {

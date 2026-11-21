@@ -10,6 +10,9 @@ export const apiEnvSpec = {
   OGM_API_PORT: { kind: 'port' },
   AIUR_API_URL: { kind: 'url', required: false },
   AIUR_API_TOKEN: { kind: 'secret', required: false },
+  OGM_CORE_PC_AIUR_URL: { kind: 'url', required: false },
+  OGM_CORE_PC_AIUR_TOKEN: { kind: 'secret', required: false },
+  OGM_CORE_PC_REPO: { kind: 'string', required: false },
   OGM_CORE_BUMP_CORE_REPO: { kind: 'string', required: false },
   OGM_ANALYTICS_RETENTION_DAYS: { kind: 'int', default: '90' },
   OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: { kind: 'int', default: '5000000' },
@@ -98,6 +101,15 @@ export function loadApiEnv(source?: Record<string, string | undefined>) {
     !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(env.AIUR_API_URL).hostname)
   ) {
     throw new ConfigError('api', [], [{ name: 'AIUR_API_URL', reason: 'must be a loopback URL' }]);
+  }
+  if (
+    env.OGM_CORE_PC_AIUR_URL !== undefined &&
+    !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(env.OGM_CORE_PC_AIUR_URL).hostname)
+  ) {
+    throw new ConfigError('api', [], [{ name: 'OGM_CORE_PC_AIUR_URL', reason: 'must be a loopback URL' }]);
+  }
+  if ((env.OGM_CORE_PC_AIUR_URL === undefined) !== (env.OGM_CORE_PC_AIUR_TOKEN === undefined)) {
+    throw new ConfigError('api', ['OGM_CORE_PC_AIUR_URL', 'OGM_CORE_PC_AIUR_TOKEN'], []);
   }
   const voiceUrl = env.OGM_VOICE_HOST_INTERNAL_URL;
   if (voiceUrl !== undefined && !['127.0.0.1', 'localhost'].includes(new URL(voiceUrl).hostname)) {

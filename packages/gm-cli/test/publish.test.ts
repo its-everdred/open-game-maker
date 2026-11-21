@@ -43,6 +43,7 @@ function writeGame(repo: string, marker: string): void {
     join(game, 'build.sh'),
     [
       'set -eu',
+      'if [[ -n ${ASSET_CACHE_SENTINEL:-} ]]; then test "$(cat .gm/cache/assets/sentinel)" = "$ASSET_CACHE_SENTINEL"; fi',
       'printf "%s\\n" "$*" > "$BUILD_ARGS_LOG"',
       'printf "token=%s mode=%s assets=%s\\n" "${OGM_INTERNAL_TOKEN:-}" "$NODE_ENV" "${OGM_ASSETS_ROOT:-}" > "$BUILD_ENV_LOG"',
       'mkdir -p dist/design dist/assets',
@@ -266,6 +267,21 @@ describe('gm publish', () => {
     // The scratch worktree and the archive are gone.
     expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  it('seeds generated asset cache files into the fresh publish worktree', async () => {
+    const cache = join(checkout, 'games', 'blobs', '.gm', 'cache', 'assets');
+    mkdirSync(cache, { recursive: true });
+    writeFileSync(join(cache, 'sentinel'), 'reusable cache');
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_cache","buildId":"build_cache"}' };
+
+    const run = await publish(['blobs', '--sha', staleSha, '--api', api], {
+      env: { OGM_INTERNAL_TOKEN: TOKEN, ASSET_CACHE_SENTINEL: 'reusable cache' },
+    });
+
+    expect(run.code).toBe(0);
+    expect(run.err).toEqual([]);
+    expect(readFileSync(join(cache, 'sentinel'), 'utf8')).toBe('reusable cache');
   });
 
   it('posts fallback content and reports an attention when a merged PR body cannot be read', async () => {

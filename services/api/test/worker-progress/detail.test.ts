@@ -221,10 +221,12 @@ describe('ticket detail media copies', () => {
     const first = (await (await get('11')).json()) as { media: unknown[]; mediaPending: number };
     expect(first).toMatchObject({ media: [], mediaPending: 1 });
     finish();
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const second = (await (await get('11')).json()) as { media: unknown[]; mediaPending: number };
+    let second!: { media: unknown[]; mediaPending: number };
+    await vi.waitFor(async () => {
+      second = (await (await get('11')).json()) as { media: unknown[]; mediaPending: number };
+      expect(second.mediaPending).toBe(0);
+    });
     expect(second.media).toHaveLength(1);
-    expect(second.mediaPending).toBe(0);
     expect(ticketDetailMedia).toHaveBeenCalledTimes(1);
   });
 

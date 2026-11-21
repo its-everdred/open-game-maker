@@ -1,5 +1,5 @@
 import type { AiurClient, Decision } from '@ogm/aiur-client';
-import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, reviewMetaMarker } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -103,8 +103,8 @@ const decision = (id: string, overrides: Partial<Decision> = {}): Decision => ({
   reversibility: 'reversible',
   question: `Question ${id}?`,
   options: [
-    { id: 'a', label: 'A' },
-    { id: 'b', label: 'B' },
+    { id: 'a', label: 'A', media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/a.png' } }] },
+    { id: 'b', label: 'B', media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/b.png' } }] },
   ],
   recommendation: { option_id: 'a' },
   context: { short_summary: `Topic ${id}`, long_context_markdown: CREATOR_AUDIENCE_MARKER },
@@ -127,6 +127,34 @@ async function read(deps: ReturnType<typeof makeDeps>, path: string, userId: str
 }
 
 describe('the creator’s decision inbox', () => {
+  it('lists marker metadata and layout on /me/commands', async () => {
+    const deps = seed();
+    const metadata = reviewMetaMarker(
+      new Map([
+        [
+          'a',
+          { meta: { kind: 'image generation', model: 'gpt-image-1' }, layout: { row: 'hero', stage: 'candidate' } },
+        ],
+      ]),
+    );
+    serveAiur(deps, {
+      [ids.blobs]: [
+        decision('d_metadata', {
+          context: { short_summary: 'Look', long_context_markdown: `${CREATOR_AUDIENCE_MARKER}\n${metadata}` },
+        }),
+      ],
+    });
+    const response = await read(deps, '/me/commands');
+    const body = (await response.json()) as {
+      commands: Array<{ options: Array<{ meta?: unknown; layout?: unknown }> }>;
+    };
+    expect(response.status).toBe(200);
+    expect(body.commands[0]!.options[0]).toMatchObject({
+      meta: { kind: 'image generation' },
+      layout: { row: 'hero', stage: 'candidate' },
+    });
+  });
+
   it('lists every game’s player-facing Commands, blocking first and then the longest waiting', async () => {
     const deps = seed();
     serveAiur(deps, {
@@ -159,6 +187,33 @@ describe('the creator’s decision inbox', () => {
         decision('d_player'),
         decision('d_engineering', { context: { short_summary: 'Vision broker returns 402' } }),
         decision('d_ops', { context: { short_summary: 'Rotate token' } }),
+      ],
+    });
+
+    const menu = (await (await read(deps, '/me/commands')).json()) as { commands: Array<{ decision_id: string }> };
+    const inbox = (await (await read(deps, `/games/${ids.blobs}/commands`)).json()) as {
+      commands: Array<{ decision_id: string }>;
+    };
+
+    expect(menu.commands.map((command) => command.decision_id)).toEqual(['d_player']);
+    expect(inbox.commands.map((command) => command.decision_id)).toEqual(['d_player']);
+  });
+
+  it('keeps operations Commands off creator feeds even when their context has a creator marker', async () => {
+    const deps = seed();
+    serveAiur(deps, {
+      [ids.blobs]: [
+        decision('d_player'),
+        ...['dispatch_stopped', 'claim', 'tracker', 'budget', 'ci'].map((kind) =>
+          decision(`d_${kind}`, { kind, context: { long_context_markdown: CREATOR_AUDIENCE_MARKER } }),
+        ),
+        decision('d_route_claim', {
+          route: 'claim_failed',
+          context: { long_context_markdown: CREATOR_AUDIENCE_MARKER },
+        }),
+        decision('d_context_budget', {
+          context: { route: 'budget_limit', long_context_markdown: CREATOR_AUDIENCE_MARKER },
+        }),
       ],
     });
 
@@ -343,8 +398,8 @@ describe('a job’s Commands in the decision inbox', () => {
         version: 1,
         question: 'Which door?',
         options: [
-          { id: 'wood', label: 'Wooden door' },
-          { id: 'iron', label: 'Iron door' },
+          { id: 'wood', label: 'Wooden door', playable: { scenario: 'door=wood', seconds: 8 } },
+          { id: 'iron', label: 'Iron door', playable: { scenario: 'door=iron', seconds: 8 } },
         ],
         status: 'open',
       },
@@ -393,7 +448,7 @@ describe('a job’s Commands in the decision inbox', () => {
 
   // The poller mirrors the job ticket's aiur decisions into Commands; the creator audience and the short topic must
   // survive that copy, or every mirrored decision would vanish from the menu (or every one would show).
-  it('keeps a mirrored decision’s audience and topic, and shows only the creator’s', async () => {
+  it('omits a mirrored review until every option has renderable media', async () => {
     const deps = seed();
     serveAiur(deps, {});
     seedJob(deps);
@@ -401,6 +456,18 @@ describe('a job’s Commands in the decision inbox', () => {
       decision('d_mirror_player', {
         kind: 'native_question',
         context: { short_summary: 'Gate colour', long_context_markdown: CREATOR_AUDIENCE_MARKER },
+        options: [
+          {
+            id: 'a',
+            label: 'A',
+            media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/a.png' } }],
+          },
+          {
+            id: 'b',
+            label: 'B',
+            media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/b.png' } }],
+          },
+        ],
       }),
       decision('d_mirror_eng', { kind: 'native_question', context: { short_summary: 'CI is red' } }),
     ];
@@ -411,15 +478,7 @@ describe('a job’s Commands in the decision inbox', () => {
     expect(deps.sqlite.prepare(`SELECT id FROM build_chat_messages WHERE kind = 'command'`).all()).toHaveLength(1);
     const body = (await (await read(deps, '/me/commands')).json()) as { commands: Array<Record<string, unknown>> };
 
-    expect(body.commands).toEqual([
-      expect.objectContaining({
-        decision_id: 'd_mirror_player',
-        job_id: ids.job,
-        title: 'Gate colour',
-        summary: 'Gate colour',
-        game_title: 'Blobs',
-      }),
-    ]);
+    expect(body.commands).toEqual([]);
   });
 
   it('keeps a builder’s own command, which asks the player by construction', async () => {

@@ -33,8 +33,10 @@ export const command: GmCommand = {
     const recommendationReason = recommendedOption
       ? entry.recommendation.slice(recommendedOption.label.length + 1).trim()
       : entry.why;
-    if (alreadyAsked(readDecisions(gameDir(ctx.cwd)), topic, entry.question)) {
+    const prior = alreadyAsked(readDecisions(gameDir(ctx.cwd)), topic, entry.question);
+    if (prior) {
       entry.status = 'asked';
+      entry.command_id = prior.command;
       writeInventory(file, inventory);
       ctx.out(`decision ${entry.id} was already asked; synchronized inventory status`);
       return EXIT.ok;
@@ -68,7 +70,25 @@ export const command: GmCommand = {
         mediaIds.push(post.id);
       }
     }
-    const result = await decide.run(ctx, [], {
+    const decideContext = {
+      ...ctx,
+      out(line: string) {
+        let output = line;
+        try {
+          const printed = JSON.parse(line) as {
+            emit_event?: { name: string; payload: Record<string, unknown> };
+          };
+          if (printed.emit_event?.name === 'decision.requested') {
+            printed.emit_event.payload.questions = [{ multi_select: true }];
+            output = JSON.stringify(printed, null, ctx.json ? undefined : 2);
+          }
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+        }
+        ctx.out(output);
+      },
+    };
+    const result = await decide.run(decideContext, [], {
       topic,
       question: entry.question,
       option: entry.options.map((option, index) => `${ids[index]}=${option.label}`),
@@ -78,7 +98,10 @@ export const command: GmCommand = {
       blocking: false,
     });
     if (result !== EXIT.ok) return result;
+    const commandId = alreadyAsked(readDecisions(gameDir(ctx.cwd)), topic, entry.question)?.command;
+    if (!commandId) throw new Error('raised decision is missing from the command ledger');
     entry.status = 'asked';
+    entry.command_id = commandId;
     writeInventory(file, inventory);
     return EXIT.ok;
   },
