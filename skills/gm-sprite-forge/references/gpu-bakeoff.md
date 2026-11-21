@@ -7,6 +7,9 @@ on an RTX 4080.
 
 - **Blender:** portable Blender 4.3 or later in `~/opt/blender` (no sudo). Check that Cycles lists an OptiX or CUDA device:
   `gpu_bake_rig.py` exits rather than fall back to CPU.
+- **One GPU job at a time:** on the PC, run every GPU job (Blender, TripoSR, Hunyuan3D-2, any local image-to-3D) through
+  `~/.local/bin/gpu-run <cmd>` (creator rule after the 2026-11-21 PC freeze). It refuses below 4 GB free VRAM or while a
+  game is running; exit 75 means retry later. `~/opt/blender/blender` already goes through it. fal calls do not.
 - **Image-to-3D:** a separate Python 3.11 environment in `~/opt/ogm-i23d` (or set `OGM_I23D`), with torch 2.5.1+cu124
   and the clones `TripoSR/` and `Hunyuan3D-2/`. Pin `torchvision` 0.20.1 and `accelerate` below 1.6, or newer packages
   pull in a torch that the pinned torchvision cannot load. Without `nvcc`, `torchmcubes` will not build, so patch TripoSR's
@@ -56,11 +59,29 @@ Blender version, backend, samples, scale, minutes and device memory. For an imag
 values and keep the one whose S view best matches the input. Hunyuan3D-2 needs none; TripoSR comes back on its side
 and tilted by the reference camera's 30°.
 
+## Creator verdicts (2026-11-21)
+
+The creator judged the arm E (fal) review cards (`Original | 3D | 2D pixel`) on the review page:
+
+- **Characters (goblin, orc): TRELLIS v1 multi-view** (`fal-ai/trellis/multi`, about 0.02 USD), plain or with
+  multidiffusion. In the creator's words: "stick to trellis, $0.02 is clearly good enough, higher isn't worth the [cost]. The model
+  looks good, but too much detail is being expressed in the final sprite to match the original sprite style. The
+  original sprite has fewer colors and chunkier pixels. Let's keep the 3D models and iterate on the shader next."
+- **Tree E3: TRELLIS 2** (`fal-ai/trellis-2`, 0.25 USD at 512) was his pick, with "rodin is good too and cheaper, use it
+  for others": use Rodin 2.5 fast (`fal-ai/hyper3d/rodin/v2.5/fast`, 0.10 USD) for the other non-character assets.
+- The Tree E3 meshes came from the pack's own views, which the creator allowed for this comparison only. New fal
+  calls get Codex turnarounds made with the original attached, never a pack file.
+
+The verdict comments name the picked card, not the asset; the asset each one belongs to is read from which arms ran
+for which asset (TRELLIS multidiffusion ran only for the goblin and orc, and TRELLIS 2 was the only pick with a tree
+note). The mesh is settled; the open problem is the finish pass. The 2D sprite must use fewer colours and chunkier
+pixels than `gpu_bake_finish.py` produces today. Keep the TRELLIS meshes and iterate on the finish pass, not the mesh
+source. The GPU arms A–C below and the three GPU matrices (`dec_4bea60ce4c10e8bd`, `dec_63c305f541835ca1`,
+`dec_bf26410d0ca0dcc3`) have no separate verdict; the fal picks supersede them for routing.
+
 ## Results (#1094, 2026-11-20)
 
-These are local evidence only. The creator's verdicts arrive on review Commands `dec_4bea60ce4c10e8bd` (Tree E3),
-`dec_63c305f541835ca1` (Flora B1) and `dec_bf26410d0ca0dcc3` (Goblin 01 walk). When one is answered, update this table,
-the matching capability-matrix row and the routing paragraph in SKILL.md together.
+These are local evidence from the GPU arms, kept for the record; routing follows the creator verdicts above.
 
 | Asset kind | Strongest by local evidence | Notes |
 |---|---|---|
@@ -107,5 +128,5 @@ Candidate arms, cheapest first (listed prices from fal's model pages, 2026-11-21
 Skill arms on top of a fal mesh, each its own column: **AnyKit** (`vendor/anykit`: the same reference to Tripo and
 Meshy, pick per item from clay renders, `normalize.py`), **AnyMachine** (`vendor/anymachine`: a Blender build script
 written from the reference views, Blender 5 on the PC; no fal needed) and **video-to-game** (`vendor/video-to-game`
-`references/fal-assets.md`: cutout, image-to-3D, Meshy rig and walk). The fal arms have no creator verdict yet: until
-one arrives they are review options, not routing.
+`references/fal-assets.md`: cutout, image-to-3D, Meshy rig and walk). The creator verdicts above set the routing:
+TRELLIS v1 multi-view for characters, TRELLIS 2 for trees, Rodin 2.5 fast for foliage and props.
