@@ -1,13 +1,15 @@
 import type { AiurClient } from '@ogm/aiur-client';
 import type { FeedFleet } from '@ogm/builder';
 import { schema, type Db } from '@ogm/db';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import { gameSlugFor } from '../games/games.js';
 
 // A daemon is keyed by the game's slug, so a game id resolves to its row through the game's own slug. Two games in
-// one instance repository therefore reach their own daemon and never each other's.
+// one instance repository therefore reach their own daemon and never each other's. A game registered into a
+// repository whose daemon is already registered (`gm games register` shares it) has no row of its own and uses that
+// repository's daemon; never guess when more than one matches.
 export function daemonRowForGame(db: Db, gameId: string): typeof schema.gameDaemons.$inferSelect | undefined {
   const slug = gameSlugFor(db, gameId);
   if (slug === null) return undefined;
@@ -22,7 +24,19 @@ export function daemonRowForGame(db: Db, gameId: string): typeof schema.gameDaem
     const daemon = db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, oldSlug)).get();
     if (daemon) return daemon;
   }
-  return undefined;
+  const game = db
+    .select({ owner: schema.games.githubOwner, repo: schema.games.githubRepo })
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .get();
+  if (!game?.owner || !game.repo) return undefined;
+  const repo = `${game.owner}/${game.repo}`.toLowerCase();
+  const shared = db
+    .select()
+    .from(schema.gameDaemons)
+    .where(sql`lower(${schema.gameDaemons.repo}) = ${repo}`)
+    .all();
+  return shared.length === 1 ? shared[0] : undefined;
 }
 
 export function createDaemonDirectory(db: Db, fleet: Pick<FeedFleet, 'daemonFor'>) {
