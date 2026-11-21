@@ -161,9 +161,11 @@ describe('ScopeChat offers', () => {
   });
 
   it('sends scope chat text through the aiur composer to the scope session', async () => {
-    const getElement = vi.spyOn(customElements, 'get').mockImplementation((name) =>
-      name === AIUR_CONVERSATION_TAG ? undefined : CustomElementRegistry.prototype.get.call(customElements, name),
-    );
+    const getElement = vi
+      .spyOn(customElements, 'get')
+      .mockImplementation((name) =>
+        name === AIUR_CONVERSATION_TAG ? undefined : CustomElementRegistry.prototype.get.call(customElements, name),
+      );
     const send = vi.fn().mockResolvedValue(undefined);
     mocks.scopeSession.mockReturnValue({
       sessionId: 's_1',
@@ -179,6 +181,7 @@ describe('ScopeChat offers', () => {
     const { container } = renderChat();
     const composer = container.querySelector('aiur-composer') as AiurComposerElement;
     await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+    expect(composer.shadowRoot?.querySelector('textarea')).toHaveAttribute('placeholder', 'Message the builder');
     composer.value = 'Add a moonlit market';
     await composer.send();
 
