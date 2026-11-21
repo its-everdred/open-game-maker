@@ -1038,23 +1038,64 @@ it('lists and answers core Commands only for the instance owner', async () => {
     answerAsCreator,
     message,
   } as unknown as AiurClient;
+  const pcDecision = decision({ decision_id: 'd_pc_9', ticket: { identifier: '7' } });
+  const pcAnswer = vi.fn().mockResolvedValue(undefined);
+  deps.registry.coreAiurClients = [
+    { id: 'core', client: deps.registry.coreAiurClient, repo: deps.config.coreRepo },
+    {
+      id: 'pc',
+      client: {
+        decisions: vi.fn().mockResolvedValue([pcDecision]),
+        decision: vi.fn().mockResolvedValue(pcDecision),
+        issue: vi.fn().mockResolvedValue({ status: 'open' }),
+        answerAsCreator: pcAnswer,
+      } as unknown as AiurClient,
+      repo: { owner: 'fixture', name: 'pc-core' },
+    },
+  ];
   expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.outsider) })).status).toBe(403);
   const page = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
-  expect(await page.json()).toMatchObject({
-    targets: [{ source: 'core', ticket: '479', title: 'Review core build' }],
-    commands: [
-      {
-        source: 'core',
-        decision_id: 'd_aiur_1',
-        options: [{ media: { url: 'https://example.test/a.png' } }, { media: { url: 'https://example.test/b.png' } }],
-      },
-    ],
+  const pageBody = await page.json();
+  expect(pageBody).toMatchObject({
+    targets: expect.arrayContaining([
+      expect.objectContaining({ source: 'core', daemon: 'core', ticket: '479', title: 'Review core build' }),
+    ]),
+    commands: expect.arrayContaining([
+      expect.objectContaining({ source: 'core', daemon: 'core', decision_id: 'd_aiur_1' }),
+    ]),
   });
+  expect(pageBody.commands).toEqual(
+    expect.arrayContaining([expect.objectContaining({ decision_id: 'd_pc_9', daemon: 'pc' })]),
+  );
+  expect(
+    await (await app.request('/api/v1/core/tickets/7/state?daemon=pc', { headers: asUser(ids.user) })).json(),
+  ).toEqual({ state: 'open' });
+  const pcAnswerResponse = await app.request('/api/v1/core/commands/d_pc_9/answer?daemon=pc', {
+    method: 'POST',
+    headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+    body: JSON.stringify({ option_id: 'round', version: 2 }),
+  });
+  expect(pcAnswerResponse.status).toBe(200);
+  expect(pcAnswer).toHaveBeenCalled();
+  const pcEntry = deps.registry.coreAiurClients[1]!;
+  deps.registry.coreAiurClients[1] = {
+    ...pcEntry,
+    client: { decisions: vi.fn().mockRejectedValue(new AiurHttpError(503, 'unavailable')) } as unknown as AiurClient,
+  };
+  const pcDown = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
+  expect(pcDown).toMatchObject({
+    targetsUnavailable: true,
+    commands: expect.arrayContaining([expect.objectContaining({ daemon: 'core' })]),
+  });
+  deps.registry.coreAiurClients[1] = pcEntry;
   deps.registry.reviewEpisode = async () => '100@2026-01-01T00:00:00Z';
   const originalTracker = deps.registry.trackerTickets!;
   deps.registry.trackerTickets = async () => ({ stale: true, tickets: [] });
   const partial = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
-  expect(partial).toMatchObject({ targetsUnavailable: true, commands: [{ decision_id: 'd_aiur_1' }] });
+  expect(partial).toMatchObject({
+    targetsUnavailable: true,
+    commands: expect.arrayContaining([expect.objectContaining({ decision_id: 'd_aiur_1' })]),
+  });
   expect(
     (await app.request('/api/v1/core/tickets/479/missing-review', { method: 'POST', headers: asUser(ids.user) }))
       .status,
@@ -1131,6 +1172,7 @@ it('lists and answers core Commands only for the instance owner', async () => {
   });
   expect(pending.status).toBe(409);
   deps.registry.coreAiurClient = null;
+  deps.registry.coreAiurClients = [];
   expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).status).toBe(503);
 });
 
