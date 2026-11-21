@@ -91,7 +91,13 @@ export const gameDrafts = {
       db
         .update(schema.gameDrafts)
         .set({ status: 'promoted', updatedAt: at })
-        .where(and(eq(schema.gameDrafts.id, id), eq(schema.gameDrafts.status, 'agreed'), isNotNull(schema.gameDrafts.gameId)))
+        .where(
+          and(
+            eq(schema.gameDrafts.id, id),
+            eq(schema.gameDrafts.status, 'agreed'),
+            isNotNull(schema.gameDrafts.gameId),
+          ),
+        )
         .run().changes > 0
     );
   },

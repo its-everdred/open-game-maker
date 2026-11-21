@@ -123,7 +123,17 @@ describe('temporary game drafts', () => {
       .prepare(
         'INSERT INTO build_chat_attachments (id, job_id, creator_id, kind, name, mime, blob_hash, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .run('a_expired', jobId, user.userId, 'text', 'scope.txt', 'text/plain', 'blob_hash', 1, '2026-11-19T12:00:00.000Z');
+      .run(
+        'a_expired',
+        jobId,
+        user.userId,
+        'text',
+        'scope.txt',
+        'text/plain',
+        'blob_hash',
+        1,
+        '2026-11-19T12:00:00.000Z',
+      );
 
     const promotedDraft = gameDrafts.create(deps.db, {
       familyId: user.familyId,
@@ -179,7 +189,13 @@ describe('temporary game drafts', () => {
       { id: promotedDraft.id, status: 'promoted', gameId: game.id, ticketRepo: null, ticketNumber: null },
       { id: attachedDraft.id, status: 'agreed', gameId: attachedGame.id, ticketRepo: null, ticketNumber: null },
     ]);
-    expect(deps.db.select().from(schema.games).all().map(({ id }) => id)).toEqual([game.id, attachedGame.id]);
+    expect(
+      deps.db
+        .select()
+        .from(schema.games)
+        .all()
+        .map(({ id }) => id),
+    ).toEqual([game.id, attachedGame.id]);
     expect(deps.sqlite.prepare('SELECT id FROM build_chat_messages').all()).toEqual([{ id: 'm_promoted' }]);
     expect(deps.sqlite.prepare('SELECT id FROM build_chat_attachments').all()).toEqual([]);
     expect(deps.sqlite.prepare('SELECT workspace_root FROM build_chat_workspaces').all()).toEqual([]);
@@ -216,7 +232,11 @@ describe('temporary game drafts', () => {
     const response = await app.request(`/api/v1/game-drafts/${draftId}`, { headers: asUser(user.userId) });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ sessionId: draftId, status: 'agreed', scope: { session_id: draftId } });
+    expect(await response.json()).toMatchObject({
+      sessionId: draftId,
+      status: 'agreed',
+      scope: { session_id: draftId },
+    });
     expect(deps.db.select().from(schema.games).all()).toEqual([]);
   });
 
@@ -243,10 +263,19 @@ describe('temporary game drafts', () => {
       });
 
     expect((await attach()).status).toBe(200);
-    expect((await app.request(`/api/v1/game-drafts/${draftId}/complete`, { method: 'POST', headers: asUser(user.userId) })).status).toBe(204);
+    expect(
+      (await app.request(`/api/v1/game-drafts/${draftId}/complete`, { method: 'POST', headers: asUser(user.userId) }))
+        .status,
+    ).toBe(204);
     expect((await attach()).status).toBe(200);
-    expect((await app.request(`/api/v1/game-drafts/${draftId}/complete`, { method: 'POST', headers: asUser(user.userId) })).status).toBe(204);
-    expect((await app.request(`/api/v1/game-drafts/${draftId}/abandon`, { method: 'POST', headers: asUser(user.userId) })).status).toBe(409);
+    expect(
+      (await app.request(`/api/v1/game-drafts/${draftId}/complete`, { method: 'POST', headers: asUser(user.userId) }))
+        .status,
+    ).toBe(204);
+    expect(
+      (await app.request(`/api/v1/game-drafts/${draftId}/abandon`, { method: 'POST', headers: asUser(user.userId) }))
+        .status,
+    ).toBe(409);
     expect(gameDrafts.get(deps.db, draftId)).toMatchObject({ status: 'promoted', gameId: game.id });
     expect(close).not.toHaveBeenCalled();
     expect(deps.db.select().from(schema.games).all()).toHaveLength(1);

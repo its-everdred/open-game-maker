@@ -35,9 +35,6 @@ export const gameDrafts = sqliteTable(
       'game_drafts_scope_payload',
       sql`(${table.scope} IS NULL AND ${table.scopeHash} IS NULL) OR (${table.scope} IS NOT NULL AND ${table.scopeHash} IS NOT NULL AND ${table.status} IN ('agreed', 'promoted'))`,
     ),
-    check(
-      'game_drafts_ticket_pair',
-      sql`${table.ticketNumber} IS NULL OR ${table.ticketRepo} IS NOT NULL`,
-    ),
+    check('game_drafts_ticket_pair', sql`${table.ticketNumber} IS NULL OR ${table.ticketRepo} IS NOT NULL`),
   ],
 );

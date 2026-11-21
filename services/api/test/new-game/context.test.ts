@@ -278,7 +278,14 @@ describe('POST /internal/new-game/requests/:requestId/token', () => {
         id: draftId,
         familyId: FAMILY,
         creatorId: CREATOR,
-        choices: JSON.stringify({ genre: 'platformer', vibe: 'cozy', family: 'chunky-low-poly', world: 'island', players: 'single', pov: 'isometric' }),
+        choices: JSON.stringify({
+          genre: 'platformer',
+          vibe: 'cozy',
+          family: 'chunky-low-poly',
+          world: 'island',
+          players: 'single',
+          pov: 'isometric',
+        }),
         allowAiGeneratedAssets: true,
         status: 'promoted',
         revision: 1,
@@ -292,7 +299,12 @@ describe('POST /internal/new-game/requests/:requestId/token', () => {
         expiresAt: '2026-11-05T17:49:00.000Z',
       })
       .run();
-    insertChatRow(deps.sqlite, { jobId: `draft:${draftId}`, actor: 'creator', kind: 'text', text: 'A lighthouse too.' });
+    insertChatRow(deps.sqlite, {
+      jobId: `draft:${draftId}`,
+      actor: 'creator',
+      kind: 'text',
+      text: 'A lighthouse too.',
+    });
 
     await sweepExpiredDrafts(deps, new Date('2026-11-06T18:00:00.000Z'));
 

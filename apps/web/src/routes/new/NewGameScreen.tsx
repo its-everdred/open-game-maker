@@ -92,7 +92,13 @@ export function NewGameScreen() {
     testApiRegistered = true;
   }, []);
 
-  const finish = async ({ sessionId, scope, attempt, start, retainDraft }: {
+  const finish = async ({
+    sessionId,
+    scope,
+    attempt,
+    start,
+    retainDraft,
+  }: {
     sessionId: string;
     scope: AgreedScope;
     attempt: number;

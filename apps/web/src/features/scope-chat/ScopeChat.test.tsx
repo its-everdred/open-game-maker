@@ -87,21 +87,26 @@ describe('ScopeChat offers', () => {
       addMessage: vi.fn(),
       retain,
     });
-    const onFinish = vi.fn(
-      ({ retainDraft }: { retainDraft(): void }) => {
-        retainDraft();
-        return new Promise<{ kind: 'accepted'; jobId: string }>((resolve) =>
-          setTimeout(() => resolve({ kind: 'accepted', jobId: 'j_1' }), 20),
-        );
-      },
-    );
+    const onFinish = vi.fn(({ retainDraft }: { retainDraft(): void }) => {
+      retainDraft();
+      return new Promise<{ kind: 'accepted'; jobId: string }>((resolve) =>
+        setTimeout(() => resolve({ kind: 'accepted', jobId: 'j_1' }), 20),
+      );
+    });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <ScopeChat
             gameId="new-draft"
-            choices={{ genre: 'Adventure', vibe: 'Cozy', family: 'smallscaleint', world: 'Sky islands', players: 'single', pov: 'iso' }}
+            choices={{
+              genre: 'Adventure',
+              vibe: 'Cozy',
+              family: 'smallscaleint',
+              world: 'Sky islands',
+              players: 'single',
+              pov: 'iso',
+            }}
             onFinish={onFinish}
           />
         </MemoryRouter>
@@ -138,7 +143,14 @@ describe('ScopeChat offers', () => {
         <MemoryRouter>
           <ScopeChat
             gameId="new-draft"
-            choices={{ genre: 'Adventure', vibe: 'Cozy', family: 'smallscaleint', world: 'Sky islands', players: 'single', pov: 'iso' }}
+            choices={{
+              genre: 'Adventure',
+              vibe: 'Cozy',
+              family: 'smallscaleint',
+              world: 'Sky islands',
+              players: 'single',
+              pov: 'iso',
+            }}
             onFinish={onFinish}
           />
         </MemoryRouter>

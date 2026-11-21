@@ -198,10 +198,13 @@ describe('NewGameScreen', () => {
 
   it('keeps the games API untouched while the creator talks through scope', async () => {
     const calls: string[] = [];
-    vi.stubGlobal('EventSource', class {
-      addEventListener() {}
-      close() {}
-    });
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        addEventListener() {}
+        close() {}
+      },
+    );
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((input: RequestInfo | URL) => {
@@ -231,7 +234,9 @@ describe('NewGameScreen', () => {
               : path.endsWith('/api/catalog/audio-styles')
                 ? { families: [] }
                 : {};
-        return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+        return Promise.resolve(
+          new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }),
+        );
       }),
     );
     renderScreen('/new?step=talk');
@@ -247,10 +252,13 @@ describe('NewGameScreen', () => {
     const gameProvisioning = new Promise<Response>((resolve) => {
       resolveGame = resolve;
     });
-    vi.stubGlobal('EventSource', class {
-      addEventListener() {}
-      close() {}
-    });
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        addEventListener() {}
+        close() {}
+      },
+    );
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((input: RequestInfo | URL) => {
@@ -281,7 +289,9 @@ describe('NewGameScreen', () => {
                 ? { families: [] }
                 : {};
         if (path.endsWith('/api/v1/games')) return gameProvisioning;
-        return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+        return Promise.resolve(
+          new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }),
+        );
       }),
     );
     const view = renderScreen('/new?step=talk');
@@ -292,7 +302,9 @@ describe('NewGameScreen', () => {
 
     expect(calls.some((path) => path.endsWith('/api/v1/game-drafts/d_1/abandon'))).toBe(false);
     await act(async () => {
-      resolveGame(new Response(JSON.stringify({ id: 'g_1' }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      resolveGame(
+        new Response(JSON.stringify({ id: 'g_1' }), { status: 201, headers: { 'content-type': 'application/json' } }),
+      );
       await gameProvisioning;
     });
   });

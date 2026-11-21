@@ -29,8 +29,7 @@ export const scopeTransport: ScopeTransport = {
       method: 'POST',
       json: { choices, allowAiGeneratedAssets },
     }).then((draft) => ({ sessionId: draft.draftId, jobId: draft.jobId })),
-  getSession: (gameId, sessionId) =>
-    api(`/game-drafts/${encodeURIComponent(sessionId)}`),
+  getSession: (gameId, sessionId) => api(`/game-drafts/${encodeURIComponent(sessionId)}`),
   abandonSession: (_gameId, sessionId) =>
     api(`/game-drafts/${encodeURIComponent(sessionId)}/abandon`, { method: 'POST' }).then(() => undefined),
   postText: (jobId, text, attachments) =>

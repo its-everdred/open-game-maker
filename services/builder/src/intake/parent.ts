@@ -93,7 +93,11 @@ function choicesSection(choices: ScopeChoices | null): string {
 function latestAgreedChoices(db: Db, job: Pick<JobRow, 'gameId' | 'createdAt' | 'plan'>): ScopeChoices | null {
   const title = text(json(job.plan).title);
   const rows = db
-    .select({ choices: schema.scopeSessions.choices, scope: schema.scopeSessions.scope, createdAt: schema.scopeSessions.createdAt })
+    .select({
+      choices: schema.scopeSessions.choices,
+      scope: schema.scopeSessions.scope,
+      createdAt: schema.scopeSessions.createdAt,
+    })
     .from(schema.scopeSessions)
     .where(
       and(
@@ -105,7 +109,11 @@ function latestAgreedChoices(db: Db, job: Pick<JobRow, 'gameId' | 'createdAt' | 
     .orderBy(desc(schema.scopeSessions.createdAt))
     .all();
   const drafts = db
-    .select({ choices: schema.gameDrafts.choices, scope: schema.gameDrafts.scope, createdAt: schema.gameDrafts.createdAt })
+    .select({
+      choices: schema.gameDrafts.choices,
+      scope: schema.gameDrafts.scope,
+      createdAt: schema.gameDrafts.createdAt,
+    })
     .from(schema.gameDrafts)
     .where(
       and(

@@ -150,9 +150,11 @@ export function ScopeChat({
           // New Game creation uses the same conversation component as the job modal; aiur replaces the captions and
           // composer once its element is installed, and the admission controls stay Open Game Maker's.
           <AiurConversation
-            scope={gameId === 'new-draft' && scopeSession.sessionId
-              ? draftJobScope(scopeSession.sessionId, scopeSession.jobId)
-              : jobScope(gameId, scopeSession.jobId, null)}
+            scope={
+              gameId === 'new-draft' && scopeSession.sessionId
+                ? draftJobScope(scopeSession.sessionId, scopeSession.jobId)
+                : jobScope(gameId, scopeSession.jobId, null)
+            }
             title="New game"
             onAnswer={answer}
           >

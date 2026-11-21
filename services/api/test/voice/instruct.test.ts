@@ -154,9 +154,16 @@ describe('POST /internal/voice/instruct', () => {
     expect(message).toHaveBeenCalledTimes(1);
     expect(message).toHaveBeenCalledWith('42', 'Add a nighttime bakery', expect.any(String), expect.anything());
     expect(listSince(deps.sqlite, `draft:${draft.id}`, 0)).toEqual([
-      expect.objectContaining({ actor: 'creator', text: 'Add a nighttime bakery', mirrorState: 'sent', aiurTicket: '42' }),
+      expect.objectContaining({
+        actor: 'creator',
+        text: 'Add a nighttime bakery',
+        mirrorState: 'sent',
+        aiurTicket: '42',
+      }),
     ]);
-    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.idempotencyKey, 'voice:voice-draft')).all()).toEqual([]);
+    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.idempotencyKey, 'voice:voice-draft')).all()).toEqual(
+      [],
+    );
   });
 
   it('keeps a refused scope draft pending with the four next choices', async () => {

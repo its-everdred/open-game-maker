@@ -92,7 +92,14 @@ describe('build chat job directory', () => {
     const draft = gameDrafts.create(deps.db, {
       familyId: 'f_1',
       creatorId: 'u_1',
-      choices: { genre: 'platformer', vibe: 'cozy', family: 'pixel', world: 'island', players: 'single', pov: 'isometric' },
+      choices: {
+        genre: 'platformer',
+        vibe: 'cozy',
+        family: 'pixel',
+        world: 'island',
+        players: 'single',
+        pov: 'isometric',
+      },
       allowAiGeneratedAssets: true,
       at: new Date(NOW),
     });

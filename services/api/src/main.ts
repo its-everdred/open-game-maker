@@ -152,9 +152,7 @@ deps.registry.draftScopeAssistant = {
   },
   async close({ repo, ticket, draftId }) {
     if (!issues.close) throw new Error('draft_ticket_close_unavailable');
-    const issue = ticket
-      ? { number: Number(ticket) }
-      : await issues.findByMarkers(repo, draftId, 'scope');
+    const issue = ticket ? { number: Number(ticket) } : await issues.findByMarkers(repo, draftId, 'scope');
     if (issue) await issues.close(repo, issue.number);
   },
   async transcript({ ticket }) {

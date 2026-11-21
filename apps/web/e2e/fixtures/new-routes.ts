@@ -17,7 +17,14 @@ export type NewRouteState = {
 };
 
 export async function installNewRoutes(page: Page): Promise<NewRouteState> {
-  const state: NewRouteState = { admissions: [], gameCreations: 0, draftAttachments: [], draftCompletions: 0, scopeMessages: [], scopeRequests: [] };
+  const state: NewRouteState = {
+    admissions: [],
+    gameCreations: 0,
+    draftAttachments: [],
+    draftCompletions: 0,
+    scopeMessages: [],
+    scopeRequests: [],
+  };
   let scopeAgreed = false;
   let scopePromoted = false;
 
