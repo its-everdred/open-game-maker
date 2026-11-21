@@ -53,6 +53,7 @@ describe('gm command request', () => {
         'a=One',
         '--option',
         'b=Two',
+        ...(await mediaFlags(root)),
         '--meta',
         'a=a.meta.json',
         '--row',
