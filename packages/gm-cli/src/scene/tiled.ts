@@ -1,9 +1,15 @@
 import type { PlannedObject } from './plan.js';
 
 type Tile = { id: number; properties: { name: string; value: string | number | boolean }[] };
-export type SceneTile = { object: PlannedObject; rotation: 0 | 90 | 180 | 270; solid: boolean };
+export type SceneTile = {
+  object: PlannedObject;
+  rotation: 0 | 90 | 180 | 270;
+  solid: boolean;
+  /** Reviewed grid offsets already rotated into the selected facing, including the anchor. */
+  footprint: readonly { x: number; y: number }[];
+};
 
-/** Build a SmallScaleInt-compatible decor layer; callers must install it in a game that consumes Tiled maps. */
+/** Build a decor layer. The game must consume it and enforce full-footprint collision itself. */
 export function sceneDecorLayer(
   width: number,
   height: number,
@@ -25,15 +31,39 @@ export function sceneDecorLayer(
     throw new Error('invalid tile map bounds');
   const data = Array<number>(width * height).fill(0);
   const tiles: Tile[] = [];
-  for (const { object, rotation, solid } of placements) {
+  const occupied = new Set<string>();
+  for (const { object, rotation, solid, footprint } of placements) {
     const { x, y } = object.position;
     if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || x < 0 || y < 0 || x >= width || y >= height)
       throw new Error(`placement is outside the tile grid: ${object.id}`);
     if (!lockedAssets.has(object.selectedAsset)) throw new Error(`asset is not locked: ${object.selectedAsset}`);
     if (![0, 90, 180, 270].includes(rotation) || typeof solid !== 'boolean') throw new Error('invalid tile properties');
-    if (reserved.has(`${x},${y}`)) throw new Error(`placement occupies a reserved cell: ${object.id}`);
+    if (!Array.isArray(footprint) || footprint.length === 0 || footprint.length > width * height)
+      throw new Error(`invalid footprint: ${object.id}`);
+    const cells = new Set<string>();
+    for (const offset of footprint) {
+      if (!Number.isSafeInteger(offset.x) || !Number.isSafeInteger(offset.y))
+        throw new Error(`invalid footprint: ${object.id}`);
+      const cx = x + offset.x,
+        cy = y + offset.y,
+        key = `${cx},${cy}`;
+      if (
+        !Number.isSafeInteger(cx) ||
+        !Number.isSafeInteger(cy) ||
+        cx < 0 ||
+        cy < 0 ||
+        cx >= width ||
+        cy >= height ||
+        cells.has(key)
+      )
+        throw new Error(`invalid footprint: ${object.id}`);
+      if (reserved.has(key)) throw new Error(`placement occupies a reserved cell: ${object.id}`);
+      if (occupied.has(key)) throw new Error(`multiple placements share a cell: ${object.id}`);
+      cells.add(key);
+    }
+    if (!cells.has(`${x},${y}`)) throw new Error(`footprint omits its anchor: ${object.id}`);
+    for (const cell of cells) occupied.add(cell);
     const index = y * width + x;
-    if (data[index] !== 0) throw new Error(`multiple placements share a cell: ${object.id}`);
     const id = tiles.length;
     tiles.push({
       id,

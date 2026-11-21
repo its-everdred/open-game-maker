@@ -5,7 +5,7 @@ import { buildScenePlan } from '../src/scene/plan.js';
 import { sceneObjectFromMatch } from '../src/scene/worker-result.js';
 
 const object = { id: 'cart', position: { x: 1, y: 2 }, selectedAsset: 'cart-asset', matches: [] };
-const placement = { object, rotation: 90 as const, solid: true };
+const placement = { object, rotation: 90 as const, solid: true, footprint: [{ x: 0, y: 0 }] };
 
 describe('scene decor layer', () => {
   it('is consumed by the SmallScaleInt Tiled adapter with asset, facing and collision', () => {
@@ -45,6 +45,22 @@ describe('scene decor layer', () => {
     expect(() => sceneDecorLayer(4, 4, 1, [fractional], new Set(['cart-asset']), new Set())).toThrow('tile grid');
   });
 
+  it('checks every reviewed footprint cell against reservations and other objects', () => {
+    const wide = {
+      ...placement,
+      footprint: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+    };
+    expect(() => sceneDecorLayer(4, 4, 1, [wide], new Set(['cart-asset']), new Set(['2,2']))).toThrow('reserved');
+    const other = { ...placement, object: { ...object, position: { x: 2, y: 2 } } };
+    expect(() => sceneDecorLayer(4, 4, 1, [wide, other], new Set(['cart-asset']), new Set())).toThrow('share a cell');
+    expect(() =>
+      sceneDecorLayer(4, 4, 1, [{ ...wide, footprint: [{ x: 1, y: 0 }] }], new Set(['cart-asset']), new Set()),
+    ).toThrow('omits its anchor');
+  });
+
   it('carries a complete worker match through registration into adapter-readable map data', () => {
     const candidate = { id: 'cart-asset', model: 'offline', vector: [1, 0] };
     const matched = sceneObjectFromMatch(
@@ -77,7 +93,7 @@ describe('scene decor layer', () => {
       4,
       4,
       1,
-      [{ object: reviewed, rotation: 0, solid: true }],
+      [{ object: reviewed, rotation: 0, solid: true, footprint: [{ x: 0, y: 0 }] }],
       new Set(['cart-asset']),
       new Set(),
     );
