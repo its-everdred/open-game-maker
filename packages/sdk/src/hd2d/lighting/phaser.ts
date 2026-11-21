@@ -3,6 +3,7 @@ import { flickerAt } from './flicker.js';
 import { FIELD_SIZE, gradeMatrix, hexToRgb01, renderLightField } from './field.js';
 import type { Lighting, LightingLight, LightingOptions, NormalSource, ScreenLight } from './field.js';
 import { maxLightsFor, type LightingPreset, type LightingQuality } from './schema.js';
+import { screenOverlays } from '../overlays.js';
 
 // Phaser enum values, inlined so this module needs only Phaser's types (BlendModes.ADD / MULTIPLY, FilterMode.LINEAR).
 const ADD = 1;
@@ -49,6 +50,7 @@ export function createPhaserLighting(
     if (!texture) throw new Error(`could not create lighting texture ${key}`);
     texture.setFilter(LINEAR);
     const image = scene.add.image(0, 0, key).setOrigin(0, 0).setDepth(OVERLAY_DEPTH).setBlendMode(blend);
+    screenOverlays.add(image);
     return { texture, image, pixels: texture.context.createImageData(width, height) };
   }
 
@@ -127,6 +129,8 @@ export function createPhaserLighting(
     for (const { texture, pixels, image } of [keep, light]) {
       texture.context.putImageData(pixels, 0, 0);
       texture.refresh();
+      // Phaser re-uploads a refreshed canvas with the game's filter (NEAREST under pixelArt); keep the field smooth.
+      texture.setFilter(LINEAR);
       // Cover the camera's current world view, so the field follows scroll, zoom and resize.
       image.setPosition(view.x, view.y).setDisplaySize(view.width, view.height);
     }

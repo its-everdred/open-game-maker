@@ -3,6 +3,7 @@ import type Phaser from 'phaser';
 import { blurForDepth, tiltShiftWeight } from './bands.js';
 import { focusPlan, type FocusBackend, type FocusState, type PhaserFocusDeps } from './create.js';
 import { hazeMix } from './haze.js';
+import { screenOverlays } from '../overlays.js';
 
 type Layer = Phaser.GameObjects.GameObject & {
   depth: number;
@@ -66,7 +67,9 @@ export function createPhaserFocus(deps: PhaserFocusDeps, state: FocusState): Foc
         for (const entry of applied.values()) entry.blur.active = entry.haze.active = false;
         return;
       }
-      const layers = scene.children.list.filter((object): object is Layer => object !== hero && isLayer(object));
+      const layers = scene.children.list.filter(
+        (object): object is Layer => object !== hero && isLayer(object) && !screenOverlays.has(object),
+      );
       const heroLayer = hero && isLayer(hero) ? hero : undefined;
       const depths = layers.map((layer) => layer.depth).concat(heroLayer ? [heroLayer.depth] : []);
       const min = Math.min(...depths);
