@@ -389,8 +389,12 @@ describe('games routes', () => {
       },
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
     });
-    expect((await list()).logoUrl).toBeUndefined();
-    expect((await list()).coverUrl).toBeUndefined();
+    // The web renders tile art only when logoUrl/coverUrl are set (Cover.tsx, Tile.tsx): the image objects add
+    // srcsets on top, so dropping the URLs blanked every tile on prod (2026-11-21).
+    expect(await list()).toMatchObject({
+      logoUrl: `https://games.example.test/a/${'1'.repeat(64)}.png`,
+      coverUrl: `https://games.example.test/a/${'2'.repeat(64)}.png`,
+    });
     // An older build's portrait cut is never offered: every game shows its one 16:9 trailer.
     expect(await list()).not.toHaveProperty('portraitTrailerUrl');
     for (const badImage of [
