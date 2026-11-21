@@ -23,7 +23,13 @@ export function preloadDisplayImage(
   if (!src) return;
   if (variants) {
     let preloadedVariant = false;
-    for (const viewport of ['phone-portrait', 'phone-landscape', 'tablet-portrait', 'tablet-landscape', 'desktop'] as const) {
+    for (const viewport of [
+      'phone-portrait',
+      'phone-landscape',
+      'tablet-portrait',
+      'tablet-landscape',
+      'desktop',
+    ] as const) {
       const variant = variants[viewport];
       if (!variant) continue;
       preloadedVariant = true;

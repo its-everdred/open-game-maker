@@ -42,7 +42,10 @@ describe('games cache', () => {
     const withSlots = [{ ...games[0]!, slotImages: { tile: { 'phone-portrait': image } } }];
     saveGames('one', withSlots);
     expect(readGames('one')).toEqual(withSlots);
-    localStorage.setItem('ogm.games.v1.one', JSON.stringify([{ ...games[0], slotImages: { tile: { mobile: image } } }]));
+    localStorage.setItem(
+      'ogm.games.v1.one',
+      JSON.stringify([{ ...games[0], slotImages: { tile: { mobile: image } } }]),
+    );
     expect(readGames('one')).toBeUndefined();
     localStorage.setItem(
       'ogm.games.v1.one',

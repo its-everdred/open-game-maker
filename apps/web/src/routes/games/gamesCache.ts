@@ -116,7 +116,9 @@ function isCachedGame(value: unknown): value is GameSummary {
               entries.length > 0 &&
               entries.every(
                 (entry: unknown) =>
-                  !!entry && typeof entry === 'object' && typeof (entry as Record<string, unknown>).path === 'string' &&
+                  !!entry &&
+                  typeof entry === 'object' &&
+                  typeof (entry as Record<string, unknown>).path === 'string' &&
                   typeof (entry as Record<string, unknown>).width === 'number',
               )
             );

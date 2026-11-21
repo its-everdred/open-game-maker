@@ -77,12 +77,18 @@ describe('game covers', () => {
       desktop: image('desktop'),
     };
     const { container } = render(
-      <Cover game={{ title: 'Example', coverUrl: '/original.png', slotImages: { tile: variants } } as Parameters<
-        typeof Cover
-      >[0]['game']} />,
+      <Cover
+        game={
+          { title: 'Example', coverUrl: '/original.png', slotImages: { tile: variants } } as Parameters<
+            typeof Cover
+          >[0]['game']
+        }
+      />,
     );
     const sources = [...container.querySelectorAll('source')];
-    expect(sources.filter((source) => source.getAttribute('type') === 'image/avif').map((source) => source.media)).toEqual([
+    expect(
+      sources.filter((source) => source.getAttribute('type') === 'image/avif').map((source) => source.media),
+    ).toEqual([
       '(max-width: 600px) and (orientation: portrait)',
       '(max-width: 1000px) and (orientation: landscape)',
       '(min-width: 601px) and (max-width: 1000px) and (orientation: portrait)',
@@ -92,9 +98,16 @@ describe('game covers', () => {
   });
 
   it("keeps today's image markup when viewport variants are absent", () => {
-    const { container } = render(<Cover game={{
-      title: 'Example', coverUrl: '/original.png',
-    } as Parameters<typeof Cover>[0]['game']} />);
+    const { container } = render(
+      <Cover
+        game={
+          {
+            title: 'Example',
+            coverUrl: '/original.png',
+          } as Parameters<typeof Cover>[0]['game']
+        }
+      />,
+    );
     expect(container.querySelector('picture')).toBeNull();
     expect(container.querySelector('img')).toHaveAttribute('src', '/original.png');
     expect(container.querySelector('img')).toHaveAttribute('width', '320');
@@ -114,11 +127,13 @@ describe('game covers', () => {
     };
     const { container } = render(
       <Cover
-        game={{
-          title: 'Example',
-          coverUrl: '/original.png',
-          slotImages: { tile: { 'phone-portrait': variant } },
-        } as Parameters<typeof Cover>[0]['game']}
+        game={
+          {
+            title: 'Example',
+            coverUrl: '/original.png',
+            slotImages: { tile: { 'phone-portrait': variant } },
+          } as Parameters<typeof Cover>[0]['game']
+        }
       />,
     );
     expect(container.querySelector('img')).toHaveAttribute('src', '/original.png');
