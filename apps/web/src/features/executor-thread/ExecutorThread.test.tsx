@@ -166,7 +166,9 @@ describe('executor thread', () => {
     const attachment = await composer.adapters.upload!(file);
     composer.value = 'Please read';
     await composer.onSend!('Please read', [attachment]);
-    await waitFor(() => expect(calls.some((call) => call.url.endsWith('/messages') && call.method === 'POST')).toBe(true));
+    await waitFor(() =>
+      expect(calls.some((call) => call.url.endsWith('/messages') && call.method === 'POST')).toBe(true),
+    );
     expect(calls.some((call) => call.url.endsWith('/uploads') && call.method === 'POST')).toBe(false);
     expect(calls.find((call) => call.url.endsWith('/messages') && call.method === 'POST')!.body).toMatchObject({
       text: 'Please read\n\nnotes.txt:\nnote text',
