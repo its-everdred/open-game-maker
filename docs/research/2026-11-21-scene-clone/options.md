@@ -117,6 +117,8 @@ A three-second test-clock capture of the ten-piece layout is `assets-local/revie
 
 Applying a scratch ambient tint to the ten-piece scene brought its ground colors closer to the reference but left the roof seam and architecture unchanged, and added no torchlight. The inspected image and comparison are `assets-local/review/1154/ambient-study.png` and `ambient-study-score.png`. Unregistered whole-frame SSIM rose from 0.165 to 0.181 and color-histogram distance fell from 0.633 to 0.518, while edge IoU fell from 0.053 to 0.012. These diagnostics neither establish a visual pass nor justify a production lighting choice.
 
+For the same unregistered still, approximate fixed rectangles around the canopy, yard and gate scored SSIM 0.171, 0.164 and 0.055 respectively with `gm look score`. The gate is visibly disconnected from the surrounding wall, consistent with its low score. These rectangles are not verified correspondences and their metrics are diagnostic only.
+
 An additional scratch-only lighting study used a torch already in the game lock and local additive glow. Initial flames appeared on the canopy roof; after manual repositioning, one sits near a support and another on the house wall. The inspected still and comparison are `assets-local/review/1154/torch-study.png` and `torch-study-score.png`: unregistered SSIM was 0.160, color-histogram distance 0.499, and edge IoU 0.012. The light sources and glow were not checked in motion, and the repeated canopy, gate and buildings still fail the reference. No lighting code has been shipped.
 
 ## Retrospective three-layout comparison
