@@ -168,7 +168,8 @@ test('attaches files with the button and by pasting an image, then sends them wi
     await json(
       route,
       {
-        id: `a_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e${uploads.length.toString().padStart(2, '0')}`,
+        // Keyed by file, not arrival: the composer uploads all attachments at once, so they can land in any order.
+        id: `a_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e${name === 'pasted-door.png' ? '02' : '01'}`,
         kind: image ? 'image' : 'text',
         name,
         mime: image ? 'image/webp' : 'text/markdown',
@@ -212,10 +213,13 @@ test('attaches files with the button and by pasting an image, then sends them wi
         attachments: ['a_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01', 'a_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e02'],
       },
     ]);
-  expect(uploads).toEqual([
-    { type: 'text/markdown', name: 'door-notes.md' },
-    { type: 'image/png', name: 'pasted-door.png' },
-  ]);
+  expect(uploads).toHaveLength(2);
+  expect(uploads).toEqual(
+    expect.arrayContaining([
+      { type: 'text/markdown', name: 'door-notes.md' },
+      { type: 'image/png', name: 'pasted-door.png' },
+    ]),
+  );
 });
 
 test('a broken picker leaves the chat dock mounted', async ({ page }) => {
