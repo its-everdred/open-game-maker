@@ -1,7 +1,7 @@
-import { useQueries } from '@tanstack/react-query';
 import type { CommandReviewEntry } from '@ogm/contracts';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api/client';
+import { queryClient } from '../../app/query';
 import { commandSource, type ReviewCommand } from './review-command';
 import type { WorkerReview } from './useWorkerReviews';
 
@@ -13,6 +13,7 @@ export type SessionAnsweredCommand = { command: ReviewCommand };
 export function useAnsweredReviews(_reviews: readonly WorkerReview[], commands: readonly ReviewCommand[]) {
   const [sessionAnsweredCommands, setSessionAnsweredCommands] = useState<SessionAnsweredCommand[]>(readSessionCommands);
   const [knownGameIds, setKnownGameIds] = useState<string[]>(readKnownGameIds);
+  const [ledgerPages, setLedgerPages] = useState<Record<string, CommandReviewEntry[]>>({});
   const visibleGameIds = commands.filter((command) => !('source' in command)).map(commandSource);
   const gameIds = Array.from(
     new Set([
@@ -31,17 +32,33 @@ export function useAnsweredReviews(_reviews: readonly WorkerReview[], commands: 
       // Session persistence is best effort when storage is unavailable.
     }
   }, [knownGameIds, visibleGameIds.join('\u0000')]);
-  const queries = useQueries({
-    queries: gameIds.map((gameId) => ({
-      queryKey: ['game-review-ledger', gameId],
-      queryFn: () => api<{ reviews: CommandReviewEntry[] }>(`/games/${encodeURIComponent(gameId)}/reviews`),
-      refetchInterval: 5_000,
-      retry: false,
-    })),
-  });
-  const savedCommands = gameIds.flatMap((gameId, index): AnsweredCommand[] => {
-    const page = queries[index]?.data as { reviews: CommandReviewEntry[] } | undefined;
-    return (page?.reviews ?? []).map((review) => ({ id: review.id, gameId, review }));
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      void Promise.all(
+        gameIds.map(async (gameId) => {
+          try {
+            const page = await queryClient.fetchQuery({
+              queryKey: ['game-review-ledger', gameId],
+              queryFn: () => api<{ reviews: CommandReviewEntry[] }>(`/games/${encodeURIComponent(gameId)}/reviews`),
+              staleTime: 0,
+            });
+            if (active) setLedgerPages((previous) => ({ ...previous, [gameId]: page.reviews }));
+          } catch {
+            // Failed refreshes leave the last available answer summaries visible.
+          }
+        }),
+      );
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [gameIds.join('\u0000')]);
+  const savedCommands = gameIds.flatMap((gameId): AnsweredCommand[] => {
+    return (ledgerPages[gameId] ?? []).map((review) => ({ id: review.id, gameId, review }));
   });
   const rememberCommand = (command: ReviewCommand) => {
     setSessionAnsweredCommands((previous) => {
