@@ -50,6 +50,13 @@
       "path": "anymachine",
       "modified": true,
       "partial": true
+    },
+    "apekshik/anykit": {
+      "sha": "9ab61cac00a5eb3afdd87d5ee989134930c307b8",
+      "license": "MIT",
+      "path": "anykit",
+      "modified": true,
+      "partial": true
     }
   }
 }
