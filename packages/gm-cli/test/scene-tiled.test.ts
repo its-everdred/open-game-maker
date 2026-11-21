@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { IsoMap } from '../../pack-adapters/smallscaleint/src/map.js';
 import { sceneDecorLayer } from '../src/scene/tiled.js';
+import { buildScenePlan } from '../src/scene/plan.js';
+import { sceneObjectFromMatch } from '../src/scene/worker-result.js';
 
 const object = { id: 'cart', position: { x: 1, y: 2 }, selectedAsset: 'cart-asset', matches: [] };
 const placement = { object, rotation: 90 as const, solid: true };
@@ -41,5 +43,45 @@ describe('scene decor layer', () => {
   it('requires explicit grid positions instead of silently rounding a registered footpoint', () => {
     const fractional = { ...placement, object: { ...object, position: { x: 1.2, y: 2 } } };
     expect(() => sceneDecorLayer(4, 4, 1, [fractional], new Set(['cart-asset']), new Set())).toThrow('tile grid');
+  });
+
+  it('carries a complete worker match through registration into adapter-readable map data', () => {
+    const candidate = { id: 'cart-asset', model: 'offline', vector: [1, 0] };
+    const matched = sceneObjectFromMatch(
+      { id: 'cart', footpoint: { x: 1, y: 2 }, selectedAsset: 'cart-asset' },
+      {
+        query: { model: 'offline', vector: [1, 0] },
+        candidates: [candidate],
+        examined: 1,
+        eligible: 1,
+        truncated: false,
+      },
+    );
+    const corners = [
+      { x: 0, y: 0 },
+      { x: 3, y: 0 },
+      { x: 3, y: 3 },
+      { x: 0, y: 3 },
+    ];
+    const plan = buildScenePlan({
+      anchors: corners.map((point) => ({ image: point, ground: point })),
+      objects: [matched],
+      dressing: { field: { width: 1, height: 1, weights: [1] }, options: { count: 0, radius: 0, seed: 1 } },
+    });
+    // Grid review is explicit: numerical fitting may introduce subpixel error.
+    const fitted = plan.objects[0]!;
+    expect(fitted.position.x).toBeCloseTo(1);
+    expect(fitted.position.y).toBeCloseTo(2);
+    const reviewed = { ...fitted, position: { x: 1, y: 2 } };
+    const { layer, tileset } = sceneDecorLayer(
+      4,
+      4,
+      1,
+      [{ object: reviewed, rotation: 0, solid: true }],
+      new Set(['cart-asset']),
+      new Set(),
+    );
+    expect(layer.data[9]).toBe(1);
+    expect(tileset.tiles[0]!.properties).toContainEqual({ name: 'asset', value: 'cart-asset' });
   });
 });
