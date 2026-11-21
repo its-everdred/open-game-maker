@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AgentOutboxLine, decisionKeyFromMarker, playablesFromMarker } from '@ogm/contracts';
+import { AgentOutboxLine, decisionKeyFromMarker, playablesFromMarker, reviewMetaFromMarker } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { preparedLibrary, WALL } from './assets-fixture.js';
@@ -22,6 +22,46 @@ function commandLine(root: string) {
 }
 
 describe('gm command request', () => {
+  it('writes option metadata and layout into the decision marker', async () => {
+    const root = workspace();
+    writeFileSync(
+      join(root, 'a.meta.json'),
+      JSON.stringify({ kind: 'image generation', model: 'gpt-image-1', cost_usd: 0.04 }),
+    );
+    const result = await gm(
+      [
+        'command',
+        'request',
+        '--job',
+        JOB_ID,
+        '--question',
+        'Which look?',
+        '--option',
+        'a=One',
+        '--option',
+        'b=Two',
+        '--meta',
+        'a=a.meta.json',
+        '--row',
+        'a=hero:candidate',
+        '--json',
+      ],
+      { cwd: root },
+    );
+    expect(result).toMatchObject({ code: 0, err: [] });
+    const printed = JSON.parse(result.out[0]) as {
+      emit_event: { payload: { context: { long_context_markdown: string } } };
+    };
+    expect(reviewMetaFromMarker(printed.emit_event.payload.context.long_context_markdown).get('a')).toEqual({
+      meta: { kind: 'image generation', model: 'gpt-image-1', cost_usd: 0.04 },
+      layout: { row: 'hero', stage: 'candidate' },
+    });
+    expect(commandLine(root).payload.options[0]).toMatchObject({
+      meta: { kind: 'image generation' },
+      layout: { row: 'hero', stage: 'candidate' },
+    });
+  });
+
   it('writes two candidates with media and prints the correlated decision.requested call', async () => {
     const root = workspace();
     const events = join(root, 'events.jsonl');
