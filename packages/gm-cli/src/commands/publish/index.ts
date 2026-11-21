@@ -99,7 +99,7 @@ function tail(text: string, lines = 20): string {
 }
 
 /** Reuse generated asset work from the registered checkout; cache entries remain content-addressed and validated. */
-function seedAssetCache(sourceGame: string, targetGame: string): void {
+export function seedAssetCache(sourceGame: string, targetGame: string): void {
   const source = join(sourceGame, '.gm', 'cache', 'assets');
   if (!existsSync(source)) return;
   const target = join(targetGame, '.gm', 'cache', 'assets');
