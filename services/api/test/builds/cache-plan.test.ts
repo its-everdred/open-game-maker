@@ -113,6 +113,22 @@ function plan(deps: ReturnType<typeof world>['deps'], gameId: string, buildId: s
 }
 
 describe('published cache plans', () => {
+  it('rewrites ./x, x and /x references to the same /a/ address once each (#1197)', async () => {
+    const { deps } = world();
+    completeRun(deps);
+    const dir = cachedBuild([]);
+    writeFileSync(
+      join(dir, 'index.html'),
+      '<!doctype html><script type="module" src="./assets/main.js"></script>' +
+        '<link rel="modulepreload" href="assets/main.js"><link rel="preload" href="/assets/main.js">\n',
+    );
+    const buildId = await publishFixture(deps, ids.job, dir, SHA);
+    const mainHash = digest(Buffer.from('console.log("fixture");\n'));
+    const html = readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'index.html'), 'utf8');
+    expect(html).not.toMatch(/\/\/a\//u);
+    expect(html.match(new RegExp(`"/a/${mainHash}\\.js"`, 'gu'))).toHaveLength(3);
+  });
+
   it('deduplicates shared blobs, records branch lineage, and keeps hashes referenced by live builds', async () => {
     const { deps } = world();
     completeRun(deps);
@@ -195,9 +211,10 @@ describe('published cache plans', () => {
     const indexEntry = firstCode.find(({ sourcePath }) => sourcePath === 'index.html');
     expect(indexEntry?.url).toBe(`/a/${digest(indexBytes)}.html`);
     expect(secondCode.find(({ sourcePath }) => sourcePath === 'index.html')?.url).toBe(indexEntry?.url);
-    expect(readFileSync(join(deps.config.gamesRoot, ids.game, firstBuild, 'index.html'), 'utf8')).toContain(
-      `/a/${mainHash}.js`,
-    );
+    const indexHtml = readFileSync(join(deps.config.gamesRoot, ids.game, firstBuild, 'index.html'), 'utf8');
+    // `./assets/main.js` must become `/a/<hash>.js`, not `.//a/<hash>.js` (#1197: every prod game's entry 404ed).
+    expect(indexHtml).toContain(`src="/a/${mainHash}.js"`);
+    expect(indexHtml).not.toMatch(/\/\/a\//u);
     expect(secondPlan.lineage).toEqual({
       previousBuildId: firstBuild,
       added: [secondHash],

@@ -256,7 +256,15 @@ async function codeFiles(
         let address: string;
         if (visiting.has(target)) address = `/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${target}`;
         else address = (await visit(target)).url;
-        for (const reference of references) text = text.replaceAll(reference, address);
+        // One pass, longest form first: replacing `x.js` before `./x.js` left `.//a/<hash>.js` (#1197).
+        const pattern = new RegExp(
+          [...references]
+            .sort((a, b) => b.length - a.length)
+            .map((reference) => reference.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'))
+            .join('|'),
+          'gu',
+        );
+        text = text.replace(pattern, () => address);
       }
       bytes = Buffer.from(text);
       visiting.delete(relativePath);
