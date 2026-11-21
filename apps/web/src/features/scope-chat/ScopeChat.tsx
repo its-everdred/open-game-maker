@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
@@ -7,11 +7,11 @@ import type { BudgetStatus, ScopeChoices } from '@ogm/contracts';
 import { api } from '../../lib/api/client';
 import { useSession } from '../../lib/api/session';
 import { answerJobCommand } from '../build-chat/commands';
+import { AiurComposer } from '../build-chat/AiurComposer';
 import { formatUnits } from '../build-chat/units';
 import { AiurConversation, jobScope, type AiurCommandAnswer } from '../aiur/embed';
 import { admitNewGame, type AdmissionResult, type SupportedOffer } from './admit';
 import { Captions } from './Captions';
-import { Composer } from './Composer';
 import { energyRefusalText } from '../energy/api';
 import { Offers } from './Offers';
 import { useScopeSession } from './useScopeSession';
@@ -28,6 +28,7 @@ export function ScopeChat({
   const navigate = useNavigate();
   const { data: session } = useSession();
   const scopeSession = useScopeSession(gameId, choices);
+  const conversationSection = useRef<HTMLElement>(null);
   const [refusal, setRefusal] = useState<Extract<AdmissionResult, { kind: 'refused' }>>();
   const [attempt, setAttempt] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -55,6 +56,10 @@ export function ScopeChat({
   useEffect(() => {
     if (scopeSession.sessionId) onSession?.(scopeSession.sessionId);
   }, [onSession, scopeSession.sessionId]);
+
+  useEffect(() => {
+    conversationSection.current?.querySelector('aiur-composer')?.setAttribute('placeholder', 'Message the builder');
+  }, [scopeSession.jobId]);
 
   const admit = async (start: 'now' | 'at_reset') => {
     if (!scopeSession.sessionId || !scopeSession.scope) return;
@@ -104,7 +109,7 @@ export function ScopeChat({
     <>
       <Captions turns={scopeSession.turns} status={scopeSession.status} />
       {scopeSession.jobId ? (
-        <Composer
+        <AiurComposer
           jobId={scopeSession.jobId}
           voiceTarget={voiceTarget}
           postText={(_jobId, text, attachments) => scopeSession.send(text, attachments)}
@@ -116,7 +121,7 @@ export function ScopeChat({
 
   return (
     <div className="talk-host">
-      <section className="vs two" aria-label="Scope conversation">
+      <section ref={conversationSection} className="vs two" aria-label="Scope conversation">
         {scopeSession.jobId ? (
           // New Game creation uses the same conversation component as the job modal; aiur replaces the captions and
           // composer once its element is installed, and the admission controls stay Open Game Maker's.
