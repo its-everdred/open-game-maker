@@ -11,6 +11,9 @@ it('scores registered regions independently', () => {
   expect(scores[0]!.ssim).toBe(1);
   expect(scores[1]!.ssim).toBeLessThan(0.01);
   expect(scores[1]!.colourHistogramDistance).toBe(1);
+  const whole = scoreSceneRegions(reference, render, [{ id: 'whole', bounds: { x: 0, y: 0, w: 2, h: 1 } }]);
+  expect(whole[0]!.referenceEdgeDensity).toBe(1);
+  expect(whole[0]!.renderEdgeDensity).toBe(0);
 });
 
 it('rejects mismatched images, duplicate names and out-of-bounds regions', () => {
