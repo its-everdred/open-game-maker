@@ -68,7 +68,7 @@ Roles: role:gameplay, role:qa
 |---|---|---|---|
 | Thumbnail | <composed art-only scene; follow the Thumbnail rule in SKILL.md> | game:<slug>, role:visual | <logo and graphics/look tickets> |
 | Loading image | <loading image ticket> | game:<slug>, role:visual | <graphics/look tickets> |
-| Trailer | <trailer ticket> | game:<slug>, role:visual, role:audio | <gameplay tickets> |
+| Trailer | <trailer ticket; made with gm-trailer> | game:<slug>, role:visual, role:audio | <gameplay tickets> |
 
 Record these as GitHub native blocked-by edges, not just prose. Refresh the affected media when the style or core gameplay changes.
 
