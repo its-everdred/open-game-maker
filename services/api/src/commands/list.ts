@@ -1,6 +1,6 @@
 import { authorize } from '@ogm/policy';
 
-import { GameCommand, type CreatorCommandsPage, type Principal } from '@ogm/contracts';
+import { GameCommand, type CreatorCommandsPage, type GameCommandsPage, type Principal } from '@ogm/contracts';
 
 import { actorFromPrincipal } from '../accounts/families.js';
 import type { AppDeps } from '../app/types.js';
@@ -20,13 +20,8 @@ async function optionMedia(deps: AppDeps, jobId: string, mediaId: string, sign: 
   return (await toMessage(row, sign)).media;
 }
 
-// One game's open player-facing Commands, newest first: its jobs' correlated Commands, plus the Commands its own aiur
-// instance holds when no job owns them. Each keeps the short review number it got the first time it was listed.
-export async function listGameCommands(
-  deps: AppDeps,
-  game: GameRow,
-  onUnavailable?: () => void,
-): Promise<GameCommand[]> {
+// Resolve all creator Commands, including incomplete reviews that need the media-repair action.
+async function resolveGameCommands(deps: AppDeps, game: GameRow, onUnavailable?: () => void): Promise<GameCommand[]> {
   const sign: MediaSigner = (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash);
   const commands: GameCommand[] = [];
   const jobs = listJobs(deps.db, game.id);
@@ -108,16 +103,73 @@ export async function listGameCommands(
     }
   }
 
-  // Each Command keeps the short number it got the first time it was listed; new ones are numbered oldest first.
-  const oldestFirst = [...commands].sort((left, right) => left.opened_at.localeCompare(right.opened_at));
+  return commands;
+}
+
+// A creator Command is a review card only when every option has media or is playable. Product questions use the
+// explicit text-only marker; a partially media-backed Command is omitted instead of falling back to plain text.
+function reviewableCommands(commands: GameCommand[]): GameCommand[] {
+  return commands.filter(
+    (command) =>
+      command.text_only === true ||
+      command.options.every(
+        (option) =>
+          option.media !== undefined ||
+          option.audio !== undefined ||
+          (option.audioClips?.length ?? 0) > 0 ||
+          option.playable !== undefined,
+      ),
+  );
+}
+
+function numberedReviewableCommands(deps: AppDeps, gameId: string, commands: GameCommand[]): GameCommand[] {
+  const reviewable = reviewableCommands(commands);
+  const oldestFirst = [...reviewable].sort((left, right) => left.opened_at.localeCompare(right.opened_at));
   const numbers = reviewNumbers(
     deps.db,
-    game.id,
+    gameId,
     oldestFirst.map((command) => command.decision_id),
   );
-  return commands
+  return reviewable
     .sort((left, right) => right.opened_at.localeCompare(left.opened_at))
     .map((command) => ({ ...command, review_number: numbers.get(command.decision_id)! }));
+}
+
+function missingMediaReviewCommands(game: GameRow, commands: GameCommand[]) {
+  return commands
+    .filter((command) => command.ticket !== null && !reviewableCommands([command]).length)
+    .map((command) => ({ game_id: game.id, decision_id: command.decision_id }));
+}
+
+// One game's reviewable Commands, newest first, with stable numbers assigned only to cards shown in the inbox.
+export async function listGameCommands(
+  deps: AppDeps,
+  game: GameRow,
+  onUnavailable?: () => void,
+): Promise<GameCommand[]> {
+  return numberedReviewableCommands(deps, game.id, await resolveGameCommands(deps, game, onUnavailable));
+}
+
+export async function listGameCommandPage(
+  deps: AppDeps,
+  game: GameRow,
+  principal: Principal,
+  onUnavailable?: () => void,
+): Promise<GameCommandsPage> {
+  const resolved = await resolveGameCommands(deps, game, onUnavailable);
+  const commands = shownOneByOne(deps, numberedReviewableCommands(deps, game.id, resolved));
+  const missingMediaCommands =
+    principal.kind === 'user' && game.ownerId === principal.userId ? missingMediaReviewCommands(game, resolved) : [];
+  return { commands, missing_media_commands: missingMediaCommands };
+}
+
+// Find a Command regardless of card completeness, for repair and answer-ledger ownership checks.
+export async function findGameCommand(
+  deps: AppDeps,
+  game: GameRow,
+  decisionId: string,
+): Promise<GameCommand | undefined> {
+  return (await resolveGameCommands(deps, game)).find((command) => command.decision_id === decisionId);
 }
 
 // How many queued product questions open a voice session when `OGM_VOICE_QUESTIONS_AT` is not set.
@@ -165,19 +217,21 @@ export async function listCreatorCommands(
   const perGame = await Promise.all(
     games.map(async (game) => {
       try {
-        return (
-          await listGameCommands(deps, game, () => {
-            unavailable = true;
-          })
-        ).map((command) => ({
+        const resolved = await resolveGameCommands(deps, game, () => {
+          unavailable = true;
+        });
+        const commands = numberedReviewableCommands(deps, game.id, resolved).map((command) => ({
           ...command,
           game_id: game.id,
           game_title: game.title.slice(0, 200),
         }));
+        const missingMediaCommands =
+          includeQuestions && game.ownerId === principal.userId ? missingMediaReviewCommands(game, resolved) : [];
+        return { commands, missingMediaCommands };
       } catch (error) {
         unavailable = true;
         deps.log({ event: 'creator_commands_game_failed', gameId: game.id, error: (error as Error).name });
-        return [];
+        return { commands: [], missingMediaCommands: [] };
       }
     }),
   );
@@ -185,11 +239,18 @@ export async function listCreatorCommands(
   const questionSessions = !voiceConfigured(deps)
     ? []
     : games.flatMap((game, index) => {
-        const count = perGame[index]!.filter((command) => command.text_only === true).length;
+        const count = perGame[index]!.commands.filter((command) => command.text_only === true).length;
         return count >= threshold ? [{ game_id: game.id, game_title: game.title.slice(0, 200), count }] : [];
       });
-  const commands = (includeQuestions ? perGame.flat() : shownOneByOne(deps, perGame.flat())).sort(
+  const allCommands = perGame.flatMap(({ commands: items }) => items);
+  const commands = (includeQuestions ? allCommands : shownOneByOne(deps, allCommands)).sort(
     (left, right) => Number(right.blocking) - Number(left.blocking) || left.opened_at.localeCompare(right.opened_at),
   );
-  return { commands, question_sessions: questionSessions, ...(unavailable ? { unavailable: true } : {}) };
+  const missingMediaCommands = perGame.flatMap(({ missingMediaCommands: items }) => items);
+  return {
+    commands,
+    question_sessions: questionSessions,
+    ...(includeQuestions ? { missing_media_commands: missingMediaCommands } : {}),
+    ...(unavailable ? { unavailable: true } : {}),
+  };
 }

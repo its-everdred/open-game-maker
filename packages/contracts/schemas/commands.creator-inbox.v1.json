@@ -301,6 +301,27 @@
         ],
         "additionalProperties": false
       }
+    },
+    "missing_media_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "game_id": {
+            "type": "string",
+            "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
+          },
+          "decision_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "game_id",
+          "decision_id"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

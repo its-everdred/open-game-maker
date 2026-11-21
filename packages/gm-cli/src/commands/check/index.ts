@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import type { GateResult, RunL0Options } from '@ogm/gm-verify';
 
@@ -12,12 +12,65 @@ import { checkLoading } from '../../loading-check.js';
 import { checkPlayArea } from '../../play-area-check.js';
 import { findPlayAreaGame } from '../../play-area-config.js';
 import { checkPrReview } from '../../pr-review-check.js';
+import { entriesForTicket, readInventory } from '../../decision-inventory.js';
+import { reviewScreens } from '../../look/screens.js';
 import { recipeSchema } from '../../sprite-forge.js';
 
 function ticketLabels(body: string): Set<string> {
   return new Set(
     [...body.matchAll(/(?:^|\s)(lane:[a-z-]+|phase:[a-z-]+)(?=\s|$)/gim)].map((match) => match[1]!.toLowerCase()),
   );
+}
+
+type MockRecord = { kind?: unknown; refs?: unknown; out?: unknown; file?: unknown; prompt?: unknown };
+
+function mockRecord(path: string, cwd: string): MockRecord | null {
+  if (!path.endsWith('.json')) return null;
+  try {
+    const value = JSON.parse(readFileSync(join(cwd, path), 'utf8')) as unknown;
+    return value && typeof value === 'object' && !Array.isArray(value) && (value as MockRecord).kind === 'image'
+      ? (value as MockRecord)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function mockReferenceProblems(changed: string[], cwd: string): string[] {
+  const records = changed.flatMap((path) => {
+    const record = mockRecord(path, cwd);
+    return record ? [{ path, record }] : [];
+  });
+  const images = changed.filter((path) => /\.(?:png|jpe?g|webp)$/i.test(path));
+  const problems: string[] = [];
+  if (images.length > 0 && records.length === 0)
+    problems.push('phase:mock images need a changed request-mock image record with pack refs');
+
+  const recordedImages = new Set<string>();
+  for (const { path, record } of records) {
+    const refs = Array.isArray(record.refs)
+      ? [...new Set(record.refs.filter((ref): ref is string => typeof ref === 'string' && ref.length > 0))]
+      : [];
+    const packRefs = refs.filter((ref) => /^assets-local\/(?:packs|sets)\//.test(ref));
+    const logoRef = refs.some((ref) => /(?:^|\/)(?:logo\/|[^/]*logo[^/]*\.(?:png|jpe?g|webp)$)/i.test(ref));
+    const logoScreen =
+      typeof record.prompt === 'string' && /\b(title|loading|end(?: screen)?|thumbnail)\b/i.test(record.prompt);
+    if (packRefs.length < 2 && !(refs.length === 1 && logoRef && logoScreen))
+      problems.push(
+        `${path} needs at least two assets-local/packs or assets-local/sets refs (or the game logo for a title/loading/end/thumbnail mock)`,
+      );
+
+    if (typeof record.out !== 'string' || typeof record.file !== 'string') {
+      problems.push(`${path} does not identify its generated image`);
+      continue;
+    }
+    const imagePath = join(record.out, record.file).replaceAll('\\', '/');
+    recordedImages.add(imagePath);
+    if (!images.includes(imagePath)) problems.push(`${path} has no generated image attached at ${imagePath}`);
+  }
+  for (const image of images)
+    if (!recordedImages.has(image)) problems.push(`${image} has no matching request-mock image record`);
+  return problems;
 }
 
 function ticketGate(cwd: string, body: string, base: string, lane?: string, phase?: string): string[] {
@@ -38,6 +91,7 @@ function ticketGate(cwd: string, body: string, base: string, lane?: string, phas
   if (effectiveLabels.has('lane:creative') && effectiveLabels.has('phase:mock')) {
     const source = changed.filter((path) => /^(?:games\/[^/]+\/src|src)\//.test(path));
     if (source.length) problems.push(`phase:mock may not change game source: ${source.join(', ')}`);
+    problems.push(...mockReferenceProblems(changed, cwd));
   }
   if (
     effectiveLabels.has('lane:creative') &&
@@ -53,38 +107,38 @@ function ticketGate(cwd: string, body: string, base: string, lane?: string, phas
       // The ticket gate can run in a bare worktree fixture without a manifest.
     }
     const slug = basename(game);
-    const decisionFiles = [join(game, 'review/decisions.json'), join(root, 'docs', slug, 'decisions.json')];
-    const recorded = decisionFiles.some((path) => {
+    const requiredApprovalPhase = effectiveLabels.has('phase:build') ? 'prototype' : 'mock';
+    const phaseRank = ['mock', 'prototype', 'build', 'polish'];
+    const hasApprovalPhase = (phase: unknown) => {
+      if (typeof phase !== 'string') return false;
+      const phaseIndex = phaseRank.indexOf(phase);
+      return phaseIndex >= 0 && phaseIndex >= phaseRank.indexOf(requiredApprovalPhase);
+    };
+    let hasApprovedScreen = false;
+    try {
+      hasApprovedScreen = reviewScreens(game).some(
+        (screen) => typeof screen.target === 'string' && hasApprovalPhase(screen.phase),
+      );
+    } catch {
+      // A missing review deck has no approved screen targets.
+    }
+    let hasTicketDecision = false;
+    if (ticketNumber) {
       try {
-        const value = JSON.parse(readFileSync(path, 'utf8')) as {
-          screens?: Record<string, { target?: string }>;
-          decisions?: { ticket?: number | null; status?: string; answer?: string | null; options?: { media?: string }[] }[];
-        } | { ticket?: number | null; status?: string; answer?: string | null; options?: { media?: string }[] }[];
-        if (Array.isArray(value))
-          return value.some(
-            (decision) =>
-              decision.ticket === Number(ticketNumber) &&
-              decision.status === 'answered' &&
-              typeof decision.answer === 'string' &&
-              decision.options?.some((option) => typeof option.media === 'string'),
-          );
-        return (
-          Object.values(value.screens ?? {}).some(
-            (screen) => typeof screen.target === 'string' && screen.target.length > 0,
-          ) ||
-          (Array.isArray(value.decisions) &&
-            value.decisions.some(
-              (decision) =>
-                decision.ticket === Number(ticketNumber) &&
-                decision.status === 'answered' &&
-                typeof decision.answer === 'string' &&
-                decision.options?.some((option) => typeof option.media === 'string'),
-            ))
+        const inventory = readInventory(join(root, 'docs', slug, 'decisions.json'));
+        hasTicketDecision = entriesForTicket(inventory, ticketNumber).some(
+          (decision) =>
+            decision.status === 'answered' &&
+            typeof decision.answer === 'string' &&
+            hasApprovalPhase(decision.phase) &&
+            decision.options.length > 0 &&
+            decision.options.every((option) => typeof option.media === 'string' && option.media.length > 0),
         );
       } catch {
-        return false;
+        hasTicketDecision = false;
       }
-    });
+    }
+    const recorded = hasApprovedScreen || hasTicketDecision;
     if (!recorded)
       problems.push(
         `lane:creative ${effectiveLabels.has('phase:build') ? 'phase:build needs an approved prototype' : 'phase:prototype needs an approved mock'} recorded in review/decisions.json or docs/<slug>/decisions.json`,
@@ -102,6 +156,9 @@ function ticketGate(cwd: string, body: string, base: string, lane?: string, phas
           continue;
         }
         const recipe = parsed.data;
+        const outputPath = join(dirname(path), recipe.output).replaceAll('\\', '/');
+        if (!changed.includes(outputPath) || !existsSync(join(cwd, outputPath)))
+          problems.push(`${path} has no generated sprite attached at ${outputPath}`);
         if (!recipe.approved_by_creator) problems.push(`${path} has no creator approval`);
         const roundPrefix = path.slice(0, -'recipe.json'.length);
         const originalPrefix = `${roundPrefix}originals/`;

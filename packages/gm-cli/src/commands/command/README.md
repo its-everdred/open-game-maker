@@ -3,8 +3,10 @@
 Raise a creator Command, then copy the printed `emit_event` call into the agent tool:
 
 ```text
-gm command request --job <id> --question "Which look?" --option a=Chunky --option b=Flat --recommend a
-gm command request --job <id> --question "Which look?" --option a=Chunky --option b=Flat --media a=<chat-message-id>
+gm command request --job <id> --question "Which look?" --option a=Chunky --option b=Flat --recommend a \
+  --media a=<chunky-image-id> --media b=<flat-image-id>
+gm command request --job <id> --question "Which look?" --option a=Chunky --option b=Flat \
+  --playable 'a=scenario=style&look=chunky' --playable 'b=scenario=style&look=flat'
 gm command request --job <id> --question "Which fall speed?" --option slow=Slow --option fast=Fast \
   --playable 'slow=scenario=sandbox&speed=slow' --playable 'fast=scenario=sandbox&speed=fast' --seconds fast=6
 gm command wait <command-id> --timeout 600
@@ -13,6 +15,7 @@ gm command wait <command-id> --timeout 600
 `request` writes `.gm/outbox/command.jsonl`. `wait` reads `.gm/inbox/commands/<id>.json`; it exits 3 on timeout
 and 4 when the Command is moot. Every `gm command request` and `gm decide` Command is raised
 blocking, so aiur never retires a creator's pick unseen; revert to non-blocking by default once aiur #7872 is deployed.
+Every option must carry image, audio or video media, or a `--playable` slice; incomplete review cards are rejected.
 
 A gameplay-feel question (speed, a chain's pause, controls) gives each option a `--playable <id>=<scenario query>`: the
 review deck plays the game's build (`--branch`, default `main`) with that query for `--seconds` (default 8), after an

@@ -20,6 +20,7 @@ export const CreatorDecision = z
     options: z.array(DecisionOption).min(2),
     recommendation: z.string().trim().min(1),
     sources: z.array(z.string().trim().min(1)),
+    phase: z.enum(['mock', 'prototype', 'build', 'polish']).optional(),
     ticket: z.number().int().positive().nullable(),
     status: z.enum(['open', 'asked', 'answered', 'defaulted']),
     answer: z.string().trim().min(1).nullable(),

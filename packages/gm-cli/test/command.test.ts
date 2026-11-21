@@ -21,12 +21,24 @@ function commandLine(root: string) {
   return AgentOutboxLine.parse(JSON.parse(raw));
 }
 
+async function mediaFlags(root: string, options: string[] = ['a', 'b']): Promise<string[]> {
+  const flags: string[] = [];
+  for (const option of options) {
+    const image = join(root, `${option}.png`);
+    writeFileSync(image, `preview ${option}`);
+    const post = await gm(['chat', 'post', '--job', JOB_ID, '--text', `${option} preview`, '--image', image], {
+      cwd: root,
+    });
+    flags.push('--media', `${option}=${post.out[0]}`);
+  }
+  return flags;
+}
+
 describe('gm command request', () => {
   it('writes two candidates with media and prints the correlated decision.requested call', async () => {
     const root = workspace();
     const events = join(root, 'events.jsonl');
-    const post = await gm(['chat', 'post', '--job', JOB_ID, '--text', 'chunky preview'], { cwd: root });
-    const mediaId = post.out[0];
+    const media = await mediaFlags(root);
 
     const result = await gm(
       [
@@ -40,8 +52,7 @@ describe('gm command request', () => {
         'a=Chunky',
         '--option',
         'b=Flat',
-        '--media',
-        `a=${mediaId}`,
+        ...media,
         '--recommend',
         'a',
         '--json',
@@ -60,8 +71,8 @@ describe('gm command request', () => {
       command_id: printed.command_id,
       question: 'Which look?',
       options: [
-        { id: 'a', label: 'Chunky', media_id: mediaId },
-        { id: 'b', label: 'Flat' },
+        { id: 'a', label: 'Chunky', media_id: media[1]!.split('=')[1] },
+        { id: 'b', label: 'Flat', media_id: media[3]!.split('=')[1] },
       ],
       recommend: 'a',
       blocking: true,
@@ -87,7 +98,7 @@ describe('gm command request', () => {
     });
   });
 
-  it('prints the command id followed by copyable emit_event JSON by default', async () => {
+  it('refuses a command when an option has no media', async () => {
     const result = await gm(
       [
         'command',
@@ -103,9 +114,35 @@ describe('gm command request', () => {
       ],
       { cwd: workspace() },
     );
-    expect(result.out[0]).toMatch(/^cp_/);
-    expect(result.out[1]).toBe('Now call emit_event with this payload:');
-    expect(JSON.parse(result.out[2])).toMatchObject({ name: 'decision.requested', message: 'Which look?' });
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('option "a", "b" has no media');
+  });
+
+  it('refuses text-only chat posts as Command option media', async () => {
+    const root = workspace();
+    const text = await gm(['chat', 'post', '--job', JOB_ID, '--text', 'a preview'], { cwd: root });
+    const media = await mediaFlags(root, ['b']);
+    const result = await gm(
+      [
+        'command',
+        'request',
+        '--job',
+        JOB_ID,
+        '--question',
+        'Which look?',
+        '--option',
+        'a=Chunky',
+        '--option',
+        'b=Flat',
+        '--media',
+        `a=${text.out[0]}`,
+        ...media,
+      ],
+      { cwd: root },
+    );
+
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('media for option "a" is a text post');
   });
 
   it('marks a lineup option whose provenance names a generated catalog pack', async () => {
@@ -121,6 +158,7 @@ describe('gm command request', () => {
       generator: 'gm shot',
       built_at: '2026-11-09T00:00:00.000Z',
     });
+    const media = await mediaFlags(root);
 
     const result = await gm(
       [
@@ -136,14 +174,21 @@ describe('gm command request', () => {
         'b=Authored',
         '--provenance',
         `a=${provenance}`,
+        ...media,
       ],
       { cwd: root, env: { OGM_ASSETS_ROOT: assets } },
     );
 
     expect(result.code).toBe(0);
     expect(commandLine(root).payload.options).toEqual([
-      { id: 'a', label: 'Generated', provenance: JSON.parse(provenance), aiGenerated: true },
-      { id: 'b', label: 'Authored' },
+      {
+        id: 'a',
+        label: 'Generated',
+        media_id: media[1]!.split('=')[1],
+        provenance: JSON.parse(provenance),
+        aiGenerated: true,
+      },
+      { id: 'b', label: 'Authored', media_id: media[3]!.split('=')[1] },
     ]);
   });
 
@@ -175,6 +220,7 @@ describe('gm command request', () => {
       generator: 'gm shot',
       built_at: '2026-11-09T00:00:00.000Z',
     });
+    const media = await mediaFlags(root);
     const args = [
       'command',
       'request',
@@ -188,6 +234,7 @@ describe('gm command request', () => {
       'b=Authored',
       '--provenance',
       `a=${provenance}`,
+      ...media,
     ];
 
     expect((await gm(args, { cwd: root, env })).code).toBe(0);
@@ -243,7 +290,16 @@ describe('gm command request', () => {
     });
 
     const result = await gm(
-      [...args, '--option', 'a=Generated', '--option', 'b=Authored', '--provenance', `a=${provenance}`],
+      [
+        ...args,
+        ...(args[0] === 'command' ? await mediaFlags(root) : []),
+        '--option',
+        'a=Generated',
+        '--option',
+        'b=Authored',
+        '--provenance',
+        `a=${provenance}`,
+      ],
       { cwd: root, env: { OGM_ASSETS_ROOT: assets } },
     );
 
@@ -331,7 +387,20 @@ describe('gm command request', () => {
   // (#680); a key that could not be a GitHub label is refused before the Command is printed.
   it('stamps the decision key that waiting tickets name on the Command', async () => {
     const root = workspace();
-    const args = ['command', 'request', '--question', 'Which diorama?', '--option', 'a=Meadow', '--option', 'b=Table'];
+    const args = [
+      'command',
+      'request',
+      '--question',
+      'Which diorama?',
+      '--option',
+      'a=Meadow',
+      '--option',
+      'b=Table',
+      '--playable',
+      'a=diorama=meadow',
+      '--playable',
+      'b=diorama=table',
+    ];
     const result = await gm([...args, '--key', 'blobs/diorama', '--json'], { cwd: root });
     expect(result).toMatchObject({ code: 0, err: [] });
     const printed = JSON.parse(result.out[0]) as {
@@ -356,8 +425,6 @@ describe('gm command request', () => {
         'a=Slow',
         '--option',
         'b=Fast',
-        '--option',
-        'c=Neither',
         '--playable',
         'a=scenario=sandbox&speed=slow',
         '--playable',
@@ -453,9 +520,24 @@ describe('gm command request', () => {
       error: 'more than one',
     },
   ])('exits 2 for $name', async ({ extra, error }) => {
+    const root = workspace();
+    const media = await mediaFlags(root);
     const result = await gm(
-      ['command', 'request', '--job', JOB_ID, '--question', 'Which?', '--option', 'a=A', '--option', 'b=B', ...extra],
-      { cwd: workspace() },
+      [
+        'command',
+        'request',
+        '--job',
+        JOB_ID,
+        '--question',
+        'Which?',
+        '--option',
+        'a=A',
+        '--option',
+        'b=B',
+        ...media,
+        ...extra,
+      ],
+      { cwd: root },
     );
     expect(result.code).toBe(2);
     expect(result.err[0]).toContain(error);
@@ -466,9 +548,11 @@ describe('gm command request', () => {
     { name: 'over two lines', question: 'Which speed?\nMore context', error: 'one line' },
     { name: 'with a link', question: 'Which? https://example.test/play', error: 'must not contain links' },
   ])('exits 2 for a question $name', async ({ question, error }) => {
+    const root = workspace();
+    const media = await mediaFlags(root);
     const result = await gm(
-      ['command', 'request', '--job', JOB_ID, '--question', question, '--option', 'a=A', '--option', 'b=B'],
-      { cwd: workspace() },
+      ['command', 'request', '--job', JOB_ID, '--question', question, '--option', 'a=A', '--option', 'b=B', ...media],
+      { cwd: root },
     );
     expect(result.code).toBe(2);
     expect(result.err[0]).toContain(error);

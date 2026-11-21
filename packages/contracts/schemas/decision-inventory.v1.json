@@ -60,6 +60,15 @@
           "minLength": 1
         }
       },
+      "phase": {
+        "type": "string",
+        "enum": [
+          "mock",
+          "prototype",
+          "build",
+          "polish"
+        ]
+      },
       "ticket": {
         "anyOf": [
           {
