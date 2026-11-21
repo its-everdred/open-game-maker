@@ -67,6 +67,8 @@ A small offline probe used the cached `openai/clip-vit-large-patch14` image enco
 
 The inspected local sheet is `assets-local/review/1154/clip-kit-diagnostic.png`. This probe supports a visually reviewed shortlist, not automatic matching or a claim that CLIP wins against other encoders. In particular, masking, transparent padding, sprite scale, view angle and candidate coverage need a controlled benchmark. It does not resolve the three-arm scene bake-off or select a winning pipeline.
 
+The official [CLIP model card](https://huggingface.co/openai/clip-vit-base-patch32) describes the model as research and calls for in-domain testing before constrained image search; deployed use is outside its stated scope. The local probe above is research, and its limited results are not evidence for deployment. A smaller ViT-B/32 local experiment was started to assess catalog-scale runtime; do not compare its scores directly with ViT-L/14 or assume the two models retrieve the same assets.
+
 ## Local blockout-first probe
 
 A local image-to-image trial used the existing rendered asset blockout as input, entirely on CPU. The model was [Segmind Tiny SD](https://huggingface.co/segmind/tiny-sd), revision `cad0bd7`, with CreativeML OpenRAIL-M terms; `diffusers` 0.36.0 and CPU PyTorch 2.14.1 ran in an isolated scratch environment. The fixed seed was 1154, the input was resized to 384 × 672, guidance was 6, and the scheduler was given 12 steps. Two strengths were tried: 0.5 (six denoising steps) and 0.25 (three). No pack image was sent to a remote service.
