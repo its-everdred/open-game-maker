@@ -51,14 +51,14 @@ describe('Composer', () => {
     expect(dictate).toHaveTextContent('');
     fireEvent.pointerDown(dictate);
     expect(screen.getByRole('status')).toHaveTextContent('Dictation uses ElevenLabs transcription credits.');
-    dictation.finish('make the door red');
+    act(() => dictation.finish('make the door red'));
 
-    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('make the door red'));
+    expect(screen.getByRole('textbox')).toHaveValue('make the door red');
     expect(screen.getByRole('textbox')).not.toHaveAttribute('placeholder');
     expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument();
     expect(postText).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    await waitFor(() => expect(postText).toHaveBeenCalledWith('j_1', 'make the door red'));
+    expect(postText).toHaveBeenCalledWith('j_1', 'make the door red');
   });
 
   it('hides two-way voice when probing reports unavailable', async () => {
