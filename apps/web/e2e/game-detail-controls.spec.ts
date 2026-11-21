@@ -160,7 +160,17 @@ for (const size of [
     await page.setViewportSize(size);
     const release = await openWhileLoading(page);
     release();
-    await page.goto('/all?test&spotlight=showcase%3Arestorebound', { waitUntil: 'domcontentloaded' });
+    const restorebound = {
+      ...fixture.games[0],
+      id: 'g_restorebound',
+      slug: 'restorebound',
+      title: 'RestoreBound',
+      stats: { version: '1.0.0', plays: 1200 },
+    };
+    await page.route('**/api/v1/games', (route) =>
+      route.fulfill({ json: { games: [...fixture.games, restorebound] } }),
+    );
+    await page.goto('/all?test&spotlight=g_restorebound', { waitUntil: 'domcontentloaded' });
     const detail = page.getByRole('region', { name: 'RestoreBound spotlight' });
     await expect(detail).toBeVisible();
     const geometry = await detail.evaluate((element) => {

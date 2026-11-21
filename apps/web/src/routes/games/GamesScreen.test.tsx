@@ -210,7 +210,6 @@ it('sorts by last played or created time, with real games ahead of curated place
     const ids = [...document.querySelectorAll('[data-game-id]')].map((node) => node.getAttribute('data-game-id'));
     expect(ids.slice(0, 4)).toEqual(['g_4', 'g_2', 'g_3', 'g_5']);
     expect(ids.slice(4)).toEqual([
-      'showcase:restorebound',
       'showcase:mossy-leap',
       'showcase:skyward-squadron',
       'showcase:powder-rush',
@@ -236,19 +235,19 @@ it('moves an older game to first when it is played most recently', async () => {
 describe('GamesScreen', () => {
   it('opens the selected prototype showcase even when Goblin Cellar has a build', async () => {
     renderGames();
-    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }, AUTO_SELECT));
-    expect(await screen.findByText('A sleepy village, one repair at a time.')).toBeVisible();
-    const play = await screen.findByRole('button', { name: 'Play RestoreBound' });
+    fireEvent.click(await screen.findByRole('button', { name: /^Mossy Leap:/ }, AUTO_SELECT));
+    expect(await screen.findByText('Hop, bop and collect every coin in the Greenwood.')).toBeVisible();
+    const play = await screen.findByRole('button', { name: 'Play Mossy Leap' });
     await waitFor(() => expect(play).toBeEnabled());
     fireEvent.click(play);
-    expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/restorebound?mode=play');
+    expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/mossy-leap?mode=play');
   });
   it('opens the prototype demo for a showcase game before Goblin Cellar is registered', async () => {
     gamesResponse = [];
     renderGames();
-    fireEvent.click(await screen.findByRole('button', { name: /^RestoreBound:/ }, AUTO_SELECT));
-    fireEvent.click(await screen.findByRole('button', { name: 'Play RestoreBound' }));
-    expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/restorebound?mode=play');
+    fireEvent.click(await screen.findByRole('button', { name: /^Mossy Leap:/ }, AUTO_SELECT));
+    fireEvent.click(await screen.findByRole('button', { name: 'Play Mossy Leap' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/g/showcase/mossy-leap?mode=play');
   });
   it('does not show a share button for a selected game', async () => {
     const { container } = renderGames('/all?spotlight=g_2');
@@ -260,7 +259,7 @@ describe('GamesScreen', () => {
     gamesResponse = [];
     renderGames();
 
-    expect(await screen.findByRole('button', { name: /^RestoreBound:/ })).toBeVisible();
+    expect(await screen.findByRole('button', { name: /^Mossy Leap:/ })).toBeVisible();
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
   });
 
@@ -276,7 +275,7 @@ describe('GamesScreen', () => {
     // slow first render under the fully parallel suite.
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });
     expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
-    expect(container.querySelectorAll('.game-tile')).toHaveLength(7 + count - (count >= 2 ? 1 : 0));
+    expect(container.querySelectorAll('.game-tile')).toHaveLength(6 + count - (count >= 2 ? 1 : 0));
     expect(container.querySelectorAll('[data-game-id].is-selected')).toHaveLength(0);
   });
 
@@ -288,7 +287,7 @@ describe('GamesScreen', () => {
     await screen.findByRole('button', { name: 'Fourth Game' });
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
     expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
-    expect(container.querySelectorAll('.game-tile')).toHaveLength(10);
+    expect(container.querySelectorAll('.game-tile')).toHaveLength(9);
   });
 
   it('starts a selected trailer during the tile click and adopts that video', async () => {
@@ -553,7 +552,7 @@ describe('GamesScreen', () => {
     const { container } = renderGames('/all', client);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh the library');
-    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(9);
+    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(8);
     expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
   });
 
@@ -568,7 +567,7 @@ describe('GamesScreen', () => {
     const { container } = renderGames();
 
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });
-    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(9);
+    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(8);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 

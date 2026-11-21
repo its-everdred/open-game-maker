@@ -17,12 +17,13 @@ describe('showcase tile', () => {
   });
 
   it('shows the featured badge, title, icons and rating from the prototype', () => {
-    const game = mergeShowcase([]).find((entry) => entry.title === 'RestoreBound')!;
+    const entry = mergeShowcase([]).find((game) => game.title === 'Mossy Leap')!;
+    const game = { ...entry, showcase: { ...entry.showcase!, badge: 'Featured' } };
     render(<Tile game={game} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />);
     expect(screen.getByText('Featured')).toBeVisible();
-    expect(screen.getAllByText('RestoreBound').length).toBeGreaterThan(0);
-    expect(screen.getByText('★ 4.7')).toBeVisible();
-    expect(screen.getByLabelText('Adventure, Craft, Cozy, Calm')).toBeInTheDocument();
+    expect(screen.getAllByText('Mossy Leap').length).toBeGreaterThan(0);
+    expect(screen.getByText('★ 4.5')).toBeVisible();
+    expect(screen.getByLabelText('Platformer, Cute, Retro')).toBeInTheDocument();
   });
 });
 
