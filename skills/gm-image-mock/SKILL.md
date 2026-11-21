@@ -22,8 +22,12 @@ assets come in step 2, built toward the mock the creator picked.
 
 ## Make the options
 
-1. **Read the direction.** The creator's concept art, logo, spec and feedback ledger set the mood; the kit's set card
-   gives the game's genre and camera. Write the direction into each prompt in plain words.
+1. **Read the direction, then pick the real assets.** The creator's concept art, logo, spec and feedback ledger set the
+   mood; the kit's set card gives the game's genre and camera. Pick the pack assets this scene uses first
+   (`gm assets search`: buildings, props, tiles, the high-res class sprites for characters) and attach them to every
+   generation. Logo-derived screens (title, loading, end screen, thumbnail) follow the logo: its viewpoint (a
+   first-person door, never an isometric background behind it), its rocks, and the logo attached as a reference.
+   Write the direction into each prompt in plain words.
 2. **Four options that differ greatly.** Different environment, palette, board or play-area treatment, HUD shape, and
    character staging. Never four tints of one scene.
 3. **The player's screen, nothing else.** Each mock is one in-game frame as the player sees it, from the game's real
@@ -58,18 +62,22 @@ the packs, gm-asset-variants and the generation routes below.
 
 ## Generate
 
-Use `image_gen.imagegen` first for mockups and logos when it is available. Otherwise run
-`python3 <this skill>/scripts/request-mock.py --prompt-file <file> --out <dir> [--ref <workspace path>]... [--aspect 9:16]`.
+Never call a built-in image tool (`image_gen`, `imagegen`): it bypasses the reference check and is off for workers.
+Always run `python3 <this skill>/scripts/request-mock.py --prompt-file <file> --out <dir> --ref <workspace path>...
+[--aspect 9:16]`. The broker refuses an image without 2+ refs under `assets-local/packs/` or `assets-local/sets/` (or
+the game logo from `assets-local/review/<slug>/` for a logo-derived screen) and says why.
 The host's mock broker writes the image into `<dir>`; the script waits and prints the paths. You never hold a provider
 key. Mark outputs as AI-generated. Keep each prompt self-contained: the screen, the moment, the palette, the HUD.
 
 **Two lanes, set by the ticket's label** (creator, 2026-11-20: "mocks do a MUCH better job with creativity, creating
 beautiful and aspirational directions"; the sprite pipeline needs "direct clone of existing style"):
 - **`lane:creative`** (towns, settings and biomes, UI screens, HUD, menus, title, loading and end screens, logos,
-  thumbnails): pure image generation with wide imagination. Aim for the most beautiful, aspirational version of the
-  screen the concept and logo point to: rich lighting, composition and mood. Kit sprites may be attached for mood
-  and palette only; they never cap detail or style at this rung, and no lineups, in-engine renders or diorama stills
-  stand in for a mock. Making it buildable is the prototype rung's job.
+  thumbnails): image generation for composition, lighting, layout and beauty, built from the game's real pack assets
+  for that scene attached directly, in the game's graphics style and camera (isometric for Dusk Helm scenes), so the
+  prototype rung can rebuild it from those assets (creator, 2026-11-21: "mocks should match the graphics style and
+  isometric angle so they can be useful for copying in prototype phase with real engine assets"). Characters are the
+  high-res class sprites. No lineups, in-engine renders or empty fields stand in for a mock, and a round never posts
+  with an option lacking media.
 - **`lane:clone`** (rebuilding or varying a pack's sprites): no imagination. Load `gm-sprite-forge`, attach the
   originals to every generation, match their pixel density, outline, shading and camera exactly, and pass its gates.
   A clone that is "better" than the original is off-style.
