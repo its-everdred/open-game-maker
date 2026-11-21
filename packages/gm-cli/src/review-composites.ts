@@ -22,8 +22,8 @@ export async function buildComposites(
 ): Promise<{ viewport: ViewportId; path: string }[]> {
   const eligible = stills
     .map((still, index) => ({ still, index }))
-    .filter(
-      (entry): entry is { still: Still & { slot: keyof typeof IMAGE_SLOTS }; index: number } => Boolean(entry.still.slot),
+    .filter((entry): entry is { still: Still & { slot: keyof typeof IMAGE_SLOTS }; index: number } =>
+      Boolean(entry.still.slot),
     );
   const output = join(root, 'review', 'composites');
   await mkdir(output, { recursive: true });

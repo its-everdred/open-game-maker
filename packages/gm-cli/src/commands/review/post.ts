@@ -34,7 +34,8 @@ export const command: GmCommand = {
       if (!slottedStills.some((still) => still.viewport === 'phone-portrait' || !still.viewport))
         throw new CommandError('art round needs a phone-portrait image (aspect sets, gm-image-mock)');
       const compositeInputs = slottedStills.map((still) => {
-        if (!still.ref.startsWith('file:')) throw new CommandError('slotted review stills must use workspace file refs');
+        if (!still.ref.startsWith('file:'))
+          throw new CommandError('slotted review stills must use workspace file refs');
         return { ...still, ref: resolve(ctx.cwd, still.ref.slice(5)) };
       });
       const composites = await buildComposites(compositeInputs, root);

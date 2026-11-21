@@ -16,7 +16,9 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'gm-review-composites-'));
   roots.push(root);
   const still = join(root, 'still.png');
-  await sharp({ create: { width: 20, height: 10, channels: 4, background: '#ff0000' } }).png().toFile(still);
+  await sharp({ create: { width: 20, height: 10, channels: 4, background: '#ff0000' } })
+    .png()
+    .toFile(still);
   return { root, still };
 }
 
