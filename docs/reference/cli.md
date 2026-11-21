@@ -119,6 +119,7 @@ gm check [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm check images [--json]
+gm images compose
 gm check boot [--dist <dir>] [--viewport both|phone|tablet-landscape] [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--deadline <seconds>] [--serve <dir>] [--out <dir>] [--json]
 gm run [--verify-source] [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
@@ -148,6 +149,9 @@ games with a manifest. It checks required viewport variants, display aspect rati
 size and contrast. Legacy `loading.portrait` and `loading.landscape` keep their existing 9:16 and 16:9 source checks;
 when either is shipped, also declare a complete `images.loading` viewport set. Games without shipped thumbnail, logo,
 loading art, or `images` slots pass without image checks.
+
+`gm images compose` renders every layered image slot into its declared viewport variants. It writes 2x PNGs under
+`public/media/slots/` by default, or to the paths listed in the slot's `variants` map.
 
 `gm decisions check` validates `docs/<slug>/decisions.json` and fails when its grouped `decisions.md` render is stale;
 `gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open

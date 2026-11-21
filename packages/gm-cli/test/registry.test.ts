@@ -80,6 +80,7 @@ describe('command registry', () => {
       'docs pattern',
       'energy',
       'games register',
+      'images compose',
       'instance init',
       'look check',
       'look evidence',
