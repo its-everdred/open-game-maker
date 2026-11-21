@@ -76,6 +76,7 @@ describe('command registry', () => {
       'decisions next',
       'decisions raise',
       'decisions render',
+      'decisions sync',
       'design current',
       'docs pattern',
       'energy',
