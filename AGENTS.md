@@ -3,6 +3,7 @@
 ## Commands
 
 - Install exactly from the lockfile: `pnpm install --frozen-lockfile`.
+- Before committing, run `pnpm exec prettier --write <changed files>`; the installed pre-commit hook also formats and re-stages staged files.
 - Run the repository gates: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`.
 - Test one package with `pnpm --filter @ogm/<pkg> test`; Python workers use `make test` after OGM-009.
 - Browser tests use Playwright on Chromium with `--use-angle=gl-egl --enable-gpu --ignore-gpu-blocklist`; set
