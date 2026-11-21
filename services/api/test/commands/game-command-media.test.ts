@@ -147,13 +147,13 @@ async function setup(options: Decision['options'], files: Record<string, File>, 
         options: Array<{ id: string; label: string; media?: Record<string, unknown>; meta?: Record<string, unknown> }>;
       }>;
     };
-    return body.commands[0]!.options;
+    return body.commands[0]?.options ?? [];
   };
   return { deps, read, decisionMedia };
 }
 
 describe('a jobless Command’s option media', () => {
-  it('copies only files inside the owning ticket review directory', async () => {
+  it('refuses a Command when any option media is outside the owning ticket review directory', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ogm-media-'));
     try {
       const review = join(root, 'fixture', 'blobs', '12', 'review', '12');
@@ -179,14 +179,8 @@ describe('a jobless Command’s option media', () => {
         true,
         root,
       );
-      const options = await read();
-      expect(options[0]!.media?.url).toContain('/api/v1/blobs/sha256/');
-      expect(options[0]!.meta).toEqual({ kind: '3D model render', model: 'fixture-renderer' });
-      expect(options[1]!.media).toBeUndefined();
-      const url = new URL(options[0]!.media!.url as string);
-      const { app } = await makeApp(deps);
-      const response = await app.request(`${url.pathname}${url.search}`);
-      expect(await response.text()).toBe('video bytes');
+      expect(await read()).toEqual([]);
+      expect(deps.lines.some((line) => line.event === 'game_command_media_copy_failed')).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -437,7 +431,7 @@ describe('a jobless Command’s option media', () => {
           question: 'Which?',
           options: [
             { id: 'pip', label: 'Pip', media_id: '01JBX2Q7M3K8V5N4R6T9W0YZAC' },
-            { id: 'hum', label: 'Hum' },
+            { id: 'hum', label: 'Hum', playable: { scenario: 'sound=hum', seconds: 8 } },
           ],
           blocking: true,
           status: 'open',
@@ -573,7 +567,7 @@ describe('a jobless Command’s option media', () => {
     expect(decisionMedia).toHaveBeenCalledTimes(1);
   });
 
-  it('lists an option whose media aiur cannot serve as text and retries it only after a while', async () => {
+  it('omits a Command with unavailable option media, then lists it once the media resolves', async () => {
     aiurMediaTiming.retryAfterMs = 1_000;
     const files: Record<string, File> = {};
     const { read, deps, decisionMedia } = await setup(
@@ -583,26 +577,30 @@ describe('a jobless Command’s option media', () => {
           label: 'Lie flat',
           media: [attachment('med_gone', 'image', 'image/png', { width: 8, height: 8 })],
         },
-        { id: 'stack', label: 'Stack up' },
+        {
+          id: 'stack',
+          label: 'Stack up',
+          media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/stack.png' } }],
+        },
       ],
       files,
     );
 
     const options = await read();
 
-    expect(options).toEqual([
-      { id: 'flat', label: 'Lie flat' },
-      { id: 'stack', label: 'Stack up' },
-    ]);
+    expect(options).toEqual([]);
     expect(deps.lines.some((line) => line.event === 'game_command_media_copy_failed')).toBe(true);
 
     // A file that just failed is not fetched again on the next poll.
     files.med_gone = { mime: 'image/png', bytes: new Uint8Array([1]) };
-    expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
+    expect(await read()).toEqual([]);
     expect(decisionMedia).toHaveBeenCalledTimes(1);
 
     await new Promise((resolve) => setTimeout(resolve, 1_100));
-    expect((await read())[0]!.media).toMatchObject({ kind: 'image', width: 8 });
+    expect((await read()).map((option) => option.media)).toEqual([
+      expect.objectContaining({ kind: 'image', width: 8 }),
+      expect.objectContaining({ kind: 'image', url: 'https://example.test/stack.png' }),
+    ]);
     expect(decisionMedia).toHaveBeenCalledTimes(2);
   });
 
@@ -617,7 +615,11 @@ describe('a jobless Command’s option media', () => {
           label: 'Lie flat',
           media: [attachment('med_slow', 'image', 'image/png', { width: 8, height: 8 })],
         },
-        { id: 'stack', label: 'Stack up' },
+        {
+          id: 'stack',
+          label: 'Stack up',
+          media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/stack.png' } }],
+        },
       ],
       {
         med_slow: {
@@ -635,7 +637,7 @@ describe('a jobless Command’s option media', () => {
       },
     );
 
-    expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
+    expect(await read()).toEqual([]);
     finish();
     await vi.waitFor(async () => expect((await read())[0]!.media).toMatchObject({ kind: 'image' }));
     expect(decisionMedia).toHaveBeenCalledTimes(1);
@@ -650,12 +652,16 @@ describe('a jobless Command’s option media', () => {
           label: 'Lie flat',
           media: [attachment('med_stuck', 'video', 'video/mp4', { width: 8, height: 8 })],
         },
-        { id: 'stack', label: 'Stack up' },
+        {
+          id: 'stack',
+          label: 'Stack up',
+          media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/stack.png' } }],
+        },
       ],
       { med_stuck: { mime: 'video/mp4', body: stalled } },
     );
 
-    expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
+    expect(await read()).toEqual([]);
     await vi.waitFor(() => expect(decisionMedia.mock.calls[0]![2]?.aborted).toBe(true));
     await vi.waitFor(() =>
       expect(deps.lines.some((line) => line.event === 'game_command_media_copy_failed')).toBe(true),
@@ -668,7 +674,11 @@ describe('a jobless Command’s option media', () => {
     const { read, deps } = await setup(
       [
         { id: 'flat', label: 'Lie flat', media: [attachment('med_huge', 'image', 'image/png')] },
-        { id: 'stack', label: 'Stack up' },
+        {
+          id: 'stack',
+          label: 'Stack up',
+          media: [{ kind: 'image', locator: { kind: 'url', value: 'https://example.test/stack.png' } }],
+        },
       ],
       {
         med_huge: {
@@ -687,11 +697,11 @@ describe('a jobless Command’s option media', () => {
       },
     );
 
-    expect((await read())[0]).toEqual({ id: 'flat', label: 'Lie flat' });
+    expect(await read()).toEqual([]);
     expect(deps.lines.some((line) => line.event === 'game_command_media_copy_failed')).toBe(true);
   });
 
-  it('passes an https poster on, drops one only the aiur host holds, and skips media it cannot render', async () => {
+  it('passes an https poster on and drops one only the aiur host holds', async () => {
     const { read } = await setup(
       [
         {
@@ -720,12 +730,11 @@ describe('a jobless Command’s option media', () => {
             },
           ],
         },
-        { id: 'hop', label: 'Hop', media: [{ kind: 'image', locator: { kind: 'attachment' } }] },
       ],
       {},
     );
 
-    const [roll, spin, hop] = await read();
+    const [roll, spin] = await read();
 
     expect(roll!.media).toEqual({
       url: 'https://media.example.test/roll.mp4',
@@ -736,6 +745,21 @@ describe('a jobless Command’s option media', () => {
       kind: 'video',
     });
     expect(spin!.media).toEqual({ url: 'https://media.example.test/spin.mp4', width: 640, height: 360, kind: 'video' });
-    expect(hop).toEqual({ id: 'hop', label: 'Hop' });
+  });
+
+  it('omits a review when one option has no renderable media', async () => {
+    const { read } = await setup(
+      [
+        {
+          id: 'roll',
+          label: 'Roll',
+          media: [{ kind: 'video', locator: { kind: 'url', value: 'https://example.test/roll.mp4' } }],
+        },
+        { id: 'hop', label: 'Hop', media: [{ kind: 'image', locator: { kind: 'attachment' } }] },
+      ],
+      {},
+    );
+
+    expect(await read()).toEqual([]);
   });
 });

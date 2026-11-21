@@ -33,6 +33,10 @@ describe('ticket roles', () => {
   it('names only skills the platform pack ships, so a mandatory skill can never be missing at dispatch', () => {
     for (const role of readRoles())
       for (const skill of role.skills) expect(existsSync(join(WORKSPACE_ROOT, 'skills', skill, 'SKILL.md'))).toBe(true);
+    const config = skillsConfig(readRoles());
+    for (const label of ['lane:creative', 'lane:clone', 'phase:mock'])
+      for (const skill of config.by_label[label]!)
+        expect(existsSync(join(WORKSPACE_ROOT, 'skills', skill, 'SKILL.md'))).toBe(true);
   });
 
   it('maps game:<slug> to gm-core and the set skill from gm.lock.json, before the roles', () => {
@@ -44,10 +48,12 @@ describe('ticket roles', () => {
       'game:bare': ['gm-core'],
       'game:castle': ['gm-core', 'gm-set-kaykit'],
       'role:qa': ['gm-core', 'gm-qa'],
-      'phase:mock': ['gm-prototype'],
+      'phase:mock': ['gm-image-mock', 'gm-prototype'],
       'phase:prototype': ['gm-prototype'],
       'phase:build': ['gm-prototype'],
       'phase:polish': ['gm-prototype'],
+      'lane:creative': ['gm-image-mock', 'gm-prototype'],
+      'lane:clone': ['gm-sprite-forge', 'gm-verify'],
     });
     expect(config.preload_max_bytes).toBe(49152);
   });

@@ -16,6 +16,13 @@ chat, voice transcript, attachments), the instance repo (`games/`, `packages/`),
 
 ## Plan the whole game, prototype first
 
+### Label tickets when filing
+
+Every child ticket must carry a lane and its current prototype rung when filed. Visual and other creative work
+(towns, settings, screens, HUD, menus, title/loading/end screens, logos and thumbnails) starts with
+`lane:creative phase:mock`; sprite rebuilds and variations use `lane:clone`. Keep the `phase:*` label in sync with the
+deliverable and do not file implementation work for a creative ticket before the mock has creator approval.
+
 The general rules for cutting tickets, typing dependencies, waves and the critical path are in the `build-order` skill;
 this section adds what is specific to games.
 

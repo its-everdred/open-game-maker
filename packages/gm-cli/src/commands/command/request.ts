@@ -206,7 +206,6 @@ export function buildEmitEvent(payload: CommandRequestPayload, decide?: DecideCo
 export type CommandRules = {
   name: string;
   maxOptions: number;
-  mediaOnEveryOption: boolean;
   topic?: string;
   blocking?: boolean;
 };
@@ -258,7 +257,7 @@ export async function requestCommand(
     if (kind === undefined)
       throw new UsageError(`unknown chat message id "${messageId}"`, `run gm chat post before gm ${rules.name}`);
     // Show, don't tell: a text-only post is words, not the thing itself.
-    if (rules.mediaOnEveryOption && kind === 'text')
+    if (kind === 'text')
       throw new UsageError(
         `media for option "${optionId}" is a text post`,
         'gm chat post --image <png> or --clip <mp4> --poster <png>, then pass its id',
@@ -271,7 +270,7 @@ export async function requestCommand(
   const playables = playablePairs(flags, ids);
   // Show, don't tell: a question for the creator puts the thing itself (a still, clip, sound or playable slice) on
   // every option.
-  const bare = rules.mediaOnEveryOption ? ids.filter((id) => !media.has(id) && !playables.has(id)) : [];
+  const bare = ids.filter((id) => !media.has(id) && !playables.has(id));
   if (bare.length > 0)
     throw new UsageError(
       `option ${bare.map((id) => `"${id}"`).join(', ')} has no media`,
@@ -398,7 +397,11 @@ export const command: GmCommand = {
     },
     question: { type: 'string', help: 'bounded direction question for the creator' },
     option: { type: 'string', multiple: true, help: 'candidate id and label; repeat 2-5 times' },
-    media: { type: 'string', multiple: true, help: 'option id and prior chat message id; repeat as needed' },
+    media: {
+      type: 'string',
+      multiple: true,
+      help: 'option id and prior image/audio/video chat message id; repeat per option',
+    },
     provenance: {
       type: 'string',
       multiple: true,
@@ -420,12 +423,7 @@ export const command: GmCommand = {
   },
   async run(ctx, _args, flags) {
     const key = decisionKeyFlag(flags);
-    printEmitEvent(
-      ctx,
-      await requestCommand(ctx, flags, { name: 'command request', maxOptions: 5, mediaOnEveryOption: false }),
-      undefined,
-      key,
-    );
+    printEmitEvent(ctx, await requestCommand(ctx, flags, { name: 'command request', maxOptions: 5 }), undefined, key);
     return EXIT.ok;
   },
 };

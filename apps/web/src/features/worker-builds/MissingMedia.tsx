@@ -6,21 +6,35 @@ type Status = 'sending' | 'asked' | 'error' | 'changed';
 export function useMissingMedia(paths: readonly string[]) {
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
   const requested = useRef(new Set<string>());
+  const retries = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      for (const timer of retries.current.values()) clearTimeout(timer);
+      retries.current.clear();
     };
   }, []);
-  const request = (path: string) => {
+  const request = (path: string, attempt = 0) => {
     requested.current.add(path);
     setStatuses((previous) => ({ ...previous, [path]: 'sending' }));
     void api(path, { method: 'POST' }).then(
       () => {
+        retries.current.delete(path);
         if (mounted.current) setStatuses((previous) => ({ ...previous, [path]: 'asked' }));
       },
       (error: unknown) => {
+        const retryable = !(error instanceof ApiError) || error.status === 429 || error.status >= 500;
+        if (retryable && attempt === 0 && mounted.current) {
+          retries.current.set(
+            path,
+            setTimeout(() => {
+              retries.current.delete(path);
+              request(path, 1);
+            }, 2000),
+          );
+        }
         if (mounted.current)
           setStatuses((previous) => ({
             ...previous,

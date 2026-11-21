@@ -29,4 +29,9 @@ describe('creator decision inventory', () => {
       DecisionInventory.safeParse([{ ...entry, status: 'answered', answer: 'Slimes', answered_at: null }]).success,
     ).toBe(false);
   });
+
+  it('accepts only a known approval phase', () => {
+    expect(DecisionInventory.safeParse([{ ...entry, phase: 'prototype' }]).success).toBe(true);
+    expect(DecisionInventory.safeParse([{ ...entry, phase: 'review' }]).success).toBe(false);
+  });
 });

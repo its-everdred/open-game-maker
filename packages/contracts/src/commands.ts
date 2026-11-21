@@ -71,9 +71,14 @@ export const GameCommand = z.object({
   text_only: z.boolean().optional(),
 });
 
+export const MissingMediaCommand = z.object({ game_id: Id, decision_id: z.string().min(1) });
+
 // GET /api/v1/games/:gameId/commands → the open Commands of every job the caller can edit in that game, plus the
 // Commands its own aiur instance holds for it when no job owns them.
-export const GameCommandsPage = z.object({ commands: z.array(GameCommand) });
+export const GameCommandsPage = z.object({
+  commands: z.array(GameCommand),
+  missing_media_commands: z.array(MissingMediaCommand).optional(),
+});
 
 // GET /api/v1/me/commands → the open player-facing Commands of every game the caller can edit, for the menu's decision
 // inbox: blocking first, then the longest waiting. Each names its game so the deck answers through that game's route.
@@ -93,12 +98,14 @@ export const QuestionSession = z.object({
 export const CreatorCommandsPage = z.object({
   commands: z.array(CreatorCommand),
   question_sessions: z.array(QuestionSession).optional(),
+  missing_media_commands: z.array(MissingMediaCommand).optional(),
 });
 
 export type CommandOption = z.infer<typeof CommandOption>;
 export type GameCommand = z.infer<typeof GameCommand>;
 export type GameCommandsPage = z.infer<typeof GameCommandsPage>;
 export type CreatorCommand = z.infer<typeof CreatorCommand>;
+export type MissingMediaCommand = z.infer<typeof MissingMediaCommand>;
 export type QuestionSession = z.infer<typeof QuestionSession>;
 export type CreatorCommandsPage = z.infer<typeof CreatorCommandsPage>;
 
