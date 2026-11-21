@@ -69,6 +69,13 @@ The creator judged the arm E (fal) review cards (`Original | 3D | 2D pixel`) on 
   original sprite has fewer colors and chunkier pixels. Let's keep the 3D models and iterate on the shader next."
 - **Tree E3: TRELLIS 2** (`fal-ai/trellis-2`, 0.25 USD at 512) was his pick, with "rodin is good too and cheaper, use it
   for others": use Rodin 2.5 fast (`fal-ai/hyper3d/rodin/v2.5/fast`, 0.10 USD) for the other non-character assets.
+- **Final call (21:05–21:28Z):** on the orc cards the creator wrote "trellis sprites looks fine" and stopped the orc
+  rounds; Tripo H3.1 multiview (0.30 USD) "looks best but too expensive". The Executor closed the 3D→2D bake-off on
+  TRELLIS multi-view: no more goblin, orc or tree rounds and no more fal spend on it.
+- The re-rendered PC matrices (#1120): Tree E3 liked C Hunyuan3D-2 (`dec_f324d605f82d98c9`); Flora B1 liked B CC0
+  with "close but color is way off" (`dec_c7a5db3337cbf08d`); Goblin 01 disliked all four walk arms
+  (`dec_eebc9455918f02f9`) because animation came before the static sprites were approved. The PC skill arms
+  (AnyMachine, AnyKit normalize) did not run: the bake-off closed first.
 - The Tree E3 meshes came from the pack's own views, which the creator allowed for this comparison only. New fal
   calls get Codex turnarounds made with the original attached, never a pack file.
 
@@ -76,8 +83,8 @@ The verdict comments name the picked card, not the asset; the asset each one bel
 for which asset (TRELLIS multidiffusion ran only for the goblin and orc, and TRELLIS 2 was the only pick with a tree
 note). The mesh is settled; the open problem is the finish pass. The 2D sprite must use fewer colours and chunkier
 pixels than `gpu_bake_finish.py` produces today. Keep the TRELLIS meshes and iterate on the finish pass, not the mesh
-source. The GPU arms A–C below and the three GPU matrices (`dec_4bea60ce4c10e8bd`, `dec_63c305f541835ca1`,
-`dec_bf26410d0ca0dcc3`) have no separate verdict; the fal picks supersede them for routing.
+source. The GPU arms A–C below and the first three GPU matrices (`dec_4bea60ce4c10e8bd`, `dec_63c305f541835ca1`,
+`dec_bf26410d0ca0dcc3`) have no separate verdict; the fal picks supersede them and the #1120 picks for routing.
 
 ## Results (#1094, 2026-11-20)
 
