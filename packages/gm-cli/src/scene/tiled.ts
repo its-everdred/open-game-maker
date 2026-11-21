@@ -32,6 +32,7 @@ export function sceneDecorLayer(
   const data = Array<number>(width * height).fill(0);
   const tiles: Tile[] = [];
   const occupied = new Set<string>();
+  const collision = new Set<string>();
   for (const { object, rotation, solid, footprint } of placements) {
     const { x, y } = object.position;
     if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || x < 0 || y < 0 || x >= width || y >= height)
@@ -62,7 +63,10 @@ export function sceneDecorLayer(
       cells.add(key);
     }
     if (!cells.has(`${x},${y}`)) throw new Error(`footprint omits its anchor: ${object.id}`);
-    for (const cell of cells) occupied.add(cell);
+    for (const cell of cells) {
+      occupied.add(cell);
+      if (solid) collision.add(cell);
+    }
     const index = y * width + x;
     const id = tiles.length;
     tiles.push({
@@ -78,5 +82,14 @@ export function sceneDecorLayer(
   return {
     layer: { type: 'tilelayer' as const, name: 'decor', width, height, data },
     tileset: { firstgid, name: 'scene-clone', tiles },
+    occupied: [...occupied].map((cell) => {
+      const [x, y] = cell.split(',').map(Number);
+      return { x: x!, y: y! };
+    }),
+    /** The game must incorporate these cells into its collision grid. */
+    collision: [...collision].map((cell) => {
+      const [x, y] = cell.split(',').map(Number);
+      return { x: x!, y: y! };
+    }),
   };
 }

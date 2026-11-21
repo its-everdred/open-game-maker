@@ -59,6 +59,17 @@ describe('scene decor layer', () => {
     expect(() =>
       sceneDecorLayer(4, 4, 1, [{ ...wide, footprint: [{ x: 1, y: 0 }] }], new Set(['cart-asset']), new Set()),
     ).toThrow('omits its anchor');
+    expect(sceneDecorLayer(4, 4, 1, [wide], new Set(['cart-asset']), new Set()).occupied).toEqual([
+      { x: 1, y: 2 },
+      { x: 2, y: 2 },
+    ]);
+    expect(sceneDecorLayer(4, 4, 1, [wide], new Set(['cart-asset']), new Set()).collision).toEqual([
+      { x: 1, y: 2 },
+      { x: 2, y: 2 },
+    ]);
+    expect(sceneDecorLayer(4, 4, 1, [{ ...wide, solid: false }], new Set(['cart-asset']), new Set()).collision).toEqual(
+      [],
+    );
   });
 
   it('carries a complete worker match through registration into adapter-readable map data', () => {
