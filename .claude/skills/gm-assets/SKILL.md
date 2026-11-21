@@ -73,6 +73,8 @@ a thin bolt (`pxBolt`) instead. A camera above the action squashes y-only billbo
 effects fully to the camera (copy its quaternion). Never repeat one effect identically (the same campfire on every ruin
 read as copy-paste): vary seed, size, options and start, or clone a variant. Run image Python tools with `gm py --`.
 
+When a game needs a pack asset at angles or rotations the pack doesn't ship (free rotation, smooth turning, vehicles or props seen from any direction) and the pack has four orthographic views (top, side, front, back), use `vendor/sprite-stacking` to build a spinnable stacked sprite, and keep the pack's pixel style. It makes stacked-slice fake 3D (a strip of flat layers drawn with a lift per layer), not a real mesh, so it does not replace the 3D→2D pipeline in `gm-sprite-forge`. Isometric N/E/S/W pack views are not orthographic and have no top view: a stack built from them is an approximation, and thin parts (branches, posts) carve into solid masses. Render the stack at every angle and compare it with the pack original before using it.
+
 ## Sound
 
 Scenes get sound from our packs (`grep -l audio` in the catalog: Kenney Sci-Fi, Impact, Retro, Foley, RPG Audio are

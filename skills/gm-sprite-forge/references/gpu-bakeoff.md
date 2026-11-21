@@ -68,6 +68,7 @@ the matching capability-matrix row and the routing paragraph in SKILL.md togethe
 | Foliage (grass clump) | C Hunyuan3D-2, with A procedural close behind | Hunyuan IoU 0.73 against 0.62 for A and 0.61 for scattered CC0 grass. TripoSR produced a flat card. |
 | Characters (walk) | A procedural | A scripted body with a scripted walk had the best 3D motion correlation (0.41). Freely available CC0 goblins are boxy low-poly. Image-to-3D from a 29×34 px frame misread the axe. D (2D) scores highest on silhouette but has the weakest motion. |
 | Props | Not tested | — |
+| Spinnable fake 3D (any game) | S sprite stacking (`vendor/sprite-stacking`), local and free | Stacked flat slices, not a mesh: for assets that must turn to any angle when the pack has four orthographic views. On Tree E3's isometric views (no top view) the hull filled the branches into a bush; silhouette IoU 0.37 mean, all prop gates but palette, lightness and shadow failed (NUC, 2026-11-21). |
 
 No arm passed the gates. Single-view image-to-3D invents the unseen sides, so check all four views by eye.
 

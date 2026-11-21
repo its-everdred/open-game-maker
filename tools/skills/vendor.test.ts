@@ -14,11 +14,12 @@ const SETS = {
   gamedev: 'Apache-2.0',
   'sprite-forge': 'MIT',
   'video-to-game': 'MIT',
+  'sprite-stacking': 'MIT',
   'frontend-design': 'Apache-2.0',
   impeccable: 'Apache-2.0',
 } as const;
 /** Tool sets ship the scripts their gm wrappers run; the engine sets stay text only. */
-const TOOL_SETS = ['sprite-forge', 'video-to-game', 'impeccable', 'anymachine', 'anykit'];
+const TOOL_SETS = ['sprite-forge', 'video-to-game', 'sprite-stacking', 'impeccable', 'anymachine', 'anykit'];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -59,7 +60,7 @@ describe('vendored skill sets', () => {
   it('holds the expected skills per set', () => {
     const count = (set: string) =>
       skillFiles.filter((f) => rel(f).startsWith(`${set}/`) && f.endsWith('/SKILL.md')).length;
-    expect(Object.keys(SETS).map(count)).toEqual([1, 1, 28, 11, 17, 5, 0, 1, 1]);
+    expect(Object.keys(SETS).map(count)).toEqual([1, 1, 28, 11, 17, 5, 0, 1, 1, 1]);
     expect(existsSync(join(vendor, 'threejs/threejs-react-three-fiber'))).toBe(false);
   });
 
@@ -92,6 +93,7 @@ describe('vendored skill sets', () => {
     expect(read('sprite-forge/LICENSE')).toContain('Copyright (c) 2026 0x0funky');
     expect(read('video-to-game/LICENSE')).toContain('Copyright (c) 2026 Lovis Odin');
     expect(read('anykit/LICENSE')).toContain('Copyright (c) 2026 Apekshik Panigrahi');
+    expect(read('sprite-stacking/LICENSE')).toContain('Copyright (c) 2026 Daniel White');
     expect(read('frontend-design/LICENSE.txt')).toContain('Apache License');
     expect(read('impeccable/LICENSE')).toContain('Apache License');
     expect(read('impeccable/NOTICE')).toContain('pbakaus/impeccable');
@@ -104,6 +106,7 @@ describe('vendored skill sets', () => {
       'anthropics/claude-plugins-official',
       'apekshik/anykit',
       'apekshik/anymachine',
+      'danielwh2/sprite-stacking',
       'gamedev-skills/awesome-gamedev-agent-skills',
       'lovisdotio/video-to-game',
       'pbakaus/impeccable',
