@@ -30,7 +30,12 @@ const Answer = CommandAnswerBody.extend({
   change_request: z.boolean().optional(),
 });
 
-export function owner(c: import('hono').Context<ApiBindings>): { client: AiurClient; principal: string; daemon: 'core' | 'pc'; repo?: { owner: string; name: string } } {
+export function owner(c: import('hono').Context<ApiBindings>): {
+  client: AiurClient;
+  principal: string;
+  daemon: 'core' | 'pc';
+  repo?: { owner: string; name: string };
+} {
   const deps = c.get('deps');
   const principal = requirePrincipal(c, ['user']).userId;
   const ownerId = deps.config.instanceOwnerId;
@@ -40,7 +45,12 @@ export function owner(c: import('hono').Context<ApiBindings>): { client: AiurCli
   const entry = deps.registry.coreAiurClients.find((item) => item.id === daemon);
   const client = entry?.client ?? (daemon === 'core' ? deps.registry.coreAiurClient : null);
   if (!client) throw new HttpError(503, 'core_daemon_unavailable');
-  return { client, principal, daemon, repo: entry?.repo ?? (daemon === 'core' ? deps.config.coreRepo : deps.config.pcCoreRepo) };
+  return {
+    client,
+    principal,
+    daemon,
+    repo: entry?.repo ?? (daemon === 'core' ? deps.config.coreRepo : deps.config.pcCoreRepo),
+  };
 }
 async function coreCall<T>(operation: () => Promise<T>): Promise<T> {
   try {
@@ -68,33 +78,47 @@ export default new Hono<ApiBindings>()
   .get('/me/core-commands', async (c) => {
     const principal = requirePrincipal(c, ['user']).userId;
     const deps = c.get('deps');
-    if (!deps.config.instanceOwnerId || principal !== deps.config.instanceOwnerId) throw new HttpError(403, 'forbidden');
-    const entries = deps.registry.coreAiurClients.length ? deps.registry.coreAiurClients : deps.registry.coreAiurClient ? [{ id: 'core' as const, client: deps.registry.coreAiurClient, repo: deps.config.coreRepo }] : [];
-    if (!entries.length || !entries.some(({ id }) => id === 'core')) throw new HttpError(503, 'core_daemon_unavailable');
+    if (!deps.config.instanceOwnerId || principal !== deps.config.instanceOwnerId)
+      throw new HttpError(403, 'forbidden');
+    const entries = deps.registry.coreAiurClients.length
+      ? deps.registry.coreAiurClients
+      : deps.registry.coreAiurClient
+        ? [{ id: 'core' as const, client: deps.registry.coreAiurClient, repo: deps.config.coreRepo }]
+        : [];
+    if (!entries.length || !entries.some(({ id }) => id === 'core'))
+      throw new HttpError(503, 'core_daemon_unavailable');
     let daemonUnavailable = false;
-    const commands = (await Promise.all(entries.map(async ({ id, client, repo }) => {
-      let decisions: Decision[];
-      try {
-        decisions = await client.decisions({}, AbortSignal.timeout(5000));
-      } catch {
-        if (id === 'core') throw new HttpError(502, 'core_daemon_unavailable');
-        daemonUnavailable = true;
-        return [];
-      }
-      return Promise.all(decisions.filter(open).map(async (decision) => {
-        const command = toGameCommand(
-          decision,
-          await optionMediaFromAiur(
-            deps,
-            client,
-            decision,
-            (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash),
-            repo ? { ...repo, ticket: decision.ticket.identifier } : undefined,
-          ),
-        );
-        return command ? { ...command, source: 'core' as const, daemon: id } : null;
-      }));
-    }))).flat().filter((command) => command !== null);
+    const commands = (
+      await Promise.all(
+        entries.map(async ({ id, client, repo }) => {
+          let decisions: Decision[];
+          try {
+            decisions = await client.decisions({}, AbortSignal.timeout(5000));
+          } catch {
+            if (id === 'core') throw new HttpError(502, 'core_daemon_unavailable');
+            daemonUnavailable = true;
+            return [];
+          }
+          return Promise.all(
+            decisions.filter(open).map(async (decision) => {
+              const command = toGameCommand(
+                decision,
+                await optionMediaFromAiur(
+                  deps,
+                  client,
+                  decision,
+                  (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash),
+                  repo ? { ...repo, ticket: decision.ticket.identifier } : undefined,
+                ),
+              );
+              return command ? { ...command, source: 'core' as const, daemon: id } : null;
+            }),
+          );
+        }),
+      )
+    )
+      .flat()
+      .filter((command) => command !== null);
     const visible = commands.filter((command) => command !== null);
     await logReviewFeedRefresh(
       'core_commands',
@@ -102,14 +126,26 @@ export default new Hono<ApiBindings>()
       visible.map((command) => ({ ticket: command.ticket!, id: command.decision_id, postedAt: command.opened_at })),
       deps.log,
     );
-    const workerResults = await Promise.all(entries.map(async ({ id, repo }) => ({
-      id,
-      workers: await reviewWorkers(deps, repo ?? null, id).catch(() => null),
-    })));
-    const targets = workerResults.flatMap(({ id, workers }) => (workers ?? [])
-      .filter((worker) => worker.state === 'human-review' && !visible.some((command) => command.daemon === id && command.ticket === worker.ticket))
-      .map((worker) => ({ source: 'core' as const, daemon: id, ticket: worker.ticket, title: worker.title })));
-    return c.json({ commands: visible, targets, targetsUnavailable: workerResults.some(({ workers }) => workers === null) || daemonUnavailable });
+    const workerResults = await Promise.all(
+      entries.map(async ({ id, repo }) => ({
+        id,
+        workers: await reviewWorkers(deps, repo ?? null, id).catch(() => null),
+      })),
+    );
+    const targets = workerResults.flatMap(({ id, workers }) =>
+      (workers ?? [])
+        .filter(
+          (worker) =>
+            worker.state === 'human-review' &&
+            !visible.some((command) => command.daemon === id && command.ticket === worker.ticket),
+        )
+        .map((worker) => ({ source: 'core' as const, daemon: id, ticket: worker.ticket, title: worker.title })),
+    );
+    return c.json({
+      commands: visible,
+      targets,
+      targetsUnavailable: workerResults.some(({ workers }) => workers === null) || daemonUnavailable,
+    });
   })
   .get('/core/tickets/:ticket/state', async (c) => {
     const { client } = owner(c);
@@ -171,12 +207,9 @@ export default new Hono<ApiBindings>()
       throw new HttpError(502, 'core_daemon_unavailable');
     }
     if (body.review) {
-      const episode = await readReviewEpisode(
-        deps.registry.reviewEpisode,
-        repo,
-        command.ticket,
-        ['agent:human-review'],
-      );
+      const episode = await readReviewEpisode(deps.registry.reviewEpisode, repo, command.ticket, [
+        'agent:human-review',
+      ]);
       if (guard) bindReviewEpisode(deps.db, daemon, command.ticket, guard, episode);
     }
     return c.json({ status: 'answered' });
@@ -187,9 +220,7 @@ export default new Hono<ApiBindings>()
     if (!/^[1-9]\d{0,18}$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
     const workers = await reviewWorkers(c.get('deps'), repo, daemon);
     const deps = c.get('deps');
-    const episode = await readReviewEpisode(deps.registry.reviewEpisode, repo, ticket, [
-      'agent:human-review',
-    ]);
+    const episode = await readReviewEpisode(deps.registry.reviewEpisode, repo, ticket, ['agent:human-review']);
     if (episode === undefined) throw new HttpError(503, 'review_episode_unavailable');
     if (episode === null) throw new HttpError(404, 'review_ticket_not_found');
     await reconcilePendingCommands(deps.db, daemon, ticket, episode, client);

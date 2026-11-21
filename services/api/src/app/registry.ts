@@ -91,7 +91,11 @@ export interface Registry {
   chatJobs: ChatJobDirectory | null;
   aiurClientFor: AiurClientResolver | null;
   coreAiurClient: import('@ogm/aiur-client').AiurClient | null;
-  coreAiurClients: { id: 'core' | 'pc'; client: import('@ogm/aiur-client').AiurClient; repo?: { owner: string; name: string } }[];
+  coreAiurClients: {
+    id: 'core' | 'pc';
+    client: import('@ogm/aiur-client').AiurClient;
+    repo?: { owner: string; name: string };
+  }[];
   workerWorkpad: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   workerTitle: ((ticket: string, repo?: { owner: string; name: string }) => Promise<string>) | null;
   trackerTickets:

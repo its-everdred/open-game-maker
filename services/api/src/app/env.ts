@@ -102,7 +102,10 @@ export function loadApiEnv(source?: Record<string, string | undefined>) {
   ) {
     throw new ConfigError('api', [], [{ name: 'AIUR_API_URL', reason: 'must be a loopback URL' }]);
   }
-  if (env.OGM_CORE_PC_AIUR_URL !== undefined && !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(env.OGM_CORE_PC_AIUR_URL).hostname)) {
+  if (
+    env.OGM_CORE_PC_AIUR_URL !== undefined &&
+    !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(env.OGM_CORE_PC_AIUR_URL).hostname)
+  ) {
     throw new ConfigError('api', [], [{ name: 'OGM_CORE_PC_AIUR_URL', reason: 'must be a loopback URL' }]);
   }
   if ((env.OGM_CORE_PC_AIUR_URL === undefined) !== (env.OGM_CORE_PC_AIUR_TOKEN === undefined)) {

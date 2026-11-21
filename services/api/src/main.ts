@@ -143,7 +143,11 @@ if (env.AIUR_API_URL && env.AIUR_API_TOKEN) {
 if (env.OGM_CORE_PC_AIUR_URL && env.OGM_CORE_PC_AIUR_TOKEN) {
   deps.registry.coreAiurClients.push({
     id: 'pc',
-    client: createAiurClient({ baseUrl: env.OGM_CORE_PC_AIUR_URL, token: env.OGM_CORE_PC_AIUR_TOKEN, supervisorToken: env.OGM_CORE_PC_AIUR_TOKEN }),
+    client: createAiurClient({
+      baseUrl: env.OGM_CORE_PC_AIUR_URL,
+      token: env.OGM_CORE_PC_AIUR_TOKEN,
+      supervisorToken: env.OGM_CORE_PC_AIUR_TOKEN,
+    }),
     repo: deps.config.pcCoreRepo,
   });
 }
