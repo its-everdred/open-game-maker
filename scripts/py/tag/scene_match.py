@@ -16,6 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tag_sheets
 
 MODEL = tag_sheets.CLIP_ID
+ENCODERS = {
+    "clip": (MODEL, "32bd64288804d66eefd0ccbe215aa642df71cc41"),
+    "siglip": ("google/siglip-base-patch16-224", "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed"),
+}
 MAX_PIXELS = 25_000_000
 
 
@@ -67,18 +71,28 @@ def rank(ids, vectors):
                   key=lambda item: (-item["similarity"], item["id"]))[:3]
 
 
-def embed(images):
+def embed(images, encoder):
     import torch
-    from transformers import CLIPModel, CLIPProcessor
 
     torch.set_num_threads(2)
-    model = CLIPModel.from_pretrained(MODEL, local_files_only=True).eval()
-    processor = CLIPProcessor.from_pretrained(MODEL, local_files_only=True)
+    model_id, revision = ENCODERS[encoder]
+    if encoder == "siglip":
+        from transformers import SiglipImageProcessor, SiglipModel
+        model = SiglipModel.from_pretrained(model_id, revision=revision, local_files_only=True).eval()
+        processor = SiglipImageProcessor.from_pretrained(model_id, revision=revision, local_files_only=True)
+    else:
+        from transformers import CLIPModel, CLIPProcessor
+        model = CLIPModel.from_pretrained(model_id, revision=revision, local_files_only=True).eval()
+        processor = CLIPProcessor.from_pretrained(model_id, revision=revision, local_files_only=True, use_fast=False)
     features = []
     with torch.inference_mode():
         for start in range(0, len(images), 8):
             inputs = processor(images=images[start:start + 8], return_tensors="pt")
-            features.extend(model.visual_projection(model.vision_model(pixel_values=inputs["pixel_values"]).pooler_output).cpu().numpy())
+            if encoder == "siglip":
+                batch = model.get_image_features(pixel_values=inputs["pixel_values"])
+            else:
+                batch = model.visual_projection(model.vision_model(pixel_values=inputs["pixel_values"]).pooler_output)
+            features.extend(batch.cpu().numpy())
             if len(features) % 64 == 0 or len(features) == len(images):
                 print(f"scene match: embedded {len(features)} of {len(images)} images", file=sys.stderr, flush=True)
     return features
@@ -92,6 +106,7 @@ def main():
     parser.add_argument("--crop", required=True, help="x,y,width,height in pixels")
     parser.add_argument("--facing", required=True, choices=("N", "NE", "E", "SE", "S", "SW", "W", "NW"))
     parser.add_argument("--limit", type=int, default=1000)
+    parser.add_argument("--encoder", choices=tuple(ENCODERS), default="clip", help="cached local image encoder")
     parser.add_argument("--include-vectors", action="store_true", help="include local embeddings for placement planning")
     args = parser.parse_args()
     if not 1 <= args.limit <= 1000:
@@ -113,14 +128,16 @@ def main():
             if image.width * image.height > MAX_PIXELS or total_pixels > 50_000_000:
                 raise ValueError("previews exceed image size limit")
             images.append(flatten(image))
-    vectors = embed(images)
+    vectors = embed(images, args.encoder)
     ids = [row["card"]["id"] for row in rows]
     results = rank(ids, vectors)
-    output = {"model": MODEL, "matches": results, "examined": len(rows), "eligible": total,
+    model_id, revision = ENCODERS[args.encoder]
+    signature = f"{model_id}@{revision}:rgb-brown-v1"
+    output = {"model": signature, "matches": results, "examined": len(rows), "eligible": total,
               "truncated": len(rows) < total, "preview": f"source facing {args.facing}; camera match not verified"}
     if args.include_vectors:
-        output["query"] = {"model": MODEL, "vector": np.asarray(vectors[0]).tolist()}
-        output["candidates"] = [{"id": name, "model": MODEL, "vector": np.asarray(vector).tolist()}
+        output["query"] = {"model": signature, "vector": np.asarray(vectors[0]).tolist()}
+        output["candidates"] = [{"id": name, "model": signature, "vector": np.asarray(vector).tolist()}
                                 for name, vector in zip(ids, vectors[1:])]
     print(json.dumps(output, allow_nan=False))
 
@@ -128,6 +145,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, RuntimeError, ValueError) as error:
+    except (ImportError, OSError, RuntimeError, ValueError) as error:
         print(f"scene match: {error}", file=sys.stderr)
         sys.exit(1)

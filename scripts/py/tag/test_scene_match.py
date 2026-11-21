@@ -43,11 +43,33 @@ def test_worker_outputs_vectors_for_placement_and_marks_truncation(tmp_path, mon
     Image.new("RGBA", (4, 4), (10, 20, 30, 255)).save(mock)
     Image.new("RGBA", (2, 2), (30, 20, 10, 255)).save(sprite)
     monkeypatch.setattr(scene, "eligible", lambda *args: ([{"card": {"id": "asset"}, "preview": sprite}], 2))
-    monkeypatch.setattr(scene, "embed", lambda images: [[1, 0], [2, 1]])
+    monkeypatch.setattr(scene, "embed", lambda images, encoder: [[1, 0], [2, 1]])
     monkeypatch.setattr(sys, "argv", ["scene_match.py", "--assets-root", str(tmp_path), "--pack", "pack", "--mock", str(mock), "--crop", "0,0,4,4", "--facing", "E", "--include-vectors"])
     scene.main()
     output = json.loads(capsys.readouterr().out)
     assert output["truncated"] is True
-    assert output["query"] == {"model": scene.MODEL, "vector": [1, 0]}
-    assert output["candidates"][0] == {"id": "asset", "model": scene.MODEL, "vector": [2, 1]}
+    signature = f"{scene.ENCODERS['clip'][0]}@{scene.ENCODERS['clip'][1]}:rgb-brown-v1"
+    assert output["query"] == {"model": signature, "vector": [1, 0]}
+    assert output["candidates"][0] == {"id": "asset", "model": signature, "vector": [2, 1]}
     assert output["matches"][0]["id"] == "asset"
+
+
+def test_worker_identifies_the_requested_local_encoder(tmp_path, monkeypatch, capsys):
+    import json
+
+    mock = tmp_path / "mock.png"
+    sprite = tmp_path / "sprite.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(mock)
+    Image.new("RGB", (2, 2), (30, 20, 10)).save(sprite)
+    monkeypatch.setattr(scene, "eligible", lambda *args: ([{"card": {"id": "asset"}, "preview": sprite}], 1))
+    seen = []
+    def fake_embed(images, encoder):
+        seen.append(encoder)
+        return [[1, 0], [1, 0]]
+    monkeypatch.setattr(scene, "embed", fake_embed)
+    monkeypatch.setattr(sys, "argv", ["scene_match.py", "--assets-root", str(tmp_path), "--pack", "pack", "--mock", str(mock), "--crop", "0,0,2,2", "--facing", "E", "--encoder", "siglip", "--include-vectors"])
+    scene.main()
+    output = json.loads(capsys.readouterr().out)
+    assert seen == ["siglip"]
+    assert output["model"] == "google/siglip-base-patch16-224@7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed:rgb-brown-v1"
+    assert output["query"]["model"] == output["candidates"][0]["model"] == output["model"]
