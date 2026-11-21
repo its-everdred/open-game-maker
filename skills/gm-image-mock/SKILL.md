@@ -11,6 +11,8 @@ size in the prompt and mark it AI-generated as usual. Include the distortion gat
 
 **Every image is an aspect set** (creator, 2026-11-20: "make all images work for all device sizes and aspect ratios include phones"). Anything a player or the creator sees (thumbnail, logo lockup, loading and title art, backgrounds, panels, and the review images themselves) is made for phone portrait (390x844), phone landscape (844x390), tablet and desktop, never desktop alone. Fill a slot one of two ways: a background plate larger than every ratio with the foreground (logo, characters) placed per ratio inside a marked safe area, or one image generated at each exact ratio. Never crop through the subject, stretch, or add bars. Post review rounds phone portrait first, each composite at its real display size, and record the ratios and anchors in the recipe so the app can serve the right one. A round with only a wide desktop image is not ready to post.
 
+**Every review image carries its metadata** (creator, 2026-11-21): ship each with a sidecar (`<image>.meta.json`, the round's `recipe.json` or `provenance.json`, or the broker's `.gm-mock/done/<id>.json` left in place) naming kind, model, cost (free for Codex), skill, tools and time, which the review page prints under the image, and a round that recreates or varies an existing asset shows the original next to every candidate.
+
 A creator judges a look fastest from a picture of the game screen. Before building dioramas or wiring real assets,
 show **image mocks**: generated stills of the actual play screen, steered by the kit (asset set) the game uses. Real
 assets come in step 2, built toward the mock the creator picked.
