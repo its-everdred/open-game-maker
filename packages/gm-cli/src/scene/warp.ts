@@ -1,4 +1,4 @@
-import { projectGround, type Homography } from './registration.js';
+import { isHorizon, projectGround, type Homography } from './registration.js';
 
 export type Raster = { width: number; height: number; pixels: Uint8Array };
 
@@ -12,16 +12,18 @@ export function warpNearest(source: Raster, width: number, height: number, desti
   ) {
     throw new Error('invalid raster dimensions');
   }
+  if (!destinationToSource.every(Number.isFinite)) throw new Error('invalid warp transform');
+  const scale = Math.max(...destinationToSource.map(Math.abs));
+  if (scale === 0) throw new Error('invalid warp transform');
+  const [a, b, c, d, e, f, g, h, i] = destinationToSource.map((value) => value / scale);
+  const determinant = a! * (e! * i! - f! * h!) - b! * (d! * i! - f! * g!) + c! * (d! * h! - e! * g!);
+  if (determinant === 0) throw new Error('invalid warp transform');
   const pixels = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      let sourcePoint;
-      try {
-        sourcePoint = projectGround(destinationToSource, { x, y });
-      } catch {
-        // Pixels on the horizon have no finite source coordinate.
-        continue;
-      }
+      const denominator = destinationToSource[6] * x + destinationToSource[7] * y + destinationToSource[8];
+      if (Number.isFinite(denominator) && isHorizon(destinationToSource, { x, y }, denominator)) continue;
+      const sourcePoint = projectGround(destinationToSource, { x, y });
       const sx = Math.round(sourcePoint.x),
         sy = Math.round(sourcePoint.y);
       if (sx < 0 || sy < 0 || sx >= source.width || sy >= source.height) continue;
