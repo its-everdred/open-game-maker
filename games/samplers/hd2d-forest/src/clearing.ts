@@ -97,15 +97,17 @@ export const HERO_DEPTH = 0.5;
  */
 export function depthBands(pieces: Piece[]): Band[] {
   const row = (piece: Piece) => piece.cell[0] + piece.cell[1] - HERO[0] - HERO[1];
-  return BAND_ROWS.map(([from, to]) => {
+  return BAND_ROWS.flatMap(([from, to]) => {
     const members = pieces
       .filter((piece) => row(piece) >= from && row(piece) <= to)
       .sort(
         (a, b) =>
           row(a) - row(b) || Number(b.ground) - Number(a.ground) || a.cell[0] - a.cell[1] - (b.cell[0] - b.cell[1]),
       );
+    // An empty band has no depth to give (min/max of nothing is NaN), so it is left out.
+    if (!members.length) return [];
     const rows = members.map(row);
     const depth = (Math.max(from, Math.min(...rows)) + Math.min(to, Math.max(...rows))) / 2;
-    return { depth, pieces: members };
+    return [{ depth, pieces: members }];
   });
 }

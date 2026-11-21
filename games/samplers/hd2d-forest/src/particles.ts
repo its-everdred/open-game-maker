@@ -22,6 +22,7 @@ export const WIND: WindSettings = { direction: [0.7, 0, -0.7], strength: 0.6, se
 const [LEAVES, MOTES] = FOREST_DEFAULT_PRESETS;
 /** How often the motes follow the drifting shafts. */
 export const MOTE_RETARGET_MS = 3000;
+const FIRST_AIM_MS = 250;
 /** Canopy rotation per unit of wind, in radians. */
 const SWAY = 0.035;
 
@@ -69,7 +70,8 @@ export function createForestParticles(): ForestParticles {
   // Leaves fall across the whole clearing, from canopy height.
   pool.emit(LEAVES, { at: [0, 5, 0] });
   let motes: ParticleHandle | undefined;
-  let retargetAt = 0;
+  // The camera's view is only final after its first render, so the first aim waits a moment.
+  let retargetAt = FIRST_AIM_MS;
   return {
     wind,
     pool,

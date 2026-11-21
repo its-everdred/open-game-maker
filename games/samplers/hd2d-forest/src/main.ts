@@ -82,6 +82,7 @@ declare global {
       options: ForestOptions;
       fps(): number;
       particles(): number;
+      bandBlur(): number[];
       setPreset(id: PresetId): void;
       setLighting(on: boolean): void;
       setFocus(on: boolean): void;
@@ -95,6 +96,7 @@ void scene.ready.then(() => {
     options,
     fps: () => game.loop.actualFps,
     particles: () => scene.particles.pool.views.count,
+    bandBlur: () => scene.bandBlur(),
     setPreset: (id) => swatches[PRESET_IDS.indexOf(id)]!.click(),
     setLighting: (on) => {
       if (on !== options.lighting) lightingButton.click();

@@ -32,7 +32,8 @@ describe('depth bands', () => {
   const span = Math.max(...bands.map((band) => band.depth)) - min;
   const blur = (depth: number) => blurForDepth(FOCUS, (depth - min) / span, (HERO_DEPTH - min) / span);
 
-  it('puts every piece in exactly one band', () => {
+  it('puts every piece in exactly one band, and every band has a real depth', () => {
+    for (const band of bands) expect(Number.isFinite(band.depth)).toBe(true);
     expect(bands.flatMap((band) => band.pieces)).toHaveLength(pieces.length);
   });
 

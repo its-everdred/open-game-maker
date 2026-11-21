@@ -59,6 +59,7 @@ export class Forest extends Phaser.Scene {
   private fire?: LightingLight;
   /** Trees and the cell each stands on, swayed by the same wind as the leaves. */
   private trees: { image: Phaser.GameObjects.Image; x: number; z: number }[] = [];
+  private bands: Phaser.GameObjects.Container[] = [];
   readonly ready: Promise<void>;
   private markReady!: () => void;
 
@@ -89,6 +90,7 @@ export class Forest extends Phaser.Scene {
     const trims = new Map<string, Trim>();
     for (const band of bands) {
       const container = this.add.container(0, 0).setDepth(band.depth);
+      this.bands.push(container);
       for (const piece of band.pieces) {
         const { x, y } = cellPoint(piece.cell);
         let trim = trims.get(piece.key);
@@ -182,6 +184,14 @@ export class Forest extends Phaser.Scene {
 
   private preset(id: PresetId) {
     return { ...PRESETS[id], lights: this.fire ? [this.fire] : [] };
+  }
+
+  /** The blur radius scale the focus module set on each band, back to front (0 when unblurred). */
+  bandBlur(): number[] {
+    return this.bands.map((band) => {
+      const blur = band.filters?.internal.list.find((filter) => filter instanceof Phaser.Filters.Blur);
+      return blur?.active ? Math.round(blur.x * 1000) / 1000 : 0;
+    });
   }
 
   setPreset(id: PresetId): void {

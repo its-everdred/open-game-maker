@@ -44,6 +44,10 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     const { context, page, errors } = await open(viewport, `preset=${preset}`);
     const file = join(out, `${preset}-${name}.png`);
     await page.screenshot({ path: file });
+    // With lighting and focus both on, the far bands must still blur (the lighting overlay once flattened them).
+    const blur = await page.evaluate(() => window.__forest.bandBlur());
+    if (!blur.some((value) => value > 0)) throw new Error(`${preset} ${name}: no depth band is blurred`);
+    report.bandBlur = { ...report.bandBlur, [`${preset}-${name}`]: blur };
     report.stills.push(file);
     report.errors.push(...errors);
     await context.close();

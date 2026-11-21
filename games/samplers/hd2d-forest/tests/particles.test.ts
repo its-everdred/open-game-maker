@@ -40,7 +40,10 @@ describe('forest particles', () => {
     const leans = [0, 2000, 4000, 6000, 8000].map((t) => swayAt(particles.wind, 4, -3, t));
     expect(new Set(leans).size).toBeGreaterThan(1);
     for (const lean of leans) expect(Math.abs(lean)).toBeLessThan(0.08);
-    const [wx, , wz] = particles.wind.sample(4, 0, -3, 2000);
-    expect(Math.sign(swayAt(particles.wind, 4, -3, 2000))).toBe(Math.sign(wx - wz));
+    // A breeze toward screen right (cell +x, -z per cellPoint) must lean the canopy right (positive rotation).
+    particles.wind.set({ direction: [1, 0, -1], strength: 1 });
+    expect(swayAt(particles.wind, 4, -3, 2000)).toBeGreaterThan(0);
+    particles.wind.set({ direction: [-1, 0, 1] });
+    expect(swayAt(particles.wind, 4, -3, 2000)).toBeLessThan(0);
   });
 });
