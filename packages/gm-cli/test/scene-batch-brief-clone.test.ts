@@ -100,3 +100,9 @@ it('refuses stale crops, invalid indexes and truncated searches', () => {
   incomplete.match.truncated = true;
   expect(() => reviewedBatchBriefClone(incomplete)).toThrow('visual search is incomplete');
 });
+
+it('rejects malformed unused worker regions before exporting', () => {
+  const data = input();
+  data.match.regions.push({ crop: [0, 0, 0, 1], query: data.match.query });
+  expect(() => reviewedBatchBriefClone(data)).toThrow();
+});
