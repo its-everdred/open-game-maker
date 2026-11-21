@@ -14,6 +14,7 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/audio/test_labels.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/audio/test_style_montages.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/maps/test_layout_fields.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_fal3d.py
 	$(MAKE) py-compile
 
 test-py-models:

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 const vendor = join(dirname(fileURLToPath(import.meta.url)), '../../skills/vendor');
 const SETS = {
+  anykit: 'MIT',
   anymachine: 'MIT',
   phaser: 'MIT',
   threejs: 'MIT',
@@ -17,7 +18,7 @@ const SETS = {
   impeccable: 'Apache-2.0',
 } as const;
 /** Tool sets ship the scripts their gm wrappers run; the engine sets stay text only. */
-const TOOL_SETS = ['sprite-forge', 'video-to-game', 'impeccable', 'anymachine'];
+const TOOL_SETS = ['sprite-forge', 'video-to-game', 'impeccable', 'anymachine', 'anykit'];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -32,7 +33,7 @@ const rel = (file: string) => relative(vendor, file);
 const skillFiles = all.filter(
   (f) =>
     f.endsWith('.md') &&
-    (rel(f).split('/').length > 2 || rel(f) === 'anymachine/SKILL.md') &&
+    (rel(f).split('/').length > 2 || rel(f) === 'anymachine/SKILL.md' || rel(f) === 'anykit/SKILL.md') &&
     (!rel(f).startsWith('impeccable/') || f.endsWith('/SKILL.md')),
 );
 const read = (path: string) => readFileSync(join(vendor, path), 'utf8');
@@ -58,7 +59,7 @@ describe('vendored skill sets', () => {
   it('holds the expected skills per set', () => {
     const count = (set: string) =>
       skillFiles.filter((f) => rel(f).startsWith(`${set}/`) && f.endsWith('/SKILL.md')).length;
-    expect(Object.keys(SETS).map(count)).toEqual([1, 28, 11, 17, 5, 0, 1, 1]);
+    expect(Object.keys(SETS).map(count)).toEqual([1, 1, 28, 11, 17, 5, 0, 1, 1]);
     expect(existsSync(join(vendor, 'threejs/threejs-react-three-fiber'))).toBe(false);
   });
 
@@ -90,6 +91,7 @@ describe('vendored skill sets', () => {
     expect(read('gamedev/NOTICE')).toContain('Copyright 2026 Abhishek Barali');
     expect(read('sprite-forge/LICENSE')).toContain('Copyright (c) 2026 0x0funky');
     expect(read('video-to-game/LICENSE')).toContain('Copyright (c) 2026 Lovis Odin');
+    expect(read('anykit/LICENSE')).toContain('Copyright (c) 2026 Apekshik Panigrahi');
     expect(read('frontend-design/LICENSE.txt')).toContain('Apache License');
     expect(read('impeccable/LICENSE')).toContain('Apache License');
     expect(read('impeccable/NOTICE')).toContain('pbakaus/impeccable');
@@ -100,6 +102,7 @@ describe('vendored skill sets', () => {
       '0x0funky/agent-sprite-forge',
       'CloudAI-X/threejs-skills',
       'anthropics/claude-plugins-official',
+      'apekshik/anykit',
       'apekshik/anymachine',
       'gamedev-skills/awesome-gamedev-agent-skills',
       'lovisdotio/video-to-game',
@@ -146,13 +149,21 @@ describe('vendored text runs nothing', () => {
     );
   });
 
-  // Kevin's policy: no fal, no provider keys. Upstream video-to-game generates every asset with fal; only its local
-  // study and compare tools may be vendored.
-  it('vendors none of the video-to-game fal generation', () => {
-    const files = all.filter((f) => rel(f).startsWith('video-to-game/')).map(rel);
-    expect(files.filter((f) => /fal|SKILL\.md|record_play|templates\//.test(f))).toEqual([]);
-    for (const f of files.filter((f) => f.endsWith('.py')))
-      expect(read(f), f).not.toMatch(/\bfal\b|FAL_KEY|https?:\/\//);
+  // Kevin, 2026-11-21: fal is allowed for the 3D bake-off arms, capped at 9 USD across every call. The cap lives in one
+  // ledger (gm-sprite-forge/scripts/fal3d.py), so no vendored 3D script may call fal or hold a key itself: upstream fal
+  // clients would spend outside the ledger. Only the guides that describe the fal arms are vendored. (Sprite Forge's
+  // media router reads FAL_KEY from the environment; no fal key is ever exported there.)
+  it('vendors fal guides but no fal client outside the ledgered one', () => {
+    const v2g = all.filter((f) => rel(f).startsWith('video-to-game/')).map(rel);
+    expect(v2g.filter((f) => /fal|SKILL\.md|record_play|templates\//.test(f))).toEqual([
+      'video-to-game/references/fal-assets.md',
+    ]);
+    for (const f of v2g.filter((f) => f.endsWith('.py'))) expect(read(f), f).not.toMatch(/\bfal\b|https?:\/\//);
+    const sets = /^(anykit|anymachine|video-to-game)\//;
+    for (const f of all.filter((f) => sets.test(rel(f)) && /\.(py|mjs|js|sh)$/.test(f)).map(rel))
+      expect(read(f), f).not.toMatch(/queue\.fal\.run|fal_client|FAL_KEY|@fal-ai\//);
+    for (const guide of ['video-to-game/references/fal-assets.md', 'anykit/SKILL.md', 'anymachine/SKILL.md'])
+      expect(read(guide), guide).toContain('gm-sprite-forge/scripts/fal3d.py');
   });
 
   it('fetches nothing from the network in code blocks', () => {
