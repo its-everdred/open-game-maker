@@ -60,12 +60,12 @@ Assumed: the `open-games` repo plus the hosted site.
 
 ## Executor host glue (temporary)
 
-**PC Executor** (Kevin's PC, `ssh everdred@100.89.62.105`; Khala channel GM as "PC"): runs core no-asset tickets under `tracker.github.label_prefix: pc` (hand over: drop `agent:*`, add `pc:queued` + `pc:todo`, post "PC takes #N"), plus aiur-team/aiur (prefix `agent`; Kevin's NUC aiur daemon 5c1b32aea9 stays off while it runs), aiur-team/archon and Kevin's other repos. No game assets on the PC: Open-Games and asset-heavy core stay on the NUC.
+**PC Executor** (Kevin's PC, `ssh everdred@100.89.62.105`; Khala channel GM as "PC"): runs core no-asset tickets under `tracker.github.label_prefix: pc` (hand over: drop `agent:*`, add `pc:queued` + `pc:todo`, post "PC takes #N"), plus aiur-team/aiur (prefix `agent`; Kevin's NUC aiur daemon 5c1b32aea9 stays off while it runs), aiur-team/archon and Kevin's other repos. Since 2026-11-22 (Kevin) it also runs code-only Dusk Helm tickets (`role:gameplay`, no `lane:*`, no `role:visual|assets|audio`, no `phase:mock`) on a PC open-games daemon (`aiur-pc open-games`, checkout `~/github/everdred/open-games`, prefix `pc`, port 4011, max 4 agents, paused with core by `yofe-game-pause.sh`; skills copied from core `origin/main` by its hook). The NUC keeps merges, publishes and stills; `executor/pc-rework.sh` (used by `host-steps.sh` and `decide.sh`) sends a `pc:*` ticket's rework to the PC. No packs, audio or `assets-local` on the PC; a PC PR that touches `src/render|ui` would wait on NUC stills, so those tickets stay on the NUC.
 
 This directory: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/` (scripts) and `executor/handoff.md` (state). Run them from there.
 
 - **Loops:** `host-steps.sh` (merge, publish, stills, audits, follow-up triage), `auto-update.sh` (stack, web deploy, aiur pin), `command-listener.sh` (wakes the Executor).
-- **Helpers:** `file-ticket.sh`, `pick-page.sh`, `tell-aiur.sh`, `og-merge.sh`, `og-publish.sh`, `decide.sh` (Executor pick decisions: comment + rework), `og-cpu-split.sh` (70/30 cgroup split), `og-dispatch-watchdog.sh` (restart a stalled open-games dispatch; both run from host-steps).
+- **Helpers:** `file-ticket.sh`, `pick-page.sh`, `tell-aiur.sh`, `og-merge.sh`, `og-publish.sh`, `decide.sh` (Executor pick decisions: comment + rework; `pc:*` tickets via `pc-rework.sh`), `og-cpu-split.sh` (70/30 cgroup split), `og-dispatch-watchdog.sh` (restart a stalled open-games dispatch; both run from host-steps).
 - **Mock broker:** `mock-broker.py` (one copy, flock) generates workers' image mocks; references may come from `assets-local/packs/` (any licence), `sets/` and `review/` so mocks match the real kit (Kevin 2026-11-19); the rest of the private library is refused.
 - **Kevin's personal skills** (not workers' unless vendored): `its-everdred/skills`, where `external-skills.json` installs into `~/.agents/skills`.
 
