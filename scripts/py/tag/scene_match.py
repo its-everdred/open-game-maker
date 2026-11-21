@@ -23,6 +23,11 @@ ENCODERS = {
 MAX_PIXELS = 25_000_000
 
 
+def encoder_signature(encoder, transformers_version, pillow_version):
+    model_id, revision = ENCODERS[encoder]
+    return f"{model_id}@{revision}:rgb-brown-v1:transformers-{transformers_version}:pillow-{pillow_version}"
+
+
 def crop_mock(path, bounds):
     with Image.open(path) as image:
         if image.width * image.height > MAX_PIXELS:
@@ -73,6 +78,8 @@ def rank(ids, vectors):
 
 def embed(images, encoder):
     import torch
+    import transformers
+    import PIL
 
     torch.set_num_threads(2)
     model_id, revision = ENCODERS[encoder]
@@ -95,7 +102,8 @@ def embed(images, encoder):
             features.extend(batch.cpu().numpy())
             if len(features) % 64 == 0 or len(features) == len(images):
                 print(f"scene match: embedded {len(features)} of {len(images)} images", file=sys.stderr, flush=True)
-    return features
+    signature = encoder_signature(encoder, transformers.__version__, PIL.__version__)
+    return features, signature
 
 
 def main():
@@ -128,11 +136,9 @@ def main():
             if image.width * image.height > MAX_PIXELS or total_pixels > 50_000_000:
                 raise ValueError("previews exceed image size limit")
             images.append(flatten(image))
-    vectors = embed(images, args.encoder)
+    vectors, signature = embed(images, args.encoder)
     ids = [row["card"]["id"] for row in rows]
     results = rank(ids, vectors)
-    model_id, revision = ENCODERS[args.encoder]
-    signature = f"{model_id}@{revision}:rgb-brown-v1"
     output = {"model": signature, "matches": results, "examined": len(rows), "eligible": total,
               "truncated": len(rows) < total, "preview": f"source facing {args.facing}; camera match not verified"}
     if args.include_vectors:
