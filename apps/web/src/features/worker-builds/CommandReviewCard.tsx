@@ -186,97 +186,89 @@ export function CommandReviewCard({
           drag.current = undefined;
         }}
       >
-        {command.options.map(
-          (option) =>
-            option.id === selected?.id && (
-              <div className="worker-review-option review-deck-card" key={option.id}>
-                {option.playable ? (
-                  <PlayableCard gameId={commandSource(command)} card={option} options={command.options} />
-                ) : option.media && mediaKindOf(option.media) === 'audio' ? (
-                  <audio controls src={option.media.url} aria-label={option.label} />
-                ) : option.media && mediaKindOf(option.media) === 'video' ? (
-                  <video
-                    controls
-                    playsInline
-                    autoPlay
-                    muted
-                    loop
-                    src={option.media.url}
-                    className="review-deck-media"
-                  />
-                ) : option.media ? (
-                  <button
-                    type="button"
-                    className="worker-review-image"
-                    onClick={() => {
-                      if (suppressImageClick.current) {
-                        suppressImageClick.current = false;
-                        return;
-                      }
-                      setZoom({ url: option.media!.url, label: option.label });
-                    }}
-                  >
-                    <img src={option.media.url} alt={option.label} className="review-deck-media" />
-                  </button>
-                ) : null}
-                {option.audio && <audio controls src={option.audio.url} aria-label={`${option.label} audio`} />}
-                {option.audioClips?.map((clip, index) => (
-                  <audio
-                    key={`${clip.url}:${index}`}
-                    controls
-                    src={clip.url}
-                    aria-label={`${option.label} audio ${index + 2}`}
-                  />
-                ))}
-                <div
-                  className="worker-review-votes"
-                  aria-label={`Rate ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={votes[option.id] === 'like'}
-                    disabled={sending || saved}
-                    onClick={() =>
-                      setVotes((current) => {
-                        const next = { ...current };
-                        if (next[option.id] === 'like') delete next[option.id];
-                        else next[option.id] = 'like';
-                        return next;
-                      })
-                    }
-                  >
-                    👍
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={votes[option.id] === 'dislike'}
-                    disabled={sending || saved}
-                    onClick={() =>
-                      setVotes((current) => {
-                        const next = { ...current };
-                        if (next[option.id] === 'dislike') delete next[option.id];
-                        else next[option.id] = 'dislike';
-                        return next;
-                      })
-                    }
-                  >
-                    👎
-                  </button>
-                </div>
-                {votes[option.id] || reasons[option.id] ? (
-                  <label className="worker-review-option-note">
-                    Note for {letterOf(command.options, option.id)} (optional)
-                    <textarea
-                      value={reasons[option.id] ?? ''}
-                      disabled={sending || saved}
-                      maxLength={1000}
-                      onChange={(event) => setReasons((current) => ({ ...current, [option.id]: event.target.value }))}
-                    />
-                  </label>
-                ) : null}
-              </div>
-            ),
-        )}
+        {command.options.map((option) => (
+          <div className="worker-review-option review-deck-card" key={option.id} hidden={option.id !== selected?.id}>
+            {option.id === selected?.id && option.playable ? (
+              <PlayableCard gameId={commandSource(command)} card={option} options={command.options} />
+            ) : option.id === selected?.id && option.media && mediaKindOf(option.media) === 'audio' ? (
+              <audio controls src={option.media.url} aria-label={option.label} />
+            ) : option.id === selected?.id && option.media && mediaKindOf(option.media) === 'video' ? (
+              <video controls playsInline autoPlay muted loop src={option.media.url} className="review-deck-media" />
+            ) : option.id === selected?.id && option.media ? (
+              <button
+                type="button"
+                className="worker-review-image"
+                onClick={() => {
+                  if (suppressImageClick.current) {
+                    suppressImageClick.current = false;
+                    return;
+                  }
+                  setZoom({ url: option.media!.url, label: option.label });
+                }}
+              >
+                <img src={option.media.url} alt={option.label} className="review-deck-media" />
+              </button>
+            ) : null}
+            {option.id === selected?.id && option.audio && (
+              <audio controls src={option.audio.url} aria-label={`${option.label} audio`} />
+            )}
+            {option.id === selected?.id &&
+              option.audioClips?.map((clip, index) => (
+                <audio
+                  key={`${clip.url}:${index}`}
+                  controls
+                  src={clip.url}
+                  aria-label={`${option.label} audio ${index + 2}`}
+                />
+              ))}
+            <div
+              className="worker-review-votes"
+              aria-label={`Rate ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`}
+            >
+              <button
+                type="button"
+                aria-pressed={votes[option.id] === 'like'}
+                disabled={sending || saved}
+                onClick={() =>
+                  setVotes((current) => {
+                    const next = { ...current };
+                    if (next[option.id] === 'like') delete next[option.id];
+                    else next[option.id] = 'like';
+                    return next;
+                  })
+                }
+              >
+                👍
+              </button>
+              <button
+                type="button"
+                aria-pressed={votes[option.id] === 'dislike'}
+                disabled={sending || saved}
+                onClick={() =>
+                  setVotes((current) => {
+                    const next = { ...current };
+                    if (next[option.id] === 'dislike') delete next[option.id];
+                    else next[option.id] = 'dislike';
+                    return next;
+                  })
+                }
+              >
+                👎
+              </button>
+            </div>
+            {votes[option.id] || reasons[option.id] ? (
+              <label className="worker-review-option-note">
+                Note for {letterOf(command.options, option.id)} (optional)
+                <textarea
+                  value={reasons[option.id] ?? ''}
+                  disabled={sending || saved}
+                  maxLength={1000}
+                  onChange={(event) => setReasons((current) => ({ ...current, [option.id]: event.target.value }))}
+                />
+              </label>
+            ) : null}
+          </div>
+        ))}
       </div>
       <div className="worker-review-submit">
         <button
