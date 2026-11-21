@@ -12,7 +12,9 @@ import { gm, tempDir } from './helpers.js';
 async function png(root: string, path: string, width: number, height: number, color: string) {
   const file = join(root, 'public', path);
   mkdirSync(dirname(file), { recursive: true });
-  await sharp({ create: { width, height, channels: 4, background: color } }).png().toFile(file);
+  await sharp({ create: { width, height, channels: 4, background: color } })
+    .png()
+    .toFile(file);
 }
 
 function manifest(root: string, images: unknown) {
@@ -29,12 +31,17 @@ describe('layered image composition', () => {
   it('writes each required viewport at 2x size and keeps a square plate cover-scaled', async () => {
     const root = tempDir();
     await png(root, 'media/plate.png', 40, 20, '#0000ff');
-    const marker = await sharp({ create: { width: 8, height: 8, channels: 4, background: '#ffffff' } }).png().toBuffer();
+    const marker = await sharp({ create: { width: 8, height: 8, channels: 4, background: '#ffffff' } })
+      .png()
+      .toBuffer();
     await sharp(join(root, 'public/media/plate.png'))
       .composite([{ input: marker, left: 16, top: 6 }])
       .png()
       .toFile(join(root, 'public/media/plate-marked.png'));
-    writeFileSync(join(root, 'gm.manifest.json'), JSON.stringify({ images: { logo: { mode: 'layered', plate: 'media/plate-marked.png', layers: [] } } }));
+    writeFileSync(
+      join(root, 'gm.manifest.json'),
+      JSON.stringify({ images: { logo: { mode: 'layered', plate: 'media/plate-marked.png', layers: [] } } }),
+    );
 
     const paths = await composeSlots(root);
     expect(paths).toHaveLength(IMAGE_SLOTS.logo.viewports.length);
@@ -45,7 +52,9 @@ describe('layered image composition', () => {
       const display = IMAGE_SLOTS.logo.display[viewport];
       expect(metadata.width).toBe(Math.round(display.width * 2));
       expect(metadata.height).toBe(Math.round(display.height * 2));
-      const { data, info } = await sharp(join(root, 'public', output)).raw().toBuffer({ resolveWithObject: true });
+      const { data, info } = await sharp(join(root, 'public', output))
+        .raw()
+        .toBuffer({ resolveWithObject: true });
       const at = (x: number, y: number) => (y * info.width + x) * info.channels;
       expect(data[at(0, Math.floor(info.height / 2)) + 3]).toBe(255);
       expect(data[at(0, Math.floor(info.height / 2)) + 2]).toBe(255);
@@ -105,10 +114,12 @@ describe('layered image composition', () => {
   it('uses declared variant paths and refuses to replace a source image', async () => {
     const root = tempDir();
     await png(root, 'media/plate.png', 16, 16, '#123456');
-    const variants = Object.fromEntries(IMAGE_SLOTS.logo.viewports.map((viewport) => [
-      viewport,
-      viewport === 'phone-portrait' ? 'media/custom-phone.png' : `media/custom-${viewport}.png`,
-    ]));
+    const variants = Object.fromEntries(
+      IMAGE_SLOTS.logo.viewports.map((viewport) => [
+        viewport,
+        viewport === 'phone-portrait' ? 'media/custom-phone.png' : `media/custom-${viewport}.png`,
+      ]),
+    );
     manifest(root, {
       logo: {
         mode: 'layered',
@@ -155,14 +166,18 @@ describe('layered image composition', () => {
     expect(await gm(['check', 'images'], { cwd: root })).toMatchObject({ code: 0, err: [] });
     const json = await gm(['images', 'compose', '--json'], { cwd: root });
     expect(json.code).toBe(0);
-    expect(JSON.parse(json.out[0]!)).toMatchObject({ paths: expect.arrayContaining(['media/slots/logo-phone-portrait.png']) });
+    expect(JSON.parse(json.out[0]!)).toMatchObject({
+      paths: expect.arrayContaining(['media/slots/logo-phone-portrait.png']),
+    });
   });
 
   it('refuses a symlinked output without touching its target', async () => {
     const root = tempDir();
     const outside = join(root, 'outside.png');
     await png(root, 'media/plate.png', 16, 16, '#123456');
-    await sharp({ create: { width: 2, height: 2, channels: 4, background: '#abcdef' } }).png().toFile(outside);
+    await sharp({ create: { width: 2, height: 2, channels: 4, background: '#abcdef' } })
+      .png()
+      .toFile(outside);
     mkdirSync(join(root, 'public/media/slots'), { recursive: true });
     symlinkSync(outside, join(root, 'public/media/slots/logo-phone-portrait.png'));
     manifest(root, { logo: { mode: 'layered', plate: 'media/plate.png', layers: [] } });
@@ -176,7 +191,9 @@ describe('layered image composition', () => {
     const root = tempDir();
     const outside = join(root, 'outside.png');
     await png(root, 'media/plate.png', 16, 16, '#123456');
-    await sharp({ create: { width: 2, height: 2, channels: 4, background: '#abcdef' } }).png().toFile(outside);
+    await sharp({ create: { width: 2, height: 2, channels: 4, background: '#abcdef' } })
+      .png()
+      .toFile(outside);
     mkdirSync(join(root, 'public/media/slots'), { recursive: true });
     linkSync(outside, join(root, 'public/media/slots/logo-phone-portrait.png'));
     manifest(root, { logo: { mode: 'layered', plate: 'media/plate.png', layers: [] } });
@@ -197,10 +214,12 @@ describe('layered image composition', () => {
         mode: 'layered',
         plate: 'media/plate.png',
         layers: [],
-        variants: Object.fromEntries(IMAGE_SLOTS.logo.viewports.map((viewport) => [
-          viewport,
-          viewport === 'phone-portrait' ? 'media/slots/nested/image.png' : `media/safe-${viewport}.png`,
-        ])),
+        variants: Object.fromEntries(
+          IMAGE_SLOTS.logo.viewports.map((viewport) => [
+            viewport,
+            viewport === 'phone-portrait' ? 'media/slots/nested/image.png' : `media/safe-${viewport}.png`,
+          ]),
+        ),
       },
     });
 
@@ -213,16 +232,18 @@ describe('layered image composition', () => {
     await png(root, 'media/plate.png', 16, 16, '#123456');
     await png(root, 'media/title.png', 8, 8, '#abcdef');
     manifest(root, {
-        logo: {
-          mode: 'layered',
-          plate: 'media/plate.png',
-          layers: [],
-          variants: Object.fromEntries(IMAGE_SLOTS.logo.viewports.map((viewport) => [
+      logo: {
+        mode: 'layered',
+        plate: 'media/plate.png',
+        layers: [],
+        variants: Object.fromEntries(
+          IMAGE_SLOTS.logo.viewports.map((viewport) => [
             viewport,
             viewport === 'phone-portrait' ? 'media/title.png' : `media/logo-${viewport}.png`,
-          ])),
-        },
-        title: { mode: 'per-ratio', variants: { desktop: 'media/title.png' } },
+          ]),
+        ),
+      },
+      title: { mode: 'per-ratio', variants: { desktop: 'media/title.png' } },
     });
 
     await expect(composeSlots(root)).rejects.toThrow('output cannot replace a source image');

@@ -64,7 +64,9 @@ export async function composeSlots(game: string): Promise<string[]> {
 
   for (const [slotName, entry] of Object.entries(parsed.data) as [SlotId, (typeof parsed.data)[SlotId]][]) {
     if (!entry || entry.mode !== 'layered' || !entry.variants) continue;
-    const viewports = [...new Set([...IMAGE_SLOTS[slotName].viewports, ...Object.keys(entry.variants) as ViewportId[]])];
+    const viewports = [
+      ...new Set([...IMAGE_SLOTS[slotName].viewports, ...(Object.keys(entry.variants) as ViewportId[])]),
+    ];
     const missing = viewports.find((viewport) => !entry.variants?.[viewport]);
     if (missing) throw new Error(`images.${slotName}: missing variant for ${missing}`);
   }
@@ -77,9 +79,10 @@ export async function composeSlots(game: string): Promise<string[]> {
   const protectedSources = new Set<string>();
   for (const entry of Object.values(parsed.data)) {
     if (!entry) continue;
-    const paths = entry.mode === 'layered'
-      ? [entry.plate, ...entry.layers.map((layer) => layer.src)].filter((path): path is string => path !== undefined)
-      : Object.values(entry.variants);
+    const paths =
+      entry.mode === 'layered'
+        ? [entry.plate, ...entry.layers.map((layer) => layer.src)].filter((path): path is string => path !== undefined)
+        : Object.values(entry.variants);
     for (const path of paths) {
       try {
         const canonical = await realpath(publicPath(publicRoot, path));
@@ -95,7 +98,7 @@ export async function composeSlots(game: string): Promise<string[]> {
   for (const [slotName, entry] of Object.entries(parsed.data) as [SlotId, (typeof parsed.data)[SlotId]][]) {
     if (!entry || entry.mode !== 'layered') continue;
     const slot = IMAGE_SLOTS[slotName];
-    const viewports = [...new Set([...slot.viewports, ...Object.keys(entry.variants ?? {}) as ViewportId[]])];
+    const viewports = [...new Set([...slot.viewports, ...(Object.keys(entry.variants ?? {}) as ViewportId[])])];
     for (const viewport of viewports) {
       const display = slot.display[viewport];
       const width = Math.round(display.width * 2);
@@ -103,7 +106,9 @@ export async function composeSlots(game: string): Promise<string[]> {
       const composites: OverlayOptions[] = [];
       if (entry.plate) {
         const plate = await readPublicImage(publicRoot, entry.plate);
-        composites.push({ input: await sharp(plate).resize(width, height, { fit: 'cover', position: 'centre' }).png().toBuffer() });
+        composites.push({
+          input: await sharp(plate).resize(width, height, { fit: 'cover', position: 'centre' }).png().toBuffer(),
+        });
       }
       for (const layer of entry.layers as Layer[]) {
         const anchor = layer.anchors[viewport];
@@ -112,7 +117,7 @@ export async function composeSlots(game: string): Promise<string[]> {
         const sourceMeta = await sharp(source).metadata();
         if (!sourceMeta.width || !sourceMeta.height) throw new Error(`${layer.src}: image has no dimensions`);
         const layerWidth = Math.max(1, Math.round(width * anchor.width));
-        const layerHeight = Math.max(1, Math.round(layerWidth * sourceMeta.height / sourceMeta.width));
+        const layerHeight = Math.max(1, Math.round((layerWidth * sourceMeta.height) / sourceMeta.width));
         const left = Math.round(anchor.x * width - layerWidth / 2);
         const top = Math.round(anchor.y * height - layerHeight / 2);
         composites.push({
@@ -123,8 +128,7 @@ export async function composeSlots(game: string): Promise<string[]> {
       }
       const output = entry.variants?.[viewport] ?? `media/slots/${slotName}-${viewport}.png`;
       const finalDestination = await outputPath(publicRoot, output);
-      if (protectedSources.has(finalDestination))
-        throw new Error(`${output}: output cannot replace a source image`);
+      if (protectedSources.has(finalDestination)) throw new Error(`${output}: output cannot replace a source image`);
       const canvas = sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } });
       await canvas.composite(composites).png().toFile(finalDestination);
       // Return manifest-relative paths so callers can display a stable result.
