@@ -1,6 +1,6 @@
 import { AgreedScope, ScopeChoices } from '@ogm/contracts';
 import { schema, type Db, type Sqlite } from '@ogm/db';
-import { and, asc, desc, eq, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lte } from 'drizzle-orm';
 
 import { jobAttachments, type AttachmentRow } from '../build-chat/attachments.js';
 import { listSince, type ChatRow } from '../build-chat/store.js';
@@ -50,7 +50,7 @@ export function newGameContext(db: Db, sqlite: Sqlite, requestId: string): NewGa
   const session = latestAgreedSession(db, job);
 
   const messages: NewGameContext['messages'] = [];
-  for (const chatJobId of new Set([session?.row.jobId, job.id].filter((id): id is string => typeof id === 'string'))) {
+  for (const chatJobId of new Set([session?.chatJobId, job.id].filter((id): id is string => typeof id === 'string'))) {
     for (const row of listSince(sqlite, chatJobId, 0, MESSAGE_LIMIT)) {
       messages.push({ at: row.at, actor: row.actor, kind: row.kind, text: row.text, media: row.mediaHash !== null });
     }
@@ -58,7 +58,7 @@ export function newGameContext(db: Db, sqlite: Sqlite, requestId: string): NewGa
   messages.sort((left, right) => (left.at < right.at ? -1 : left.at > right.at ? 1 : 0));
 
   const attachments = [
-    ...(session === null ? [] : jobAttachments(sqlite, session.row.jobId)),
+    ...(session === null ? [] : jobAttachments(sqlite, session.chatJobId)),
     ...jobAttachments(sqlite, job.id),
   ].map((row) => ({
     id: row.id,
@@ -75,7 +75,7 @@ export function newGameContext(db: Db, sqlite: Sqlite, requestId: string): NewGa
     choices: session === null ? null : session.choices,
     brief: typeof plan.summary === 'string' ? plan.summary.slice(0, BRIEF_MAX) : '',
     spec: session?.scope ?? null,
-    revisions: session === null ? [] : revisionsFor(db, session.row.id),
+    revisions: session?.revisions ?? [],
     messages,
     attachments,
     parent:
@@ -85,8 +85,13 @@ export function newGameContext(db: Db, sqlite: Sqlite, requestId: string): NewGa
   };
 }
 
-type SessionRow = typeof schema.scopeSessions.$inferSelect;
-type FoundSession = { row: SessionRow; choices: ScopeChoices | null; scope: AgreedScope | null };
+type FoundSession = {
+  id: string;
+  chatJobId: string;
+  choices: ScopeChoices | null;
+  scope: AgreedScope | null;
+  revisions: NewGameContext['revisions'];
+};
 
 // The scope session the New Game flow finished: the game's latest agreed session created before the request, matched
 // on the agreed title when one matches. Null when the session cannot be identified.
@@ -104,11 +109,47 @@ function latestAgreedSession(db: Db, job: RequestRow): FoundSession | null {
     )
     .orderBy(desc(schema.scopeSessions.createdAt))
     .all();
-  const chosen = rows.find((row) => row.scope !== null && text(json(row.scope).title) === title) ?? rows[0];
+  const drafts = db
+    .select()
+    .from(schema.gameDrafts)
+    .where(
+      and(
+        eq(schema.gameDrafts.gameId, job.gameId),
+        inArray(schema.gameDrafts.status, ['agreed', 'promoted']),
+        lte(schema.gameDrafts.createdAt, job.createdAt),
+      ),
+    )
+    .orderBy(desc(schema.gameDrafts.createdAt))
+    .all();
+  const candidates = [
+    ...rows.map((row) => ({
+      id: row.id,
+      chatJobId: row.jobId,
+      choices: row.choices,
+      scope: row.scope,
+      createdAt: row.createdAt,
+      revisions: revisionsFor(db, row.id),
+    })),
+    ...drafts.map((draft) => ({
+      id: draft.id,
+      chatJobId: `draft:${draft.id}`,
+      choices: draft.choices,
+      scope: draft.scope,
+      createdAt: draft.createdAt,
+      revisions: [{ revision: draft.revision, agreedAt: draft.updatedAt }],
+    })),
+  ].sort((left, right) => (left.createdAt > right.createdAt ? -1 : left.createdAt < right.createdAt ? 1 : 0));
+  const chosen = candidates.find((row) => row.scope !== null && text(json(row.scope).title) === title) ?? candidates[0];
   if (!chosen) return null;
   const scope = chosen.scope === null ? null : AgreedScope.safeParse(json(chosen.scope));
   const choices = ScopeChoices.safeParse(json(chosen.choices));
-  return { row: chosen, choices: choices.success ? choices.data : null, scope: scope?.success ? scope.data : null };
+  return {
+    id: chosen.id,
+    chatJobId: chosen.chatJobId,
+    choices: choices.success ? choices.data : null,
+    scope: scope?.success ? scope.data : null,
+    revisions: chosen.revisions,
+  };
 }
 
 function revisionsFor(db: Db, sessionId: string): NewGameContext['revisions'] {

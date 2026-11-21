@@ -1,8 +1,9 @@
 import { createElement, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { Dictation, VoiceClient } from '@ogm/voice-client';
 import type { VoiceTarget } from '@ogm/contracts';
+import { MAX_CHAT_ATTACHMENTS } from '@ogm/contracts/browser';
 import { defineComposer, type AiurComposer as ComposerElement } from '@aiur/conversation';
-import { attachmentType, uploadChatAttachment, type UploadAttachment } from './attachments';
+import { attachmentType, isLargeTextPaste, uploadChatAttachment, type UploadAttachment } from './attachments';
 import type { Composer } from './Composer';
 import { connectDictation, probeVoice, type VoiceAvailability } from './voice';
 import type { StreamedChatMessage } from './stream';
@@ -98,6 +99,31 @@ export function AiurComposer({
     `
         : '';
     element.shadowRoot?.append(style);
+    const input = element.shadowRoot?.querySelector('textarea');
+    const fileInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[type="file"]');
+    const paste = (event: ClipboardEvent) => {
+      const clipboard = event.clipboardData;
+      if (!clipboard || !fileInput) return;
+      const pastedFiles = Array.from(clipboard.items)
+        .map((item) => (item.kind === 'file' ? item.getAsFile() : null))
+        .filter((file): file is File => file !== null);
+      const text = clipboard.getData('text/plain');
+      const files =
+        pastedFiles.length > 0
+          ? pastedFiles
+          : text && isLargeTextPaste(text)
+            ? [new File([text], 'pasted-text.txt', { type: 'text/plain' })]
+            : [];
+      const room = MAX_CHAT_ATTACHMENTS - element.attachments.length;
+      const accepted = files.filter((file) => attachmentType(file)).slice(0, room);
+      if (accepted.length === 0) return;
+      event.preventDefault();
+      const transfer = new DataTransfer();
+      accepted.forEach((file) => transfer.items.add(file));
+      fileInput.files = transfer.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    input?.addEventListener('paste', paste);
     const recording = (event: Event) => {
       if (event instanceof KeyboardEvent && event.code !== 'Space' && event.code !== 'Enter') return;
       const mic = event
@@ -277,6 +303,7 @@ export function AiurComposer({
       element.removeEventListener('pointercancel', recording);
       element.removeEventListener('keydown', recording);
       element.removeEventListener('keyup', recording);
+      input?.removeEventListener('paste', paste);
       style.remove();
     };
   }, [jobId, voiceTarget, dictationTarget, reading]);

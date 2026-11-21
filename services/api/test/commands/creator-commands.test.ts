@@ -1,5 +1,5 @@
 import type { AiurClient, Decision } from '@ogm/aiur-client';
-import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, reviewMetaMarker } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -127,6 +127,34 @@ async function read(deps: ReturnType<typeof makeDeps>, path: string, userId: str
 }
 
 describe('the creator’s decision inbox', () => {
+  it('lists marker metadata and layout on /me/commands', async () => {
+    const deps = seed();
+    const metadata = reviewMetaMarker(
+      new Map([
+        [
+          'a',
+          { meta: { kind: 'image generation', model: 'gpt-image-1' }, layout: { row: 'hero', stage: 'candidate' } },
+        ],
+      ]),
+    );
+    serveAiur(deps, {
+      [ids.blobs]: [
+        decision('d_metadata', {
+          context: { short_summary: 'Look', long_context_markdown: `${CREATOR_AUDIENCE_MARKER}\n${metadata}` },
+        }),
+      ],
+    });
+    const response = await read(deps, '/me/commands');
+    const body = (await response.json()) as {
+      commands: Array<{ options: Array<{ meta?: unknown; layout?: unknown }> }>;
+    };
+    expect(response.status).toBe(200);
+    expect(body.commands[0]!.options[0]).toMatchObject({
+      meta: { kind: 'image generation' },
+      layout: { row: 'hero', stage: 'candidate' },
+    });
+  });
+
   it('lists every game’s player-facing Commands, blocking first and then the longest waiting', async () => {
     const deps = seed();
     serveAiur(deps, {

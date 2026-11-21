@@ -35,6 +35,7 @@ describe('command registry', () => {
   it('registers every dropped-in command, each with help of at most 15 lines', async () => {
     const registry = await loadCommands(COMMANDS_DIR);
     expect([...registry.keys()].sort()).toEqual([
+      'admin games prune-failed',
       'ask',
       'assets export',
       'assets facets',
@@ -63,6 +64,7 @@ describe('command registry', () => {
       'check assets',
       'check boot',
       'check hooks',
+      'check images',
       'check static',
       'checkpoint open',
       'checkpoint wait',
@@ -78,6 +80,7 @@ describe('command registry', () => {
       'docs pattern',
       'energy',
       'games register',
+      'images compose',
       'instance init',
       'look check',
       'look evidence',

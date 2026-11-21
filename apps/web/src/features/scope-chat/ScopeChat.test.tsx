@@ -24,6 +24,7 @@ vi.mock('../../lib/api/client', async () => {
 vi.mock('../../lib/api/session', () => ({ useSession: mocks.session }));
 
 import { AIUR_CONVERSATION_TAG } from '../aiur/embed';
+import type { AiurComposer as AiurComposerElement } from '@aiur/conversation';
 import { ScopeChat } from './ScopeChat';
 
 const scope: AgreedScope = {
@@ -66,12 +67,103 @@ beforeEach(() => {
     error: '',
     send: vi.fn(),
     addMessage: vi.fn(),
+    retain: vi.fn(),
   });
 });
 
 afterEach(() => cleanup());
 
 describe('ScopeChat offers', () => {
+  it('submits Finish only once when activated twice before React rerenders', async () => {
+    const retain = vi.fn();
+    mocks.scopeSession.mockReturnValue({
+      sessionId: 's_1',
+      jobId: undefined,
+      scope,
+      turns: [],
+      status: 'agreed',
+      error: '',
+      send: vi.fn(),
+      addMessage: vi.fn(),
+      retain,
+    });
+    const onFinish = vi.fn(({ retainDraft }: { retainDraft(): void }) => {
+      retainDraft();
+      return new Promise<{ kind: 'accepted'; jobId: string }>((resolve) =>
+        setTimeout(() => resolve({ kind: 'accepted', jobId: 'j_1' }), 20),
+      );
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ScopeChat
+            gameId="new-draft"
+            choices={{
+              genre: 'Adventure',
+              vibe: 'Cozy',
+              family: 'smallscaleint',
+              world: 'Sky islands',
+              players: 'single',
+              pov: 'iso',
+            }}
+            onFinish={onFinish}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const finish = screen.getByRole('button', { name: 'Finish' });
+    act(() => {
+      fireEvent.click(finish);
+      fireEvent.click(finish);
+    });
+
+    await waitFor(() => expect(onFinish).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(retain).toHaveBeenCalledTimes(1));
+  });
+
+  it('leaves a failed Finish eligible for draft cleanup when the creator leaves', async () => {
+    const retain = vi.fn();
+    mocks.scopeSession.mockReturnValue({
+      sessionId: 's_1',
+      jobId: undefined,
+      scope,
+      turns: [],
+      status: 'agreed',
+      error: '',
+      send: vi.fn(),
+      addMessage: vi.fn(),
+      retain,
+    });
+    const onFinish = vi.fn().mockRejectedValue(new Error('game provisioning failed'));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ScopeChat
+            gameId="new-draft"
+            choices={{
+              genre: 'Adventure',
+              vibe: 'Cozy',
+              family: 'smallscaleint',
+              world: 'Sky islands',
+              players: 'single',
+              pov: 'iso',
+            }}
+            onFinish={onFinish}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The build could not be started. Try again.');
+    view.unmount();
+
+    expect(retain).not.toHaveBeenCalled();
+  });
+
   it('keeps one voice-token probe across parent rerenders', async () => {
     mocks.session.mockReturnValue({ data: { user: { id: 'u_1' } } });
     mocks.scopeSession.mockReturnValue({
@@ -157,6 +249,35 @@ describe('ScopeChat offers', () => {
     expect(element).toHaveProperty('scope.conversation', '/api/v1/jobs/j_1/chat/messages');
     expect(element).toHaveProperty('scope.tickets', []);
     expect(screen.getByRole('button', { name: 'Finish' })).toBeVisible();
+  });
+
+  it('sends scope chat text through the aiur composer to the scope session', async () => {
+    const getElement = vi
+      .spyOn(customElements, 'get')
+      .mockImplementation((name) =>
+        name === AIUR_CONVERSATION_TAG ? undefined : CustomElementRegistry.prototype.get.call(customElements, name),
+      );
+    const send = vi.fn().mockResolvedValue(undefined);
+    mocks.scopeSession.mockReturnValue({
+      sessionId: 's_1',
+      jobId: 'j_1',
+      scope,
+      turns: [],
+      status: 'agreed',
+      error: '',
+      send,
+      addMessage: vi.fn(),
+    });
+
+    const { container } = renderChat();
+    const composer = container.querySelector('aiur-composer') as AiurComposerElement;
+    await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+    expect(composer.shadowRoot?.querySelector('textarea')).toHaveAttribute('placeholder', 'Message the builder');
+    composer.value = 'Add a moonlit market';
+    await composer.send();
+
+    expect(send).toHaveBeenCalledWith('Add a moonlit market', undefined);
+    getElement.mockRestore();
   });
 });
 

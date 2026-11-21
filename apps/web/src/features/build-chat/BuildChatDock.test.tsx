@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AiurComposer as ComposerElement } from '@aiur/conversation';
 import { queryClient } from '../../app/query';
 import { AIUR_CONVERSATION_TAG } from '../aiur/embed';
 import { BuildChatDock } from './BuildChatDock';
@@ -80,6 +81,36 @@ describe('BuildChatDock', () => {
     expect(screen.getByRole('heading', { name: 'Second build' })).toBeInTheDocument();
   });
 
+  it('uses the aiur composer in the dock', () => {
+    const job = buildChatJob();
+    jobState.jobs = [job];
+    renderDock();
+    act(() => useDock.getState().openChat(job.id, [job]));
+    expect(document.querySelector('aiur-composer')).not.toBeNull();
+  });
+
+  it('shows optimistic text while a chat post is pending', async () => {
+    const job = buildChatJob();
+    jobState.jobs = [job];
+    let resolvePost: (value: unknown) => void = () => undefined;
+    api.mockReturnValue(new Promise((resolve) => (resolvePost = resolve)));
+    renderDock();
+    act(() => useDock.getState().openChat(job.id, [job]));
+    const composer = document.querySelector('aiur-composer') as ComposerElement;
+    await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+    let pending: Promise<unknown> | undefined;
+    await act(async () => {
+      pending = Promise.resolve(composer.onSend!('Hello from dock', []));
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Hello from dock')).toBeInTheDocument();
+    expect(api).toHaveBeenCalledWith(`/jobs/${job.id}/chat`, { method: 'POST', json: { text: 'Hello from dock' } });
+    await act(async () => {
+      resolvePost({ id: 'm_sent', job_id: job.id, at: '', actor: 'creator', kind: 'text', text: 'Hello from dock' });
+      await pending;
+    });
+  });
+
   it('starts an edit job from a draft chat when no job is running, then streams it', async () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined);
     api.mockResolvedValue({ jobId: 'j_new', state: 'admitted' });
@@ -87,7 +118,7 @@ describe('BuildChatDock', () => {
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'v2', title: 'Goblin Cellar' }));
     expect(screen.getByRole('heading', { name: 'Goblin Cellar' })).toBeInTheDocument();
-    send('Make the door glow');
+    await send('Make the door glow');
 
     await waitFor(() => expect(chatListeners.has('j_new')).toBe(true));
     expect(api).toHaveBeenCalledTimes(1);
@@ -95,12 +126,11 @@ describe('BuildChatDock', () => {
       method: 'POST',
       json: expect.objectContaining({ gameId: 'g_1', branchId: 'v2', kind: 'feature', start: 'now' }),
     });
-    // The instruction stays on screen while the new job streams into the same chat.
-    expect(screen.getByText('Make the door glow')).toBeInTheDocument();
+    // Admission creates the job; subsequent chat messages use its chat endpoint.
     expect(useDock.getState()).toMatchObject({ view: 'chat', openJobId: 'j_new' });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['game-jobs', 'g_1'] });
 
-    send('And make it creak');
+    await send('And make it creak');
     await waitFor(() =>
       expect(api).toHaveBeenLastCalledWith('/jobs/j_new/chat', { method: 'POST', json: { text: 'And make it creak' } }),
     );
@@ -113,7 +143,7 @@ describe('BuildChatDock', () => {
     renderDock();
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
-    send('Hi');
+    await send('Hi');
 
     await waitFor(() => expect(api).toHaveBeenCalledWith(`/jobs/${running.id}/chat`, expect.anything()));
     expect(api).not.toHaveBeenCalledWith('/jobs', expect.anything());
@@ -126,7 +156,7 @@ describe('BuildChatDock', () => {
     renderDock();
 
     act(() => useDock.getState().openChat(finished.id, [finished]));
-    send('Add a second door');
+    await send('Add a second door');
 
     await waitFor(() => expect(chatListeners.has('j_new')).toBe(true));
     expect(api).toHaveBeenCalledWith(
@@ -162,7 +192,7 @@ describe('BuildChatDock', () => {
     renderDock();
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
-    send('Make the door glow');
+    await send('Make the door glow');
 
     fireEvent.click(await screen.findByRole('button', { name: 'Ask an admin' }));
     expect(await screen.findByText(/remain/)).toBeInTheDocument();
@@ -198,9 +228,9 @@ describe('BuildChatDock', () => {
     renderDock();
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
-    send('Make the door glow');
+    await send('Make the door glow');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('This build needs more Energy than is left this week.');
+    expect(await screen.findByText('This build needs more Energy than is left this week.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Queue for the reset' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Ask an admin' }));
     const status = await screen.findByRole('region', { name: 'Allowance status' });
@@ -226,7 +256,7 @@ describe('BuildChatDock', () => {
     renderDock();
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
-    send('Make the door glow');
+    await send('Make the door glow');
     fireEvent.click(await screen.findByRole('button', { name: 'Queue for the reset' }));
 
     await waitFor(() => expect(chatListeners.has('j_queued')).toBe(true));
@@ -242,9 +272,9 @@ describe('BuildChatDock', () => {
     renderDock();
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
-    send('Make the door glow');
-    expect(await screen.findByText('Message not sent. Try again.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await send('Make the door glow');
+    expect(await screen.findByText('Message or voice could not be started.')).toBeInTheDocument();
+    await send('Make the door glow');
 
     await waitFor(() => expect(chatListeners.has('j_new')).toBe(true));
     const keys = api.mock.calls.map(([, init]) => (init as { json: { idempotencyKey: string } }).json.idempotencyKey);
@@ -280,7 +310,7 @@ describe('BuildChatDock', () => {
     renderDock();
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
-    send('Make the door glow');
+    await send('Make the door glow');
     fireEvent.click(await screen.findByRole('button', { name: 'Ask an admin' }));
     await screen.findByText(/remain/);
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -295,9 +325,17 @@ describe('BuildChatDock', () => {
     renderDock();
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
-    send('Make the door glow');
+    const composer = document.querySelector('aiur-composer') as ComposerElement;
+    await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+    let pending: Promise<unknown> | undefined;
+    act(() => {
+      pending = Promise.resolve(composer.onSend!('Make the door glow', []));
+    });
     act(() => useDock.getState().close([]));
-    await act(async () => resolve({ jobId: 'j_late', state: 'admitted' }));
+    await act(async () => {
+      resolve({ jobId: 'j_late', state: 'admitted' });
+      await pending;
+    });
 
     expect(useDock.getState()).toMatchObject({ view: 'collapsed', openJobId: undefined });
   });
@@ -305,7 +343,13 @@ describe('BuildChatDock', () => {
   // Editor feature scoping keeps its job list but hands the conversation to aiur's element once installed (#478, A2).
   it('hands the scoped job conversation to aiur’s element when installed', () => {
     if (!customElements.get(AIUR_CONVERSATION_TAG)) {
-      customElements.define(AIUR_CONVERSATION_TAG, class extends HTMLElement {});
+      customElements.define(
+        AIUR_CONVERSATION_TAG,
+        class extends HTMLElement {
+          scope: unknown;
+          features: unknown;
+        },
+      );
     }
     const job = buildChatJob();
     jobState.jobs = [job];
@@ -331,7 +375,10 @@ function renderDock() {
   );
 }
 
-function send(text: string) {
-  fireEvent.change(screen.getByRole('textbox', { name: 'Message the builder' }), { target: { value: text } });
-  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+async function send(text: string) {
+  const composer = document.querySelector('aiur-composer') as ComposerElement | null;
+  if (!composer) throw new Error('Aiur composer is not available');
+  await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+  composer.value = text;
+  await act(async () => composer.send());
 }

@@ -5,6 +5,9 @@ description: Measure and make sprites that match the SmallScaleInt packs.
 
 # Sprite forge
 
+This is the `lane:clone` skill: a rebuild or variation clones the pack's existing style exactly (creator,
+2026-11-20). No creative reinterpretation; creative screens and scenes belong to `lane:creative` (gm-image-mock).
+
 Use this skill when a sprite needs to match the SmallScaleInt packs. First look for an existing asset to kitbash or recolour using `gm-assets` and `gm-asset-variants`; clone pack assets and never edit the originals. If that cannot meet the need, use a calibrated 3D render rig. Do not use a generated 2D image as the production sprite. Mark AI-assisted outputs `ai_generated: true` in their manifest; do not send pack files to cloud services.
 
 Compare results against the [measured style reference](references/smallscaleint-style.md). The local measurement harness needs Python with Pillow, NumPy and SciPy installed:
@@ -65,6 +68,8 @@ The sheet report includes each occupied frame, row counts and motion correlation
 
 For every rebuild or variation review, prepare both an image-gen option and a 3D pipeline option for each original (when the creator asks to compare approaches, one labelled option per skill or tool, each with the minutes it took), and follow the [comparison media instructions](references/review-lane.md). Use the free Codex image generation route. Attach the original pack frames as references every time: this is permitted for every pack in the library, including ones marked `processing: local-only` (that field forbids other cloud processing, not image-generation references through the mock broker; Kevin, 2026-11-20). Never ask about it, and never post an image option that was generated without the original attached or that covers fewer directions than the original shows. Generated images are review options, not production sprites.
 
+Every review image ships with a sidecar `recipe.json` (or `<image>.meta.json`) naming kind (pack original, image generation, 3D model render, 3D→2D render), model, cost, skill and arm, tools and time, which the review page prints under it, and every candidate is shown next to its original, as one row per candidate (`Original | 3D | 2D pixel`) when it went through a 3D model (creator, 2026-11-21).
+
 For side-by-side stills, animations and gate verdicts, follow the [comparison media instructions](references/review-lane.md). To prepare seven-column vegetation review cells, run:
 
 ```sh
@@ -72,5 +77,9 @@ python skills/gm-sprite-forge/scripts/vegetation_matrix_media.py matrix.json rev
 ```
 
 The manifest has a `rows` array of 10–16 entries; each entry has an `id` slug, display `name`, `original` PNG path, five `variants` PNG paths and a `mock` PNG path. The tool writes individually labelled media and `options.json`, alongside the supplied recipe. It checks for duplicate variants and requires each finished render's alpha bounding-box width, height, coverage and ground-shadow coverage to be within 15% of the original. Ground-shadow coverage counts visible partial-alpha pixels with near-black RGB (0–3), excluding alpha-1 specks and dark-green foliage. Cells are enlarged 4×. It never submits the review or approves the assets. For a single row, check the five finished render paths with `python skills/gm-sprite-forge/scripts/vegetation_footprint.py original.png v1.png v2.png v3.png v4.png v5.png` before posting.
+
+For a requested multi-tool bake-off, do not treat the default image-gen-versus-3D comparison as sufficient. Label each requested tool as its own arm, use the same references, cell size, camera, light, colour pass and shadow treatment, record tool and version, setup, active time, peak GPU memory and unavailable capabilities in a `recipe.json` beside the local outputs, and score every arm with `score.py`. Keep missing or failed arms explicit, and mark each AI-assisted arm `"ai_generated": true` in its `recipe.json` entry. A local score is diagnostic only: record a capability-matrix winner as provisional, with its review Command ID, until the creator's visual verdict arrives, then update the matrix row and the routing below. Keep pack files and renders outside the repository.
+
+When GPU rendering is requested, use `scripts/gpu_bake_rig.py` and `scripts/gpu_bake_finish.py`. The rig refuses to fall back to CPU; `blender_iso_rig.py` is CPU-only and does not count as a GPU arm. The [GPU bake-off guide](references/gpu-bakeoff.md) covers setup, the arm builders in `scripts/bakeoff/` (procedural, CC0, Hunyuan3D-2, TripoSR), the #1094 results and the fal image-to-3D candidate arms (NUC host only, through the `scripts/fal3d.py` ledger; fal receives Codex-generated references, never pack files). This routing applies to new rebuild attempts on a GPU host; the vegetation renderer above stays the CPU blockout path. Until the creator rules, try Hunyuan3D-2 from the original view first for bare trees and foliage, and fall back to the procedural builders when the GPU or the model is unavailable. For characters, use the procedural body with a scripted walk. Props have not been compared. Hunyuan3D-2 runs locally, so the pack original never leaves the machine. Check its licence region before use (see the guide). Single-view image-to-3D invents the unseen sides, so check every direction. No arm has passed the gates; every result is a review option, not a production sprite.
 
 For approved reusable assets, see the [generated library and recipe workflow](references/generated-library.md).

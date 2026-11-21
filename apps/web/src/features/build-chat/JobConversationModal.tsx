@@ -35,7 +35,7 @@ export function JobConversationModal() {
         title={job.plan.title}
         onAnswer={answer}
       >
-        <Chat key={job.id} jobId={job.id} job={job} onBack={close} heading={false} />
+        <Chat key={job.id} jobId={job.id} job={job} onBack={close} heading={false} useAiurComposer />
       </AiurConversation>
     </Dialog>
   );

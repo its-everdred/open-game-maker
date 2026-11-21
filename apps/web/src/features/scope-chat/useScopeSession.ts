@@ -9,7 +9,12 @@ import { scopeTransport, type ScopeTransport } from './transport';
 export type ScopeTurn = { id: string; who: 'you' | 'builder'; text: string };
 export type ScopeStatus = 'connecting' | 'open' | 'agreed' | 'unavailable' | 'error';
 
-export function useScopeSession(gameId: string, choices: ScopeChoices, transport: ScopeTransport = scopeTransport) {
+export function useScopeSession(
+  gameId: string,
+  choices: ScopeChoices,
+  transport: ScopeTransport = scopeTransport,
+  allowAiGeneratedAssets = true,
+) {
   const [sessionId, setSessionId] = useState<string>();
   const [jobId, setJobId] = useState<string>();
   const [scope, setScope] = useState<AgreedScope>();
@@ -17,6 +22,7 @@ export function useScopeSession(gameId: string, choices: ScopeChoices, transport
   const [status, setStatus] = useState<ScopeStatus>('connecting');
   const [error, setError] = useState('');
   const latestScope = useRef<string | undefined>(undefined);
+  const retainDraft = useRef(false);
   const choicesKey = JSON.stringify(choices);
 
   useEffect(() => {
@@ -24,6 +30,7 @@ export function useScopeSession(gameId: string, choices: ScopeChoices, transport
     let refreshing = false;
     let stopStream: (() => void) | undefined;
     let poll: ReturnType<typeof setInterval> | undefined;
+    let sessionIdForCleanup: string | undefined;
 
     const refresh = async (id: string) => {
       if (refreshing) return;
@@ -31,7 +38,7 @@ export function useScopeSession(gameId: string, choices: ScopeChoices, transport
       try {
         const session = await transport.getSession(gameId, id);
         if (!current) return;
-        if (session.status === 'agreed' && session.scope) {
+        if ((session.status === 'agreed' || session.status === 'promoted') && session.scope) {
           const next = JSON.stringify(session.scope);
           if (latestScope.current === next) return;
           latestScope.current = next;
@@ -51,9 +58,13 @@ export function useScopeSession(gameId: string, choices: ScopeChoices, transport
     };
 
     void transport
-      .createSession(gameId, JSON.parse(choicesKey) as ScopeChoices)
+      .createSession(gameId, JSON.parse(choicesKey) as ScopeChoices, allowAiGeneratedAssets)
       .then(({ sessionId: createdSessionId, jobId: createdJobId }) => {
-        if (!current) return;
+        if (!current) {
+          void transport.abandonSession(gameId, createdSessionId).catch(() => undefined);
+          return;
+        }
+        sessionIdForCleanup = createdSessionId;
         setSessionId(createdSessionId);
         setJobId(createdJobId);
         setStatus('open');
@@ -80,13 +91,19 @@ export function useScopeSession(gameId: string, choices: ScopeChoices, transport
       current = false;
       clearInterval(poll);
       stopStream?.();
+      if (sessionIdForCleanup && !retainDraft.current) {
+        void transport.abandonSession(gameId, sessionIdForCleanup).catch(() => undefined);
+      }
     };
-  }, [choicesKey, gameId, transport]);
+  }, [allowAiGeneratedAssets, choicesKey, gameId, transport]);
 
   const addMessage = useCallback(
     (message: StreamedChatMessage) => setMessages((existing) => reduceMessages(existing, message)),
     [],
   );
+  const retain = useCallback(() => {
+    retainDraft.current = true;
+  }, []);
 
   const send = useCallback(
     async (text: string, attachments?: string[]) => {
@@ -108,5 +125,5 @@ export function useScopeSession(gameId: string, choices: ScopeChoices, transport
       : [],
   );
 
-  return { sessionId, jobId, scope, turns, status, error, send, addMessage };
+  return { sessionId, jobId, scope, turns, status, error, send, addMessage, retain };
 }

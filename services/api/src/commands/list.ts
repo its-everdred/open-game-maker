@@ -150,6 +150,18 @@ export async function listGameCommands(
   return numberedReviewableCommands(deps, game.id, await resolveGameCommands(deps, game, onUnavailable));
 }
 
+// Notifications also cover incomplete Commands so creators can open the inbox and repair missing review media.
+export async function listGameCommandRefs(
+  deps: AppDeps,
+  game: GameRow,
+): Promise<Pick<GameCommand, 'decision_id' | 'version' | 'ticket'>[]> {
+  return (await resolveGameCommands(deps, game)).map(({ decision_id, version, ticket }) => ({
+    decision_id,
+    version,
+    ticket,
+  }));
+}
+
 export async function listGameCommandPage(
   deps: AppDeps,
   game: GameRow,

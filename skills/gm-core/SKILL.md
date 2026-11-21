@@ -7,7 +7,8 @@ description: Load first in every Game Maker build. Routes the work, keeps the br
 
 ## The job
 Build the game in `gm scope`. The scope owns the WHAT: theme, art, names, palette, and mechanics. Templates, skills,
-pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in the build chat instead. Loading artwork: declare `loading.portrait` and `loading.landscape` PNG paths under `media/` in `gm.manifest.json`, with 9:16 (at least 1440×2560) and 16:9 (at least 2560×1440) art in `public/media/`. Keep the subject in the centre 70%, the top 25% calm for the shell logo, and the bottom 20% calm for progress. Run `gm check`. For asynchronous startup, set `runtime.hooks.ready = false` before starting work and `true` only after the first frame renders.
+pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in the build chat instead. Loading artwork: declare `loading.portrait` and `loading.landscape` PNG paths under `media/` in `gm.manifest.json`, with 9:16 (at least 1440×2560) and 16:9 (at least 2560×1440) art in `public/media/`. Also declare `images.loading` with `per-ratio` variants for phone-portrait, phone-landscape, tablet-portrait, tablet-landscape, and desktop, each matching its display ratio.
+Keep the subject in the centre 70%, the top 25% calm for the shell logo, and the bottom 20% calm for progress. Run `gm check`. For asynchronous startup, set `runtime.hooks.ready = false` before starting work and `true` only after the first frame renders.
 
 Before coding, write a five-line plan and a short list titled "defaults I'd reach for." Drop each default or justify it
 against the scope. Templates are scaffolds, not game designs: do not inherit a theme, entity, HUD, name, or mechanic.
@@ -91,6 +92,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-map-inspiration | Building the first map, a level, dungeon, world layout, or terrain. |
 | gm-asset-variants | Recolouring a model, attaching a prop to a rig joint, or making any variant of a library asset. |
 | gm-sprite-forge | Measuring or making sprites to match the SmallScaleInt style. |
+| gm-trailer | Making or refreshing a game's gameplay trailer: inventory, shot list on the music, capture, self-check. |
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
 | gm-voiceover | Making a short consented local voice draft and caption timing. |
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |

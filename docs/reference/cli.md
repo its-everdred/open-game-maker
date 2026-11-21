@@ -29,6 +29,17 @@ reads. A set id (for example `limezu-modern`) is refused with its family named; 
 `--set` must name a set in that registry and, when `--family` is present, belong to the chosen family. It records the
 set in `gm.lock.json` and pins the exact `@gm/pack-<set>` version.
 
+## Prune failed game creates
+
+```text
+gm admin games prune-failed [--dry-run | --prune] [--api <url>]
+```
+
+Lists games whose latest commit audit records a refused or failed `create_game` before a repository could be resolved,
+with no repository metadata or release. The default is a dry run; `--dry-run` makes that explicit. Pass `--prune` to
+remove only those audited rows. The command uses the host's `OGM_INTERNAL_TOKEN` and
+`OGM_API_PORT` from `api.env`; `--api` can select a loopback API explicitly.
+
 ## Preview an unmerged build
 
 ```text
@@ -80,7 +91,9 @@ play link with “Limitations not stated” and reports the merged PRs that need
 `Prototype review: none`, no round is posted. The review links to the published build and carries current works,
 limitations and eligible decision ids.
 
-The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link opens the exact published build.
+The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link opens the exact published build. Set
+`OGM_PUBLISH_BUILD_TIMEOUT_MS` in that file to change the production build deadline in milliseconds; it defaults to
+1,800,000 (30 minutes). A timed-out build reports its deadline directly and is not reported as missing `dist/` output.
 
 The post-publish check runs through `ops/bin/ogm-qa-review-hook`. For a direct check, use
 `gm qa publish-review-check <slug> <build-id>`; `gm qa publish-review-check --all` lists any published builds still
@@ -105,6 +118,8 @@ gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buil
 gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
 gm check hooks [--json]
+gm check images [--json]
+gm images compose
 gm check boot [--dist <dir>] [--viewport both|phone|tablet-landscape] [--json]
 gm test [--inputs <script.json>] [--ticks <count>] [--deadline <seconds>] [--serve <dir>] [--out <dir>] [--json]
 gm run [--verify-source] [--frame host|app|bare] [--viewport touch|all|<one>] [--inputs <script.json>] [--frames <seconds,...>] [--out <dir>]
@@ -134,6 +149,15 @@ checked-in review decisions with an approval `phase` (`mock`, `prototype`, `buil
 attached originals, numeric scores and passing `gate_results`.
 `gm publish` requires a prototype review round for the commit when the game has a decision inventory; games without an
 inventory continue with a reported gate line.
+
+`gm check images` validates creator-visible image slots against `@ogm/contracts`; `gm check` runs the same check for
+games with a manifest. It checks required viewport variants, display aspect ratios, layered safe areas, and phone text
+size and contrast. Legacy `loading.portrait` and `loading.landscape` keep their existing 9:16 and 16:9 source checks;
+when either is shipped, also declare a complete `images.loading` viewport set. Games without shipped thumbnail, logo,
+loading art, or `images` slots pass without image checks.
+
+`gm images compose` renders every layered image slot into its declared viewport variants. It writes 2x PNGs under
+`public/media/slots/` by default, or to the paths listed in the slot's `variants` map.
 
 `gm decisions check` validates `docs/<slug>/decisions.json` and fails when its grouped `decisions.md` render is stale;
 `gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open

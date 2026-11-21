@@ -29,6 +29,7 @@ let staleSha: string;
 let remoteSha: string;
 let brokenSha: string;
 let unlistedSha: string;
+let slowSha: string;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -42,6 +43,7 @@ function writeGame(repo: string, marker: string): void {
     join(game, 'build.sh'),
     [
       'set -eu',
+      'if [[ -n ${ASSET_CACHE_SENTINEL:-} ]]; then test "$(cat .gm/cache/assets/sentinel)" = "$ASSET_CACHE_SENTINEL"; fi',
       'printf "%s\\n" "$*" > "$BUILD_ARGS_LOG"',
       'printf "token=%s mode=%s assets=%s\\n" "${OGM_INTERNAL_TOKEN:-}" "$NODE_ENV" "${OGM_ASSETS_ROOT:-}" > "$BUILD_ENV_LOG"',
       'mkdir -p dist/design dist/assets',
@@ -96,6 +98,10 @@ beforeAll(async () => {
   git(origin, 'add', '-A');
   git(origin, 'commit', '-qm', 'unlisted');
   unlistedSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'slow', 'main');
+  writeFileSync(join(origin, 'games', 'blobs', 'build.sh'), 'sleep 2\n');
+  git(origin, 'commit', '-qam', 'slow build fixture');
+  slowSha = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'switch', '-q', 'main');
 
   // pnpm stand-in: the scratch repository has nothing to install, and its build is one shell script.
@@ -263,6 +269,21 @@ describe('gm publish', () => {
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
   });
 
+  it('seeds generated asset cache files into the fresh publish worktree', async () => {
+    const cache = join(checkout, 'games', 'blobs', '.gm', 'cache', 'assets');
+    mkdirSync(cache, { recursive: true });
+    writeFileSync(join(cache, 'sentinel'), 'reusable cache');
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_cache","buildId":"build_cache"}' };
+
+    const run = await publish(['blobs', '--sha', staleSha, '--api', api], {
+      env: { OGM_INTERNAL_TOKEN: TOKEN, ASSET_CACHE_SENTINEL: 'reusable cache' },
+    });
+
+    expect(run.code).toBe(0);
+    expect(run.err).toEqual([]);
+    expect(readFileSync(join(cache, 'sentinel'), 'utf8')).toBe('reusable cache');
+  });
+
   it('posts fallback content and reports an attention when a merged PR body cannot be read', async () => {
     git(origin, 'switch', '-q', 'main');
     git(origin, 'commit', '--allow-empty', '-qm', 'prototype review: none (#42)');
@@ -409,6 +430,30 @@ describe('gm publish', () => {
     expect(requests.map((r) => r.method)).toEqual(['GET']);
     expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  it('reports a timed out build with the configured duration instead of missing dist output', async () => {
+    const run = await publish(['blobs', '--sha', slowSha, '--api', api], {
+      env: { OGM_PUBLISH_BUILD_TIMEOUT_MS: '1000' },
+    });
+
+    expect(run.code).toBe(1);
+    expect(run.err).toEqual(["the game's build timed out after 1 s"]);
+    expect(run.err.join('\n')).not.toContain('no dist/index.html');
+    expect(requests.map((r) => r.method)).toEqual(['GET']);
+    expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
+    expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  it('refuses a nonpositive build timeout before preparing the worktree', async () => {
+    const run = await publish(['blobs', '--api', api], { env: { OGM_PUBLISH_BUILD_TIMEOUT_MS: '0' } });
+
+    expect(run.code).toBe(2);
+    expect(run.err).toEqual([
+      'OGM_PUBLISH_BUILD_TIMEOUT_MS must be positive. Try: set a positive millisecond value in api.env',
+    ]);
+    expect(run.pnpm).toBe('');
+    expect(requests).toEqual([]);
   });
 
   // #627: the asset list is what ships, so publish refuses code that names an unlisted asset before building it.

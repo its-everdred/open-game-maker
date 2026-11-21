@@ -17,12 +17,13 @@ describe('showcase tile', () => {
   });
 
   it('shows the featured badge, title, icons and rating from the prototype', () => {
-    const game = mergeShowcase([]).find((entry) => entry.title === 'RestoreBound')!;
+    const entry = mergeShowcase([]).find((game) => game.title === 'Mossy Leap')!;
+    const game = { ...entry, showcase: { ...entry.showcase!, badge: 'Featured' } };
     render(<Tile game={game} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />);
     expect(screen.getByText('Featured')).toBeVisible();
-    expect(screen.getAllByText('RestoreBound').length).toBeGreaterThan(0);
-    expect(screen.getByText('★ 4.7')).toBeVisible();
-    expect(screen.getByLabelText('Adventure, Craft, Cozy, Calm')).toBeInTheDocument();
+    expect(screen.getAllByText('Mossy Leap').length).toBeGreaterThan(0);
+    expect(screen.getByText('★ 4.5')).toBeVisible();
+    expect(screen.getByLabelText('Platformer, Cute, Retro')).toBeInTheDocument();
   });
 });
 
@@ -63,4 +64,35 @@ it('uses the genre icons on a real game tile rather than player tags', () => {
   );
   expect(screen.getByLabelText('Zany')).toBeInTheDocument();
   expect(container.querySelector('.game-tag-icons svg')).not.toBeNull();
+});
+
+it('shows creating status and prevents opening a game before repository provisioning finishes', () => {
+  const game = {
+    id: 'g-creating',
+    familyId: 'f',
+    ownerId: 'o',
+    repo: null,
+    title: 'Castle Game',
+    createdAt: '',
+    creationStatus: 'creating' as const,
+  };
+  const onClick = vi.fn();
+  render(<Tile game={game} selected={false} tabIndex={0} onClick={onClick} onFocus={vi.fn()} />);
+  expect(screen.getByText('Creating…')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Castle Game: Creating' })).toBeDisabled();
+});
+
+it('shows retained uncertain creates as failed setup instead of a dead game tile', () => {
+  const game = {
+    id: 'g-uncertain',
+    familyId: 'f',
+    ownerId: 'o',
+    repo: null,
+    title: 'Castle Game',
+    createdAt: '',
+    creationStatus: 'failed' as const,
+  };
+  render(<Tile game={game} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />);
+  expect(screen.getByText('Setup failed')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Castle Game: Setup failed' })).toBeDisabled();
 });

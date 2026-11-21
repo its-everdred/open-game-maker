@@ -47,3 +47,17 @@ it('generates variants for both declared loading images', async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it('generates variants for declared slot paths', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'display-slots-'));
+  try {
+    await mkdir(join(root, 'media', 'tiles'), { recursive: true });
+    await sharp({ create: { width: 400, height: 300, channels: 3, background: '#0f0' } })
+      .png()
+      .toFile(join(root, 'media', 'tiles', 'tile-portrait.png'));
+    const images = await makeDisplayImages(root, undefined, [], ['media/tiles/tile-portrait.png']);
+    expect(images['media/tiles/tile-portrait.png']?.sources.avif[0]?.path).toMatch(/[a-f0-9]{64}\.avif$/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

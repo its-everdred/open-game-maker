@@ -2,7 +2,7 @@ import { eq, isNull } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 import { Notification as NotificationSchema, type Notification } from '@ogm/contracts';
 import type { AppDeps } from '../app/types.js';
-import { listGameCommands } from '../commands/list.js';
+import { listGameCommandRefs } from '../commands/list.js';
 import type { GameRow } from '../games/games.js';
 import { insertNotification } from '../notify/store.js';
 import { latestPublishedPrototypeRound, latestRoundForTicket } from './store.js';
@@ -110,7 +110,7 @@ export function createReadyReviewNotifier(
   },
 ) {
   let running = false;
-  const commands = options.commands ?? ((game: GameRow) => listGameCommands(deps, game));
+  const commands = options.commands ?? ((game: GameRow) => listGameCommandRefs(deps, game));
   return async () => {
     if (running) return;
     running = true;

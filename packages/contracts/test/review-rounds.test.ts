@@ -17,6 +17,19 @@ describe('review submissions', () => {
     expect(ReviewSubmission.safeParse({ ...base, category: 'art', media: [target] }).success).toBe(false);
     expect(ReviewSubmission.safeParse({ ...base, category: 'art', media: [target, target, work] }).success).toBe(false);
   });
+  it('accepts per-media provenance metadata', () => {
+    const value = { kind: 'image generation', model: 'gpt-image-1', cost_usd: 0.04 };
+    expect(
+      ReviewSubmission.safeParse({
+        ...base,
+        category: 'art',
+        media: [
+          { kind: 'still', ref: 'target.png', role: 'target' },
+          { kind: 'still', ref: 'work.png', meta: value },
+        ],
+      }).success,
+    ).toBe(true);
+  });
   it('requires a capture clip with audio for sound', () => {
     expect(
       ReviewSubmission.safeParse({ ...base, category: 'sound', media: [{ kind: 'audio', ref: 'cue.wav' }] }).success,

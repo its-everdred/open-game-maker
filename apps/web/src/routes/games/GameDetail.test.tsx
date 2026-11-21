@@ -131,6 +131,24 @@ describe('game detail', () => {
     expect(container.querySelector('.game-logo')).toBeNull();
   });
 
+  // Kevin, 2026-11-21: with no trailer yet, the expanded view shows the thumbnail with the logo on it, as the tile does.
+  it('lays the logo over the cover when there is no trailer, shared cover or not', () => {
+    const untrailered = { ...blobs, trailerUrl: undefined, coverUrl: '/cover.png' };
+    for (const sharedCover of [false, true]) {
+      const { container, unmount } = detail(untrailered, { sharedCover });
+      expect(container.querySelector('video')).toBeNull();
+      expect(
+        container.querySelector('.games-spotlight-media .game-cover img.game-logo[src="/blobs-logo.png"]'),
+      ).not.toBeNull();
+      unmount();
+    }
+  });
+
+  it('shows no logo for a game without one', () => {
+    const { container } = detail({ ...blobs, trailerUrl: undefined, logoUrl: undefined, coverUrl: '/cover.png' });
+    expect(container.querySelector('.game-logo')).toBeNull();
+  });
+
   it('shows a published game its description, tag chips, stats and icon-only buttons', () => {
     detail(blobs);
     expect(screen.getByText('Match colour blobs and drop blocks in a forest duel.')).toBeVisible();

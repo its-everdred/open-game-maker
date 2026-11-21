@@ -1,6 +1,7 @@
 import { access, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { schema } from '@ogm/db';
+import { ImageSlots, type SlotId, type ViewportId } from '@ogm/contracts';
 import { buildDir } from '@ogm/games-host/layout';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { AppDeps } from '../app/types.js';
@@ -46,6 +47,7 @@ async function manifestMedia(directory: string): Promise<{
   description?: string;
   tags?: string[];
   images?: Record<string, DisplayImage>;
+  slotImages?: unknown;
   sharedUrls?: Record<string, string>;
   pending?: boolean;
   loading?: { portrait: string; landscape: string };
@@ -62,6 +64,7 @@ async function manifestMedia(directory: string): Promise<{
       description?: unknown;
       tags?: unknown;
       images?: Record<string, DisplayImage>;
+      slotImages?: unknown;
       sharedUrls?: Record<string, string>;
       loading?: unknown;
     };
@@ -92,6 +95,7 @@ async function manifestMedia(directory: string): Promise<{
         ? { logo }
         : {}),
       ...(images ? { images } : {}),
+      ...(manifest.slotImages && typeof manifest.slotImages === 'object' ? { slotImages: manifest.slotImages } : {}),
       ...(sidecar?.sharedUrls && typeof sidecar.sharedUrls === 'object'
         ? { sharedUrls: sidecar.sharedUrls as Record<string, string> }
         : {}),
@@ -128,6 +132,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
         trailerUrl?: string;
         coverImage?: DisplayImage;
         logoImage?: DisplayImage;
+        slotImages?: Partial<Record<SlotId, Partial<Record<ViewportId, DisplayImage>>>>;
       },
     ]
   > = [];
@@ -197,22 +202,34 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
           const logoImage = image(manifest.logo);
           const loadingPortrait = image(manifest.loading?.portrait);
           const loadingLandscape = image(manifest.loading?.landscape);
+          const slots = ImageSlots.safeParse(manifest.slotImages);
+          const slotImages = slots.success
+            ? (Object.fromEntries(
+                Object.entries(slots.data).map(([slotId, entry]) => [
+                  slotId,
+                  Object.fromEntries(
+                    Object.entries(entry.variants ?? {}).flatMap(([viewport, path]) => {
+                      const display = image(path);
+                      return display ? [[viewport, display]] : [];
+                    }),
+                  ),
+                ]),
+              ) as Partial<Record<SlotId, Partial<Record<ViewportId, DisplayImage>>>>)
+            : undefined;
           return [
             gameId,
             {
+              // The web gates tile art on logoUrl/coverUrl (the image objects only add srcsets), so both stay.
               ...(manifest.logo
                 ? {
-                    ...(logoImage
-                      ? {}
-                      : {
-                          logoUrl: manifest.sharedUrls?.[manifest.logo]
-                            ? `${origin}${manifest.sharedUrls[manifest.logo]}`
-                            : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
-                        }),
+                    logoUrl: manifest.sharedUrls?.[manifest.logo]
+                      ? `${origin}${manifest.sharedUrls[manifest.logo]}`
+                      : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
                   }
                 : {}),
               ...(coverImage ? { coverImage } : {}),
               ...(logoImage ? { logoImage } : {}),
+              ...(slotImages ? { slotImages } : {}),
               ...(manifest.loading
                 ? {
                     loadingUrls: {
@@ -231,15 +248,13 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
               ...(manifest.description ? { tagline: manifest.description } : {}),
               ...(manifest.tags ? { tags: manifest.tags } : {}),
-              ...(coverImage
-                ? {}
-                : cover
-                  ? {
-                      coverUrl: manifest.sharedUrls?.['media/thumbnail.png']
-                        ? `${origin}${manifest.sharedUrls['media/thumbnail.png']}`
-                        : `${base}/thumbnail.png`,
-                    }
-                  : {}),
+              ...(cover
+                ? {
+                    coverUrl: manifest.sharedUrls?.['media/thumbnail.png']
+                      ? `${origin}${manifest.sharedUrls['media/thumbnail.png']}`
+                      : `${base}/thumbnail.png`,
+                  }
+                : {}),
               ...(trailer ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
             },
           ] as const;

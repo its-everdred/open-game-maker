@@ -9,7 +9,7 @@ afterEach(cleanup);
 describe('showcase play', () => {
   it('opens the staged prototype demo with the selected title and mode', () => {
     render(
-      <MemoryRouter initialEntries={['/g/showcase/restorebound?mode=play']}>
+      <MemoryRouter initialEntries={['/g/showcase/mossy-leap?mode=play']}>
         <GameMenuProvider>
           <Routes>
             <Route path="/g/showcase/:id" element={<ShowcasePlay />} />
@@ -17,8 +17,8 @@ describe('showcase play', () => {
         </GameMenuProvider>
       </MemoryRouter>,
     );
-    const frame = screen.getByTitle('RestoreBound') as HTMLIFrameElement;
-    expect(frame).toHaveAttribute('src', '/proto/demo/index.html?shell=&models=json&editor=&title=RestoreBound&play=');
+    const frame = screen.getByTitle('Mossy Leap') as HTMLIFrameElement;
+    expect(frame).toHaveAttribute('src', '/proto/demo/index.html?shell=&models=json&editor=&title=Mossy+Leap&play=');
     const demoDocument = document.implementation.createHTMLDocument('demo');
     Object.defineProperty(frame, 'contentDocument', { value: demoDocument });
     fireEvent.load(frame);
@@ -32,7 +32,7 @@ describe('showcase play', () => {
       return <button onClick={() => navigate('?mode=edit')}>Switch</button>;
     }
     render(
-      <MemoryRouter initialEntries={['/g/showcase/restorebound?mode=play']}>
+      <MemoryRouter initialEntries={['/g/showcase/mossy-leap?mode=play']}>
         <GameMenuProvider>
           <Routes>
             <Route
@@ -48,7 +48,7 @@ describe('showcase play', () => {
         </GameMenuProvider>
       </MemoryRouter>,
     );
-    const frame = screen.getByTitle('RestoreBound') as HTMLIFrameElement;
+    const frame = screen.getByTitle('Mossy Leap') as HTMLIFrameElement;
     const document = window.document.implementation.createHTMLDocument('demo');
     document.body.innerHTML = '<button id="play"></button>';
     Object.defineProperty(frame, 'contentDocument', { value: document });

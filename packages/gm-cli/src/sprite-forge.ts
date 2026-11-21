@@ -55,7 +55,8 @@ export const recipeSchema = z
       .strictObject({
         record: relativePath,
         record_sha256: z.string().regex(/^[a-f0-9]{64}$/),
-        round: z.number().int().positive(),
+        round: z.union([z.number().int().positive(), z.string().regex(/^[a-z0-9-]+$/)]),
+        record_format: z.literal('captured-blender').optional(),
         files: z.array(
           z.strictObject({
             path: z.string().regex(/^rebuild_[NWSE]\.png$/),

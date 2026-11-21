@@ -4,12 +4,43 @@ import { dirname, join, resolve, sep } from 'node:path';
 
 import { validateCard } from '@ogm/contracts';
 import { buildIndex, resolve as resolveCard } from '@ogm/asset-cards';
+import { z } from 'zod';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson, requireAssetsRoot } from '../../context.js';
 import { creditForCard } from '../../license-metadata.js';
 import { intersectLockRights, rightsForCard } from '../../rules.js';
 import { containedFile, pixelSha256, readRecipe, sha256 } from '../../sprite-forge.js';
+
+// Captured Blender recipes are preserved as evidence, never executed by gm.
+const capturedRecord = z.object({
+  round: z.string(),
+  source_cards: z.array(z.string()).min(1),
+  agent: z.object({ backend: z.string(), model: z.string() }),
+  skills: z.array(z.string()),
+  materials: z.array(z.string()),
+  tools: z.object({ blender: z.string(), python: z.string(), rig: z.object({ sha256: z.string() }) }),
+  rig_settings: z.object({
+    yaw0: z.number(),
+    sun_az: z.number(),
+    sun_elev: z.number(),
+    samples: z.number(),
+    seed: z.number(),
+    views: z.string(),
+  }),
+  outputs: z.record(z.string(), z.string()),
+  creator_verdict: z
+    .object({ decision_id: z.string().min(1), action_id: z.string().min(1), '3d_pipeline': z.literal('matches') })
+    .optional(),
+  review: z
+    .object({
+      decision_id: z.string().min(1),
+      action_id: z.string().min(1),
+      status: z.literal('approved'),
+      verdict_quote: z.string().min(1),
+    })
+    .optional(),
+});
 
 async function cardTemplate(path: string) {
   let value: unknown;
@@ -127,7 +158,56 @@ export const command: GmCommand = {
         return { ...file, absolute, bytes: (await stat(absolute)).size };
       }),
     );
-    if (historicalRecord && recipe.archive) {
+    if (historicalRecord && recipe.archive?.record_format === 'captured-blender') {
+      let value: unknown;
+      try {
+        value = JSON.parse(await readFile(historicalRecord, 'utf8'));
+      } catch {
+        throw new UsageError('captured recipe is invalid JSON', 'provide the original recipe');
+      }
+      const parsed = capturedRecord.safeParse(value);
+      if (!parsed.success)
+        throw new UsageError('captured recipe is missing provenance', 'provide the original approved recipe');
+      const record = parsed.data;
+      const expectedSettings = {
+        yaw0: record.rig_settings.yaw0,
+        sun_az: record.rig_settings.sun_az,
+        sun_elev: record.rig_settings.sun_elev,
+        samples: record.rig_settings.samples,
+      };
+      const approval = record.review?.verdict_quote ?? (record.creator_verdict ? '3D matches' : undefined);
+      const files = [{ path: recipe.output, sha256: recipe.output_sha256 }, ...companions];
+      const sourceCollections = recipe.derived_from.map((id) => `${id.split('/')[0]}@${id.split('@').at(-1)}`);
+      if (
+        record.round !== recipe.archive.round ||
+        record.rig_settings.seed !== recipe.seed ||
+        record.rig_settings.views !== recipe.views ||
+        record.agent.backend !== recipe.agent.backend ||
+        record.agent.model !== recipe.agent.model ||
+        recipe.agent.effort !== 'not recorded' ||
+        record.tools.rig.sha256 !== recipe.rig_sha256 ||
+        recipe.blender_version !== `Blender ${record.tools.blender}` ||
+        JSON.stringify(Object.entries(recipe.parameters).sort()) !==
+          JSON.stringify(Object.entries(expectedSettings).sort()) ||
+        !record.source_cards.every((id) => sourceCollections.includes(id)) ||
+        record.skills.length !== recipe.skills.length ||
+        new Set(record.skills).size !== record.skills.length ||
+        new Set(recipe.skills.map((skill) => skill.name)).size !== recipe.skills.length ||
+        !recipe.skills.every((s) => s.version === 'not recorded' && record.skills.includes(s.name)) ||
+        JSON.stringify(recipe.materials) !== JSON.stringify({ recorded: record.materials }) ||
+        recipe.prompt !== null ||
+        files.some((f) => record.outputs[f.path.replace(/^rebuild_/, 'finished_')] !== f.sha256) ||
+        approval !== recipe.verdict_quote ||
+        recipe.tools.length !== 3 ||
+        !recipe.tools.some((t) => t.name === 'Blender' && t.version === record.tools.blender) ||
+        !recipe.tools.some((t) => t.name === 'Python' && t.version === record.tools.python) ||
+        !recipe.tools.some((t) => t.name === 'historical rig' && t.version === `sha256:${recipe.rig_sha256}`)
+      )
+        throw new UsageError(
+          'captured recipe does not match provenance, approval or outputs',
+          'provide the matching original recipe',
+        );
+    } else if (historicalRecord && recipe.archive) {
       let record: {
         schema?: unknown;
         round?: unknown;

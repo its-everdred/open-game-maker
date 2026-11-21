@@ -1,4 +1,6 @@
 import type { AiurClient, Decision, DecisionMedia } from '@ogm/aiur-client';
+import { MediaMeta, type MediaMeta as MediaMetaValue } from '@ogm/contracts';
+import { basename, dirname, extname } from 'node:path';
 import type { BlobHash } from '@ogm/blob-store';
 import type { CommandOption } from '@ogm/contracts';
 import sharp from 'sharp';
@@ -77,6 +79,26 @@ async function copy(deps: AppDeps, client: AiurClient, decisionId: string, item:
   const meta = await sharp(bytes).metadata();
   const ref = await deps.blobStore.put(bytes, mime);
   return { hash: ref.hash, width: meta.width, height: meta.height };
+}
+
+async function sidecarMeta(deps: AppDeps, scope: MediaScope, path: string): Promise<MediaMetaValue | undefined> {
+  for (const candidate of [`${path}.meta.json`, `${dirname(path)}/recipe.json`, `${dirname(path)}/provenance.json`]) {
+    try {
+      const file = await pathMedia(deps, scope, candidate, 'application/json', 64 * 1024);
+      const value = JSON.parse(await new Response(file.body).text()) as unknown;
+      const direct = MediaMeta.safeParse(value);
+      if (direct.success) return direct.data;
+      const nested =
+        value && typeof value === 'object'
+          ? (value as Record<string, unknown>)[basename(path, extname(path))]
+          : undefined;
+      const parsed = MediaMeta.safeParse(nested);
+      if (parsed.success) return parsed.data;
+    } catch {
+      // Missing or invalid sidecars do not prevent the image from being listed.
+    }
+  }
+  return undefined;
 }
 
 function stored(deps: AppDeps, client: AiurClient, decisionId: string, item: DecisionMedia, source: Source) {
@@ -166,7 +188,12 @@ async function resolveItem(
 // The media each option shows, by option id: its first picture or clip (else its first sound), and its first sound
 // beside a picture or clip (a character card's portrait with its voice). An item aiur cannot serve leaves its option
 // without that media (its copy logs the failure once); it never fails the inbox.
-export type ResolvedOptionMedia = { media?: OptionMedia; audio?: OptionMedia; audioClips?: OptionMedia[] };
+export type ResolvedOptionMedia = {
+  media?: OptionMedia;
+  audio?: OptionMedia;
+  audioClips?: OptionMedia[];
+  meta?: MediaMetaValue;
+};
 
 export async function optionMediaFromAiur(
   deps: AppDeps,
@@ -197,11 +224,17 @@ export async function optionMediaFromAiur(
       const additional = items.filter((item) => KIND[item.kind ?? ''] === 'audio' && item !== sound).slice(0, 16);
       const [media, audio, ...extra] = await Promise.all([quietly(shown), quietly(voice), ...additional.map(quietly)]);
       const audioClips = extra.filter((item): item is OptionMedia => item !== undefined);
-      if (media === undefined && audio === undefined && audioClips.length === 0) return;
+      const locator = shown?.locator;
+      const meta =
+        locator?.kind === 'path' && locator.value && scope && visual === shown
+          ? await sidecarMeta(deps, scope, locator.value).catch(() => undefined)
+          : undefined;
+      if (media === undefined && audio === undefined && audioClips.length === 0 && meta === undefined) return;
       resolved.set(option.id, {
         ...(media === undefined ? {} : { media }),
         ...(audio === undefined ? {} : { audio }),
         ...(audioClips.length ? { audioClips } : {}),
+        ...(meta === undefined ? {} : { meta }),
       });
     }),
   );

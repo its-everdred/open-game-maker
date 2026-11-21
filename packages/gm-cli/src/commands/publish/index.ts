@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,7 @@ const ENV = {
   OGM_APP_ORIGIN: { kind: 'url', required: false },
   OGM_GAMES_ORIGIN: { kind: 'url', required: false },
   OGM_ASSETS_ROOT: { kind: 'path', required: false },
+  OGM_PUBLISH_BUILD_TIMEOUT_MS: { kind: 'int', default: '1800000' },
 } as const;
 
 const OUTPUT_BYTES = 64 * 1024 * 1024;
@@ -95,6 +96,31 @@ function slugFromCwd(cwd: string): string {
 
 function tail(text: string, lines = 20): string {
   return text.trimEnd().split('\n').slice(-lines).join('\n');
+}
+
+/** Reuse generated asset work from the registered checkout; cache entries remain content-addressed and validated. */
+export function seedAssetCache(sourceGame: string, targetGame: string): void {
+  const source = join(sourceGame, '.gm', 'cache', 'assets');
+  if (!existsSync(source)) return;
+  const target = join(targetGame, '.gm', 'cache', 'assets');
+  const copyRegularTree = (from: string, to: string): void => {
+    let info;
+    try {
+      info = lstatSync(from);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    if (info.isSymbolicLink()) return;
+    if (info.isDirectory()) {
+      mkdirSync(to, { recursive: true });
+      for (const name of readdirSync(from)) copyRegularTree(join(from, name), join(to, name));
+    } else if (info.isFile()) {
+      mkdirSync(dirname(to), { recursive: true });
+      cpSync(from, to);
+    }
+  };
+  copyRegularTree(source, target);
 }
 
 /** fetch's own message is a bare "fetch failed"; the socket's reason sits on its cause. */
@@ -188,6 +214,11 @@ export const command: GmCommand = {
     const slug = args[0] ?? slugFromCwd(ctx.cwd);
     const home = ctx.home ?? homedir();
     const env = hostEnv(ctx, home);
+    if (env.OGM_PUBLISH_BUILD_TIMEOUT_MS < 1)
+      throw new UsageError(
+        'OGM_PUBLISH_BUILD_TIMEOUT_MS must be positive',
+        'set a positive millisecond value in api.env',
+      );
     if (!env.OGM_INTERNAL_TOKEN) {
       throw new UsageError('no internal token', 'set OGM_INTERNAL_TOKEN in ~/.config/ogm/env/api.env');
     }
@@ -231,6 +262,7 @@ export const command: GmCommand = {
       });
       return {
         ok: result.status === 0,
+        timedOut: (result.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT',
         out: result.stdout ?? '',
         err: `${result.stderr ?? ''}${result.error?.message ?? ''}`,
       };
@@ -272,6 +304,7 @@ export const command: GmCommand = {
       const added = git(['worktree', 'add', '--quiet', '--detach', work, commit]);
       if (!added.ok) throw new CommandError(`cannot check ${commit} out of ${checkout}: ${tail(added.err, 3)}`);
       const game = join(work, facts.repoPath);
+      seedAssetCache(join(checkout, facts.repoPath), game);
       if (!existsSync(join(game, 'package.json'))) {
         throw new CommandError(`${facts.repoPath} has no package.json in ${checkout} at ${commit}`);
       }
@@ -303,7 +336,16 @@ export const command: GmCommand = {
       const install = exec('pnpm', ['install', '--frozen-lockfile', '--prefer-offline'], work, buildEnv);
       if (!install.ok)
         throw new CommandError(`pnpm install failed in the worktree:\n${tail(install.err || install.out)}`);
-      const build = exec('pnpm', ['run', 'build', ...(extra.length ? ['--', ...extra] : [])], game, buildEnv);
+      const buildTimeout = env.OGM_PUBLISH_BUILD_TIMEOUT_MS;
+      const build = exec(
+        'pnpm',
+        ['run', 'build', ...(extra.length ? ['--', ...extra] : [])],
+        game,
+        buildEnv,
+        buildTimeout,
+      );
+      if (build.timedOut)
+        throw new CommandError(`the game's build timed out after ${Math.ceil(buildTimeout / 1000)} s`);
       if (!build.ok) throw new CommandError(`the game's build failed:\n${tail(`${build.out}\n${build.err}`)}`);
 
       const dist = join(game, 'dist');

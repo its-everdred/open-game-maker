@@ -1,21 +1,15 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { schema, type Db } from '@ogm/db';
 import type { FeedFleet } from '@ogm/builder';
 import { daemonRowForGame } from '../jobs/daemons.js';
 
-// Operator-registered games can share a repository daemon. Never guess when more than one matches.
+// Operator-registered games can share a repository daemon (resolved by daemonRowForGame); never another repository's.
 export function reviewDaemonForGame(db: Db, gameId: string): typeof schema.gameDaemons.$inferSelect | undefined {
   const game = db.select().from(schema.games).where(eq(schema.games.id, gameId)).get();
   if (!game?.githubOwner || !game.githubRepo) return undefined;
   const repo = `${game.githubOwner}/${game.githubRepo}`.toLowerCase();
   const own = daemonRowForGame(db, gameId);
-  if (own) return own.repo.toLowerCase() === repo ? own : undefined;
-  const matches = db
-    .select()
-    .from(schema.gameDaemons)
-    .where(sql`lower(${schema.gameDaemons.repo}) = ${repo}`)
-    .all();
-  return matches.length === 1 ? matches[0] : undefined;
+  return own?.repo.toLowerCase() === repo ? own : undefined;
 }
 
 export function reviewClientForGame(db: Db, fleet: Pick<FeedFleet, 'daemonFor'>) {

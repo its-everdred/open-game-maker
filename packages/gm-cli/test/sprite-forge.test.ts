@@ -191,6 +191,65 @@ describe('sprite forge', () => {
     expect(result.code).toBe(2);
     expect(result.err.join(' ')).toContain('source rights prohibit redistribution');
   }, 30000);
+  it('promotes a captured Blender recipe only when its approval and output hashes agree', async () => {
+    const root = library();
+    const dir = round(root);
+    const rigHash = hash(readFileSync(rig));
+    const record = {
+      round: 'weapons-v4',
+      source_cards: ['t1:kenney-mini-dungeon@2.0'],
+      agent: { backend: 'codex', model: 'test' },
+      skills: ['gm-sprite-forge'],
+      materials: ['wood'],
+      tools: { blender: '4.3.2', python: '3.13.5', rig: { sha256: rigHash } },
+      rig_settings: { yaw0: 180, sun_az: 125, sun_elev: 75, samples: 32, seed: 3, views: 'NE' },
+      outputs: { 'finished_N.png': hash(png), 'finished_E.png': hash(png) },
+      review: { decision_id: 'decision', action_id: 'action', status: 'approved', verdict_quote: 'Looks good' },
+    };
+    const recipe = {
+      ...makeRecipe(),
+      scene: 'historical',
+      views: 'NE',
+      output: 'rebuild_N.png',
+      parameters: { yaw0: 180, sun_az: 125, sun_elev: 75, samples: 32 },
+      agent: { backend: 'codex', model: 'test', effort: 'not recorded' },
+      skills: [{ name: 'gm-sprite-forge', version: 'not recorded' }],
+      tools: [
+        { name: 'Blender', version: '4.3.2' },
+        { name: 'Python', version: '3.13.5' },
+        { name: 'historical rig', version: `sha256:${rigHash}` },
+      ],
+      verdict_quote: 'Looks good',
+      materials: { recorded: ['wood'] },
+      prompt: null,
+      archive: {
+        record: 'captured.json',
+        record_sha256: '',
+        round: 'weapons-v4',
+        record_format: 'captured-blender',
+        files: [{ path: 'rebuild_E.png', sha256: hash(png) }],
+        gm_rerun_supported: false,
+        created_at_basis: 'archive_capture',
+      },
+    };
+    writeFileSync(join(dir, 'rebuild_N.png'), png);
+    writeFileSync(join(dir, 'rebuild_E.png'), png);
+    const save = (value: typeof record) => {
+      const data = Buffer.from(JSON.stringify(value));
+      writeFileSync(join(dir, 'captured.json'), data);
+      json(join(dir, 'recipe.json'), { ...recipe, archive: { ...recipe.archive, record_sha256: hash(data) } });
+    };
+    save({ ...record, outputs: { ...record.outputs, 'finished_E.png': '0'.repeat(64) } });
+    expect((await gm(['sprite-forge', 'promote', dir], { env: { OGM_ASSETS_ROOT: root } })).code).toBe(2);
+    save({ ...record, review: { ...record.review, status: 'rejected' } });
+    expect((await gm(['sprite-forge', 'promote', dir], { env: { OGM_ASSETS_ROOT: root } })).code).toBe(2);
+    save(record);
+    const result = await gm(['sprite-forge', 'promote', dir], { env: { OGM_ASSETS_ROOT: root } });
+    expect(result.code, result.err.join('\n')).toBe(0);
+    expect(readFileSync(join(root, 'sets/example-generated/1/extracted/rock/captured.json'), 'utf8')).toBe(
+      JSON.stringify(record),
+    );
+  }, 30000);
   it('promotes a verified historical round without claiming it can rerun', async () => {
     const root = library();
     const dir = round(root);

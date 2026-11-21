@@ -70,6 +70,7 @@ export function BuildChatDock() {
       onBack={() => dock.back(jobs)}
       onAdmitted={dock.admitted}
       onMessages={recordMessages}
+      useAiurComposer
     />
   );
   return (

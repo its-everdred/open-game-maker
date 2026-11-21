@@ -259,6 +259,12 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
   { name: 'OGM_INTERNAL_URL', unit: 'gm', kind: 'url', doc: 'loopback API URL a game daemon puts blobs to' },
   { name: 'OGM_HOOK_SECRET_FILE', unit: 'gm', kind: 'path', doc: "file holding the game daemon's hook secret" },
   {
+    name: 'OGM_PUBLISH_BUILD_TIMEOUT_MS',
+    unit: 'gm',
+    kind: 'int',
+    doc: 'maximum gm publish build duration in milliseconds (default 1800000)',
+  },
+  {
     name: 'OGM_API_INTERNAL_URL',
     unit: 'shared',
     kind: 'url',
