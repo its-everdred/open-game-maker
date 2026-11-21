@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 import { Document, NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
@@ -11,6 +11,7 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 import { gm, tempDir } from './helpers.js';
+import { seedAssetCache } from '../src/commands/publish/index.js';
 
 type LockAsset = {
   id: string;
@@ -356,6 +357,33 @@ describe('gm build assets', () => {
       ).toBe(true);
     }
   });
+
+  it('reuses the seeded asset cache in a fresh publish worktree', async () => {
+    const source = tempDir('gm-build-cache-source-');
+    const target = `${source}-worktree`;
+    const path = 'assets/image/cache.png';
+    const bytes = await png(2, 2);
+    writeAsset(source, path, bytes);
+    writeLock(source, [{ id: 't3:fixture/cache', path }]);
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: source });
+    execFileSync('git', ['add', '-A'], { cwd: source });
+    execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture'], {
+      cwd: source,
+    });
+
+    const first = await gm(['build', 'assets', '--tier', 'mobile,desktop', '--json'], { cwd: source });
+    expect(first.code, JSON.stringify(first)).toBe(0);
+    expect(JSON.parse(first.out[0]!).cache).toEqual({ hits: 0, misses: 1 });
+    execFileSync('git', ['worktree', 'add', '-q', '--detach', target, 'HEAD'], { cwd: source });
+    seedAssetCache(source, target);
+
+    const second = await gm(['build', 'assets', '--tier', 'mobile,desktop', '--json'], { cwd: target });
+
+    expect(second.code, JSON.stringify(second)).toBe(0);
+    expect(JSON.parse(second.out[0]!).cache).toEqual({ hits: 1, misses: 0 });
+    expect(readFileSync(join(target, 'public/assets/manifest.json'), 'utf8')).toContain('t3:fixture/cache');
+  });
+
   it('builds tiered assets, validates the manifest, preserves metadata, and reuses the cache', async () => {
     const { cwd, meta } = await fixtureGame();
     const events = join(cwd, 'events.jsonl');
