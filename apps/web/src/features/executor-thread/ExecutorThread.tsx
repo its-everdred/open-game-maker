@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import type { ChatAttachment, CreatorCommand } from '@ogm/contracts/browser';
 
 import { Dialog } from '../../components/Dialog';
-import { Composer } from '../build-chat/Composer';
+import { AiurComposer } from '../build-chat/AiurComposer';
 import {
   closeThread,
   sendThreadMessage,
@@ -113,7 +113,7 @@ export function ExecutorThread({
             <CommandCard key={command.decision_id} command={command} onOpen={() => onOpenCommand(command)} />
           ))}
         </div>
-        <Composer jobId="executor-thread" postText={post} uploadAttachment={upload} />
+        <AiurComposer jobId="executor-thread" postText={post} uploadAttachment={upload} />
       </section>
     </Dialog>
   );
