@@ -3,18 +3,5 @@ after_create: |
   git clone "$THIS_REPOSITORY_URL" .
   issue_id="$(basename "$PWD")"
   git checkout -b "aiur/${issue_id}" "origin/$THIS_BASE_BRANCH"
-  # Host-local media must land in the real library, never in this disposable clone (Kevin 2026-11-02: a render
-  # written to the workspace's own assets-local was deleted with the workspace).
-  ln -sfn /home/orangekid/games/open-game-maker-2000/assets-local assets-local
-  echo assets-local >> .git/info/exclude
-  # Mapped skills resolve from .claude/skills, which tracks only some gm-* skills; add every skills/<name> it lacks
-  # (gm-prototype for phase:* labels was missing on #1191, 2026-11-21) as untracked copies from this branch.
-  for d in skills/*/; do n=$(basename "$d"); if [ -f "$d/SKILL.md" ] && [ ! -e ".claude/skills/$n" ]; then cp -r "$d" ".claude/skills/$n" && echo ".claude/skills/$n" >> .git/info/exclude; fi; done; true
 before_remove: |
   git status --short
-  # Keep anything gitignored and untracked for 7 days instead of deleting it with the workspace.
-  keep="$HOME/.aiur/trash/open-game-maker/$(basename "$PWD")-$(date +%Y%m%dT%H%M%S)"
-  git ls-files --others --ignored --exclude-standard --directory | grep -v -E '^(node_modules|\.pnpm-store|.*/node_modules)/?$|^assets-local$' > /tmp/keep-$$ || true
-  if [ -s /tmp/keep-$$ ]; then mkdir -p "$keep" && while read -r f; do [ -L "$f" ] && continue; mkdir -p "$keep/$(dirname "$f")" && cp -a "$f" "$keep/$f" 2>/dev/null; done < /tmp/keep-$$; fi
-  rm -f /tmp/keep-$$
-  find "$HOME/.aiur/trash/open-game-maker" -mindepth 1 -maxdepth 1 -mtime +7 -exec rm -rf {} + 2>/dev/null || true
