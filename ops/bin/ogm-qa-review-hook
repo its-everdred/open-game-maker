@@ -137,6 +137,15 @@ if ((${#game_publish[@]})); then
   fi
   tail -n 1 "$log" || true
   printf 'exit=%s qa-publish-review-check\n' "$rc"
+  # Every published game must still serve its entry script (#1197: a build rewrite 404ed every game for a day).
+  boot_log=$log_dir/$build_id.boot.log
+  ${OGM_QA_GAME_BOOT:-$repo/ops/bin/ogm-qa-game-boot} > "$boot_log" 2>&1
+  boot_rc=$?
+  if ((boot_rc != 0)); then
+    worst=1
+    [[ -n $attention ]] && printf '%s qa-game-boot failed after publishing %s (exit %s): %s\n' "$(date -u +%FT%TZ)" "$slug" "$boot_rc" "$boot_log" >> "$attention"
+  fi
+  printf 'exit=%s qa-game-boot\n' "$boot_rc"
   exit "$worst"
 fi
 
@@ -154,7 +163,7 @@ git -C "$repo" diff --quiet "$have" "$want" -- "${voice_paths[@]}" 2> /dev/null 
 new_game='^(templates/game-[^/]+/|packages/game-repo-template/|services/api/src/games/|services/commit/)'
 if ((daily)) || grep -qE "$new_game" <<< "$changed"; then runs+=(new-game); fi
 games_cache='^(services/games-host/|services/api/src/(games|builds)/|apps/web/src/routes/games/)'
-grep -qE "$games_cache" <<< "$changed" && runs+=(games-cache)
+grep -qE "$games_cache" <<< "$changed" && runs+=(games-cache game-boot)
 if ((${#runs[@]} == 0)); then
   printf 'ogm-qa-review-hook: no review or voice change or new-game change in %s..%s\n' "$have" "$want"
   exit 0
@@ -170,11 +179,13 @@ session_rc=
 for kind in "${runs[@]}"; do
   name=qa-$kind-e2e
   [[ $kind == games-cache ]] && name=qa-games-cache
+  [[ $kind == game-boot ]] && name=qa-game-boot
   stills=qa-e2e
   [[ $kind == voice ]] && stills=voice-e2e
   [[ $kind == new-game ]] && stills=new-game-e2e
   logs=$qa_root/$kind-e2e
   [[ $kind == games-cache ]] && logs=$qa_root/games-cache
+  [[ $kind == game-boot ]] && logs=$qa_root/game-boot
   mkdir -p "$logs"
   log=$logs/$sha.log
   : > "$log"
@@ -185,7 +196,9 @@ for kind in "${runs[@]}"; do
   fi
   rc=$session_rc
   if ((rc == 0)); then
-    if [[ $kind == games-cache ]]; then
+    if [[ $kind == game-boot ]]; then
+      timeout --kill-after=30 "$limit" ${OGM_QA_GAME_BOOT:-$repo/ops/bin/ogm-qa-game-boot} >> "$log" 2>&1
+    elif [[ $kind == games-cache ]]; then
       (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa games-cache --game blobs --json) >> "$log" 2>&1
     else
       (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa "$kind-e2e" --sha "$sha" --out "$repo/assets-local/review/app/$stills/$sha") >> "$log" 2>&1

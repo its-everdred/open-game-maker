@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""OGM post-deploy game boot check (#1197): every published game's latest tested build must serve its scripts.
+
+For each game with a tested build (QA games excluded), GET <games origin>/g/<id>/<build>/ (following redirects), then
+GET every <script src> and <link rel=modulepreload href> in that page, resolved against the page's final URL. Any
+non-200, or a reference that still holds `//a/` (the c85b055b8 rewrite that 404ed every game), fails the check.
+
+usage: ogm-qa-game-boot [--db <ogm.sqlite3>] [--origin <games origin>]
+  defaults: $OGM_DATA_DIR/ogm.sqlite3 and OGM_GAMES_ORIGIN, read from $OGM_ENV_DIR/api.env (~/.config/ogm/env)
+Prints one line per game and `exit=<n> qa-game-boot`. exit 0 all games boot; 1 a game failed; 64 bad usage.
+"""
+
+import os
+import re
+import sqlite3
+import sys
+import urllib.error
+import urllib.request
+from urllib.parse import urljoin
+
+REF = re.compile(r'<(?:script[^>]*\ssrc|link[^>]*rel="modulepreload"[^>]*\shref)="([^"]+)"', re.I)
+
+
+def env_file(path):
+    values = {}
+    try:
+        with open(path) as handle:
+            for line in handle:
+                if '=' in line and not line.lstrip().startswith('#'):
+                    key, value = line.split('=', 1)
+                    values[key.strip()] = value.strip().strip('"')
+    except FileNotFoundError:
+        pass
+    return values
+
+
+def get(url):
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            return response.status, response.geturl(), response.read()
+    except urllib.error.HTTPError as error:
+        return error.code, url, b''
+    except (urllib.error.URLError, TimeoutError) as error:
+        return f'error {error}', url, b''
+
+
+def check(origin, game_id, slug, build_id):
+    status, final, body = get(f'{origin}/g/{game_id}/{build_id}/')
+    if status != 200:
+        return f'{slug} {build_id}: page {status}'
+    refs = REF.findall(body.decode('utf8', 'replace'))
+    if not refs:
+        return f'{slug} {build_id}: page has no script'
+    for ref in refs:
+        if '//a/' in ref:
+            return f'{slug} {build_id}: broken reference {ref}'
+        status, _, _ = get(urljoin(final, ref))
+        if status != 200:
+            return f'{slug} {build_id}: {ref} {status}'
+    return None
+
+
+def main(argv):
+    args = dict(zip(argv[::2], argv[1::2]))
+    if len(argv) % 2 or set(args) - {'--db', '--origin'}:
+        print(__doc__.split('\n\n')[1], file=sys.stderr)
+        return 64
+    api = env_file(os.path.join(os.environ.get('OGM_ENV_DIR', os.path.expanduser('~/.config/ogm/env')), 'api.env'))
+    db = args.get('--db') or os.path.join(api.get('OGM_DATA_DIR', ''), 'ogm.sqlite3')
+    origin = (args.get('--origin') or api.get('OGM_GAMES_ORIGIN', '')).rstrip('/')
+    if not origin or not os.path.exists(db):
+        print('ogm-qa-game-boot: no games origin or database', file=sys.stderr)
+        return 64
+    with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
+        rows = conn.execute(
+            """select g.id, g.slug, (select b.id from builds b where b.game_id = g.id and b.status = 'tested'
+                                      order by b.created_at desc limit 1)
+               from games g where g.delisted_at is null and g.slug not like 'qa-%' order by g.slug"""
+        ).fetchall()
+    failed = 0
+    for game_id, slug, build_id in rows:
+        if not build_id:
+            continue
+        problem = check(origin, game_id, slug, build_id)
+        print(problem or f'{slug} {build_id}: ok')
+        failed |= bool(problem)
+    print(f'exit={int(failed)} qa-game-boot')
+    return int(failed)
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
