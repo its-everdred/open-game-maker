@@ -24,7 +24,7 @@ commit() {
   git -C "$stack" rev-parse HEAD
 }
 base=$(commit README.md)
-other=$(commit apps/web/src/routes/games/Grid.tsx)
+other=$(commit apps/web/src/routes/profile/Profile.tsx)
 review=$(commit apps/web/src/routes/review/RoundReviews.tsx)
 api=$(commit services/api/src/review-rounds/routes.ts)
 
@@ -63,6 +63,28 @@ for path in templates/game-2d/src/main.ts packages/game-repo-template/src/repo.t
   OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" > /dev/null
   assert_grep 'qa new-game-e2e' "$scratch/calls"
 done
+# A games-serving change runs the cache check and logs/alerts failures independently of New Game.
+from=$(git -C "$stack" rev-parse HEAD)
+to=$(commit services/games-host/src/server.ts)
+: > "$scratch/calls"
+OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+assert_grep 'qa games-cache --game blobs --json' "$scratch/calls"
+assert_grep 'exit=0 qa-games-cache' "$scratch/out"
+short=$(git -C "$stack" rev-parse --short=12 "$to")
+assert_grep 'exit=0 qa-games-cache' "$OGM_QA_ROOT/games-cache/$short.log"
+from=$to
+to=$(commit services/api/src/builds/publish.ts)
+: > "$scratch/calls"
+set +e
+OGM_TEST_RC=1 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a failing games-cache check fails the deploy hook'
+assert_grep 'qa-games-cache failed on' "$attention"
+assert_grep 'exit=1 qa-games-cache' "$scratch/out"
+short=$(git -C "$stack" rev-parse --short=12 "$to")
+assert_grep 'exit=1 qa-games-cache' "$OGM_QA_ROOT/games-cache/$short.log"
+: > "$attention"
 : > "$scratch/calls"
 OGM_TEST_RC=0 "$hook" "$to" "$to" --daily --repo "$stack" > /dev/null
 assert_grep 'qa new-game-e2e' "$scratch/calls"

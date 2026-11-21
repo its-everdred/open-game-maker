@@ -5,6 +5,9 @@ description: Measure and make sprites that match the SmallScaleInt packs.
 
 # Sprite forge
 
+This is the `lane:clone` skill: a rebuild or variation clones the pack's existing style exactly (creator,
+2026-11-20). No creative reinterpretation; creative screens and scenes belong to `lane:creative` (gm-image-mock).
+
 Use this skill when a sprite needs to match the SmallScaleInt packs. First look for an existing asset to kitbash or recolour using `gm-assets` and `gm-asset-variants`; clone pack assets and never edit the originals. If that cannot meet the need, use a calibrated 3D render rig. Do not use a generated 2D image as the production sprite. Mark AI-assisted outputs `ai_generated: true` in their manifest; do not send pack files to cloud services.
 
 Compare results against the [measured style reference](references/smallscaleint-style.md). The local measurement harness needs Python with Pillow, NumPy and SciPy installed:
@@ -23,6 +26,24 @@ python skills/gm-sprite-forge/scripts/render_sheet.py blend output/walk.png --me
 ```
 
 The Blender import keeps mesh materials and animation, but ignores source cameras and lights; prepare the mesh with the desired materials before rendering. The script samples the inclusive animation range evenly, renders at lowered CPU priority, and writes a JSON manifest beside the sheet. Add `--ai-generated` when the source or output is AI-assisted. `cube`, `rock`, and `hull` are also available; `hull` takes an OBJ via `--mesh`. The separate shadow sheet contains black partial-alpha shadow pixels; without it, those pixels remain in the main sheet. For four 256-pixel prop views or the tile calibration, run `blender -b --python skills/gm-sprite-forge/scripts/blender_iso_rig.py -- tile output/ samples=1`. The hull carver and finisher expose their arguments with `--help`. Never write into a pack directory.
+
+The experimental `tree` rig scene accepts `dense=1` for a seeded clustered canopy and `leaf_count` (1–100000, default 24000) to control its detail. `canopy_scale`, `crown_width`, `crown_depth` and `crown_height` adjust the crown proportions. This is a blockout and has not passed the vegetation reference gates. Set `shadows=0` on the rig when the reference has no cast-shadow pixels. Render and score against the relevant original before using it.
+
+After a variant is approved, render and package all four views in one command:
+
+```sh
+python skills/gm-sprite-forge/scripts/render_vegetation.py tree assets-local/sets/smallscaleint-vegetation/ tree-v1 --source-card source.card.json --source-collection collection.card.json --metadata provenance.json --seed 42 --dense --shadowless
+```
+
+`provenance.json` must provide `agent.backend`, `agent.model`, a nonempty `skills` list and `tool_versions.blender`. The recipe records those fields, the source ID, generator hashes, seed and parameters. Use `--yaw` to preserve the orientation selected in a matrix and `--sun-elev` to set the light elevation in degrees (default 65). Use `--fanout`, `--spread-min`, `--spread-max`, `--leaf-count`, `--crown-width`, `--crown-depth` and `--crown-height` to tune branch and crown shape. For `tree`, `--dense --fine-canopy` uses smaller, overlapping leaf geometry and a wider range of foliage shades. For `tree` and `bare`, `--attachment-min T` sets the earliest 3D branch attachment along each parent (default 0.55). For `bare`, `--organic-bare` selects a rooted, segmented branch layout; it cannot be combined with non-default `--lean`, `--levels`, `--fanout`, spread or attachment controls. `--branch-width W` scales the 3D branching spread horizontally (default 1); `--branch-radius R` sets trunk and branch thickness (default 0.07). For `bush`, `--bush-vertical-scale S` scales the 3D shrub vertically about its ground origin (default 1); `--bush-leaf-detail` adds seeded 3D surface leaf cards with palette-derived tones; `--bush-mass-count` and `--bush-mass-radius` set the number and size of 3D shrub masses. For `conifer`, `--branched --tiers N --spokes N` enables an experimental seeded bough model. For `plant`, `--leafy --count N --extent X --plant-height H --leaves-per-cluster N --leaf-width W` makes seeded leaf clumps with a width multiplier (default 1); `--leaf-length-scale` adjusts their 3D radial length (default 1). Add `--leaf-shading` for independently seeded leaf-tone variation. Use `--batch-size` and `--batch-radius` to scatter small groups instead of individual clumps. This remains a blockout. `--palette palette.json` supplies per-style `foliage` and `bark` objects, each with `hi`, `mid` and `lo` RGB integer arrays; the recipe records the supplied palette. Its geometry remains experimental; the command does not confer approval.
+
+Once a vegetation variant has passed the applicable review gate, package four rig renders named `N.png`, `E.png`, `S.png` and `W.png` outside the pack:
+
+```sh
+python skills/gm-sprite-forge/scripts/vegetation_export.py renders/ assets-local/sets/smallscaleint-vegetation/ tree-v1 --source-card source.card.json --source-collection collection.card.json --recipe recipe.json
+```
+
+The exporter finishes the PNGs, copies the source collection rights into the generated collection and asset cards, records the source card and recipe, and refuses pack paths or existing variant names. It does not approve the output or run a style gate.
 
 For a draped canopy, build a subdivided mesh above the frame in a local Blender Python script, then use the cloth helper:
 
@@ -47,8 +68,16 @@ The sheet report includes each occupied frame, row counts and motion correlation
 
 For every rebuild or variation review, prepare both an image-gen option and a 3D pipeline option for each original (when the creator asks to compare approaches, one labelled option per skill or tool, each with the minutes it took), and follow the [comparison media instructions](references/review-lane.md). Use the free Codex image generation route. Attach the original pack frames as references every time: this is permitted for every pack in the library, including ones marked `processing: local-only` (that field forbids other cloud processing, not image-generation references through the mock broker; Kevin, 2026-11-20). Never ask about it, and never post an image option that was generated without the original attached or that covers fewer directions than the original shows. Generated images are review options, not production sprites.
 
-For a requested multi-tool bake-off, do not treat this default image-gen-versus-3D comparison as sufficient. Label each requested tool as its own arm, use the same asset references, cell size, camera, light, palette and shadow treatment wherever the methods allow, and record tool and version, setup, active time, peak GPU memory, and unavailable capabilities in a `recipe.json` beside the local render outputs. Score every arm against the original with `score.py`; for animated sheets, also require matching directions and frame counts. Keep missing or failed arms explicit rather than substituting an unrelated result. A local score is diagnostic only: the creator's visual verdict is required before recording a winning approach in the capability matrix. Keep source pack files and experiment renders outside the repository.
+For side-by-side stills, animations and gate verdicts, follow the [comparison media instructions](references/review-lane.md). To prepare seven-column vegetation review cells, run:
 
-When the request specifies GPU rendering, first verify that Blender reports an available GPU backend and that device memory can be measured. The bundled `blender_iso_rig.py` is CPU-only; it does not satisfy a GPU-render requirement. Do not label CPU renders as GPU arms or infer a GPU winner from them. If the active workspace has no device access, record GPU setup/rendering as a post-deploy check and hand off the other completed evidence without claiming the bake-off has a winner.
+```sh
+python skills/gm-sprite-forge/scripts/vegetation_matrix_media.py matrix.json review-output/ --recipe recipe.json
+```
+
+The manifest has a `rows` array of 10–16 entries; each entry has an `id` slug, display `name`, `original` PNG path, five `variants` PNG paths and a `mock` PNG path. The tool writes individually labelled media and `options.json`, alongside the supplied recipe. It checks for duplicate variants and requires each finished render's alpha bounding-box width, height, coverage and ground-shadow coverage to be within 15% of the original. Ground-shadow coverage counts visible partial-alpha pixels with near-black RGB (0–3), excluding alpha-1 specks and dark-green foliage. Cells are enlarged 4×. It never submits the review or approves the assets. For a single row, check the five finished render paths with `python skills/gm-sprite-forge/scripts/vegetation_footprint.py original.png v1.png v2.png v3.png v4.png v5.png` before posting.
+
+For a requested multi-tool bake-off, do not treat the default image-gen-versus-3D comparison as sufficient. Label each requested tool as its own arm, use the same references, cell size, camera, light, colour pass and shadow treatment, record tool and version, setup, active time, peak GPU memory and unavailable capabilities in a `recipe.json` beside the local outputs, and score every arm with `score.py`. Keep missing or failed arms explicit. A local score is diagnostic only: the creator's visual verdict is required before a winner goes into the capability matrix. Keep pack files and renders outside the repository.
+
+When GPU rendering is requested, use `scripts/gpu_bake_rig.py` and `scripts/gpu_bake_finish.py`. The rig refuses to fall back to CPU; `blender_iso_rig.py` is CPU-only and does not count as a GPU arm. The [GPU bake-off guide](references/gpu-bakeoff.md) covers setup, the arm builders in `scripts/bakeoff/` (procedural, CC0, Hunyuan3D-2, TripoSR) and the #1094 results. Until the creator rules: route bare trees and foliage to Hunyuan3D-2 from the original view or to a procedural model, and characters to a procedural model with a scripted walk. Single-view image-to-3D invents the unseen sides, so check every direction, and mark its outputs `ai_generated: true`.
 
 For approved reusable assets, see the [generated library and recipe workflow](references/generated-library.md).

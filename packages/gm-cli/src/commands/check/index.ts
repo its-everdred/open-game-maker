@@ -8,6 +8,7 @@ import { command as assetsCommand } from './assets.js';
 import { command as lookCommand } from '../look/check.js';
 import { gameDir } from '../../outbox.js';
 import { checkLoading } from '../../loading-check.js';
+import { checkImageSlots } from '../../image-slots-check.js';
 import { checkPlayArea } from '../../play-area-check.js';
 import { findPlayAreaGame } from '../../play-area-config.js';
 import { checkPrReview } from '../../pr-review-check.js';
@@ -58,6 +59,7 @@ export const command: GmCommand = {
     let lookCode: number = EXIT.ok;
     let lookReport: unknown;
     let loadingErrors: string[] = [];
+    let imageErrors: string[] = [];
     let playArea: Awaited<ReturnType<typeof checkPlayArea>> | undefined;
     const prProblems =
       typeof flags.body === 'string'
@@ -77,7 +79,9 @@ export const command: GmCommand = {
     }
     if (existsSync(join(game, 'gm.manifest.json'))) {
       loadingErrors = await checkLoading(game);
+      imageErrors = await checkImageSlots(game);
       if (!ctx.json) loadingErrors.forEach(ctx.err);
+      if (!ctx.json) imageErrors.forEach(ctx.err);
       const lookOut: string[] = [];
       lookCode = await lookCommand.run({ ...ctx, json: true, fields: null, out: (line) => lookOut.push(line) }, [], {
         changed: true,
@@ -104,6 +108,7 @@ export const command: GmCommand = {
       assetCode === EXIT.ok &&
       lookCode === EXIT.ok &&
       loadingErrors.length === 0 &&
+      imageErrors.length === 0 &&
       playArea?.ok !== false &&
       prProblems.length === 0;
     if (ctx.json && (lookReport !== undefined || playArea !== undefined || typeof flags.body === 'string'))
@@ -113,6 +118,7 @@ export const command: GmCommand = {
           ok,
           look: lookReport,
           loadingErrors,
+          imageErrors,
           playArea,
           prototypeReview: typeof flags.body === 'string' ? { problems: prProblems } : undefined,
         }),

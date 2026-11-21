@@ -22,9 +22,8 @@ assets come in step 2, built toward the mock the creator picked.
 
 ## Make the options
 
-1. **Read the kit.** Search the set (`gm assets search`) and read its set card and lineups: shape language, bevels,
-   proportions, palette, how characters look. Write what you saw into each prompt in plain words. The mock must look
-   like it could be built from that kit.
+1. **Read the direction.** The creator's concept art, logo, spec and feedback ledger set the mood; the kit's set card
+   gives the game's genre and camera. Write the direction into each prompt in plain words.
 2. **Four options that differ greatly.** Different environment, palette, board or play-area treatment, HUD shape, and
    character staging. Never four tints of one scene.
 3. **The player's screen, nothing else.** Each mock is one in-game frame as the player sees it, from the game's real
@@ -64,18 +63,16 @@ Use `image_gen.imagegen` first for mockups and logos when it is available. Other
 The host's mock broker writes the image into `<dir>`; the script waits and prints the paths. You never hold a provider
 key. Mark outputs as AI-generated. Keep each prompt self-contained: the screen, the moment, the palette, the HUD.
 
-**Mocks match the real kit, or they are useless** (Kevin, 2026-11-19: painted, over-detailed mocks "don't match the
-asset pack style"):
-- **Attach the kit as references on every generation**: 2-4 real sprites from the game's packs (`gm assets search`, then
-  the card's sprite sheet frames under `assets-local/packs/<pack>/`) plus a scene render of the set if one exists
-  (`assets-local/sets/<set>/` dioramas and showcase frames). Packs of any licence are allowed as mock references; the
-  broker refuses only other private-library files.
-- Prompt for **the kit's detail level**: same pixel density, outline and shading as the references, no added painterly
-  detail, the same camera angle. A mock more detailed than the kit is off-style: regenerate it.
-- **Assets that already exist in the packs are not mocked.** Show a lineup of the real sprites (classes, enemies, props)
-  as the option instead, for the creator's sign-off.
-- Look check: put a real kit sprite beside every mock (`--kind look --ref <mock> --ref <kit sprite>`) and fail any mock
-  whose pixel size, outline or detail differs.
+**Two lanes, set by the ticket's label** (creator, 2026-11-20: "mocks do a MUCH better job with creativity, creating
+beautiful and aspirational directions"; the sprite pipeline needs "direct clone of existing style"):
+- **`lane:creative`** (towns, settings and biomes, UI screens, HUD, menus, title, loading and end screens, logos,
+  thumbnails): pure image generation with wide imagination. Aim for the most beautiful, aspirational version of the
+  screen the concept and logo point to: rich lighting, composition and mood. Kit sprites may be attached for mood
+  and palette only; they never cap detail or style at this rung, and no lineups, in-engine renders or diorama stills
+  stand in for a mock. Making it buildable is the prototype rung's job.
+- **`lane:clone`** (rebuilding or varying a pack's sprites): no imagination. Load `gm-sprite-forge`, attach the
+  originals to every generation, match their pixel density, outline, shading and camera exactly, and pass its gates.
+  A clone that is "better" than the original is off-style.
 
 Budget: one image per option per view, then regenerate only the ones that came out wrong. Look at every image before
 sending it (gm-verify). If your tools cannot show you an image (a shell-only agent), ask a vision model:

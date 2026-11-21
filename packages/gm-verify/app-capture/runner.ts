@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import type { DesignDoc } from '@ogm/contracts/browser';
+import { REVIEW_VIEWPORTS, VIEWPORTS } from '@ogm/contracts';
 import { captureFile } from '../../../apps/web/e2e/support/shell-capture-files';
 import { serveStatic } from '../src/server';
 import { GPU_ARGS, SOFTWARE_ARGS } from '../src/browser';
@@ -42,13 +43,8 @@ const measurements: (
 const distortions: ImageDistortion[] = [];
 try {
   mkdirSync(out, { recursive: true });
-  const viewports = [
-    [390, 844],
-    [844, 390],
-    [820, 1180],
-    [1180, 820],
-  ] as const;
-  for (const [width, height] of testFastArg === '--test-fast' ? viewports.slice(0, 1) : viewports) {
+  const viewports = REVIEW_VIEWPORTS.map((id) => VIEWPORTS[id]);
+  for (const { width, height } of testFastArg === '--test-fast' ? viewports.slice(0, 1) : viewports) {
     const size = `${width}x${height}`;
     console.error(`shell capture: opening ${size}`);
     // A new browser per viewport releases WebGL resources between captures.

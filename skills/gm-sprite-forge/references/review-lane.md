@@ -58,7 +58,7 @@ On “Matches”, record the identified verdict in `calibration.jsonl` as below,
 
 ## Review and calibration
 
-At each checkpoint above, post one non-blocking Command on the rebuild ticket. Ask separately whether image gen matches and whether the 3D pipeline matches. The Command schema has one question and at most three suggested responses, so put both questions in that field and use the three outcomes below; when one needs changes, identify that track in the note. Ask for a note on each track needing changes. Include the round sheet, eight-direction still and animated GIF or MP4 as applicable, plus the score JSON and gates in force. In the Command text list each point from Kevin's last note and what changed for it, one line per point. Inspect the media first. Attach the same media to every option:
+At each checkpoint above, post one non-blocking Command on the rebuild ticket. Ask separately whether image gen matches and whether the 3D pipeline matches. The Command schema has one question and at most three suggested responses, so put both questions in that field and use the three outcomes below; when one needs changes, identify that track in the note. Ask for a note on each track needing changes. Include the round sheet, eight-direction still, an automatically looping GIF of the animation, plus the score JSON and gates in force. An MP4 may accompany the GIF but does not replace it. In the Command text list each point from Kevin’s last note and what changed for it, one line per point. Inspect the media first and verify that the GIF loops indefinitely. Attach the same media to every option:
 
 ```json
 {

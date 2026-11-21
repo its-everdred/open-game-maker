@@ -48,8 +48,8 @@ it('publishes three display images within the budget while derivation is still r
   expect(metadata.images).toBeUndefined();
   expect(metadata.pending).toBe(true);
   const media = (await gameMedia(deps, [ids.game])).get(ids.game)!;
-  expect(media.coverUrl).toContain(`/g/${ids.game}/${buildId}/media/thumbnail.png`);
-  expect(media.loadingUrls?.portrait).toContain(`/g/${ids.game}/${buildId}/media/portrait.png`);
+  expect(media.coverUrl).toMatch(/^https:\/\/games\.example\.test\/a\/[a-f0-9]{64}\.png$/u);
+  expect(media.loadingUrls?.portrait).toMatch(/^https:\/\/games\.example\.test\/a\/[a-f0-9]{64}\.png$/u);
   expect(media.loadingImages).toBeUndefined();
   finishImages({});
   await vi.waitFor(async () => expect(JSON.parse(await readFile(path, 'utf8')).images).toEqual({}));

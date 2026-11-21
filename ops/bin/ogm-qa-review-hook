@@ -153,6 +153,8 @@ mapfile -t voice_paths < "$(dirname -- "${BASH_SOURCE[0]}")/../voice-paths"
 git -C "$repo" diff --quiet "$have" "$want" -- "${voice_paths[@]}" 2> /dev/null || runs+=(voice)
 new_game='^(templates/game-[^/]+/|packages/game-repo-template/|services/api/src/games/|services/commit/)'
 if ((daily)) || grep -qE "$new_game" <<< "$changed"; then runs+=(new-game); fi
+games_cache='^(services/games-host/|services/api/src/(games|builds)/|apps/web/src/routes/games/)'
+grep -qE "$games_cache" <<< "$changed" && runs+=(games-cache)
 if ((${#runs[@]} == 0)); then
   printf 'ogm-qa-review-hook: no review or voice change or new-game change in %s..%s\n' "$have" "$want"
   exit 0
@@ -167,10 +169,12 @@ worst=0
 session_rc=
 for kind in "${runs[@]}"; do
   name=qa-$kind-e2e
+  [[ $kind == games-cache ]] && name=qa-games-cache
   stills=qa-e2e
   [[ $kind == voice ]] && stills=voice-e2e
   [[ $kind == new-game ]] && stills=new-game-e2e
   logs=$qa_root/$kind-e2e
+  [[ $kind == games-cache ]] && logs=$qa_root/games-cache
   mkdir -p "$logs"
   log=$logs/$sha.log
   : > "$log"
@@ -181,7 +185,11 @@ for kind in "${runs[@]}"; do
   fi
   rc=$session_rc
   if ((rc == 0)); then
-    (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa "$kind-e2e" --sha "$sha" --out "$repo/assets-local/review/app/$stills/$sha") >> "$log" 2>&1
+    if [[ $kind == games-cache ]]; then
+      (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa games-cache --game blobs --json) >> "$log" 2>&1
+    else
+      (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa "$kind-e2e" --sha "$sha" --out "$repo/assets-local/review/app/$stills/$sha") >> "$log" 2>&1
+    fi
     rc=$?
   fi
   if ((rc != 0)); then

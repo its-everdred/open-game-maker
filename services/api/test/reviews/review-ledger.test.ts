@@ -139,6 +139,23 @@ describe('review deck answers', () => {
     });
   });
 
+  it('sends notes attached to liked options in the worker answer', async () => {
+    const { app, deps, answers } = await setup();
+    insertOpenDesignCommand(deps);
+    const review = {
+      likes: ['wood'],
+      dislikes: [],
+      liked_notes: [{ option_id: 'wood', reason: 'Warm and readable' }],
+    };
+
+    expect((await answerReview(app, { option_id: 'wood', review })).status).toBe(200);
+    expect(JSON.parse(answers[0]!.response ?? 'null')).toEqual({
+      kind: 'question_answers',
+      answers: [{ option_id: 'wood', verdict: 'like', note: 'Warm and readable' }],
+    });
+    expect(answers[0]!.rationale).toContain("liked Wooden ('Warm and readable')");
+  });
+
   it('names the likes the creator passed over as aiur’s alternatives, never the chosen card', async () => {
     const { app, deps, answers } = await setup();
     insertOpenDesignCommand(deps, {
@@ -171,12 +188,23 @@ describe('review deck answers', () => {
       notes: 'All of these read too cold for the lantern room.',
     });
     expect(listReviews(deps.db, GAME)[0]).toMatchObject({
+      likes: [{ option_id: 'wood', label: 'Wooden' }],
       notes: 'All of these read too cold for the lantern room.',
       dislikes: [{ option_id: 'iron', label: 'Iron', reason: 'Too cold for the lantern room' }],
     });
     expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
       status: 'answered',
       review: { notes: 'All of these read too cold for the lantern room.' },
+    });
+  });
+
+  it('persists liked-option notes in the review ledger', async () => {
+    const { app, deps } = await setup();
+    insertOpenDesignCommand(deps);
+    const review = { likes: ['wood'], dislikes: [], liked_notes: [{ option_id: 'wood', reason: 'Warm' }] };
+    expect((await answerReview(app, { option_id: 'wood', review })).status).toBe(200);
+    expect(listReviews(deps.db, GAME)[0]).toMatchObject({
+      likes: [{ option_id: 'wood', label: 'Wooden', note: 'Warm' }],
     });
   });
 
@@ -203,6 +231,18 @@ describe('review deck answers', () => {
       review: { likes: ['wood', 'lava'], dislikes: [{ option_id: 'iron' }] },
     });
 
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'command_review_invalid' });
+    expect(listReviews(deps.db, GAME)).toEqual([]);
+  });
+
+  it('refuses a liked-option note for a card the Command does not have', async () => {
+    const { app, deps } = await setup();
+    insertOpenDesignCommand(deps);
+    const response = await answerReview(app, {
+      option_id: 'wood',
+      review: { likes: ['wood', 'lava'], dislikes: [], liked_notes: [{ option_id: 'lava', reason: 'Not real' }] },
+    });
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: 'command_review_invalid' });
     expect(listReviews(deps.db, GAME)).toEqual([]);

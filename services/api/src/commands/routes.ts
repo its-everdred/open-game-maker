@@ -155,6 +155,7 @@ export default new Hono<ApiBindings>()
       review.likes.length === 1 &&
       review.likes[0] === body.option_id &&
       review.dislikes.length === 0 &&
+      review.liked_notes === undefined &&
       review.notes === undefined;
     const selectedOption = keyedChange ? 'needs_work' : body.option_id;
     const ledgerInput =

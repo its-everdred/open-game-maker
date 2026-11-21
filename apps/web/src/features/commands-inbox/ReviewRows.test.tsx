@@ -1,11 +1,12 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameCommand } from '@ogm/contracts';
 
 import { markSent, resetReviewDrafts, useDeckDraft } from './drafts';
 import { ReviewRows } from './ReviewRows';
+import { CommandOptions } from './CommandOptions';
 
 function command(overrides: Partial<GameCommand> = {}): GameCommand {
   return {
@@ -140,5 +141,70 @@ describe('ReviewRows', () => {
     const row = screen.getByRole('link', { name: 'Pick the roll, open' });
     expect(row.querySelector('.review-row-thumb video')).toHaveAttribute('src', 'https://media.example.test/roll.mp4');
     expect(row.querySelector('.review-row-thumb img')).toBeNull();
+  });
+
+  it('renders review videos muted, inline, autoplaying and looping', () => {
+    const clip = { url: 'https://media.example.test/roll.mp4', width: 64, height: 48, kind: 'video' as const };
+    render(
+      <CommandOptions
+        command={command({
+          options: [
+            { id: 'm1', label: 'Roll', media: clip },
+            { id: 'm2', label: 'Other' },
+          ],
+        })}
+        disabled={false}
+        onAnswer={() => undefined}
+      />,
+    );
+    const video = document.querySelector('video');
+    expect(video).toHaveProperty('autoplay', false);
+    expect(video).toHaveProperty('muted', true);
+    expect(video).toHaveProperty('loop', true);
+    expect(video).toHaveProperty('playsInline', true);
+  });
+
+  it('plays clips while visible, pauses them offscreen and cleans up the observer', () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    class ObserverStub {
+      constructor(callback: IntersectionObserverCallback) {
+        callbackRef = callback;
+      }
+    }
+    let callbackRef: IntersectionObserverCallback | undefined;
+    Object.assign(ObserverStub.prototype, { observe, disconnect });
+    vi.stubGlobal('IntersectionObserver', ObserverStub);
+    const clip = { url: 'https://media.example.test/roll.mp4', width: 64, height: 48, kind: 'video' as const };
+    const { unmount } = render(
+      <CommandOptions
+        command={command({
+          options: [
+            { id: 'm1', label: 'Roll', media: clip },
+            { id: 'm2', label: 'Other' },
+          ],
+        })}
+        disabled={false}
+        onAnswer={() => undefined}
+      />,
+    );
+    const video = document.querySelector('video') as HTMLVideoElement;
+    const play = vi.fn().mockResolvedValue(undefined);
+    const pause = vi.fn();
+    Object.defineProperties(video, { play: { value: play }, pause: { value: pause } });
+    callbackRef!(
+      [{ target: video, isIntersecting: true } as unknown as IntersectionObserverEntry],
+      {} as IntersectionObserver,
+    );
+    expect(play).toHaveBeenCalledOnce();
+    callbackRef!(
+      [{ target: video, isIntersecting: false } as unknown as IntersectionObserverEntry],
+      {} as IntersectionObserver,
+    );
+    expect(pause).toHaveBeenCalledOnce();
+    unmount();
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(pause).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
   });
 });

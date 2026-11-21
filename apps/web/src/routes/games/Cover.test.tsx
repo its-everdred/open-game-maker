@@ -27,6 +27,8 @@ describe('game covers', () => {
       '/small.avif 320w, /large.avif 640w',
     );
     expect(container.querySelector('img')).toHaveAttribute('width', '640');
+    expect(container.querySelector('img')).toHaveAttribute('src', '/small.webp');
+    expect(container.querySelector('img')).toHaveAttribute('srcset', '/small.webp 320w, /large.webp 640w');
     expect(container.querySelector('img')).toHaveAttribute('loading', 'eager');
   });
 
