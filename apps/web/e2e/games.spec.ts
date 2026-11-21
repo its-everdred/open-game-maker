@@ -23,7 +23,7 @@ for (const count of [0, 1]) {
   test(`keeps the prototype games in the grid with ${count} real games`, async ({ page }, testInfo) => {
     await page.goto(`/all?test&games=${count}`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'New game' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^RestoreBound:/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Mossy Leap:/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Goblin Cellar:/ })).toBeVisible();
     await expect(page.locator('.games-spotlight')).toHaveCount(0);
     await testInfo.attach(`${testInfo.project.name}-${count}-games`, {
@@ -62,7 +62,7 @@ test('browses three real game tiles with the keyboard', async ({ page }) => {
   await page.goto('/all?test');
 
   const tiles = page.locator('.game-tile');
-  await expect(tiles).toHaveCount(9);
+  await expect(tiles).toHaveCount(8);
   await expect(tiles.getByText('Building 40%')).toBeVisible();
   await expect
     .poll(() =>
@@ -87,7 +87,7 @@ test('browses three real game tiles with the keyboard', async ({ page }) => {
   await page.waitForTimeout(200);
   expect(page.url()).not.toContain('spotlight');
   await expect(page.locator('.games-spotlight')).toHaveCount(0);
-  await expect(tiles).toHaveCount(9);
+  await expect(tiles).toHaveCount(8);
 });
 
 test('keeps spotlight actions and close control touch sized on a phone', async ({ page }, testInfo) => {
@@ -192,7 +192,7 @@ test('keeps tile badges in the bottom band', async ({ page }) => {
     jobs: Array<Record<string, unknown>>;
   };
   fixture.games.push({ ...fixture.games[2], id: 'g_empty', title: 'Empty game' });
-  fixture.games.push({ ...fixture.games[2], id: 'g_featured', slug: 'restorebound', title: 'RestoreBound' });
+  fixture.games.push({ ...fixture.games[2], id: 'g_featured', slug: 'mossy-leap', title: 'Mossy Leap' });
   fixture.jobs.push({ ...fixture.jobs[0], id: 'j_featured', gameId: 'g_featured' });
   await page.route('**/api/v1/jobs?state=active', (route) => route.fulfill({ json: { jobs: fixture.jobs } }));
   fixture.games[0]!.logoUrl = 'https://example.test/cover.png';

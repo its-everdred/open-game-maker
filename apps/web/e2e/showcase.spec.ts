@@ -21,7 +21,7 @@ test('renders prototype showcase art and opens a detail sheet', async ({ page })
     expect(dimensions[0]).toBeGreaterThan(1);
     expect(dimensions[1]).toBeGreaterThan(1);
   }
-  const tile = page.getByRole('button', { name: /^RestoreBound:/ });
+  const tile = page.getByRole('button', { name: /^Mossy Leap:/ });
   if (test.info().project.name === 'phone') {
     const first = page.getByRole('button', { name: /^Goblin Cellar:/ });
     const [firstBox, nextBox] = await Promise.all([first.boundingBox(), tile.boundingBox()]);
@@ -39,10 +39,10 @@ test('renders prototype showcase art and opens a detail sheet', async ({ page })
   });
   expect(colours).toBeGreaterThan(20);
   await tile.click();
-  await expect(page.getByRole('heading', { name: 'RestoreBound' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mossy Leap' })).toBeVisible();
   await expect(page.locator('.games-spotlight-media canvas')).toHaveAttribute('data-painted', 'true');
   await expect(page.locator('.games-spotlight-media')).toHaveAttribute('data-splat', 'true');
-  await expect(page.getByText('A sleepy village, one repair at a time.')).toBeVisible();
-  await page.getByRole('button', { name: 'Play RestoreBound' }).click();
-  await expect(page).toHaveURL(/\/g\/showcase\/restorebound\?mode=play/);
+  await expect(page.getByText('Hop, bop and collect every coin in the Greenwood.')).toBeVisible();
+  await page.getByRole('button', { name: 'Play Mossy Leap' }).click();
+  await expect(page).toHaveURL(/\/g\/showcase\/mossy-leap\?mode=play/);
 });

@@ -141,9 +141,9 @@ describe('game covers', () => {
   });
 
   it('uses the prototype scene for a showcase entry', () => {
-    const game = mergeShowcase([]).find((entry) => entry.title === 'RestoreBound')!;
+    const game = mergeShowcase([]).find((entry) => entry.title === 'Mossy Leap')!;
     const { container } = render(<Cover game={game} />);
     expect(container.querySelector('canvas')).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByText('RestoreBound')).toBeInTheDocument();
+    expect(screen.getByText('Mossy Leap')).toBeInTheDocument();
   });
 });
