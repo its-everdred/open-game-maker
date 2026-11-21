@@ -24,6 +24,7 @@ vi.mock('../../lib/api/client', async () => {
 vi.mock('../../lib/api/session', () => ({ useSession: mocks.session }));
 
 import { AIUR_CONVERSATION_TAG } from '../aiur/embed';
+import type { AiurComposer as AiurComposerElement } from '@aiur/conversation';
 import { ScopeChat } from './ScopeChat';
 
 const scope: AgreedScope = {
@@ -236,6 +237,35 @@ describe('ScopeChat offers', () => {
     expect(element).toHaveProperty('scope.conversation', '/api/v1/jobs/j_1/chat/messages');
     expect(element).toHaveProperty('scope.tickets', []);
     expect(screen.getByRole('button', { name: 'Finish' })).toBeVisible();
+  });
+
+  it('sends scope chat text through the aiur composer to the scope session', async () => {
+    const getElement = vi
+      .spyOn(customElements, 'get')
+      .mockImplementation((name) =>
+        name === AIUR_CONVERSATION_TAG ? undefined : CustomElementRegistry.prototype.get.call(customElements, name),
+      );
+    const send = vi.fn().mockResolvedValue(undefined);
+    mocks.scopeSession.mockReturnValue({
+      sessionId: 's_1',
+      jobId: 'j_1',
+      scope,
+      turns: [],
+      status: 'agreed',
+      error: '',
+      send,
+      addMessage: vi.fn(),
+    });
+
+    const { container } = renderChat();
+    const composer = container.querySelector('aiur-composer') as AiurComposerElement;
+    await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+    expect(composer.shadowRoot?.querySelector('textarea')).toHaveAttribute('placeholder', 'Message the builder');
+    composer.value = 'Add a moonlit market';
+    await composer.send();
+
+    expect(send).toHaveBeenCalledWith('Add a moonlit market', undefined);
+    getElement.mockRestore();
   });
 });
 
