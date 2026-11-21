@@ -10,6 +10,20 @@ const marker = /gm-(?:command|checkpoint):(cp_[0-7][0-9A-HJKMNP-TV-Z]{25})/;
 const openStatuses = new Set(['open', 'pending', 'deferred']);
 const answeredStatuses = new Set(['answered', 'decided', 'acknowledged', 'resolved']);
 const mootStatuses = new Set(['expired', 'dismissed', 'moot']);
+const executorRoutePrefixes = ['dispatch', 'claim', 'tracker', 'budget', 'ci'];
+
+function decisionRoute(decision: Decision): string | undefined {
+  const value = decision.route ?? decision.context?.route;
+  return typeof value === 'string' ? value.toLowerCase().replace(/[- ]/gu, '_') : undefined;
+}
+
+function isExecutorDecision(decision: Decision): boolean {
+  const route = decisionRoute(decision);
+  const kind = typeof decision.kind === 'string' ? decision.kind.toLowerCase().replace(/[- ]/gu, '_') : '';
+  return [route, kind].some(
+    (value) => value !== undefined && executorRoutePrefixes.some((prefix) => value.startsWith(prefix)),
+  );
+}
 
 export function commandMarker(decision: Decision): string | null {
   for (const source of [decision.context?.long_context_markdown, decision.context?.short_summary, decision.question]) {
@@ -25,6 +39,9 @@ export function commandMarker(decision: Decision): string | null {
 // (an engineering or operations question an agent raised with plain `aiur command request`) stays with the Executor.
 // Native creator audience and legacy creator markers identify these decisions; other decisions stay with the Executor.
 export function isForCreator(decision: Decision): boolean {
+  // Aiur route/kind is authoritative: an ops or engineering Command must not leak into creator surfaces even if a
+  // stale/over-broad creator marker is present in its context.
+  if (isExecutorDecision(decision)) return false;
   if (decision.audience === 'creator') return true;
   if (commandMarker(decision) !== null) return true;
   return [decision.context?.long_context_markdown, decision.context?.short_summary, decision.question].some(
