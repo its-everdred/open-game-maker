@@ -66,3 +66,9 @@ A small offline probe used the cached `openai/clip-vit-large-patch14` image enco
 | Door | wallflora 0.666, torch 0.660, ground 0.658 | None is the door; the small crop contains a bright torch and surrounding wall. |
 
 The inspected local sheet is `assets-local/review/1154/clip-kit-diagnostic.png`. This probe supports a visually reviewed shortlist, not automatic matching or a claim that CLIP wins against other encoders. In particular, masking, transparent padding, sprite scale, view angle and candidate coverage need a controlled benchmark. It does not resolve the three-arm scene bake-off or select a winning pipeline.
+
+## Local blockout-first probe
+
+A local image-to-image trial used the existing rendered asset blockout as input, entirely on CPU. The model was [Segmind Tiny SD](https://huggingface.co/segmind/tiny-sd), revision `cad0bd7`, with CreativeML OpenRAIL-M terms; `diffusers` 0.36.0 and CPU PyTorch 2.14.1 ran in an isolated scratch environment. The fixed seed was 1154, the input was resized to 384 × 672, guidance was 6, and the scheduler was given 12 steps. Two strengths were tried: 0.5 (six denoising steps) and 0.25 (three). No pack image was sent to a remote service.
+
+The prompt requested an isometric pixel-art medieval trading courtyard at dusk, torchlight, a stall and carts, and preservation of the input arrangement and camera. The 0.5 result invented people and replaced major structures; the 0.25 result kept the broad wall and stalls but transformed a cart into an unrelated structure. Both visibly softened the pack's pixels. The inspected local outputs are `assets-local/review/1154/local-restyle-failed.png` and `local-restyle-low-failed.png` and are not approved review targets. This is evidence against these two settings on this blockout, not evidence against all local restyling models or a completed C arm. In particular, no independent reconstruction or motion comparison was performed.
