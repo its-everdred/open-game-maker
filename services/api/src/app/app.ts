@@ -15,6 +15,7 @@ export {
   type AiurClientResolver,
   type ChatJob,
   type ChatJobDirectory,
+  type DraftScopeAssistant,
   resolveGame,
   type GameInfo,
   type GameResolver,

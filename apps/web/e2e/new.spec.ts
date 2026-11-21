@@ -123,6 +123,7 @@ test('phone creation flow reaches scope admission and queues at reset', async ({
   await expect(page.getByText('“Moonlit”')).toBeVisible();
   await expect(page.getByText('Three small islands will make a good first version.')).toBeVisible();
   expect(routes.scopeRequests[0]).toMatchObject({ choices: { family: 'smallscaleint', pov: 'iso' } });
+  expect(routes.gameCreations).toBe(0);
   await page.getByRole('textbox', { name: 'Message the builder' }).fill('Keep the first version small.');
   await activate(page, 'Send');
   await expect(page.getByText('Keep the first version small.')).toHaveCount(1);
@@ -136,13 +137,21 @@ test('phone creation flow reaches scope admission and queues at reset', async ({
   expect(testApi.picks).toMatchObject({ genre: { picks: ['adventure'] }, family: { picks: ['smallscaleint'] } });
   expect(testApi.sessionId).toBeTruthy();
 
+  expect(routes.gameCreations).toBe(0);
   await activate(page, 'Finish');
+  await expect(page.getByRole('button', { name: 'Queue for the reset' })).toBeVisible();
+  expect(routes.gameCreations).toBe(1);
   await activate(page, 'Queue for the reset');
   await expect(page).toHaveURL(/\/all\?spotlight=g_/, { timeout: 5_000 });
   expect(routes.scopeMessages).toEqual(['Keep the first version small.']);
   expect(routes.admissions).toHaveLength(2);
   expect(routes.admissions[0]).toMatchObject({ start: 'now', idempotencyKey: expect.stringMatching(/:1$/) });
   expect(routes.admissions[1]).toMatchObject({ start: 'at_reset', idempotencyKey: expect.stringMatching(/:2$/) });
+  expect(routes.gameCreations).toBe(1);
+  expect(routes.draftAttachments).toHaveLength(2);
+  expect(routes.draftAttachments[0]).toMatchObject({ gameId: expect.stringMatching(/^g_/) });
+  expect(routes.draftAttachments[1]).toEqual(routes.draftAttachments[0]);
+  expect(routes.draftCompletions).toBe(2);
 });
 
 test('style detail fits its media and navigation into phone and desktop viewports', async ({ page }) => {

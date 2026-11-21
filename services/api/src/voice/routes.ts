@@ -29,6 +29,7 @@ import { answerVoiceCommand } from './command-answer.js';
 import { deliverInstruction } from './instruct.js';
 import { mintVoiceToken, VOICE_DICTATION_TOKEN_SCOPE } from './token.js';
 import { appendVoiceTranscript } from './transcript.js';
+import { gameDrafts } from '../new-game/drafts.js';
 
 export const prefix = '/';
 
@@ -60,6 +61,19 @@ async function authorizedTarget(c: Context<ApiBindings>) {
   const { target } = await parseBody(c, VoiceTokenRequest);
   const { db } = c.get('deps');
   if (target.creator_id !== principal.userId) throw new HttpError(403, 'not_target_creator');
+  if (target.kind === 'scope') {
+    const draft = gameDrafts.get(db, target.session_id);
+    if (draft && draft.id === target.game_id) {
+      requireAuthorization(
+        authorize(actorFromPrincipal(principal), 'game.edit', {
+          familyId: draft.familyId,
+          ownerId: draft.creatorId,
+        }),
+      );
+      if (!['open', 'agreed'].includes(draft.status)) throw new HttpError(404, 'scope_not_in_game');
+      return { principal, target };
+    }
+  }
   const game = findGameForFamily(db, target.game_id, principal.familyId);
   requireAuthorization(
     authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),

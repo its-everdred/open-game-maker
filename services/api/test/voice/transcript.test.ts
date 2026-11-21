@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import { listSince } from '../../src/build-chat/store.js';
+import { gameDrafts } from '../../src/new-game/drafts.js';
 import { scopeSessions } from '../../src/scope/store.js';
 import type { VoiceTarget } from '../../src/voice/briefing-push.js';
 import { ids, worked } from '../budget/fixture.js';
@@ -152,6 +153,38 @@ describe('POST /internal/voice/transcript', () => {
     expect(listSince(deps.sqlite, ids.running, 0)).toEqual([
       expect.objectContaining({ actor: 'agent', text: 'A cozy cavern platformer sounds good.' }),
     ]);
+  });
+
+  it('routes pre-Finish draft dictation to its temporary chat without a game row', async () => {
+    const { deps, request } = await setup();
+    const draft = gameDrafts.create(deps.db, {
+      familyId: ids.family,
+      creatorId: ids.creator,
+      choices: {
+        genre: 'platformer',
+        vibe: 'cozy',
+        family: 'chunky-low-poly',
+        world: 'cavern',
+        players: 'single',
+        pov: 'side-on',
+      },
+      allowAiGeneratedAssets: true,
+    });
+    gameDrafts.attachTicket(deps.db, draft.id, 'owner/instance', 42);
+    const target: VoiceTarget = {
+      kind: 'scope',
+      game_id: draft.id,
+      session_id: draft.id,
+      creator_id: ids.creator,
+    };
+
+    const response = await request(target, 'creator', 'Make it a moonlit cavern', 'draft-user-1');
+
+    expect(response.status).toBe(200);
+    expect(listSince(deps.sqlite, `draft:${draft.id}`, 0)).toEqual([
+      expect.objectContaining({ actor: 'creator', text: 'Make it a moonlit cavern' }),
+    ]);
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(1); // only the fixture game exists
   });
 
   it('keeps structured idempotency fields distinct when identifiers contain separators', async () => {

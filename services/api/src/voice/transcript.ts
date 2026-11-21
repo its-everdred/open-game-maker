@@ -8,6 +8,7 @@ import type { AppDeps } from '../app/types.js';
 import { getChatRuntime } from '../build-chat/routes.js';
 import { insertChatRow } from '../build-chat/store.js';
 import { scopeSessions } from '../scope/store.js';
+import { gameDrafts } from '../new-game/drafts.js';
 import { targetKey } from './briefing-push.js';
 import { jobFor } from './briefing-push.js';
 import { deliverInstruction } from './instruct.js';
@@ -30,7 +31,14 @@ function buildJob(deps: AppDeps, target: Extract<VoiceTarget, { kind: 'build' }>
 
 function scopeJob(deps: AppDeps, target: Extract<VoiceTarget, { kind: 'scope' }>): string | null {
   const session = scopeSessions.get(deps.db, target.session_id);
-  return session?.game_id === target.game_id && session.creator_id === target.creator_id ? session.job_id : null;
+  if (session?.game_id === target.game_id && session.creator_id === target.creator_id) return session.job_id;
+  const draft = gameDrafts.get(deps.db, target.session_id);
+  return draft &&
+    draft.id === target.game_id &&
+    draft.creatorId === target.creator_id &&
+    ['open', 'agreed'].includes(draft.status)
+    ? `draft:${draft.id}`
+    : null;
 }
 
 // A question session belongs to the game, so its words go to the creator's newest build chat in that game.

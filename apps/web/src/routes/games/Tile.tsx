@@ -25,14 +25,22 @@ type TileProps = {
 };
 
 export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCover }: TileProps) {
+  const unavailable = game.creationStatus === 'creating' || game.creationStatus === 'failed';
+  const statusLabel = game.creationStatus === 'creating' ? 'Creating' : 'Setup failed';
+  const accessibleName = unavailable
+    ? `${game.title}: ${statusLabel}`
+    : game.tagline
+      ? `${game.title}: ${game.tagline}`
+      : game.title;
   if (game.showcase) {
     const tags = game.showcase.displayTags.filter((tag) => tag.kind === 'genre' || tag.kind === 'vibe').slice(0, 4);
     return (
       <button
         type="button"
         className="game-tile showcase-tile"
-        aria-label={`${game.title}: ${game.showcase.tagline}`}
+        aria-label={unavailable ? accessibleName : `${game.title}: ${game.showcase.tagline}`}
         aria-pressed={selected}
+        disabled={unavailable}
         tabIndex={tabIndex}
         onClick={onClick}
         onFocus={onFocus}
@@ -40,6 +48,11 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
         <span className="game-cover">
           {sharedCover ? <span data-cover-slot /> : <Cover game={game} />}
           {job && <span className="game-building-chip">{jobLabel(job)}</span>}
+          {unavailable && (
+            <span className="game-building-chip">
+              {game.creationStatus === 'creating' ? 'Creating…' : 'Setup failed'}
+            </span>
+          )}
           {game.showcase.badge && <span className="game-new-badge">{game.showcase.badge}</span>}
           {game.logoUrl && (
             <DisplayImage
@@ -79,7 +92,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
       ]),
     ).values(),
   ].slice(0, 4);
-  const label = game.tagline ? `${game.title}: ${game.tagline}` : game.title;
+  const label = accessibleName;
 
   return (
     <button
@@ -87,6 +100,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
       className="game-tile"
       aria-label={label}
       aria-pressed={selected}
+      disabled={unavailable}
       tabIndex={tabIndex}
       onClick={onClick}
       onFocus={onFocus}
@@ -94,6 +108,11 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
       <span className="game-cover">
         {sharedCover ? <span data-cover-slot /> : <Cover game={game} />}
         {job && <span className="game-building-chip">{jobLabel(job)}</span>}
+        {unavailable && (
+          <span className="game-building-chip">
+            {game.creationStatus === 'creating' ? 'Creating…' : 'Setup failed'}
+          </span>
+        )}
         {!game.publishedReleaseId && <span className="game-new-badge">New</span>}
         {game.logoUrl && (
           <DisplayImage

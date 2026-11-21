@@ -42,6 +42,7 @@ function fakeTransport(): ScopeTransport {
   return {
     createSession: vi.fn().mockResolvedValue({ sessionId: 's_1', jobId: 'j_1' }),
     getSession: vi.fn().mockResolvedValue({ sessionId: 's_1', chatJobId: 'j_1', status: 'agreed', scope }),
+    abandonSession: vi.fn().mockResolvedValue(undefined),
     postText: vi.fn().mockResolvedValue({
       id: 'm_2',
       job_id: 'j_1',
@@ -134,6 +135,35 @@ describe('useScopeSession', () => {
     await act(async () => result.current.send('use my sketch', ['a_1', 'a_2']));
 
     expect(transport.postText).toHaveBeenCalledWith('j_1', 'use my sketch', ['a_1', 'a_2']);
+  });
+
+  it('abandons the temporary scope session when the creator leaves before Finish', async () => {
+    const transport = fakeTransport();
+    const { result, unmount } = renderHook(() => useScopeSession('new-draft', choices, transport));
+    await waitFor(() => expect(result.current.sessionId).toBe('s_1'));
+
+    unmount();
+
+    expect(transport.abandonSession).toHaveBeenCalledWith('new-draft', 's_1');
+  });
+
+  it('abandons a draft if the creator leaves while it is still being created', async () => {
+    const transport = fakeTransport();
+    let resolveCreate!: (value: { sessionId: string; jobId: string }) => void;
+    const creation = new Promise<{ sessionId: string; jobId: string }>((resolve) => {
+      resolveCreate = resolve;
+    });
+    vi.mocked(transport.createSession).mockReturnValue(creation);
+    const { unmount } = renderHook(() => useScopeSession('new-draft', choices, transport));
+
+    unmount();
+    await act(async () => {
+      resolveCreate({ sessionId: 's_1', jobId: 'j_1' });
+      await creation;
+      await Promise.resolve();
+    });
+
+    expect(transport.abandonSession).toHaveBeenCalledWith('new-draft', 's_1');
   });
 
   it('reports a missing scope route without enabling admission', async () => {

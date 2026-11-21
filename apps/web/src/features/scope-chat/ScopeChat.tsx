@@ -9,7 +9,7 @@ import { useSession } from '../../lib/api/session';
 import { answerJobCommand } from '../build-chat/commands';
 import { AiurComposer } from '../build-chat/AiurComposer';
 import { formatUnits } from '../build-chat/units';
-import { AiurConversation, jobScope, type AiurCommandAnswer } from '../aiur/embed';
+import { AiurConversation, draftJobScope, jobScope, type AiurCommandAnswer } from '../aiur/embed';
 import { admitNewGame, type AdmissionResult, type SupportedOffer } from './admit';
 import { Captions } from './Captions';
 import { energyRefusalText } from '../energy/api';
@@ -19,19 +19,31 @@ import { useScopeSession } from './useScopeSession';
 export function ScopeChat({
   gameId,
   choices,
+  allowAiGeneratedAssets = true,
   onSession,
+  onFinish,
 }: {
   gameId: string;
   choices: ScopeChoices;
+  allowAiGeneratedAssets?: boolean;
   onSession?(sessionId: string): void;
+  onFinish?(input: {
+    gameId: string;
+    sessionId: string;
+    scope: NonNullable<ReturnType<typeof useScopeSession>['scope']>;
+    attempt: number;
+    start: 'now' | 'at_reset';
+    retainDraft(): void;
+  }): Promise<AdmissionResult>;
 }) {
   const navigate = useNavigate();
   const { data: session } = useSession();
-  const scopeSession = useScopeSession(gameId, choices);
+  const scopeSession = useScopeSession(gameId, choices, undefined, allowAiGeneratedAssets);
   const conversationSection = useRef<HTMLElement>(null);
   const [refusal, setRefusal] = useState<Extract<AdmissionResult, { kind: 'refused' }>>();
   const [attempt, setAttempt] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [admissionError, setAdmissionError] = useState('');
   const [waitingForAdmin, setWaitingForAdmin] = useState(false);
   const budget = useQuery({
@@ -45,7 +57,7 @@ export function ScopeChat({
       scopeSession.sessionId && session?.user.id
         ? {
             kind: 'scope' as const,
-            game_id: gameId,
+            game_id: gameId === 'new-draft' ? scopeSession.sessionId : gameId,
             session_id: scopeSession.sessionId,
             creator_id: session.user.id,
           }
@@ -62,19 +74,31 @@ export function ScopeChat({
   }, [scopeSession.jobId]);
 
   const admit = async (start: 'now' | 'at_reset') => {
-    if (!scopeSession.sessionId || !scopeSession.scope) return;
+    if (submittingRef.current || !scopeSession.sessionId || !scopeSession.scope) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setAdmissionError('');
     try {
-      const result = await admitNewGame(
-        { gameId, sessionId: scopeSession.sessionId, scope: scopeSession.scope, attempt, start },
-        { request: api, navigate },
-      );
+      const result = onFinish
+        ? await onFinish({
+            gameId,
+            sessionId: scopeSession.sessionId,
+            scope: scopeSession.scope,
+            attempt,
+            start,
+            retainDraft: scopeSession.retain,
+          })
+        : await admitNewGame(
+            { gameId, sessionId: scopeSession.sessionId, scope: scopeSession.scope, attempt, start },
+            { request: api, navigate },
+          );
       if (result.kind === 'refused') setRefusal(result);
+      if (!onFinish && result.kind === 'accepted') scopeSession.retain();
       setAttempt((current) => current + 1);
     } catch {
       setAdmissionError('The build could not be started. Try again.');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -125,7 +149,15 @@ export function ScopeChat({
         {scopeSession.jobId ? (
           // New Game creation uses the same conversation component as the job modal; aiur replaces the captions and
           // composer once its element is installed, and the admission controls stay Open Game Maker's.
-          <AiurConversation scope={jobScope(gameId, scopeSession.jobId, null)} title="New game" onAnswer={answer}>
+          <AiurConversation
+            scope={
+              gameId === 'new-draft' && scopeSession.sessionId
+                ? draftJobScope(scopeSession.sessionId, scopeSession.jobId)
+                : jobScope(gameId, scopeSession.jobId, null)
+            }
+            title="New game"
+            onAnswer={answer}
+          >
             {conversation}
           </AiurConversation>
         ) : (

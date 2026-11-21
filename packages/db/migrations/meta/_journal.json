@@ -316,6 +316,13 @@
       "when": 1795183337172,
       "tag": "20261120140217_prototype_review_sweep_state",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1795212294017,
+      "tag": "20261120220454_game_drafts",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ export type DisplayImage = {
 export type GameSummary = {
   showcase?: Showcase;
   id: string;
+  creationStatus?: 'creating' | 'failed' | 'ready';
   familyId: string;
   ownerId: string;
   title: string;

@@ -29,6 +29,17 @@ reads. A set id (for example `limezu-modern`) is refused with its family named; 
 `--set` must name a set in that registry and, when `--family` is present, belong to the chosen family. It records the
 set in `gm.lock.json` and pins the exact `@gm/pack-<set>` version.
 
+## Prune failed game creates
+
+```text
+gm admin games prune-failed [--dry-run | --prune] [--api <url>]
+```
+
+Lists games whose latest commit audit records a refused or failed `create_game` before a repository could be resolved,
+with no repository metadata or release. The default is a dry run; `--dry-run` makes that explicit. Pass `--prune` to
+remove only those audited rows. The command uses the host's `OGM_INTERNAL_TOKEN` and
+`OGM_API_PORT` from `api.env`; `--api` can select a loopback API explicitly.
+
 ## Preview an unmerged build
 
 ```text

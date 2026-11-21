@@ -33,4 +33,27 @@ describe('QA create fence', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('lists only the latest refused or failed create audit for pruning', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qa-audit-'));
+    try {
+      await mkdir(join(dir, 'commit'), { recursive: true });
+      await writeFile(
+        join(dir, 'commit', 'audit.jsonl'),
+        [
+          { gameId: 'g_failed', op: 'create_game', repo: 'unresolved', result: 'error' },
+          { gameId: 'g_refused', op: 'create_game', repo: 'unresolved', result: 'refused' },
+          { gameId: 'g_recovered', op: 'create_game', result: 'error' },
+          { gameId: 'g_recovered', op: 'create_game', result: 'allowed' },
+          { gameId: 'g_partial', op: 'create_game', repo: 'instance/games', result: 'error' },
+          { gameId: 'g_other_op', op: 'merge', result: 'error' },
+        ]
+          .map((entry) => JSON.stringify(entry))
+          .join('\n') + '\n',
+      );
+      expect(await new QaCreateFence(dir).failedCreateIds()).toEqual(['g_failed', 'g_refused']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
