@@ -4,7 +4,6 @@ tracker:
   active_states:
     - todo
     - in-progress
-    - human-review
     - rework
     - merging
   terminal_states:
@@ -13,7 +12,7 @@ tracker:
     - cancelled
     - canceled
   github:
-    repo: its-everdred/open-game-maker-2000
+    repo: its-everdred/open-game-maker
     label_prefix: agent
     # Agents push and post as Kevin's own login (single-identity install); the credential is GITHUB_TOKEN in ~/.aiur/.env.
     bot_account: its-everdred
@@ -65,13 +64,38 @@ workspace:
 hooks_file: hooks
 prompt_file: prompt.md
 agent:
+  # Skills by lane (aiur #7489, NUC-OGM 2026-11-06). Lanes come from build-lane:* labels.
+  skills:
+    by_lane:
+      assets: [gm-asset-intake, gm-assets, gm-asset-variants, gm-pack-scout, gm-props-procedural, gm-verify]
+      design: [gm-design-loop, gm-assets, gm-verify]
+      web: [gm-design-loop, gm-verify]
+      engine: [gm-verify]
+      capstone: [gm-verify]
+    by_label:   # Fidelity ladder (Kevin 2026-11-16, core #830): any ticket on a creator ladder rung loads the ladder skill
+      # Kevin 2026-11-20: lanes enforced by label, not by asking the agent (creative starts with pure image mocks; clone copies the pack style)
+      "lane:creative": [gm-image-mock, gm-prototype]
+      "lane:clone": [gm-sprite-forge, gm-verify]
+      "phase:mock": [gm-prototype, gm-image-mock]
+      "phase:prototype": [gm-prototype]
+      "phase:build": [gm-prototype]
+      "phase:polish": [gm-prototype]
   # Codex (ChatGPT login) first; both Claude logins behind it. headroom sends each new ticket to the backend and
   # account with the most usage left (Kevin, 2026-10-31: Codex until its limit, then the Claude login with the most tokens).
-  priority: [codex, claude]
+  priority: [codex, claude]   # Kevin 2026-11-20: Codex first, then the Claude logins, on both machines (OpenRouter out of credit)
   accounts:
-    claude: [default]   # Kevin's goal: after Codex's limit, the Claude login with the most tokens — default (second is at 15 % left, 2026-11-01 19:10Z)
+    codex: [gamebuilder]   # the game-build Codex login
+    claude: [second, default]   # Kevin 2026-11-10: both Claude logins, after Codex and OpenRouter
   account_selection: priority   # Kevin 2026-11-01: Codex first until its limit, then Claude; headroom had put every worker on claude/second (26% vs codex 24%)
-  max_concurrent_agents: 12
+  backend_configs:
+    openrouter:
+      command_sandbox:
+        read_only_binds:
+          - /home/orangekid/games/open-game-maker-2000/assets-local
+      provider:
+        allow_fallbacks: true
+        sort: price
+  max_concurrent_agents: 3   # 2026-11-21 22:30Z host load 80-90 PSI 90; restore 5 with open-games
   max_concurrent_builds: 3
   build_start_stagger_seconds: 5
   build_nice: 10
@@ -81,7 +105,7 @@ agent:
   # Kevin 2026-11-01: ramp as fast as is safe. PSI target/ceiling instead of the 20% default gate; three slots per poll
   # below 80% of target; a saved "safe level" older than 10 minutes is ignored so a restart ramps from the step.
   target_cpu_pressure: 80
-  max_cpu_pressure: 92
+  max_cpu_pressure: 88
   load_ramp_step: 3
   load_cooldown_seconds: 20
   load_resume_max_age_seconds: 600
@@ -96,26 +120,36 @@ agent:
   prior_work_continuation: true
   codex:
     command: codex app-server
+    read_timeout_ms: 10000   # liveness probe gave 5 s; slow answers under CPU load SIGKILLed whole turns (exit 137, 286 kills 2026-11-15)
     approval_policy: never
     thread_sandbox: workspace-write
     turn_sandbox_policy:
       type: workspaceWrite
       writableRoots:
         - /home/orangekid/.aiur/workspaces
+        - /home/orangekid/.aiur/w
+        - /home/orangekid/.local/share/pnpm/store
+        - /home/orangekid/.local/state/mise
         - /tmp
+        - /home/orangekid/games/open-game-maker-2000/assets-local/sets
+        - /home/orangekid/games/open-game-maker-2000/assets-local/experiments
+        - /home/orangekid/games/open-game-maker-2000/assets-local/review
+        - /run/user/1001/ogm-verify
+        - /home/orangekid/games/open-game-maker-2000/assets-local/packs/angais-pixel-art-atlas
+        - /home/orangekid/games/open-game-maker-2000/assets-local/packs/limezu-modern-farm
       networkAccess: true
   claude:
-    command: aiur-claude
+    command: /home/orangekid/.aiur/repo/its-everdred/open-game-maker-2000/executor/claude-headless/aiur-claude
     permission_mode: bypassPermissions
 executor:
-  relay_operator_answers: false
+  relay_operator_answers: true
 observability:
   telemetry_retention_max_bytes: 67108864
   telemetry_retention_max_age_days: 30
 
 # === Warm base pre-warm (added by `aiur init`) ===
 prewarm:
-  enabled: true
+  enabled: false
   base_build_file: prewarm
   poll_seconds: 0
 
@@ -123,3 +157,11 @@ prewarm:
 elevenlabs:
   enabled: false
   api_key: $ELEVENLABS_API_KEY   # key only: the dashboard's ElevenLabs quota meter (free read); voice stays off (Kevin, 2026-11-01)
+capacity:   # Kevin 2026-11-10: stop dispatching to a Claude login at 95% usage (5% buffer)
+  sources:
+    claude:
+      reserve:
+        percent: 5
+
+decisions:
+  require_option_media: true
