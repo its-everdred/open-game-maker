@@ -6,3 +6,12 @@ export { renderDappleMask, sampleShaftIntensity } from './dapple.js';
 export type { DappleMaskOptions, DappleMaskSettings } from './dapple.js';
 export { gradeColor, timeOfDayGrade } from './grade.js';
 export type { ColorGrade, RGB } from './grade.js';
+export { createLighting } from './create.js';
+export type {
+  Lighting,
+  LightingLight,
+  LightingOptions,
+  LightingSprite,
+  LightingTarget,
+  NormalSource,
+} from './field.js';
