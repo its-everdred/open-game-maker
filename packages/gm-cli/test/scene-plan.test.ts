@@ -19,6 +19,7 @@ function input(): ScenePlanInput {
           { id: 'stall-asset', model: 'local-v1', vector: [0, 1] },
         ],
         selectedAsset: 'cart-asset',
+        searchComplete: true,
       },
     ],
     dressing: { field: { width: 2, height: 1, weights: [0, 1] }, options: { count: 1, radius: 0, seed: 7 } },
@@ -52,6 +53,11 @@ describe('scene placement plan', () => {
     const object = buildScenePlan(scene).objects[0]!;
     expect(object.selectedAsset).toBe('reviewed');
     expect(object.matches.map((match) => match.id)).not.toContain('reviewed');
+  });
+  it('refuses placements based on a truncated visual search', () => {
+    const scene = input();
+    scene.objects = [{ ...scene.objects[0]!, searchComplete: false }];
+    expect(() => buildScenePlan(scene)).toThrow('visual search is incomplete');
   });
   it('refuses selections not in the available shortlist and duplicate object ids', () => {
     const bad = input();

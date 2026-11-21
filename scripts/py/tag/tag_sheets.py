@@ -306,7 +306,7 @@ def expected_sheet_key(card: dict, collection_rights: dict, restrictions=()) -> 
     return f"{prefix}/{digest[:2]}/{digest[:16]}-{kind}-sheet.webp"
 
 
-def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
+def eligible_cards(pack: Path, kind: str | None = None, *, include_reviewed=False, required_uses=("vision-input",), facing=None) -> list[dict]:
     if pack.is_symlink():
         raise ValueError("collection directory symlinks are not allowed")
     try:
@@ -325,7 +325,7 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
             return []
     except (OSError, json.JSONDecodeError, KeyError, TypeError):
         return []
-    if "vision-input" not in rights.get("uses", []) or rights.get("processing", "local-only") not in ("any", "local-only"):
+    if not all(use in rights.get("uses", []) for use in required_uses) or rights.get("processing", "local-only") not in ("any", "local-only"):
         return []
     assets_root = pack.parents[1]
     rows = []
@@ -348,7 +348,7 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
                 raise ValueError(f"visual source alias: {name}")
             by_source.setdefault(name, []).append(item)
     for path, card in cards:
-        if card.get("status") == "reviewed" or _locked(card, "previews.sheet"):
+        if not include_reviewed and (card.get("status") == "reviewed" or _locked(card, "previews.sheet")):
             continue
         if card.get("kind") not in VISUAL_KINDS or (kind and card.get("kind") != kind):
             continue
@@ -359,9 +359,16 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
                 continue
         files = card.get("source", {}).get("files", [])
         primary = next((file for file in files if file.get("role") == "primary"), files[0] if files else {})
+        if facing is not None:
+            if card.get("kind") != "sprite":
+                continue
+            selected = card.get("sprite", {}).get("facings", {}).get(facing)
+            primary = next((file for file in files if file.get("path") == selected), {})
+            if not selected or not primary:
+                continue
         restrictions = by_source.get(primary.get("path"), [card])
         grants = [item["rights"] if "rights" in item else rights for item in restrictions]
-        if any(not isinstance(grant, dict) or "vision-input" not in grant.get("uses", []) or grant.get("processing", "local-only") not in ("any", "local-only") for grant in grants):
+        if any(not isinstance(grant, dict) or any(use not in grant.get("uses", []) for use in required_uses) or grant.get("processing", "local-only") not in ("any", "local-only") for grant in grants):
             continue
         source = (extracted / primary.get("path", "")).resolve()
         if source != extracted / primary.get("path", "") or not source.is_relative_to(extracted) or not source.is_file():
@@ -369,6 +376,9 @@ def eligible_cards(pack: Path, kind: str | None = None) -> list[dict]:
         with source.open("rb") as stream:
             actual_hash = "sha256:" + hashlib.file_digest(stream, "sha256").hexdigest()
         if actual_hash != primary.get("sha256"):
+            continue
+        if facing is not None:
+            rows.append({"card": card, "path": path, "preview": source, "collection": pack / "collection.card.json"})
             continue
         preview = card.get("previews", {}).get("sheet")
         if isinstance(preview, str) and preview == expected_sheet_key(card, rights, restrictions):

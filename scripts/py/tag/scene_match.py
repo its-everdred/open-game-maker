@@ -1,0 +1,131 @@
+"""Rank rights-eligible local visual previews against a mock crop with cached CLIP.
+
+This is a shortlist, not an asset selection or a game-camera renderer. The
+caller must establish that the mock itself permits local vision processing.
+"""
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import tag_sheets
+
+MODEL = tag_sheets.CLIP_ID
+MAX_PIXELS = 25_000_000
+
+
+def crop_mock(path, bounds):
+    with Image.open(path) as image:
+        if image.width * image.height > MAX_PIXELS:
+            raise ValueError("mock exceeds image size limit")
+        x, y, width, height = bounds
+        if min(x, y) < 0 or min(width, height) < 1 or x + width > image.width or y + height > image.height:
+            raise ValueError("crop exceeds mock bounds")
+        return flatten(image.crop((x, y, x + width, y + height)))
+
+
+def flatten(image):
+    rgba = image.convert("RGBA")
+    background = Image.new("RGBA", rgba.size, (74, 62, 45, 255))
+    background.alpha_composite(rgba)
+    return background.convert("RGB")
+
+
+def eligible(assets_root, pack_id, limit, facing):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", pack_id) or ".." in pack_id:
+        raise ValueError("invalid pack id")
+    packs = assets_root.resolve() / "packs"
+    pack = packs / pack_id
+    if packs.is_symlink() or pack.is_symlink() or not pack.is_dir():
+        raise ValueError("pack is missing or is a symlink")
+    code, failures, _ = tag_sheets.validate(packs, [], [pack_id])
+    if code or failures:
+        raise ValueError("pack cards failed rights and schema validation")
+    rows = tag_sheets.eligible_cards(pack, "sprite", include_reviewed=True, required_uses=("vision-input", "in-game"), facing=facing)
+    rows = [row for row in rows if row["card"].get("status") != "quarantined" and row["preview"].is_file()]
+    ids = [row["card"].get("id") for row in rows]
+    if any(not isinstance(value, str) or not value for value in ids) or len(ids) != len(set(ids)):
+        raise ValueError("candidate card ids are missing or duplicated")
+    return rows[:limit], len(rows)
+
+
+def rank(ids, vectors):
+    array = np.asarray(vectors, dtype=np.float64)
+    if array.ndim != 2 or array.shape[0] != len(ids) + 1 or array.shape[1] == 0 or not np.isfinite(array).all():
+        raise ValueError("invalid image embeddings")
+    norms = np.linalg.norm(array, axis=1)
+    if not np.isfinite(norms).all() or np.any(norms == 0):
+        raise ValueError("invalid image embeddings")
+    normalized = array / norms[:, None]
+    scores = normalized[1:] @ normalized[0]
+    return sorted(({"id": name, "similarity": float(score)} for name, score in zip(ids, scores)),
+                  key=lambda item: (-item["similarity"], item["id"]))[:3]
+
+
+def embed(images):
+    import torch
+    from transformers import CLIPModel, CLIPProcessor
+
+    torch.set_num_threads(2)
+    model = CLIPModel.from_pretrained(MODEL, local_files_only=True).eval()
+    processor = CLIPProcessor.from_pretrained(MODEL, local_files_only=True)
+    features = []
+    with torch.inference_mode():
+        for start in range(0, len(images), 8):
+            inputs = processor(images=images[start:start + 8], return_tensors="pt")
+            features.extend(model.visual_projection(model.vision_model(pixel_values=inputs["pixel_values"]).pooler_output).cpu().numpy())
+    return features
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--assets-root", type=Path, required=True)
+    parser.add_argument("--pack", required=True)
+    parser.add_argument("--mock", type=Path, required=True)
+    parser.add_argument("--crop", required=True, help="x,y,width,height in pixels")
+    parser.add_argument("--facing", required=True, choices=("N", "NE", "E", "SE", "S", "SW", "W", "NW"))
+    parser.add_argument("--limit", type=int, default=1000)
+    parser.add_argument("--include-vectors", action="store_true", help="include local embeddings for placement planning")
+    args = parser.parse_args()
+    if not 1 <= args.limit <= 1000:
+        raise ValueError("limit must be between 1 and 1000")
+    try:
+        bounds = tuple(int(value) for value in args.crop.split(","))
+    except ValueError as error:
+        raise ValueError("crop must be x,y,width,height") from error
+    if len(bounds) != 4:
+        raise ValueError("crop must be x,y,width,height")
+    rows, total = eligible(args.assets_root, args.pack, args.limit, args.facing)
+    if not rows:
+        raise ValueError("no eligible preview cards")
+    images = [crop_mock(args.mock, bounds)]
+    total_pixels = images[0].width * images[0].height
+    for row in rows:
+        with Image.open(row["preview"]) as image:
+            total_pixels += image.width * image.height
+            if image.width * image.height > MAX_PIXELS or total_pixels > 50_000_000:
+                raise ValueError("previews exceed image size limit")
+            images.append(flatten(image))
+    vectors = embed(images)
+    ids = [row["card"]["id"] for row in rows]
+    results = rank(ids, vectors)
+    output = {"model": MODEL, "matches": results, "examined": len(rows), "eligible": total,
+              "truncated": len(rows) < total, "preview": f"source facing {args.facing}; camera match not verified"}
+    if args.include_vectors:
+        output["query"] = {"model": MODEL, "vector": np.asarray(vectors[0]).tolist()}
+        output["candidates"] = [{"id": name, "model": MODEL, "vector": np.asarray(vector).tolist()}
+                                for name, vector in zip(ids, vectors[1:])]
+    print(json.dumps(output, allow_nan=False))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"scene match: {error}", file=sys.stderr)
+        sys.exit(1)
