@@ -54,3 +54,15 @@ A scratch copy of the game at the revision above was built in test mode with the
 Neither is a valid completed bake-off arm: the scene has not been registered to the reference, the region list and matches were manually authored, no metric or motion was measured, and the third arm is absent. Inspecting the overlays reveals major differences in camera framing, wall silhouette, house coverage, lighting, scale and dressing density. These results do not establish whether a parsing or retrieval model helps.
 
 The fantasy pack card records `processing: local-only`. The generated mock skill prohibits sending paid-pack renders to a hosted generator, and the blockout is a render of that pack. A local image generation stack was not found in the checked cache or Python environment. Do not send this blockout to the broker or treat a simple colour filter as the requested beauty pass. A rights-compatible local generator is needed to test that arm with the same pack.
+
+## Local visual retrieval probe
+
+A small offline probe used the cached `openai/clip-vit-large-patch14` image encoder on CPU, with approximate rectangular crops of the approved phone composite and 25 existing environment kit images. The collection card permits `vision-input` and requires `local-only` processing; inference and the contact sheet stayed local. Transparent kit pixels were composited over a fixed dark brown background. The crops are approximate, not masks, and the candidate set is a hand-selected kit, not the full catalog.
+
+| Crop | Top three kit labels (cosine similarity) | Visual observation |
+| --- | --- | --- |
+| Stall | market stall 0.777, house roof 0.702, chest 0.687 | The first has the right canopy and posts, but is smaller and less detailed than the mock. |
+| Cart | cart 0.784, roof 0.698, market stall 0.661 | The first is recognizably the same kind of cart, though the mock's silhouette differs. |
+| Door | wallflora 0.666, torch 0.660, ground 0.658 | None is the door; the small crop contains a bright torch and surrounding wall. |
+
+The inspected local sheet is `assets-local/review/1154/clip-kit-diagnostic.png`. This probe supports a visually reviewed shortlist, not automatic matching or a claim that CLIP wins against other encoders. In particular, masking, transparent padding, sprite scale, view angle and candidate coverage need a controlled benchmark. It does not resolve the three-arm scene bake-off or select a winning pipeline.
