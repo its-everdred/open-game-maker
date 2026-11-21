@@ -19,7 +19,7 @@ Usage:
   scripts/meta/review-loop-metric.py                # the 1 h and 24 h windows (what the hourly meta pass logs)
   scripts/meta/review-loop-metric.py --hours 6      # one window
   scripts/meta/review-loop-metric.py --hours 24 --rows   # plus one line per iteration
-  options: --no-gh (skip GitHub comment lookups), --picks DIR, --transcript FILE, --now ISO (replay)
+  options: --no-gh (skip GitHub comment lookups), --picks DIR, --publish-log FILE, --transcript FILE, --now ISO (replay)
 
 The meta pass copies the `REVIEW_LOOP ...` and `REVIEW_QUEUE ...` lines into its `## Review loop` section and diffs them
 against the last pass. REVIEW_QUEUE is what Kevin has to review right now: open creator Commands per game, and each
@@ -33,8 +33,11 @@ Sources (all local files; no daemon RPC, so a slow or restarting daemon cannot s
   relays          answer.accepted_at, else the first verdict comment on the ticket (gh, 15 s timeout),
                   else the first agent.rework label event in ticket-events
   worker receipt  Codex rollouts of the ticket's workspace (first user message with the note or the decision id)
-  page publishes  `Published .../review-all/index.html` results in the Executor session transcript, read
-                  incrementally (offset cached in ~/.cache/ogm/review-loop-publishes.json)
+  page publishes  review-publish-log.txt in the scratchpad (`HH:MM published v<ver> keys=<ids on the page>`, local
+                  time; written by pubdone.sh since the relay agent took over publishing on 2026-11-20), plus, for
+                  older history, `Published .../review-all/index.html` results in the Executor session transcript,
+                  read incrementally (offset cached in ~/.cache/ogm/review-loop-publishes.json). With the log's keys
+                  a round counts as visible only on the first publish that carries its Command id.
 Runs in a few seconds once the cache is warm (about 30 s cold on the 1 GB transcript).
 """
 import argparse, glob, json, os, re, statistics, subprocess, sys
@@ -159,6 +162,33 @@ def load_publishes(transcript):
     return sorted(ts(t) for t in set(state["times"]))
 
 
+def load_publish_log(path):
+    """[(utc time, {keys on the page})] from review-publish-log.txt. Lines carry local HH:MM only; versions
+    `v<epoch s>-xxxx` (since 2026-11-21) pin the date, and walking back a later HH:MM than the line after it
+    means the previous day."""
+    rows = []
+    try:
+        for line in open(path, errors="replace"):
+            m = re.match(r"(\d\d):(\d\d) published v(\S*).*?keys=(.*)$", line.strip())
+            if m:
+                ep = re.match(r"(\d{10})-", m.group(3))
+                rows.append((int(m.group(1)) * 60 + int(m.group(2)), int(ep.group(1)) if ep else None, set(m.group(4).split())))
+    except OSError:
+        return []
+    out, day, later = [], datetime.fromtimestamp(os.path.getmtime(path)).date(), None
+    for hm, ep, keys in reversed(rows):
+        if ep:
+            t = datetime.fromtimestamp(ep, timezone.utc)
+            day = t.astimezone().date()
+        else:
+            if later is not None and hm > later:
+                day -= timedelta(days=1)
+            t = datetime(day.year, day.month, day.day, hm // 60, hm % 60).astimezone().astimezone(timezone.utc)
+        later = hm
+        out.append((t, keys))
+    return sorted(out, key=lambda x: x[0])
+
+
 def rollouts_since(start):
     """{(repo, ticket): [rollout paths]} for Codex worker threads touched since `start`."""
     out = {}
@@ -222,7 +252,9 @@ def rework_event(repo, ticket, after):
 def iterations(start, now, args):
     cmds, by_ticket = load_commands()
     picks = load_picks(args.picks, cmds)
-    pubs = [p for p in load_publishes(args.transcript) if p <= now]
+    logged = [(t, k) for t, k in load_publish_log(args.publish_log) if t <= now] if args.publish_log else []
+    cut = logged[0][0] if logged else now
+    pubs = sorted([(p, None) for p in load_publishes(args.transcript) if p < cut] + logged, key=lambda x: x[0])
     rolls = rollouts_since(start - timedelta(hours=1))
     todo = [(k, p) for k, p in picks.items() if k in cmds and start <= p["first"] <= now]
     relay_gh = {}
@@ -237,15 +269,16 @@ def iterations(start, now, args):
     for k, p in sorted(todo, key=lambda kp: kp[1]["first"]):
         c = cmds[k]
         key = (c["repo"], c["ticket"])
-        shown = max((x for x in pubs if c["created"] <= x <= p["first"]), default=None)
+        shown = max((x for x, ks in pubs if c["created"] <= x <= p["first"] and (ks is None or k in ks)), default=None)
         relay = min((t for t in (c["answered"], relay_gh.get(k)) if t and t >= p["first"] - timedelta(seconds=5)), default=None) \
             or rework_event(c["repo"], c["ticket"], p["first"])
         needles = [k] + ([json.dumps(p["note"][:28], ensure_ascii=False)[1:-1]] if len(p["note"]) >= 8 else [f"his words: {p['label']}"])
         got = worker_receipt(rolls.get(key, []), start, p["first"], needles) or \
             (c["delivered"] if c["delivered"] and c["delivered"] >= p["first"] else None)
-        nxt = next((x for x in by_ticket[key] if got and got < x["created"] <= now), None)
+        since = got or relay or p["first"]      # a worker on the Claude backend leaves no Codex rollout to read
+        nxt = next((x for x in by_ticket[key] if since < x["created"] <= now), None)
         asks_change = bool(re.search(r"chang|revis|dislike", p["label"], re.I))
-        vis = next((x for x in pubs if nxt and x >= nxt["created"]), None)
+        vis = next((x for x, ks in pubs if nxt and x >= nxt["created"] and (ks is None or nxt["id"] in ks)), None)
         rows.append({"key": k, "ticket": ("" if c["repo"] == "core" else "og") + "#" + c["ticket"], "label": p["label"],
                      "created": c["created"], "shown": shown, "pick": p["first"], "relay": relay, "got": got,
                      "next": nxt["created"] if nxt else None, "visible": vis,
@@ -372,6 +405,7 @@ def main():
     ap.add_argument("--rows", action="store_true", help="one line per iteration")
     ap.add_argument("--no-gh", action="store_true", help="skip GitHub comment lookups")
     ap.add_argument("--picks", default=newest(f"/tmp/claude-*/{PROJECT}/*/scratchpad/picks-live/picks"))
+    ap.add_argument("--publish-log", default=newest(f"/tmp/claude-*/{PROJECT}/*/scratchpad/review-publish-log.txt"))
     ap.add_argument("--transcript", default=newest(os.path.join(HOME, ".claude-2/projects", PROJECT, "*.jsonl")))
     ap.add_argument("--now", help="ISO time to evaluate at (default: now)")
     args = ap.parse_args()
