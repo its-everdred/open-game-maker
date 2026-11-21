@@ -17,7 +17,7 @@ const contentTypes: Record<string, string> = {
 const server = createServer(async (request, response) => {
   if (request.url === '/health') return response.end('ok');
   const pathname = new URL(request.url ?? '/', 'http://127.0.0.1:4181').pathname;
-  const match = /^\/(audio|camera)(\/.*)?$/.exec(pathname);
+  const match = /^\/(audio|camera|hd2d)(\/.*)?$/.exec(pathname);
   if (!match) {
     response.writeHead(404);
     return response.end('not found');
