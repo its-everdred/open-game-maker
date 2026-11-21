@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { ScopeChoices } from '@ogm/contracts';
 import { audioDirectionText, hasAudioDirection } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
-import { and, desc, eq, lte } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte } from 'drizzle-orm';
 
 // A New Game request's parent issue: the one issue the New Game flow files when the creator finishes the scope chat.
 // It carries only a privacy-safe summary and an opaque reference; the conversation, transcripts, pastes, attachments
@@ -93,7 +93,7 @@ function choicesSection(choices: ScopeChoices | null): string {
 function latestAgreedChoices(db: Db, job: Pick<JobRow, 'gameId' | 'createdAt' | 'plan'>): ScopeChoices | null {
   const title = text(json(job.plan).title);
   const rows = db
-    .select({ choices: schema.scopeSessions.choices, scope: schema.scopeSessions.scope })
+    .select({ choices: schema.scopeSessions.choices, scope: schema.scopeSessions.scope, createdAt: schema.scopeSessions.createdAt })
     .from(schema.scopeSessions)
     .where(
       and(
@@ -104,7 +104,22 @@ function latestAgreedChoices(db: Db, job: Pick<JobRow, 'gameId' | 'createdAt' | 
     )
     .orderBy(desc(schema.scopeSessions.createdAt))
     .all();
-  const chosen = rows.find((row) => row.scope !== null && text(json(row.scope).title) === title) ?? rows[0];
+  const drafts = db
+    .select({ choices: schema.gameDrafts.choices, scope: schema.gameDrafts.scope, createdAt: schema.gameDrafts.createdAt })
+    .from(schema.gameDrafts)
+    .where(
+      and(
+        eq(schema.gameDrafts.gameId, job.gameId),
+        inArray(schema.gameDrafts.status, ['agreed', 'promoted']),
+        lte(schema.gameDrafts.createdAt, job.createdAt),
+      ),
+    )
+    .orderBy(desc(schema.gameDrafts.createdAt))
+    .all();
+  const candidates = [...rows, ...drafts].sort((left, right) =>
+    left.createdAt > right.createdAt ? -1 : left.createdAt < right.createdAt ? 1 : 0,
+  );
+  const chosen = candidates.find((row) => row.scope !== null && text(json(row.scope).title) === title) ?? candidates[0];
   if (!chosen) return null;
   const parsed = ScopeChoices.safeParse(json(chosen.choices));
   return parsed.success ? parsed.data : null;

@@ -1,8 +1,10 @@
 import { schema } from '@ogm/db';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { claimAttachments, storeAttachment } from '../../src/build-chat/attachments.js';
 import { insertChatRow } from '../../src/build-chat/store.js';
+import { newGameContext } from '../../src/new-game/context.js';
+import { sweepExpiredDrafts } from '../../src/game-drafts/cleanup.js';
 import { contextTokenSecret, signContextToken } from '../../src/new-game/token.js';
 import { asUser, installUsers, makeApp, makeDeps, INTERNAL_TOKEN } from '../helpers.js';
 
@@ -256,5 +258,49 @@ describe('POST /internal/new-game/requests/:requestId/token', () => {
     });
     expect(elsewhere.status).toBe(403);
     expect(contextTokenSecret(deps.config.jobTokenSecret)).not.toBe('');
+  });
+
+  it('includes the promoted draft scope and chat when building the game request context', async () => {
+    const { deps } = await setup();
+    const close = vi.fn(async () => undefined);
+    deps.registry.draftScopeAssistant = {
+      create: vi.fn(async () => ({ repo: 'owner/game', ticket: '42' })),
+      close,
+      transcript: vi.fn(async () => []),
+    };
+    deps.db.delete(schema.scopeSessionRevisions).run();
+    deps.db.delete(schema.scopeSessions).run();
+    const draftId = 'd_47500000-0000-4000-8000-000000000010';
+    const scope = { ...SCOPE, session_id: draftId };
+    deps.db
+      .insert(schema.gameDrafts)
+      .values({
+        id: draftId,
+        familyId: FAMILY,
+        creatorId: CREATOR,
+        choices: JSON.stringify({ genre: 'platformer', vibe: 'cozy', family: 'chunky-low-poly', world: 'island', players: 'single', pov: 'isometric' }),
+        allowAiGeneratedAssets: true,
+        status: 'promoted',
+        revision: 1,
+        ticketRepo: 'owner/game',
+        ticketNumber: 42,
+        scope: JSON.stringify(scope),
+        scopeHash: 'b'.repeat(64),
+        gameId: GAME,
+        createdAt: '2026-11-04T17:49:00.000Z',
+        updatedAt: NOW,
+        expiresAt: '2026-11-05T17:49:00.000Z',
+      })
+      .run();
+    insertChatRow(deps.sqlite, { jobId: `draft:${draftId}`, actor: 'creator', kind: 'text', text: 'A lighthouse too.' });
+
+    await sweepExpiredDrafts(deps, new Date('2026-11-06T18:00:00.000Z'));
+
+    const context = newGameContext(deps.db, deps.sqlite, REQUEST);
+
+    expect(context).toMatchObject({ choices: { genre: 'platformer' }, spec: { session_id: draftId } });
+    expect(context?.messages).toContainEqual(expect.objectContaining({ text: 'A lighthouse too.' }));
+    expect(close).toHaveBeenCalledWith({ repo: 'owner/game', ticket: '42', draftId });
+    expect(deps.db.select().from(schema.gameDrafts).all()).toMatchObject([{ id: draftId, gameId: GAME }]);
   });
 });

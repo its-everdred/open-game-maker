@@ -55,10 +55,25 @@ export function createChatJobDirectory(db: Db): ChatJobDirectory {
         .leftJoin(schema.gameDaemons, eq(schema.gameDaemons.slug, schema.games.slug))
         .where(eq(schema.jobs.id, jobId))
         .get();
-      return row ? toChatJob(row) : null;
+      if (row) return toChatJob(row);
+      const draft = db
+        .select()
+        .from(schema.gameDrafts)
+        .where(eq(schema.gameDrafts.id, jobId.replace(/^draft:/u, '')))
+        .get();
+      if (!draft || !draft.ticketRepo || draft.ticketNumber === null || draft.status === 'abandoned') return null;
+      return {
+        jobId,
+        gameId: draft.id,
+        familyId: draft.familyId,
+        ownerId: draft.creatorId,
+        kind: 'scope',
+        state: 'running',
+        aiur: { daemonSlug: 'core', ticket: String(draft.ticketNumber) },
+      };
     },
     async active() {
-      return db
+      const regular = db
         .select(selection)
         .from(schema.jobs)
         .innerJoin(schema.games, eq(schema.games.id, schema.jobs.gameId))
@@ -67,6 +82,28 @@ export function createChatJobDirectory(db: Db): ChatJobDirectory {
         .orderBy(asc(schema.jobs.createdAt), asc(schema.jobs.id))
         .all()
         .map(toChatJob);
+      const drafts = db
+        .select()
+        .from(schema.gameDrafts)
+        .where(and(inArray(schema.gameDrafts.status, ['open', 'agreed']), isNotNull(schema.gameDrafts.ticketNumber)))
+        .orderBy(asc(schema.gameDrafts.createdAt), asc(schema.gameDrafts.id))
+        .all()
+        .flatMap((draft): ChatJob[] =>
+          draft.ticketNumber === null
+            ? []
+            : [
+                {
+                  jobId: `draft:${draft.id}`,
+                  gameId: draft.id,
+                  familyId: draft.familyId,
+                  ownerId: draft.creatorId,
+                  kind: 'scope',
+                  state: 'running',
+                  aiur: { daemonSlug: 'core', ticket: String(draft.ticketNumber) },
+                },
+              ],
+        );
+      return [...regular, ...drafts];
     },
   };
 }

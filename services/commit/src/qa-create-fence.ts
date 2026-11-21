@@ -84,4 +84,26 @@ export class QaCreateFence {
     }
     return terminal;
   }
+
+  async failedCreateIds(): Promise<string[]> {
+    const lines = createInterface({
+      input: createReadStream(join(this.dataDirectory, 'commit', 'audit.jsonl')),
+      crlfDelay: Infinity,
+    });
+    const latest = new Map<string, { op?: unknown; repo?: unknown; result?: unknown }>();
+    for await (const line of lines) {
+      const entry = JSON.parse(line) as { gameId?: unknown; op?: unknown; result?: unknown };
+      if (typeof entry.gameId === 'string' && entry.op === 'create_game') latest.set(entry.gameId, entry);
+    }
+    return [...latest.entries()]
+      .filter(
+        ([id, entry]) =>
+          /^g_[A-Za-z0-9_-]+$/u.test(id) &&
+          entry.op === 'create_game' &&
+          entry.repo === 'unresolved' &&
+          (entry.result === 'error' || entry.result === 'refused'),
+      )
+      .map(([id]) => id)
+      .sort();
+  }
 }

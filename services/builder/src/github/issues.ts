@@ -21,6 +21,7 @@ export interface IssuesClient {
   labels(repo: string, issueNumber: number): Promise<string[]>;
   addLabel(repo: string, issueNumber: number, name: string): Promise<void>;
   removeLabel(repo: string, issueNumber: number, name: string): Promise<void>;
+  close?(repo: string, issueNumber: number): Promise<void>;
   // `prefix` is the daemon's lifecycle-label prefix: a game daemon writes `<game-slug>:<state>`, never `agent:<state>`.
   setStateLabel(
     repo: string,
@@ -214,6 +215,16 @@ export function createIssuesClient(deps: IssuesClientDeps): IssuesClient {
         if (error instanceof GitHubIssuesError && error.status === 404) return;
         throw error;
       }
+    },
+
+    async close(repo, issueNumber) {
+      const parts = splitRepo(repo);
+      await call('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {
+        owner: parts.owner,
+        repo: parts.name,
+        issue_number: issueNumber,
+        state: 'closed',
+      });
     },
 
     async setStateLabel(repo, issueNumber, state, prefix = 'agent') {

@@ -1,6 +1,7 @@
-import { ApiError } from '../../lib/api/client';
+import { api } from '../../lib/api/client';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import type { AgreedScope } from '@ogm/contracts';
 
 import { registerTestApi } from '../../app/testHook';
 import { ScopeChat } from '../../features/scope-chat';
@@ -23,6 +24,7 @@ import {
   type StepKey,
 } from './options';
 import { useCreateGame } from './useCreateGame';
+import { admitNewGame, type AdmissionResult } from '../../features/scope-chat/admit';
 import './new.css';
 import './new-prototype.css';
 
@@ -59,10 +61,6 @@ export function NewGameScreen() {
   const [search, setSearch] = useSearchParams();
   const [choices, setChoices] = useState<NewGameChoices>({});
   const [limitFeedback, setLimitFeedback] = useState(0);
-  const [gameId, setGameId] = useState<string>();
-  const [createError, setCreateError] = useState('');
-  const [createAttempt, setCreateAttempt] = useState(0);
-  const [creationStarted, setCreationStarted] = useState(false);
   const [allowAiGeneratedAssets, setAllowAiGeneratedAssets] = useState(true);
   const ensureGame = useCreateGame();
   const catalog = useCatalog();
@@ -94,32 +92,29 @@ export function NewGameScreen() {
     testApiRegistered = true;
   }, []);
 
-  useEffect(() => {
-    if (step === 'talk') setCreationStarted(true);
-  }, [step]);
-
-  useEffect(() => {
-    if (!creationStarted) return;
-    let current = true;
-    setCreateError('');
-    void ensureGame(choices, allowAiGeneratedAssets)
-      .then((id) => {
-        if (current) setGameId(id);
-      })
-      .catch((error: unknown) => {
-        const body = error instanceof ApiError ? error.body : undefined;
-        const limited =
-          typeof body === 'object' &&
-          body !== null &&
-          'message' in body &&
-          body.message === 'GitHub is busy. Please try again later.';
-        if (current)
-          setCreateError(limited ? 'GitHub is busy. Please try again later.' : 'The game could not be created.');
-      });
-    return () => {
-      current = false;
-    };
-  }, [allowAiGeneratedAssets, choices, createAttempt, creationStarted, ensureGame]);
+  const finish = async ({ sessionId, scope, attempt, start, retainDraft }: {
+    sessionId: string;
+    scope: AgreedScope;
+    attempt: number;
+    start: 'now' | 'at_reset';
+    retainDraft(): void;
+  }) => {
+    retainDraft();
+    const gameId = await ensureGame(choices, allowAiGeneratedAssets);
+    await api(`/game-drafts/${encodeURIComponent(sessionId)}/attach-game`, {
+      method: 'POST',
+      json: { gameId },
+    });
+    await api(`/game-drafts/${encodeURIComponent(sessionId)}/complete`, { method: 'POST' });
+    const result = await admitNewGame(
+      { gameId, sessionId, scope, attempt, start },
+      { request: api, navigate: () => undefined },
+    );
+    if (result.kind === 'accepted') {
+      navigate(`/games?spotlight=${encodeURIComponent(gameId)}`);
+    }
+    return result;
+  };
 
   useEffect(() => {
     if (!limitFeedback) return;
@@ -198,9 +193,8 @@ export function NewGameScreen() {
           <TalkStep
             choices={choices}
             familyViews={selectedFamily?.views}
-            gameId={gameId}
-            createError={createError}
-            onRetry={() => setCreateAttempt((current) => current + 1)}
+            allowAiGeneratedAssets={allowAiGeneratedAssets}
+            onFinish={finish}
             onSession={(sessionId) => {
               testState.sessionId = sessionId;
             }}
@@ -349,16 +343,21 @@ function stepDefinition(
 function TalkStep({
   choices,
   familyViews,
-  gameId,
-  createError,
-  onRetry,
+  allowAiGeneratedAssets,
+  onFinish,
   onSession,
 }: {
   choices: NewGameChoices;
   familyViews?: string[];
-  gameId?: string;
-  createError: string;
-  onRetry(): void;
+  allowAiGeneratedAssets: boolean;
+  onFinish(input: {
+    gameId: string;
+    sessionId: string;
+    scope: AgreedScope;
+    attempt: number;
+    start: 'now' | 'at_reset';
+    retainDraft(): void;
+  }): Promise<AdmissionResult>;
   onSession(sessionId: string): void;
 }) {
   const rows = (Object.keys(choices) as ChoiceKey[]).flatMap((key) => {
@@ -389,19 +388,13 @@ function TalkStep({
           </span>
         )}
       </div>
-      {createError ? (
-        <p role="alert">
-          {createError}{' '}
-          <button type="button" onClick={onRetry}>
-            Try again
-          </button>
-        </p>
-      ) : null}
-      {gameId ? (
-        <ScopeChat gameId={gameId} choices={scopeChoicesFrom(choices, familyViews)} onSession={onSession} />
-      ) : createError ? null : (
-        <p role="status">Creating your game…</p>
-      )}
+      <ScopeChat
+        gameId="new-draft"
+        choices={scopeChoicesFrom(choices, familyViews)}
+        allowAiGeneratedAssets={allowAiGeneratedAssets}
+        onFinish={onFinish}
+        onSession={onSession}
+      />
     </>
   );
 }

@@ -67,6 +67,7 @@ describe('migrate', () => {
         '20261116045852_review_answer_guards.sql',
         '20261116135518_review_effort.sql',
         '20261118033354_game_play_sessions.sql',
+        '20261120220454_game_drafts.sql',
       ],
     });
     expect(migrate({ sqlite })).toEqual({ applied: [] });
@@ -120,6 +121,7 @@ describe('migrate', () => {
       'migration:20261116045852_review_answer_guards.sql',
       'migration:20261116135518_review_effort.sql',
       'migration:20261118033354_game_play_sessions.sql',
+      'migration:20261120220454_game_drafts.sql',
     ]);
     sqlite.close();
   });

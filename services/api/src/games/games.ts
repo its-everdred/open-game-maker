@@ -8,10 +8,16 @@ import type { AppDeps } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
 import { gameFolder } from '@ogm/contracts';
 import { assignSlug } from './slug.js';
-import { GitHubRateLimitError } from './repo-provisioner.js';
+import { GitHubRateLimitError, ProvisioningOutcomeUnknownError } from './repo-provisioner.js';
 import { readQaState } from '../qa/state.js';
 
 export type GameRow = typeof schema.games.$inferSelect;
+
+export class GameProvisioningOutcomeUnknown extends HttpError {
+  constructor(gameId: string) {
+    super(502, 'repo_provisioning_failed', undefined, { gameId });
+  }
+}
 
 export function gameResponse(game: GameRow) {
   return {
@@ -29,6 +35,7 @@ export function gameResponse(game: GameRow) {
     createdAt: game.createdAt,
     delistedAt: game.delistedAt,
     allowAiGeneratedAssets: game.allowAiGeneratedAssets,
+    creationStatus: isGameProvisioning(game.id) ? 'creating' : game.repoUrl === null ? 'failed' : 'ready',
   };
 }
 
@@ -145,19 +152,28 @@ export async function provisionGame(deps: AppDeps, game: GameRow): Promise<GameR
         ? { repository: { owner: game.githubOwner, name: game.githubRepo } }
         : {}),
     });
-    deps.db
-      .update(schema.games)
-      .set({ githubOwner: repo.owner, githubRepo: repo.repo, githubPath: repo.path, repoUrl: repo.url })
-      .where(eq(schema.games.id, game.id))
-      .run();
-    return findGame(deps.db, game.id);
+    try {
+      deps.db
+        .update(schema.games)
+        .set({ githubOwner: repo.owner, githubRepo: repo.repo, githubPath: repo.path, repoUrl: repo.url })
+        .where(eq(schema.games.id, game.id))
+        .run();
+      return findGame(deps.db, game.id);
+    } catch (error) {
+      deps.log({ event: 'repo-provision-record-failed', gameId: game.id, error: (error as Error).name });
+      throw new GameProvisioningOutcomeUnknown(game.id);
+    }
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if (error instanceof GitHubRateLimitError) {
-      throw new HttpError(502, 'repo_provisioning_failed', error.message, { gameId: game.id });
+      throw new HttpError(502, 'repo_provisioning_failed', error.message);
+    }
+    if (error instanceof ProvisioningOutcomeUnknownError) {
+      deps.log({ event: 'repo-provision-outcome-unknown', gameId: game.id });
+      throw new GameProvisioningOutcomeUnknown(game.id);
     }
     deps.log({ event: 'repo-provision-failed', gameId: game.id, error: (error as Error).message });
-    throw new HttpError(502, 'repo_provisioning_failed', undefined, { gameId: game.id });
+    throw new HttpError(502, 'repo_provisioning_failed');
   } finally {
     const remaining = (provisioningGames.get(game.id) ?? 1) - 1;
     if (remaining === 0) provisioningGames.delete(game.id);

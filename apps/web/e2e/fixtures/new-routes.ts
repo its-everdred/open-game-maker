@@ -9,13 +9,17 @@ const scopeJobId = 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 
 export type NewRouteState = {
   admissions: Array<Record<string, unknown>>;
+  gameCreations: number;
+  draftAttachments: Array<Record<string, unknown>>;
+  draftCompletions: number;
   scopeMessages: string[];
   scopeRequests: Array<Record<string, unknown>>;
 };
 
 export async function installNewRoutes(page: Page): Promise<NewRouteState> {
-  const state: NewRouteState = { admissions: [], scopeMessages: [], scopeRequests: [] };
+  const state: NewRouteState = { admissions: [], gameCreations: 0, draftAttachments: [], draftCompletions: 0, scopeMessages: [], scopeRequests: [] };
   let scopeAgreed = false;
+  let scopePromoted = false;
 
   await page.route('**/api/catalog/style-families', (route) => json(route, catalog));
   // The creation flow asks for the Sound step's tiles on every screen. No montage is rendered in this fixture, so the
@@ -38,18 +42,22 @@ export async function installNewRoutes(page: Page): Promise<NewRouteState> {
     });
   });
   await page.route('**/api/v1/games', async (route) => {
-    if (route.request().method() === 'POST') return json(route, { id: gameId }, 201);
+    if (route.request().method() === 'POST') {
+      state.gameCreations += 1;
+      return json(route, { id: gameId }, 201);
+    }
     return json(route, { games: [] });
   });
-  await page.route('**/api/v1/games/*/scope/sessions', (route) => {
+  await page.route('**/api/v1/game-drafts', (route) => {
     state.scopeRequests.push(route.request().postDataJSON() as Record<string, unknown>);
-    return json(route, { sessionId, jobId: scopeJobId }, 201);
+    return json(route, { draftId: sessionId, jobId: `draft:${sessionId}`, status: 'open' }, 201);
   });
-  await page.route(/\/api\/v1\/games\/[^/]+\/scope\/sessions\/[^/?]+$/, (route) =>
+  await page.route(/\/api\/v1\/game-drafts\/[^/?]+$/, (route) =>
     json(route, {
       sessionId,
-      chatJobId: scopeJobId,
-      status: scopeAgreed ? 'agreed' : 'open',
+      chatJobId: `draft:${sessionId}`,
+      revision: scopeAgreed ? 1 : 0,
+      status: scopePromoted ? 'promoted' : scopeAgreed ? 'agreed' : 'open',
       choices: {
         genre: 'Adventure',
         vibe: 'Moonlit',
@@ -61,6 +69,16 @@ export async function installNewRoutes(page: Page): Promise<NewRouteState> {
       ...(scopeAgreed ? { scope: agreedScope() } : {}),
     }),
   );
+  await page.route(/\/api\/v1\/game-drafts\/[^/?]+\/attach-game$/, async (route) => {
+    state.draftAttachments.push(route.request().postDataJSON() as Record<string, unknown>);
+    return json(route, { draftId: sessionId, gameId }, 200);
+  });
+  await page.route(/\/api\/v1\/game-drafts\/[^/?]+\/complete$/, async (route) => {
+    scopePromoted = true;
+    state.draftCompletions += 1;
+    return route.fulfill({ status: 204 });
+  });
+  await page.route(/\/api\/v1\/game-drafts\/[^/?]+\/abandon$/, (route) => route.fulfill({ status: 204 }));
   await page.route('**/api/v1/jobs/*/chat*', async (route) => {
     if (route.request().method() === 'POST') {
       const body = route.request().postDataJSON() as { text: string };
@@ -121,6 +139,7 @@ export async function installNewRoutes(page: Page): Promise<NewRouteState> {
 function agreedScope() {
   return {
     session_id: sessionId,
+    revision: 1,
     title: 'Moonlit Delivery',
     summary: 'Deliver bread between three floating islands.',
     scope: { included: ['three islands'], excluded: ['online multiplayer'] },

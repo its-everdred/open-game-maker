@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
@@ -196,136 +196,105 @@ describe('NewGameScreen', () => {
     expect(screen.getByRole('button', { name: 'Select SmallScaleInt' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('shows a rate limit message during creation', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((input: RequestInfo | URL) => {
-        if (String(input).endsWith('/api/v1/games'))
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                error: 'repo_provisioning_failed',
-                message: 'GitHub is busy. Please try again later.',
-                details: { gameId: 'g_1' },
-              }),
-              { status: 502, headers: { 'content-type': 'application/json' } },
-            ),
-          );
-        return Promise.resolve(new Response('{}', { status: 404 }));
-      }),
-    );
-    renderScreen('/new?step=talk');
-    expect(await screen.findByRole('alert')).toHaveTextContent('GitHub is busy. Please try again later.');
-  });
-
-  it('offers a working retry when game creation fails', async () => {
-    let createCalls = 0;
+  it('keeps the games API untouched while the creator talks through scope', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('EventSource', class {
+      addEventListener() {}
+      close() {}
+    });
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((input: RequestInfo | URL) => {
         const path = String(input);
-        if (path.endsWith('/api/catalog/style-families')) {
-          return Promise.resolve(
-            new Response(JSON.stringify(catalog), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            }),
-          );
-        }
-        if (path.endsWith('/api/v1/games')) {
-          createCalls += 1;
-          return Promise.resolve(
-            createCalls === 1
-              ? new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 })
-              : new Response(JSON.stringify({ id: 'g_2' }), {
-                  status: 201,
-                  headers: { 'content-type': 'application/json' },
-                }),
-          );
-        }
-        return Promise.resolve(new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }));
+        calls.push(path);
+        const body = path.endsWith('/api/v1/game-drafts')
+          ? { draftId: 'd_1', jobId: 'draft:d_1', status: 'open' }
+          : path.endsWith('/api/v1/game-drafts/d_1')
+            ? {
+                sessionId: 'd_1',
+                chatJobId: 'draft:d_1',
+                status: 'agreed',
+                scope: {
+                  session_id: 'd_1',
+                  revision: 1,
+                  title: 'Fox island',
+                  summary: 'A small island game.',
+                  scope: { included: ['island'], excluded: [] },
+                  tickets: [{ key: 'game', skills: [], dependsOn: [], acceptanceCriteria: ['Can play.'] }],
+                  complexity: 1,
+                  open_questions: [],
+                  ideas: [],
+                },
+              }
+            : path.endsWith('/api/catalog/style-families')
+              ? catalog
+              : path.endsWith('/api/catalog/audio-styles')
+                ? { families: [] }
+                : {};
+        return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
       }),
     );
     renderScreen('/new?step=talk');
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
-
-    await waitFor(() => expect(createCalls).toBe(2));
+    await screen.findByRole('button', { name: 'Finish' });
+    expect(calls.some((path) => path.endsWith('/api/v1/game-drafts'))).toBe(true);
+    expect(calls.some((path) => path.includes('/api/v1/games'))).toBe(false);
   });
 
-  it('persists an asset-setting change made after game creation starts', async () => {
-    const writes: Array<{ path: string; method: string; body: Record<string, unknown> }> = [];
+  it('retains the draft before waiting for game provisioning after Finish', async () => {
+    const calls: string[] = [];
+    let resolveGame!: (response: Response) => void;
+    const gameProvisioning = new Promise<Response>((resolve) => {
+      resolveGame = resolve;
+    });
+    vi.stubGlobal('EventSource', class {
+      addEventListener() {}
+      close() {}
+    });
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
         const path = String(input);
-        if (path.endsWith('/api/catalog/audio-styles')) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                families: [
-                  {
-                    id: 'chiptune',
-                    label: 'Chiptune',
-                    styles: [
-                      {
-                        id: 'chiptune-playful',
-                        label: 'Chiptune · Playful',
-                        style: 'chiptune',
-                        mood: 'playful',
-                        sampleUrl: '/sample.wav',
-                      },
-                    ],
-                  },
-                ],
-              }),
-              { status: 200, headers: { 'content-type': 'application/json' } },
-            ),
-          );
-        }
-        if (path.endsWith('/api/catalog/style-families')) {
-          return Promise.resolve(
-            new Response(JSON.stringify(catalog), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            }),
-          );
-        }
-        if (path.endsWith('/api/v1/games') || path.endsWith('/api/v1/games/g_1')) {
-          writes.push({
-            path,
-            method: init?.method ?? 'GET',
-            body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>,
-          });
-          return Promise.resolve(
-            new Response(JSON.stringify({ id: 'g_1' }), {
-              status: path.endsWith('/games') ? 201 : 200,
-              headers: { 'content-type': 'application/json' },
-            }),
-          );
-        }
-        return Promise.resolve(new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }));
+        calls.push(path);
+        const body = path.endsWith('/api/v1/game-drafts')
+          ? { draftId: 'd_1', jobId: 'draft:d_1', status: 'open' }
+          : path.endsWith('/api/v1/game-drafts/d_1')
+            ? {
+                sessionId: 'd_1',
+                chatJobId: 'draft:d_1',
+                status: 'agreed',
+                scope: {
+                  session_id: 'd_1',
+                  revision: 1,
+                  title: 'Fox island',
+                  summary: 'A small island game.',
+                  scope: { included: ['island'], excluded: [] },
+                  tickets: [{ key: 'game', skills: [], dependsOn: [], acceptanceCriteria: ['Can play.'] }],
+                  complexity: 1,
+                  open_questions: [],
+                  ideas: [],
+                },
+              }
+            : path.endsWith('/api/catalog/style-families')
+              ? catalog
+              : path.endsWith('/api/catalog/audio-styles')
+                ? { families: [] }
+                : {};
+        if (path.endsWith('/api/v1/games')) return gameProvisioning;
+        return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
       }),
     );
-    renderScreen('/new?step=talk');
+    const view = renderScreen('/new?step=talk');
 
-    await waitFor(() => expect(writes.some(({ method }) => method === 'POST')).toBe(true));
-    await screen.findByText('The builder is unavailable right now. Try again later.');
-    expect((authClient.$store.atoms.session as unknown as { active?: boolean }).active).toBeFalsy();
-    for (const heading of ['Players', 'World', 'Art']) {
-      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-      await screen.findByRole('heading', { name: heading });
-    }
-    fireEvent.click(screen.getByRole('switch', { name: 'AI-generated assets' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Finish' }));
+    await waitFor(() => expect(calls.some((path) => path.endsWith('/api/v1/games'))).toBe(true));
+    view.unmount();
 
-    await waitFor(() =>
-      expect(writes).toContainEqual({
-        path: expect.stringMatching(/\/api\/v1\/games\/g_1$/),
-        method: 'PATCH',
-        body: { allowAiGeneratedAssets: false },
-      }),
-    );
-    expect(writes.filter(({ method }) => method === 'POST')).toHaveLength(1);
+    expect(calls.some((path) => path.endsWith('/api/v1/game-drafts/d_1/abandon'))).toBe(false);
+    await act(async () => {
+      resolveGame(new Response(JSON.stringify({ id: 'g_1' }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      await gameProvisioning;
+    });
   });
 
   it('plays an audio style sample and carries the pick into the next step', async () => {

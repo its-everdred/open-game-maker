@@ -8,15 +8,18 @@ import { and, count, eq, inArray, lt, sql } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
+import { sameSecret } from '../app/internal-auth.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
 import {
+  GameProvisioningOutcomeUnknown,
   createGameRow,
   findGame,
   findGameForFamily,
   gameResponse,
   hasGameGrant,
+  isGameProvisioning,
   listGames,
   provisionGame,
 } from './games.js';
@@ -27,6 +30,66 @@ import { CommitServiceRepoProvisioner } from './repo-provisioner.js';
 import { readQaState } from '../qa/state.js';
 
 export const prefix = '/api/v1';
+
+async function commitAuditIds(deps: AppDeps): Promise<string[]> {
+  try {
+    const response = await fetch(
+      `${deps.config.commitInternalUrl.replace(/\/$/u, '')}/internal/admin/games/failed-create-audits`,
+      {
+        headers: { 'x-ogm-internal': deps.config.internalToken, 'x-ogm-service': 'commit' },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!response.ok) throw new Error('audit lookup failed');
+    const body = (await response.json().catch(() => null)) as { gameIds?: unknown } | null;
+    if (!Array.isArray(body?.gameIds) || body.gameIds.some((id) => typeof id !== 'string'))
+      throw new Error('invalid audit response');
+    return body.gameIds as string[];
+  } catch {
+    throw new HttpError(503, 'create_audit_unavailable');
+  }
+}
+
+export async function failedCreateCandidates(deps: AppDeps) {
+  // The commit service only includes creates whose repository lookup failed, so no remote game folder was reachable.
+  const auditedIds = await commitAuditIds(deps);
+  return auditedIds.flatMap((id) => failedCreateCandidate(deps, id));
+}
+
+function failedCreateCandidate(deps: AppDeps, id: string) {
+  const game = deps.db.select().from(schema.games).where(eq(schema.games.id, id)).get();
+  if (!game || game.repoUrl !== null || game.githubOwner !== null || game.githubRepo !== null) return [];
+  const release = deps.db
+    .select({ id: schema.releases.id })
+    .from(schema.releases)
+    .where(eq(schema.releases.gameId, id))
+    .get();
+  const job = deps.db.select({ id: schema.jobs.id }).from(schema.jobs).where(eq(schema.jobs.gameId, id)).get();
+  const scope = deps.db
+    .select({ id: schema.scopeSessions.id })
+    .from(schema.scopeSessions)
+    .where(eq(schema.scopeSessions.gameId, id))
+    .get();
+  const daemon =
+    game.slug === null
+      ? undefined
+      : deps.db
+          .select({ slug: schema.gameDaemons.slug })
+          .from(schema.gameDaemons)
+          .where(eq(schema.gameDaemons.slug, game.slug))
+          .get();
+  return release || job || scope || daemon ? [] : [{ id, title: game.title, createdAt: game.createdAt }];
+}
+
+export async function pruneFailedCreate(deps: AppDeps, id: string): Promise<boolean> {
+  if (isGameProvisioning(id)) return false;
+  if (failedCreateCandidate(deps, id).length === 0 || isGameProvisioning(id)) return false;
+  const auditIds = await commitAuditIds(deps);
+  if (!auditIds.includes(id) || failedCreateCandidate(deps, id).length === 0 || isGameProvisioning(id)) return false;
+  const removed = deps.db.delete(schema.games).where(eq(schema.games.id, id)).run();
+  if (removed.changes === 0) return false;
+  return true;
+}
 
 export function setup(deps: AppDeps): void {
   deps.registry.repoProvisioner ??= new CommitServiceRepoProvisioner({
@@ -91,7 +154,14 @@ const routes = new Hono<ApiBindings>()
       allowAiGeneratedAssets: body.allowAiGeneratedAssets,
       repository,
     });
-    return c.json(gameResponse(await provisionGame(c.get('deps'), game)), 201);
+    try {
+      return c.json(gameResponse(await provisionGame(deps, game)), 201);
+    } catch (error) {
+      // A transport failure can hide a successful remote commit, so keep that row for recovery.
+      if (!(error instanceof GameProvisioningOutcomeUnknown))
+        deps.db.delete(schema.games).where(eq(schema.games.id, game.id)).run();
+      throw error;
+    }
   })
   .get('/games', async (c) => {
     const principal = requirePrincipal(c, ['user']);
@@ -246,6 +316,23 @@ const routes = new Hono<ApiBindings>()
       authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
     );
     return c.json(gameResponse(await provisionGame(c.get('deps'), game)));
+  })
+  .get('/internal/admin/games/prune-failed-candidates', async (c) => {
+    requireCommitService(c);
+    return c.json({ games: await failedCreateCandidates(c.get('deps')) });
+  })
+  .delete('/internal/admin/games/:id/prune-failed', async (c) => {
+    requireCommitService(c);
+    return c.json({ removed: await pruneFailedCreate(c.get('deps'), c.req.param('id')) });
   });
+
+function requireCommitService(c: Parameters<typeof requirePrincipal>[0]): void {
+  const deps = c.get('deps');
+  if (
+    !sameSecret(c.req.header('x-ogm-internal') ?? '', deps.config.internalToken) ||
+    c.req.header('x-ogm-service') !== 'commit'
+  )
+    throw new HttpError(403, 'forbidden');
+}
 
 export default routes;

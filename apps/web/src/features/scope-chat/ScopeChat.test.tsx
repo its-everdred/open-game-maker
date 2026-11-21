@@ -66,12 +66,91 @@ beforeEach(() => {
     error: '',
     send: vi.fn(),
     addMessage: vi.fn(),
+    retain: vi.fn(),
   });
 });
 
 afterEach(() => cleanup());
 
 describe('ScopeChat offers', () => {
+  it('submits Finish only once when activated twice before React rerenders', async () => {
+    const retain = vi.fn();
+    mocks.scopeSession.mockReturnValue({
+      sessionId: 's_1',
+      jobId: undefined,
+      scope,
+      turns: [],
+      status: 'agreed',
+      error: '',
+      send: vi.fn(),
+      addMessage: vi.fn(),
+      retain,
+    });
+    const onFinish = vi.fn(
+      ({ retainDraft }: { retainDraft(): void }) => {
+        retainDraft();
+        return new Promise<{ kind: 'accepted'; jobId: string }>((resolve) =>
+          setTimeout(() => resolve({ kind: 'accepted', jobId: 'j_1' }), 20),
+        );
+      },
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ScopeChat
+            gameId="new-draft"
+            choices={{ genre: 'Adventure', vibe: 'Cozy', family: 'smallscaleint', world: 'Sky islands', players: 'single', pov: 'iso' }}
+            onFinish={onFinish}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const finish = screen.getByRole('button', { name: 'Finish' });
+    act(() => {
+      fireEvent.click(finish);
+      fireEvent.click(finish);
+    });
+
+    await waitFor(() => expect(onFinish).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(retain).toHaveBeenCalledTimes(1));
+  });
+
+  it('leaves a failed Finish eligible for draft cleanup when the creator leaves', async () => {
+    const retain = vi.fn();
+    mocks.scopeSession.mockReturnValue({
+      sessionId: 's_1',
+      jobId: undefined,
+      scope,
+      turns: [],
+      status: 'agreed',
+      error: '',
+      send: vi.fn(),
+      addMessage: vi.fn(),
+      retain,
+    });
+    const onFinish = vi.fn().mockRejectedValue(new Error('game provisioning failed'));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ScopeChat
+            gameId="new-draft"
+            choices={{ genre: 'Adventure', vibe: 'Cozy', family: 'smallscaleint', world: 'Sky islands', players: 'single', pov: 'iso' }}
+            onFinish={onFinish}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The build could not be started. Try again.');
+    view.unmount();
+
+    expect(retain).not.toHaveBeenCalled();
+  });
+
   it('keeps one voice-token probe across parent rerenders', async () => {
     mocks.session.mockReturnValue({ data: { user: { id: 'u_1' } } });
     mocks.scopeSession.mockReturnValue({
