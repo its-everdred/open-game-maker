@@ -119,6 +119,8 @@ Applying a scratch ambient tint to the ten-piece scene brought its ground colors
 
 For the same unregistered still, approximate fixed rectangles around the canopy, yard and gate scored SSIM 0.171, 0.164 and 0.055 respectively with `gm look score`. The gate is visibly disconnected from the surrounding wall, consistent with its low score. These rectangles are not verified correspondences and their metrics are diagnostic only.
 
+In a scratch game experiment, placing the existing arch at the wall's grid gap still left it raised. The house cutaway code was shifting every roof-layer sprite upwards, including the arch; excluding that arch from the shift moved it down (`gate-aligned-diagnostic.png`, `gate-offset-diagnostic.png`). It remains small and at the edge of the frame, unlike the reference. The change is scratch-only; its collision and traversal have not been validated.
+
 An additional scratch-only lighting study used a torch already in the game lock and local additive glow. Initial flames appeared on the canopy roof; after manual repositioning, one sits near a support and another on the house wall. The inspected still and comparison are `assets-local/review/1154/torch-study.png` and `torch-study-score.png`: unregistered SSIM was 0.160, color-histogram distance 0.499, and edge IoU 0.012. The light sources and glow were not checked in motion, and the repeated canopy, gate and buildings still fail the reference. No lighting code has been shipped.
 
 ## Retrospective three-layout comparison
