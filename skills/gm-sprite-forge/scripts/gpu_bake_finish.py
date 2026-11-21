@@ -53,8 +53,11 @@ def main():
             lab[..., 0] = match_histograms(lab[..., 0], ref_l)
             a[..., :3][obj] = (lab2rgb(lab)[0] * 255).round().clip(0, 255)
         frames[p.stem[4:]] = a
+    sheet_keys = {k for k in frames if re.fullmatch(r'\d+_\d+', k)}
+    if not frames or (sheet_keys and len(sheet_keys) != len(frames)):
+        ap.error(f'{x.raw} must hold only raw_<N|E|S|W>.png or only raw_<row>_<col>.png frames')
     x.out.mkdir(parents=True, exist_ok=True)
-    if all(re.fullmatch(r'\d+_\d+', k) for k in frames):
+    if sheet_keys:
         sheet = np.zeros((8 * x.cell, 15 * x.cell, 4), np.uint8)
         for k, a in frames.items():
             r, c = map(int, k.split('_'))

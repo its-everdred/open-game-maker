@@ -46,12 +46,30 @@ class FinishTest(unittest.TestCase):
             Image.fromarray(ref).save(Path(t, 'ref.png'))
             run_finish(raw, out, '--cell', 8, '--colour-ref', Path(t, 'ref.png'))
             sheet = np.asarray(Image.open(out / 'sheet.png'))
+            run_finish(raw, Path(t, 'plain'), '--cell', 8)
+            plain = np.asarray(Image.open(Path(t, 'plain', 'sheet.png')))
         self.assertEqual(sheet.shape, (64, 120, 4))
-        self.assertEqual(tuple(sheet[3 * 8, 7 * 8][:2]) != (0, 0), True)
+        self.assertEqual(tuple(plain[3 * 8, 7 * 8][:3]), (70, 80, 50))  # row 3, column 7 landed in its own cell
         body = sheet[8 * 3 + 3, 8 * 7 + 3]
         self.assertEqual(body[3], 255)
         self.assertLessEqual(int(body[:3].max()) - int(body[:3].min()), 3)  # still grey
         self.assertNotEqual(int(body[0]), 120)  # lightness was matched
+
+    def test_props_views_and_mixed_directory(self):
+        with tempfile.TemporaryDirectory() as t:
+            raw = Path(t, 'raw')
+            raw.mkdir()
+            view = np.zeros((8, 8, 4), np.uint8)
+            view[2:6, 2:6] = (90, 60, 30, 255)
+            for d in 'NESW':
+                Image.fromarray(view).save(raw / f'raw_{d}.png')
+            run_finish(raw, Path(t, 'out'), '--cell', 4)
+            self.assertEqual(sorted(p.name for p in Path(t, 'out').iterdir()), ['E.png', 'N.png', 'S.png', 'W.png'])
+            Image.fromarray(view).save(raw / 'raw_0_0.png')  # a stale sheet frame in a props directory
+            bad = subprocess.run([sys.executable, str(SCRIPTS / 'gpu_bake_finish.py'), str(raw), str(Path(t, 'x'))],
+                                 capture_output=True)
+            self.assertNotEqual(bad.returncode, 0)
+            self.assertFalse(Path(t, 'x').exists())
 
 
 @unittest.skipUnless(shutil.which('nvidia-smi') and shutil.which('blender'), 'needs an NVIDIA GPU and Blender')

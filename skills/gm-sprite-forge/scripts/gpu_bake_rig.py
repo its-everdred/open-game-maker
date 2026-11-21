@@ -140,13 +140,17 @@ def main():
     s = P['height_px'] / ((y1 - y0) * CELL)
     root.scale = (s, s, s)
     os.makedirs(OUT, exist_ok=True)
+    for old in os.listdir(OUT):  # a reused directory must not mix earlier props and sheet frames
+        if old.startswith('raw_') and old.endswith('.png'):
+            os.remove(os.path.join(OUT, old))
     peak = 0
     if P['mode'] == 'sheet':
-        start, end = int(P['frame_start']), int(P['frame_end'])
+        start, end = P['frame_start'], P['frame_end']
         for row in range(8):  # E, SE, S, SW, W, NW, N, NE; a -Y front faces the camera at yaw 45 (screen-right at 135)
             root.rotation_euler = (0, 0, math.radians(135 - 45 * row))
             for col in range(15):
-                sc.frame_set(round(start + (end - start) * col / 15))
+                f = start + (end - start) * col / 15  # even steps; a 24-frame loop needs subframes
+                sc.frame_set(math.floor(f), subframe=f - math.floor(f))
                 sc.render.filepath = f'{OUT}/raw_{row}_{col}.png'
                 bpy.ops.render.render(write_still=True)
                 peak = max(peak, gpu_mb() or 0)
@@ -158,6 +162,7 @@ def main():
             peak = max(peak, gpu_mb() or 0)
     json.dump({'blender': bpy.app.version_string, 'backend': bpy.context.preferences.addons['cycles'].preferences
                .compute_device_type, 'samples': int(P['samples']), 'resolution': RES, 'cell': CELL,
+               # device-wide memory in use after each render (includes other processes), not a per-process peak
                'scale': s, 'render_minutes': round((time.time() - t0) / 60, 2), 'peak_gpu_mb_total': peak,
                'params': P, 'builder': os.path.abspath(BUILDER)},
               open(f'{OUT}/render.json', 'w'), indent=2)

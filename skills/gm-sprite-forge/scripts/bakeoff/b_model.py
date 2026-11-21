@@ -1,12 +1,17 @@
 """Arm B: an existing CC0 model, imported unchanged except for optional material-based face removal.
 env MODEL=<.gltf/.glb/.fbx/.obj>  DROP=<regex of material names whose faces are deleted, e.g. leaf>
     TINT=r,g,b (optional, multiplies base colour: restyle toward the pack hue before the shared colour pass)
-    KEEP=<regex of object names to keep>"""
+    KEEP=<regex of object names to keep>  SCATTER=N copies of the file's variants over one tile, VH=<copy height>
+    VCOL=1 colour from the mesh's vertex colours (image-to-3D output)  ROTX/ROTZ=<degrees> axis and tilt fixes
+All options are environment variables, not rig key=value arguments."""
+import math
 import os
+import random
 import re
 
 import bpy
 import bmesh
+import mathutils
 
 
 def build(P):
@@ -71,8 +76,6 @@ def build(P):
             nt.links.new(mix.outputs[2], src)
     scatter = int(os.environ.get('SCATTER', 0))
     if scatter:  # SCATTER=N copies of the file's variants over one tile, each scaled to VH world units tall
-        import random
-        import mathutils
         rnd = random.Random(5)
         vh = float(os.environ.get('VH', 0.3))
         meshes = [o for o in new if o.type == 'MESH']
@@ -95,18 +98,15 @@ def build(P):
             bpy.data.objects.remove(o)
         new = copies
     roots = [o for o in new if o.parent is None]
-    import math
-    import mathutils
     rx, rz = float(os.environ.get('ROTX', 0)), float(os.environ.get('ROTZ', 0))
     if rx or rz:  # ROTX/ROTZ degrees: fix image-to-3D axis conventions and the reference camera tilt
         R = mathutils.Matrix.Rotation(math.radians(rz), 4, 'Z') @ mathutils.Matrix.Rotation(math.radians(rx), 4, 'X')
         for r in roots:
             r.matrix_world = R @ r.matrix_world
     bpy.context.view_layer.update()
-    import mathutils
     pts = [o.matrix_world @ mathutils.Vector(c) for o in new if o.type == 'MESH' for c in o.bound_box]
-    cx = sum(p.x for p in pts) / len(pts)
-    cy = sum(p.y for p in pts) / len(pts)
+    cx = (min(p.x for p in pts) + max(p.x for p in pts)) / 2  # centre of the union box
+    cy = (min(p.y for p in pts) + max(p.y for p in pts)) / 2
     zmin = min(p.z for p in pts)
     for r in roots:
         r.location -= mathutils.Vector((cx, cy, zmin))
