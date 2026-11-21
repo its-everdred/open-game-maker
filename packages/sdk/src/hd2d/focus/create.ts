@@ -78,8 +78,11 @@ export function createFocus(
         ? createThreeFocus(target.three, state)
         : createPhaserFocus((target as { phaser: PhaserFocusDeps }).phaser, state);
   const reconfigure = (next: FocusConfig) => {
+    const smoothing = state.config.smoothing;
     state.config = focusConfigSchema.parse(next);
-    state.follower = createFocusFollower(state.config.smoothing, FOLLOW_DEADZONE);
+    // Keep the follower (and its position) unless smoothing changed, so a new target eases in instead of snapping.
+    if (state.config.smoothing !== smoothing)
+      state.follower = createFocusFollower(state.config.smoothing, FOLLOW_DEADZONE);
   };
   return {
     configure: reconfigure,

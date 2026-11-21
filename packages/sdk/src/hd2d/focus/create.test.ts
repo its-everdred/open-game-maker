@@ -62,6 +62,20 @@ describe('focus quality fallbacks', () => {
     expect(renderer.render).toBe(render);
   });
 
+  it('leaves renders of other cameras and other scenes to three.js', () => {
+    const render = vi.fn();
+    const renderer = { render, getRenderTarget: () => null } as unknown as WebGLRenderer;
+    const scene = new Scene();
+    const camera = new OrthographicCamera();
+    const minimap = new OrthographicCamera();
+    const focus = createFocus({ three: { renderer, scene, camera } });
+    renderer.render(scene, minimap);
+    renderer.render(new Scene(), camera);
+    expect(render).toHaveBeenCalledTimes(2);
+    expect(render).toHaveBeenNthCalledWith(1, scene, minimap);
+    focus.dispose();
+  });
+
   it('rejects invalid config at the boundary', () => {
     const focus = createFocus(phaserTarget({ gameCanvas: {} }));
     expect(() => focus.configure({ ...DEFAULT_FOCUS, strength: 2 })).toThrow();

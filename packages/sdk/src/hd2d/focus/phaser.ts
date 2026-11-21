@@ -16,25 +16,35 @@ interface Applied {
 }
 
 const BLUR_STEPS = 4;
-/** Each Phaser blur pass reaches 3.23 × its offset; scale so all passes together reach `radius` pixels. */
-const PASS_REACH = 3.2307692308 * BLUR_STEPS;
+/** How far one Phaser blur pass reaches per unit offset: the low shader samples at 1.333, the medium at 3.23. */
+const PASS_REACH = { low: 1.333, high: 3.2307692308 } as const;
 
 function isLayer(object: Phaser.GameObjects.GameObject): object is Layer {
   const candidate = object as Partial<Layer>;
   return typeof candidate.enableFilters === 'function' && typeof candidate.depth === 'number';
 }
 
+/** The display-list child that holds `object`: itself, or its outermost container. */
+function topLevel(object: Phaser.GameObjects.GameObject): Phaser.GameObjects.GameObject {
+  let current = object;
+  while (current.parentContainer) current = current.parentContainer;
+  return current;
+}
+
 /**
  * Phaser focus: each display-list object is a layer, blurred by its depth band (or its screen band in
- * tilt-shift) with a per-object filter and hazed toward the haze colour by depth. The hero gets no filter,
- * so its pixels stay exactly as drawn; no camera-wide filter ever touches it.
+ * tilt-shift) with a per-object filter and hazed toward the haze colour by depth. The hero (or the container
+ * holding it) gets no filter, so its pixels stay exactly as drawn; no camera-wide filter ever touches it.
  */
 export function createPhaserFocus(deps: PhaserFocusDeps, state: FocusState): FocusBackend {
-  const { scene, hero } = deps;
+  const { scene } = deps;
+  const hero = deps.hero && topLevel(deps.hero);
   const camera = deps.camera ?? scene.cameras.main;
   const applied = new Map<Layer, Applied>();
   let lastTime: number | undefined;
   let focus = { y: camera.height / 2, depth: Number.POSITIVE_INFINITY };
+  let hazeColor: string | undefined;
+  let hazeRgb = [0, 0, 0];
 
   function filtersFor(layer: Layer): Applied {
     let entry = applied.get(layer);
@@ -52,11 +62,11 @@ export function createPhaserFocus(deps: PhaserFocusDeps, state: FocusState): Foc
       const dt = lastTime === undefined ? 0 : timeMs - lastTime;
       lastTime = timeMs;
       const { config, atmosphere } = state;
-      const layers = scene.children.list.filter((object): object is Layer => object !== hero && isLayer(object));
       if (focusPlan(config).bypass) {
         for (const entry of applied.values()) entry.blur.active = entry.haze.active = false;
         return;
       }
+      const layers = scene.children.list.filter((object): object is Layer => object !== hero && isLayer(object));
       const heroLayer = hero && isLayer(hero) ? hero : undefined;
       const depths = layers.map((layer) => layer.depth).concat(heroLayer ? [heroLayer.depth] : []);
       const min = Math.min(...depths);
@@ -73,7 +83,12 @@ export function createPhaserFocus(deps: PhaserFocusDeps, state: FocusState): Foc
       const span = Math.max(max - min, Number.EPSILON);
       const focus01 = Math.min(1, (focus.depth - min) / span);
       const haze = atmosphere.haze;
-      const hazeRgb = [1, 3, 5].map((at) => Number.parseInt((haze?.color ?? '#000000').slice(at, at + 2), 16) / 255);
+      if (haze?.color !== hazeColor) {
+        hazeColor = haze?.color;
+        // ColorMatrix offsets are 0-255 and the filter works on unpremultiplied colour.
+        hazeRgb = [1, 3, 5].map((at) => Number.parseInt((hazeColor ?? '#000000').slice(at, at + 2), 16));
+      }
+      const reach = PASS_REACH[config.quality === 'high' ? 'high' : 'low'] * BLUR_STEPS;
       for (const layer of layers) {
         const radius =
           config.mode === 'tiltShift'
@@ -85,31 +100,15 @@ export function createPhaserFocus(deps: PhaserFocusDeps, state: FocusState): Foc
         const entry = filtersFor(layer);
         entry.blur.active = radius > 0.25;
         entry.blur.quality = config.quality === 'high' ? 1 : 0;
-        entry.blur.x = entry.blur.y = radius / PASS_REACH;
+        entry.blur.x = entry.blur.y = radius / reach;
         entry.haze.active = amount > 0;
-        // Premultiplied alpha: the haze colour is weighted by the pixel's own alpha (column 4), not added.
         const keep = 1 - amount;
+        // prettier-ignore
         entry.haze.colorMatrix.set([
-          keep,
-          0,
-          0,
-          amount * hazeRgb[0]!,
-          0,
-          0,
-          keep,
-          0,
-          amount * hazeRgb[1]!,
-          0,
-          0,
-          0,
-          keep,
-          amount * hazeRgb[2]!,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
+          keep, 0, 0, 0, amount * hazeRgb[0]!,
+          0, keep, 0, 0, amount * hazeRgb[1]!,
+          0, 0, keep, 0, amount * hazeRgb[2]!,
+          0, 0, 0, 1, 0,
         ]);
       }
     },

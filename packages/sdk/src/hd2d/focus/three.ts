@@ -9,7 +9,7 @@ import {
   PlaneGeometry,
   Scene,
   ShaderMaterial,
-  FloatType,
+  HalfFloatType,
   Vector2,
   Vector3,
   WebGLRenderTarget,
@@ -120,32 +120,45 @@ export function createThreeFocus(deps: ThreeFocusDeps, state: FocusState): Focus
   let composer: { composer: EffectComposer; bokeh: BokehPass } | undefined;
   let lastTime: number | undefined;
   let focusDistance = 0;
+  /** The focus point's screen row, 0 at the top, so the tilt-shift band follows it as in Phaser. */
+  let focusScreenY = 0.5;
   let busy = false;
+  let disposed = false;
 
   const viewDistance = (object: Object3D) => -object.getWorldPosition(point).applyMatrix4(camera.matrixWorldInverse).z;
 
-  function sceneDistance(): Vector2 {
-    let min = Infinity;
-    let max = -Infinity;
+  /** Nearest and farthest renderable view distances, widened to include the focus point, into `out`. */
+  function sceneDistance(out: Vector2): Vector2 {
+    let min = focusDistance;
+    let max = focusDistance;
     scene.traverseVisible((object) => {
       if (!isRenderable(object)) return;
       const distance = viewDistance(object);
       min = Math.min(min, distance);
       max = Math.max(max, distance);
     });
-    return Number.isFinite(min) ? new Vector2(min, max) : new Vector2(0, 1);
+    return out.set(min, max);
   }
 
-  function ensureTarget(width: number, height: number): WebGLRenderTarget {
-    if (target && target.width === width && target.height === height) return target;
-    target?.dispose();
-    target = new WebGLRenderTarget(width, height, {
-      minFilter: LinearFilter,
-      magFilter: LinearFilter,
-      // Float keeps linear colour exact through the round trip, so flat or unblurred areas match a plain render.
-      type: FloatType,
-      depthTexture: new DepthTexture(width, height),
-    });
+  /** Renders the scene (hero hidden by the caller) into a target of the given size with its depth. */
+  function renderToTarget(width: number, height: number): WebGLRenderTarget {
+    if (!target || target.width !== width || target.height !== height) {
+      target?.dispose();
+      target = new WebGLRenderTarget(width, height, {
+        minFilter: LinearFilter,
+        magFilter: LinearFilter,
+        // Half float is linearly filterable in WebGL2 core and keeps flat colours exact through the round trip.
+        type: HalfFloatType,
+        depthTexture: new DepthTexture(width, height),
+      });
+    }
+    const previous = renderer.getRenderTarget();
+    renderer.setRenderTarget(target);
+    try {
+      original.call(renderer, scene, camera);
+    } finally {
+      renderer.setRenderTarget(previous);
+    }
     return target;
   }
 
@@ -168,6 +181,29 @@ export function createThreeFocus(deps: ThreeFocusDeps, state: FocusState): Focus
     }
   }
 
+  function renderBokeh(width: number, height: number): void {
+    composer ??= (() => {
+      const effect = new EffectComposer(renderer);
+      const bokeh = new BokehPass(scene, camera, {});
+      effect.addPass(new RenderPass(scene, camera));
+      effect.addPass(bokeh);
+      effect.addPass(new OutputPass());
+      effect.setPixelRatio(1);
+      // BokehShader assumes a perspective camera; an orthographic depth buffer needs the other conversion.
+      bokeh.materialBokeh.defines.PERSPECTIVE_CAMERA = (camera as { isPerspectiveCamera?: boolean }).isPerspectiveCamera
+        ? 1
+        : 0;
+      bokeh.materialBokeh.needsUpdate = true;
+      return { composer: effect, bokeh };
+    })();
+    composer.composer.setSize(width, height);
+    const uniforms = composer.bokeh.uniforms as Record<string, { value: number }>;
+    uniforms.focus!.value = focusDistance;
+    uniforms.aperture!.value = state.config.strength * 0.0005;
+    uniforms.maxblur!.value = state.config.strength * 0.02;
+    composer.composer.render();
+  }
+
   function composite(): void {
     const { config, atmosphere } = state;
     const plan = focusPlan(config, renderer.getPixelRatio());
@@ -187,71 +223,45 @@ export function createThreeFocus(deps: ThreeFocusDeps, state: FocusState): Focus
     if (hero) hero.visible = false;
     try {
       renderer.getDrawingBufferSize(size);
-      if (plan.bokeh) {
-        // ponytail: the composer writes no depth to the canvas, so the hero draws over foreground occluders here.
-        composer ??= (() => {
-          const effect = new EffectComposer(renderer);
-          const bokeh = new BokehPass(scene, camera, {});
-          effect.addPass(new RenderPass(scene, camera));
-          effect.addPass(bokeh);
-          effect.addPass(new OutputPass());
-          // BokehShader assumes a perspective camera; an orthographic depth buffer needs the other conversion.
-          bokeh.materialBokeh.defines.PERSPECTIVE_CAMERA = (camera as { isPerspectiveCamera?: boolean })
-            .isPerspectiveCamera
-            ? 1
-            : 0;
-          bokeh.materialBokeh.needsUpdate = true;
-          return { composer: effect, bokeh };
-        })();
-        composer.composer.setPixelRatio(1);
-        composer.composer.setSize(size.x, size.y);
-        const uniforms = composer.bokeh.uniforms as Record<string, { value: number }>;
-        uniforms.focus!.value = focusDistance;
-        uniforms.aperture!.value = config.strength * 0.0005;
-        uniforms.maxblur!.value = config.strength * 0.02;
-        composer.composer.render();
-        renderer.clearDepth();
-      } else {
-        const width = Math.max(1, Math.round(size.x * plan.scale));
-        const height = Math.max(1, Math.round(size.y * plan.scale));
-        const rt = ensureTarget(width, height);
-        const previous = renderer.getRenderTarget();
-        renderer.setRenderTarget(rt);
-        original.call(renderer, scene, camera);
-        renderer.setRenderTarget(previous);
-        const distances = sceneDistance();
-        const span = Math.max(distances.y - distances.x, Number.EPSILON);
-        const focus01 = (distances.y - focusDistance) / span;
-        const uniforms = material.uniforms;
-        uniforms.tColor!.value = rt.texture;
-        uniforms.tDepth!.value = rt.depthTexture;
-        (uniforms.texel!.value as Vector2).set(1 / width, 1 / height);
-        const projection = camera as Camera & { near?: number; far?: number; isOrthographicCamera?: boolean };
-        uniforms.near!.value = projection.near ?? 0.1;
-        uniforms.far!.value = projection.far ?? 1000;
-        uniforms.ortho!.value = Boolean(projection.isOrthographicCamera);
-        uniforms.sceneDistance!.value = distances;
-        const depthBands = uniforms.depthBands!.value as number[];
-        const screenBands = uniforms.screenBands!.value as number[];
-        for (let index = 0; index < BANDS; index += 1) {
-          const at = index / (BANDS - 1);
-          // Radii are full-resolution pixels; the target is scaled, so scale them with it.
-          depthBands[index] = blurForDepth(config, at, focus01) * plan.scale;
-          screenBands[index] = tiltShiftWeight(config, at) * 12 * plan.scale;
-        }
-        original.call(renderer, quad, quadCamera);
+      const width = Math.max(1, Math.round(size.x * plan.scale));
+      const height = Math.max(1, Math.round(size.y * plan.scale));
+      const uniforms = material.uniforms;
+      const distances = sceneDistance(uniforms.sceneDistance!.value as Vector2);
+      const rt = renderToTarget(width, height);
+      // DOF draws its own colour; the band pass then only restores scene depth so occluders still cover the hero.
+      if (plan.bokeh) renderBokeh(width, height);
+      const span = Math.max(distances.y - distances.x, Number.EPSILON);
+      const focus01 = (distances.y - focusDistance) / span;
+      uniforms.tColor!.value = rt.texture;
+      uniforms.tDepth!.value = rt.depthTexture;
+      (uniforms.texel!.value as Vector2).set(1 / width, 1 / height);
+      const projection = camera as Camera & { near?: number; far?: number; isOrthographicCamera?: boolean };
+      uniforms.near!.value = projection.near ?? 0.1;
+      uniforms.far!.value = projection.far ?? 1000;
+      uniforms.ortho!.value = Boolean(projection.isOrthographicCamera);
+      const depthBands = uniforms.depthBands!.value as number[];
+      const screenBands = uniforms.screenBands!.value as number[];
+      for (let index = 0; index < BANDS; index += 1) {
+        const at = index / (BANDS - 1);
+        // Radii are full-resolution pixels; the target is scaled, so scale them with it.
+        depthBands[index] = blurForDepth(config, at, focus01) * plan.scale;
+        screenBands[index] = tiltShiftWeight(config, 0.5 + at - focusScreenY) * 12 * plan.scale;
       }
-      if (hero && heroVisible) {
-        hero.visible = true;
-        const autoClear = renderer.autoClear;
-        renderer.autoClear = false;
-        scene.fog = null;
-        scene.background = null;
-        try {
+      const autoClear = renderer.autoClear;
+      material.colorWrite = !plan.bokeh;
+      renderer.autoClear = !plan.bokeh;
+      try {
+        original.call(renderer, quad, quadCamera);
+        if (hero && heroVisible) {
+          hero.visible = true;
+          renderer.autoClear = false;
+          scene.fog = null;
+          scene.background = null;
           withOnlyHero(hero, () => original.call(renderer, scene, camera));
-        } finally {
-          renderer.autoClear = autoClear;
         }
+      } finally {
+        material.colorWrite = true;
+        renderer.autoClear = autoClear;
       }
     } finally {
       if (hero) hero.visible = heroVisible;
@@ -266,8 +276,15 @@ export function createThreeFocus(deps: ThreeFocusDeps, state: FocusState): Focus
   }
 
   // Route the game's own canvas renders of this scene through the compositor, so callers keep calling render().
-  renderer.render = function render(this: typeof renderer, renderScene, renderCamera) {
-    if (busy || renderScene !== scene || renderer.getRenderTarget() !== null || !needsComposite())
+  const patched: typeof renderer.render = (renderScene, renderCamera) => {
+    if (
+      disposed ||
+      busy ||
+      renderScene !== scene ||
+      renderCamera !== camera ||
+      renderer.getRenderTarget() !== null ||
+      !needsComposite()
+    )
       return original.call(renderer, renderScene, renderCamera);
     busy = true;
     try {
@@ -276,6 +293,7 @@ export function createThreeFocus(deps: ThreeFocusDeps, state: FocusState): Focus
       busy = false;
     }
   };
+  renderer.render = patched;
 
   return {
     update(timeMs) {
@@ -283,18 +301,20 @@ export function createThreeFocus(deps: ThreeFocusDeps, state: FocusState): Focus
       lastTime = timeMs;
       camera.updateMatrixWorld();
       const focusTarget = state.config.target;
+      if (focusTarget === 'player' && !deps.hero) return;
       const at =
         focusTarget === 'player'
-          ? deps.hero
-            ? deps.hero.getWorldPosition(point).clone()
-            : undefined
-          : new Vector3(focusTarget.x, focusTarget.y, focusTarget.z ?? 0);
-      if (!at) return;
+          ? deps.hero!.getWorldPosition(point)
+          : point.set(focusTarget.x, focusTarget.y, focusTarget.z ?? 0);
       const followed = state.follower.step({ x: at.x, y: at.y, z: at.z }, dt);
-      focusDistance = -point.set(followed.x, followed.y, followed.z ?? 0).applyMatrix4(camera.matrixWorldInverse).z;
+      point.set(followed.x, followed.y, followed.z ?? 0);
+      focusScreenY = 0.5 - point.clone().project(camera).y / 2;
+      focusDistance = -point.applyMatrix4(camera.matrixWorldInverse).z;
     },
     dispose() {
-      renderer.render = original;
+      disposed = true;
+      // Only unwrap when no later wrapper sits on top of ours; otherwise ours stays as a pass-through.
+      if (renderer.render === patched) renderer.render = original;
       target?.dispose();
       composer?.composer.dispose();
       composer?.bokeh.dispose();

@@ -5,9 +5,9 @@ const HERO = { x: 304, y: 228, width: 32, height: 48 };
 // The far tree line behind the clearing.
 const BACKGROUND = { x: 0, y: 40, width: 640, height: 90 };
 
-async function render(page: Page, renderer: 'phaser' | 'three', focus: 0 | 1) {
+async function render(page: Page, renderer: 'phaser' | 'three', focus: 0 | 1, quality: 'low' | 'high') {
   await page.setViewportSize({ width: 640, height: 360 });
-  await page.goto(`/hd2d/?renderer=${renderer}&focus=${focus}&quality=high&seed=1`);
+  await page.goto(`/hd2d/?renderer=${renderer}&focus=${focus}&quality=${quality}&seed=1`);
   await expect.poll(() => page.evaluate(() => window.__hd2d?.ready)).toBe(true);
   return page.evaluate(
     async ({ hero, background }) => {
@@ -42,13 +42,14 @@ async function render(page: Page, renderer: 'phaser' | 'three', focus: 0 | 1) {
   );
 }
 
-for (const renderer of ['phaser', 'three'] as const) {
-  test(`${renderer} focus blurs the background, never the hero`, async ({ page }) => {
-    const on = await render(page, renderer, 1);
-    const off = await render(page, renderer, 0);
-    expect(on.first).toBe(on.second);
-    expect(on.first).not.toBe(off.first);
-    expect(on.hero).toEqual(off.hero);
-    expect(on.contrast).toBeLessThan(off.contrast * 0.8);
-  });
-}
+for (const renderer of ['phaser', 'three'] as const)
+  for (const quality of ['high', 'low'] as const) {
+    test(`${renderer} focus at ${quality} blurs the background, never the hero`, async ({ page }) => {
+      const on = await render(page, renderer, 1, quality);
+      const off = await render(page, renderer, 0, quality);
+      expect(on.first).toBe(on.second);
+      expect(on.first).not.toBe(off.first);
+      expect(on.hero).toEqual(off.hero);
+      expect(on.contrast).toBeLessThan(off.contrast * 0.8);
+    });
+  }
