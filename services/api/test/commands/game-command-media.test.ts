@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { AiurClient, Decision, DecisionMedia, DecisionMediaFile } from '@ogm/aiur-client';
-import { CREATOR_AUDIENCE_MARKER } from '@ogm/contracts';
+import { CREATOR_AUDIENCE_MARKER, reviewMetaMarker } from '@ogm/contracts';
 import { eq } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -143,7 +143,9 @@ async function setup(options: Decision['options'], files: Record<string, File>, 
     const response = await app.request(`/api/v1/games/${ids.game}/commands`, { headers: asUser(ids.user) });
     expect(response.status, await response.clone().text()).toBe(200);
     const body = (await response.json()) as {
-      commands: Array<{ options: Array<{ id: string; label: string; media?: Record<string, unknown> }> }>;
+      commands: Array<{
+        options: Array<{ id: string; label: string; media?: Record<string, unknown>; meta?: Record<string, unknown> }>;
+      }>;
     };
     return body.commands[0]!.options;
   };
@@ -158,6 +160,7 @@ describe('a jobless Command’s option media', () => {
       await mkdir(review, { recursive: true });
       const video = join(review, 'clip.mp4');
       await writeFile(video, 'video bytes');
+      await writeFile(`${video}.meta.json`, JSON.stringify({ kind: '3D model render', model: 'fixture-renderer' }));
       const secret = join(root, 'secret.mp4');
       await writeFile(secret, 'secret');
       const link = join(review, 'escape.mp4');
@@ -178,6 +181,7 @@ describe('a jobless Command’s option media', () => {
       );
       const options = await read();
       expect(options[0]!.media?.url).toContain('/api/v1/blobs/sha256/');
+      expect(options[0]!.meta).toEqual({ kind: '3D model render', model: 'fixture-renderer' });
       expect(options[1]!.media).toBeUndefined();
       const url = new URL(options[0]!.media!.url as string);
       const { app } = await makeApp(deps);
@@ -323,13 +327,50 @@ describe('a jobless Command’s option media', () => {
     const { app } = await makeApp(deps);
     const response = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { commands: { options: { media: { url: string } }[] }[] };
+    const body = (await response.json()) as { commands: { options: { media: { url: string }; meta?: unknown }[] }[] };
     const url = new URL(body.commands[0]!.options[0]!.media.url);
     expect(url.origin).toBe(deps.config.appOrigin);
     expect(url.pathname).toMatch(/^\/api\/v1\/blobs\/sha256\//);
     const image = await app.request(`${url.pathname}${url.search}`);
     expect(image.status).toBe(200);
     expect(new Uint8Array(await image.arrayBuffer())).toEqual(png);
+  });
+  it('lists marker metadata on the core creator command endpoint', async () => {
+    const deps = seed();
+    deps.config.instanceOwnerId = ids.user;
+    const marker = reviewMetaMarker(
+      new Map([
+        [
+          'a',
+          { meta: { kind: 'image generation', model: 'gpt-image-1' }, layout: { row: 'hero', stage: 'candidate' } },
+        ],
+      ]),
+    );
+    deps.registry.coreAiurClient = {
+      baseUrl: 'https://core.example.test',
+      decisions: async () => [
+        {
+          ...decision([
+            { id: 'a', label: 'A' },
+            { id: 'b', label: 'B' },
+          ]),
+          context: {
+            short_summary: 'Review',
+            long_context_markdown: `<!-- gm-command:cp_01JBX2Q7M3K8V5N4R6T9W0YZAB -->\n${CREATOR_AUDIENCE_MARKER}\n${marker}`,
+          },
+        },
+      ],
+    } as unknown as AiurClient;
+    const { app } = await makeApp(deps);
+    const response = await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      commands: Array<{ options: Array<{ meta?: unknown; layout?: unknown }> }>;
+    };
+    expect(body.commands[0]!.options[0]).toMatchObject({
+      meta: { kind: 'image generation' },
+      layout: { row: 'hero', stage: 'candidate' },
+    });
   });
   it('retains all Aiur sounds for a matching job-linked Command but not for a different version', async () => {
     const options = [

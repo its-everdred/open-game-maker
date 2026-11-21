@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { Id, IsoTime } from './api.js';
 import { ChatMedia, OptionPlayable } from './chat.js';
+import { MediaMeta, MediaLayout } from './media-meta.js';
 
 // The per-game Commands inbox (M3, A2a): one game's open aiur Commands in the shape the embeddable
 // `<aiur-commands>` component consumes (aiur#7487). A Command is one open aiur decision; a job's Command is answered
@@ -13,6 +14,8 @@ export const CommandOption = z.object({
   // Present when the option carries media (A1 rich Commands). OGM signs the same blob URLs the chat uses. `kind` is set
   // when the media names its type (an aiur Command's media does): a clip with no poster is still a clip.
   media: ChatMedia.extend({ kind: z.enum(['image', 'video', 'audio']).optional() }).optional(),
+  meta: MediaMeta.optional(),
+  layout: MediaLayout.optional(),
   // A sound that goes with a picture: a character card shows its portrait in `media` and plays its voice from here.
   audio: ChatMedia.optional(),
   // Additional sound samples attached to the same option.

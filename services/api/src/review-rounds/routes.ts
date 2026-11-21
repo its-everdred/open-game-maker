@@ -19,7 +19,7 @@ const Answer = z
   .object({ verdict: z.enum(['approved', 'needs_work']), note: z.string().max(3900).optional() })
   .strict();
 
-type Media = { kind: string; ref: string; role?: 'target' };
+type Media = { kind: string; ref: string; role?: 'target'; meta?: unknown };
 export default new Hono<ApiBindings>()
   .get('/games/:gameId/review-rounds', async (c) => {
     const game = authorizedGame(c, 'game.edit');
@@ -73,6 +73,7 @@ export default new Hono<ApiBindings>()
             .map(async (item) => ({
               kind: item.kind,
               ...(item.role === 'target' ? { role: item.role } : {}),
+              ...(item.meta === undefined ? {} : { meta: item.meta }),
               url: await reviewMediaUrl(deps.blobStore, deps.config.appOrigin, item.ref as BlobHash),
             })),
         );

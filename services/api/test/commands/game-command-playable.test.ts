@@ -1,5 +1,5 @@
 import type { Decision } from '@ogm/aiur-client';
-import { playableMarker, type OptionPlayable } from '@ogm/contracts';
+import { playableMarker, reviewMetaMarker, type OptionPlayable } from '@ogm/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { toGameCommand } from '../../src/commands/aiur.js';
@@ -56,5 +56,21 @@ describe('a registered game’s playable Command', () => {
       const command = toGameCommand(decision(context));
       expect(command?.options.map(({ playable }) => playable)).toEqual([undefined, undefined, undefined]);
     }
+  });
+
+  it('lists validated metadata and layout from the context marker and ignores malformed metadata', () => {
+    const marker = reviewMetaMarker(
+      new Map([
+        [
+          'a',
+          { meta: { kind: 'image generation', model: 'gpt-image-1' }, layout: { row: 'hero', stage: 'candidate' } },
+        ],
+      ]),
+    );
+    expect(toGameCommand(decision(marker))?.options[0]).toMatchObject({
+      meta: { kind: 'image generation', model: 'gpt-image-1' },
+      layout: { row: 'hero', stage: 'candidate' },
+    });
+    expect(toGameCommand(decision('<!-- gm-review-meta:{bad} -->'))?.options[0]).not.toHaveProperty('meta');
   });
 });

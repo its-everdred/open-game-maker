@@ -8,6 +8,9 @@ import {
   decisionKeyMarker,
   OptionPlayable,
   playableMarker,
+  MediaMeta,
+  MediaLayout,
+  reviewMetaMarker,
   type OptionProvenance,
   validateCard,
 } from '@ogm/contracts';
@@ -37,6 +40,8 @@ export type CommandRequestPayload = {
     provenance?: OptionProvenance;
     aiGenerated?: boolean;
     playable?: OptionPlayable;
+    meta?: import('@ogm/contracts').MediaMeta;
+    layout?: import('@ogm/contracts').MediaLayout;
   }[];
   recommend?: string;
   blocking: boolean;
@@ -154,6 +159,11 @@ export const KEY_FLAG = {
 
 export function buildEmitEvent(payload: CommandRequestPayload, decide?: DecideContext, key?: string): EmitEventCall {
   const playables = new Map(payload.options.flatMap(({ id, playable }) => (playable ? [[id, playable] as const] : [])));
+  const metadata = new Map(
+    payload.options.flatMap(({ id, meta, layout }) =>
+      meta || layout ? [[id, { ...(meta ? { meta } : {}), ...(layout ? { layout } : {}) }] as const] : [],
+    ),
+  );
   return {
     name: 'decision.requested',
     message: payload.question,
@@ -168,7 +178,7 @@ export function buildEmitEvent(payload: CommandRequestPayload, decide?: DecideCo
         short_summary: decide?.topic ?? 'Direction command for the creator',
         long_context_markdown: `<!-- gm-command:${payload.command_id} -->\n${CREATOR_AUDIENCE_MARKER}\n${
           key === undefined ? '' : `${decisionKeyMarker(key)}\n`
-        }${
+        }${metadata.size > 0 ? `${reviewMetaMarker(metadata)}\n` : ''}${
           playables.size > 0
             ? `Options are slices of the game the creator plays in the review deck.\n${playableMarker(playables)}`
             : 'Options are previews already posted in the build chat.'
@@ -273,6 +283,34 @@ export async function requestCommand(
     if (!ids.includes(id)) throw new UsageError(`provenance names unknown option "${id}"`, 'use an id from --option');
   }
 
+  const metadata = new Map<string, import('@ogm/contracts').MediaMeta>();
+  for (const raw of strings(flags, 'meta')) {
+    const [id, sidecar] = pair(raw, 'meta');
+    if (!ids.includes(id)) throw new UsageError(`meta option "${id}" does not exist`, 'use an id from --option');
+    if (metadata.has(id)) throw new UsageError(`option "${id}" has more than one --meta`, 'pass one --meta per option');
+    let value: unknown;
+    try {
+      value = JSON.parse(await readFile(join(ctx.cwd, sidecar), 'utf8'));
+    } catch {
+      throw new UsageError(`cannot read metadata sidecar "${sidecar}"`, 'pass a JSON file path');
+    }
+    const parsed = MediaMeta.safeParse(value);
+    if (!parsed.success)
+      throw new UsageError(`metadata for option "${id}" is invalid`, 'check the MediaMeta JSON shape');
+    metadata.set(id, parsed.data);
+  }
+  const layouts = new Map<string, import('@ogm/contracts').MediaLayout>();
+  for (const raw of strings(flags, 'row')) {
+    const [id, value] = pair(raw, 'row');
+    if (!ids.includes(id)) throw new UsageError(`row option "${id}" does not exist`, 'use an id from --option');
+    if (layouts.has(id)) throw new UsageError(`option "${id}" has more than one --row`, 'pass one --row per option');
+    const [row, stage, ...rest] = value.split(':');
+    const parsed = MediaLayout.safeParse({ row, ...(stage ? { stage } : {}) });
+    if (rest.length || !parsed.success)
+      throw new UsageError(`layout for option "${id}" is invalid`, 'use <row>[:original|3d|2d|candidate]');
+    layouts.set(id, parsed.data);
+  }
+
   const { assets: generatedAssets, packs: generatedPacks } = await generatedProvenance(ctx, root, provenance);
   const optionIsGenerated = (value: OptionProvenance | undefined): boolean =>
     value !== undefined &&
@@ -285,6 +323,8 @@ export async function requestCommand(
     label,
     ...(media.has(id) ? { media_id: media.get(id)! } : {}),
     ...(provenance.has(id) ? { provenance: provenance.get(id)! } : {}),
+    ...(metadata.has(id) ? { meta: metadata.get(id)! } : {}),
+    ...(layouts.has(id) ? { layout: layouts.get(id)! } : {}),
     ...(optionIsGenerated(provenance.get(id)) ? { aiGenerated: true } : {}),
     ...(playables.has(id) ? { playable: playables.get(id)! } : {}),
   }));
@@ -364,6 +404,8 @@ export const command: GmCommand = {
       multiple: true,
       help: 'option id and its provenance JSON or @file; repeat once per option',
     },
+    meta: { type: 'string', multiple: true, help: 'option id and metadata sidecar JSON path; repeat once per option' },
+    row: { type: 'string', multiple: true, help: 'option id and row[:stage] layout; repeat once per option' },
     playable: {
       type: 'string',
       multiple: true,

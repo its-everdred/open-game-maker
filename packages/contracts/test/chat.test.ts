@@ -13,6 +13,8 @@ import {
   ChatPostPayload,
   chatSchemas,
   OptionPlayable,
+  reviewMetaMarker,
+  reviewMetaFromMarker,
 } from '../src/chat.js';
 import { loadJson } from './helpers.js';
 
@@ -86,6 +88,16 @@ describe('build chat contract', () => {
       kind: payload.kind,
       text: payload.text,
     });
+  });
+
+  it('round trips valid review metadata and ignores a malformed marker', () => {
+    const value = {
+      meta: { kind: 'image generation' as const, model: 'gpt-image-1' },
+      layout: { row: 'hero', stage: 'candidate' as const },
+    };
+    const marker = reviewMetaMarker(new Map([['b', value]]));
+    expect(reviewMetaFromMarker(marker).get('b')).toEqual(value);
+    expect(reviewMetaFromMarker('<!-- gm-review-meta:{bad} -->')).toEqual(new Map());
   });
 
   // A creator may send files with no words, but never an empty message or the same file twice.

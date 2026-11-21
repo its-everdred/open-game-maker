@@ -1,5 +1,5 @@
 import { AiurHttpError, type AiurClient, type Decision } from '@ogm/aiur-client';
-import { GameCommand, playablesFromMarker } from '@ogm/contracts';
+import { GameCommand, playablesFromMarker, reviewMetaFromMarker } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
@@ -53,6 +53,7 @@ export function toGameCommand(
   const recommend = recommendOf(decision);
   const summary = summaryOf(decision);
   const playables = playablesFromMarker(decision.context?.long_context_markdown);
+  const reviewMeta = reviewMetaFromMarker(decision.context?.long_context_markdown);
   const command = GameCommand.safeParse({
     job_id: null,
     ticket: decision.ticket.identifier,
@@ -65,7 +66,15 @@ export function toGameCommand(
     question: decision.question,
     options: decision.options.map(({ id, label }) => {
       const playable = playables.get(id);
-      return { id, label, ...media.get(id), ...(playable === undefined ? {} : { playable }) };
+      const annotation = reviewMeta.get(id);
+      return {
+        id,
+        label,
+        ...media.get(id),
+        ...(annotation?.meta === undefined ? {} : { meta: annotation.meta }),
+        ...(annotation?.layout === undefined ? {} : { layout: annotation.layout }),
+        ...(playable === undefined ? {} : { playable }),
+      };
     }),
     ...(recommend === undefined ? {} : { recommend }),
     blocking: decision.blocking,
