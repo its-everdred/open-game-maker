@@ -80,7 +80,9 @@ play link with “Limitations not stated” and reports the merged PRs that need
 `Prototype review: none`, no round is posted. The review links to the published build and carries current works,
 limitations and eligible decision ids.
 
-The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link opens the exact published build.
+The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link opens the exact published build. Set
+`OGM_PUBLISH_BUILD_TIMEOUT_MS` in that file to change the production build deadline in milliseconds; it defaults to
+1,800,000 (30 minutes). A timed-out build reports its deadline directly and is not reported as missing `dist/` output.
 
 The post-publish check runs through `ops/bin/ogm-qa-review-hook`. For a direct check, use
 `gm qa publish-review-check <slug> <build-id>`; `gm qa publish-review-check --all` lists any published builds still
