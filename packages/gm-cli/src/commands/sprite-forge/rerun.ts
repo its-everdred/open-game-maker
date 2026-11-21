@@ -33,6 +33,7 @@ export const command: GmCommand = {
       approved_by_creator: false,
       verdict_quote: undefined,
       scores: {},
+      gate_results: {},
     };
     if (flags.seed !== undefined) {
       if (!Number.isSafeInteger(flags.seed))
@@ -47,6 +48,7 @@ export const command: GmCommand = {
           approved_by_creator: false,
           verdict_quote: undefined,
           scores: {},
+          gate_results: {},
         };
     }
     const recipes = variation(flags.vary, recipe);

@@ -102,7 +102,7 @@ gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buil
 ```
 
 ```text
-gm check [--phase mock|prototype|build|polish] [--json]
+gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm check boot [--dist <dir>] [--viewport both|phone|tablet-landscape] [--json]
@@ -126,6 +126,9 @@ gate result. `--phase` supplies the current look rung when evaluating provisiona
 expiry cannot remain green because a command defaulted to an earlier phase.
 In ticket PR mode, pass `--body <file>` and `--base <ref>` to also reject open creator decisions and
 creator-visible changes without a prototype review section (or `Prototype review: none` for code-only changes).
+Pass `--lane creative` or `--lane clone` when checking a PR for those ticket lanes. A creative mock PR cannot change
+game source; prototype and build rungs require an approved target in the checked-in review decisions. Clone lane PRs
+require a valid `recipe.json`, creator approval, attached originals, numeric scores and passing `gate_results`.
 `gm publish` requires a prototype review round for the commit when the game has a decision inventory; games without an
 inventory continue with a reported gate line.
 

@@ -121,6 +121,7 @@ describe('sprite forge', () => {
       ['rock-v2', 2, false],
       ['rock-v3', 3, false],
     ]);
+    expect(variants.map((item) => item.gate_results)).toEqual([{}, {}, {}]);
   });
   it('promotes only an approved, unchanged round into a searchable shared set', async () => {
     const root = library();
