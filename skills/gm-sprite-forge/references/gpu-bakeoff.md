@@ -44,7 +44,7 @@ python $S/score.py "$REF/Tree E3_S.png" out/S.png --gates prop
 # C image-to-3D: mesh from the original's S view (local GPU), then the same rig; builder options are environment variables
 ~/opt/ogm-i23d/venv/bin/python $S/bakeoff/hy_run.py "$REF/Tree E3_S.png" mesh.glb
 MODEL=mesh.glb VCOL=1 ROTZ=225 blender -b --factory-startup --python $S/gpu_bake_rig.py -- raw/ $S/bakeoff/b_model.py height_px=147 samples=64 shadow=0
-# A procedural goblin walk sheet, 8 x 15 at 128 px
+# A procedural goblin walk sheet, 8 x 15 at 128 px (only after the static sprite is approved)
 blender -b --factory-startup --python $S/gpu_bake_rig.py -- raw/ $S/bakeoff/a_goblin.py mode=sheet cell=128 origin_row=90 height_px=34 samples=32 shadow=0
 python $S/gpu_bake_finish.py raw/ out/ --cell 128 --colour-ref "$REF/Walk.png"
 python $S/score.py "$REF/Walk.png" out/sheet.png --cell 128 --gates character-128
@@ -71,10 +71,12 @@ The creator judged the arm E (fal) review cards (`Original | 3D | 2D pixel`) on 
   for others": use Rodin 2.5 fast (`fal-ai/hyper3d/rodin/v2.5/fast`, 0.10 USD) for the other non-character assets.
 - **Final call (21:05–21:28Z):** on the orc cards the creator wrote "trellis sprites looks fine" and stopped the orc
   rounds; Tripo H3.1 multiview (0.30 USD) "looks best but too expensive". The Executor closed the 3D→2D bake-off on
-  TRELLIS multi-view: no more goblin, orc or tree rounds and no more fal spend on it.
+  TRELLIS multi-view: no more goblin, orc or tree rounds and no more fal spend on the comparison. The routing above
+  stays for production meshes.
 - The re-rendered PC matrices (#1120): Tree E3 liked C Hunyuan3D-2 (`dec_f324d605f82d98c9`); Flora B1 liked B CC0
   with "close but color is way off" (`dec_c7a5db3337cbf08d`); Goblin 01 disliked all four walk arms
-  (`dec_eebc9455918f02f9`) because animation came before the static sprites were approved. The PC skill arms
+  (`dec_eebc9455918f02f9`): "this step should have waited behind the pixel art sprites to be finalized", so
+  animation now waits for an approved static sprite (SKILL.md). The PC skill arms
   (AnyMachine, AnyKit normalize) did not run: the bake-off closed first.
 - The Tree E3 meshes came from the pack's own views, which the creator allowed for this comparison only. New fal
   calls get Codex turnarounds made with the original attached, never a pack file.
@@ -84,7 +86,8 @@ for which asset (TRELLIS multidiffusion ran only for the goblin and orc, and TRE
 note). The mesh is settled; the open problem is the finish pass. The 2D sprite must use fewer colours and chunkier
 pixels than `gpu_bake_finish.py` produces today. Keep the TRELLIS meshes and iterate on the finish pass, not the mesh
 source. The GPU arms A–C below and the first three GPU matrices (`dec_4bea60ce4c10e8bd`, `dec_63c305f541835ca1`,
-`dec_bf26410d0ca0dcc3`) have no separate verdict; the fal picks supersede them and the #1120 picks for routing.
+`dec_bf26410d0ca0dcc3`) have no separate verdict. For routing, the fal picks supersede both those matrices and the #1120 picks; the #1120
+picks only guide the local fallback without fal.
 
 ## Results (#1094, 2026-11-20)
 
@@ -94,7 +97,7 @@ These are local evidence from the GPU arms, kept for the record; routing follows
 |---|---|---|
 | Trees (bare) | C Hunyuan3D-2 from the original view, then A procedural | Hunyuan kept real branch structure (silhouette IoU 0.36 mean, best palette). TripoSR fails on thin branches. Leafless CC0 trees are close in look but not in shape. |
 | Foliage (grass clump) | C Hunyuan3D-2, with A procedural close behind | Hunyuan IoU 0.73 against 0.62 for A and 0.61 for scattered CC0 grass. TripoSR produced a flat card. |
-| Characters (walk) | A procedural | A scripted body with a scripted walk had the best 3D motion correlation (0.41). Freely available CC0 goblins are boxy low-poly. Image-to-3D from a 29×34 px frame misread the axe. D (2D) scores highest on silhouette but has the weakest motion. |
+| Characters (walk) | A procedural | A scripted body with a scripted walk had the best 3D motion correlation (0.41). Freely available CC0 goblins are boxy low-poly. Image-to-3D from a 29×34 px frame misread the axe. D (2D) scores highest on silhouette but has the weakest motion. Superseded: the creator disliked all four walks on #1120. |
 | Props | Not tested | — |
 | Spinnable fake 3D (any game) | S sprite stacking (`vendor/sprite-stacking`), local and free | Stacked flat slices, not a mesh: for assets that must turn to any angle when the pack has four orthographic views. On Tree E3's isometric views (no top view) the hull filled the branches into a bush; silhouette IoU 0.37 mean, all prop gates but palette, lightness and shadow failed (NUC, 2026-11-21). |
 

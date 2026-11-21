@@ -26,7 +26,7 @@ python skills/gm-sprite-forge/scripts/compare.py still --pairs north.png:north-r
 
 Each row shows original, rebuild, difference heatmap, and the prop gate thresholds and verdicts. Green means identical pixels; red indicates differences.
 
-For a character sheet, rows are directions and columns are frames. Choose the gate that matches the asset class:
+For a character sheet (an animation, so only after the static sprite is approved; see SKILL.md), rows are directions and columns are frames. Choose the gate that matches the asset class:
 
 ```sh
 python skills/gm-sprite-forge/scripts/compare.py sheet original.png rebuild.png --cell 64 --gates character-64 --out review --fps 12
@@ -54,7 +54,7 @@ If a verdict includes a note, wait until the first round that changes the part i
 
 When choosing a direction, put up to three candidates (A/B/C) with their media into one Command. Do not raise a separate Command for each candidate.
 
-On “Matches”, record the identified verdict in `calibration.jsonl` as below, apply U9 gate calibration, stop raising Commands for that asset, and finish the PR. Do not continue generating review rounds after acceptance.
+On a character's stills round, “Matches” approves the static sprite and opens the animation round. On any other “Matches”, record the identified verdict in `calibration.jsonl` as below, apply U9 gate calibration, stop raising Commands for that asset, and finish the PR. Do not continue generating review rounds after acceptance.
 
 ## Review and calibration
 
