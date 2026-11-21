@@ -53,6 +53,7 @@ function input() {
     ],
     match: {
       query,
+      mock_sha256: 'a'.repeat(64),
       candidates: [
         { id: 'cart', ...query },
         { id: 'stall', ...stallQuery },
@@ -65,6 +66,7 @@ function input() {
         { crop: [0, 0, 1, 1] as [number, number, number, number], query: stallQuery },
       ],
     },
+    mockSha256: 'a'.repeat(64),
     dressing: { field: { width: 1, height: 1, weights: [1] }, options: { count: 0, radius: 0, seed: 1 } },
     lockedAssets: new Set(['cart', 'stall']),
     reserved: new Set<string>(),
@@ -82,6 +84,9 @@ it('exports a reviewed object from the corresponding complete batch crop', () =>
 });
 
 it('refuses stale crops, invalid indexes and truncated searches', () => {
+  const staleImage = input();
+  staleImage.mockSha256 = 'b'.repeat(64);
+  expect(() => reviewedBatchBriefClone(staleImage)).toThrow('different mock');
   const stale = input();
   stale.match.regions[0]!.crop = [0, 0, 2, 2];
   expect(() => reviewedBatchBriefClone(stale)).toThrow('crop does not match');

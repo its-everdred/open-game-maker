@@ -41,6 +41,14 @@ def test_multiple_crops_enforce_total_pixel_limit_before_encoding(tmp_path, monk
         scene.crop_mock_regions(path, [(0, 0, 2, 2)] * 3)
 
 
+def test_mock_file_size_is_bounded_before_decode(tmp_path, monkeypatch):
+    path = tmp_path / "mock.png"
+    Image.new("RGB", (4, 4)).save(path)
+    monkeypatch.setattr(scene, "MAX_MOCK_BYTES", 4)
+    with pytest.raises(ValueError, match="file size"):
+        scene.crop_mock_regions(path, [(0, 0, 1, 1)])
+
+
 def test_catalog_search_rejects_invalid_pack_and_validation_failure(tmp_path, monkeypatch):
     (tmp_path / "packs" / "pack").mkdir(parents=True)
     with pytest.raises(ValueError, match="invalid pack"):
@@ -90,7 +98,35 @@ def test_worker_identifies_the_requested_local_encoder(tmp_path, monkeypatch, ca
     assert output["query"]["model"] == output["candidates"][0]["model"] == output["model"]
 
 
+def test_worker_hashes_the_same_bytes_used_for_crops(tmp_path, monkeypatch, capsys):
+    import hashlib
+    import json
+
+    mock = tmp_path / "mock.png"
+    sprite = tmp_path / "sprite.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(mock)
+    Image.new("RGB", (2, 2), (30, 20, 10)).save(sprite)
+    original = mock.read_bytes()
+    read = scene.read_mock_bytes
+    def read_then_replace(path):
+        data = read(path)
+        Image.new("RGB", (2, 2), (90, 80, 70)).save(path)
+        return data
+    monkeypatch.setattr(scene, "read_mock_bytes", read_then_replace)
+    monkeypatch.setattr(scene, "eligible", lambda *args: ([{"card": {"id": "asset"}, "preview": sprite}], 1))
+    def fake_embed(images, encoder):
+        assert images[0].getpixel((0, 0)) == (10, 20, 30)
+        return [[1, 0], [1, 0]], "test-model"
+    monkeypatch.setattr(scene, "embed", fake_embed)
+    monkeypatch.setattr(sys, "argv", ["scene_match.py", "--assets-root", str(tmp_path), "--pack", "pack", "--mock", str(mock), "--crop", "0,0,2,2", "--facing", "E"])
+    scene.main()
+    output = json.loads(capsys.readouterr().out)
+    assert output["mock_sha256"] == hashlib.sha256(original).hexdigest()
+    assert output["mock_sha256"] != hashlib.sha256(mock.read_bytes()).hexdigest()
+
+
 def test_multiple_crops_share_candidates_but_keep_separate_rankings(tmp_path, monkeypatch, capsys):
+    import hashlib
     import json
 
     mock = tmp_path / "mock.png"
@@ -108,6 +144,7 @@ def test_multiple_crops_share_candidates_but_keep_separate_rankings(tmp_path, mo
     scene.main()
     output = json.loads(capsys.readouterr().out)
     assert calls == [4]
+    assert output["mock_sha256"] == hashlib.sha256(mock.read_bytes()).hexdigest()
     assert [region["matches"][0]["id"] for region in output["regions"]] == ["first", "second"]
     assert [region["crop"] for region in output["regions"]] == [[0, 0, 2, 2], [2, 0, 2, 2]]
     assert len(output["candidates"]) == 2

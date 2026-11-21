@@ -11,6 +11,7 @@ export type SceneMatchResult = {
 };
 
 export type SceneBatchMatchResult = SceneMatchResult & {
+  mock_sha256: string;
   regions: readonly { crop: readonly [number, number, number, number]; query: Embedding }[];
 };
 

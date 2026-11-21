@@ -12,10 +12,14 @@ export function reviewedBatchBriefClone<T extends SceneTiledMap>(input: {
   anchors: ScenePlanInput['anchors'];
   objects: readonly (Omit<ReviewedSceneObject, 'match'> & { regionIndex: number })[];
   match: SceneBatchMatchResult;
+  /** SHA-256 computed by the caller from the actual mock file being reviewed. */
+  mockSha256: string;
   dressing: ScenePlanInput['dressing'];
   lockedAssets: ReadonlySet<string>;
   reserved: ReadonlySet<string>;
 }) {
+  if (!/^[a-f0-9]{64}$/.test(input.mockSha256) || input.match.mock_sha256 !== input.mockSha256)
+    throw new Error('scene match was computed from a different mock');
   const brief = parseSceneBrief(input.brief);
   const regions = new Map(brief.regions.map((region) => [region.id, region]));
   const indexes = new Set<number>();

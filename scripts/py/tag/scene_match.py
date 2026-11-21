@@ -4,6 +4,8 @@ This is a shortlist, not an asset selection or a game-camera renderer. The
 caller must establish that the mock itself permits local vision processing.
 """
 import argparse
+import hashlib
+import io
 import json
 import re
 import sys
@@ -22,6 +24,7 @@ ENCODERS = {
 }
 MAX_PIXELS = 25_000_000
 MAX_TOTAL_PIXELS = 50_000_000
+MAX_MOCK_BYTES = 64 * 1024 * 1024
 
 
 def encoder_signature(encoder, transformers_version, pillow_version):
@@ -34,7 +37,19 @@ def crop_mock(path, bounds):
 
 
 def crop_mock_regions(path, bounds_list):
-    with Image.open(path) as image:
+    return crop_mock_bytes(read_mock_bytes(path), bounds_list)
+
+
+def read_mock_bytes(path):
+    with path.open("rb") as stream:
+        data = stream.read(MAX_MOCK_BYTES + 1)
+    if len(data) > MAX_MOCK_BYTES:
+        raise ValueError("mock exceeds file size limit")
+    return data
+
+
+def crop_mock_bytes(data, bounds_list):
+    with Image.open(io.BytesIO(data)) as image:
         if image.width * image.height > MAX_PIXELS:
             raise ValueError("mock exceeds image size limit")
         total_pixels = 0
@@ -142,7 +157,8 @@ def main():
     rows, total = eligible(args.assets_root, args.pack, args.limit, args.facing)
     if not rows:
         raise ValueError("no eligible preview cards")
-    images = crop_mock_regions(args.mock, bounds_list)
+    mock_bytes = read_mock_bytes(args.mock)
+    images = crop_mock_bytes(mock_bytes, bounds_list)
     total_pixels = sum(image.width * image.height for image in images)
     for row in rows:
         with Image.open(row["preview"]) as image:
@@ -157,7 +173,7 @@ def main():
         raise ValueError("encoder returned an unexpected number of embeddings")
     candidates = vectors[query_count:]
     results = [rank(ids, [query, *candidates]) for query in vectors[:query_count]]
-    output = {"model": signature, "matches": results[0], "examined": len(rows), "eligible": total,
+    output = {"model": signature, "mock_sha256": hashlib.sha256(mock_bytes).hexdigest(), "matches": results[0], "examined": len(rows), "eligible": total,
               "truncated": len(rows) < total, "preview": f"source facing {args.facing}; camera match not verified"}
     if args.include_vectors:
         output["query"] = {"model": signature, "vector": np.asarray(vectors[0]).tolist()}
