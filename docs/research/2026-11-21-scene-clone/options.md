@@ -46,3 +46,11 @@ For single-view layout, [Total3DUnderstanding](https://arxiv.org/abs/2002.12212)
 ## Capture feasibility check
 
 A readiness-aware software-rendered capture of the existing Dusk Helm village test build succeeded at 390 × 693; local artifact SHA-256 `7a3c1aae5d3b07dd1da618c87bddba58434038f0b3bd1b429ad08302630bf2f3`. The image shows a sparse paved slice, partial stall, a wall section and a fenced animal. It is not a reconstruction of the approved yard and is not an A/B/C result. The first blank screenshots were captured before the game's `__gm.ready` signal; wait for that signal and advance the test hook before judging a frame. The source workspace was at `3a91b92f08134add4171b65a0a7492f48b3f0e1e`; the existing build's exact source provenance still needs verification before using it as a baseline.
+
+## Exploratory layouts, not a bake-off
+
+A scratch copy of the game at the revision above was built in test mode with the existing staged assets. Two 390 × 693 stills were captured at the same camera: a freehand placement and a placement generated from a hand-written region list. The latter replaced palisades with stone wall segments. Both retained the existing house assembly and used the existing stall and cart assets. Local review artifacts are `freehand-draft.png` and `regions-draft.png` with corresponding 50% overlays under `assets-local/review/1154/`.
+
+Neither is a valid completed bake-off arm: the scene has not been registered to the reference, the region list and matches were manually authored, no metric or motion was measured, and the third arm is absent. Inspecting the overlays reveals major differences in camera framing, wall silhouette, house coverage, lighting, scale and dressing density. These results do not establish whether a parsing or retrieval model helps.
+
+The fantasy pack card records `processing: local-only`. The generated mock skill prohibits sending paid-pack renders to a hosted generator, and the blockout is a render of that pack. A local image generation stack was not found in the checked cache or Python environment. Do not send this blockout to the broker or treat a simple colour filter as the requested beauty pass. A rights-compatible local generator is needed to test that arm with the same pack.
