@@ -2,7 +2,7 @@ import { AiurHttpError } from '@ogm/aiur-client';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { CommandAnswerBody, decisionKeyFromMarker, type GameCommandsPage } from '@ogm/contracts';
+import { CommandAnswerBody, decisionKeyFromMarker } from '@ogm/contracts';
 
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
@@ -15,7 +15,7 @@ import { toGameCommand } from './aiur.js';
 import coreRoutes, { hasMissingDeclaredMedia } from './core.js';
 import { findCommand, parseCommand } from '../build-chat/store.js';
 import { isForCreator } from '../job-commands/correlate.js';
-import { listCreatorCommands, listGameCommands, shownOneByOne } from './list.js';
+import { findGameCommand, listCreatorCommands, listGameCommandPage } from './list.js';
 import { gameTicketFilter } from './scope.js';
 import {
   beginReviewAnswer,
@@ -42,10 +42,9 @@ export default new Hono<ApiBindings>()
   .route('/', coreRoutes)
   .get('/games/:gameId/commands', async (c) => {
     const game = authorizedGame(c, 'game.edit');
+    const principal = requirePrincipal(c, ['user']);
     // A product question waits for a voice session (#612); the game's inbox shows the decisions only.
-    const page: GameCommandsPage = {
-      commands: shownOneByOne(c.get('deps'), await listGameCommands(c.get('deps'), game)),
-    };
+    const page = await listGameCommandPage(c.get('deps'), game, principal);
     await logReviewFeedRefresh(
       'game_commands',
       game.id,
@@ -74,7 +73,7 @@ export default new Hono<ApiBindings>()
     const game = authorizedGame(c, 'game.edit');
     if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const deps = c.get('deps');
-    const command = (await listGameCommands(deps, game)).find((item) => item.decision_id === c.req.param('decisionId'));
+    const command = await findGameCommand(deps, game, c.req.param('decisionId'));
     if (!command || !command.ticket) throw new HttpError(404, 'command_not_found');
     if (command.options.every((option) => option.media || option.audio || option.audioClips?.length || option.playable))
       throw new HttpError(409, 'media_present');
@@ -123,11 +122,8 @@ export default new Hono<ApiBindings>()
     if (!canonical.options.some((option) => option.id === body.option_id))
       throw new HttpError(400, 'command_option_invalid');
     // Retain the owning job in the ledger; aiur's decision remains authoritative for the options.
-    const owned = review
-      ? (await listGameCommands(deps, game)).find(
-          (item) => item.decision_id === decisionId && item.ticket === canonical.ticket,
-        )
-      : undefined;
+    const ownedCandidate = review ? await findGameCommand(deps, game, decisionId) : undefined;
+    const owned = ownedCandidate?.ticket === canonical.ticket ? ownedCandidate : undefined;
     const command = owned?.job_id
       ? { ...canonical, job_id: owned.job_id, command_id: owned.command_id, title: owned.title }
       : canonical;

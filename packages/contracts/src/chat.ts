@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { Id, IsoTime } from './api.js';
 import { CommandReview } from './review.js';
+import { MediaMeta, MediaLayout } from './media-meta.js';
 
 // Build chat (D-BUILD-CHAT), transcribed from T06 §4. Agent rows carry the writer's ULID; rows the API mints carry `m_<uuid>`.
 export const Ulid = z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
@@ -94,11 +95,39 @@ export function playablesFromMarker(text: string | null | undefined): Map<string
   }
 }
 
+const REVIEW_META_MARKER = /<!-- gm-review-meta:(.+?) -->/;
+const ReviewMetaMarker = z.record(
+  z.string(),
+  z.object({ meta: MediaMeta.optional(), layout: MediaLayout.optional() }).strict(),
+);
+
+export function reviewMetaMarker(
+  entries: ReadonlyMap<string, { meta?: z.infer<typeof MediaMeta>; layout?: z.infer<typeof MediaLayout> }>,
+): string {
+  const json = JSON.stringify(Object.fromEntries(entries)).replaceAll('>', '\\u003e');
+  return `<!-- gm-review-meta:${json} -->`;
+}
+
+export function reviewMetaFromMarker(
+  text: string | null | undefined,
+): Map<string, { meta?: z.infer<typeof MediaMeta>; layout?: z.infer<typeof MediaLayout> }> {
+  const match = typeof text === 'string' ? REVIEW_META_MARKER.exec(text) : null;
+  if (!match) return new Map();
+  try {
+    const parsed = ReviewMetaMarker.safeParse(JSON.parse(match[1]!) as unknown);
+    return parsed.success ? new Map(Object.entries(parsed.data)) : new Map();
+  } catch {
+    return new Map();
+  }
+}
+
 export const ChatCommandOption = z.object({
   id: z.string(),
   label: z.string(),
   media_id: z.string().optional(),
   provenance: OptionProvenance.optional(),
+  meta: MediaMeta.optional(),
+  layout: MediaLayout.optional(),
   aiGenerated: z.boolean().optional(),
   playable: OptionPlayable.optional(),
 });
@@ -180,6 +209,8 @@ export const CommandRequestPayload = z
           label: z.string().trim().min(1).max(200),
           media_id: ChatMessageId.optional(),
           provenance: OptionProvenance.optional(),
+          meta: MediaMeta.optional(),
+          layout: MediaLayout.optional(),
           aiGenerated: z.boolean().optional(),
           playable: OptionPlayable.optional(),
         }),

@@ -87,6 +87,13 @@ describe('ticket roles', () => {
     expect(plan).toContain('`game:<slug>` and `role:*` labels');
     expect(read('../gm-core/references/roles.md')).toContain('`game:<slug>` maps to `gm-core` and the set skill');
   });
+
+  it('assigns creative and clone lanes at ticket filing', () => {
+    const plan = read('./SKILL.md');
+    expect(plan).toContain('### Label tickets when filing');
+    expect(plan).toContain('`lane:creative phase:mock`');
+    expect(plan).toContain('`lane:clone`');
+  });
 });
 
 /* Kevin 2026-11-20: reviewing is the core loop; agents think of the decisions so the creator doesn't have to. A playable

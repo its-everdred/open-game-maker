@@ -41,4 +41,9 @@ describe('creator decision inventory', () => {
     ]);
     expect(parsed.success).toBe(true);
   });
+
+  it('accepts only a known approval phase', () => {
+    expect(DecisionInventory.safeParse([{ ...entry, phase: 'prototype' }]).success).toBe(true);
+    expect(DecisionInventory.safeParse([{ ...entry, phase: 'review' }]).success).toBe(false);
+  });
 });

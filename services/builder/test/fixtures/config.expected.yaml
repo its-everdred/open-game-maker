@@ -105,6 +105,7 @@ agent:
         - gm-asset-showcase
         - gm-dream-loop
       phase:mock:
+        - gm-image-mock
         - gm-prototype
       phase:prototype:
         - gm-prototype
@@ -112,6 +113,12 @@ agent:
         - gm-prototype
       phase:polish:
         - gm-prototype
+      lane:creative:
+        - gm-image-mock
+        - gm-prototype
+      lane:clone:
+        - gm-sprite-forge
+        - gm-verify
   codex:
     approval_policy: on-request
     thread_sandbox: workspace-write

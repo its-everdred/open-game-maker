@@ -79,6 +79,7 @@ export const recipeSchema = z
     skills: z.array(versioned),
     tools: z.array(versioned).min(1),
     scores: z.record(z.string(), z.number().finite()),
+    gate_results: z.record(z.string(), z.object({ pass: z.boolean() }).passthrough()).optional(),
     ticket: z.number().int().positive(),
     created_at: z.iso.datetime({ offset: true }),
     approved_by_creator: z.boolean(),
@@ -346,6 +347,7 @@ export function variation(value: unknown, recipe: Recipe): Recipe[] {
     approved_by_creator: false,
     verdict_quote: undefined,
     scores: {},
+    gate_results: {},
     parameters: { ...recipe.parameters, [key]: min + ((max - min) * index) / (count - 1) },
   }));
 }

@@ -68,5 +68,44 @@ the matching capability-matrix row and the routing paragraph in SKILL.md togethe
 | Foliage (grass clump) | C Hunyuan3D-2, with A procedural close behind | Hunyuan IoU 0.73 against 0.62 for A and 0.61 for scattered CC0 grass. TripoSR produced a flat card. |
 | Characters (walk) | A procedural | A scripted body with a scripted walk had the best 3D motion correlation (0.41). Freely available CC0 goblins are boxy low-poly. Image-to-3D from a 29×34 px frame misread the axe. D (2D) scores highest on silhouette but has the weakest motion. |
 | Props | Not tested | — |
+| Spinnable fake 3D (any game) | S sprite stacking (`vendor/sprite-stacking`), local and free | Stacked flat slices, not a mesh: for assets that must turn to any angle when the pack has four orthographic views. On Tree E3's isometric views (no top view) the hull filled the branches into a bush; silhouette IoU 0.37 mean, all prop gates but palette, lightness and shadow failed (NUC, 2026-11-21). |
 
 No arm passed the gates. Single-view image-to-3D invents the unseen sides, so check all four views by eye.
+
+## Arm E: fal image-to-3D (NUC host only)
+
+The creator added a fal key on the NUC (2026-11-21) with a 9 USD cap across every fal call. Workers have no key: a
+ticket writes the exact calls, and the NUC Executor runs them with `scripts/fal3d.py` against the one host ledger
+(`OGM_FAL_LEDGER`; it refuses a call that would pass the cap). fal receives only images generated through the free Codex
+route with the originals attached, never a pack file. Mark every fal mesh `"ai_generated": true` in its `recipe.json`.
+Each mesh then goes through the same rig, finish pass and `score.py` as arms A–D (`b_model.py` for props and trees,
+`c_goblin.py` for characters), so the only difference between columns is the mesh source.
+
+```sh
+S=skills/gm-sprite-forge/scripts
+python3 -I $S/fal3d.py price fal-ai/trellis-2 meshy/v7.1/multi-image-to-3d
+OGM_FAL_LEDGER=<ledger.json> python3 -I $S/fal3d.py run fal-ai/trellis-2 out/trellis2 0.25 image_url=@turn_front.png
+```
+
+Candidate arms, cheapest first (listed prices from fal's model pages, 2026-11-21; check `price` before a first call):
+
+| Arm | Endpoint | USD per call | Notes |
+|---|---|---|---|
+| SAM 3D Objects / Body | `fal-ai/sam-3/3d-objects`, `fal-ai/sam-3/3d-body` | 0.02 per unit | Body is a human body fit; try it on characters |
+| TRELLIS (v1), single and multi | `fal-ai/trellis`, `fal-ai/trellis/multi` | ~0.02 | Run in arm E, 2026-11-21 |
+| Hunyuan3D 2 mini / multi-view | `fal-ai/hunyuan3d/v2/mini`, `fal-ai/hunyuan3d/v2/multi-view` | 0.10 / 0.16 (×3 textured) | Multi-view run in arm E |
+| Rodin Gen-2.5 fast | `fal-ai/hyper3d/rodin/v2.5/fast` | 0.10 | Rodin v1 run in arm E at 0.40 |
+| Idol Max turbo | `speridlabs/idol/max/turbo` | 0.10 (+0.10 PBR, +0.025 rig) | Rigged character output |
+| Hyper3D low-poly | `hyper3d/lowpoly/image-to-3d` | 0.20 | |
+| Meshy T2.5 | `meshy/t2.5/image-to-3d` | 0.20 mesh / 0.60 textured | |
+| Hunyuan 3D 3.1 rapid / pro | `fal-ai/hunyuan-3d/v3.1/rapid/image-to-3d`, `.../pro/image-to-3d` | 0.225 / 0.375 (+0.15 multi-view, +0.15 PBR) | |
+| TRELLIS 2 | `fal-ai/trellis-2` | 0.25 (512) – 0.35 (1536) | |
+| Tripo H3.1 multiview | `tripo3d/h3.1/multiview-to-3d` | 0.30 textured (+0.20 detailed) | AnyKit's hard-surface pick; Tripo v2.5 run in arm E |
+| Meshy 7.1 multi-image | `meshy/v7.1/multi-image-to-3d` | 0.80 mesh / 1.20 textured | AnyKit's pick for ~70% of props |
+| Meshy rigging + walk | `fal-ai/meshy/rigging/multi-animation` | 0.20 + 0.12 per clip | On a fal mesh; compare with the shared scripted walk |
+
+Skill arms on top of a fal mesh, each its own column: **AnyKit** (`vendor/anykit`: the same reference to Tripo and
+Meshy, pick per item from clay renders, `normalize.py`), **AnyMachine** (`vendor/anymachine`: a Blender build script
+written from the reference views, Blender 5 on the PC; no fal needed) and **video-to-game** (`vendor/video-to-game`
+`references/fal-assets.md`: cutout, image-to-3D, Meshy rig and walk). The fal arms have no creator verdict yet: until
+one arrives they are review options, not routing.

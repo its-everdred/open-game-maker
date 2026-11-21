@@ -21,6 +21,7 @@ answer, ticket). Never edit the `.md` alone.
 | `recommendation` | The option label the agent would ship, and why in one line. |
 | `sources[]` | Where it came from: a New Game form field, a privacy-safe summary of the conversation (never the raw words), a ticket, a doc path. |
 | `ticket` | The ticket that builds it; `null` until one exists. |
+| `phase` | The approval rung represented by a `review/decisions.json` screen target or answered ticket decision: `mock`, `prototype`, `build`, or `polish`. Creative prototype PRs require `mock` or later; build PRs require `prototype` or later. |
 | `status` | `open` (not yet asked) → `asked` (a Command is raised) → `answered` (the creator picked) or `defaulted` (the recommendation stands after silence; a later answer still wins). |
 | `answer`, `answered_at` | The picked label plus any note; ISO time. `null` until then. |
 

@@ -6,7 +6,7 @@ game to its ticket identifiers and never receives aiur supervisor credentials.
 
 ## Reading the inbox
 
-`GET /api/v1/games/:gameId/commands` returns the open Commands of every job in the game that the caller may edit:
+`GET /api/v1/games/:gameId/commands` returns reviewable Commands of every job in the game that the caller may edit:
 
 ```json
 {
@@ -21,7 +21,7 @@ game to its ticket identifiers and never receives aiur supervisor credentials.
       "question": "Which gate should the courtyard use?",
       "options": [
         { "id": "stone", "label": "Stone arch", "media": { "url": "...", "width": 640, "height": 360 } },
-        { "id": "wood", "label": "Wooden door" }
+        { "id": "wood", "label": "Wooden door", "media": { "url": "...", "width": 640, "height": 360 } }
       ],
       "recommend": "stone",
       "blocking": true,
@@ -36,6 +36,11 @@ are always present; answered, moot and uncorrelated Commands are left out. `summ
 `short_summary`) when it has one; a builder's Command keeps its job's title instead, since `gm command request` sends
 the same placeholder topic for every question. `media` is a signed blob URL, the same one the build chat renders for an
 option that carries an image, GIF, video or audio.
+Review Commands appear only when every option has media or a playable preview. Incomplete reviews are omitted until their
+ticket supplies the missing media. The creator review feed (`GET /api/v1/me/commands?includeQuestions=1`) includes
+`missing_media_commands` descriptors for those hidden reviews; the web review screen uses them to request repair from the
+owning ticket. The game inbox response also includes these descriptors for the game owner. Product questions marked
+text-only remain eligible for their separate question queue.
 
 ### Player-facing only
 

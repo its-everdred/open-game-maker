@@ -115,7 +115,7 @@ gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buil
 ```
 
 ```text
-gm check [--phase mock|prototype|build|polish] [--json]
+gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm check images [--json]
@@ -142,6 +142,12 @@ gate result. `--phase` supplies the current look rung when evaluating provisiona
 expiry cannot remain green because a command defaulted to an earlier phase.
 In ticket PR mode, pass `--body <file>` and `--base <ref>` to also reject open creator decisions and
 creator-visible changes without a prototype review section (or `Prototype review: none` for code-only changes).
+Pass `--lane creative` or `--lane clone` when checking a PR for those ticket lanes. A creative mock PR cannot change
+game source; changed mock images need their `request-mock.py` image record with two real pack/set references, or the
+game logo for title, loading, end, and thumbnail screens. Prototype and build rungs require an approved target in the
+checked-in review decisions with an approval `phase` (`mock`, `prototype`, `build`, or `polish`): prototype work accepts
+`mock` or later, while build work needs `prototype` or later. Clone lane PRs require a valid `recipe.json`, its generated sprite output, creator approval,
+attached originals, numeric scores and passing `gate_results`.
 `gm publish` requires a prototype review round for the commit when the game has a decision inventory; games without an
 inventory continue with a reported gate line.
 
@@ -216,8 +222,9 @@ exits 1. A broker error or timeout (for example a 402) is reported as `blocked` 
 For a failed look, the check prints the answer so its reported differences can guide the next fixes. New look requests
 ask for those differences worst first.
 
-A game records the render the creator approved for each screen in `review/decisions.json`
-(`{"screens": {"select": {"target": "review/mock-matrix/select.png"}}}`). `gm look sheet <screen> --still <png>` puts the
+A game records the render and approval rung the creator approved for each screen in `review/decisions.json`
+(`{"screens": {"select": {"target": "review/mock-matrix/select.png", "phase": "mock"}}}`). Creative prototype PRs require a
+mock-or-later approval; creative build PRs require a prototype-or-later approval. `gm look sheet <screen> --still <png>` puts the
 still beside that target (`--target` overrides it) at one height in `look/<screen>.sheet.png`, and `gm look check`
 judges every such sheet like a still: a screen with no sheet, or whose sheet's newest look reads a mismatch, exits 1.
 Every PNG in `design/flow/screens/target/` must also be named as a target in that file; unrecorded targets fail the
@@ -225,8 +232,8 @@ check and are listed by name.
 
 During prototype work, a screen may mark its look scope provisional with an owner and expiry rung, for example
 `{"screens":{"play":{"provisional":{"owner":"Kevin","until":"build"}}}}`.
-Before the expiry rung, `gm check` reports a visible warning and exits successfully for the missing approved target and
-sheet. At the expiry rung or later, it fails until the provisional declaration is replaced by an approved look target.
+Before the expiry rung, `gm look check` reports a visible warning and exits successfully for the missing approved target and
+sheet. The creative ticket gate still requires a recorded mock approval before prototype work and a prototype approval before build work. At the expiry rung or later, `gm look check` fails until the provisional declaration is replaced by an approved look target.
 Pass the active rung with `gm check --phase <rung>`; the phase does not auto-advance from the branch or ticket. While a
 provisional scope exists, omitting `--phase` fails closed and asks for the current rung.
 
@@ -290,7 +297,8 @@ gm command request [--job <id>] --question "<question>" --option <id>=<label> --
 gm command wait <command-id|decision-id> [--timeout <seconds>]
 ```
 
-`gm chat post` copies media into `.gm/outbox/media/` and prints the chat message id. `gm command request` prints
+`gm chat post` copies media into `.gm/outbox/media/` and prints the chat message id. `gm command request` requires
+image, audio, video, or playable media for each option, then prints
 the Command id and the `decision.requested` `emit_event` call the agent must make. `gm command wait` prints
 the selected option id, exits 3 on timeout, and exits 4 when the Command becomes moot.
 `gm command request` and `gm decide` raise every creator Command with `blocking: true`, with or without

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SLOT_IDS, VIEWPORT_IDS } from './image-slots.js';
+import { MediaMeta } from './media-meta.js';
 
 const Key = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u);
 const Ticket = z.string().regex(/^[1-9]\d{0,15}$/u);
@@ -57,11 +58,19 @@ export const ReviewMedia = z.discriminatedUnion('kind', [
       role: z.literal('target').optional(),
       viewport: z.enum(VIEWPORT_IDS).optional(),
       slot: z.enum(SLOT_IDS).optional(),
+      meta: MediaMeta.optional(),
     })
     .strict(),
-  z.object({ kind: z.literal('clip'), ref: z.string().min(1).max(512), hasAudio: z.boolean() }).strict(),
-  z.object({ kind: z.literal('build'), ref: z.string().min(1).max(512) }).strict(),
-  z.object({ kind: z.literal('audio'), ref: z.string().min(1).max(512) }).strict(),
+  z
+    .object({
+      kind: z.literal('clip'),
+      ref: z.string().min(1).max(512),
+      hasAudio: z.boolean(),
+      meta: MediaMeta.optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('build'), ref: z.string().min(1).max(512), meta: MediaMeta.optional() }).strict(),
+  z.object({ kind: z.literal('audio'), ref: z.string().min(1).max(512), meta: MediaMeta.optional() }).strict(),
 ]);
 
 export const ReviewSubmission = z

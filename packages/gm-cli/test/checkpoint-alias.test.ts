@@ -14,13 +14,39 @@ function workspace(): string {
   return root;
 }
 
+async function mediaFlags(root: string, options: string[]): Promise<string[]> {
+  const flags: string[] = [];
+  for (const option of options) {
+    const image = join(root, `${option}.png`);
+    writeFileSync(image, `preview ${option}`);
+    const post = await gm(['chat', 'post', '--job', JOB_ID, '--text', `${option} preview`, '--image', image], {
+      cwd: root,
+    });
+    flags.push('--media', `${option}=${post.out[0]}`);
+  }
+  return flags;
+}
+
 // `gm checkpoint` became `gm command` (#571). Agents and skills written before the rename keep working for one release,
 // and every run tells them the new name so they move over; help shows only the new name.
 describe('gm checkpoint alias', () => {
   it('still requests a Command and names the new command', async () => {
     const root = workspace();
+    const media = await mediaFlags(root, ['a', 'b']);
     const result = await gm(
-      ['checkpoint', 'open', '--job', JOB_ID, '--question', 'Which look?', '--option', 'a=A', '--option', 'b=B'],
+      [
+        'checkpoint',
+        'open',
+        '--job',
+        JOB_ID,
+        '--question',
+        'Which look?',
+        '--option',
+        'a=A',
+        '--option',
+        'b=B',
+        ...media,
+      ],
       { cwd: root },
     );
     expect(result.code).toBe(0);
