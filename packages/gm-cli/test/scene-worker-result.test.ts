@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sceneObjectFromMatch } from '../src/scene/worker-result.js';
+import { sceneObjectFromMatch, sceneObjectFromRegion } from '../src/scene/worker-result.js';
 import { buildScenePlan } from '../src/scene/plan.js';
 
 describe('local scene match result', () => {
@@ -25,6 +25,23 @@ describe('local scene match result', () => {
     expect(sceneObjectFromMatch(object, { ...result, truncated: true }).searchComplete).toBe(false);
     expect(sceneObjectFromMatch(object, { ...result, eligible: 2 }).searchComplete).toBe(false);
     expect(sceneObjectFromMatch(object, { ...result, candidates: [] }).searchComplete).toBe(false);
+  });
+
+  it('binds each reviewed object to its own crop while sharing candidates', () => {
+    const batch = {
+      ...result,
+      regions: [
+        { crop: [0, 0, 2, 2] as const, query: result.query },
+        { crop: [2, 0, 2, 2] as const, query: { model: 'local', vector: [0, 1] } },
+      ],
+    };
+    const first = sceneObjectFromRegion(object, batch, 0);
+    const second = sceneObjectFromRegion({ ...object, id: 'stall' }, batch, 1);
+    expect(first.crop.vector).toEqual([1, 0]);
+    expect(second.crop.vector).toEqual([0, 1]);
+    expect(second.candidates).toBe(first.candidates);
+    expect(second.searchComplete).toBe(true);
+    expect(() => sceneObjectFromRegion(object, batch, 2)).toThrow('invalid scene match region');
   });
 
   it('prevents incomplete worker results from producing a placement', () => {

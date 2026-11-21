@@ -21,6 +21,7 @@ ENCODERS = {
     "siglip": ("google/siglip-base-patch16-224", "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed"),
 }
 MAX_PIXELS = 25_000_000
+MAX_TOTAL_PIXELS = 50_000_000
 
 
 def encoder_signature(encoder, transformers_version, pillow_version):
@@ -29,13 +30,21 @@ def encoder_signature(encoder, transformers_version, pillow_version):
 
 
 def crop_mock(path, bounds):
+    return crop_mock_regions(path, [bounds])[0]
+
+
+def crop_mock_regions(path, bounds_list):
     with Image.open(path) as image:
         if image.width * image.height > MAX_PIXELS:
             raise ValueError("mock exceeds image size limit")
-        x, y, width, height = bounds
-        if min(x, y) < 0 or min(width, height) < 1 or x + width > image.width or y + height > image.height:
-            raise ValueError("crop exceeds mock bounds")
-        return flatten(image.crop((x, y, x + width, y + height)))
+        total_pixels = 0
+        for x, y, width, height in bounds_list:
+            if min(x, y) < 0 or min(width, height) < 1 or x + width > image.width or y + height > image.height:
+                raise ValueError("crop exceeds mock bounds")
+            total_pixels += width * height
+        if total_pixels > MAX_TOTAL_PIXELS:
+            raise ValueError("crops exceed image size limit")
+        return [flatten(image.crop((x, y, x + width, y + height))) for x, y, width, height in bounds_list]
 
 
 def flatten(image):
@@ -111,7 +120,7 @@ def main():
     parser.add_argument("--assets-root", type=Path, required=True)
     parser.add_argument("--pack", required=True)
     parser.add_argument("--mock", type=Path, required=True)
-    parser.add_argument("--crop", required=True, help="x,y,width,height in pixels")
+    parser.add_argument("--crop", required=True, action="append", help="x,y,width,height in pixels; repeat per object")
     parser.add_argument("--facing", required=True, choices=("N", "NE", "E", "SE", "S", "SW", "W", "NW"))
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--encoder", choices=tuple(ENCODERS), default="clip", help="cached local image encoder")
@@ -119,32 +128,46 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.limit <= 1000:
         raise ValueError("limit must be between 1 and 1000")
-    try:
-        bounds = tuple(int(value) for value in args.crop.split(","))
-    except ValueError as error:
-        raise ValueError("crop must be x,y,width,height") from error
-    if len(bounds) != 4:
-        raise ValueError("crop must be x,y,width,height")
+    if len(args.crop) > 32:
+        raise ValueError("at most 32 crops may be matched at once")
+    bounds_list = []
+    for crop in args.crop:
+        try:
+            bounds = tuple(int(value) for value in crop.split(","))
+        except ValueError as error:
+            raise ValueError("crop must be x,y,width,height") from error
+        if len(bounds) != 4:
+            raise ValueError("crop must be x,y,width,height")
+        bounds_list.append(bounds)
     rows, total = eligible(args.assets_root, args.pack, args.limit, args.facing)
     if not rows:
         raise ValueError("no eligible preview cards")
-    images = [crop_mock(args.mock, bounds)]
-    total_pixels = images[0].width * images[0].height
+    images = crop_mock_regions(args.mock, bounds_list)
+    total_pixels = sum(image.width * image.height for image in images)
     for row in rows:
         with Image.open(row["preview"]) as image:
             total_pixels += image.width * image.height
-            if image.width * image.height > MAX_PIXELS or total_pixels > 50_000_000:
+            if image.width * image.height > MAX_PIXELS or total_pixels > MAX_TOTAL_PIXELS:
                 raise ValueError("previews exceed image size limit")
             images.append(flatten(image))
     vectors, signature = embed(images, args.encoder)
     ids = [row["card"]["id"] for row in rows]
-    results = rank(ids, vectors)
-    output = {"model": signature, "matches": results, "examined": len(rows), "eligible": total,
+    query_count = len(bounds_list)
+    if len(vectors) != query_count + len(ids):
+        raise ValueError("encoder returned an unexpected number of embeddings")
+    candidates = vectors[query_count:]
+    results = [rank(ids, [query, *candidates]) for query in vectors[:query_count]]
+    output = {"model": signature, "matches": results[0], "examined": len(rows), "eligible": total,
               "truncated": len(rows) < total, "preview": f"source facing {args.facing}; camera match not verified"}
     if args.include_vectors:
         output["query"] = {"model": signature, "vector": np.asarray(vectors[0]).tolist()}
         output["candidates"] = [{"id": name, "model": signature, "vector": np.asarray(vector).tolist()}
-                                for name, vector in zip(ids, vectors[1:])]
+                                for name, vector in zip(ids, candidates)]
+    if query_count > 1:
+        output["regions"] = [
+            {"crop": list(bounds), "matches": matches, **({"query": {"model": signature, "vector": np.asarray(vector).tolist()}} if args.include_vectors else {})}
+            for bounds, matches, vector in zip(bounds_list, results, vectors[:query_count])
+        ]
     print(json.dumps(output, allow_nan=False))
 
 

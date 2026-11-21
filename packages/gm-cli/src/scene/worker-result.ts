@@ -10,6 +10,10 @@ export type SceneMatchResult = {
   truncated: boolean;
 };
 
+export type SceneBatchMatchResult = SceneMatchResult & {
+  regions: readonly { crop: readonly [number, number, number, number]; query: Embedding }[];
+};
+
 /** Preserve the worker's completeness evidence when preparing a reviewed placement. */
 export function sceneObjectFromMatch(
   object: Pick<SceneObjectInput, 'id' | 'footpoint' | 'selectedAsset'>,
@@ -22,4 +26,15 @@ export function sceneObjectFromMatch(
     result.examined === result.eligible &&
     result.examined === result.candidates.length;
   return { ...object, crop: result.query, candidates: result.candidates, searchComplete: complete };
+}
+
+/** Bind a reviewed object to one crop from a shared, complete catalog search. */
+export function sceneObjectFromRegion(
+  object: Pick<SceneObjectInput, 'id' | 'footpoint' | 'selectedAsset'>,
+  result: SceneBatchMatchResult,
+  index: number,
+): SceneObjectInput {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= result.regions.length)
+    throw new Error('invalid scene match region');
+  return sceneObjectFromMatch(object, { ...result, query: result.regions[index]!.query });
 }

@@ -33,6 +33,14 @@ def test_mock_crop_checks_bounds_and_composites_alpha(tmp_path):
         scene.crop_mock(path, (3, 3, 2, 2))
 
 
+def test_multiple_crops_enforce_total_pixel_limit_before_encoding(tmp_path, monkeypatch):
+    path = tmp_path / "mock.png"
+    Image.new("RGB", (4, 4)).save(path)
+    monkeypatch.setattr(scene, "MAX_TOTAL_PIXELS", 10)
+    with pytest.raises(ValueError, match="crops exceed"):
+        scene.crop_mock_regions(path, [(0, 0, 2, 2)] * 3)
+
+
 def test_catalog_search_rejects_invalid_pack_and_validation_failure(tmp_path, monkeypatch):
     (tmp_path / "packs" / "pack").mkdir(parents=True)
     with pytest.raises(ValueError, match="invalid pack"):
@@ -80,3 +88,27 @@ def test_worker_identifies_the_requested_local_encoder(tmp_path, monkeypatch, ca
     assert seen == ["siglip"]
     assert output["model"] == "siglip@revision:rgb-brown-v1:transformers-test:pillow-test"
     assert output["query"]["model"] == output["candidates"][0]["model"] == output["model"]
+
+
+def test_multiple_crops_share_candidates_but_keep_separate_rankings(tmp_path, monkeypatch, capsys):
+    import json
+
+    mock = tmp_path / "mock.png"
+    sprite = tmp_path / "sprite.png"
+    Image.new("RGB", (4, 2), (10, 20, 30)).save(mock)
+    Image.new("RGB", (2, 2), (30, 20, 10)).save(sprite)
+    rows = [{"card": {"id": "first"}, "preview": sprite}, {"card": {"id": "second"}, "preview": sprite}]
+    monkeypatch.setattr(scene, "eligible", lambda *args: (rows, 2))
+    calls = []
+    def fake_embed(images, encoder):
+        calls.append(len(images))
+        return [[1, 0], [0, 1], [1, 0], [0, 1]], "test-model"
+    monkeypatch.setattr(scene, "embed", fake_embed)
+    monkeypatch.setattr(sys, "argv", ["scene_match.py", "--assets-root", str(tmp_path), "--pack", "pack", "--mock", str(mock), "--crop", "0,0,2,2", "--crop", "2,0,2,2", "--facing", "E", "--include-vectors"])
+    scene.main()
+    output = json.loads(capsys.readouterr().out)
+    assert calls == [4]
+    assert [region["matches"][0]["id"] for region in output["regions"]] == ["first", "second"]
+    assert [region["crop"] for region in output["regions"]] == [[0, 0, 2, 2], [2, 0, 2, 2]]
+    assert len(output["candidates"]) == 2
+    assert output["query"] == output["regions"][0]["query"]
