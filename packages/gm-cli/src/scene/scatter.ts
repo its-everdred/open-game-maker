@@ -2,7 +2,7 @@ export type ScatterPoint = { x: number; y: number };
 export type DensityGrid = { width: number; height: number; weights: readonly number[] };
 export type ScatterOptions = { count: number; radius: number; seed: number; attemptsPerPoint?: number };
 
-/** Sample a seeded density field; zero-weight cells exclude paths and other reserved areas. */
+/** Sample a seeded density field. Zero weights exclude centers; callers must account for asset footprints. */
 export function scatter(grid: DensityGrid, options: ScatterOptions): ScatterPoint[] {
   const { width, height, weights } = grid;
   const { count, radius, seed, attemptsPerPoint = 30 } = options;

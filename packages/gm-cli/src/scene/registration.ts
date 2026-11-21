@@ -19,6 +19,9 @@ export function fitGroundPlane(anchors: readonly Correspondence[]): Homography {
     matrix.push([x, y, 1, 0, 0, 0, -u * x, -u * y, u]);
     matrix.push([0, 0, 0, x, y, 1, -v * x, -v * y, v]);
   }
+  if (matrix.some((row) => row.some((value) => !Number.isFinite(value)))) {
+    throw new Error('ground anchors exceed numeric range');
+  }
   // Partial pivoting both rejects ambiguous anchors and avoids dividing by a tiny pivot.
   for (let col = 0; col < 8; col++) {
     let pivot = col;
@@ -37,7 +40,9 @@ export function fitGroundPlane(anchors: readonly Correspondence[]): Homography {
       for (let j = col; j <= 8; j++) target[j] = target[j]! - factor * selected[j]!;
     }
   }
-  return matrix.map((row) => row[8]!) as unknown as Homography;
+  const result = matrix.map((row) => row[8]!);
+  if (!result.every(Number.isFinite)) throw new Error('ground anchors are degenerate');
+  return result as unknown as Homography;
 }
 
 /** Project a ground-plane point; reject points on the transform's horizon. */
@@ -47,7 +52,9 @@ export function projectGround(transform: Homography, point: Point): Point {
   if (![...transform, point.x, point.y, denominator].every(Number.isFinite) || Math.abs(denominator) < 1e-10) {
     throw new Error('ground point lies on the registration horizon');
   }
-  return { x: (a * point.x + b * point.y + c) / denominator, y: (d * point.x + e * point.y + f) / denominator };
+  const result = { x: (a * point.x + b * point.y + c) / denominator, y: (d * point.x + e * point.y + f) / denominator };
+  if (![result.x, result.y].every(Number.isFinite)) throw new Error('ground projection exceeds numeric range');
+  return result;
 }
 
 /** Recover a ground position from a pixel known to lie on the same plane. */

@@ -26,6 +26,10 @@ describe('ground registration', () => {
     expect(() => fitGroundPlane(anchors)).toThrow('finite');
   });
 
+  it('rejects numeric overflow rather than producing non-finite coordinates', () => {
+    expect(() => projectGround([1e308, 0, 0, 0, 1, 0, 0, 0], { x: 1e308, y: 1 })).toThrow('numeric range');
+  });
+
   it('rejects projections on the horizon', () => {
     expect(() => projectGround([1, 0, 0, 0, 1, 0, -1, 0], { x: 1, y: 2 })).toThrow('horizon');
   });
