@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HD-2D lighting proof — canopy shafts</title>
+<style>
+  :root { color-scheme: dark; font: 15px/1.45 system-ui, sans-serif; background: #111925; color: #e9e5ce; }
+  body { margin: 0; padding: 24px; }
+  h1 { margin: 0 0 6px; font-size: 20px; }
+  canvas { display: block; width: min(100%, 960px); height: auto; image-rendering: pixelated; border: 1px solid #54635e; background: #172b2e; }
+</style>
+<h1>Canopy light: shafts and moving dapple</h1>
+<canvas id="scene" width="320" height="176" aria-label="Procedural forest clearing with moving sunlight shafts"></canvas>
+<script>
+const canvas=document.querySelector('#scene'),ctx=canvas.getContext('2d',{alpha:false}),W=canvas.width,H=canvas.height;
+const mask=document.createElement('canvas');mask.width=80;mask.height=44;const m=mask.getContext('2d');
+function poly(points,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.moveTo(...points[0]);for(const p of points.slice(1))ctx.lineTo(...p);ctx.closePath();ctx.fill();}
+function tree(x,y,s,leaf,sec){
+  ctx.fillStyle='#443a35';ctx.fillRect(x-2*s,y-23*s,4*s,25*s);
+  ctx.fillStyle='#665146';ctx.fillRect(x+1*s,y-21*s,2*s,20*s);
+  const sway=Math.sin(sec*.72+x)*1.2*s;
+  for(let i=0;i<5;i++){
+    const a=i*Math.PI*2/5, cx=x+sway+Math.cos(a)*8*s,cy=y-27*s+Math.sin(a)*7*s;
+    ctx.fillStyle=i%2?'#3f684b':leaf;ctx.fillRect(Math.round(cx-6*s),Math.round(cy-5*s),12*s,10*s);
+    ctx.fillStyle='rgba(153,181,102,.34)';ctx.fillRect(Math.round(cx-3*s),Math.round(cy-4*s),4*s,2*s);
+  }
+}
+function draw(sec=0){
+  const sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#1c3544');sky.addColorStop(.55,'#527058');sky.addColorStop(1,'#283f39');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+  // distant treeline
+  for(let i=0;i<15;i++){const x=i*23-7;ctx.fillStyle=i%2?'#294740':'#315445';ctx.fillRect(x,38+(i%3)*3,16,47);ctx.fillRect(x-5,46+(i%2)*4,26,14);}
+  poly([[0,90],[162,60],[320,91],[320,176],[0,176]],'#496447');
+  for(let row=0;row<6;row++)for(let col=-1;col<13;col++){
+    const x=col*32+(row%2)*16,y=91+row*13;
+    poly([[x,y],[x+16,y-6],[x+32,y],[x+16,y+7]],(row+col)%2?'#56764b':'#607b4b');
+    poly([[x+16,y+7],[x+32,y],[x+32,y+4],[x+16,y+11]],'#354d40');
+  }
+  // back trees
+  tree(55,88,.82,'#5e804d',sec);tree(127,78,.64,'#58794a',sec);tree(251,84,.82,'#62824c',sec);
+  // Screen-space shaft quads, deliberately few and low resolution.
+  ctx.save();ctx.globalCompositeOperation='screen';
+  for(let i=0;i<3;i++){
+    const drift=Math.sin(sec*.35+i*1.7)*4, x=88+i*53+drift;
+    const g=ctx.createLinearGradient(x,15,x+40,130);g.addColorStop(0,'rgba(255,233,166,.19)');g.addColorStop(.55,'rgba(255,223,143,.11)');g.addColorStop(1,'rgba(255,215,135,0)');
+    poly([[x,22],[x+18,21],[x+49,133],[x+16,133]],g);
+  }
+  ctx.restore();
+  // low-resolution moving canopy cookie: sparse leaf islands, softly composited
+  m.clearRect(0,0,mask.width,mask.height);
+  m.fillStyle='rgba(16,32,27,.33)';m.fillRect(0,0,80,44);
+  for(let i=0;i<27;i++){
+    const x=(i*29+Math.floor(sec*7*(i%3+1)))%88-4,y=(i*17+Math.floor(sec*3))%42;
+    m.fillStyle=i%3?'rgba(13,27,24,.55)':'rgba(224,225,157,.32)';m.fillRect(x,y,3+(i%4),1+(i%2));
+  }
+  ctx.save();ctx.globalAlpha=.53;ctx.imageSmoothingEnabled=true;ctx.drawImage(mask,0,44,W,H-44);ctx.restore();
+  tree(84,133,1.05,'#688750',sec);tree(227,133,1.1,'#708c50',sec);
+  // simple luminous clearing marker, procedural not an imported sprite
+  ctx.fillStyle='rgba(255,227,151,.17)';ctx.beginPath();ctx.ellipse(160,130,25,6,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#d6c890';ctx.fillRect(158,107,4,19);ctx.fillRect(153,116,14,4);ctx.fillRect(159,105,2,3);
+  ctx.fillStyle='rgba(255,231,161,.48)';ctx.fillRect(160,107,1,17);
+}
+window.__frame=t=>draw(t);
+if(location.search.includes('capture'))draw(0);else requestAnimationFrame(function loop(ms){draw(ms/1000);requestAnimationFrame(loop);});
+</script>
+</html>
