@@ -358,6 +358,9 @@ importers:
       '@gm/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@ogm/aiur-client':
+        specifier: workspace:*
+        version: link:../aiur-client
       '@ogm/asset-cards':
         specifier: workspace:*
         version: link:../asset-cards

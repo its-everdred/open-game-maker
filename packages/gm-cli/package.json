@@ -32,6 +32,7 @@
     "@gltf-transform/functions": "4.5.1",
     "@gm/sdk": "workspace:*",
     "@ogm/asset-cards": "workspace:*",
+    "@ogm/aiur-client": "workspace:*",
     "@ogm/asset-measure": "workspace:*",
     "@ogm/asset-previews": "workspace:*",
     "@ogm/blob-store": "workspace:*",

@@ -132,6 +132,7 @@ gm decisions render
 gm decisions next --ticket <n> [--body <file>]
 gm decisions raise <id>
 gm decisions answer <id> <option label> [--note <text>]
+gm decisions sync
 ```
 
 `gm check` runs TypeScript, deterministic simulation-source, test-hook, and registered asset gates. Use `static` or
@@ -163,7 +164,8 @@ loading art, or `images` slots pass without image checks.
 `gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open
 decisions as JSON, including IDs linked from its `## Creator decisions` section when the inventory has no ticket number.
 Raise an entry with `gm decisions raise <id>` after every option has media, then record the creator's answer with
-`gm decisions answer <id> <option label> [--note <text>]`.
+`gm decisions answer <id> <option label> [--note <text>]`. `gm decisions sync` reads answered review maps from the local
+Aiur API and records likes and notes for raised decisions in `decisions.json`.
 
 `gm check boot` serves the build and checks readiness and visible frames at phone and landscape sizes. Frames with
 more than 98% of pixels near one color fail. It writes

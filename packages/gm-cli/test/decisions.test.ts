@@ -2,7 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { gm, tempDir } from './helpers.js';
+import { syncInventory } from '../src/commands/decisions/sync.js';
 
 const data = [
   {
@@ -34,6 +36,7 @@ function game() {
 }
 
 describe('gm decisions', () => {
+  afterEach(() => vi.unstubAllGlobals());
   it('renders by area, then rejects stale markdown', async () => {
     const root = game();
     expect(await gm(['decisions', 'render'], { cwd: root })).toMatchObject({ code: 0 });
@@ -122,6 +125,136 @@ describe('gm decisions', () => {
     expect(JSON.parse(readFileSync(file, 'utf8'))[0]).toMatchObject({
       status: 'answered',
       answer: 'Golems: likes the darker look',
+    });
+  });
+
+  it('raises creator inventory decisions and stores the ledger command id', async () => {
+    const root = game();
+    const file = join(root, 'docs', basename(root), 'decisions.json');
+    const inventory = structuredClone(data);
+    for (const [index, label] of ['Slimes', 'Golems'].entries()) {
+      const image = join(root, `raise-option-${index}.png`);
+      writeFileSync(image, `image ${index}`);
+      const posted = await gm(['chat', 'post', '--job', JOB_ID, '--text', label, '--image', image], { cwd: root });
+      inventory[0]!.options[index] = { label, media: `chat:${posted.out[0]!}` };
+    }
+    writeFileSync(file, JSON.stringify(inventory));
+    const raised = await gm(['decisions', 'raise', 'enemy-style', '--json'], { cwd: root, env: { GM_JOB: JOB_ID } });
+    expect(raised.code, raised.err.join('\n')).toBe(0);
+    expect(JSON.parse(raised.out[0]!).emit_event.payload.context.long_context_markdown).toContain(
+      'gm-audience:creator',
+    );
+    expect(JSON.parse(raised.out[0]!).emit_event.payload.questions).toEqual([{ multi_select: true }]);
+    expect(JSON.parse(readFileSync(file, 'utf8'))[0].command_id).toMatch(/^cp_/);
+  });
+
+  it('synchronizes note-only and multi-like review answers once, preserving the note text', () => {
+    const inventory = structuredClone(data);
+    inventory[0]!.status = 'asked';
+    inventory[0]!.command_id = 'cp_01ARZ3NDEKTSV4RRFFQ69G5FAV';
+    const decision = (answers: unknown[], notes?: string, commandId = inventory[0]!.command_id) => ({
+      decision_id: 'decision-1',
+      question: inventory[0]!.question,
+      decision_status: 'answered',
+      context: { long_context_markdown: `<!-- gm-command:${commandId} -->` },
+      answer: {
+        custom_response: JSON.stringify({
+          kind: 'question_answers',
+          answers,
+          ...(notes === undefined ? {} : { notes }),
+        }),
+      },
+    });
+    const multi = decision(
+      [
+        { option_id: 'golems', verdict: 'like', note: '  bigger  ' },
+        { option_id: 'slimes', verdict: 'like' },
+      ],
+      'global note',
+    );
+    expect(syncInventory({ inventory, decisions: [multi], now: () => '2026-11-21T00:00:00.000Z' })).toBe(1);
+    expect(inventory[0]).toMatchObject({
+      status: 'answered',
+      answer: 'Golems:   bigger  , Slimes: global note',
+      answered_at: '2026-11-21T00:00:00.000Z',
+    });
+    expect(syncInventory({ inventory, decisions: [multi] })).toBe(0);
+
+    const noteOnly = structuredClone(data);
+    noteOnly[0]!.status = 'asked';
+    noteOnly[0]!.command_id = 'cp_01ARZ3NDEKTSV4RRFFQ69G5FAV';
+    expect(
+      syncInventory({
+        inventory: noteOnly,
+        decisions: [decision([], 'Just the note', noteOnly[0]!.command_id!)],
+        now: () => '2026-11-21T00:00:00.000Z',
+      }),
+    ).toBe(1);
+    expect(noteOnly[0]!.answer).toBe('Just the note');
+
+    const colonNote = structuredClone(data);
+    colonNote[0]!.status = 'asked';
+    colonNote[0]!.command_id = 'cp_01ARZ3NDEKTSV4RRFFQ69G5FAV';
+    expect(
+      syncInventory({
+        inventory: colonNote,
+        decisions: [decision([], 'Kevin: use the blue one', colonNote[0]!.command_id!)],
+      }),
+    ).toBe(1);
+    expect(colonNote[0]!.answer).toBe('Kevin: use the blue one');
+  });
+
+  it('loads answered decisions from the local Aiur registry and writes inventory state', async () => {
+    const root = game();
+    const home = tempDir('gm-decisions-home-');
+    mkdirSync(join(home, '.aiur'), { recursive: true });
+    const token = join(home, '.aiur', 'token');
+    writeFileSync(token, 'local-token');
+    const file = join(root, 'docs', basename(root), 'decisions.json');
+    const inventory = structuredClone(data);
+    inventory[0]!.status = 'asked';
+    inventory[0]!.command_id = 'cp_01ARZ3NDEKTSV4RRFFQ69G5FAV';
+    inventory[0]!.options[1] = { label: 'Golems', media: 'chat-golems' };
+    writeFileSync(file, JSON.stringify(inventory));
+    writeFileSync(
+      join(home, '.aiur', 'remote-instances.yaml'),
+      `instances:\n  game:\n    url: http://127.0.0.1:43123\n    token_file: ${token}\n`,
+    );
+    const response = {
+      decisions: [
+        {
+          decision_id: 'decision-1',
+          version: 2,
+          ticket: { identifier: 'OGM-1' },
+          kind: 'direction_checkpoint',
+          authority: 'supervisor_allowed',
+          blocking: false,
+          reversibility: 'reversible',
+          question: 'Which enemies?',
+          options: [],
+          context: { long_context_markdown: '<!-- gm-command:cp_01ARZ3NDEKTSV4RRFFQ69G5FAV -->' },
+          answer: {
+            custom_response: JSON.stringify({
+              kind: 'question_answers',
+              answers: [{ option_id: 'golems', verdict: 'like', note: 'bigger' }],
+              notes: 'Use these in the tower',
+            }),
+          },
+          created_at: '2026-11-21T00:00:00.000Z',
+          decision_status: 'answered',
+        },
+      ],
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await gm(['decisions', 'sync'], { cwd: root, home });
+    expect(result.code, result.err.join('\n')).toBe(0);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(JSON.parse(readFileSync(file, 'utf8'))[0]).toMatchObject({
+      status: 'answered',
+      answer: 'Golems: bigger: Use these in the tower',
+      answered_at: expect.any(String),
+      command_id: null,
     });
   });
 
