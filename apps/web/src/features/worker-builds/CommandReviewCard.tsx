@@ -28,6 +28,7 @@ export function CommandReviewCard({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
   const [zoom, setZoom] = useState<{ url: string; label: string }>();
+  const [picking, setPicking] = useState<{ id: string; label: string; version: number }>();
   const drag = useRef<{ id: number; x: number; y: number } | undefined>(undefined);
   const suppressImageClick = useRef(false);
   useEffect(() => {
@@ -35,6 +36,7 @@ export function CommandReviewCard({
     setSelectedOption(command.options[0]?.id ?? '');
     setVotes({});
     setReasons({});
+    setPicking(undefined);
     setError(false);
   }, [command.version]);
   const selected = command.options.find((option) => option.id === selectedOption) ?? command.options[0];
@@ -74,6 +76,7 @@ export function CommandReviewCard({
         queryClient.invalidateQueries({ queryKey: gameCommandsQueryKey(commandSource(command)) }),
       ]);
       setSaved(true);
+      setPicking(undefined);
       onAnswered();
     } catch {
       setError(true);
@@ -188,13 +191,13 @@ export function CommandReviewCard({
       >
         {command.options.map((option) => (
           <div className="worker-review-option review-deck-card" key={option.id} hidden={option.id !== selected?.id}>
-            {option.id === selected?.id && option.playable ? (
+            {option.playable ? (
               <PlayableCard gameId={commandSource(command)} card={option} options={command.options} />
-            ) : option.id === selected?.id && option.media && mediaKindOf(option.media) === 'audio' ? (
+            ) : option.media && mediaKindOf(option.media) === 'audio' ? (
               <audio controls src={option.media.url} aria-label={option.label} />
-            ) : option.id === selected?.id && option.media && mediaKindOf(option.media) === 'video' ? (
+            ) : option.media && mediaKindOf(option.media) === 'video' ? (
               <video controls playsInline autoPlay muted loop src={option.media.url} className="review-deck-media" />
-            ) : option.id === selected?.id && option.media ? (
+            ) : option.media ? (
               <button
                 type="button"
                 className="worker-review-image"
@@ -209,18 +212,15 @@ export function CommandReviewCard({
                 <img src={option.media.url} alt={option.label} className="review-deck-media" />
               </button>
             ) : null}
-            {option.id === selected?.id && option.audio && (
-              <audio controls src={option.audio.url} aria-label={`${option.label} audio`} />
-            )}
-            {option.id === selected?.id &&
-              option.audioClips?.map((clip, index) => (
-                <audio
-                  key={`${clip.url}:${index}`}
-                  controls
-                  src={clip.url}
-                  aria-label={`${option.label} audio ${index + 2}`}
-                />
-              ))}
+            {option.audio && <audio controls src={option.audio.url} aria-label={`${option.label} audio`} />}
+            {option.audioClips?.map((clip, index) => (
+              <audio
+                key={`${clip.url}:${index}`}
+                controls
+                src={clip.url}
+                aria-label={`${option.label} audio ${index + 2}`}
+              />
+            ))}
             <div
               className="worker-review-votes"
               aria-label={`Rate ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`}
@@ -267,6 +267,20 @@ export function CommandReviewCard({
                 />
               </label>
             ) : null}
+            <button
+              type="button"
+              disabled={sending || saved}
+              onClick={() => {
+                setError(false);
+                setPicking({
+                  id: option.id,
+                  label: `Pick ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`,
+                  version: command.version,
+                });
+              }}
+            >
+              Pick {letterOf(command.options, option.id)}: {withoutLinks(option.label)}
+            </button>
           </div>
         ))}
       </div>
@@ -295,6 +309,48 @@ export function CommandReviewCard({
         </p>
       )}
       {error && <p role="alert">That answer did not send. Try again.</p>}
+      {picking && picking.version === command.version && (
+        <div onKeyDown={(event) => event.stopPropagation()}>
+          <Dialog
+            title={picking.label}
+            className="review-deck-reason"
+            backdropClassName="review-deck-reason-backdrop worker-review-sheet-backdrop"
+            onClose={() => {
+              if (!sending) setPicking(undefined);
+            }}
+          >
+            <label>
+              Note (optional)
+              <textarea
+                value={note}
+                disabled={sending}
+                maxLength={2000}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            </label>
+            {error && <p role="alert">That answer did not send. Try again.</p>}
+            <div className="review-deck-reason-actions">
+              <button
+                type="button"
+                disabled={sending}
+                onClick={() => {
+                  if (picking.version === command.version)
+                    void send(picking.id, {
+                      likes: [picking.id],
+                      dislikes: [],
+                      ...(note.trim() ? { notes: note.trim() } : {}),
+                    });
+                }}
+              >
+                Send choice
+              </button>
+              <button type="button" disabled={sending} onClick={() => setPicking(undefined)}>
+                Cancel
+              </button>
+            </div>
+          </Dialog>
+        </div>
+      )}
       {zoom && (
         <div
           onKeyDown={(event) => {
