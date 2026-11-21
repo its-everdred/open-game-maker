@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { queryClient } from '../../app/query';
 import { ReviewInbox } from './ReviewInbox';
@@ -463,7 +463,7 @@ it('lists core Commands alongside game reviews', () => {
       <ReviewInbox commands={[core]} reviews={[]} onClose={close} />
     </QueryClientProvider>,
   );
-  expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeVisible();
+  expect(screen.getByRole('button', { name: '👍' })).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(close).toHaveBeenCalledOnce();
 });
@@ -488,8 +488,6 @@ it('refreshes the version and options of the open command', () => {
     </QueryClientProvider>,
   );
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Keep my note' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Pick A: Old' }));
-  expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
   view.rerender(
     <QueryClientProvider client={queryClient}>
       <ReviewInbox
@@ -501,8 +499,7 @@ it('refreshes the version and options of the open command', () => {
       />
     </QueryClientProvider>,
   );
-  expect(screen.getByRole('button', { name: 'Pick A: New' })).toBeVisible();
-  expect(screen.queryByRole('dialog', { name: 'Pick A: Old' })).toBeNull();
+  expect(screen.getByRole('button', { name: '👍' })).toBeVisible();
   expect(screen.getByLabelText('Note (optional)')).toHaveValue('Keep my note');
 });
 
@@ -611,16 +608,11 @@ it('keeps a command open while an answer is sending', async () => {
       <ReviewInbox commands={[command]} reviews={[]} onClose={close} />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Pick A: A' }));
-  const sheet = within(screen.getByRole('dialog', { name: 'Pick A: A' }));
-  const note = sheet.getByLabelText('Note (optional)');
-  note.focus();
-  fireEvent.keyDown(note, { key: 'Tab' });
-  expect(note).toHaveFocus();
-  fireEvent.click(sheet.getByRole('button', { name: 'Send choice' }));
-  expect(screen.getByRole('button', { name: 'Pick A: A' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '👍' }));
+  fireEvent.click(screen.getByText('Send', { selector: 'button' }));
+  expect(screen.getByRole('button', { name: '👍' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
-  fireEvent.keyDown(screen.getByRole('dialog', { name: 'Pick A: A' }), { key: 'Escape' });
+  fireEvent.keyDown(screen.getByRole('dialog', { name: 'Needs Review' }), { key: 'Escape' });
   expect(close).not.toHaveBeenCalled();
   finish({ status: 'answered' });
   await screen.findByText(/Saved/);
