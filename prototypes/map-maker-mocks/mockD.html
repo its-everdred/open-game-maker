@@ -15,12 +15,12 @@ if(q==='snap'||q==='free'){
   else{Iso.img(L,'sprites/stone_a13_e.png',3.35,2.7,ox,oy,s,'f','opacity:.9;filter:drop-shadow(0 0 6px #ffbf32)');Iso.img(L,'sprites/stone_a5_e.png',3.8,3.45,ox,oy,s,'f');const [x,y]=at(3.85,3.2,ox,oy,s);H(`<div class="finger" style="left:${x+30}px;top:${y+20}px"></div>`);}
 }
 if(q==='drag'||q==='tap'){
-  buildScene(L,ox,oy,s,{skipFence:(x,y,e)=>e==='xMax'});
-  // new fence run along the east side, auto-joined at both corners
-  const ys=[0,1,2,3,4,5,6];
-  ys.forEach(y=>{if(y<5){Iso.fence(L,'b1',7,y,'xMax',ox,oy,s,'filter:drop-shadow(0 0 5px #94d742)');}});
+  // The east fence's north end is gone; the new run (glowing) closes the gap from the north corner to the old fence.
+  buildScene(L,ox,oy,s,{skipFence:(x,y,e)=>e==='xMax'&&y<5});
+  const ys=[0,1,2,3,4];
+  ys.forEach(y=>Iso.fence(L,'b1',7,y,'xMax',ox,oy,s,'filter:drop-shadow(0 0 5px #94d742)'));
   if(q==='drag'){const a=at(8,0.1,ox,oy,s),b=at(8,4.9,ox,oy,s);H(`<svg style="position:absolute;inset:0;width:100%;height:100%;z-index:900001"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#94d742" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 12"/></svg><div class="finger" style="left:${b[0]}px;top:${b[1]}px"></div>`);}
-  else{ys.slice(0,5).forEach((y,i)=>{const p=at(8,y+0.5,ox,oy,s);H(`<div class="tapn" style="left:${p[0]+14}px;top:${p[1]}px">${i+1}</div>`);});}
+  else{ys.forEach((y,i)=>{const p=at(8,y+0.5,ox,oy,s);H(`<div class="tapn" style="left:${p[0]+14}px;top:${p[1]}px">${i+1}</div>`);});}
 }
 if(q==='lock'||q==='agent'){
   buildScene(L,ox,oy,s);

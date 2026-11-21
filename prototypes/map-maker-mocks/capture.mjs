@@ -15,8 +15,13 @@ const shots = [
   ...['snap', 'free', 'drag', 'tap', 'lock', 'agent'].map((q) => [`mockD.html?q=${q}`, `D-${q}.png`, 640, 480, 1]),
 ];
 const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
+const missing = [];
 for (const [page, file, width, height, scale] of shots) {
   const tab = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale });
+  // Local files are the sprites and mock code: a failed one means a broken picture. Web fonts may fall back.
+  tab.on('requestfailed', (request) => {
+    if (request.url().startsWith('file:')) missing.push(`${page}: ${decodeURI(request.url())}`);
+  });
   await tab.goto(`file://${here}${page}`);
   await tab.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
   await tab.evaluate(() => Promise.all([...document.images].map((image) => image.decode().catch(() => {}))));
@@ -25,3 +30,7 @@ for (const [page, file, width, height, scale] of shots) {
   await tab.close();
 }
 await browser.close();
+if (missing.length) {
+  console.error(`missing local files (run stage-sprites.sh):\n${[...new Set(missing)].join('\n')}`);
+  process.exit(1);
+}
