@@ -50,8 +50,7 @@ export function ReviewInbox({
   const [newCommandKeys, setNewCommandKeys] = useState<ReadonlySet<string>>(() => new Set());
   const [command, setCommand] = useState<ReviewCommand | undefined>(initialCommand);
   const [sending, setSending] = useState(false);
-  const [picking, setPicking] = useState(false);
-  const busy = sending || picking;
+  const busy = sending;
   const [target, setTarget] = useState<ReviewTarget | undefined>(initialTarget);
   const pendingReviews = reviews.filter((review) => !answered.has(keyOf(review)));
   const pendingCommands = commands.filter((item) => !answered.has(commandKey(item)));
@@ -244,7 +243,6 @@ export function ReviewInbox({
             key={`${commandSource(command)}:${command.decision_id}`}
             command={command}
             onSendingChange={setSending}
-            onPickingChange={setPicking}
             ticketState={
               workers.find((worker) => worker.ticket === `${commandSource(command)}:${command.ticket}`)?.state
             }

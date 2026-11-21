@@ -1,0 +1,47 @@
+.worker-review-recommendation {
+  margin: 8px 0;
+  font-weight: 700;
+}
+
+.worker-review-votes,
+.worker-review-submit {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.worker-review-votes button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.worker-review-votes button[aria-pressed='true'] {
+  outline: 2px solid var(--green-b);
+  outline-offset: 2px;
+}
+
+.worker-review-option-note {
+  display: block;
+  width: 100%;
+}
+
+.worker-review-option-note textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--night);
+  color: var(--ink);
+  font: 600 15px var(--body);
+}
+
+.worker-review-submit {
+  flex-wrap: wrap;
+}
