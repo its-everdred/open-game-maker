@@ -219,15 +219,12 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
           return [
             gameId,
             {
+              // The web gates tile art on logoUrl/coverUrl (the image objects only add srcsets), so both stay.
               ...(manifest.logo
                 ? {
-                    ...(logoImage
-                      ? {}
-                      : {
-                          logoUrl: manifest.sharedUrls?.[manifest.logo]
-                            ? `${origin}${manifest.sharedUrls[manifest.logo]}`
-                            : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
-                        }),
+                    logoUrl: manifest.sharedUrls?.[manifest.logo]
+                      ? `${origin}${manifest.sharedUrls[manifest.logo]}`
+                      : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
                   }
                 : {}),
               ...(coverImage ? { coverImage } : {}),
@@ -251,15 +248,13 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               ...(manifest.genres ? { choices: { genre: manifest.genres } } : {}),
               ...(manifest.description ? { tagline: manifest.description } : {}),
               ...(manifest.tags ? { tags: manifest.tags } : {}),
-              ...(coverImage
-                ? {}
-                : cover
-                  ? {
-                      coverUrl: manifest.sharedUrls?.['media/thumbnail.png']
-                        ? `${origin}${manifest.sharedUrls['media/thumbnail.png']}`
-                        : `${base}/thumbnail.png`,
-                    }
-                  : {}),
+              ...(cover
+                ? {
+                    coverUrl: manifest.sharedUrls?.['media/thumbnail.png']
+                      ? `${origin}${manifest.sharedUrls['media/thumbnail.png']}`
+                      : `${base}/thumbnail.png`,
+                  }
+                : {}),
               ...(trailer ? { trailerUrl: `${base}/trailer-landscape.mp4` } : {}),
             },
           ] as const;
