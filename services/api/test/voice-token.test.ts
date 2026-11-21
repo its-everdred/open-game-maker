@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { loadApiEnv } from '../src/app/env.js';
 import { createGameRow } from '../src/games/games.js';
+import { gameDrafts } from '../src/new-game/drafts.js';
 import { activeTargetFor } from '../src/voice/briefing-push.js';
 import { mintVoiceToken, VOICE_TOKEN_TTL_SEC } from '../src/voice/token.js';
 import { makeApiEnv } from './env-fixture.js';
@@ -93,6 +94,20 @@ async function setup(
       updatedAt: now,
     })
     .run();
+  const draft = gameDrafts.create(deps.db, {
+    familyId,
+    creatorId: creator.userId,
+    choices: {
+      genre: 'platformer',
+      vibe: 'cozy',
+      family: 'chunky-low-poly',
+      world: 'cavern',
+      players: 'single',
+      pov: 'side-on',
+    },
+    allowAiGeneratedAssets: true,
+  });
+  gameDrafts.attachTicket(deps.db, draft.id, 'owner/instance', 144);
   const { app } = await makeApp(deps);
   const request = (user: TestUser, target: Record<string, string>, path = '/api/v1/voice/token') =>
     app.request(path, {
@@ -100,7 +115,7 @@ async function setup(
       headers: { ...asUser(user.userId), 'content-type': 'application/json' },
       body: JSON.stringify({ target }),
     });
-  return { request, gameId: game.id, scopeSessionId };
+  return { request, gameId: game.id, scopeSessionId, draftId: draft.id };
 }
 
 function insertJob(deps: ReturnType<typeof makeDeps>, id: string, gameId: string) {
@@ -137,6 +152,18 @@ const buildTarget = (gameId: string, creatorId = creator.userId, jobId = 'j-1') 
 });
 
 describe('POST /api/v1/voice/token', () => {
+  it('authorizes a temporary draft scope session without a game row', async () => {
+    const { request, draftId } = await setup();
+    const target = {
+      kind: 'scope',
+      game_id: draftId,
+      session_id: draftId,
+      creator_id: creator.userId,
+    };
+
+    expect((await request(creator, target)).status).toBe(200);
+    expect((await request(sibling, { ...target, creator_id: sibling.userId })).status).toBe(403);
+  });
   it('authorizes an edit session before a job exists and rejects another game’s job', async () => {
     const { request, gameId } = await setup();
     const target = {
@@ -235,6 +262,22 @@ describe('POST /api/v1/voice/token', () => {
 });
 
 describe('POST /api/v1/voice/dictation-token', () => {
+  it('mints a target-bound dictation token for a temporary draft scope session', async () => {
+    const { request, draftId } = await setup();
+    const target = {
+      kind: 'scope',
+      game_id: draftId,
+      session_id: draftId,
+      creator_id: creator.userId,
+    };
+
+    const response = await request(creator, target, '/api/v1/voice/dictation-token');
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { token: string; url: string };
+    expect(decode(body.token).claims).toMatchObject({ scope: 'dictate', sub: creator.userId, target });
+    expect(new URL(body.url).searchParams.get('mode')).toBe('dictate');
+  });
   it('mints a target-bound dictate token and selects dictation on the existing voice URL', async () => {
     const { request, gameId, scopeSessionId } = await setup();
     const target = {

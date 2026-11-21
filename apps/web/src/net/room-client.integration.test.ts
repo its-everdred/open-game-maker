@@ -68,8 +68,20 @@ describe('RoomClient with GameRoom', () => {
       store: watcherStore,
       clientFactory: () => testServer!.sdk,
     });
+    const appliedRevisions = new Set<number>();
+    const applyListeners = new Set<() => void>();
+    const subscribeToApply = (listener: () => void) => {
+      applyListeners.add(listener);
+      return () => applyListeners.delete(listener);
+    };
     const sync = new WatcherSync({
-      bridge: { send: () => undefined },
+      bridge: {
+        send: (envelope) => {
+          if (envelope.t !== 'design.apply') return;
+          appliedRevisions.add((envelope.payload as { rev: number }).rev);
+          applyListeners.forEach((listener) => listener());
+        },
+      },
       fetchSnapshot: async () => ({ rev: 0, doc: initialDoc }),
       store: watcherStore,
     });
@@ -83,20 +95,21 @@ describe('RoomClient with GameRoom', () => {
       owner.join({ roomId: room.roomId, grant: ownerGrant, pin, expiresAt: Date.now() + 600_000 }),
       watcher.join({ roomId: room.roomId, grant: watcherGrant, pin, expiresAt: Date.now() + 600_000 }),
     ]);
-    /* A protocol-2 join sends the seat table beside the welcome, and this file boots a real room beside
-     * eighteen jsdom files; the default 8 s wait is too tight for both under load. */
-    await waitFor(
+    /* A protocol-2 join sends the seat table beside the welcome, and the real room/socket setup runs beside
+     * eighteen jsdom files; the existing 25 s test budget covers setup and all sync revisions under load. */
+    await waitForStores(
+      [ownerStore, watcherStore],
       () => ownerStore.getState().status === 'connected' && watcherStore.getState().status === 'connected',
-      15_000,
     );
-    await waitFor(() => sync.appliedRev === 0, 15_000);
+    await waitForSignal(subscribeToApply, () => appliedRevisions.has(0));
 
     let hostDoc = initialDoc;
     for (let rev = 1; rev <= 3; rev += 1) {
       const patches: Patch[] = [{ op: 'replace', path: ['globals', 'gravity'], value: rev + 1 }];
       hostDoc = apply(hostDoc, patches);
       ownerStore.getState().publishTransaction(transaction(rev, patches));
-      await waitFor(() => sync.appliedRev === rev);
+      await waitForSignal(subscribeToApply, () => appliedRevisions.has(rev));
+      expect(sync.appliedRev).toBe(rev);
       expect(sync.doc).toEqual(hostDoc);
     }
 
@@ -119,12 +132,29 @@ function transaction(rev: number, patches: Patch[]): DesignTx {
   };
 }
 
-async function waitFor(condition: () => boolean, timeoutMs = 8_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!condition()) {
-    if (Date.now() >= deadline) throw new Error('timed out waiting for room state');
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
+async function waitForSignal(subscribe: (listener: () => void) => () => void, condition: () => boolean): Promise<void> {
+  if (condition()) return;
+
+  await new Promise<void>((resolve) => {
+    let unsubscribe: () => void = () => {};
+    const check = () => {
+      if (!condition()) return;
+      unsubscribe();
+      resolve();
+    };
+    unsubscribe = subscribe(check);
+    check();
+  });
+}
+
+async function waitForStores(
+  stores: Array<ReturnType<typeof createRoomStore>>,
+  condition: () => boolean,
+): Promise<void> {
+  await waitForSignal((listener) => {
+    const unsubscribers = stores.map((store) => store.subscribe(listener));
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, condition);
 }
 
 async function availablePort(): Promise<number> {

@@ -20,8 +20,18 @@ describe('prototype showcase', () => {
     ]);
     expect(games.filter((game) => game.title === 'Goblin Cellar')).toHaveLength(1);
     expect(games.find((game) => game.title === 'Goblin Cellar')?.id).toBe('real-goblin');
-    expect(games.find((game) => game.title === 'RestoreBound')?.showcase?.badge).toBe('Featured');
+    expect(games.find((game) => game.title === 'Mossy Leap')?.showcase?.id).toBe('mossy-leap');
     expect(games.find((game) => game.title === 'Puddle Postal')).toBeDefined();
     expect(games.find((game) => game.title === 'Blobs VS Blocks')?.id).toBe('blobs');
+  });
+
+  it('shows the real RestoreBound as itself, not under the old placeholder record', () => {
+    // RestoreBound began as an invented showcase tile; the family's real game now owns the slug.
+    const games = mergeShowcase([real('real-restorebound', 'RestoreBound', 'restorebound')]);
+    const restorebound = games.filter((game) => game.slug === 'restorebound' || game.title === 'RestoreBound');
+    expect(restorebound).toHaveLength(1);
+    expect(restorebound[0]?.id).toBe('real-restorebound');
+    expect(restorebound[0]?.showcase).toBeUndefined();
+    expect(mergeShowcase([]).find((game) => game.id === 'showcase:restorebound')).toBeUndefined();
   });
 });

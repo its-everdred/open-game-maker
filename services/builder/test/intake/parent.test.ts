@@ -238,6 +238,34 @@ describe('New Game parent issue', () => {
     close(input);
   });
 
+  it('reads the finished form choices from a promoted game draft', () => {
+    const input = harness();
+    input.db.delete(schema.scopeSessions).where(eq(schema.scopeSessions.id, SESSION_ID)).run();
+    input.db
+      .insert(schema.gameDrafts)
+      .values({
+        id: 'd_88000000-0000-4000-8000-000000000042',
+        familyId: 'f_1',
+        creatorId: 'u_1',
+        choices: JSON.stringify(CHOICES),
+        allowAiGeneratedAssets: true,
+        status: 'promoted',
+        revision: 1,
+        scope: JSON.stringify({ ...PLAN, session_id: 'd_88000000-0000-4000-8000-000000000042', revision: 1 }),
+        scopeHash: 'hash',
+        gameId: 'g_1',
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString(),
+      })
+      .run();
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    const game = input.db.select().from(schema.games).where(eq(schema.games.id, 'g_1')).get()!;
+
+    expect(parentIssueFor(input.db, job, game)?.body).toContain('- Genre: platformer');
+    close(input);
+  });
+
   it('redacts an address-shaped value and truncates a long brief', () => {
     const input = harness();
     const long = `${'x'.repeat(500)} ask me at maker@example.test`;

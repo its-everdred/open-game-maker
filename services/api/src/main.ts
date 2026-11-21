@@ -23,6 +23,8 @@ import { startAnalyticsRetention } from './analytics/retention.js';
 import { startEstimateRefinement } from './budget/estimate.js';
 import { createApplyUsage, startUsageReconciler } from './budget/aiur-usage.js';
 import { createChatJobDirectory } from './build-chat/job-directory.js';
+import { createDraftScopeTicket } from './new-game/draft-assistant.js';
+import { startDraftCleanup } from './game-drafts/cleanup.js';
 import { finishRun, startBuildSweep } from './builds/publish.js';
 import { gameSlugFor } from './games/games.js';
 import { createDaemonDirectory } from './jobs/daemons.js';
@@ -127,7 +129,8 @@ const deps: AppDeps = {
   log,
 };
 deps.registry.chatJobs = createChatJobDirectory(db);
-deps.registry.aiurClientFor = daemonDirectory.clientForSlug;
+deps.registry.aiurClientFor = async (slug) =>
+  slug === 'core' ? deps.registry.coreAiurClient : daemonDirectory.clientForSlug(slug);
 if (env.AIUR_API_URL && env.AIUR_API_TOKEN) {
   deps.registry.coreAiurClient = createAiurClient({
     baseUrl: env.AIUR_API_URL,
@@ -135,6 +138,30 @@ if (env.AIUR_API_URL && env.AIUR_API_TOKEN) {
     supervisorToken: env.AIUR_API_TOKEN,
   });
 }
+deps.registry.draftScopeAssistant = {
+  async create({ draftId, choices }) {
+    const aiur = deps.registry.coreAiurClient;
+    if (!aiur) throw new Error('shared_aiur_unavailable');
+    return createDraftScopeTicket({
+      repo: `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`,
+      draftId,
+      choices,
+      issues,
+      aiur,
+    });
+  },
+  async close({ repo, ticket, draftId }) {
+    if (!issues.close) throw new Error('draft_ticket_close_unavailable');
+    const issue = ticket ? { number: Number(ticket) } : await issues.findByMarkers(repo, draftId, 'scope');
+    if (issue) await issues.close(repo, issue.number);
+  },
+  async transcript({ ticket }) {
+    const aiur = deps.registry.coreAiurClient;
+    if (!aiur) return [];
+    const transcript = await aiur.ticketTranscript(ticket);
+    return transcript.events;
+  },
+};
 deps.registry.workerWorkpad = createWorkpadReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.workerTitle = createTicketTitleReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.trackerTickets = createTrackerReader(env.OGM_INTAKE_GITHUB_TOKEN);
@@ -191,6 +218,7 @@ const stopAnalyticsRetention = startAnalyticsRetention({
   log,
 });
 intake.start();
+const stopDraftCleanup = startDraftCleanup(deps);
 const stopScheduler = startScheduler({ ...lifecycleDeps, log });
 const stopEstimateRefinement = startEstimateRefinement({ db, events: deps.events, log });
 const stopBuildSweep = startBuildSweep(deps, { graceMs: 30 * 60_000, intervalMs: 60_000 });
@@ -271,6 +299,7 @@ const server = serve({ fetch: app.fetch, hostname: API_HOST, port: env.OGM_API_P
 server.once('listening', () => log({ event: 'listening', host: API_HOST, port: env.OGM_API_PORT }));
 process.once('SIGTERM', () => {
   intake.stop();
+  stopDraftCleanup();
   stopAnalyticsRetention();
   stopScheduler();
   stopEstimateRefinement();

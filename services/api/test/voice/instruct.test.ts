@@ -4,8 +4,10 @@ import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listSince } from '../../src/build-chat/store.js';
+import { createChatJobDirectory } from '../../src/build-chat/job-directory.js';
 import { writeLimits } from '../../src/energy/store.js';
 import { buildBriefing, clearVoiceWaitingOn, type VoiceTarget } from '../../src/voice/briefing-push.js';
+import { gameDrafts } from '../../src/new-game/drafts.js';
 import { ids, NOW, worked } from '../budget/fixture.js';
 import { makeApp } from '../helpers.js';
 
@@ -114,6 +116,54 @@ describe('POST /internal/voice/instruct', () => {
         dayKey: expect.any(String),
       }),
     ]);
+  });
+
+  it('delivers voice instructions into a pre-Finish draft conversation', async () => {
+    const { deps, message, request } = await setup();
+    const client = { message } as unknown as AiurClient;
+    deps.registry.chatJobs = createChatJobDirectory(deps.db);
+    deps.registry.coreAiurClient = client;
+    deps.registry.aiurClientFor = async () => client;
+    const draft = gameDrafts.create(deps.db, {
+      familyId: ids.family,
+      creatorId: ids.creator,
+      choices: {
+        genre: 'Adventure',
+        vibe: 'Cozy',
+        family: 'smallscaleint',
+        world: 'Sky islands',
+        players: 'single',
+        pov: 'iso',
+      },
+      allowAiGeneratedAssets: true,
+      at: new Date(NOW),
+    });
+    gameDrafts.attachTicket(deps.db, draft.id, 'owner/instance', 42, NOW.toISOString());
+    const target: VoiceTarget = {
+      kind: 'scope',
+      game_id: draft.id,
+      session_id: draft.id,
+      creator_id: ids.creator,
+    };
+
+    const first = await request(target, 'Add a nighttime bakery', 'voice-draft');
+    const replay = await request(target, 'Add a nighttime bakery', 'voice-draft');
+
+    expect(await first.json()).toEqual({ delivery_id: expect.any(String), status: 'delivered' });
+    expect(await replay.json()).toEqual({ delivery_id: expect.any(String), status: 'delivered' });
+    expect(message).toHaveBeenCalledTimes(1);
+    expect(message).toHaveBeenCalledWith('42', 'Add a nighttime bakery', expect.any(String), expect.anything());
+    expect(listSince(deps.sqlite, `draft:${draft.id}`, 0)).toEqual([
+      expect.objectContaining({
+        actor: 'creator',
+        text: 'Add a nighttime bakery',
+        mirrorState: 'sent',
+        aiurTicket: '42',
+      }),
+    ]);
+    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.idempotencyKey, 'voice:voice-draft')).all()).toEqual(
+      [],
+    );
   });
 
   it('keeps a refused scope draft pending with the four next choices', async () => {

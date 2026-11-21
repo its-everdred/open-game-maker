@@ -28,6 +28,14 @@ export type RepoProvisioner = {
     repository?: { owner: string; name: string };
   }): Promise<{ owner: string; repo: string; url: string; path: string }>;
 };
+export type DraftScopeAssistant = {
+  create(input: { draftId: string; choices: import('@ogm/contracts').ScopeChoices }): Promise<{
+    repo: string;
+    ticket: string;
+  }>;
+  close(input: { repo: string; ticket?: string; draftId: string }): Promise<void>;
+  transcript(input: { ticket: string }): Promise<{ body: string; turn_id: string | null }[]>;
+};
 // The GitHub account an App installation belongs to. A login is only answered for proof of ownership.
 export type GitHubInstallationLookup = {
   // The login of the installation the creator who authorized `code` controls; null when GitHub does not report it.
@@ -75,6 +83,7 @@ export interface Registry {
   principalResolvers: Resolver[];
   gameResolver: GameResolver | null;
   repoProvisioner: RepoProvisioner | null;
+  draftScopeAssistant: DraftScopeAssistant | null;
   githubInstallations: GitHubInstallationLookup | null;
   mailSender: MailSender | null;
   userDirectory: UserDirectory | null;
@@ -115,6 +124,7 @@ export function createRegistry(): Registry {
     principalResolvers: [],
     gameResolver: null,
     repoProvisioner: null,
+    draftScopeAssistant: null,
     githubInstallations: null,
     mailSender: null,
     userDirectory: null,

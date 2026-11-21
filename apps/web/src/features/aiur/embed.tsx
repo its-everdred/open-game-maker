@@ -46,6 +46,17 @@ export function jobScope(gameId: string, jobId: string, ticket: string | null): 
   };
 }
 
+export function draftJobScope(draftId: string, jobId: string): AiurEmbedScope {
+  const job = encodeURIComponent(jobId);
+  return {
+    game: draftId,
+    tickets: [],
+    commands: '',
+    conversation: `/api/v1/jobs/${job}/chat/messages`,
+    stream: `/api/v1/jobs/${job}/chat`,
+  };
+}
+
 export function features(): AiurEmbedFeatures {
   return ALL_FEATURES;
 }

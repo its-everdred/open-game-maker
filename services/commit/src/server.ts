@@ -145,6 +145,17 @@ export function createCommitApp(dependencies: ServerDependencies): Hono {
     }
   });
 
+  app.get('/internal/admin/games/failed-create-audits', async (context) => {
+    const refused = refuseCaller(context);
+    if (refused !== undefined) return refused;
+    if (!dependencies.qaCreateFence) return context.json({ error: 'audit_unavailable' }, 503);
+    try {
+      return context.json({ gameIds: await dependencies.qaCreateFence.failedCreateIds() });
+    } catch {
+      return context.json({ error: 'audit_unavailable' }, 503);
+    }
+  });
+
   // The API resolves the account behind an installation id the browser brought back from GitHub (#280). A login is
   // only returned for an installation the user who authorized `code` controls, so learning an id proves nothing.
   app.post('/internal/installations/:id/ownership', async (context) => {

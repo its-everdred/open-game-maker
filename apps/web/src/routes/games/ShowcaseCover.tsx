@@ -10,7 +10,6 @@ let sceneModule: Promise<SceneModule> | undefined;
 const lastFrames = new Map<string, HTMLCanvasElement>();
 const sceneArt: Record<string, string> = {
   'goblin-cellar': 'goblin-fight.webp',
-  restorebound: 'town.png',
   'mossy-leap': 'pp-tiles.png',
   'skyward-squadron': 'shmup-tiles.png',
   'powder-rush': 'ski.png',

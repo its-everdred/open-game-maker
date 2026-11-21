@@ -34,8 +34,17 @@ export function dismissToast(id: number): void {
   write({ toasts: read().toasts.filter((t) => t.id !== id) });
 }
 
+// A repeated notice ("Reviews are ready" once per batch) shows once, at its latest arrival, and counts once while
+// it is unread.
 export function pushUpdate(text: string): void {
-  write({ updates: [...read().updates, { id: nextId++, text }].slice(-100), unreadUpdates: read().unreadUpdates + 1 });
+  const { updates, unreadUpdates } = read();
+  const unreadRepeat = updates
+    .slice(Math.max(0, updates.length - unreadUpdates))
+    .some((update) => update.text === text);
+  write({
+    updates: [...updates.filter((update) => update.text !== text), { id: nextId++, text }].slice(-100),
+    unreadUpdates: unreadRepeat ? unreadUpdates : unreadUpdates + 1,
+  });
 }
 export function readUpdates(): void {
   write({ unreadUpdates: 0 });

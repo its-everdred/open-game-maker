@@ -704,36 +704,35 @@ describe('GameScreen', () => {
   });
 
   it('renders manifest palette controls only in edit mode', async () => {
-    host.mountGameFrame.mockImplementationOnce((options) => {
-      queueMicrotask(() =>
-        options?.onState?.({
-          bridgeState: 'ready',
-          dropped: 0,
-          manifest: {
-            id: 'cellar',
-            sdk: '^1',
-            title: 'Goblin Cellar',
-            inputs: { actions: {} },
-            presentation: { orientation: 'any', minLogical: { w: 320, h: 180 }, fit: 'responsive' },
-            view: 'main',
-            dimension: '2d',
-            capabilities: [],
-            palette: {
-              categories: [{ id: 'actors', label: 'Actors', kind: 'items' }],
-              items: [{ prefab: 'skeleton', label: 'Skeleton', category: 'actors', thumbnail: 'art/skeleton.png' }],
-            },
-            tools: ['select', 'place'],
-            gizmos: {},
-            playLabel: 'Enter crypt',
-            saves: false,
-            overrides: { aliases: {}, retired: [] },
-          },
-        }),
-      );
-      return host.controller;
-    });
+    host.mountGameFrame.mockImplementationOnce(() => host.controller);
 
     renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    act(() => {
+      host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+        bridgeState: 'ready',
+        dropped: 0,
+        manifest: {
+          id: 'cellar',
+          sdk: '^1',
+          title: 'Goblin Cellar',
+          inputs: { actions: {} },
+          presentation: { orientation: 'any', minLogical: { w: 320, h: 180 }, fit: 'responsive' },
+          view: 'main',
+          dimension: '2d',
+          capabilities: [],
+          palette: {
+            categories: [{ id: 'actors', label: 'Actors', kind: 'items' }],
+            items: [{ prefab: 'skeleton', label: 'Skeleton', category: 'actors', thumbnail: 'art/skeleton.png' }],
+          },
+          tools: ['select', 'place'],
+          gizmos: {},
+          playLabel: 'Enter crypt',
+          saves: false,
+          overrides: { aliases: {}, retired: [] },
+        },
+      });
+    });
 
     fireEvent.click(await screen.findByLabelText('Game editor'));
     expect(await screen.findByRole('button', { name: 'Skeleton' }, { timeout: 5_000 })).toBeVisible();

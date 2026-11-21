@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 
 import { sweepPlaySessions } from '../src/analytics/retention.js';
+import { createGameRow } from '../src/games/games.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 import { writeQaState } from '../src/qa/state.js';
@@ -389,8 +390,12 @@ describe('games routes', () => {
       },
       trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
     });
-    expect((await list()).logoUrl).toBeUndefined();
-    expect((await list()).coverUrl).toBeUndefined();
+    // The web renders tile art only when logoUrl/coverUrl are set (Cover.tsx, Tile.tsx): the image objects add
+    // srcsets on top, so dropping the URLs blanked every tile on prod (2026-11-21).
+    expect(await list()).toMatchObject({
+      logoUrl: `https://games.example.test/a/${'1'.repeat(64)}.png`,
+      coverUrl: `https://games.example.test/a/${'2'.repeat(64)}.png`,
+    });
     // An older build's portrait cut is never offered: every game shows its one 16:9 trailer.
     expect(await list()).not.toHaveProperty('portraitTrailerUrl');
     for (const badImage of [
@@ -624,8 +629,11 @@ describe('games routes', () => {
       expect(response.status).toBe(502);
       expect(await response.json()).toEqual({
         error: 'repo_provisioning_failed',
-        details: { gameId: expect.stringMatching(/^g_/) },
+        details: { gameId: expect.any(String) },
       });
+      expect(deps.db.select().from(schema.games).all()).toHaveLength(1);
+      const listed = await app.request('/api/v1/games', { headers: asUser(creator.userId) });
+      expect((await listed.json()).games[0]).toMatchObject({ creationStatus: 'failed' });
     } finally {
       timeout.mockRestore();
     }
@@ -650,11 +658,59 @@ describe('games routes', () => {
     expect(await response.json()).toEqual({
       error: 'repo_provisioning_failed',
       message: 'GitHub is busy. Please try again later.',
-      details: { gameId: expect.stringMatching(/^g_/) },
     });
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(0);
   });
 
-  it('keeps a failed provision row and lets its owner retry', async () => {
+  it('retains the game row when the commit service reports an ambiguous server error', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.registry.repoProvisioner = new CommitServiceRepoProvisioner({
+      baseUrl: 'http://127.0.0.1:4301',
+      token: 'token',
+      instanceRepo: { owner: 'instance', name: 'games' },
+      fetch: async () => new Response(JSON.stringify({ error: 'commit operation failed' }), { status: 502 }),
+    });
+    const { app } = await makeApp(deps);
+    const response = await createGame(app);
+    const body = (await response.json()) as { details: { gameId: string } };
+    expect(response.status).toBe(502);
+    expect(
+      deps.db
+        .select()
+        .from(schema.games)
+        .all()
+        .map(({ id }) => id),
+    ).toEqual([body.details.gameId]);
+  });
+
+  it('retains the game row when remote provisioning succeeds but local metadata cannot be recorded', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.registry.repoProvisioner = {
+      provision: async () => ({
+        owner: 'instance',
+        repo: 'games',
+        url: 'https://github.com/instance/games',
+        path: 'games/moonlit-adventure',
+      }),
+    };
+    deps.sqlite.exec(
+      "CREATE TRIGGER fail_game_repo_record BEFORE UPDATE OF repo_url ON games BEGIN SELECT RAISE(ABORT, 'write failed'); END;",
+    );
+    const { app } = await makeApp(deps);
+
+    const response = await createGame(app);
+    const body = (await response.json()) as { details: { gameId: string } };
+
+    expect(response.status).toBe(502);
+    expect(body.details.gameId).toMatch(/^g_/);
+    expect(deps.db.select().from(schema.games).all()).toMatchObject([
+      { id: body.details.gameId, repoUrl: null, ownerId: creator.userId },
+    ]);
+  });
+
+  it('removes a failed create row so it cannot appear in the games list', async () => {
     const deps = makeDeps();
     seedFamily(deps);
     deps.registry.repoProvisioner = {
@@ -665,22 +721,65 @@ describe('games routes', () => {
     const { app } = await makeApp(deps);
     const failed = await createGame(app);
     expect(failed.status).toBe(502);
-    const failure = (await failed.json()) as { error: string; details: { gameId: string } };
-    expect(failure).toEqual({
-      error: 'repo_provisioning_failed',
-      details: { gameId: expect.stringMatching(/^g_/) },
-    });
-    const row = deps.db.select().from(schema.games).get();
-    expect(row).toMatchObject({ repoUrl: null, ownerId: creator.userId });
-    expect(failure.details.gameId).toBe(row?.id);
+    expect(await failed.json()).toEqual({ error: 'repo_provisioning_failed' });
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(0);
+    const listed = await app.request('/api/v1/games', { headers: asUser(creator.userId) });
+    expect(await listed.json()).toEqual({ games: [] });
+  });
 
-    deps.registry.repoProvisioner = new NullRepoProvisioner();
-    const retried = await app.request(`/api/v1/games/${row?.id}/provision`, {
-      method: 'POST',
-      headers: asUser(creator.userId),
+  it('shows a creating state while a repository is being created', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    let finish!: (repo: { owner: string; repo: string; url: string; path: string }) => void;
+    deps.registry.repoProvisioner = {
+      provision: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    };
+    const { app } = await makeApp(deps);
+    const creating = createGame(app);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    const listed = await app.request('/api/v1/games', { headers: asUser(creator.userId) });
+    const body = (await listed.json()) as { games: { id: string; creationStatus: string }[] };
+    expect(body.games).toHaveLength(1);
+    expect(body.games[0]).toMatchObject({ creationStatus: 'creating' });
+    finish({ owner: 'instance', repo: 'games', url: 'https://github.com/instance/games', path: 'games/castle-game' });
+    expect((await creating).status).toBe(201);
+  });
+
+  it('prunes only rows named by the failed-create audit', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    const failed = createGameRow(deps.db, {
+      familyId,
+      ownerId: creator.userId,
+      title: 'Failed Game',
+      repoVisibility: 'private',
     });
-    expect(retried.status).toBe(200);
-    expect(deps.db.select().from(schema.games).get()?.repoUrl).toBe('https://github.com/instance/games');
+    const other = createGameRow(deps.db, {
+      familyId,
+      ownerId: creator.userId,
+      title: 'Other Game',
+      repoVisibility: 'private',
+    });
+    const fetcher = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => Response.json({ gameIds: [failed.id] }));
+    try {
+      const { app } = await makeApp(deps);
+      const headers = { 'x-ogm-internal': deps.config.internalToken, 'x-ogm-service': 'commit' };
+      const listed = await app.request('/api/v1/internal/admin/games/prune-failed-candidates', { headers });
+      expect(await listed.json()).toMatchObject({ games: [{ id: failed.id, title: 'Failed Game' }] });
+      const removed = await app.request(`/api/v1/internal/admin/games/${failed.id}/prune-failed`, {
+        method: 'DELETE',
+        headers,
+      });
+      expect(await removed.json()).toEqual({ removed: true });
+      expect(deps.db.select({ id: schema.games.id }).from(schema.games).all()).toEqual([{ id: other.id }]);
+    } finally {
+      fetcher.mockRestore();
+    }
   });
 
   it('does not create a game when the provisioner is unavailable', async () => {

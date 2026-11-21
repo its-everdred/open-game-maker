@@ -17,6 +17,7 @@ import {
   setVoiceWaitingOn,
   targetKey,
 } from './briefing-push.js';
+import { gameDrafts } from '../new-game/drafts.js';
 
 type Delivery = { promise: Promise<InstructResponse>; expiresAt: number };
 
@@ -88,6 +89,40 @@ async function deliverScope(
   if (target.kind !== 'scope' && target.kind !== 'edit') throw new Error('not a scope or edit target');
   const draft = scopeText(request.text);
   if (!draft.text) throw new Error('empty voice draft');
+  if (target.kind === 'scope') {
+    const draftSession = gameDrafts.get(deps.db, target.session_id);
+    if (draftSession?.id === target.game_id) {
+      if (
+        draftSession.creatorId !== target.creator_id ||
+        !['open', 'agreed'].includes(draftSession.status) ||
+        draftSession.ticketNumber === null
+      ) {
+        throw new Error('voice scope target is unavailable');
+      }
+      const id = `m_${stableUuid(`${targetKey(target)}:${request.idempotency_key}`)}`;
+      const existing = getChatRow(deps.sqlite, id);
+      if (existing?.mirrorState === 'sent') return 'delivered';
+      if (existing?.mirrorState === 'failed') markMirror(deps.sqlite, id, 'pending');
+      const { inserted } =
+        existing === null
+          ? insertChatRow(deps.sqlite, {
+              id,
+              jobId: `draft:${draftSession.id}`,
+              actor: 'creator',
+              kind: 'text',
+              text: draft.text,
+              aiur: { ticket: String(draftSession.ticketNumber) },
+              mirrorState: 'pending',
+            })
+          : { inserted: false };
+      const runtime = getChatRuntime(deps);
+      if (inserted) runtime.hub.publish(`draft:${draftSession.id}`);
+      await runtime.mirror.mirror(id);
+      if (getChatRow(deps.sqlite, id)?.mirrorState !== 'sent') throw new Error('draft voice instruction not delivered');
+      clearVoiceWaitingOn(target);
+      return 'delivered';
+    }
+  }
   const game = deps.db.select().from(schema.games).where(eq(schema.games.id, target.game_id)).get();
   const membership = game
     ? deps.db
