@@ -62,7 +62,7 @@ test('browses three real game tiles with the keyboard', async ({ page }) => {
   await page.goto('/all?test');
 
   const tiles = page.locator('.game-tile');
-  await expect(tiles).toHaveCount(9);
+  await expect(tiles).toHaveCount(8);
   await expect(tiles.getByText('Building 40%')).toBeVisible();
   await expect
     .poll(() =>
@@ -87,7 +87,7 @@ test('browses three real game tiles with the keyboard', async ({ page }) => {
   await page.waitForTimeout(200);
   expect(page.url()).not.toContain('spotlight');
   await expect(page.locator('.games-spotlight')).toHaveCount(0);
-  await expect(tiles).toHaveCount(9);
+  await expect(tiles).toHaveCount(8);
 });
 
 test('keeps spotlight actions and close control touch sized on a phone', async ({ page }, testInfo) => {
