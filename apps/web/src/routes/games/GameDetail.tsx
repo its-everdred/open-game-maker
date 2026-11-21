@@ -3,6 +3,7 @@ import { CommandsInbox } from '../../features/commands-inbox/CommandsInbox';
 import { openConversation } from '../../features/build-chat/conversation';
 import { Icon } from '../../components/Icon';
 import { Cover } from './Cover';
+import { DisplayImage } from './DisplayImage';
 import { Ambient } from './Ambient';
 import { GameTrailer } from './GameTrailer';
 import { splatMask } from './splatMask';
@@ -223,6 +224,14 @@ export function GameDetail({
             <GameTrailer game={game} />
           ) : (
             <Cover game={game} hero />
+          )}
+          {!game.trailerUrl && game.logoUrl && (
+            <DisplayImage
+              className="game-logo"
+              src={game.logoUrl}
+              image={game.logoImage}
+              sizes="(max-width: 600px) 55vw, 320px"
+            />
           )}
         </span>
       </div>
