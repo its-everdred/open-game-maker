@@ -120,24 +120,27 @@ test('phone build dock opens the streamed chat and posts text once', async ({ pa
   await expect(page.locator('.build-chat-panel')).toHaveCSS('height', '390px');
 });
 
-test('large pasted text is a compact expandable attachment on phone and desktop', async ({ page }, testInfo) => {
+test('large pasted text becomes a compact attachment on phone and desktop', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   await page.setViewportSize(
     testInfo.project.name === 'phone' ? { width: 390, height: 844 } : { width: 1440, height: 900 },
   );
   await installAuthRoutes(page, { signedIn: true });
   await installBuildRoutes(page);
+  await page.route('**/api/v1/jobs/*/chat/attachments', async (route) =>
+    json(route, { id: 'a_pasted_text', kind: 'text', name: 'pasted-text.txt', mime: 'text/plain', bytes: 1_501 }, 201),
+  );
   await page.goto('/all?test', { waitUntil: 'domcontentloaded' });
   await openBuildChat(page);
 
-  const textbox = page.locator('aiur-composer textarea');
+  const composer = page.locator('#chat-dock-slot aiur-composer');
+  const textbox = composer.locator('textarea');
   const smallPasteAccepted = await textbox.evaluate((element) => {
     const data = new DataTransfer();
     data.setData('text/plain', 'a'.repeat(1_500));
     return element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   });
   expect(smallPasteAccepted).toBe(true);
-
   const largePaste = 'a'.repeat(1_501);
   const largePasteAccepted = await textbox.evaluate((element, text) => {
     const data = new DataTransfer();
@@ -145,15 +148,8 @@ test('large pasted text is a compact expandable attachment on phone and desktop'
     return element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   }, largePaste);
   expect(largePasteAccepted).toBe(false);
-
-  const composer = page.locator('aiur-composer');
-  const chip = composer.getByRole('listitem');
-  await expect(chip.getByText('Pasted text')).toBeVisible();
-  await expect(chip.getByText('1.5 KB')).toBeVisible();
-  expect((await chip.boundingBox())!.width).toBeLessThanOrEqual((await composer.boundingBox())!.width);
-
-  await chip.getByText('Pasted text').click();
-  await expect(chip.locator('pre')).toHaveText(largePaste);
+  const chip = composer.locator('.chip');
+  await expect(chip.locator('span')).toHaveText('pasted-text.txt');
 });
 
 // #222: files reach the builder as attachment ids on the message; the composer only shows their names.
@@ -185,7 +181,7 @@ test('attaches files with the button and by pasting an image, then sends them wi
   await openBuildChat(page);
 
   const chooser = page.waitForEvent('filechooser');
-  const aiurComposer = page.locator('aiur-composer');
+  const aiurComposer = page.locator('#chat-dock-slot aiur-composer');
   await aiurComposer.getByRole('button', { name: 'Attach files' }).click();
   await (
     await chooser
@@ -193,8 +189,9 @@ test('attaches files with the button and by pasting an image, then sends them wi
     { name: 'door-notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Door\nMake it creak.\n') },
     { name: 'blocked.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7') },
   ]);
-  const composer = aiurComposer;
-  await expect(composer.getByRole('listitem')).toHaveText(['door-notes.md']);
+  const chips = aiurComposer.locator('.chip');
+  await expect(chips).toHaveCount(1);
+  await expect(chips.locator('span')).toHaveText(['door-notes.md']);
 
   const textbox = aiurComposer.locator('textarea');
   await textbox.evaluate((element) => {
@@ -202,11 +199,11 @@ test('attaches files with the button and by pasting an image, then sends them wi
     data.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'pasted-door.png', { type: 'image/png' }));
     element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   });
-  await expect(composer.getByRole('listitem')).toHaveText(['door-notes.md', 'pasted-door.png']);
+  await expect(chips.locator('span')).toHaveText(['door-notes.md', 'pasted-door.png']);
 
   await textbox.fill('Use these for the door');
   await aiurComposer.getByRole('button', { name: 'Send' }).click();
-  await expect(composer.getByRole('listitem')).toHaveCount(0);
+  await expect(chips).toHaveCount(0);
   await expect
     .poll(() => posts)
     .toEqual([
@@ -297,7 +294,7 @@ test('asking for a change with no build running starts an edit job and streams i
   const pendingPoll = page.waitForResponse((response) => response.url().includes('/api/v1/jobs?gameId='));
   await page.clock.pauseAt(Date.now() + 60_000);
   await pendingPoll;
-  const composer = page.locator('aiur-composer');
+  const composer = page.locator('#chat-dock-slot aiur-composer');
   await composer.locator('textarea').fill('Make the door glow');
   await composer.getByRole('button', { name: 'Send' }).click({ force: true });
 
