@@ -4,36 +4,37 @@ import { commandPath, commandSource, type ReviewCommand } from './review-command
 import { api } from '../../lib/api/client';
 import { queryClient } from '../../app/query';
 import { creatorCommandsQueryKey, gameCommandsQueryKey } from '../commands-inbox/commands';
-import { mediaKindOf, withoutLinks } from '../commands-inbox/review';
+import { letterOf, mediaKindOf, withoutLinks } from '../commands-inbox/review';
 import { PlayableCard } from '../commands-inbox/playable';
 import { Dialog } from '../../components/Dialog';
+import './command-review-card.css';
 
 export function CommandReviewCard({
   command,
   onAnswered,
   ticketState,
   onSendingChange,
-  onPickingChange,
 }: {
   command: ReviewCommand;
   onAnswered(): void;
   ticketState?: string;
   onSendingChange?(sending: boolean): void;
-  onPickingChange?(picking: boolean): void;
 }) {
   const [note, setNote] = useState('');
+  const [votes, setVotes] = useState<Record<string, 'like' | 'dislike'>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
   const [selectedOption, setSelectedOption] = useState(command.options[0]?.id ?? '');
   const [sending, setSending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
   const [zoom, setZoom] = useState<{ url: string; label: string }>();
-  const [picking, setPicking] = useState<{ id: string; label: string; version: number }>();
   const drag = useRef<{ id: number; x: number; y: number } | undefined>(undefined);
   const suppressImageClick = useRef(false);
   useEffect(() => {
     setSaved(false);
     setSelectedOption(command.options[0]?.id ?? '');
-    setPicking(undefined);
+    setVotes({});
+    setReasons({});
     setError(false);
   }, [command.version]);
   const selected = command.options.find((option) => option.id === selectedOption) ?? command.options[0];
@@ -41,10 +42,6 @@ export function CommandReviewCard({
     onSendingChange?.(sending);
     return () => onSendingChange?.(false);
   }, [onSendingChange, sending]);
-  useEffect(() => {
-    onPickingChange?.(Boolean(picking));
-    return () => onPickingChange?.(false);
-  }, [onPickingChange, picking]);
   const coreState = useQuery({
     queryKey: ['core-review-state', command.ticket],
     enabled: saved && 'source' in command && Boolean(command.ticket),
@@ -52,7 +49,15 @@ export function CommandReviewCard({
     refetchInterval: 5000,
     retry: false,
   });
-  const send = async (optionId: string, change: boolean) => {
+  const send = async (
+    optionId: string,
+    review: {
+      likes: string[];
+      dislikes: { option_id: string; reason?: string }[];
+      liked_notes?: { option_id: string; reason: string }[];
+      notes?: string;
+    },
+  ) => {
     setSending(true);
     setError(false);
     try {
@@ -61,10 +66,7 @@ export function CommandReviewCard({
         json: {
           option_id: optionId,
           version: command.version,
-          ...(change ? { change_request: true } : {}),
-          ...(change
-            ? { review: { likes: [], dislikes: [{ option_id: optionId }], notes: note.trim() } }
-            : { review: { likes: [optionId], dislikes: [], ...(note.trim() ? { notes: note.trim() } : {}) } }),
+          review,
         },
       });
       await Promise.all([
@@ -72,13 +74,34 @@ export function CommandReviewCard({
         queryClient.invalidateQueries({ queryKey: gameCommandsQueryKey(commandSource(command)) }),
       ]);
       setSaved(true);
-      setPicking(undefined);
       onAnswered();
     } catch {
       setError(true);
     } finally {
       setSending(false);
     }
+  };
+  const likes = command.options.filter(({ id }) => votes[id] === 'like').map(({ id }) => id);
+  const dislikes = command.options.filter(({ id }) => votes[id] === 'dislike');
+  const optionId = likes[0] ?? command.recommend ?? command.options[0]?.id ?? '';
+  const canSend = likes.length > 0 || dislikes.length > 0 || Boolean(note.trim());
+  const sendReview = (none = false) => {
+    const review = {
+      likes: none ? [] : likes,
+      dislikes: (none ? command.options : dislikes).map(({ id }) => ({
+        option_id: id,
+        ...(!none && reasons[id]?.trim() ? { reason: reasons[id]!.trim() } : {}),
+      })),
+      ...(!none && likes.some((id) => reasons[id]?.trim())
+        ? {
+            liked_notes: command.options.flatMap(({ id }) =>
+              votes[id] === 'like' && reasons[id]?.trim() ? [{ option_id: id, reason: reasons[id]!.trim() }] : [],
+            ),
+          }
+        : {}),
+      ...(note.trim() ? { notes: note.trim() } : {}),
+    };
+    void send(optionId, review);
   };
   const startPaging = (event: PointerEvent<HTMLDivElement>) => {
     if (event.isPrimary === false) {
@@ -123,6 +146,12 @@ export function CommandReviewCard({
   return (
     <section className="review-deck" aria-label={command.summary ?? command.title}>
       <p>{withoutLinks(command.question)}</p>
+      {command.recommend ? (
+        <p className="worker-review-recommendation">
+          Recommended: {letterOf(command.options, command.recommend)}:{' '}
+          {withoutLinks(command.options.find(({ id }) => id === command.recommend)?.label ?? '')}
+        </p>
+      ) : null}
       <label>
         Note (optional)
         <textarea
@@ -158,7 +187,7 @@ export function CommandReviewCard({
         }}
       >
         {command.options.map(
-          (option, index) =>
+          (option) =>
             option.id === selected?.id && (
               <div className="worker-review-option review-deck-card" key={option.id}>
                 {option.playable ? (
@@ -199,32 +228,74 @@ export function CommandReviewCard({
                     aria-label={`${option.label} audio ${index + 2}`}
                   />
                 ))}
-                <button
-                  disabled={sending || saved}
-                  type="button"
-                  onClick={() => {
-                    setError(false);
-                    setPicking({
-                      id: option.id,
-                      label: `Pick ${String.fromCharCode(65 + index)}: ${withoutLinks(option.label)}`,
-                      version: command.version,
-                    });
-                  }}
+                <div
+                  className="worker-review-votes"
+                  aria-label={`Rate ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`}
                 >
-                  Pick {String.fromCharCode(65 + index)}: {withoutLinks(option.label)}
-                </button>
+                  <button
+                    type="button"
+                    aria-pressed={votes[option.id] === 'like'}
+                    disabled={sending || saved}
+                    onClick={() =>
+                      setVotes((current) => {
+                        const next = { ...current };
+                        if (next[option.id] === 'like') delete next[option.id];
+                        else next[option.id] = 'like';
+                        return next;
+                      })
+                    }
+                  >
+                    👍
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={votes[option.id] === 'dislike'}
+                    disabled={sending || saved}
+                    onClick={() =>
+                      setVotes((current) => {
+                        const next = { ...current };
+                        if (next[option.id] === 'dislike') delete next[option.id];
+                        else next[option.id] = 'dislike';
+                        return next;
+                      })
+                    }
+                  >
+                    👎
+                  </button>
+                </div>
+                {votes[option.id] || reasons[option.id] ? (
+                  <label className="worker-review-option-note">
+                    Note for {letterOf(command.options, option.id)} (optional)
+                    <textarea
+                      value={reasons[option.id] ?? ''}
+                      disabled={sending || saved}
+                      maxLength={1000}
+                      onChange={(event) => setReasons((current) => ({ ...current, [option.id]: event.target.value }))}
+                    />
+                  </label>
+                ) : null}
               </div>
             ),
         )}
       </div>
-      <button
-        className="worker-review-change"
-        disabled={sending || saved || !note.trim() || !selected}
-        type="button"
-        onClick={() => selected && void send(selected.id, true)}
-      >
-        Send changes
-      </button>
+      <div className="worker-review-submit">
+        <button
+          className="worker-review-change"
+          disabled={sending || saved || !canSend}
+          type="button"
+          onClick={() => sendReview()}
+        >
+          Send
+        </button>
+        <button
+          className="worker-review-change"
+          disabled={sending || saved}
+          type="button"
+          onClick={() => sendReview(true)}
+        >
+          None of these
+        </button>
+      </div>
       {saved && (
         <p role="status">
           Saved · sent to agent · Ticket state:{' '}
@@ -232,43 +303,6 @@ export function CommandReviewCard({
         </p>
       )}
       {error && <p role="alert">That answer did not send. Try again.</p>}
-      {picking && picking.version === command.version && (
-        <div onKeyDown={(event) => event.stopPropagation()}>
-          <Dialog
-            title={picking.label}
-            className="review-deck-reason"
-            backdropClassName="review-deck-reason-backdrop worker-review-sheet-backdrop"
-            onClose={() => {
-              if (!sending) setPicking(undefined);
-            }}
-          >
-            <label>
-              Note (optional)
-              <textarea
-                value={note}
-                disabled={sending}
-                maxLength={2000}
-                onChange={(event) => setNote(event.target.value)}
-              />
-            </label>
-            {error && <p role="alert">That answer did not send. Try again.</p>}
-            <div className="review-deck-reason-actions">
-              <button
-                type="button"
-                disabled={sending}
-                onClick={() => {
-                  if (picking.version === command.version) void send(picking.id, false);
-                }}
-              >
-                Send choice
-              </button>
-              <button type="button" disabled={sending} onClick={() => setPicking(undefined)}>
-                Cancel
-              </button>
-            </div>
-          </Dialog>
-        </div>
-      )}
       {zoom && (
         <div
           onKeyDown={(event) => {
