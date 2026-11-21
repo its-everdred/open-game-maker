@@ -14,8 +14,9 @@ export type Tier = z.infer<typeof tierSchema>;
  * 4: lock entries may name the curated asset set their pack belongs to (`set`).
  * 5: lock entries may carry typed asset-generation provenance.
  * 6: lock and manifest entries may name a lazy asset phase.
+ * 7: lock and manifest entries may carry Game Maker provenance.
  */
-export const ASSETS_SCHEMA_MINOR = 6;
+export const ASSETS_SCHEMA_MINOR = 7;
 const minorSchema = z.number().int().min(0).optional();
 
 export const loadPhaseSchema = z.enum(['boot', 'ready', 'stream']);
@@ -43,6 +44,8 @@ const tierOrWildcardSchema = z.enum([...tierSchema.options, '*']);
 export const cachePlanEntrySchema = z.looseObject({
   sha256: digestSchema,
   url: z.string().min(1),
+  /** Original build-relative path for publisher and host lookup; `url` is the shared content address. */
+  sourcePath: z.string().min(1).optional(),
   bytes: z.number().int().min(0),
   kind: cacheEntryKindSchema,
   phase: loadPhaseSchema,
@@ -99,7 +102,7 @@ const fileEntrySchema = z.looseObject({
   decoders: z.array(z.enum(['meshopt', 'draco', 'ktx2'])),
 });
 
-type CardMetadataBlock = 'sprite' | 'rig' | 'kit' | 'geometry' | 'generation';
+type CardMetadataBlock = 'sprite' | 'rig' | 'kit' | 'geometry' | 'generation' | 'generated';
 
 /** Re-uses the asset-card `$defs` block (generated from asset-card.schema.json), never a local copy. */
 function cardMetadataBlock<K extends CardMetadataBlock>(block: K): z.ZodType<NonNullable<AssetCard[K]>> {
@@ -132,6 +135,7 @@ export const assetMetadataSchema = z
     kit: cardMetadataBlock('kit').optional(),
     geometry: cardMetadataBlock('geometry').optional(),
     generation: cardMetadataBlock('generation').optional(),
+    generated: cardMetadataBlock('generated').optional(),
   })
   .superRefine((meta, ctx) => checkMetaStrings(meta, [], ctx));
 export type AssetMetadata = z.infer<typeof assetMetadataSchema>;

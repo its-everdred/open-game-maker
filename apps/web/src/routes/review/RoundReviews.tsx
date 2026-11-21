@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
@@ -9,6 +9,13 @@ import { RoundMedia } from './RoundMedia';
 export type Round = {
   category?: 'art' | 'gameplay' | 'sound';
   buildId?: string | null;
+  track?: string;
+  works?: string[];
+  limitations?: string[];
+  decisionIds?: string[];
+  sourceTickets?: string[];
+  clipStatus?: 'captured' | 'unchecked' | null;
+  playUrl?: string | null;
   id: string;
   ticket: string;
   question: string | null;
@@ -26,10 +33,20 @@ export function useReviewRounds(gameId: string) {
 }
 
 export function RoundReviews({ gameId, rounds }: { gameId: string; rounds: Round[] }) {
+  const previous = useRef(new Map<string, string>());
+  const [newRounds, setNewRounds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const next = new Map(rounds.map((round) => [round.ticket, round.id]));
+    const replaced = rounds
+      .filter((round) => previous.current.has(round.ticket) && previous.current.get(round.ticket) !== round.id)
+      .map((round) => round.id);
+    if (replaced.length) setNewRounds((current) => new Set([...current, ...replaced]));
+    previous.current = next;
+  }, [rounds]);
   return (
     <>
       {rounds.map((round) => (
-        <RoundCard key={round.id} gameId={gameId} round={round} />
+        <RoundCard key={round.id} gameId={gameId} round={round} isNew={newRounds.has(round.id)} />
       ))}
     </>
   );
@@ -41,12 +58,14 @@ export function RoundCard({
   onAnswered,
   swipe = false,
   onPendingChange,
+  isNew = false,
 }: {
   gameId: string;
   round: Round;
   onAnswered?(): void;
   swipe?: boolean;
   onPendingChange?(pending: boolean): void;
+  isNew?: boolean;
 }) {
   const [note, setNote] = useState('');
   const answer = useMutation({
@@ -74,14 +93,44 @@ export function RoundCard({
     <>
       <RoundMedia media={round.media} />
       {round.question ? <p>{round.question}</p> : null}
-      {round.buildId && <p role="alert">The playable review is unavailable. Try again later.</p>}
+      {round.playUrl ? (
+        <p>
+          <a href={round.playUrl} target="_blank" rel="noreferrer">
+            Play this build
+          </a>
+        </p>
+      ) : null}
+      {round.buildId && !round.playUrl && <p role="alert">The playable review is unavailable. Try again later.</p>}
+      {round.clipStatus === 'unchecked' ? <p>Clip: unchecked</p> : null}
+      {round.works?.length ? (
+        <p>
+          <strong>Works now:</strong> {round.works.join('; ')}
+        </p>
+      ) : null}
+      {round.limitations?.length ? (
+        <p>
+          <strong>Known limitations:</strong> {round.limitations.join('; ')}
+        </p>
+      ) : null}
+      {round.decisionIds?.length ? (
+        <p>
+          <strong>Weigh in on:</strong> {round.decisionIds.join(', ')}
+        </p>
+      ) : null}
     </>
   );
   return (
     <section className="review-deck" aria-label={`Review for ticket ${round.ticket}`}>
+      {isNew ? (
+        <p className="review-round-new" role="status">
+          New round
+        </p>
+      ) : null}
       {swipe ? (
         <SwipeVerdict
-          disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
+          disabled={
+            answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
+          }
           onPendingChange={onPendingChange}
           onSend={async (verdict, answerNote) => {
             await answer.mutateAsync({ verdict, note: answerNote });
@@ -95,7 +144,7 @@ export function RoundCard({
           <label>
             Note (optional)
             <textarea
-              disabled={Boolean(round.buildId)}
+              disabled={Boolean(round.buildId) && round.track !== 'prototype-publish'}
               value={note}
               maxLength={3900}
               onChange={(event) => setNote(event.target.value)}
@@ -104,14 +153,18 @@ export function RoundCard({
           <div className="review-deck-actions">
             <button
               type="button"
-              disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
+              disabled={
+                answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
+              }
               onClick={() => answer.mutate({ verdict: 'approved', note })}
             >
               Looks right
             </button>
             <button
               type="button"
-              disabled={answer.isPending || answer.isSuccess || Boolean(round.buildId)}
+              disabled={
+                answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
+              }
               onClick={() => answer.mutate({ verdict: 'needs_work', note })}
             >
               Needs work

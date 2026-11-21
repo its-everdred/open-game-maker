@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -25,16 +26,20 @@ describe('gm plan check', () => {
   });
 
   it('fails a ticket filed without a role, without its game, with two games or with a role not in roles.md', async () => {
-    const result = await check(
-      [
-        { number: 4, labels: ['game:blobs'] },
+    const root = tempDir('gm-plan-check-');
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    mkdirSync(join(root, 'docs', 'blobs'), { recursive: true });
+    writeFileSync(join(root, 'docs', 'blobs', 'decisions.json'), JSON.stringify([]));
+    writeFileSync(
+      join(root, 'issues.json'),
+      JSON.stringify([
+        { number: 4, body: '## Creator decisions\n- None\n', labels: ['game:blobs'] },
         { number: 5, labels: ['role:audio'] },
-        { number: 6, labels: ['game:blobs', 'role:painter'] },
-        { number: 7, labels: ['game:blobs', 'game:castle', 'role:qa'] },
-      ],
-      '--game',
-      'blobs',
+        { number: 6, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:painter'] },
+        { number: 7, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'game:castle', 'role:qa'] },
+      ]),
     );
+    const result = await gm(['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs'], { cwd: root });
     expect(result.code).toBe(1);
     expect(result.out).toEqual([
       '#4: no role:* label from gm-core/references/roles.md',
@@ -45,23 +50,98 @@ describe('gm plan check', () => {
   });
 
   it("skips a sibling game's tickets in a shared instance repo when --game names the planned game", async () => {
-    const result = await check(
-      [
-        { number: 8, labels: ['game:blobs', 'role:qa'] },
+    const root = tempDir('gm-plan-check-');
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    mkdirSync(join(root, 'docs', 'blobs'), { recursive: true });
+    writeFileSync(join(root, 'docs', 'blobs', 'decisions.json'), JSON.stringify([]));
+    writeFileSync(
+      join(root, 'issues.json'),
+      JSON.stringify([
+        { number: 8, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:qa'] },
         { number: 9, labels: ['game:castle'] },
-      ],
-      '--game',
-      'blobs',
-      '--json',
+      ]),
     );
+    const result = await gm(['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs', '--json'], { cwd: root });
     expect(result.code).toBe(0);
-    expect(JSON.parse(result.out[0]!)).toEqual({ checked: 1, failed: [] });
+    expect(JSON.parse(result.out[0]!)).toEqual({ checked: 1, failed: [], inventoryProblems: [], ok: true });
   });
 
   it('fails loud when there is nothing to check, so a wrong tickets file never reads as a clean plan', async () => {
     const result = await check([{ number: 10, labels: ['request:new-game'] }]);
     expect(result.code).toBe(1);
     expect(result.err).toEqual(['no tickets to check in issues.json']);
+  });
+
+  it('requires a decision inventory when checking a game plan', async () => {
+    const root = tempDir('gm-plan-check-');
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    writeFileSync(
+      join(root, 'issues.json'),
+      JSON.stringify([{ number: 12, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:qa'] }]),
+    );
+    const result = await gm(['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs'], { cwd: root });
+    expect(result.code).toBe(1);
+    expect(result.err.join('\n')).toContain('game blobs has no valid docs/blobs/decisions.json');
+  });
+
+  it('rejects malformed inventories and incomplete decision links in game tickets', async () => {
+    const base = tempDir('gm-plan-inventory-');
+    execFileSync('git', ['init', '-q'], { cwd: base });
+    mkdirSync(join(base, 'docs', 'blobs'), { recursive: true });
+    const inventory = [
+      {
+        id: 'enemy-style',
+        area: 'Enemies',
+        question: 'Which enemies?',
+        why: 'Sets the tone.',
+        options: [
+          { label: 'Slimes', media_needed: 'slime still' },
+          { label: 'Golems', media_needed: 'golem still' },
+        ],
+        recommendation: 'Slimes: existing pack art.',
+        sources: ['brief.md'],
+        ticket: null,
+        status: 'open',
+        answer: null,
+        answered_at: null,
+      },
+    ];
+    writeFileSync(join(base, 'docs', 'blobs', 'decisions.json'), JSON.stringify(inventory));
+    const ticketsFile = join(base, 'issues.json');
+    const run = async (tickets: unknown[]) => {
+      writeFileSync(ticketsFile, JSON.stringify(tickets));
+      return gm(['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs', '--json'], { cwd: base });
+    };
+    const missingBody = await run([{ number: 20, labels: ['game:blobs', 'role:qa'] }]);
+    expect(JSON.parse(missingBody.out[0]!).inventoryProblems).toContain(
+      '#20 body missing; use gh issue list --json number,title,labels,body',
+    );
+    const missingSection = await run([{ number: 20, body: 'No decision section.', labels: ['game:blobs', 'role:qa'] }]);
+    expect(JSON.parse(missingSection.out[0]!).inventoryProblems).toContain('#20 has no ## Creator decisions section');
+    const unknownId = await run([
+      { number: 20, body: '## Creator decisions\n- other-choice\n', labels: ['game:blobs', 'role:qa'] },
+    ]);
+    expect(JSON.parse(unknownId.out[0]!).inventoryProblems).toContain('#20 lists unknown decision other-choice');
+    const unassigned = await run([
+      { number: 20, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:qa'] },
+    ]);
+    expect(JSON.parse(unassigned.out[0]!).inventoryProblems).toContain(
+      'decision enemy-style is not listed on a game:blobs ticket',
+    );
+    inventory[0]!.ticket = 21;
+    writeFileSync(join(base, 'docs', 'blobs', 'decisions.json'), JSON.stringify(inventory));
+    const wrongTicket = await run([
+      { number: 20, body: '## Creator decisions\n- enemy-style\n', labels: ['game:blobs', 'role:qa'] },
+    ]);
+    expect(JSON.parse(wrongTicket.out[0]!).inventoryProblems).toContain(
+      'decision enemy-style is assigned to ticket #21 but listed on #20',
+    );
+    writeFileSync(join(base, 'docs', 'blobs', 'decisions.json'), '{invalid');
+    const malformed = await run([
+      { number: 20, body: '## Creator decisions\n- None\n', labels: ['game:blobs', 'role:qa'] },
+    ]);
+    expect(malformed.code).toBe(1);
+    expect(JSON.parse(malformed.out[0]!).inventoryProblems[0]).toContain('game blobs has no valid');
   });
 
   it('reads the roles from the platform pack the builder uses, never a game repo’s older installed copy', async () => {

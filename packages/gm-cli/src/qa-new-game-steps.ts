@@ -15,7 +15,7 @@ export async function newGameSteps(
   origin: string,
   still: (name: string) => Promise<void>,
   created: (game: CreatedGame) => void | Promise<void>,
-): Promise<{ gameId: string; requestId: string }> {
+): Promise<{ gameId: string; requestId: string; finishedAt: number }> {
   const timeout = { timeout: 60_000 };
   const button = (name: string) => page.getByRole('button', { name, exact: true });
   const heading = (name: string) => page.getByRole('heading', { name, exact: true });
@@ -83,6 +83,7 @@ export async function newGameSteps(
     { timeout: 180_000 },
   );
   const captured: { status?: number; jobId?: unknown } = {};
+  let finishedAt: number;
   const pattern = '**/api/v1/jobs';
   const handler: Parameters<Page['route']>[1] = async (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
@@ -99,6 +100,7 @@ export async function newGameSteps(
       timeout,
     );
     await Promise.all([jobResponse, finish.click(timeout)]);
+    finishedAt = Date.now();
   } finally {
     await page.unroute(pattern, handler);
   }
@@ -107,5 +109,5 @@ export async function newGameSteps(
   if (typeof captured.jobId !== 'string') throw new Error('Finish returned no request ID');
   await page.waitForURL((url) => url.pathname === '/all' && url.searchParams.get('spotlight') === id, timeout);
   await still('library');
-  return { gameId: id, requestId: captured.jobId };
+  return { gameId: id, requestId: captured.jobId, finishedAt };
 }

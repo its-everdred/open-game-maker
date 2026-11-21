@@ -1,10 +1,12 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ReviewAnswerPayload } from '@ogm/contracts';
 import { reviewOptionImageReady, reviewRoundMediaReady } from './qa-review-media.js';
 import { swipeReviewMedia as swipe } from './qa-review-touch.js';
 
 import {
   mediaFailures,
+  captureQaStill,
   openReviewDeck,
   openReviewItem,
   optionFailures,
@@ -67,16 +69,35 @@ export type Report = {
   received: { kind: string; option?: string; response?: string; reason?: string }[];
 };
 
+// A Command answer must cross aiur's boundary in the same request that submits it. The production check validates its
+// exact receipt immediately after the direct route succeeds, before waiting for separate review-round reconciliation.
+export function commandReached(report: Report): string | null {
+  const answer = report.received.find((item) => item.kind === 'answer');
+  if (!answer) return 'the Command answer did not reach aiur';
+  let payload: unknown;
+  try {
+    payload = JSON.parse(answer.response ?? '');
+  } catch {
+    return 'the Command answer is not B with its note';
+  }
+  const response = ReviewAnswerPayload.safeParse(payload);
+  if (
+    !response.success ||
+    response.data.answers.length !== 1 ||
+    response.data.answers[0]?.option_id !== 'b' ||
+    response.data.answers[0]?.verdict !== 'like' ||
+    response.data.notes !== PICK_NOTE
+  )
+    return 'the Command answer is not B with its note';
+  return null;
+}
+
 // The verdicts reached aiur: the round's rework carries the note, and the Command's answer picks B with its note.
 export function reached(report: Report): string | null {
   if (report.round.verdict !== 'needs_work' || report.round.notes !== NOTE) return 'the round verdict was not stored';
   const rework = report.received.find((item) => item.kind === 'rework');
   if (!rework?.reason?.includes(NOTE)) return 'the round verdict did not reach aiur';
-  const answer = report.received.find((item) => item.kind === 'answer');
-  if (!answer) return 'the Command answer did not reach aiur';
-  const picked = answer.option === 'b' || (answer.response ?? '').includes('"b"');
-  if (!picked || !(answer.response ?? '').includes(PICK_NOTE)) return 'the Command answer is not B with its note';
-  return null;
+  return commandReached(report);
 }
 
 async function poll<T>(read: () => Promise<T>, done: (value: T) => boolean, timeoutMs: number): Promise<T> {
@@ -126,7 +147,7 @@ async function runViewport(
     await step('open a running and a closed ticket', () =>
       ticketDetailSteps(ticketActive, config.origin, async (label) => {
         const file = join(config.out, `${name}-${stills.length + 1}-${label}.png`);
-        await ticketActive.screenshot({ path: file });
+        await captureQaStill(ticketActive, file);
         stills.push(file);
       }),
     );
@@ -139,6 +160,9 @@ async function runViewport(
         media: { still: media('still.png'), clip: media('clip.mp4'), audio: media('sound.mp3') },
       }),
     });
+    if (typeof seeded.gameId !== 'string' || typeof seeded.decisionId !== 'string')
+      throw new StepFailed('the fixture seed did not identify its game Command');
+    const answerPath = `/api/v1/games/${encodeURIComponent(seeded.gameId)}/commands/${encodeURIComponent(seeded.decisionId)}/answer`;
     if (config.breakMedia) {
       const picture = readFileSync(new URL('still.png', MEDIA_DIR));
       await context.route('**/*', async (route) => {
@@ -161,7 +185,7 @@ async function runViewport(
     reviewPage = page;
     const still = async (label: string) => {
       const file = join(config.out, `${name}-${stills.length + 1}-${label}.png`);
-      await page.screenshot({ path: file });
+      await captureQaStill(page, file);
       stills.push(file);
     };
     const dialog = page.getByRole('dialog', { name: 'Needs Review' });
@@ -250,7 +274,23 @@ async function runViewport(
       await dialog.getByRole('button', { name: /^Pick B/ }).click(timeout);
       const noteSheet = page.getByRole('dialog', { name: /^Pick B/ });
       await noteSheet.getByLabel('Note (optional)').fill(PICK_NOTE, timeout);
-      await noteSheet.getByRole('button', { name: 'Send choice' }).click(timeout);
+      await step('send the Command answer directly to aiur', async () => {
+        const answerResponse = page.waitForResponse(
+          (response) => response.request().method() === 'POST' && new URL(response.url()).pathname === answerPath,
+          timeout,
+        );
+        const [response] = await Promise.all([
+          answerResponse,
+          noteSheet.getByRole('button', { name: 'Send choice' }).click(timeout),
+        ]);
+        if (!response.ok()) throw new StepFailed(`the Command answer route returned ${response.status()}`);
+        const result = (await response.json()) as { status?: unknown; option_id?: unknown };
+        if (result.status !== 'answered' || result.option_id !== 'b')
+          throw new StepFailed('the Command answer route did not confirm choice B');
+        const immediate = (await internal(config, `/review-fixtures/${run}`)) as Report;
+        const failure = commandReached(immediate);
+        if (failure) throw new StepFailed(`${failure} when the direct answer route acknowledged`);
+      });
     });
     const report = await poll(
       async () => (await internal(config, `/review-fixtures/${run}`)) as Report,
@@ -270,7 +310,8 @@ async function runViewport(
     if (failedPage) {
       const file = join(config.out, `${name}-${stills.length + 1}-${ticketPage ? 'ticket' : 'review'}-failure.png`);
       try {
-        await failedPage.screenshot({ path: file });
+        // Failure diagnostics should not add another long wait after a viewport has already failed.
+        await captureQaStill(failedPage, file, 5_000);
         stills.push(file);
       } catch (captureError) {
         failure += `\nScreenshot failed: ${String(captureError)}`;

@@ -8,8 +8,10 @@ import { command as assetsCommand } from './assets.js';
 import { command as lookCommand } from '../look/check.js';
 import { gameDir } from '../../outbox.js';
 import { checkLoading } from '../../loading-check.js';
+import { checkImageSlots } from '../../image-slots-check.js';
 import { checkPlayArea } from '../../play-area-check.js';
 import { findPlayAreaGame } from '../../play-area-config.js';
+import { checkPrReview } from '../../pr-review-check.js';
 
 export function printGate(ctx: GmContext, result: GateResult): number {
   if (ctx.json) ctx.out(JSON.stringify(result));
@@ -32,11 +34,18 @@ export async function runSelected(ctx: GmContext, checks: RunL0Options): Promise
 export const command: GmCommand = {
   name: 'check',
   summary: 'run deterministic static, hook, and asset gates',
-  usage: '[--json]',
+  usage: '[--body <file>] [--base <ref>] [--phase <mock|prototype|build|polish>] [--json]',
   example: 'check',
-  flags: {},
-  async run(ctx, args) {
+  flags: {
+    body: { type: 'string', help: 'pull request body markdown for ticket PR gates' },
+    base: { type: 'string', help: 'base ref for changed-file detection (default origin/main)' },
+    phase: { type: 'string', help: 'current look rung: mock, prototype, build, or polish' },
+  },
+  async run(ctx, args, flags) {
     if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help check');
+    const phase = flags.phase as string | undefined;
+    if (phase !== undefined && !['mock', 'prototype', 'build', 'polish'].includes(phase))
+      throw new UsageError(`invalid look phase "${phase}"`, 'use --phase mock|prototype|build|polish');
     const verify = await import('@ogm/gm-verify');
     const gate = verify.runL0(ctx.cwd);
 
@@ -50,7 +59,13 @@ export const command: GmCommand = {
     let lookCode: number = EXIT.ok;
     let lookReport: unknown;
     let loadingErrors: string[] = [];
+    let imageErrors: string[] = [];
     let playArea: Awaited<ReturnType<typeof checkPlayArea>> | undefined;
+    const prProblems =
+      typeof flags.body === 'string'
+        ? checkPrReview(ctx.cwd, flags.body, typeof flags.base === 'string' ? flags.base : 'origin/main')
+        : [];
+    if (!ctx.json) prProblems.forEach(ctx.err);
     let game = ctx.cwd;
     try {
       game = gameDir(ctx.cwd);
@@ -64,10 +79,13 @@ export const command: GmCommand = {
     }
     if (existsSync(join(game, 'gm.manifest.json'))) {
       loadingErrors = await checkLoading(game);
+      imageErrors = await checkImageSlots(game);
       if (!ctx.json) loadingErrors.forEach(ctx.err);
+      if (!ctx.json) imageErrors.forEach(ctx.err);
       const lookOut: string[] = [];
       lookCode = await lookCommand.run({ ...ctx, json: true, fields: null, out: (line) => lookOut.push(line) }, [], {
         changed: true,
+        phase,
       });
       lookReport = JSON.parse(lookOut.join('\n'));
       if (!ctx.json) {
@@ -75,42 +93,41 @@ export const command: GmCommand = {
           stills: { status: string; path: string; detail: string }[];
           inherited: { status: string; path: string; detail: string }[];
         };
+        for (const item of report.stills.filter((item) => item.status === 'warning'))
+          ctx.err(`warning ${item.path}: ${item.detail}`);
         for (const item of report.stills.filter((item) => item.status !== 'pass'))
-          ctx.err(`${item.status} ${item.path}: ${item.detail}`);
+          if (item.status !== 'warning') ctx.err(`${item.status} ${item.path}: ${item.detail}`);
         if (report.inherited.length > 0) {
           ctx.err('inherited:');
           for (const item of report.inherited) ctx.err(`${item.status} ${item.path}: ${item.detail}`);
         }
       }
     }
-    const gateCode =
-      ctx.json && (lookReport !== undefined || playArea !== undefined)
-        ? (ctx.out(
-            JSON.stringify({
-              ...gate,
-              ok:
-                gate.ok &&
-                assetCode === EXIT.ok &&
-                lookCode === EXIT.ok &&
-                loadingErrors.length === 0 &&
-                playArea?.ok !== false,
-              look: lookReport,
-              loadingErrors,
-              playArea,
-            }),
-          ),
-          gate.ok ? EXIT.ok : EXIT.failed)
-        : printGate(ctx, gate);
+    const ok =
+      gate.ok &&
+      assetCode === EXIT.ok &&
+      lookCode === EXIT.ok &&
+      loadingErrors.length === 0 &&
+      imageErrors.length === 0 &&
+      playArea?.ok !== false &&
+      prProblems.length === 0;
+    if (ctx.json && (lookReport !== undefined || playArea !== undefined || typeof flags.body === 'string'))
+      ctx.out(
+        JSON.stringify({
+          ...gate,
+          ok,
+          look: lookReport,
+          loadingErrors,
+          imageErrors,
+          playArea,
+          prototypeReview: typeof flags.body === 'string' ? { problems: prProblems } : undefined,
+        }),
+      );
+    else printGate(ctx, { ...gate, ok, checks: gate.checks });
     if (assetCode !== EXIT.ok) {
       out.forEach(ctx.out);
       err.forEach(ctx.err);
     }
-    return gateCode === EXIT.ok &&
-      assetCode === EXIT.ok &&
-      lookCode === EXIT.ok &&
-      loadingErrors.length === 0 &&
-      playArea?.ok !== false
-      ? EXIT.ok
-      : EXIT.failed;
+    return ok ? EXIT.ok : EXIT.failed;
   },
 };

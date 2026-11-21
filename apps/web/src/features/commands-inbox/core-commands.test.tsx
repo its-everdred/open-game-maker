@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { useCoreReviewCommands } from './commands';
+import { REVIEW_POLL_MS, useCoreReviewCommands } from './commands';
 
 const api = vi.hoisted(() => vi.fn());
 vi.mock('../../lib/api/client', async (actual) => ({
@@ -33,5 +33,10 @@ describe('core review Commands', () => {
     api.mockRejectedValue(new ApiError(502, { error: 'core_daemon_unavailable' }));
     const { result } = render();
     await waitFor(() => expect(result.current.error).toBe(true));
+  });
+
+  it('refreshes review Commands within the 60 second live-update bound', () => {
+    expect(REVIEW_POLL_MS).toBeGreaterThan(0);
+    expect(REVIEW_POLL_MS).toBeLessThanOrEqual(60_000);
   });
 });

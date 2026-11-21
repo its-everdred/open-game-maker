@@ -67,6 +67,8 @@ describe('migrate', () => {
         '20261116045852_review_answer_guards.sql',
         '20261116135518_review_effort.sql',
         '20261118033354_game_play_sessions.sql',
+        '20261120131223_prototype_review_content.sql',
+        '20261120140217_prototype_review_sweep_state.sql',
         '20261120220454_game_drafts.sql',
       ],
     });
@@ -121,6 +123,8 @@ describe('migrate', () => {
       'migration:20261116045852_review_answer_guards.sql',
       'migration:20261116135518_review_effort.sql',
       'migration:20261118033354_game_play_sessions.sql',
+      'migration:20261120131223_prototype_review_content.sql',
+      'migration:20261120140217_prototype_review_sweep_state.sql',
       'migration:20261120220454_game_drafts.sql',
     ]);
     sqlite.close();

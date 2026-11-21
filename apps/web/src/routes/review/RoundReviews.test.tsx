@@ -24,6 +24,21 @@ it('offers playback for an audio mock', () => {
   expect(screen.getByLabelText('Review audio').getAttribute('src')).toBe('/cue.wav');
 });
 
+it('marks a replacement review round as new while the screen is open', async () => {
+  const { rerender } = render(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews gameId="game" rounds={[{ id: 'first', ticket: '42', question: null, media: [] }]} />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByText('New round')).toBeNull();
+  rerender(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews gameId="game" rounds={[{ id: 'replacement', ticket: '42', question: null, media: [] }]} />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('New round')).toBeVisible();
+});
+
 it('shows a named concept target beside the submitted image', () => {
   render(
     <QueryClientProvider client={queryClient}>
@@ -75,6 +90,43 @@ it('shows the capture and sends the creator notes without trimming', async () =>
       method: 'POST',
       json: { verdict: 'needs_work', note: '  Keep\nthis.  ' },
     }),
+  );
+});
+
+it('shows published prototype details and lets the creator submit a verdict', async () => {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RoundReviews
+        gameId="game"
+        rounds={[
+          {
+            id: 'published-round',
+            ticket: 'publish',
+            track: 'prototype-publish',
+            buildId: 'build_1',
+            playUrl: 'https://app.example/play/game',
+            question: 'Review the published build',
+            works: ['Walk around'],
+            limitations: ['No attack yet'],
+            decisionIds: ['enemy-lineup'],
+            clipStatus: 'unchecked',
+            media: [],
+          },
+        ]}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole('link', { name: 'Play this build' })).toHaveAttribute(
+    'href',
+    'https://app.example/play/game',
+  );
+  expect(screen.getByText('Walk around')).toBeVisible();
+  expect(screen.getByText('No attack yet')).toBeVisible();
+  expect(screen.getByText('enemy-lineup')).toBeVisible();
+  expect(screen.getByText('Clip: unchecked')).toBeVisible();
+  fireEvent.click(screen.getByText('Looks right'));
+  await waitFor(() =>
+    expect(send).toHaveBeenCalledWith('/games/game/review-rounds/published-round/answer', expect.anything()),
   );
 });
 

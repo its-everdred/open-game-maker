@@ -68,6 +68,11 @@ vi.mock('../src/commands/check/boot.js', async (original) => ({
   },
 }));
 
+vi.mock('../src/play-area-check.js', async (original) => ({
+  ...(await original<typeof import('../src/play-area-check.js')>()),
+  checkPlayArea: async () => ({ ok: true, output: [] }),
+}));
+
 vi.mock('@ogm/gm-verify', async (original) => ({
   ...(await original()),
   runL0: (_root: string, options: unknown) => {
@@ -154,6 +159,47 @@ describe('gm check', () => {
     expect(text.err.join('\n')).toContain('shots/a/t2.png');
   }, 60_000);
 
+  it('keeps an unapproved provisional screen visible in gm check until its expiry rung', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    const game = join(root, 'games/prototype');
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    mkdirSync(join(game, 'review'), { recursive: true });
+    writeFileSync(join(game, 'gm.manifest.json'), '{}');
+    writeFileSync(
+      join(game, 'review/decisions.json'),
+      JSON.stringify({ screens: { play: { provisional: { owner: 'Kevin', until: 'build' } } } }),
+    );
+    git('add', '-A');
+    git('commit', '-qm', 'provisional scope');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+
+    const unspecified = await gm(['check', '--json'], { cwd: game });
+    expect(unspecified.code).toBe(2);
+    expect(unspecified.err.join('\n')).toContain('a current rung is required');
+
+    const prototype = await gm(['check', '--phase', 'prototype', '--json'], { cwd: game });
+    expect(prototype.code, JSON.stringify(prototype)).toBe(0);
+    expect(JSON.parse(prototype.out[0]!).look.stills).toContainEqual(
+      expect.objectContaining({
+        path: 'games/prototype/review/decisions.json',
+        status: 'warning',
+        detail: expect.stringContaining('approved look target still required'),
+      }),
+    );
+    const plain = await gm(['check', '--phase', 'prototype'], { cwd: game });
+    expect(plain.code).toBe(0);
+    expect(plain.err.join('\n')).toContain('warning games/prototype/review/decisions.json:');
+
+    const build = await gm(['check', '--phase', 'build', '--json'], { cwd: game });
+    expect(build.code).toBe(1);
+    expect(JSON.parse(build.out[0]!).look.stills).toContainEqual(
+      expect.objectContaining({ status: 'fail', detail: expect.stringContaining('expired at build') }),
+    );
+  }, 60_000);
+
   it('fails the complete check when declared loading images are missing', async () => {
     state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
     const root = tempDir();
@@ -169,7 +215,47 @@ describe('gm check', () => {
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     const result = await gm(['check', '--json'], { cwd: root });
     expect(result.code).toBe(1);
-    expect(JSON.parse(result.out[0]!).loadingErrors).toHaveLength(2);
+    const report = JSON.parse(result.out[0]!);
+    expect(report.loadingErrors).toHaveLength(2);
+    expect(report.imageErrors).toContain('images.loading: missing variant for phone-portrait');
+  }, 60_000);
+
+  it('fails the complete check when only the image slot gate fails', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    writeFileSync(
+      join(root, 'gm.manifest.json'),
+      JSON.stringify({ images: { title: { mode: 'per-ratio', variants: {} } } }),
+    );
+    git('add', '-A');
+    git('commit', '-qm', 'fixture');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const result = await gm(['check', '--json'], { cwd: root });
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.out[0]!);
+    expect(report.loadingErrors).toEqual([]);
+    expect(report.imageErrors).toContain('images.title: missing variant for phone-portrait');
+    expect(report.ok).toBe(false);
+  }, 60_000);
+
+  it('keeps games without shipped creator images passing the image gate', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+    git('init', '-q');
+    writeFileSync(join(root, 'gm.manifest.json'), '{}');
+    git('add', '-A');
+    git('commit', '-qm', 'fixture');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const result = await gm(['check', '--json'], { cwd: root });
+    expect(result.code).toBe(0);
+    const report = JSON.parse(result.out[0]!);
+    expect(report.loadingErrors).toEqual([]);
+    expect(report.imageErrors).toEqual([]);
   }, 60_000);
 
   it('prints failures only as file:line diagnostics and exits one', async () => {

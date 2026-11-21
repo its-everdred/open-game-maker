@@ -28,6 +28,14 @@ const palette: GameManifest['palette'] = {
 afterEach(cleanup);
 
 describe('Palette', () => {
+  it('identifies assets made by Game Maker', () => {
+    const generated = {
+      ...palette,
+      items: [{ prefab: 'rock', label: 'Rock', category: 'actors', madeByGameMaker: true }],
+    };
+    render(<Palette palette={generated} onPick={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Rock, Made by Game Maker' })).toHaveTextContent('Made by Game Maker');
+  });
   it('renders an unhashed scenery prefab only from a build-pinned lock', () => {
     const scenery = {
       categories: [{ id: 'props', label: 'Forest', kind: 'items' as const }],

@@ -1,0 +1,42 @@
+{
+  "game": "blobs",
+  "logoUrl": "https://games.example.test/media/logo.webp",
+  "thumbnailUrl": "https://games.example.test/media/thumbnail.webp",
+  "firstResources": [
+    {
+      "url": "https://games.example.test/media/logo.webp",
+      "status": 200,
+      "transferSize": 8192,
+      "duration": 120,
+      "cacheControl": "public, max-age=31536000, immutable",
+      "cache": "network"
+    },
+    {
+      "url": "https://games.example.test/media/thumbnail.webp",
+      "status": 200,
+      "transferSize": 16384,
+      "duration": 180,
+      "cacheControl": "public, max-age=31536000, immutable",
+      "cache": "network"
+    }
+  ],
+  "resources": [
+    {
+      "url": "https://games.example.test/media/logo.webp",
+      "status": 200,
+      "transferSize": 0,
+      "duration": 2.1,
+      "cacheControl": "public, max-age=31536000, immutable",
+      "cache": "cache (memory/disk unknown)"
+    },
+    {
+      "url": "https://games.example.test/media/thumbnail.webp",
+      "status": 200,
+      "transferSize": 0,
+      "duration": 1.8,
+      "cacheControl": "public, max-age=31536000, immutable",
+      "cache": "cache (memory/disk unknown)"
+    }
+  ],
+  "api": { "url": "https://api.example.test/api/v1/games", "status": 200, "duration": 842.4 }
+}

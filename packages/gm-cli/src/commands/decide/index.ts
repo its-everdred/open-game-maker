@@ -52,7 +52,11 @@ export const command: GmCommand = {
     recommend: { type: 'string', help: 'option id you recommend' },
     reason: { type: 'string', help: 'one line: why the recommended option' },
     revisit: { type: 'boolean', default: false, help: 'ask a recorded question again because the creator reopened it' },
-    blocking: { type: 'boolean', default: false, help: 'always on until aiur #7872 is deployed' },
+    blocking: {
+      type: 'boolean',
+      default: true,
+      help: 'keep the creator Command blocking (inventory Commands are non-blocking)',
+    },
     ...KEY_FLAG,
   },
   async run(ctx, _args, flags) {
@@ -82,6 +86,7 @@ export const command: GmCommand = {
       maxOptions: MAX_COMMAND_OPTIONS,
       mediaOnEveryOption: true,
       topic,
+      blocking: flags.blocking === true,
     });
     appendDecision(dir, {
       command: payload.command_id,

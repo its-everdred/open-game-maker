@@ -101,13 +101,9 @@ describe('games-host layout', () => {
     const file = `${'a'.repeat(64)}.webp`;
 
     expect(blobPath(root, file)).toBe(join(root, '_a', file));
-    for (const invalid of [
-      `${'a'.repeat(63)}.webp`,
-      `${'A'.repeat(64)}.webp`,
-      `${'a'.repeat(64)}.svg`,
-      `../${file}`,
-      `_a/${file}`,
-    ]) {
+    expect(blobPath(root, `${'c'.repeat(64)}.js`)).toBe(join(root, '_a', `${'c'.repeat(64)}.js`));
+    expect(blobPath(root, `${'d'.repeat(64)}.exe`)).toBe(join(root, '_a', `${'d'.repeat(64)}.exe`));
+    for (const invalid of [`${'a'.repeat(63)}.webp`, `${'A'.repeat(64)}.webp`, `../${file}`, `_a/${file}`]) {
       expect(() => blobPath(root, invalid)).toThrow(BadBlobName);
     }
   });

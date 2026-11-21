@@ -1,0 +1,9 @@
+[Unit]
+Description=Reconcile published prototype reviews every ten minutes
+
+[Timer]
+OnBootSec=10min
+OnUnitInactiveSec=10min
+
+[Install]
+WantedBy=timers.target

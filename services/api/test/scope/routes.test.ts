@@ -120,11 +120,22 @@ describe('scope session routes', () => {
     const first = await create(app);
     expect(first.status).toBe(201);
     const created = (await first.json()) as { sessionId: string; jobId: string };
-    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, created.jobId)).get()).toMatchObject({
+    const job = deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, created.jobId)).get();
+    expect(job).toMatchObject({
       kind: 'scope',
       complexity: 1,
       state: 'admitted',
     });
+    const plan = JSON.parse(job!.plan) as {
+      tickets: { skills: string[]; acceptanceCriteria: string[] }[];
+    };
+    expect(plan.tickets[0]?.skills).toEqual(['gm-scope-options', 'gm-new-game-design']);
+    expect(plan.tickets[0]?.acceptanceCriteria).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('at least 15 product decisions across five areas'),
+        expect.stringContaining('five to eight open, media-backed product decisions'),
+      ]),
+    );
     expect(deps.db.select().from(schema.scopeSessions).all()).toHaveLength(1);
 
     const retry = await create(app);

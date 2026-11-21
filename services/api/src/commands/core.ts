@@ -10,6 +10,7 @@ import { parseBody } from '../app/validate.js';
 import { reviewMediaUrl } from '../blobs/review-url.js';
 import { isForCreator } from '../job-commands/correlate.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
+import { logReviewFeedRefresh } from '../review-rounds/feed-log.js';
 import { optionMediaFromAiur } from './aiur-media.js';
 import { toGameCommand } from './aiur.js';
 import {
@@ -80,6 +81,12 @@ export default new Hono<ApiBindings>()
       }),
     );
     const visible = commands.filter((command) => command !== null);
+    await logReviewFeedRefresh(
+      'core_commands',
+      'core',
+      visible.map((command) => ({ ticket: command.ticket!, id: command.decision_id, postedAt: command.opened_at })),
+      deps.log,
+    );
     const workers = await reviewWorkers(deps).catch(() => null);
     const targets = (workers ?? [])
       .filter(
@@ -114,6 +121,7 @@ export default new Hono<ApiBindings>()
       body.review.likes.length === 1 &&
       body.review.likes[0] === body.option_id &&
       body.review.dislikes.length === 0 &&
+      body.review.liked_notes === undefined &&
       body.review.notes === undefined;
     const deps = c.get('deps');
     const guard = body.review

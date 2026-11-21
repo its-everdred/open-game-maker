@@ -42,6 +42,26 @@ describe('review submissions', () => {
       false,
     );
   });
+  it('validates creator-facing prototype review content and its ticket targets', () => {
+    const prototype = {
+      ...base,
+      track: 'prototype-publish',
+      phase: 'build',
+      category: 'gameplay',
+      question: 'Review this published build',
+      media: [{ kind: 'build', ref: 'build_1' }],
+      works: ['Walk around the town'],
+      limitations: ['No attack yet'],
+      decisionIds: ['enemy-lineup'],
+      sourceTickets: ['42', '43'],
+      clipStatus: 'unchecked',
+    };
+    expect(ReviewSubmission.safeParse(prototype).success).toBe(true);
+    expect(ReviewSubmission.safeParse({ ...prototype, sourceTickets: ['42', '42'] }).success).toBe(false);
+    expect(ReviewSubmission.safeParse({ ...prototype, decisionIds: ['enemy-lineup', 'enemy-lineup'] }).success).toBe(
+      false,
+    );
+  });
   it('accepts audio and stills for mock rounds while keeping later rung requirements', () => {
     expect(
       ReviewSubmission.safeParse({

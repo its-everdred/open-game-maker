@@ -6,6 +6,8 @@
 # deployed from and to.
 #
 # usage: ogm-qa-review-hook <have> <want> [--daily] [--repo <checkout>] [--attention <file>]
+#        ogm-qa-review-hook --game-publish <slug> <build-id> [--api <url>] [--repo <checkout>] [--attention <file>]
+#        ogm-qa-review-hook --publish-sweep [--repo <checkout>] [--attention <file>]
 #
 #   <have> <want>  the deployed range; only paths changed in it decide which E2E runs
 #   --repo         the deployed checkout (default: this script's repository)
@@ -25,6 +27,8 @@ set -uo pipefail
 
 usage() {
   printf 'usage: ogm-qa-review-hook <have> <want> [--daily] [--repo <checkout>] [--attention <file>]\n' >&2
+  printf '       ogm-qa-review-hook --game-publish <slug> <build-id> [--api <url>] [--repo <checkout>] [--attention <file>]\n' >&2
+  printf '       ogm-qa-review-hook --publish-sweep [--repo <checkout>] [--attention <file>]\n' >&2
   exit 64
 }
 
@@ -32,9 +36,30 @@ repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 attention=${OGM_QA_ATTENTION:-}
 daily=0
 range=()
+game_publish=()
+publish_sweep=0
+api_url=
+attention_message=
+worst=0
 while (($#)); do
   case $1 in
     --daily) daily=1; shift ;;
+    --game-publish)
+      [[ $# -ge 3 ]] || usage
+      game_publish=("$2" "$3")
+      shift 3
+      ;;
+    --publish-sweep) publish_sweep=1; shift ;;
+    --api)
+      [[ $# -ge 2 ]] || usage
+      api_url=$2
+      shift 2
+      ;;
+    --attention-message)
+      [[ $# -ge 2 ]] || usage
+      attention_message=$2
+      shift 2
+      ;;
     --repo | --attention)
       [[ $# -ge 2 ]] || usage
       declare "${1#--}=$2"
@@ -47,21 +72,72 @@ while (($#)); do
       ;;
   esac
 done
-((${#range[@]} == 2)) || usage
-have=${range[0]}
-want=${range[1]}
+if ((${#game_publish[@]})); then
+  ((${#game_publish[@]} == 2 && ${#range[@]} == 0 && daily == 0 && publish_sweep == 0)) || usage
+  slug=${game_publish[0]}
+  build_id=${game_publish[1]}
+elif ((publish_sweep)); then
+  ((${#range[@]} == 0 && daily == 0)) || usage
+else
+  ((${#range[@]} == 2)) || usage
+  have=${range[0]}
+  want=${range[1]}
+fi
 
 # The deploy caller supplies the Executor's attention file. Remember it for the
 # timer, which runs outside that caller's environment.
-qa_root=${OGM_QA_ROOT:-$HOME/.local/state/ogm/qa}
+qa_root=${OGM_QA_ROOT:-${HOME:-$repo}/.local/state/ogm/qa}
 attention_config=$qa_root/attention-path
 if [[ -n $attention ]]; then
   mkdir -p "$qa_root"
   config_tmp=$(mktemp "$qa_root/.attention-path.XXXXXX")
   printf '%s\n' "$attention" > "$config_tmp"
   mv -f -- "$config_tmp" "$attention_config"
-elif ((daily)) && [[ -f $attention_config ]]; then
+elif [[ -f $attention_config ]]; then
   IFS= read -r attention < "$attention_config" || :
+fi
+
+if ((publish_sweep)); then
+  gm=${OGM_QA_GM:-node $repo/packages/gm-cli/dist/index.js}
+  log_dir=$qa_root/game-publish
+  mkdir -p "$log_dir"
+  log=$log_dir/reconcile.log
+  : > "$log"
+  (cd "$repo" && timeout --kill-after=30 "${OGM_QA_TIMEOUT_SEC:-3600}" $gm qa publish-review-check --all) > "$log" 2>&1
+  rc=$?
+  if ((rc != 0)); then
+    worst=1
+    [[ -n $attention ]] && printf '%s published prototype review reconciliation failed (exit %s): %s\n' "$(date -u +%FT%TZ)" "$rc" "$log" >> "$attention"
+  fi
+  tail -n 1 "$log" || true
+  printf 'exit=%s qa-publish-review-sweep\n' "$rc"
+  exit "$worst"
+fi
+
+if ((${#game_publish[@]})); then
+  gm=${OGM_QA_GM:-node $repo/packages/gm-cli/dist/index.js}
+  log_dir=$qa_root/game-publish
+  mkdir -p "$log_dir"
+  log=$log_dir/$build_id.log
+  : > "$log"
+  check=(qa publish-review-check "$slug" "$build_id")
+  [[ -z $api_url ]] || check+=(--api "$api_url")
+  (cd "$repo" && timeout --kill-after=30 "${OGM_QA_TIMEOUT_SEC:-3600}" $gm "${check[@]}") > "$log" 2>&1
+  rc=$?
+  if ((rc != 0)); then
+    worst=1
+    message=${attention_message:-prototype review missing for published game $slug build $build_id}
+    [[ -n $attention ]] && printf '%s %s (exit %s): %s\n' "$(date -u +%FT%TZ)" "$message" "$rc" "$log" >> "$attention"
+  elif [[ -n $attention_message ]]; then
+    if [[ -n $attention ]]; then
+      printf '%s %s\n' "$(date -u +%FT%TZ)" "$attention_message" >> "$attention"
+    else
+      printf 'attention: %s\n' "$attention_message" >&2
+    fi
+  fi
+  tail -n 1 "$log" || true
+  printf 'exit=%s qa-publish-review-check\n' "$rc"
+  exit "$worst"
 fi
 
 changed=$(git -C "$repo" diff --name-only "$have" "$want" 2> /dev/null) || {
@@ -77,6 +153,8 @@ mapfile -t voice_paths < "$(dirname -- "${BASH_SOURCE[0]}")/../voice-paths"
 git -C "$repo" diff --quiet "$have" "$want" -- "${voice_paths[@]}" 2> /dev/null || runs+=(voice)
 new_game='^(templates/game-[^/]+/|packages/game-repo-template/|services/api/src/games/|services/commit/)'
 if ((daily)) || grep -qE "$new_game" <<< "$changed"; then runs+=(new-game); fi
+games_cache='^(services/games-host/|services/api/src/(games|builds)/|apps/web/src/routes/games/)'
+grep -qE "$games_cache" <<< "$changed" && runs+=(games-cache)
 if ((${#runs[@]} == 0)); then
   printf 'ogm-qa-review-hook: no review or voice change or new-game change in %s..%s\n' "$have" "$want"
   exit 0
@@ -91,10 +169,12 @@ worst=0
 session_rc=
 for kind in "${runs[@]}"; do
   name=qa-$kind-e2e
+  [[ $kind == games-cache ]] && name=qa-games-cache
   stills=qa-e2e
   [[ $kind == voice ]] && stills=voice-e2e
   [[ $kind == new-game ]] && stills=new-game-e2e
   logs=$qa_root/$kind-e2e
+  [[ $kind == games-cache ]] && logs=$qa_root/games-cache
   mkdir -p "$logs"
   log=$logs/$sha.log
   : > "$log"
@@ -105,7 +185,11 @@ for kind in "${runs[@]}"; do
   fi
   rc=$session_rc
   if ((rc == 0)); then
-    (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa "$kind-e2e" --sha "$sha" --out "$repo/assets-local/review/app/$stills/$sha") >> "$log" 2>&1
+    if [[ $kind == games-cache ]]; then
+      (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa games-cache --game blobs --json) >> "$log" 2>&1
+    else
+      (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa "$kind-e2e" --sha "$sha" --out "$repo/assets-local/review/app/$stills/$sha") >> "$log" 2>&1
+    fi
     rc=$?
   fi
   if ((rc != 0)); then

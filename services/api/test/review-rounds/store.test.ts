@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { answerRound, consumeRound, getRound, postRound, submitRound } from '../../src/review-rounds/store.js';
+import {
+  answerRound,
+  consumeRound,
+  getRound,
+  latestRoundForTicket,
+  postRound,
+  submitRound,
+} from '../../src/review-rounds/store.js';
 import { makeDeps } from '../helpers.js';
 import { GAME, seedDesignGame } from '../design-decisions/fixtures.js';
 
@@ -24,6 +31,17 @@ function setup() {
 }
 
 describe('review round posting', () => {
+  it('keeps prototype publish rounds out of ordinary ticket lookup', () => {
+    const { deps, round } = setup();
+    postRound(deps.db, {
+      ...round,
+      id: 'publish-round',
+      track: 'prototype-publish',
+      media: JSON.stringify([{ kind: 'build', ref: 'build_1' }]),
+    });
+    expect(latestRoundForTicket(deps.db, GAME, '42')?.id).toBe(round.id);
+  });
+
   it('treats approval with a note as changes on the current fidelity rung', () => {
     const { deps, round } = setup();
     postRound(deps.db, { ...round, id: 'mock', phase: 'mock' });

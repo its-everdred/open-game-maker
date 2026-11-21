@@ -14,6 +14,7 @@ const STATUS_RANK: Record<Status, number> = {
   rejected: 0,
 };
 const TAGGED: Status[] = ['tagged', 'reviewed'];
+const AUDIO_SEARCHABLE: Status[] = ['measured', 'tagged', 'reviewed'];
 const MEASURED: Status[] = ['measured', 'tagged', 'reviewed'];
 const BIDI_CONTROLS = new Set([
   0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069,
@@ -25,7 +26,8 @@ const UNTAGGED_OK: Status[] = ['draft', 'measured', 'tagged', 'reviewed'];
 export function statusAllowed(kind: string | undefined, status: Status, includeDraft = false): boolean {
   if (includeDraft && status === 'draft') return true;
   if (kind === 'model' || kind === 'sprite') return UNTAGGED_OK.includes(status);
-  if (kind === 'audio' || kind === 'inspiration') return TAGGED.includes(status);
+  if (kind === 'audio') return AUDIO_SEARCHABLE.includes(status);
+  if (kind === 'inspiration') return TAGGED.includes(status);
   return MEASURED.includes(status);
 }
 
@@ -124,6 +126,7 @@ export function passes(index: CardIndex, card: ResolvedCard, q: SearchQuery): bo
   if (card.status === 'quarantined' || card.status === 'rejected') return false;
   if (collectionOf(index, card)?.status === 'quarantined') return false;
   if (q.excludeAiGenerated && card.generation?.method === 'ai') return false;
+  if (q.generated && !card.generated) return false;
   if (!card.resolved.rights.uses.includes(use)) return false;
   if ((use === 'in-game' || use === 'placeholder') && kindsOf(card).includes('inspiration')) return false;
 
@@ -145,7 +148,7 @@ export function passes(index: CardIndex, card: ResolvedCard, q: SearchQuery): bo
   }
   const needsSet = q.set !== undefined || Boolean(q.gameSets?.length);
   const pack = needsSet ? packOf(card.id) : undefined;
-  const set = pack ? setFor(pack)?.id : undefined;
+  const set = (pack ? setFor(pack)?.id : undefined) ?? (card.generated ? card.resolved.set : undefined);
   if (q.set !== undefined) {
     if (set !== q.set) return false;
   }
@@ -229,5 +232,8 @@ export function formatRow(card: ResolvedCard): string {
       })
       .join('');
   const generation = card.generation?.method === 'ai' ? `  [AI-generated: ${safe(card.generation.tool)}]` : '';
-  return `${[card.id, kind, card.status, card.resolved.style_family ?? '-', card.title].map(safe).join('  ')}${generation}`;
+  const madeBy = card.generated ? '  [Made by Game Maker]' : '';
+  const status =
+    card.status === 'measured' && kindsOf(card).includes('audio') ? 'measured [low-confidence]' : card.status;
+  return `${[card.id, kind, status, card.resolved.style_family ?? '-', card.title].map(safe).join('  ')}${generation}${madeBy}`;
 }

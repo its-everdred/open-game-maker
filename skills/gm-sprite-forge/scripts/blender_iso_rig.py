@@ -16,6 +16,8 @@ import math
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import bpy
 from mathutils import Vector
 
@@ -181,7 +183,13 @@ def rock(sc):
     if P['shape'] == 3:  # smaller pebbles, at the boulder's left/front foot
         pebbles = [((-0.40, -0.30, 0.05), 0.11, (128, 118, 102)), ((-0.18, -0.44, 0.04), 0.07, (100, 100, 96)),
                    ((-0.48, -0.05, 0.04), 0.07, (100, 100, 96))]
+    # Seed 3 preserves the calibrated baseline. Other seeds reposition the
+    # independently modelled pebbles so a rerun can produce a new sibling.
+    offsets = random.Random(int(P['seed']))
+    baseline = random.Random(3)
     for loc, r, rgb in pebbles:
+        loc = (loc[0] + (offsets.random() - baseline.random()) * 0.1,
+               loc[1] + (offsets.random() - baseline.random()) * 0.1, loc[2])
         bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=r, location=loc)
         p = bpy.context.object
         p.scale = (1.15, 1.0, 0.7)
@@ -230,13 +238,74 @@ def hull(sc):
     return [h]
 
 
+def vegetation_palette(name, defaults):
+    palette = tuple(tuple(P.get(f'{name}_{band}_{channel}', colour[index])
+                          for index, channel in enumerate('rgb'))
+                    for band, colour in zip(('hi', 'mid', 'lo'), defaults))
+    if any(not math.isfinite(c) or not 0 <= c <= 255 for colour in palette for c in colour):
+        raise ValueError('vegetation palette channels must be in 0..255')
+    return palette
+
+
+def vegetation(sc):
+    from vegetation_mesh import bush, cluster, conifer, tree
+    defaults = ((165, 111, 30), (123, 73, 17), (70, 41, 8)) if P.get('autumn', 0) else ((102, 145, 63), (75, 113, 46), (40, 67, 28))
+    palette = vegetation_palette('foliage', defaults)
+    green = toon_material('foliage', *palette, noise=0.08)
+    if SCENE == 'plant':
+        return cluster(int(P['seed']), green, count=int(P.get('count', 5)), extent=P.get('extent', 0.2),
+                       height=P.get('plant_height', 0.18), leafy=bool(P.get('leafy', 0)),
+                       leaves_per_cluster=int(P.get('leaves_per_cluster', 12)),
+                       leaf_width=P.get('leaf_width', 1),
+                       leaf_length_scale=P.get('leaf_length_scale', 1),
+                       leaf_shading=bool(P.get('leaf_shading', 0)), batch_size=int(P.get('batch_size', 1)),
+                       batch_radius=P.get('batch_radius', 0.05))
+    if SCENE == 'bush':
+        masses = bush(int(P['seed']), green, scale=P.get('height', 1),
+                      count=int(P.get('bush_mass_count', 9)), mass_radius=P.get('bush_mass_radius', .15))
+        if P.get('bush_leaf_detail', 0):
+            from vegetation_bush_detail import leaf_cards
+            def shade(factor):
+                return tuple(tuple(min(255, c * factor) for c in band) for band in palette)
+            bright = toon_material('leaf-bright', *shade(1.35))
+            dark = toon_material('leaf-dark', *shade(.70))
+            masses.append(leaf_cards(masses, (green, bright, dark), int(P['seed'])))
+        return masses
+    bark = toon_material('bark', *vegetation_palette('bark', ((117, 87, 56), (92, 65, 42), (52, 37, 25))), noise=0.08)
+    if SCENE == 'conifer':
+        if P.get('branched', 0):
+            from vegetation_conifer import conifer_boughs
+            return conifer_boughs(int(P['seed']), bark, green, height=P.get('height', 1.2),
+                                  lean=P.get('lean', 0.1), tiers=int(P.get('tiers', 14)),
+                                  spokes=int(P.get('spokes', 8)))
+        return conifer(int(P['seed']), bark, green, height=P.get('height', 1.2), lean=P.get('lean', 0.1))
+    return tree(int(P['seed']), bark, green, height=P.get('height', 1), lean=P.get('lean', 0.1), bare=SCENE == 'bare', dense=bool(P.get('dense', 0)), leaf_count=int(P.get('leaf_count', 24000)),
+                branch_radius=P.get('branch_radius', 0.07),
+                attachment_min=P.get('attachment_min', 0.55), organic_bare=bool(P.get('organic_bare', 0)), fine_canopy=bool(P.get('fine_canopy', 0)),
+                crown_shape=(P.get('crown_width', 1), P.get('crown_depth', 1), P.get('crown_height', 1)),
+                levels=int(P.get('levels', 3)), canopy_scale=P.get('canopy_scale', 1),
+                fanout=int(P.get('fanout', 2)),
+                spread=(P.get('spread_min', 0.55), P.get('spread_max', 0.85)))
+
+
 def main():
     sc = reset()
     camera(sc)
-    shadow_catcher(sc)
-    objs = {'tile': tile, 'rock': rock, 'hull': hull, 'cube': cube, 'blend': blend}[SCENE](sc)
+    if P.get('shadows', 1):
+        shadow_catcher(sc)
+    objs = {'tile': tile, 'rock': rock, 'hull': hull, 'cube': cube, 'blend': blend, 'tree': vegetation, 'plant': vegetation, 'bush': vegetation, 'conifer': vegetation, 'bare': vegetation}[SCENE](sc)
     root = bpy.data.objects.new('root', None)
     sc.collection.objects.link(root)
+    if SCENE == 'bare':
+        spread = P.get('branch_width', 1.0)
+        if not math.isfinite(spread) or spread <= 0:
+            raise ValueError('branch_width must be positive and finite')
+        root.scale = (spread, spread, 1.0)
+    if SCENE == 'bush':
+        vertical_scale = P.get('bush_vertical_scale', 1.0)
+        if not math.isfinite(vertical_scale) or vertical_scale <= 0:
+            raise ValueError('bush_vertical_scale must be positive and finite')
+        root.scale = (1.0, 1.0, vertical_scale)
     for o in objs:
         o.parent = root
     os.makedirs(OUT, exist_ok=True)
@@ -259,4 +328,5 @@ def main():
         bpy.ops.render.render(write_still=True)
 
 
-main()
+if __name__ == '__main__':
+    main()

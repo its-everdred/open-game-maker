@@ -10,6 +10,10 @@ A creator request climbs rungs of rising fidelity on **one ticket**. Each rung e
 raises your reasoning effort. Lessons and evidence: `references/lessons.md`. Rung media rules:
 `../gm-new-game-plan/references/prototype-ladder.md`.
 
+Every `lane:creative` ticket (towns, settings, UI screens, HUD, menus, title, loading and end screens, logos,
+thumbnails) starts at `phase:mock` with pure image-generated mocks (gm-image-mock), and no rung is skipped: a
+prototype needs the creator's approved mock, a build needs the approved prototype.
+
 | Rung (label) | Effort | Deliver | Never |
 |---|---|---|---|
 | `phase:mock` | low | The cheapest thing the creator can judge: image mocks (imagegen), rough sound takes, a clip or paper mock of the gameplay. Each one is built from the real concept, cast and screen. | Production code, hand-coded SVG logos, generic stand-ins |
@@ -20,6 +24,9 @@ raises your reasoning effort. Lessons and evidence: `references/lessons.md`. Run
 ## Every turn
 1. **Read your rung** from the `phase:*` label and the review ledger. Build only what that rung delivers. Your
    effort is set by the `model:<effort>` label. Never change it, never ask for more, and never pretend to have more.
+   On the first turn, raise the ticket's `open` inventory decisions (the ids under `## Creator decisions`; when the
+   ticket lists none, first add the feature's decisions to `docs/<slug>/decisions.json` and the section to the
+   ticket), one non-blocking Command each, and record answers back: `../gm-core/references/decision-inventory.md`.
 2. **Start from the last approved output.** That is the approved round's sha and media, not your own last trial
    and not a model-made mock. Score against the creator's real target (his concept crop or the approved media).
 3. **Fold in every note.** An approval that carries a note ("looks good, but add X") is a change request first:
@@ -38,9 +45,12 @@ raises your reasoning effort. Lessons and evidence: `references/lessons.md`. Run
    with media on every option (one Command per screen, or one Command with a question per screen), and build your recommendation meanwhile. Never re-polish and re-ask before his verdict, and
    never ask the same question twice.
 7. **Ship each round that beats prod.** Mark the PR ready with `Refs #<ticket>`, so it merges and publishes, and
-   keep iterating on a new branch. The ticket stays open until the creator approves the last rung.
-8. **Decide engineering yourself.** Only taste goes to the creator. Ship, scope, retries and tooling are yours,
-   or the Executor's for host-only steps.
+   keep iterating on a new branch. The ticket stays open until the creator approves the last rung. A playable
+   round that changes what the creator can do or see carries its prototype review in the round and the PR body:
+   play link, phone clip, works now, known limitations (checked in that build), 3–6 decisions to weigh in on.
+8. **Decide engineering yourself.** Only taste and product choices go to the creator, and every one of those
+   does: never settle an inventory decision silently. Ship, scope, retries and tooling are yours, or the
+   Executor's for host-only steps.
 
 ## On approval (automatic)
 The reconciler swaps `phase:*` and `model:<effort>` to the next rung on this same ticket and reworks it with

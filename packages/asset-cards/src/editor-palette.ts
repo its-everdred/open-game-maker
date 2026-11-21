@@ -34,6 +34,7 @@ export function fallbackEditorPalette(
       category,
       ...(thumbnail === undefined ? {} : { thumbnail }),
       ...(card?.generation?.method === 'ai' ? { aiGenerated: true } : {}),
+      ...(card?.generated ? { madeByGameMaker: true } : {}),
     });
     groups.set(category, items);
   }

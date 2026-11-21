@@ -45,3 +45,5 @@ export * from './decision-waits.js';
 
 export * from './scenery.js';
 export * from './review-rounds.js';
+export * from './decision-inventory.js';
+export * from './image-slots.js';

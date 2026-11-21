@@ -1,4 +1,5 @@
 import type { GameCommand } from '@ogm/contracts';
+import { useEffect, useRef } from 'react';
 
 import { mediaKindOf, withoutLinks } from './review';
 
@@ -13,8 +14,30 @@ export function CommandOptions({
   disabled: boolean;
   onAnswer(optionId: string): void;
 }) {
+  const optionsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = optionsRef.current;
+    if (!root || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const video = entry.target as HTMLVideoElement;
+        if (entry.isIntersecting) {
+          video.play().catch(() => undefined);
+        } else {
+          video.pause();
+        }
+      }
+    });
+    root.querySelectorAll('video[data-review-loop]').forEach((video) => {
+      observer.observe(video);
+    });
+    return () => {
+      observer.disconnect();
+      root.querySelectorAll('video[data-review-loop]').forEach((video) => (video as HTMLVideoElement).pause());
+    };
+  }, [command]);
   return (
-    <div className="build-chat-options">
+    <div className="build-chat-options" ref={optionsRef}>
       {command.options.map((option) => (
         <button
           aria-label={withoutLinks(option.label)}
@@ -29,7 +52,15 @@ export function CommandOptions({
               {mediaKindOf(option.media) === 'image' ? (
                 <img alt="" src={option.media.url} />
               ) : (
-                <video muted playsInline poster={option.media.poster} preload="metadata" src={option.media.url} />
+                <video
+                  data-review-loop
+                  loop
+                  muted
+                  playsInline
+                  poster={option.media.poster}
+                  preload="metadata"
+                  src={option.media.url}
+                />
               )}
             </span>
           )}

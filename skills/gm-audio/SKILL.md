@@ -52,6 +52,12 @@ and add loop points when needed. For music as data, validate `song.json` with `s
 Stop retained music and song handles when their state ends. Call `GmAudio.stop()` on a full reset and
 `GmAudio.dispose()` when the game instance is disposed so sources, listeners, and the context do not leak.
 
+Packed music and voice assets use the asset cache's `stream` phase. Put large tracks in a `lazy:<group>` phase in
+`assets.lock.json`; set a tracked per-group budget in `gm.manifest.json` as
+`{"assetBudgets":{"lazy":{"music":{"mobile":8388608,"desktop":16777216}}}}` (bytes). Stream-only groups may use up to
+32 MiB on mobile/low and 64 MiB on desktop; groups with preloaded assets remain capped at 1.5 MiB and 4 MiB respectively. The
+build report shows the measured bytes and rejects values above those ceilings.
+
 ## Host fallback
 
 When the host requests iOS audio fallback, enable `GmAudio.relay(true)`. Samples and loops then leave through the

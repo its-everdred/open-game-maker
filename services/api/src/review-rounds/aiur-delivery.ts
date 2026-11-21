@@ -28,7 +28,8 @@ export function aiurReworkDelivery(
             Date.parse(started) >= Date.parse(verdictAt)
               ? session
               : null;
-          return { runId };
+          const queued = typeof issue.queue.depth === 'number' && issue.queue.depth > 0;
+          return runId ? { runId } : { runId: null, pending: issue.status === 'running' || queued };
         }
         if (page.nextCursor === null) return null;
         if (page.nextCursor === cursor) throw new Error('aiur_transcript_cursor_repeated');

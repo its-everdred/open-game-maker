@@ -382,7 +382,7 @@ describe('AssetLoader', () => {
     });
     await loader.load();
 
-    expect(ASSETS_SCHEMA_MINOR).toBe(6);
+    expect(ASSETS_SCHEMA_MINOR).toBe(7);
     expect(loader.resolve('content-addressed/model')).toMatchObject({
       file,
       url: `https://game.test/a/${digest}.glb`,

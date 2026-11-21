@@ -171,9 +171,8 @@ describe('published cache plans', () => {
       'd'.repeat(40),
     );
 
-    expect(readdirSync(join(deps.config.gamesRoot, '_a')).sort()).toEqual(
-      [`${firstHash}.png`, `${secondHash}.png`, `${sharedHash}.mp3`].sort(),
-    );
+    const stored = readdirSync(join(deps.config.gamesRoot, '_a'));
+    expect(stored).toEqual(expect.arrayContaining([`${firstHash}.png`, `${secondHash}.png`, `${sharedHash}.mp3`]));
     for (const [gameId, buildId] of [
       [ids.game, firstBuild],
       [ids.game, secondBuild],
@@ -187,12 +186,18 @@ describe('published cache plans', () => {
     const otherPlan = plan(deps, otherGame, otherBuild);
     expect(firstPlan).toMatchObject({ gameId: ids.game, buildId: firstBuild, sdkVersion: '^1.0.0' });
     expect(firstPlan.lineage).toBeUndefined();
-    expect(
-      firstPlan.entries
-        .filter(({ kind }) => kind === 'code')
-        .map(({ url }) => url)
-        .sort(),
-    ).toEqual(['assets/main.js', 'index.html']);
+    const firstCode = firstPlan.entries.filter(({ kind }) => kind === 'code');
+    const secondCode = secondPlan.entries.filter(({ kind }) => kind === 'code');
+    const mainHash = digest(Buffer.from('console.log("fixture");\n'));
+    expect(firstCode.find(({ sourcePath }) => sourcePath === 'assets/main.js')?.url).toBe(`/a/${mainHash}.js`);
+    const indexPath = join(deps.config.gamesRoot, ids.game, firstBuild, 'index.html');
+    const indexBytes = readFileSync(indexPath);
+    const indexEntry = firstCode.find(({ sourcePath }) => sourcePath === 'index.html');
+    expect(indexEntry?.url).toBe(`/a/${digest(indexBytes)}.html`);
+    expect(secondCode.find(({ sourcePath }) => sourcePath === 'index.html')?.url).toBe(indexEntry?.url);
+    expect(readFileSync(join(deps.config.gamesRoot, ids.game, firstBuild, 'index.html'), 'utf8')).toContain(
+      `/a/${mainHash}.js`,
+    );
     expect(secondPlan.lineage).toEqual({
       previousBuildId: firstBuild,
       added: [secondHash],
