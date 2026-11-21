@@ -88,7 +88,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "node scripts/list-pixelfx.mjs --check && tsc -b",
     "test": "vitest run",
-    "test:browser": "tsx src/audio/fixture/build.ts && tsx src/camera/fixture/build.ts && playwright test --config playwright.config.ts",
+    "test:browser": "tsx src/audio/fixture/build.ts && tsx src/camera/fixture/build.ts && tsx src/hd2d/fixture/build.ts && playwright test --config playwright.config.ts",
     "lint": "eslint src"
   },
   "dependencies": {
