@@ -1,0 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap');
+:root{--night:#1a1824;--night-2:#282532;--night-3:#373340;--ink:#f2ead6;--muted:rgba(242,234,214,.6);--rule:rgba(242,234,214,.18);--paper-2:rgba(255,255,255,.06);--paper-3:rgba(255,255,255,.1);--yellow-b:#ffbf32;--green-b:#94d742;--aqua-b:#6fd6b4;--red-b:#f76d67;--dark:#1d1b16;--pop:0 12px 32px rgba(0,0,0,.35);--pop-sm:0 6px 18px rgba(0,0,0,.35);--glass:blur(22px) saturate(1.4)}
+*{box-sizing:border-box}
+body{margin:0;background:#0f0e16;font-family:'Nunito',system-ui,sans-serif;color:var(--ink);overflow:hidden}
+.stage{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,#2e2340 0,#1c1528 60%,#120e1a 100%);overflow:hidden}
+.world{position:absolute;inset:0;z-index:0}
+.glass{-webkit-backdrop-filter:var(--glass);backdrop-filter:var(--glass);background:color-mix(in srgb,var(--night) 82%,transparent);border:1px solid var(--rule);box-shadow:var(--pop)}
+.btn{display:grid;place-items:center;width:48px;height:48px;border-radius:999px;background:var(--paper-2);color:var(--ink);border:0}
+.btn svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.btn.on{background:var(--yellow-b);color:var(--dark)}
+.btn.go{background:var(--green-b);color:var(--dark)}
+.btn[disabled]{opacity:.4}
+.tile{position:relative;height:100%;border-radius:14px;background:var(--paper-2);overflow:hidden;display:grid;place-items:center}
+.tile img{width:100%;height:100%;object-fit:contain}
+.tile img.tall{object-fit:cover;object-position:50% 78%;transform:scale(1.25)}
+.tile.on{outline:3px solid var(--yellow-b);background:color-mix(in srgb,var(--yellow-b) 18%,transparent)}
+.tile .sheet{width:100%;height:100%;background-repeat:no-repeat}
+.chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:999px;background:var(--paper-2);font:700 14px Nunito,sans-serif;color:var(--ink);white-space:nowrap}
+.chip.on{background:var(--yellow-b);color:var(--dark)}
+.ghost{outline:none}
+.mock-tag{position:absolute;right:10px;top:10px;font:800 11px Nunito;letter-spacing:.08em;color:rgba(242,234,214,.55);z-index:999999}

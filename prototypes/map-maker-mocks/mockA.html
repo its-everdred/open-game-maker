@@ -1,0 +1,32 @@
+<html><head><link rel="stylesheet" href="ui.css"><style>
+.top{position:absolute;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;z-index:900000}
+.pill{display:flex;gap:6px;padding:6px;border-radius:999px}
+.tray{position:absolute;z-index:900000;border-radius:26px 26px 0 0;padding:10px 12px 18px}
+.tools{display:flex;gap:6px;padding:6px;border-radius:999px;width:max-content;margin:0 auto 10px}
+.kinds{display:grid;gap:8px;margin-bottom:10px}
+.grid{display:grid;gap:8px}
+.float{position:absolute;z-index:900001;display:flex;gap:4px;padding:5px;border-radius:999px;transform:translate(-50%,-100%)}
+.float .btn{width:44px;height:44px}
+.finger{position:absolute;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.3);border:3px solid #fff;z-index:900002;transform:translate(-50%,-50%)}
+</style></head><body><div class="stage"><div class="world" id="w"></div></div>
+<script src="iso.js"></script><script src="scene.js"></script><script src="icons.js"></script><script>
+const v=new URLSearchParams(location.search).get('v')||'phone', P=v==='phone';
+const VW=innerWidth, s=P?0.36:0.62, ox=VW/2+(P?-10:0), oy=P?250:150;
+const L=document.getElementById('w');
+buildScene(L,ox,oy,s);
+mark(L,2,2,ox,oy,s,'background:rgba(255,191,50,.35);outline:2px solid #ffbf32');
+for(const x of [5,6,7]){mark(L,x,5,ox,oy,s,'background:rgba(148,215,66,.35)');Iso.fence(L,'b1',x,5,'yMin',ox,oy,s,'opacity:.75;filter:drop-shadow(0 0 4px #94d742)');}
+const [fx,fy]=at(7.4,5.3,ox,oy,s);
+const [sx,sy]=at(2.5,2,ox,oy,s);
+const kinds=[{ground:'ground_a2_e'},{fence:'b1'},{wall:'wall_f1_s'},{prop:'stone_a13_e'},{prop:'tree_a1_e'},{char:'knight_idle'}];
+const items=[{fence:'b1'},{fence:'b3'},{fence:'b6'},{fence:'a1'},{fence:'a3'},{fence:'a6'},{wall:'wall_f1_s'},{wall:'wall_f6_s'}];
+document.body.insertAdjacentHTML('beforeend',`
+<div class="top"><div class="pill glass">${btn('close')}</div><div class="pill glass">${btn('undo')}${btn('redo')}</div><div class="pill glass">${btn('play','', 'test play')}${btn('check','go','save')}</div></div>
+<div class="float glass" style="left:${sx}px;top:${sy-60*s}px">${btn('rotate')}${btn('flip')}${btn('dup','', 'duplicate')}${btn('trash','', 'delete')}</div>
+<div class="finger" style="left:${fx}px;top:${fy}px"></div>
+<div class="tray glass" style="${P?'left:0;right:0;bottom:0':'left:50%;bottom:0;width:880px;transform:translateX(-50%)'}">
+ <div class="tools glass">${btn('select')}${btn('brush','', 'paint ground')}${btn('fence','on','draw fences and walls')}${btn('erase')}${btn('layers')}</div>
+ <div class="kinds" style="grid-template-columns:repeat(6,1fr)">${kinds.map((k,i)=>mini(k,i===1,P?46:52)).join('')}</div>
+ <div class="grid" style="grid-template-columns:repeat(${P?4:8},1fr)">${items.map((k,i)=>mini(k,i===0,P?84:96)).join('')}</div>
+</div>`);
+</script></body></html>

@@ -1,0 +1,32 @@
+<html><head><link rel="stylesheet" href="ui.css"><style>
+.finger{position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.3);border:3px solid #fff;z-index:900002;transform:translate(-50%,-50%)}
+.tapn{position:absolute;z-index:900003;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:#fff;color:#1d1b16;font:800 15px Nunito;display:grid;place-items:center}
+.badge{position:absolute;z-index:900003;transform:translate(-50%,-100%);display:grid;place-items:center;width:34px;height:34px;border-radius:50%}
+.badge svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+</style></head><body><div class="stage"><div class="world" id="w"></div></div>
+<script src="iso.js"></script><script src="scene.js"></script><script src="icons.js"></script><script>
+const q=new URLSearchParams(location.search).get('q');
+const VW=innerWidth, Z=(q==='snap'||q==='free'); const s=Z?1.1:0.62, ox=Z?VW/2-0*s:VW/2+(q==='drag'||q==='tap'?-60:0), oy=Z?-60:70;
+const L=document.getElementById('w');
+const H=(h)=>document.body.insertAdjacentHTML('beforeend',h);
+if(q==='snap'||q==='free'){
+  buildScene(L,ox,oy,s);
+  if(q==='snap'){gridLines(L,8,7,ox,oy,s);mark(L,3,3,ox,oy,s,'background:rgba(148,215,66,.45);outline:2px solid #94d742');Iso.img(L,'sprites/stone_a13_e.png',3,3,ox,oy,s,'f','opacity:.85');const [x,y]=at(3.5,3.5,ox,oy,s);H(`<div class="finger" style="left:${x+30}px;top:${y+20}px"></div>`);}
+  else{Iso.img(L,'sprites/stone_a13_e.png',3.35,2.7,ox,oy,s,'f','opacity:.9;filter:drop-shadow(0 0 6px #ffbf32)');Iso.img(L,'sprites/stone_a5_e.png',3.8,3.45,ox,oy,s,'f');const [x,y]=at(3.85,3.2,ox,oy,s);H(`<div class="finger" style="left:${x+30}px;top:${y+20}px"></div>`);}
+}
+if(q==='drag'||q==='tap'){
+  buildScene(L,ox,oy,s,{skipFence:(x,y,e)=>e==='xMax'});
+  // new fence run along the east side, auto-joined at both corners
+  const ys=[0,1,2,3,4,5,6];
+  ys.forEach(y=>{if(y<5){Iso.fence(L,'b1',7,y,'xMax',ox,oy,s,'filter:drop-shadow(0 0 5px #94d742)');}});
+  if(q==='drag'){const a=at(8,0.1,ox,oy,s),b=at(8,4.9,ox,oy,s);H(`<svg style="position:absolute;inset:0;width:100%;height:100%;z-index:900001"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#94d742" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 12"/></svg><div class="finger" style="left:${b[0]}px;top:${b[1]}px"></div>`);}
+  else{ys.slice(0,5).forEach((y,i)=>{const p=at(8,y+0.5,ox,oy,s);H(`<div class="tapn" style="left:${p[0]+14}px;top:${p[1]}px">${i+1}</div>`);});}
+}
+if(q==='lock'||q==='agent'){
+  buildScene(L,ox,oy,s);
+  // Kevin's own edits: two graves and a tree he placed
+  const mine=[[2,4],[6,5]];
+  mine.forEach(([x,y])=>{Iso.img(L,'sprites/stone_a4_e.png',x,y,ox,oy,s,'f');mark(L,x,y,ox,oy,s,'background:rgba(255,191,50,.35);outline:2px solid #ffbf32');const p=at(x+.5,y,ox,oy,s);H(`<div class="badge" style="left:${p[0]}px;top:${p[1]-38}px;background:#ffbf32;color:#1d1b16">${q==='lock'?'<svg viewBox="0 0 24 24">'+IC.lock+'</svg>':'<svg viewBox="0 0 24 24">'+IC.person+'</svg>'}</div>`);});
+  if(q==='agent'){[[4,1],[1,2],[5,5]].forEach(([x,y])=>{Iso.img(L,'sprites/stone_a5_e.png',x,y,ox,oy,s,'f','filter:drop-shadow(0 0 6px #6fd6b4)');mark(L,x,y,ox,oy,s,'background:rgba(111,214,180,.35)');});}
+}
+</script></body></html>
