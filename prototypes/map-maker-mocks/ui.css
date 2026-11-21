@@ -12,10 +12,6 @@ body{margin:0;background:#0f0e16;font-family:'Nunito',system-ui,sans-serif;color
 .btn[disabled]{opacity:.4}
 .tile{position:relative;height:100%;border-radius:14px;background:var(--paper-2);overflow:hidden;display:grid;place-items:center}
 .tile img{width:100%;height:100%;object-fit:contain}
-.tile img.tall{object-fit:cover;object-position:50% 78%;transform:scale(1.25)}
 .tile.on{outline:3px solid var(--yellow-b);background:color-mix(in srgb,var(--yellow-b) 18%,transparent)}
-.tile .sheet{width:100%;height:100%;background-repeat:no-repeat}
 .chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:999px;background:var(--paper-2);font:700 14px Nunito,sans-serif;color:var(--ink);white-space:nowrap}
 .chip.on{background:var(--yellow-b);color:var(--dark)}
-.ghost{outline:none}
-.mock-tag{position:absolute;right:10px;top:10px;font:800 11px Nunito;letter-spacing:.08em;color:rgba(242,234,214,.55);z-index:999999}

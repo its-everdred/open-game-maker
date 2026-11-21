@@ -16,22 +16,15 @@ window.IC = {
   eyeoff:'<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3 3.7M6.6 6.6A17 17 0 0 0 2 12s4 7 10 7a10 10 0 0 0 4.3-1"/>',
   lock:'<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
-  grid:'<path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/>',
   ground:'<path d="m12 4 9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/>',
   tree:'<path d="M12 22v-6"/><path d="M12 2 5 12h4l-3 4h12l-3-4h4z"/>',
-  stone:'<path d="M7 21V9a5 5 0 0 1 10 0v12z"/><path d="M4 21h16"/>',
   person:'<circle cx="12" cy="6" r="3"/><path d="M6 21v-5a6 6 0 0 1 12 0v5"/>',
-  wall:'<path d="M3 5h18v14H3zM3 12h18M9 5v7M15 12v7"/>',
   roof:'<path d="m3 12 9-8 9 8M5 10v10h14V10"/>',
   play:'<path d="M7 4v16l13-8z"/>',
-  scatter:'<circle cx="6" cy="7" r="2"/><circle cx="17" cy="6" r="2"/><circle cx="11" cy="13" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="17" r="2"/>',
   magnet:'<path d="M6 15V7a6 6 0 0 1 12 0v8"/><path d="M6 15h4M14 15h4M6 11h4M14 11h4"/>',
 };
 window.ic = (n) => `<svg viewBox="0 0 24 24">${IC[n]}</svg>`;
 window.btn = (n, cls = '', label = n) => `<button class="btn ${cls}" aria-label="${label}">${ic(n)}</button>`;
-window.thumb = (src, on, kind = 'img') => kind === 'char'
-  ? `<div class="tile ${on ? 'on' : ''}"><div class="sheet" style="background-image:url(${src});background-size:400% 800%;background-position:0 28.57%"></div></div>`
-  : `<div class="tile ${on ? 'on' : ''}"><img class="${/fence_/.test(src) ? 'tall' : ''}" src="${src}" alt=""></div>`;
 // Mini iso preview of a piece inside a thumb (fences as a corner pair, props as a single sprite on a tile).
 window.mini = function (spec, on, h = 80, label = '') {
   const id = 'm' + Math.random().toString(36).slice(2);

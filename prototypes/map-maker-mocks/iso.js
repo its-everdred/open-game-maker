@@ -1,6 +1,5 @@
 // Tiny iso renderer for the mocks. Tile 128x64 at scale 1.
 window.Iso = {
-  TW: 128, TH: 64,
   pos(x, y, ox, oy, s) { return [ox + (x - y) * 64 * s, oy + (x + y) * 32 * s]; },
   // kind: 'g' ground / 'f' fantasy prop, 256x256 images whose 128x64 tile sits 160px down; 'c' character sheet (4x8, 128px frames).
   img(layer, src, x, y, ox, oy, s, kind = 'f', extra = '') {
