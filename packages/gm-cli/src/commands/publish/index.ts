@@ -190,7 +190,10 @@ export const command: GmCommand = {
     const home = ctx.home ?? homedir();
     const env = hostEnv(ctx, home);
     if (env.OGM_PUBLISH_BUILD_TIMEOUT_MS < 1)
-      throw new UsageError('OGM_PUBLISH_BUILD_TIMEOUT_MS must be positive', 'set a positive millisecond value in api.env');
+      throw new UsageError(
+        'OGM_PUBLISH_BUILD_TIMEOUT_MS must be positive',
+        'set a positive millisecond value in api.env',
+      );
     if (!env.OGM_INTERNAL_TOKEN) {
       throw new UsageError('no internal token', 'set OGM_INTERNAL_TOKEN in ~/.config/ogm/env/api.env');
     }
@@ -308,7 +311,13 @@ export const command: GmCommand = {
       if (!install.ok)
         throw new CommandError(`pnpm install failed in the worktree:\n${tail(install.err || install.out)}`);
       const buildTimeout = env.OGM_PUBLISH_BUILD_TIMEOUT_MS;
-      const build = exec('pnpm', ['run', 'build', ...(extra.length ? ['--', ...extra] : [])], game, buildEnv, buildTimeout);
+      const build = exec(
+        'pnpm',
+        ['run', 'build', ...(extra.length ? ['--', ...extra] : [])],
+        game,
+        buildEnv,
+        buildTimeout,
+      );
       if (build.timedOut)
         throw new CommandError(`the game's build timed out after ${Math.ceil(buildTimeout / 1000)} s`);
       if (!build.ok) throw new CommandError(`the game's build failed:\n${tail(`${build.out}\n${build.err}`)}`);
