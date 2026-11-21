@@ -74,7 +74,8 @@ def video_filter(shot: dict, frames: int, size: tuple[int, int]) -> str:
         y = f"floor({y0}+({y1 - y0})*n/{span})" if y1 != y0 else str(y0)
         parts.append(f"crop={w}:{h}:{x}:{y}")
     flags = "neighbor" if shot.get("scale", "nearest") == "nearest" else "lanczos"
-    parts += [f"scale={size[0]}:{size[1]}:flags={flags}", "setsar=1", "format=yuv420p"]
+    # JPEG frames decode as full-range yuvj420p; phones and the trailer gate want limited-range yuv420p
+    parts += [f"scale={size[0]}:{size[1]}:flags={flags}:out_range=tv", "setsar=1", "format=yuv420p"]
     return ",".join(parts)
 
 
@@ -148,7 +149,7 @@ def assemble(plan: dict, base: Path, out: Path) -> dict:
              "-c:a", "aac", "-b:a", "160k", str(audio)])
         out.parent.mkdir(parents=True, exist_ok=True)
         run(["ffmpeg", "-v", "error", "-y", "-i", str(silent), "-i", str(audio), "-map", "0:v", "-map", "1:a",
-             "-c:v", "libx264", "-profile:v", "main", "-level:v", "4.1", "-pix_fmt", "yuv420p", "-preset", "slow",
+             "-c:v", "libx264", "-profile:v", "main", "-level:v", "4.1", "-pix_fmt", "yuv420p", "-color_range", "tv", "-preset", "slow",
              "-crf", "17", "-r", str(fps), "-c:a", "copy", "-shortest", "-movflags", "+faststart", str(out)])
         return {"out": str(out), "seconds": round(duration, 3), "shots": len(times),
                 "cuts": [round(t["start"], 3) for t in times[1:]]}
