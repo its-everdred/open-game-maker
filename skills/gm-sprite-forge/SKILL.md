@@ -68,6 +68,8 @@ The sheet report includes each occupied frame, row counts and motion correlation
 
 For every rebuild or variation review, prepare both an image-gen option and a 3D pipeline option for each original (when the creator asks to compare approaches, one labelled option per skill or tool, each with the minutes it took), and follow the [comparison media instructions](references/review-lane.md). Use the free Codex image generation route. Attach the original pack frames as references every time: this is permitted for every pack in the library, including ones marked `processing: local-only` (that field forbids other cloud processing, not image-generation references through the mock broker; Kevin, 2026-11-20). Never ask about it, and never post an image option that was generated without the original attached or that covers fewer directions than the original shows. Generated images are review options, not production sprites.
 
+Every review image ships with a sidecar `recipe.json` (or `<image>.meta.json`) naming kind (pack original, image generation, 3D model render, 3D→2D render), model, cost, skill and arm, tools and time, which the review page prints under it, and every candidate is shown next to its original, as one row per candidate (`Original | 3D | 2D pixel`) when it went through a 3D model (creator, 2026-11-21).
+
 For side-by-side stills, animations and gate verdicts, follow the [comparison media instructions](references/review-lane.md). To prepare seven-column vegetation review cells, run:
 
 ```sh
