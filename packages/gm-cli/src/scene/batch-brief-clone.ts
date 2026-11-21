@@ -4,6 +4,7 @@ import type { ReviewedSceneObject } from './reviewed-clone.js';
 import type { ScenePlanInput } from './plan.js';
 import type { SceneTiledMap } from './tiled-merge.js';
 import type { SceneBatchMatchResult } from './worker-result.js';
+import type { SceneRoute, WalkableGrid } from './routes.js';
 
 /** Bind each reviewed region to the exact crop used by a rights-checked local search. */
 export function reviewedBatchBriefClone<T extends SceneTiledMap>(input: {
@@ -17,6 +18,7 @@ export function reviewedBatchBriefClone<T extends SceneTiledMap>(input: {
   dressing: ScenePlanInput['dressing'];
   lockedAssets: ReadonlySet<string>;
   reserved: ReadonlySet<string>;
+  routeChecks?: { grid: WalkableGrid; routes: readonly SceneRoute[] };
 }) {
   if (!/^[a-f0-9]{64}$/.test(input.mockSha256) || input.match.mock_sha256 !== input.mockSha256)
     throw new Error('scene match was computed from a different mock');
