@@ -89,6 +89,13 @@ source. The GPU arms A–C below and the first three GPU matrices (`dec_4bea60ce
 `dec_bf26410d0ca0dcc3`) have no separate verdict. For routing, the fal picks supersede both those matrices and the #1120 picks; the #1120
 picks only guide the local fallback without fal.
 
+## Next rung: static TRELLIS sprites (#1195)
+
+With the mesh settled, the next step turns the kept TRELLIS meshes into static pixel sprites. Rework the finish pass
+for fewer colours and chunkier pixels, render stills only (eight directions at 128 px for characters, N/E/S/W for
+trees), score each beside its original and post one review Command per asset. A walk starts only after the creator
+approves the static sprite. Make no new mesh sources and no new fal calls for this rung.
+
 ## Results (#1094, 2026-11-20)
 
 These are local evidence from the GPU arms, kept for the record; routing follows the creator verdicts above.
