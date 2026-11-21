@@ -10,6 +10,10 @@ A creator request climbs rungs of rising fidelity on **one ticket**. Each rung e
 raises your reasoning effort. Lessons and evidence: `references/lessons.md`. Rung media rules:
 `../gm-new-game-plan/references/prototype-ladder.md`.
 
+Every `lane:creative` ticket (towns, settings, UI screens, HUD, menus, title, loading and end screens, logos,
+thumbnails) starts at `phase:mock` with pure image-generated mocks (gm-image-mock), and no rung is skipped: a
+prototype needs the creator's approved mock, a build needs the approved prototype.
+
 | Rung (label) | Effort | Deliver | Never |
 |---|---|---|---|
 | `phase:mock` | low | The cheapest thing the creator can judge: image mocks (imagegen), rough sound takes, a clip or paper mock of the gameplay. Each one is built from the real concept, cast and screen. | Production code, hand-coded SVG logos, generic stand-ins |
