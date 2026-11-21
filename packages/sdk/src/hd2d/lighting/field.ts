@@ -1,6 +1,6 @@
 import type { Camera, Mesh, Scene, WebGLRenderer } from 'three';
 import type Phaser from 'phaser';
-import { renderDappleMask, sampleShaftIntensity } from './dapple.js';
+import { DAPPLE_DEPTH, renderDappleMask, sampleShaftIntensity } from './dapple.js';
 import type { LightingPreset, LightingQuality } from './schema.js';
 
 type PresetLight = NonNullable<LightingPreset['lights']>[number];
@@ -58,7 +58,7 @@ export function renderLightField(
 ): void {
   const dapple = preset.dapple;
   const mask = dapple ? renderDappleMask(dapple, { width, height, timeMs, seed }) : undefined;
-  const dappleBase = dapple ? 1 - Math.min(1, Math.max(0, dapple.intensity)) * 0.62 : 1;
+  const dappleBase = dapple ? 1 - Math.min(1, Math.max(0, dapple.intensity)) * DAPPLE_DEPTH : 1;
   const sun = hexToRgb01(preset.shafts?.color ?? '#ffffff');
   const aspect = width / height;
   for (let py = 0; py < height; py += 1) {
@@ -78,8 +78,11 @@ export function renderLightField(
       let g = sun[1] * sunAmount;
       let b = sun[2] * sunAmount;
       for (const light of lights) {
-        const distance = Math.hypot((nx - light.x) * aspect, ny - light.y) / light.radius;
-        if (distance >= 1) continue;
+        const dx = (nx - light.x) * aspect;
+        const dy = ny - light.y;
+        const reach = dx * dx + dy * dy;
+        if (reach >= light.radius * light.radius) continue;
+        const distance = Math.sqrt(reach) / light.radius;
         const amount = light.amount * Math.pow(1 - distance, light.falloff);
         r += light.color[0] * amount;
         g += light.color[1] * amount;

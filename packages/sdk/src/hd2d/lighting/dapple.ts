@@ -1,6 +1,9 @@
 import { SeededRng } from '../../core/rng.js';
 import type { LightingPreset } from './schema.js';
 
+/** How far the canopy darkens the clearing at full dapple intensity. */
+export const DAPPLE_DEPTH = 0.62;
+
 export interface DappleMaskSettings {
   scale: number;
   speed: number;
@@ -38,7 +41,7 @@ export function renderDappleMask(
     });
   }
 
-  const base = Math.round(255 * (1 - clamp01(dapple.intensity) * 0.62));
+  const base = Math.round(255 * (1 - clamp01(dapple.intensity) * DAPPLE_DEPTH));
   output.fill(base);
   for (const spot of spots) {
     const cx = (spot.x + drift * 0.7) % width;

@@ -40,25 +40,21 @@ export function createPhaserLighting(
   let overlays: { keep: Overlay; light: Overlay } | undefined;
   let grade: Phaser.Filters.ColorMatrix | undefined;
   let field = new Uint8ClampedArray(0);
+  // The LightsManager is scene-wide: leave it on (and its ambient alone) if the game already lit the scene.
+  const ownsManager = !scene.lights.active;
 
   function overlay(name: string, width: number, height: number, blend: number): Overlay {
     const key = `hd2d-lighting-${id}-${name}`;
     const texture = scene.textures.createCanvas(key, width, height);
     if (!texture) throw new Error(`could not create lighting texture ${key}`);
     texture.setFilter(LINEAR);
-    const image = scene.add
-      .image(0, 0, key)
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(OVERLAY_DEPTH)
-      .setDisplaySize(camera.width, camera.height)
-      .setBlendMode(blend);
+    const image = scene.add.image(0, 0, key).setOrigin(0, 0).setDepth(OVERLAY_DEPTH).setBlendMode(blend);
     return { texture, image, pixels: texture.context.createImageData(width, height) };
   }
 
   function detach(): void {
     for (const light of native.splice(0)) scene.lights.removeLight(light);
-    scene.lights.disable();
+    if (ownsManager) scene.lights.disable();
     for (const sprite of lit) sprite.setLighting(false);
     if (overlays)
       for (const { texture, image } of [overlays.keep, overlays.light]) {
@@ -74,7 +70,7 @@ export function createPhaserLighting(
     detach();
     quality = next;
     if (next === 'off') return;
-    scene.lights.enable().setAmbientColor(NATIVE_AMBIENT);
+    if (ownsManager) scene.lights.enable().setAmbientColor(NATIVE_AMBIENT);
     for (const sprite of lit) sprite.setLighting(true);
     const [width, height] = FIELD_SIZE[next];
     field = new Uint8ClampedArray(width * height * 4);
@@ -128,9 +124,11 @@ export function createPhaserLighting(
       glow[i + 2] = field[i + 2]!;
       shade[i + 3] = glow[i + 3] = 255;
     }
-    for (const { texture, pixels } of [keep, light]) {
+    for (const { texture, pixels, image } of [keep, light]) {
       texture.context.putImageData(pixels, 0, 0);
       texture.refresh();
+      // Cover the camera's current world view, so the field follows scroll, zoom and resize.
+      image.setPosition(view.x, view.y).setDisplaySize(view.width, view.height);
     }
   }
 

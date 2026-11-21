@@ -3,7 +3,7 @@ import { AmbientLight, OrthographicCamera, PointLight, Scene, type WebGLRenderer
 import { describe, expect, it, vi } from 'vitest';
 import { createLighting } from './create.js';
 import { createPhaserLighting } from './phaser.js';
-import { DEFAULT_FOREST_LIGHTING, type LightingPreset } from './schema.js';
+import { DEFAULT_FOREST_LIGHTING, maxLightsFor, type LightingPreset } from './schema.js';
 import { createThreeLighting } from './three.js';
 
 const preset: LightingPreset = {
@@ -64,6 +64,47 @@ describe("setQuality('off')", () => {
     lighting.update(100);
     expect(state).toMatchObject({ lights: [], images: [], filters: [], textures: [], enabled: false });
   });
+
+  it("leaves a game's own Phaser lighting enabled", () => {
+    const { scene, state } = fakePhaserScene();
+    state.enabled = true;
+    createPhaserLighting({ scene }, preset).setQuality('off');
+    expect(state.enabled).toBe(true);
+  });
+});
+
+describe('quality tiers', () => {
+  const many: LightingPreset = {
+    ...preset,
+    lights: Array.from({ length: 6 }, (_, i) => ({ ...preset.lights![0]!, id: `lamp${i}` })),
+  };
+
+  it('caps three.js lights per tier and restores them after off', () => {
+    const scene = new Scene();
+    const lighting = createThreeLighting(
+      { renderer: {} as WebGLRenderer, scene, camera: new OrthographicCamera() },
+      many,
+      { quality: 'low' },
+    );
+    const lit = () => scene.children.filter((child) => child instanceof PointLight && child.intensity > 0).length;
+    lighting.update(0);
+    expect(lit()).toBe(maxLightsFor('low'));
+    lighting.setQuality('off');
+    lighting.setQuality('high');
+    lighting.update(0);
+    expect(lit()).toBe(6);
+  });
+
+  it('caps Phaser lights per tier and restores them after off', () => {
+    const { scene, state } = fakePhaserScene();
+    const lighting = createPhaserLighting({ scene }, many, { quality: 'low' });
+    lighting.update(0);
+    expect(state.lights).toHaveLength(maxLightsFor('low'));
+    lighting.setQuality('off');
+    lighting.setQuality('high');
+    lighting.update(0);
+    expect(state).toMatchObject({ enabled: true, lights: { length: 6 }, images: { length: 2 } });
+  });
 });
 
 function fakePhaserScene() {
@@ -98,6 +139,9 @@ function fakePhaserScene() {
       },
     },
     lights: {
+      get active() {
+        return state.enabled;
+      },
       enable() {
         state.enabled = true;
         return this;
@@ -135,6 +179,7 @@ function fakePhaserScene() {
       image() {
         const image = chain({ destroy: () => remove(state.images, image) }, [
           'setOrigin',
+          'setPosition',
           'setScrollFactor',
           'setDepth',
           'setDisplaySize',

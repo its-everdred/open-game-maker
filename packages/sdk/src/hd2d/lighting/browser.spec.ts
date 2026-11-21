@@ -65,6 +65,8 @@ for (const renderer of ['phaser', 'three'] as const)
 
       await open(page, renderer, quality, 0);
       const unlit = await sample(page, 1000, [shaft, shadow]);
+      const unlitStart = await sample(page, 0, [LANTERN]);
+      const unlitLater = await sample(page, 500, [LANTERN]);
 
       await open(page, renderer, quality, 1);
       const first = await sample(page, 1000, [shaft, shadow]);
@@ -80,7 +82,10 @@ for (const renderer of ['phaser', 'three'] as const)
       const start = await sample(page, 0, [LANTERN]);
       const later = await sample(page, 500, [LANTERN]);
       expect(later.hash).not.toBe(start.hash);
-      expect(Math.abs(later.luma[0]! - start.luma[0]!)).toBeGreaterThan(1);
+      // The lantern's own light (lit minus unlit) must change, not just the scene animating underneath it.
+      const startGain = start.luma[0]! - unlitStart.luma[0]!;
+      const laterGain = later.luma[0]! - unlitLater.luma[0]!;
+      expect(laterGain - startGain).toBeGreaterThan(20);
     });
 
 declare global {

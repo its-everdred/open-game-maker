@@ -17,7 +17,7 @@ import {
   Vector2,
   Vector3,
   type Camera,
-  type Material,
+  Material,
   type WebGLRenderer,
 } from 'three';
 import { flickerAt } from './flicker.js';
@@ -71,14 +71,19 @@ export function createThreeLighting(
     grade: { value: new Matrix3() },
     offset: { value: new Vector3() },
   };
-  const post = new Mesh(new PlaneGeometry(2, 2), new ShaderMaterial({ uniforms, vertexShader, fragmentShader }));
+  const post = new Mesh(
+    new PlaneGeometry(2, 2),
+    new ShaderMaterial({ uniforms, vertexShader, fragmentShader, depthTest: false, depthWrite: false }),
+  );
   post.frustumCulled = false;
   const postScene = new Scene().add(post);
   const postCamera = new OrthographicCamera();
   const size = new Vector2();
-  const previousAfterRender = scene.onAfterRender;
+  let previousAfterRender = scene.onAfterRender;
   const afterRender: Scene['onAfterRender'] = (...args) => {
     previousAfterRender.apply(scene, args);
+    // Another hook may have chained on top of ours; once detached, stay a pass-through.
+    if (!attached()) return;
     renderer.getDrawingBufferSize(size);
     if (!frame || frame.image.width !== size.x || frame.image.height !== size.y) {
       frame?.dispose();
@@ -101,11 +106,16 @@ export function createThreeLighting(
       if (on) scene.add(object);
       else scene.remove(object);
     }
-    scene.onAfterRender = on ? afterRender : previousAfterRender;
+    // Only unhook when the scene still points at us, so other lighting instances keep their own hooks.
+    if (on && scene.onAfterRender !== afterRender) {
+      previousAfterRender = scene.onAfterRender;
+      scene.onAfterRender = afterRender;
+    } else if (!on && scene.onAfterRender === afterRender) scene.onAfterRender = previousAfterRender;
     for (const [mesh, materials] of lit) mesh.material = on ? materials.lit : materials.original;
     if (next !== 'off') {
       const [width, height] = FIELD_SIZE[next];
       fieldData = new Uint8ClampedArray(width * height * 4);
+      for (let i = 3; i < fieldData.length; i += 4) fieldData[i] = 255; // keep the scene until the first update
       field?.dispose();
       field = new DataTexture(fieldData, width, height);
       field.minFilter = field.magFilter = LinearFilter;
@@ -159,15 +169,14 @@ export function createThreeLighting(
     if (!(sprite instanceof Mesh)) throw new Error('three lighting needs a Mesh sprite');
     let entry = lit.get(sprite);
     if (!entry) {
-      const source = sprite.material as MeshBasicMaterial;
-      const material = new MeshStandardMaterial({
-        map: source.map,
-        color: source.color,
-        transparent: source.transparent,
-        alphaTest: source.alphaTest,
-        roughness: 1,
-        metalness: 0,
-      });
+      const source = sprite.material;
+      if (!(source instanceof MeshBasicMaterial)) throw new Error('three lighting needs a MeshBasicMaterial sprite');
+      const material = new MeshStandardMaterial({ roughness: 1, metalness: 0 });
+      // The base Material copy carries opacity, side, blending, depth and alpha-test state across.
+      Material.prototype.copy.call(material, source);
+      material.map = source.map;
+      material.alphaMap = source.alphaMap;
+      material.color.copy(source.color);
       entry = { original: sprite.material, lit: material };
       lit.set(sprite, entry);
     }
