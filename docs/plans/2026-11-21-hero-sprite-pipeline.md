@@ -1,6 +1,6 @@
 ---
 title: "Hero sprite pipeline: 3D -> 2D class sprites for Dusk Helm"
-status: awaiting Kevin's approval (no spend, no tickets yet)
+status: Stage 1 approved and running (Kevin 2026-11-21 ~22:45Z); Stages 2-4 not started
 date: 2026-11-21
 origin: Kevin 2026-11-21 ~21:45Z; follows core #1120 (TRELLIS multi-view at $0.02 won the model bake-off)
 ---
@@ -39,6 +39,17 @@ judge before we spend more on the next one.
    they may be usable. Can we use them, or only CC0/CC BY sources?
 5. **Your own video.** Will you film short clips (pushing a box, falling) for local pose extraction? Nothing leaves
    the NUC.
+
+## Decisions
+
+Kevin, 2026-11-21 ~22:45Z:
+
+1. **Stage 1: approved.** Exact re-render of the Warrior (`6Barbarian`), Wizard (`3Wizard`) and Ranger (`5BarbArcher`):
+   one TRELLIS multi-view call each, $0.06 total, $0.12 at most with one retry each. Use the first appearance per class.
+2. **Pack-derived turnarounds to fal: yes.**
+3. **Cloud auto-rigger for pack-derived meshes: allowed** (Stage 2 arm C may run).
+4. **CC BY-NC mocap (100STYLE and the like): fine** (Stage 2).
+5. **Kevin's own reference video:** not asked yet; do not plan on it.
 
 ---
 
