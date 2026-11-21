@@ -9,5 +9,5 @@ trap 'rm -f "$staged"' EXIT HUP INT TERM
 git diff --cached --name-only --diff-filter=ACMR -z > "$staged"
 [ -s "$staged" ] || exit 0
 
-xargs -0 -r pnpm exec prettier --write --ignore-unknown -- < "$staged"
-xargs -0 -r git add -- < "$staged"
+xargs -0 pnpm exec prettier --write --ignore-unknown -- < "$staged"
+xargs -0 git add -- < "$staged"
