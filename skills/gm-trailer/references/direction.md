@@ -48,6 +48,11 @@ land on its downbeat.
 - Load the page once and enter each take from the game's own state (save, scene, scenario) instead of reloading;
   a heavy game can take minutes to boot on a busy host.
 - Capture at the game's native resolution or an exact multiple of it; record 2–3× the footage the cut needs.
+- Walk by waypoints read from the game's own layout, and stop a take the moment the hero stops moving (a wall)
+  rather than film a hero walking in place; read any line a sign or bark opens on the way, then keep walking.
+  Encounter and door zones trigger on overlap: aim the last waypoint into the zone, not at its edge.
+- A battle autopilot reads the screen state each frame: advance dialogue, press on the game's NOW prompt, mash
+  when a counter shows, and take each turn's scripted move; it plays any boss for as long as the take needs.
 - Render the game's music and effects offline when they are synthesized (an OfflineAudioContext driven by the
   same scheduler) so a busy host cannot glitch them.
 
@@ -61,7 +66,8 @@ land on its downbeat.
 
 ## Sound
 
-- One music bed from the game's own tracks, cut on beats (`assemble.py` does it), with 15 ms edges at the joins.
+- One music bed from the game's own tracks, cut on beats (`assemble.py` does it), with 15 ms edges at the joins,
+  loudness-normalised to -16 LUFS so a phone plays it at the level of other trailers.
 - The game's own effects layered at the frames they happened, a little under the music on world shots and on top
   in action. A hit with no sound reads as a glitch.
 

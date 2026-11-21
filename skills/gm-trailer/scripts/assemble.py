@@ -143,7 +143,7 @@ def assemble(plan: dict, base: Path, out: Path) -> dict:
                 mix.append(f"[c{n}]")
                 n += 1
         chains.append(f"{''.join(mix)}amix=inputs={len(mix)}:normalize=0:duration=first,"
-                      f"atrim=duration={duration:.4f},alimiter=limit=0.95[aout]")
+                      f"atrim=duration={duration:.4f},loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]")
         audio = work / "audio.m4a"
         run(["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex", ";".join(chains), "-map", "[aout]",
              "-c:a", "aac", "-b:a", "160k", str(audio)])
