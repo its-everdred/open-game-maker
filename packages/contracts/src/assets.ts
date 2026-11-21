@@ -226,6 +226,11 @@ export const lockAssetIdSchema = z
     'invalid lock asset id',
   );
 
+/** Sort asset ids using the same codepoint order required by assets.lock.json. */
+export function compareLockAssetIds(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 const lockEntrySchema = z.looseObject({
   phase: assetPhaseSchema.optional(),
   id: lockAssetIdSchema,
@@ -273,7 +278,7 @@ export const AssetsLockSchema = z
   .superRefine((lock, ctx) => {
     let previous: string | undefined;
     for (const [index, entry] of lock.assets.entries()) {
-      if (previous !== undefined && entry.id <= previous) {
+      if (previous !== undefined && compareLockAssetIds(entry.id, previous) <= 0) {
         ctx.addIssue({
           code: 'custom',
           path: ['assets', index, 'id'],

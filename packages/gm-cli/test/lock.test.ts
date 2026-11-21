@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { AssetsLockSchema } from '@ogm/contracts';
+
 import { readLock, upsertLock, writeLock } from '../src/lock.js';
 import { tempDir } from './helpers.js';
 
@@ -29,6 +31,22 @@ describe('asset lock I/O', () => {
     const text = readFileSync(join(cwd, 'assets.lock.json'), 'utf8');
     expect(text.endsWith('\n')).toBe(true);
     expect((await readLock(cwd))?.assets.map((entry) => entry.id)).toEqual([first.id, ENTRY.id]);
+  });
+
+  it('sorts numeric suffixes in the codepoint order required by the lock schema', async () => {
+    const cwd = tempDir();
+    const ids = ['t1:stone/stone-a2@1', 't1:stone/stone-a13@1', 't1:stone/stone-a1@1'];
+    const entries = ids.map((id) => ({ ...ENTRY, id }));
+
+    await writeLock(cwd, { version: 1, family: 'chunky-low-poly', pov: 'iso', assets: entries });
+
+    const lock = JSON.parse(readFileSync(join(cwd, 'assets.lock.json'), 'utf8')) as unknown;
+    expect(AssetsLockSchema.safeParse(lock).success).toBe(true);
+    expect((lock as { assets: Array<{ id: string }> }).assets.map(({ id }) => id)).toEqual([
+      't1:stone/stone-a13@1',
+      't1:stone/stone-a1@1',
+      't1:stone/stone-a2@1',
+    ]);
   });
 
   it('upserts an entry by id without mutating the original lock', () => {

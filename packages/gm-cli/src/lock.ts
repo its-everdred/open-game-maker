@@ -3,7 +3,13 @@ import { createReadStream } from 'node:fs';
 import { open, readFile, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
-import { ASSETS_SCHEMA_MINOR, AssetsLockSchema, type AssetsLock, type LockEntry } from '@ogm/contracts';
+import {
+  ASSETS_SCHEMA_MINOR,
+  AssetsLockSchema,
+  compareLockAssetIds,
+  type AssetsLock,
+  type LockEntry,
+} from '@ogm/contracts';
 
 const LOCK_FILE = 'assets.lock.json';
 
@@ -28,7 +34,7 @@ export async function readLock(cwd: string): Promise<AssetsLock | null> {
 export function upsertLock(lock: AssetsLock, entry: LockEntry): AssetsLock {
   const assets = lock.assets.filter((candidate) => candidate.id !== entry.id);
   assets.push(entry);
-  assets.sort((left, right) => left.id.localeCompare(right.id));
+  assets.sort((left, right) => compareLockAssetIds(left.id, right.id));
   return { ...lock, assets };
 }
 
@@ -36,7 +42,7 @@ export async function writeLock(cwd: string, lock: AssetsLock): Promise<void> {
   const sorted = {
     ...lock,
     minor: ASSETS_SCHEMA_MINOR,
-    assets: [...lock.assets].sort((left, right) => left.id.localeCompare(right.id)),
+    assets: [...lock.assets].sort((left, right) => compareLockAssetIds(left.id, right.id)),
   };
   const parsed = AssetsLockSchema.parse(sorted);
   await writeGeneratedText(join(cwd, LOCK_FILE), `${JSON.stringify(parsed, null, 2)}\n`);
