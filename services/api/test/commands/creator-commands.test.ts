@@ -199,6 +199,33 @@ describe('the creator’s decision inbox', () => {
     expect(inbox.commands.map((command) => command.decision_id)).toEqual(['d_player']);
   });
 
+  it('keeps operations Commands off creator feeds even when their context has a creator marker', async () => {
+    const deps = seed();
+    serveAiur(deps, {
+      [ids.blobs]: [
+        decision('d_player'),
+        ...['dispatch_stopped', 'claim', 'tracker', 'budget', 'ci'].map((kind) =>
+          decision(`d_${kind}`, { kind, context: { long_context_markdown: CREATOR_AUDIENCE_MARKER } }),
+        ),
+        decision('d_route_claim', {
+          route: 'claim_failed',
+          context: { long_context_markdown: CREATOR_AUDIENCE_MARKER },
+        }),
+        decision('d_context_budget', {
+          context: { route: 'budget_limit', long_context_markdown: CREATOR_AUDIENCE_MARKER },
+        }),
+      ],
+    });
+
+    const menu = (await (await read(deps, '/me/commands')).json()) as { commands: Array<{ decision_id: string }> };
+    const inbox = (await (await read(deps, `/games/${ids.blobs}/commands`)).json()) as {
+      commands: Array<{ decision_id: string }>;
+    };
+
+    expect(menu.commands.map((command) => command.decision_id)).toEqual(['d_player']);
+    expect(inbox.commands.map((command) => command.decision_id)).toEqual(['d_player']);
+  });
+
   // One game's instance that never answers must not stall every other game's decisions in the menu.
   it('lists the other games’ decisions when one game’s instance hangs', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
