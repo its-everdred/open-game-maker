@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __GM_PRIVATE_ASSETS__: JSON.stringify(local && existsSync(resolve('public/assets-local/manifest.json'))),
     },
+    base: './',
     publicDir: local ? 'public' : false,
     server: { host: '127.0.0.1' },
     preview: { host: '127.0.0.1' },
