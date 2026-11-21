@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SLOT_IDS, VIEWPORT_IDS } from './image-slots.js';
 
 const Key = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u);
 const Ticket = z.string().regex(/^[1-9]\d{0,15}$/u);
@@ -50,7 +51,13 @@ export type ReviewTrack = z.infer<typeof ReviewTrack>;
 
 export const ReviewMedia = z.discriminatedUnion('kind', [
   z
-    .object({ kind: z.literal('still'), ref: z.string().min(1).max(512), role: z.literal('target').optional() })
+    .object({
+      kind: z.literal('still'),
+      ref: z.string().min(1).max(512),
+      role: z.literal('target').optional(),
+      viewport: z.enum(VIEWPORT_IDS).optional(),
+      slot: z.enum(SLOT_IDS).optional(),
+    })
     .strict(),
   z.object({ kind: z.literal('clip'), ref: z.string().min(1).max(512), hasAudio: z.boolean() }).strict(),
   z.object({ kind: z.literal('build'), ref: z.string().min(1).max(512) }).strict(),

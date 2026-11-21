@@ -3,11 +3,12 @@ import { join, relative, resolve, sep } from 'node:path';
 import { basename } from 'node:path';
 import { createHash } from 'node:crypto';
 
-import { ReviewSubmission } from '@ogm/contracts';
+import { ReviewSubmission, type ViewportId } from '@ogm/contracts';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 import { submitReviewRelay } from '../../review-relay.js';
 import { putBlob } from '../../blobs.js';
+import { buildComposites } from '../../review-composites.js';
 
 export const command: GmCommand = {
   name: 'review post',
@@ -25,6 +26,47 @@ export const command: GmCommand = {
     const parsed = ReviewSubmission.safeParse(input);
     if (!parsed.success) throw new CommandError(parsed.error.issues.map((issue) => issue.message).join('; '));
     const root = realpathSync(workspaceRoot(ctx.cwd));
+    const slottedStills = parsed.data.media.filter(
+      (media): media is Extract<(typeof parsed.data.media)[number], { kind: 'still' }> =>
+        media.kind === 'still' && Boolean(media.slot),
+    );
+    if (parsed.data.category === 'art' && slottedStills.length) {
+      if (!slottedStills.some((still) => still.viewport === 'phone-portrait' || !still.viewport))
+        throw new CommandError('art round needs a phone-portrait image (aspect sets, gm-image-mock)');
+      const compositeInputs = slottedStills.map((still) => {
+        if (!still.ref.startsWith('file:'))
+          throw new CommandError('slotted review stills must use workspace file refs');
+        return { ...still, ref: resolve(ctx.cwd, still.ref.slice(5)) };
+      });
+      const composites = await buildComposites(compositeInputs, root);
+      let slottedIndex = 0;
+      parsed.data.media = parsed.data.media.flatMap((media) => {
+        if (media.kind !== 'still' || !media.slot || !media.ref.startsWith('file:')) return [media];
+        const input = slottedStills[slottedIndex++];
+        if (!input) return [];
+        const viewports: readonly ViewportId[] = input.viewport
+          ? [input.viewport]
+          : composites.map(({ viewport }) => viewport);
+        return viewports.flatMap((viewport) => {
+          const path = composites.find((composite) => composite.viewport === viewport)?.path;
+          if (!path) return [];
+          const still = { kind: media.kind, ref: media.ref, role: media.role };
+          return [{ ...still, ref: `file:${relative(root, path)}`, viewport }];
+        });
+      });
+    }
+    parsed.data.media.sort((a, b) => {
+      const order: readonly ViewportId[] = [
+        'phone-portrait',
+        'phone-landscape',
+        'tablet-portrait',
+        'tablet-landscape',
+        'desktop',
+      ];
+      const viewportOrder = (media: (typeof parsed.data.media)[number]) =>
+        media.kind === 'still' && media.viewport ? order.indexOf(media.viewport) : order.length;
+      return viewportOrder(a) - viewportOrder(b);
+    });
     const attachments: { index: number; bytes: Buffer; mime: string }[] = [];
     for (const [index, media] of parsed.data.media.entries()) {
       if ((media.kind !== 'still' && media.kind !== 'clip' && media.kind !== 'audio') || !media.ref.startsWith('file:'))
