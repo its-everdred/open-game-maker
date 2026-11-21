@@ -92,6 +92,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-map-inspiration | Building the first map, a level, dungeon, world layout, or terrain. |
 | gm-asset-variants | Recolouring a model, attaching a prop to a rig joint, or making any variant of a library asset. |
 | gm-sprite-forge | Measuring or making sprites to match the SmallScaleInt style. |
+| gm-trailer | Making or refreshing a game's gameplay trailer: inventory, shot list on the music, capture, self-check. |
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
 | gm-voiceover | Making a short consented local voice draft and caption timing. |
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |
