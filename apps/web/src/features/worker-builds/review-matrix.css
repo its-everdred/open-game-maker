@@ -1,0 +1,41 @@
+.review-matrix-row {
+  overflow-x: auto;
+}
+
+.review-matrix-cells {
+  display: flex;
+  gap: 0.75rem;
+  min-width: max-content;
+}
+
+.review-matrix-cell {
+  flex: 0 0 96px;
+  min-width: 96px;
+}
+
+.review-matrix-media {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+}
+
+.review-matrix-media img,
+.review-matrix-media video,
+.review-matrix-dialog-media img,
+.review-matrix-dialog-media video {
+  display: block;
+  max-width: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+}
+
+.review-matrix-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.review-matrix-dialog-media {
+  display: grid;
+  place-items: center;
+}
