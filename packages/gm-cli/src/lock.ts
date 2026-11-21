@@ -28,7 +28,7 @@ export async function readLock(cwd: string): Promise<AssetsLock | null> {
 export function upsertLock(lock: AssetsLock, entry: LockEntry): AssetsLock {
   const assets = lock.assets.filter((candidate) => candidate.id !== entry.id);
   assets.push(entry);
-  assets.sort((left, right) => left.id.localeCompare(right.id));
+  assets.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
   return { ...lock, assets };
 }
 
@@ -36,7 +36,7 @@ export async function writeLock(cwd: string, lock: AssetsLock): Promise<void> {
   const sorted = {
     ...lock,
     minor: ASSETS_SCHEMA_MINOR,
-    assets: [...lock.assets].sort((left, right) => left.id.localeCompare(right.id)),
+    assets: [...lock.assets].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)),
   };
   const parsed = AssetsLockSchema.parse(sorted);
   await writeGeneratedText(join(cwd, LOCK_FILE), `${JSON.stringify(parsed, null, 2)}\n`);

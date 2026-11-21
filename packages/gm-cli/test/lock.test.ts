@@ -38,6 +38,17 @@ describe('asset lock I/O', () => {
     expect(lock.assets[0]?.sha256).toBe('0'.repeat(64));
   });
 
+  it('orders versioned asset IDs exactly as the lock schema requires', async () => {
+    const cwd = tempDir();
+    const short = { ...ENTRY, id: 't1:pack/tiles/misc-b1@2026-11-01' };
+    const longer = { ...ENTRY, id: 't1:pack/tiles/misc-b13@2026-11-01' };
+    const lock = { version: 1 as const, family: 'chunky-low-poly' as const, pov: 'iso' as const, assets: [short] };
+    const changed = upsertLock(lock, longer);
+    expect(changed.assets.map((entry) => entry.id)).toEqual([longer.id, short.id]);
+    await writeLock(cwd, changed);
+    expect((await readLock(cwd))?.assets.map((entry) => entry.id)).toEqual([longer.id, short.id]);
+  });
+
   it('names an invalid lockfile instead of returning unvalidated data', async () => {
     const cwd = tempDir();
     writeFileSync(join(cwd, 'assets.lock.json'), '{"version":1}');
