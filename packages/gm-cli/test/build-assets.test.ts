@@ -367,10 +367,9 @@ describe('gm build assets', () => {
     writeLock(source, [{ id: 't3:fixture/cache', path }]);
     execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: source });
     execFileSync('git', ['add', '-A'], { cwd: source });
-    execFileSync(
-      'git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture'],
-      { cwd: source },
-    );
+    execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture'], {
+      cwd: source,
+    });
 
     const first = await gm(['build', 'assets', '--tier', 'mobile,desktop', '--json'], { cwd: source });
     expect(first.code, JSON.stringify(first)).toBe(0);
