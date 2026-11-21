@@ -18,7 +18,7 @@ it('reports stretched raster images and sprites, but accepts 9-slice and hidden 
       return canvas.toDataURL();
     });
     await page.setContent(
-      `<img id="bad" src="${png}" style="width:30px;height:30px"><div style="display:none"><img src="${png}" style="width:30px;height:30px"></div><div id="slice" style="width:30px;height:30px;border:10px solid transparent;border-image:url(${png}) 1 fill / 10px stretch"></div><div id="background" style="width:30px;height:30px;background-image:url(${png});background-size:100% 100%"></div><div id="rounded" style="width:100px;height:80px;background-image:url(${png});background-size:90px 30px;background-repeat:round"></div><div style="width:30px;height:30px;background-image:url(${png});background-size:contain"></div>`,
+      `<img id="bad" src="${png}" style="width:30px;height:30px"><img id="logo" src="${png}" style="width:90px;height:30px;transform:scale(2,1)"><div style="display:none"><img src="${png}" style="width:30px;height:30px"></div><div id="slice" style="width:30px;height:30px;border:10px solid transparent;border-image:url(${png}) 1 fill / 10px stretch"></div><div id="background" style="width:30px;height:30px;background-image:url(${png});background-size:100% 100%"></div><div id="rounded" style="width:100px;height:80px;background-image:url(${png});background-size:90px 30px;background-repeat:round"></div><div style="width:30px;height:30px;background-image:url(${png});background-size:contain"></div>`,
     );
     await page.locator('#bad').evaluate((image: HTMLImageElement) => image.decode());
     await page.evaluate(() => {
@@ -31,7 +31,14 @@ it('reports stretched raster images and sprites, but accepts 9-slice and hidden 
       };
     });
     const findings = await measureImageDistortion(page.mainFrame(), '390x844', 'play');
-    expect(findings.map((item) => item.element)).toEqual(['#bad', '#background', '#rounded', 'sprite', 'broken']);
+    expect(findings.map((item) => item.element)).toEqual([
+      '#bad',
+      '#logo',
+      '#background',
+      '#rounded',
+      'sprite',
+      'broken',
+    ]);
     expect(findings.find((item) => item.element === '#rounded')?.error).toContain('round background repetition');
     expect(findings.find((item) => item.element === 'broken')?.error).toContain('invalid SDK');
     expect(findings[0]).toMatchObject({ natural: 3, drawn: 1, viewport: '390x844' });

@@ -144,7 +144,10 @@ export async function checkImageSlots(game: string): Promise<string[]> {
     if (!dimensions) continue;
     const { width, height } = dimensions;
     const display = IMAGE_SLOTS[variant.slot].display[variant.viewport];
-    if (Math.abs(width / height / (display.width / display.height) - 1) > 0.01 + NUMERIC_EPSILON)
+    if (
+      IMAGE_SLOTS[variant.slot].fit !== 'contain' &&
+      Math.abs(width / height / (display.width / display.height) - 1) > 0.01 + NUMERIC_EPSILON
+    )
       errors.push(
         `${variant.path}: ${variant.slot} ${variant.viewport} is ${width}:${height}, needs the ${display.width}:${display.height} display box`,
       );
