@@ -190,6 +190,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
 }
 
 type DisplayManifest = {
+  images?: Record<string, { variants?: Record<string, string> }>;
   logo?: string;
   loading?: { portrait: string; landscape: string };
   genres?: string[];
@@ -258,6 +259,7 @@ async function writeDisplayImages(deps: AppDeps, target: string, manifest: Displ
     target,
     manifest.logo,
     manifest.loading ? [manifest.loading.portrait, manifest.loading.landscape] : [],
+    Object.values(manifest.images ?? {}).flatMap((slot) => Object.values(slot.variants ?? {})),
   );
   await withArtifactMutation(() => storeDisplayImageBlobs(deps.config.gamesRoot, target, images));
   for (const image of Object.values(images))
@@ -274,6 +276,7 @@ async function writeDisplayImages(deps: AppDeps, target: string, manifest: Displ
         description: manifest.description,
         tags: manifest.tags,
         sharedUrls: manifest.sharedUrls,
+        slotImages: manifest.images,
         images,
       }),
     );
