@@ -1,5 +1,6 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
@@ -34,112 +35,21 @@ describe('command registry', () => {
 
   it('registers every dropped-in command, each with help of at most 15 lines', async () => {
     const registry = await loadCommands(COMMANDS_DIR);
-    expect([...registry.keys()].sort()).toEqual([
-      'admin games prune-failed',
-      'ask',
-      'assets export',
-      'assets facets',
-      'assets import',
-      'assets info',
-      'assets list',
-      'assets register',
-      'assets search',
-      'assets sheet',
-      'assets unused',
-      'assets use',
-      'assets variant',
-      'assets vendor',
-      'assets why',
-      'build',
-      'build assets',
-      'build hold-pr',
-      'build park',
-      'build pause',
-      'build requeue',
-      'build resume',
-      'build state',
-      'capture shell',
-      'chat post',
-      'check',
-      'check assets',
-      'check boot',
-      'check hooks',
-      'check images',
-      'check static',
-      'checkpoint open',
-      'checkpoint wait',
-      'command request',
-      'command wait',
-      'decide',
-      'decisions answer',
-      'decisions check',
-      'decisions next',
-      'decisions raise',
-      'decisions render',
-      'decisions sync',
-      'design current',
-      'docs pattern',
-      'energy',
-      'games register',
-      'images compose',
-      'instance init',
-      'look check',
-      'look evidence',
-      'look judge',
-      'look scope add',
-      'look score',
-      'look sheet',
-      'look shell',
-      'maps index',
-      'maps info',
-      'maps search',
-      'new',
-      'options check',
-      'options reject',
-      'packs blocklist',
-      'packs import',
-      'packs index',
-      'packs sync',
-      'packs tag',
-      'perf',
-      'plan check',
-      'plan premises',
-      'policy',
-      'preview',
-      'publish',
-      'py',
-      'py setup',
-      'qa drive',
-      'qa games-cache',
-      'qa look',
-      'qa new-game-e2e',
-      'qa open',
-      'qa playtest',
-      'qa publish-review-check',
-      'qa review-e2e',
-      'qa room',
-      'qa voice-e2e',
-      'review close-check',
-      'review post',
-      'run',
-      'scenery add',
-      'scenery list',
-      'scenery move',
-      'scenery render',
-      'scenery sync',
-      'scope done',
-      'shot',
-      'skills config',
-      'skills list',
-      'skills search',
-      'skills show',
-      'skills sync',
-      'sprite-forge promote',
-      'sprite-forge rerun',
-      'test',
-      'trailer',
-      'verify serve',
-    ]);
+    const commandFiles = readdirSync(COMMANDS_DIR, { withFileTypes: true })
+      .filter((entry) => statSync(join(COMMANDS_DIR, entry.name)).isDirectory())
+      .sort()
+      .flatMap(({ name: namespace }) => {
+        const namespaceDir = join(COMMANDS_DIR, namespace);
+        return readdirSync(namespaceDir)
+          .filter((name) => /\.(?:js|ts)$/.test(name) && !name.endsWith('.d.ts') && !/\.test\.(?:js|ts)$/.test(name))
+          .map((name) => join(namespaceDir, name));
+      })
+      .map(async (file) => {
+        const module = (await import(pathToFileURL(file).href)) as { command?: { name?: string } };
+        return module.command?.name;
+      });
+    const expectedNames = (await Promise.all(commandFiles)).filter((name): name is string => name !== undefined).sort();
+    expect([...registry.keys()].sort()).toEqual(expectedNames);
     for (const command of registry.values()) expect(commandHelp(command).length).toBeLessThanOrEqual(15);
     const help = await gm(['help', 'assets', 'search']);
     expect(help.out[0]).toBe('usage: gm assets search <words...> [filters]');
