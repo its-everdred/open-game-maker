@@ -71,7 +71,7 @@ const focusButton = button('Focus', ICON.focus, options.focus, (element) => {
   scene.setFocus(!options.focus);
   element.setAttribute('aria-pressed', String(options.focus));
 });
-// The particle slot: pixel leaves and soft motes arrive with the core particle backends (#1174, #1178).
+// Leaves and motes are simulated (see particles.ts); the button turns on when the core backends (#1178) draw them.
 const particles = button('Particles', ICON.particles, false, () => {});
 particles.disabled = true;
 
@@ -81,6 +81,7 @@ declare global {
       ready: boolean;
       options: ForestOptions;
       fps(): number;
+      particles(): number;
       setPreset(id: PresetId): void;
       setLighting(on: boolean): void;
       setFocus(on: boolean): void;
@@ -93,6 +94,7 @@ void scene.ready.then(() => {
     ready: true,
     options,
     fps: () => game.loop.actualFps,
+    particles: () => scene.particles.pool.views.count,
     setPreset: (id) => swatches[PRESET_IDS.indexOf(id)]!.click(),
     setLighting: (on) => {
       if (on !== options.lighting) lightingButton.click();

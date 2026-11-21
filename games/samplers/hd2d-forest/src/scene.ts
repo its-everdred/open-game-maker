@@ -5,6 +5,7 @@ import { createLighting, type Lighting, type LightingLight } from '../../../../p
 import { fallbackTexture, HERO_FRAME, TEXTURES } from './art.js';
 import { cellPoint, clearingPieces, depthBands, FIRE, HERO, HERO_DEPTH } from './clearing.js';
 import { normalCanvas } from './normals.js';
+import { createForestParticles, swayAt, worldToCell, type ForestParticles } from './particles.js';
 import { FOCUS, PRESETS, type PresetId } from './presets.js';
 
 declare const __GM_PRIVATE_ASSETS__: boolean;
@@ -31,6 +32,11 @@ const HERO_SCALE = 1;
 /** Sheet row 1 faces south-east, toward the camera's right like the mock. */
 const HERO_ROW = 1;
 
+const cellOf = (x: number, y: number) => {
+  const [cx, cz] = worldToCell(x, y);
+  return { x: cx, z: cz };
+};
+
 const campfire = (x: number, y: number): LightingLight => ({
   id: 'campfire',
   x,
@@ -43,13 +49,16 @@ const campfire = (x: number, y: number): LightingLight => ({
 });
 
 /**
- * The forest clearing in Phaser 4. Lighting and focus come only from the core HD-2D modules; particles have a slot
- * here that stays empty until the core particle backends (#1174, #1178) merge.
+ * The forest clearing in Phaser 4. Lighting, focus and the particle simulation come only from the core HD-2D modules;
+ * particles are simulated but not drawn until the core particle backends (#1178) merge.
  */
 export class Forest extends Phaser.Scene {
   lighting?: Lighting;
   focus?: Focus;
+  readonly particles: ForestParticles = createForestParticles();
   private fire?: LightingLight;
+  /** Trees and the cell each stands on, swayed by the same wind as the leaves. */
+  private trees: { image: Phaser.GameObjects.Image; x: number; z: number }[] = [];
   readonly ready: Promise<void>;
   private markReady!: () => void;
 
@@ -92,6 +101,7 @@ export class Forest extends Phaser.Scene {
           .setFlipX(piece.flip);
         container.add(image);
         images.push(image);
+        if (piece.key.startsWith('tree-a')) this.trees.push({ image, ...cellOf(x, y) });
       }
     }
 
@@ -134,7 +144,9 @@ export class Forest extends Phaser.Scene {
     this.markReady();
   }
 
-  update(time: number): void {
+  update(time: number, delta: number): void {
+    for (const tree of this.trees) tree.image.rotation = swayAt(this.particles.wind, tree.x, tree.z, time);
+    this.particles.step(delta, time, PRESETS[this.options.preset], this.cameras.main.worldView);
     this.lighting?.update(time);
     this.focus?.update(time);
   }

@@ -8,7 +8,7 @@ export function normalsFromAlpha(
   width: number,
   height: number,
   radius = 3,
-): Uint8ClampedArray {
+): Uint8ClampedArray<ArrayBuffer> {
   const solid = new Float32Array(width * height);
   for (let i = 0; i < solid.length; i += 1) solid[i] = alpha[i]! >= 200 ? 1 : 0;
   const blurred = boxBlur(boxBlur(solid, width, height, radius, 1, 0), width, height, radius, 0, 1);
