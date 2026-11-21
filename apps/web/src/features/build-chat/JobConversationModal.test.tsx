@@ -83,12 +83,15 @@ describe('JobConversationModal', () => {
   });
 
   it('forwards an answer from aiur’s conversation element to the job command route', async () => {
-    if (!customElements.get(AIUR_CONVERSATION_TAG)) customElements.define(AIUR_CONVERSATION_TAG, class extends HTMLElement {});
+    if (!customElements.get(AIUR_CONVERSATION_TAG))
+      customElements.define(AIUR_CONVERSATION_TAG, class extends HTMLElement {});
     useConversation.getState().open('j_1');
     renderModal();
-    document.querySelector(AIUR_CONVERSATION_TAG)!.dispatchEvent(
-      new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', command_id: 'm_3', option_id: 'stone' } }),
-    );
+    document
+      .querySelector(AIUR_CONVERSATION_TAG)!
+      .dispatchEvent(
+        new CustomEvent('aiur-answer', { detail: { job_id: 'j_1', command_id: 'm_3', option_id: 'stone' } }),
+      );
     await waitFor(() =>
       expect(calls).toContainEqual({
         url: '/api/v1/jobs/j_1/commands/m_3/answer',

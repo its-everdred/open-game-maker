@@ -93,8 +93,9 @@ test('phone build dock opens the streamed chat and posts text once', async ({ pa
   await expect(page.getByText('Question 1 of 3')).toBeVisible();
 
   const postedText = 'Make the moonlight warmer';
-  await page.getByRole('textbox', { name: 'Message the builder' }).fill(postedText);
-  await page.getByRole('button', { name: 'Send' }).click();
+  const composer = page.locator('aiur-composer');
+  await composer.locator('textarea').fill(postedText);
+  await composer.getByRole('button', { name: 'Send' }).click();
   await expect(page.getByText(postedText, { exact: true })).toHaveCount(1);
 
   await expect
@@ -129,7 +130,7 @@ test('large pasted text is a compact expandable attachment on phone and desktop'
   await page.goto('/all?test', { waitUntil: 'domcontentloaded' });
   await openBuildChat(page);
 
-  const textbox = page.getByRole('textbox', { name: 'Message the builder' });
+  const textbox = page.locator('aiur-composer textarea');
   const smallPasteAccepted = await textbox.evaluate((element) => {
     const data = new DataTransfer();
     data.setData('text/plain', 'a'.repeat(1_500));
@@ -145,7 +146,7 @@ test('large pasted text is a compact expandable attachment on phone and desktop'
   }, largePaste);
   expect(largePasteAccepted).toBe(false);
 
-  const composer = page.locator('.build-chat-composer');
+  const composer = page.locator('aiur-composer');
   const chip = composer.getByRole('listitem');
   await expect(chip.getByText('Pasted text')).toBeVisible();
   await expect(chip.getByText('1.5 KB')).toBeVisible();
@@ -184,17 +185,18 @@ test('attaches files with the button and by pasting an image, then sends them wi
   await openBuildChat(page);
 
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Attach files' }).click();
+  const aiurComposer = page.locator('aiur-composer');
+  await aiurComposer.getByRole('button', { name: 'Attach files' }).click();
   await (
     await chooser
   ).setFiles([
     { name: 'door-notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Door\nMake it creak.\n') },
     { name: 'blocked.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7') },
   ]);
-  const composer = page.locator('.build-chat-composer');
+  const composer = aiurComposer;
   await expect(composer.getByRole('listitem')).toHaveText(['door-notes.md']);
 
-  const textbox = page.getByRole('textbox', { name: 'Message the builder' });
+  const textbox = aiurComposer.locator('textarea');
   await textbox.evaluate((element) => {
     const data = new DataTransfer();
     data.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'pasted-door.png', { type: 'image/png' }));
@@ -203,7 +205,7 @@ test('attaches files with the button and by pasting an image, then sends them wi
   await expect(composer.getByRole('listitem')).toHaveText(['door-notes.md', 'pasted-door.png']);
 
   await textbox.fill('Use these for the door');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await aiurComposer.getByRole('button', { name: 'Send' }).click();
   await expect(composer.getByRole('listitem')).toHaveCount(0);
   await expect
     .poll(() => posts)
@@ -295,8 +297,9 @@ test('asking for a change with no build running starts an edit job and streams i
   const pendingPoll = page.waitForResponse((response) => response.url().includes('/api/v1/jobs?gameId='));
   await page.clock.pauseAt(Date.now() + 60_000);
   await pendingPoll;
-  await page.getByRole('textbox', { name: 'Message the builder' }).fill('Make the door glow');
-  await page.locator('.build-chat-composer').getByRole('button', { name: 'Send' }).click({ force: true });
+  const composer = page.locator('aiur-composer');
+  await composer.locator('textarea').fill('Make the door glow');
+  await composer.getByRole('button', { name: 'Send' }).click({ force: true });
 
   await expect.poll(() => created.length).toBe(1);
   expect(created[0]).toMatchObject({ gameId: 'game', branchId: 'main', kind: 'feature', start: 'now' });
