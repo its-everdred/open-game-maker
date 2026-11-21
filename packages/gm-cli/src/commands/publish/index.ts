@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,13 +117,7 @@ function seedAssetCache(sourceGame: string, targetGame: string): void {
       for (const name of readdirSync(from)) copyRegularTree(join(from, name), join(to, name));
     } else if (info.isFile()) {
       mkdirSync(dirname(to), { recursive: true });
-      try {
-        linkSync(from, to);
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== 'EXDEV' && code !== 'EPERM' && code !== 'EACCES') throw error;
-        cpSync(from, to);
-      }
+      cpSync(from, to);
     }
   };
   copyRegularTree(source, target);
