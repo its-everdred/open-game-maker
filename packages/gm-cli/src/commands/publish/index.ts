@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,6 +96,37 @@ function slugFromCwd(cwd: string): string {
 
 function tail(text: string, lines = 20): string {
   return text.trimEnd().split('\n').slice(-lines).join('\n');
+}
+
+/** Reuse generated asset work from the registered checkout; cache entries remain content-addressed and validated. */
+function seedAssetCache(sourceGame: string, targetGame: string): void {
+  const source = join(sourceGame, '.gm', 'cache', 'assets');
+  if (!existsSync(source)) return;
+  const target = join(targetGame, '.gm', 'cache', 'assets');
+  const copyRegularTree = (from: string, to: string): void => {
+    let info;
+    try {
+      info = lstatSync(from);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    if (info.isSymbolicLink()) return;
+    if (info.isDirectory()) {
+      mkdirSync(to, { recursive: true });
+      for (const name of readdirSync(from)) copyRegularTree(join(from, name), join(to, name));
+    } else if (info.isFile()) {
+      mkdirSync(dirname(to), { recursive: true });
+      try {
+        linkSync(from, to);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'EXDEV' && code !== 'EPERM' && code !== 'EACCES') throw error;
+        cpSync(from, to);
+      }
+    }
+  };
+  copyRegularTree(source, target);
 }
 
 /** fetch's own message is a bare "fetch failed"; the socket's reason sits on its cause. */
@@ -279,6 +310,7 @@ export const command: GmCommand = {
       const added = git(['worktree', 'add', '--quiet', '--detach', work, commit]);
       if (!added.ok) throw new CommandError(`cannot check ${commit} out of ${checkout}: ${tail(added.err, 3)}`);
       const game = join(work, facts.repoPath);
+      seedAssetCache(join(checkout, facts.repoPath), game);
       if (!existsSync(join(game, 'package.json'))) {
         throw new CommandError(`${facts.repoPath} has no package.json in ${checkout} at ${commit}`);
       }
