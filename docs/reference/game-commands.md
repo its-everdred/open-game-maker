@@ -83,7 +83,9 @@ add a note before sending it.
 Core Commands are labeled Core and are visible only to the instance owner. The API connects to the local core daemon
 using `AIUR_API_URL` and `AIUR_API_TOKEN` from its environment. `OGM_INSTANCE_OWNER_ID` authorizes the owner and
 `OGM_CORE_BUMP_CORE_REPO` identifies the core tracker. The core source or its target list is unavailable when its required
-settings are unset.
+settings are unset. PC core daemon Commands can also be included by setting `OGM_CORE_PC_AIUR_URL` and
+`OGM_CORE_PC_AIUR_TOKEN` to the PC daemon's loopback endpoint and token, and `OGM_CORE_PC_REPO` to its `owner/repository` tracker. Core command routes accept `?daemon=pc`;
+they default to the existing core daemon.
 A Command card sends a pick or change note through `POST /api/v1/games/:gameId/commands/:decisionId/answer`
 with the displayed version. Aiur records the creator's answer and the review ledger records its notes.
 

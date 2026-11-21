@@ -30,13 +30,17 @@ const Answer = CommandAnswerBody.extend({
   change_request: z.boolean().optional(),
 });
 
-export function owner(c: import('hono').Context<ApiBindings>): { client: AiurClient; principal: string } {
+export function owner(c: import('hono').Context<ApiBindings>): { client: AiurClient; principal: string; daemon: 'core' | 'pc'; repo?: { owner: string; name: string } } {
   const deps = c.get('deps');
   const principal = requirePrincipal(c, ['user']).userId;
   const ownerId = deps.config.instanceOwnerId;
   if (!ownerId || principal !== ownerId) throw new HttpError(403, 'forbidden');
-  if (!deps.registry.coreAiurClient) throw new HttpError(503, 'core_daemon_unavailable');
-  return { client: deps.registry.coreAiurClient, principal };
+  const daemon = c.req.query('daemon') ?? 'core';
+  if (daemon !== 'core' && daemon !== 'pc') throw new HttpError(400, 'invalid_daemon');
+  const entry = deps.registry.coreAiurClients.find((item) => item.id === daemon);
+  const client = entry?.client ?? (daemon === 'core' ? deps.registry.coreAiurClient : null);
+  if (!client) throw new HttpError(503, 'core_daemon_unavailable');
+  return { client, principal, daemon, repo: entry?.repo ?? (daemon === 'core' ? deps.config.coreRepo : deps.config.pcCoreRepo) };
 }
 async function coreCall<T>(operation: () => Promise<T>): Promise<T> {
   try {
@@ -62,11 +66,22 @@ function validated(decision: Decision): GameCommand {
 
 export default new Hono<ApiBindings>()
   .get('/me/core-commands', async (c) => {
-    const { client } = owner(c);
+    const principal = requirePrincipal(c, ['user']).userId;
     const deps = c.get('deps');
-    const decisions = await coreCall(() => client.decisions({}, AbortSignal.timeout(5000)));
-    const commands = await Promise.all(
-      decisions.filter(open).map(async (decision) => {
+    if (!deps.config.instanceOwnerId || principal !== deps.config.instanceOwnerId) throw new HttpError(403, 'forbidden');
+    const entries = deps.registry.coreAiurClients.length ? deps.registry.coreAiurClients : deps.registry.coreAiurClient ? [{ id: 'core' as const, client: deps.registry.coreAiurClient, repo: deps.config.coreRepo }] : [];
+    if (!entries.length || !entries.some(({ id }) => id === 'core')) throw new HttpError(503, 'core_daemon_unavailable');
+    let daemonUnavailable = false;
+    const commands = (await Promise.all(entries.map(async ({ id, client, repo }) => {
+      let decisions: Decision[];
+      try {
+        decisions = await client.decisions({}, AbortSignal.timeout(5000));
+      } catch {
+        if (id === 'core') throw new HttpError(502, 'core_daemon_unavailable');
+        daemonUnavailable = true;
+        return [];
+      }
+      return Promise.all(decisions.filter(open).map(async (decision) => {
         const command = toGameCommand(
           decision,
           await optionMediaFromAiur(
@@ -74,12 +89,12 @@ export default new Hono<ApiBindings>()
             client,
             decision,
             (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash),
-            deps.config.coreRepo ? { ...deps.config.coreRepo, ticket: decision.ticket.identifier } : undefined,
+            repo ? { ...repo, ticket: decision.ticket.identifier } : undefined,
           ),
         );
-        return command ? { ...command, source: 'core' as const } : null;
-      }),
-    );
+        return command ? { ...command, source: 'core' as const, daemon: id } : null;
+      }));
+    }))).flat().filter((command) => command !== null);
     const visible = commands.filter((command) => command !== null);
     await logReviewFeedRefresh(
       'core_commands',
@@ -87,13 +102,14 @@ export default new Hono<ApiBindings>()
       visible.map((command) => ({ ticket: command.ticket!, id: command.decision_id, postedAt: command.opened_at })),
       deps.log,
     );
-    const workers = await reviewWorkers(deps).catch(() => null);
-    const targets = (workers ?? [])
-      .filter(
-        (worker) => worker.state === 'human-review' && !visible.some((command) => command.ticket === worker.ticket),
-      )
-      .map((worker) => ({ source: 'core' as const, ticket: worker.ticket, title: worker.title }));
-    return c.json({ commands: visible, targets, targetsUnavailable: workers === null });
+    const workerResults = await Promise.all(entries.map(async ({ id, repo }) => ({
+      id,
+      workers: await reviewWorkers(deps, repo ?? null, id).catch(() => null),
+    })));
+    const targets = workerResults.flatMap(({ id, workers }) => (workers ?? [])
+      .filter((worker) => worker.state === 'human-review' && !visible.some((command) => command.daemon === id && command.ticket === worker.ticket))
+      .map((worker) => ({ source: 'core' as const, daemon: id, ticket: worker.ticket, title: worker.title })));
+    return c.json({ commands: visible, targets, targetsUnavailable: workerResults.some(({ workers }) => workers === null) || daemonUnavailable });
   })
   .get('/core/tickets/:ticket/state', async (c) => {
     const { client } = owner(c);
@@ -103,7 +119,7 @@ export default new Hono<ApiBindings>()
     return c.json({ state: issue.status });
   })
   .post('/core/commands/:id/answer', async (c) => {
-    const { client, principal } = owner(c);
+    const { client, principal, daemon, repo } = owner(c);
     const body = await parseBody(c, Answer);
     const id = c.req.param('id');
     const decision = await coreCall(() => client.decision(id));
@@ -125,7 +141,7 @@ export default new Hono<ApiBindings>()
       body.review.notes === undefined;
     const deps = c.get('deps');
     const guard = body.review
-      ? beginReviewAnswer(deps.db, 'core', command.ticket, `command:${id}:${body.version}`)
+      ? beginReviewAnswer(deps.db, daemon, command.ticket, `command:${id}:${body.version}`)
       : undefined;
     try {
       await client.answerAsCreator(id, {
@@ -138,7 +154,7 @@ export default new Hono<ApiBindings>()
       });
     } catch (error) {
       if (guard && error instanceof AiurHttpError && [400, 403, 404, 422].includes(error.status))
-        discardReviewAnswer(deps.db, 'core', command.ticket, guard);
+        discardReviewAnswer(deps.db, daemon, command.ticket, guard);
       if (error instanceof AiurHttpError && error.status === 409) {
         if (guard) {
           const latest = await client.decision(id).catch(() => null);
@@ -148,7 +164,7 @@ export default new Hono<ApiBindings>()
             !latest.active_answer &&
             ['open', 'deferred', 'pending'].includes(latest.decision_status)
           )
-            discardReviewAnswer(deps.db, 'core', command.ticket, guard);
+            discardReviewAnswer(deps.db, daemon, command.ticket, guard);
         }
         throw new HttpError(409, 'command_answer_conflict');
       }
@@ -157,28 +173,28 @@ export default new Hono<ApiBindings>()
     if (body.review) {
       const episode = await readReviewEpisode(
         deps.registry.reviewEpisode,
-        deps.config.coreRepo ?? undefined,
+        repo,
         command.ticket,
         ['agent:human-review'],
       );
-      if (guard) bindReviewEpisode(deps.db, 'core', command.ticket, guard, episode);
+      if (guard) bindReviewEpisode(deps.db, daemon, command.ticket, guard, episode);
     }
     return c.json({ status: 'answered' });
   })
   .post('/core/tickets/:ticket/missing-review', async (c) => {
-    const { client } = owner(c);
+    const { client, daemon, repo } = owner(c);
     const ticket = c.req.param('ticket');
     if (!/^[1-9]\d{0,18}$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
-    const workers = await reviewWorkers(c.get('deps'));
+    const workers = await reviewWorkers(c.get('deps'), repo, daemon);
     const deps = c.get('deps');
-    const episode = await readReviewEpisode(deps.registry.reviewEpisode, deps.config.coreRepo ?? undefined, ticket, [
+    const episode = await readReviewEpisode(deps.registry.reviewEpisode, repo, ticket, [
       'agent:human-review',
     ]);
     if (episode === undefined) throw new HttpError(503, 'review_episode_unavailable');
     if (episode === null) throw new HttpError(404, 'review_ticket_not_found');
-    await reconcilePendingCommands(deps.db, 'core', ticket, episode, client);
-    await reconcileReviewEpisode(deps.db, 'core', ticket, episode);
-    if (reviewAnswerPending(deps.db, 'core', ticket)) throw new HttpError(409, 'review_answer_pending');
+    await reconcilePendingCommands(deps.db, daemon, ticket, episode, client);
+    await reconcileReviewEpisode(deps.db, daemon, ticket, episode);
+    if (reviewAnswerPending(deps.db, daemon, ticket)) throw new HttpError(409, 'review_answer_pending');
     if (!workers.some((worker) => worker.ticket === ticket && worker.state === 'human-review'))
       throw new HttpError(404, 'review_ticket_not_found');
     const decisions = await coreCall(() => client.decisions({ ticket }, AbortSignal.timeout(5000)));
@@ -216,18 +232,20 @@ export default new Hono<ApiBindings>()
 
 async function reviewWorkers(
   deps: import('../app/types.js').AppDeps,
+  repo: { owner: string; name: string } | null = deps.config.coreRepo ?? null,
+  source = 'core',
 ): Promise<{ ticket: string; title: string; state: string }[]> {
-  if (!deps.config.coreRepo || !deps.registry.trackerTickets) throw new HttpError(503, 'core_tracker_unavailable');
+  if (!repo || !deps.registry.trackerTickets) throw new HttpError(503, 'core_tracker_unavailable');
   let snapshot: Awaited<ReturnType<NonNullable<typeof deps.registry.trackerTickets>>>;
   try {
-    snapshot = await deps.registry.trackerTickets(deps.config.coreRepo, 'open');
+    snapshot = await deps.registry.trackerTickets(repo, 'open');
   } catch {
     throw new HttpError(503, 'core_tracker_unavailable');
   }
   if (snapshot.stale) throw new HttpError(503, 'core_tracker_unavailable');
   retainReviewTickets(
     deps.db,
-    'core',
+    source,
     new Set(
       snapshot.tickets.filter((ticket) => ticket.labels.includes('agent:human-review')).map((ticket) => ticket.ticket),
     ),
