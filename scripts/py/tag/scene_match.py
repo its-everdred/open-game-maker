@@ -179,11 +179,10 @@ def main():
         output["query"] = {"model": signature, "vector": np.asarray(vectors[0]).tolist()}
         output["candidates"] = [{"id": name, "model": signature, "vector": np.asarray(vector).tolist()}
                                 for name, vector in zip(ids, candidates)]
-    if query_count > 1:
-        output["regions"] = [
-            {"crop": list(bounds), "matches": matches, **({"query": {"model": signature, "vector": np.asarray(vector).tolist()}} if args.include_vectors else {})}
-            for bounds, matches, vector in zip(bounds_list, results, vectors[:query_count])
-        ]
+    output["regions"] = [
+        {"crop": list(bounds), "matches": matches, **({"query": {"model": signature, "vector": np.asarray(vector).tolist()}} if args.include_vectors else {})}
+        for bounds, matches, vector in zip(bounds_list, results, vectors[:query_count])
+    ]
     print(json.dumps(output, allow_nan=False))
 
 

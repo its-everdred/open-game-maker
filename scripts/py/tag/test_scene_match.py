@@ -75,6 +75,7 @@ def test_worker_outputs_vectors_for_placement_and_marks_truncation(tmp_path, mon
     assert output["query"] == {"model": signature, "vector": [1, 0]}
     assert output["candidates"][0] == {"id": "asset", "model": signature, "vector": [2, 1]}
     assert output["matches"][0]["id"] == "asset"
+    assert output["regions"] == [{"crop": [0, 0, 4, 4], "matches": output["matches"], "query": output["query"]}]
 
 
 def test_worker_identifies_the_requested_local_encoder(tmp_path, monkeypatch, capsys):
