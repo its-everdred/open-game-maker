@@ -141,7 +141,9 @@ describe('gm decisions', () => {
     writeFileSync(file, JSON.stringify(inventory));
     const raised = await gm(['decisions', 'raise', 'enemy-style', '--json'], { cwd: root, env: { GM_JOB: JOB_ID } });
     expect(raised.code, raised.err.join('\n')).toBe(0);
-    expect(JSON.parse(raised.out[0]!).emit_event.payload.context.long_context_markdown).toContain('gm-audience:creator');
+    expect(JSON.parse(raised.out[0]!).emit_event.payload.context.long_context_markdown).toContain(
+      'gm-audience:creator',
+    );
     expect(JSON.parse(raised.out[0]!).emit_event.payload.questions).toEqual([{ multi_select: true }]);
     expect(JSON.parse(readFileSync(file, 'utf8'))[0].command_id).toMatch(/^cp_/);
   });
