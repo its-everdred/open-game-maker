@@ -2,6 +2,7 @@ import { parseSceneBrief } from './brief.js';
 import { reviewedClone, type ReviewedSceneObject } from './reviewed-clone.js';
 import type { ScenePlanInput } from './plan.js';
 import type { SceneTiledMap } from './tiled-merge.js';
+import { validateSceneRoutes, type SceneRoute, type WalkableGrid } from './routes.js';
 
 /** Export reviewed matches only when their footpoints belong to the named brief regions. */
 export function reviewedBriefClone<T extends SceneTiledMap>(input: {
@@ -12,6 +13,7 @@ export function reviewedBriefClone<T extends SceneTiledMap>(input: {
   dressing: ScenePlanInput['dressing'];
   lockedAssets: ReadonlySet<string>;
   reserved: ReadonlySet<string>;
+  routeChecks?: { grid: WalkableGrid; routes: readonly SceneRoute[] };
 }) {
   const brief = parseSceneBrief(input.brief);
   const regions = new Map(brief.regions.map((region) => [region.id, region]));
@@ -29,5 +31,11 @@ export function reviewedBriefClone<T extends SceneTiledMap>(input: {
     )
       throw new Error(`scene object ${object.id} footpoint is outside its brief region`);
   }
-  return { ...reviewedClone(input), brief };
+  const result = reviewedClone(input);
+  if (input.routeChecks) {
+    if (input.routeChecks.grid.width !== input.map.width || input.routeChecks.grid.height !== input.map.height)
+      throw new Error('scene route grid does not match the game map');
+    validateSceneRoutes(input.routeChecks.grid, result.collision, input.routeChecks.routes);
+  }
+  return { ...result, brief };
 }

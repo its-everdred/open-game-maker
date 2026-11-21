@@ -62,3 +62,24 @@ it('refuses unmatched regions and footpoints outside the reviewed region', () =>
   outside.objects[0]!.footpoint.x = 0;
   expect(() => reviewedBriefClone(outside)).toThrow('footpoint is outside');
 });
+
+it('checks reviewed collision against an authored route when provided', () => {
+  const data = input();
+  const routeChecks = {
+    grid: { width: 4, height: 4, cells: Array<boolean>(16).fill(true) },
+    routes: [
+      {
+        id: 'entrance',
+        waypoints: [
+          { x: 0, y: 2 },
+          { x: 1, y: 2 },
+          { x: 2, y: 2 },
+        ],
+      },
+    ],
+  };
+  expect(() => reviewedBriefClone({ ...data, routeChecks })).toThrow('blocked waypoint');
+  expect(() =>
+    reviewedBriefClone({ ...data, routeChecks: { ...routeChecks, grid: { ...routeChecks.grid, width: 3 } } }),
+  ).toThrow('does not match');
+});
