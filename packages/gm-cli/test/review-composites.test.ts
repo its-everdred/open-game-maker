@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'gm-review-composites-'));
   roots.push(root);
+  execFileSync('git', ['init', '-q'], { cwd: root });
   const still = join(root, 'still.png');
   await sharp({ create: { width: 20, height: 10, channels: 4, background: '#ff0000' } })
     .png()
