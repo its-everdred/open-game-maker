@@ -2,7 +2,7 @@ import type { GameSummary } from './types';
 import { DisplayImage } from './DisplayImage';
 import { ShowcaseCover } from './ShowcaseCover';
 
-type CoverGame = Pick<GameSummary, 'title' | 'coverUrl' | 'coverImage' | 'logoUrl' | 'showcase'>;
+type CoverGame = Pick<GameSummary, 'title' | 'coverUrl' | 'coverImage' | 'logoUrl' | 'showcase' | 'slotImages'>;
 
 export function Cover({ game, hero = false }: { game: CoverGame; hero?: boolean }) {
   if (game.coverUrl) {
@@ -11,6 +11,7 @@ export function Cover({ game, hero = false }: { game: CoverGame; hero?: boolean 
         className="game-cover-image"
         src={game.coverUrl}
         image={game.coverImage}
+        variants={game.slotImages?.tile}
         sizes={
           hero
             ? '(max-width: 600px) 85vw, (max-width: 1000px) 50vw, 640px'
