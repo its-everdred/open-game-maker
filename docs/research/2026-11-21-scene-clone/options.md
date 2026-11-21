@@ -53,7 +53,7 @@ A scratch copy of the game at the revision above was built in test mode with the
 
 Neither is a valid completed bake-off arm: the scene has not been registered to the reference, the region list and matches were manually authored, no metric or motion was measured, and the third arm is absent. Inspecting the overlays reveals major differences in camera framing, wall silhouette, house coverage, lighting, scale and dressing density. These results do not establish whether a parsing or retrieval model helps.
 
-The fantasy pack card records `processing: local-only`. The generated mock skill prohibits sending paid-pack renders to a hosted generator, and the blockout is a render of that pack. A local image generation stack was not found in the checked cache or Python environment. Do not send this blockout to the broker or treat a simple colour filter as the requested beauty pass. A rights-compatible local generator is needed to test that arm with the same pack.
+The fantasy pack card records `processing: local-only`. The generated mock skill prohibits sending paid-pack renders to a hosted generator, and the blockout is a render of that pack. At this checkpoint no local image generation stack was found in the checked cache or Python environment. A local stack was subsequently installed and tested as described below. Do not send this blockout to the broker or treat a simple colour filter as the requested beauty pass.
 
 ## Local visual retrieval probe
 
