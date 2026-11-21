@@ -14,11 +14,13 @@ export function useAnsweredReviews(_reviews: readonly WorkerReview[], commands: 
   const [sessionAnsweredCommands, setSessionAnsweredCommands] = useState<SessionAnsweredCommand[]>(readSessionCommands);
   const [knownGameIds, setKnownGameIds] = useState<string[]>(readKnownGameIds);
   const visibleGameIds = commands.filter((command) => !('source' in command)).map(commandSource);
-  const gameIds = Array.from(new Set([
-    ...knownGameIds,
-    ...visibleGameIds,
-    ...sessionAnsweredCommands.map(({ command }) => commandSource(command)).filter((source) => source !== 'core'),
-  ]));
+  const gameIds = Array.from(
+    new Set([
+      ...knownGameIds,
+      ...visibleGameIds,
+      ...sessionAnsweredCommands.map(({ command }) => commandSource(command)).filter((source) => source !== 'core'),
+    ]),
+  );
   useEffect(() => {
     const next = Array.from(new Set([...knownGameIds, ...visibleGameIds]));
     if (next.length === knownGameIds.length) return;
@@ -43,7 +45,13 @@ export function useAnsweredReviews(_reviews: readonly WorkerReview[], commands: 
   });
   const rememberCommand = (command: ReviewCommand) => {
     setSessionAnsweredCommands((previous) => {
-      const next = [...previous.filter(({ command: prior }) => commandSource(prior) !== commandSource(command) || prior.decision_id !== command.decision_id), { command }];
+      const next = [
+        ...previous.filter(
+          ({ command: prior }) =>
+            commandSource(prior) !== commandSource(command) || prior.decision_id !== command.decision_id,
+        ),
+        { command },
+      ];
       try {
         sessionStorage.setItem(storageKey, JSON.stringify(next));
       } catch {
@@ -59,9 +67,14 @@ function readSessionCommands(): SessionAnsweredCommand[] {
   try {
     const value: unknown = JSON.parse(sessionStorage.getItem(storageKey) ?? '[]');
     if (!Array.isArray(value)) return [];
-    return value.filter((item): item is SessionAnsweredCommand =>
-      typeof item === 'object' && item !== null && typeof item.command === 'object' && item.command !== null &&
-      'decision_id' in item.command && typeof item.command.decision_id === 'string',
+    return value.filter(
+      (item): item is SessionAnsweredCommand =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof item.command === 'object' &&
+        item.command !== null &&
+        'decision_id' in item.command &&
+        typeof item.command.decision_id === 'string',
     );
   } catch {
     return [];
@@ -71,7 +84,9 @@ function readSessionCommands(): SessionAnsweredCommand[] {
 function readKnownGameIds(): string[] {
   try {
     const value: unknown = JSON.parse(sessionStorage.getItem(gameIdsStorageKey) ?? '[]');
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+      : [];
   } catch {
     return [];
   }

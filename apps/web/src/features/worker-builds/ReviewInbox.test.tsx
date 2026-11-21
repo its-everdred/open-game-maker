@@ -76,14 +76,35 @@ it('answers a ledger round with a note and advances to the next review', async (
 
 it('restores a saved Command answer and resends its still-live Command', async () => {
   const saved = {
-      id: 'r_1', game_id: 'g', job_id: null, ticket: '45', title: 'Castle', command_id: 'c', decision_id: 'd',
-      question: 'Which colors?', option_id: 'b', likes: [{ option_id: 'b', label: 'Blue' }],
-      dislikes: [{ option_id: 'a', label: 'Red', reason: 'Too dark' }], notes: 'Keep the trim', at: '2026-01-01T00:00:00Z',
+    id: 'r_1',
+    game_id: 'g',
+    job_id: null,
+    ticket: '45',
+    title: 'Castle',
+    command_id: 'c',
+    decision_id: 'd',
+    question: 'Which colors?',
+    option_id: 'b',
+    likes: [{ option_id: 'b', label: 'Blue' }],
+    dislikes: [{ option_id: 'a', label: 'Red', reason: 'Too dark' }],
+    notes: 'Keep the trim',
+    at: '2026-01-01T00:00:00Z',
   };
-  api.mockImplementation((path: string) => Promise.resolve(path.endsWith('/reviews') ? { reviews: [saved] } : { status: 'answered' }));
+  api.mockImplementation((path: string) =>
+    Promise.resolve(path.endsWith('/reviews') ? { reviews: [saved] } : { status: 'answered' }),
+  );
   const command = {
-    game_id: 'g', game_title: 'Game', job_id: null, ticket: '45', title: 'Castle', command_id: 'c', decision_id: 'd', version: 2,
-    question: 'Which colors?', blocking: true, opened_at: '2026-01-01T00:00:00Z',
+    game_id: 'g',
+    game_title: 'Game',
+    job_id: null,
+    ticket: '45',
+    title: 'Castle',
+    command_id: 'c',
+    decision_id: 'd',
+    version: 2,
+    question: 'Which colors?',
+    blocking: true,
+    opened_at: '2026-01-01T00:00:00Z',
     options: [
       { id: 'a', label: 'Red', media: { url: '/red.png', width: 10, height: 10 } },
       { id: 'b', label: 'Blue', media: { url: '/blue.png', width: 10, height: 10 } },
@@ -107,8 +128,16 @@ it('restores a saved Command answer and resends its still-live Command', async (
 it('keeps a core Command answer when the deck closes and reopens in the same session', async () => {
   api.mockResolvedValue({ status: 'answered' });
   const command = {
-    source: 'core' as const, job_id: null, ticket: '45', title: 'Castle', command_id: 'c', decision_id: 'core-d', version: 2,
-    question: 'Which colors?', blocking: true, opened_at: '2026-01-01T00:00:00Z',
+    source: 'core' as const,
+    job_id: null,
+    ticket: '45',
+    title: 'Castle',
+    command_id: 'c',
+    decision_id: 'core-d',
+    version: 2,
+    question: 'Which colors?',
+    blocking: true,
+    opened_at: '2026-01-01T00:00:00Z',
     options: [{ id: 'a', label: 'Red', media: { url: '/red.png', width: 10, height: 10 } }],
   };
   const view = render(
@@ -118,7 +147,9 @@ it('keeps a core Command answer when the deck closes and reopens in the same ses
   );
   fireEvent.click(screen.getByRole('button', { name: 'Pick A: Red' }));
   fireEvent.click(screen.getByRole('button', { name: 'Send choice' }));
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/core/commands/core-d/answer', expect.objectContaining({ method: 'POST' })));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/core/commands/core-d/answer', expect.objectContaining({ method: 'POST' })),
+  );
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   view.unmount();
   render(
@@ -387,7 +418,9 @@ it('asks for missing media on later cards without waiting for the creator to ope
   await waitFor(() => expect(api).toHaveBeenCalledWith('/games/g/review-rounds/b/missing-media', { method: 'POST' }));
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(await screen.findByText('Asked the agent for media in the next round.')).toBeVisible();
-  expect(api.mock.calls.filter(([path]) => typeof path === 'string' && path.endsWith('/missing-media'))).toHaveLength(1);
+  expect(api.mock.calls.filter(([path]) => typeof path === 'string' && path.endsWith('/missing-media'))).toHaveLength(
+    1,
+  );
 });
 
 it('lists a review-stage ticket without an artifact and asks its worker for media', async () => {

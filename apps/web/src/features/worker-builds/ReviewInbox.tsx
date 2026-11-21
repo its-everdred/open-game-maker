@@ -60,9 +60,7 @@ export function ReviewInbox({
   const { savedCommands, sessionAnsweredCommands, rememberCommand } = answeredReviewData;
   const answeredReviews = reviews.filter((review) => answered.has(keyOf(review)));
   const answeredCommands = commands.filter((item) => answered.has(commandKey(item)));
-  const pendingReviews = reviews.filter(
-    (review) => !answered.has(keyOf(review)),
-  );
+  const pendingReviews = reviews.filter((review) => !answered.has(keyOf(review)));
   const pendingCommands = commands.filter((item) => !answered.has(commandKey(item)));
   const pendingTargets = targets.filter((item) => !answeredTickets.has(`${targetSource(item)}:${item.ticket}`));
   const queue = [
@@ -82,14 +80,30 @@ export function ReviewInbox({
     ...answeredReviews.map((item) => ({ kind: 'review' as const, item, key: `answered-review:${keyOf(item)}` })),
     ...answeredCommands.map((item) => ({ kind: 'command' as const, item, key: commandKey(item) })),
     ...savedCommands
-      .filter((item) => !answeredCommands.some((command) => commandSource(command) === item.gameId && command.decision_id === item.review.decision_id))
+      .filter(
+        (item) =>
+          !answeredCommands.some(
+            (command) => commandSource(command) === item.gameId && command.decision_id === item.review.decision_id,
+          ),
+      )
       .map((item) => ({ kind: 'saved-command' as const, item, key: `saved-command:${item.review.id}` })),
     ...sessionAnsweredCommands
-      .filter(({ command: item }) =>
-        !answeredCommands.some((answeredCommand) => commandSource(answeredCommand) === commandSource(item) && answeredCommand.decision_id === item.decision_id) &&
-        !savedCommands.some((saved) => saved.gameId === commandSource(item) && saved.review.decision_id === item.decision_id),
+      .filter(
+        ({ command: item }) =>
+          !answeredCommands.some(
+            (answeredCommand) =>
+              commandSource(answeredCommand) === commandSource(item) &&
+              answeredCommand.decision_id === item.decision_id,
+          ) &&
+          !savedCommands.some(
+            (saved) => saved.gameId === commandSource(item) && saved.review.decision_id === item.decision_id,
+          ),
       )
-      .map((item) => ({ kind: 'session-command' as const, item, key: `session-command:${commandSource(item.command)}:${item.command.decision_id}` })),
+      .map((item) => ({
+        kind: 'session-command' as const,
+        item,
+        key: `session-command:${commandSource(item.command)}:${item.command.decision_id}`,
+      })),
   ];
   const missingPaths = [
     ...pendingReviews.flatMap((review) =>
@@ -122,7 +136,21 @@ export function ReviewInbox({
         : undefined;
   const show = (entry: (typeof queue)[number] | (typeof answerRows)[number] | undefined) => {
     setCurrent(entry?.kind === 'review' ? entry.item : undefined);
-    setCommand(entry?.kind === 'command' ? entry.item : entry?.kind === 'saved-command' ? commands.find((item) => commandSource(item) === entry.item.gameId && item.decision_id === entry.item.review.decision_id) : entry?.kind === 'session-command' ? commands.find((item) => commandSource(item) === commandSource(entry.item.command) && item.decision_id === entry.item.command.decision_id) : undefined);
+    setCommand(
+      entry?.kind === 'command'
+        ? entry.item
+        : entry?.kind === 'saved-command'
+          ? commands.find(
+              (item) => commandSource(item) === entry.item.gameId && item.decision_id === entry.item.review.decision_id,
+            )
+          : entry?.kind === 'session-command'
+            ? commands.find(
+                (item) =>
+                  commandSource(item) === commandSource(entry.item.command) &&
+                  item.decision_id === entry.item.command.decision_id,
+              )
+            : undefined,
+    );
     setSavedCommand(entry?.kind === 'saved-command' ? entry.item : undefined);
     setSessionSavedCommand(entry?.kind === 'session-command' ? entry.item : undefined);
     setTarget(entry?.kind === 'target' ? entry.item : undefined);
@@ -147,23 +175,24 @@ export function ReviewInbox({
   const collapsedAnswers = answerRows.length ? (
     <section className="worker-review-answers" aria-label="Answered reviews">
       {answerRows.map((entry) => {
-        const title = entry.kind === 'saved-command'
-          ? entry.item.review.title
-          : entry.kind === 'session-command'
-            ? entry.item.command.title
-            : entry.kind === 'command'
-              ? entry.item.title
-              : entry.item.kind === 'standalone-preview'
-                ? entry.item.preview.title ?? `Ticket ${entry.item.preview.ticket}`
-                : entry.item.round.question ?? `Ticket ${entry.item.round.ticket}`;
+        const title =
+          entry.kind === 'saved-command'
+            ? entry.item.review.title
+            : entry.kind === 'session-command'
+              ? entry.item.command.title
+              : entry.kind === 'command'
+                ? entry.item.title
+                : entry.item.kind === 'standalone-preview'
+                  ? (entry.item.preview.title ?? `Ticket ${entry.item.preview.ticket}`)
+                  : (entry.item.round.question ?? `Ticket ${entry.item.round.ticket}`);
         const answer =
           entry.kind === 'saved-command'
             ? `${entry.item.review.likes.map(({ label }) => `Liked ${label}`).join(', ')}${entry.item.review.dislikes.length ? ` · disliked ${entry.item.review.dislikes.map(({ label, reason }) => `${label}${reason ? `: ${reason}` : ''}`).join(', ')}` : ''}${entry.item.review.notes ? ` · ${entry.item.review.notes}` : ''}`
             : entry.kind === 'review'
               ? 'Answered in this session'
-            : entry.kind === 'session-command'
-              ? 'Answer saved in this session'
-            : 'Answer saved in this session';
+              : entry.kind === 'session-command'
+                ? 'Answer saved in this session'
+                : 'Answer saved in this session';
         return (
           <button type="button" className="worker-review-answered" key={entry.key} onClick={() => show(entry)}>
             <strong>{title}</strong>
@@ -350,7 +379,12 @@ export function ReviewInbox({
           <section className="worker-review-saved">
             <p>{savedCommand.review.question}</p>
             <p>{savedCommand.review.likes.map(({ label }) => `Liked ${label}`).join(', ')}</p>
-            {savedCommand.review.dislikes.map(({ label, reason }) => <p key={label}>Disliked {label}{reason ? `: ${reason}` : ''}</p>)}
+            {savedCommand.review.dislikes.map(({ label, reason }) => (
+              <p key={label}>
+                Disliked {label}
+                {reason ? `: ${reason}` : ''}
+              </p>
+            ))}
             {savedCommand.review.notes ? <p>{savedCommand.review.notes}</p> : null}
             <p role="status">The worker already has this answer.</p>
           </section>

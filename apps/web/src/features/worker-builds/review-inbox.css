@@ -34,7 +34,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: .8;
+  opacity: 0.8;
 }
 .worker-review-next,
 .worker-review-change,
