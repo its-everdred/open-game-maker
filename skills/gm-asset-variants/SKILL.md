@@ -55,7 +55,7 @@ order: try installed packs and mirrors first, then vary a selected source before
 run its tools from the repo root with `gm py --` where it says `python`
 (`<skill-dir>` is that skill's folder). They need numpy, Pillow and scipy; if those are missing, tell the Executor and
 never install them. When no pack sprite or map fits (tier 4), `generate2dsprite` makes characters, props and FX and
-`generate2dmap` tilemaps, prop packs and parallax. These rules win over the vendored text, including its "a configured
+`generate2dmap` tilemaps, prop packs and parallax. When a game needs a pack asset at angles or rotations the pack doesn't ship (free rotation, smooth turning, vehicles or props seen from any direction) and the pack has four orthographic views (top, side, front, back), use `vendor/sprite-stacking` to build a spinnable stacked sprite, and keep the pack's pixel style. It makes stacked-slice fake 3D (a strip of flat layers drawn with a lift per layer), not a real mesh, so it does not replace the 3D→2D pipeline in `gm-sprite-forge`. Isometric N/E/S/W pack views are not orthographic and have no top view: a stack built from them is an approximation, and thin parts (branches, posts) carve into solid masses. Render the stack at every angle and compare it with the pack original before using it. These rules win over the vendored text, including its "a configured
 key is the owner's consent":
 
 - No fal and no provider key: never add, set or ask for one, and never spend. Every command that generates an image
