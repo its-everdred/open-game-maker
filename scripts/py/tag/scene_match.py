@@ -79,6 +79,8 @@ def embed(images):
         for start in range(0, len(images), 8):
             inputs = processor(images=images[start:start + 8], return_tensors="pt")
             features.extend(model.visual_projection(model.vision_model(pixel_values=inputs["pixel_values"]).pooler_output).cpu().numpy())
+            if len(features) % 64 == 0 or len(features) == len(images):
+                print(f"scene match: embedded {len(features)} of {len(images)} images", file=sys.stderr, flush=True)
     return features
 
 
