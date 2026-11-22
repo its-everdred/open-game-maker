@@ -40,9 +40,11 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
 - `isoMapToScene(json, { game, scene })` / `sceneToIsoMap(doc)`: the Tiled subset ⇄ a scene document. Pieces become
   cell-keyed tiles with an explicit facing, `props.solid` only where it differs from the layer default (`wall` blocks);
   `wall#1` layers become `wall-1`; spawns become `spawn-<id>` objects on the `spawns` layer posed in 64 px units. Both
-  directions are lossless: the map loads the same pieces and spawns after a round trip (gids are renumbered), and a
-  converted document comes back unchanged. `sceneToIsoMap` refuses what a map can't hold (flips, other object layers,
-  unknown tile props) instead of dropping it; HD-2D settings stay in `doc.hd2d` for the game.
+  directions are lossless for map data: the map loads the same pieces and spawns after a round trip (gids are
+  renumbered), and a converted document comes back unchanged. `sceneToIsoMap` refuses what a map can't draw (flips,
+  hidden layers, other object layers, unknown tile props, more than 512×512 cells) instead of dropping it. HD-2D
+  settings and creator locks are not map data: they stay in the document, so `isoMapToScene` is only for moving a TS
+  map into a new scene, never for rewriting an existing one.
 - `conventions`: the pack facts, each with how it was verified (sheet row order E, SE, S, SW, W, NW, N, NE, measured
   pixel by pixel against the angle-named frame files), and `layerForCategory` for tileset pieces.
 - Assemblers (cells are `{ x, y }` grid cells; an opening or door is `{ cell, edge: 'xMin' | 'xMax' | 'yMin' | 'yMax' }`):

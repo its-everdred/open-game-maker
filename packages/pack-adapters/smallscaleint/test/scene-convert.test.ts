@@ -75,7 +75,7 @@ function richMap(): TiledIsoMap {
         type: 'objectgroup',
         name: 'spawns',
         objects: [
-          { id: 2, name: 'mini-boss', x: 320, y: 256 },
+          { id: 2, name: 'mini-boss', x: 320, y: 256, properties: [{ name: 'prefab', value: 'boss' }] },
           { id: 7, x: 96, y: 128, properties: [{ name: 'prefab', value: 'hero' }] },
         ],
       },
@@ -117,7 +117,12 @@ describe('isoMapToScene / sceneToIsoMap', () => {
     expect(doc.layers.decor!.tiles).toEqual({ '3,2': { asset: 'tree-b4', facing: 'S', props: { solid: true } } });
     expect(doc.layers['wall-1']!.tiles).toEqual({ '1,1': { asset: 'lantern-a1', facing: 'E', elevation: 1.5 } });
     expect(doc.objects).toEqual({
-      'spawn-2': { asset: 'spawn', layer: 'spawns', pose: { x: 5, y: 4 }, props: { name: 'mini-boss' } },
+      'spawn-2': {
+        asset: 'spawn',
+        layer: 'spawns',
+        pose: { x: 5, y: 4 },
+        props: { name: 'mini-boss', prefab: 'boss' },
+      },
       'spawn-7': { asset: 'spawn', layer: 'spawns', pose: { x: 1.5, y: 2 }, props: { prefab: 'hero' } },
     });
   });
@@ -129,6 +134,14 @@ describe('isoMapToScene / sceneToIsoMap', () => {
     doc.objects['spawn-9'] = { asset: 'spawn', layer: 'spawns', pose: { x: 2.25, y: 3 } };
 
     expect(isoMapToScene(sceneToIsoMap(doc), ids)).toEqual(doc);
+  });
+
+  it('refuses a map whose spawns share an id rather than keeping only one', () => {
+    const json = richMap();
+    const spawns = json.layers.find((layer) => layer.type === 'objectgroup')!;
+    if (spawns.type === 'objectgroup') spawns.objects.push({ id: 7, name: 'twin', x: 0, y: 0 });
+
+    expect(() => isoMapToScene(json, ids)).toThrow(/two spawns with id 7/);
   });
 
   it('draws a tile without a facing as east, the pack rotation 0', () => {
@@ -157,6 +170,18 @@ describe('isoMapToScene / sceneToIsoMap', () => {
       (doc) => (doc.objects.player = { asset: 'spawn', layer: 'spawns', pose: { x: 0, y: 0 } }),
       /spawn-<number>/,
     ],
+    ['a hidden layer', (doc) => (doc.layers.decor!.visible = false), /layer "decor" is hidden/],
+    ['more cells than a map array holds', (doc) => (doc.bounds = { width: 65536, height: 65536 }), /more than/],
+    [
+      'a tile solid that is not a boolean',
+      (doc) => (doc.layers.decor!.tiles!['3,2']!.props = { solid: 'yes' }),
+      /solid/,
+    ],
+    ['a spawn with an elevation', (doc) => (doc.objects['spawn-2']!.pose.elevation = 1), /has an elevation/],
+    ['a spawn with a rotation', (doc) => (doc.objects['spawn-2']!.rotation = 90), /has rotation/],
+    ['a spawn that is not a spawn asset', (doc) => (doc.objects['spawn-2']!.asset = 'chest'), /must have asset/],
+    ['an unknown spawn prop', (doc) => (doc.objects['spawn-2']!.props = { hp: 3 }), /props hp/],
+    ['a spawn name that is not text', (doc) => (doc.objects['spawn-2']!.props = { name: 5 }), /name must be a string/],
   ])('refuses %s instead of dropping it', (_name, change, message) => {
     const doc = isoMapToScene(richMap(), ids);
     change(doc);

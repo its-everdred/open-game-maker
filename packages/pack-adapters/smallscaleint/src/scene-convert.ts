@@ -14,6 +14,8 @@ export const SPAWNS_LAYER = 'spawns';
 export const SPAWN_ASSET = 'spawn';
 
 const TILE_HEIGHT = 64;
+/** Every layer is a dense `width * height` array; far past any scene a phone can draw, and well inside array limits. */
+const MAX_CELLS = 512 * 512;
 const ROTATION: Record<TileFacing, number> = { E: 0, N: 90, W: 180, S: 270 };
 
 type SpawnJson = { id: number; name?: string; x: number; y: number; properties?: { name: string; value: unknown }[] };
@@ -47,6 +49,7 @@ export function isoMapToScene(json: TiledIsoMap, ids: { game: string; scene: str
   }
   const objects: Record<string, SceneObject> = {};
   for (const spawn of map.spawns) {
+    if (objects[`spawn-${spawn.id}`]) throw new Error(`map has two spawns with id ${spawn.id}`);
     const props = {
       ...(spawn.name === undefined ? {} : { name: spawn.name }),
       ...(spawn.prefab === undefined ? {} : { prefab: spawn.prefab }),
@@ -95,18 +98,21 @@ function spawnOf(id: string, object: SceneObject): SpawnJson {
 
 /**
  * Scene document to the Tiled subset `IsoMap` reads; `new IsoMap(sceneToIsoMap(doc))` is how a game loads a scene.
- * Refuses anything the map cannot hold (flips, objects outside the spawns layer, unknown tile props) rather than
- * dropping it. HD-2D settings are not map data: the game reads `doc.hd2d` itself.
+ * Refuses anything the map cannot draw (flips, hidden layers, objects outside the spawns layer, unknown tile props)
+ * rather than dropping it. HD-2D settings and creator locks are not map data and stay in the document: the game reads
+ * `doc.hd2d` itself, and a document rebuilt from a map has no locks, so never push one over an existing scene.
  */
 export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
   const doc = SceneDocSchema.parse(input);
   if (doc.packAdapter !== SMALLSCALEINT_SCENE_ADAPTER) refuse(`its pack adapter is ${doc.packAdapter}`);
   if (!doc.bounds) refuse('it has no bounds');
   const { width, height } = doc.bounds;
+  if (width * height > MAX_CELLS) refuse(`${width}x${height} is more than ${MAX_CELLS} cells`);
   const gids = new Map<string, number>();
   const tiles: TiledIsoMap['tilesets'][number]['tiles'] = [];
   const ordered = Object.entries(doc.layers).sort(([, a], [, b]) => a.order - b.order);
   const layers: TiledIsoMap['layers'] = ordered.map(([id, layer]) => {
+    if (layer.visible === false) refuse(`layer "${id}" is hidden; the game draws every layer`);
     if (layer.kind === 'objects') {
       if (id !== SPAWNS_LAYER) refuse(`objects layer "${id}"; SmallScaleInt pieces are tiles`);
       const objects = Object.entries(doc.objects)
