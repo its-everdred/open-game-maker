@@ -10,8 +10,7 @@ Build the game in `gm scope`. The scope owns the WHAT: theme, art, names, palett
 pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in the build chat instead. Loading artwork: declare `loading.portrait` and `loading.landscape` PNG paths under `media/` in `gm.manifest.json`, with 9:16 (at least 1440×2560) and 16:9 (at least 2560×1440) art in `public/media/`. Also declare `images.loading` with `per-ratio` variants for phone-portrait, phone-landscape, tablet-portrait, tablet-landscape, and desktop, each matching its display ratio.
 Keep the subject in the centre 70%, the top 25% calm for the shell logo, and the bottom 20% calm for progress. Run `gm check`. For asynchronous startup, set `runtime.hooks.ready = false` before starting work and `true` only after the first frame renders.
 
-Before coding, write a five-line plan and a short list titled "defaults I'd reach for." Drop each default or justify it
-against the scope. Templates are scaffolds, not game designs: do not inherit a theme, entity, HUD, name, or mechanic.
+Before coding, write a five-line plan and a short list titled "defaults I'd reach for." Drop each default or justify it against the scope. Templates are scaffolds, not game designs: do not inherit a theme, entity, HUD, name, or mechanic.
 Play spends no paid API unless `gm policy` says an admin turned it on (default off): bake LLM, voice and media at build time; never put a provider key in the game. Publishing refuses both.
 
 ## Keep the layers honest
@@ -110,6 +109,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-scope-options | Turning a vague brief into distinct creator-facing options. |
 | gm-new-game-design | Scoping a new game from the New Game flow with the player. |
 | gm-prototype | Follow the current rung of a creator request carrying a `phase:*` label; see [gm-prototype](../gm-prototype/SKILL.md). |
+| gm-scene-clone | Rebuilding an approved scene mock in the real game and comparing the capture with it. |
 | gm-new-game-plan | Executor: turning a new-game spec into a prototype ladder of staged tickets and a Build Order. |
 | gm-editor-tuning | Exposing safe creator-tunable values. |
 | gm-repair | Repairing a failed build or verification gate. |
