@@ -20,6 +20,7 @@ Run `gm run` to play the game and capture a still. Done means `gm check`, `gm te
 
 ## Rules
 
-- Never edit `.gm/` or `.github/`, and never edit `assets.lock.json` by hand (use `gm assets use`).
+- Never edit `.gm/` (except the scene copies `gm scene pull` writes to `.gm/scenes/`) or `.github/`, and never edit
+  `assets.lock.json` by hand (use `gm assets use`). Change `scenes/` only through `gm scene push`.
 - Open the pull request with `Closes #<issue>` as its first line and a `## Local tests` section listing each command
   you ran and its result.

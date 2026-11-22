@@ -1,0 +1,518 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "doc": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "game": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "scene": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "packAdapter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "layers": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "tiles",
+                  "objects"
+                ]
+              },
+              "order": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "visible": {
+                "type": "boolean"
+              },
+              "tiles": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^-?\\d+,-?\\d+$"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "asset": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "facing": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "flip": {
+                      "type": "boolean"
+                    },
+                    "elevation": {
+                      "type": "number"
+                    },
+                    "lockedBy": {
+                      "type": "string",
+                      "const": "creator"
+                    }
+                  },
+                  "required": [
+                    "asset"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "lockedBy": {
+                "type": "string",
+                "const": "creator"
+              }
+            },
+            "required": [
+              "kind",
+              "order"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "objects": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "asset": {
+                "type": "string",
+                "minLength": 1
+              },
+              "layer": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+              },
+              "pose": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "elevation": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "rotation": {
+                "type": "number"
+              },
+              "facing": {
+                "type": "string",
+                "minLength": 1
+              },
+              "flip": {
+                "type": "boolean"
+              },
+              "props": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "lockedBy": {
+                "type": "string",
+                "const": "creator"
+              }
+            },
+            "required": [
+              "asset",
+              "layer",
+              "pose"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "hd2d": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "lighting",
+              "focus",
+              "atmosphere",
+              "occlusion",
+              "particles"
+            ]
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "settings": {},
+              "lockedBy": {
+                "type": "string",
+                "const": "creator"
+              }
+            },
+            "required": [
+              "settings"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "game",
+        "scene",
+        "packAdapter",
+        "layers",
+        "objects",
+        "hd2d"
+      ],
+      "additionalProperties": false
+    },
+    "head": {
+      "type": "object",
+      "properties": {
+        "rev": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "doc": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "game": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+            },
+            "scene": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+            },
+            "packAdapter": {
+              "type": "string",
+              "minLength": 1
+            },
+            "layers": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "tiles",
+                      "objects"
+                    ]
+                  },
+                  "order": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "visible": {
+                    "type": "boolean"
+                  },
+                  "tiles": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^-?\\d+,-?\\d+$"
+                    },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "asset": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "facing": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "flip": {
+                          "type": "boolean"
+                        },
+                        "elevation": {
+                          "type": "number"
+                        },
+                        "lockedBy": {
+                          "type": "string",
+                          "const": "creator"
+                        }
+                      },
+                      "required": [
+                        "asset"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "lockedBy": {
+                    "type": "string",
+                    "const": "creator"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "order"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "objects": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "asset": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "layer": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                  },
+                  "pose": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "elevation": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "rotation": {
+                    "type": "number"
+                  },
+                  "facing": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "flip": {
+                    "type": "boolean"
+                  },
+                  "props": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "lockedBy": {
+                    "type": "string",
+                    "const": "creator"
+                  }
+                },
+                "required": [
+                  "asset",
+                  "layer",
+                  "pose"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "hd2d": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "enum": [
+                  "lighting",
+                  "focus",
+                  "atmosphere",
+                  "occlusion",
+                  "particles"
+                ]
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "settings": {},
+                  "lockedBy": {
+                    "type": "string",
+                    "const": "creator"
+                  }
+                },
+                "required": [
+                  "settings"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "game",
+            "scene",
+            "packAdapter",
+            "layers",
+            "objects",
+            "hd2d"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "rev",
+        "doc"
+      ],
+      "additionalProperties": false
+    },
+    "revision": {
+      "type": "object",
+      "properties": {
+        "rev": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "parentRev": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "baseRev": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "author": {
+          "type": "string",
+          "pattern": "^(?:agent:[1-9][0-9]{0,15}|[a-z][a-z0-9-]{0,31})$"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "editor",
+            "cli",
+            "migration"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "unit": {
+                "type": "string",
+                "pattern": "^(?:meta|layer:[^:]+|tile:[^:]+:-?\\d+,-?\\d+|object:[^:]+|hd2d:[a-z]+)$"
+              },
+              "before": {},
+              "after": {}
+            },
+            "required": [
+              "unit"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "docHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "rev",
+        "parentRev",
+        "baseRev",
+        "author",
+        "source",
+        "label",
+        "createdAt",
+        "changes",
+        "docHash"
+      ],
+      "additionalProperties": false
+    },
+    "conflict": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "type": "string",
+          "pattern": "^(?:meta|layer:[^:]+|tile:[^:]+:-?\\d+,-?\\d+|object:[^:]+|hd2d:[a-z]+)$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "creator_locked",
+            "changed_since_base"
+          ]
+        },
+        "theirs": {},
+        "mine": {},
+        "by": {
+          "type": "string",
+          "pattern": "^(?:agent:[1-9][0-9]{0,15}|[a-z][a-z0-9-]{0,31})$"
+        }
+      },
+      "required": [
+        "unit",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "doc",
+    "head",
+    "revision",
+    "conflict"
+  ],
+  "additionalProperties": {},
+  "$id": "https://open-game-maker-2000.local/schemas/scene.v1.json"
+}

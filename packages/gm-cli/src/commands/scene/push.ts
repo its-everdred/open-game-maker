@@ -1,0 +1,98 @@
+import { readFile, writeFile } from 'node:fs/promises';
+
+import { SceneDocSchema } from '@ogm/contracts';
+import { commitScene, describeConflict, InvalidSceneError, SceneBaseUnavailableError } from '@ogm/design-log';
+import { z } from 'zod';
+
+import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
+import { printJson } from '../../context.js';
+import {
+  persistMigration,
+  readStore,
+  sceneRef,
+  validateHd2d,
+  withSceneLock,
+  workingCopyPath,
+  writeRevision,
+} from '../../scene/store.js';
+import { ticketFor } from '../../ticket.js';
+
+const workingCopySchema = z.strictObject({
+  game: z.string(),
+  scene: z.string(),
+  baseRev: z.number().int().nonnegative(),
+  doc: SceneDocSchema,
+});
+
+export const command: GmCommand = {
+  name: 'scene push',
+  summary: 'save your edits to a pulled scene; refused where they would overwrite Kevin',
+  usage: '<game> <scene> [--label <what changed>]',
+  example: 'scene push dusk-helm graveyard --label "add north graves"',
+  flags: { label: { type: 'string', help: 'what this revision changes' } },
+  async run(ctx, args, flags) {
+    if (args.length !== 2) throw new UsageError('give a game and a scene', 'gm scene push dusk-helm graveyard');
+    const ref = sceneRef(ctx.cwd, args[0]!, args[1]!);
+    const author = `agent:${await ticketFor(ctx)}`;
+    const path = workingCopyPath(ref);
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await readFile(path, 'utf8'));
+    } catch {
+      throw new UsageError(`no working copy at ${path}`, `gm scene pull ${ref.game} ${ref.scene}`);
+    }
+    const parsed = workingCopySchema.safeParse(raw);
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+      throw new CommandError(`invalid working copy ${path}: ${issues}`);
+    }
+    const copy = parsed.data;
+    if (copy.game !== ref.game || copy.scene !== ref.scene)
+      throw new CommandError(`${path} is not ${ref.game}/${ref.scene}`);
+    validateHd2d(copy.doc);
+
+    const result = await withSceneLock(ref, async () => {
+      const now = new Date();
+      const store = await persistMigration(ref, await readStore(ref, copy.doc.packAdapter), author, now);
+      let commit: ReturnType<typeof commitScene>;
+      try {
+        commit = commitScene({
+          head: store.head,
+          log: store.log,
+          doc: copy.doc,
+          baseRev: copy.baseRev,
+          author,
+          source: 'cli',
+          label: typeof flags.label === 'string' ? flags.label : '',
+          now,
+        });
+      } catch (error) {
+        if (error instanceof SceneBaseUnavailableError || error instanceof InvalidSceneError) {
+          throw new CommandError(`cannot push ${ref.game}/${ref.scene}: ${error.message}`);
+        }
+        throw error;
+      }
+      if (commit.ok && commit.revision) await writeRevision(ref, commit.head, commit.revision);
+      return commit;
+    });
+
+    if (!result.ok) {
+      if (ctx.json) printJson(ctx, { ok: false, conflicts: result.conflicts });
+      else {
+        ctx.err(`push refused: ${result.conflicts.length} conflict(s); nothing was saved`);
+        for (const conflict of result.conflicts) ctx.err(`  ${describeConflict(conflict)}`);
+        ctx.err(`pull again (gm scene pull ${ref.game} ${ref.scene}) and redo your edits around these`);
+      }
+      return EXIT.failed;
+    }
+    await writeFile(path, `${JSON.stringify({ ...copy, baseRev: result.head.rev, doc: result.head.doc }, null, 2)}\n`);
+    const rev = result.head.rev;
+    if (ctx.json) printJson(ctx, { ok: true, rev, rebased: result.rebased, saved: result.revision !== null });
+    else if (!result.revision) ctx.out(`no changes to ${ref.game}/${ref.scene} (rev ${rev})`);
+    else
+      ctx.out(
+        `pushed ${ref.game}/${ref.scene} rev ${rev}${result.rebased ? ` (rebased from rev ${copy.baseRev})` : ''}`,
+      );
+    return EXIT.ok;
+  },
+};

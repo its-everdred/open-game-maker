@@ -74,7 +74,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 
 - `gm assets search|facets|info` finds and inspects candidate cards.
 - `gm assets sheet` makes the labelled lineup; `gm assets use|vendor|register|variant|list|unused|why` records choices and derivatives; record an asset with `gm assets use` as soon as the code names it (the build fails on an unlisted id).
-- `gm-map-inspiration` owns agent-only map choice; `gm maps search|info` supplies layout facts and graphs.
+- `gm-map-inspiration` owns agent-only map choice; `gm maps search|info` supplies layout facts and graphs. Edit a shared scene with `gm scene pull <game> <scene>`, change `doc` in the copy it writes under `.gm/scenes/`, then `gm scene push`; a refused push lists what the creator owns: pull again and build around it.
 - `gm check`, `gm test`, and `gm run` are the definition-of-done gates.
 - `gm shot` captures evidence; `gm perf` checks frame and resource budgets.
 - `gm docs pattern` retrieves a mechanic card without loading a whole reference game.

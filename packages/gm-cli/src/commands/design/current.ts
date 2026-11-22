@@ -1,30 +1,16 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 
 import { DesignDocSchema } from '@ogm/contracts';
 import { z } from 'zod';
 
-import { CommandError, EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
-import { workspaceRoot } from '../../outbox.js';
+import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
+import { ticketFor } from '../../ticket.js';
 
 const snapshotSchema = z.object({
   rev: z.number().int().nonnegative(),
   buildId: z.string().nullable(),
   doc: DesignDocSchema,
 });
-
-async function ticketFor(ctx: GmContext): Promise<string> {
-  let ticket = ctx.config.aiurIssue === undefined ? '' : String(ctx.config.aiurIssue);
-  if (!ticket) {
-    try {
-      ticket = (await readFile(join(workspaceRoot(ctx.cwd), '.gm/context/ticket'), 'utf8')).trim();
-    } catch {
-      throw new CommandError('current ticket identifier is unavailable');
-    }
-  }
-  if (!/^[1-9][0-9]{0,15}$/.test(ticket)) throw new CommandError('current ticket identifier is invalid');
-  return ticket;
-}
 
 export const command: GmCommand = {
   name: 'design current',
