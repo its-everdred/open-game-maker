@@ -5,8 +5,11 @@ const SHELL: ReadonlySet<Role> = new Set(['wall', 'door', 'opening']);
 
 const at = (cells: readonly Cell[]) => cells.map((c) => `(${c.x},${c.y})`).join(' ');
 
-/** Cells a closed set of edges encloses: everything a flood from outside its box cannot reach. */
-function enclosed(group: readonly Segment[]): Cell[] {
+/**
+ * Cells a closed set of edges encloses: everything a flood from outside its box cannot reach. A door with no
+ * measured edge seals its own cell, so it closes the gap it stands in.
+ */
+function enclosed(group: readonly Segment[], sealed: ReadonlySet<string>): Cell[] {
   const walls = new Set(group.map((part) => part.key));
   const xs = group.flatMap((part) => [part.a.x, part.b.x]);
   const ys = group.flatMap((part) => [part.a.y, part.b.y]);
@@ -18,8 +21,9 @@ function enclosed(group: readonly Segment[]): Cell[] {
     const cell = queue.pop()!;
     for (const [dx, dy, edge] of NEIGHBORS) {
       const next = { x: cell.x + dx, y: cell.y + dy };
-      if (!inside(next) || outside.has(cellKey(next)) || walls.has(segment(cell, edge).key)) continue;
-      outside.add(cellKey(next));
+      const key = cellKey(next);
+      if (!inside(next) || outside.has(key) || sealed.has(key) || walls.has(segment(cell, edge).key)) continue;
+      outside.add(key);
       queue.push(next);
     }
   }
@@ -46,7 +50,8 @@ export function coherentBuildings(grid: Grid): Finding[] {
   for (const group of components(parts)) {
     const vertices = vertexIndex(group);
     const touches = (piece: Piece) => corners(piece).some((v) => vertices.has(cellKey(v)));
-    const footprint = enclosed(group);
+    const near = loose.filter(touches);
+    const footprint = enclosed(group, new Set(near.filter((piece) => piece.role !== 'roof').map(cellKey)));
     const inFootprint = new Set(footprint.map(cellKey));
     const attached = loose.filter((piece) => inFootprint.has(cellKey(piece)) || touches(piece));
     const doors = [...group.map((part) => part.piece), ...attached].filter(

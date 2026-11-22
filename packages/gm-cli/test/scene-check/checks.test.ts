@@ -36,6 +36,11 @@ describe('connected-runs', () => {
 
   it('fails an undeclared gap, but not the posted gate: only declared gates may break a run', () => {
     expect(ids(scene(without(yard(), at(8, 1, 'wall'))))).toContain('connected-runs/gap');
+    // A lone turned piece has two open ends one edge apart; that is a stray piece, not a gap.
+    const stray = yard();
+    stray.pieces.push({ layer: 'wall', x: 8, y: 6, asset: 'pack:fence', facing: 'W', solid: true });
+    expect(ids(scene(stray))).toContain('connected-runs/open-end');
+    expect(ids(scene(stray))).not.toContain('connected-runs/gap');
     const unposted = without(yard(), (p) => p.asset === 'pack:post');
     expect(ids(scene(unposted))).toContain('connected-runs/open-end');
   });
@@ -51,6 +56,12 @@ describe('coherent-buildings', () => {
     const ruin = without(yard(), (p) => p.asset === 'pack:wall' && p.y === 3);
     ruin.pieces = ruin.pieces.map((p) => (p.asset === 'pack:door' ? { ...p, tags: 'ruin' } : p));
     expect(ids(scene(ruin)).filter((id) => id.startsWith('coherent-buildings'))).toEqual([]);
+  });
+
+  it('accepts a door with no measured edge closing its shell: #24 crypt doors are unmeasured crops', () => {
+    const fixture = yard();
+    fixture.pieces = fixture.pieces.map((p) => (p.asset === 'pack:door' ? { ...p, asset: 'pack:plain-door' } : p));
+    expect(ids(scene(fixture)).filter((id) => id.startsWith('coherent-buildings'))).toEqual([]);
   });
 
   it('fails a roof that leaves its footprint open: a roof must cover the whole building', () => {

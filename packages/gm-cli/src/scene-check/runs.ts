@@ -49,8 +49,8 @@ export function connectedRuns(grid: Grid): Finding[] {
       objects: group.map((part) => part.piece.key),
     });
   }
-  const openEnds: Cell[] = [];
-  for (const group of components(parts)) {
+  const openEnds: { cell: Cell; run: number }[] = [];
+  for (const [run, group] of components(parts).entries()) {
     if (group.every((part) => part.piece.role === 'door' || part.piece.role === 'opening')) continue;
     const ends = new Set<string>();
     for (const part of group) {
@@ -61,7 +61,7 @@ export function connectedRuns(grid: Grid): Finding[] {
     }
     if (!ends.size) continue;
     const cells = [...ends].map(parse);
-    openEnds.push(...cells);
+    openEnds.push(...cells.map((cell) => ({ cell, run })));
     const role = group.find((part) => part.piece.role === 'fence' || part.piece.role === 'wall')!.piece.role;
     findings.push({
       check: 'connected-runs',
@@ -75,10 +75,11 @@ export function connectedRuns(grid: Grid): Finding[] {
     });
   }
   const reported = new Set<string>();
-  for (const a of openEnds) {
-    for (const b of openEnds) {
+  // Two different runs ending one edge apart: the missing piece between them is a gap, not a gate.
+  for (const { cell: a, run } of openEnds) {
+    for (const { cell: b, run: other } of openEnds) {
       const pair = [cellKey(a), cellKey(b)].sort().join('|');
-      if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1 || reported.has(pair)) continue;
+      if (run === other || Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1 || reported.has(pair)) continue;
       reported.add(pair);
       findings.push({
         check: 'connected-runs',

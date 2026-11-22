@@ -90,9 +90,11 @@ export const command: GmCommand = {
       throw new UsageError(`set "${set}" has no scene facts yet; supported: ${Object.keys(PACKS).join(', ')}`, USAGE);
     const pack = await load();
     const lockPath = join(game, 'assets.lock.json');
-    const lock = existsSync(lockPath)
-      ? ((readJson(lockPath, 'asset list') as { assets?: Record<string, LockEntry> }).assets ?? {})
-      : {};
+    // Loose read: the checker only needs ids, sources and facings, so schema drift on other fields never blocks it.
+    const listed = existsSync(lockPath) ? (readJson(lockPath, 'asset list') as { assets?: unknown }).assets : undefined;
+    const lock: Record<string, LockEntry> = Array.isArray(listed)
+      ? Object.fromEntries((listed as (LockEntry & { id: string })[]).map((entry) => [entry.id, entry]))
+      : ((listed as Record<string, LockEntry> | undefined) ?? {});
     const scenePath = locate(ctx.cwd, game, args[1]!, true);
     const sources: MapSource[] = [{ json: readJson(scenePath, 'scene') }];
     for (const [i, spec] of ((flags.under as string[] | undefined) ?? []).entries()) {

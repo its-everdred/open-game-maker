@@ -17,6 +17,9 @@ function game(broken: boolean): string {
   const fixture = yard();
   if (broken) fixture.spawns[1] = { name: 'guard', x: 3, y: 3 };
   writeFileSync(join(dir, 'maps', 'yard.json'), JSON.stringify(tiled(fixture)));
+  // The game's asset list says the flower ships only an S facing; the yard places it facing E.
+  const assets = [{ id: 'pack:flower', meta: { sprite: { facings: { S: 'flower.png' } } } }];
+  writeFileSync(join(dir, 'assets.lock.json'), JSON.stringify({ version: 1, assets }));
   return dir;
 }
 
@@ -35,11 +38,13 @@ describe('gm verify scene', () => {
     const report = JSON.parse(readFileSync(`${out}.json`, 'utf8')) as { findings: { id: string; rank: number }[] };
     expect(report.findings[0]).toMatchObject({ id: 'no-overlap/actor-in-solid', rank: 1 });
     expect(readFileSync(`${out}.md`, 'utf8')).toContain('### Scene structure: yard — FAIL');
-    const known = await gm(['verify', 'scene', dir, 'yard', ...frame, '--allow', 'no-overlap/actor-in-solid'], {
+    const allow = ['--allow', 'no-overlap/actor-in-solid', '--allow', 'facing'];
+    const known = await gm(['verify', 'scene', dir, 'yard', ...frame, ...allow], {
       cwd: dir,
     });
     expect(known.code).toBe(0);
     expect(known.out.join('\n')).toContain('high (known limitation)');
+    expect(known.out.join('\n')).toContain('facing/unshipped');
   }, 60_000);
 
   it('refuses a game whose set has no scene facts', async () => {
