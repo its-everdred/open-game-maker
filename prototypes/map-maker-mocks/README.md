@@ -69,7 +69,7 @@ node capture.mjs <out-dir> [file-prefix]        # four states per direction at 3
 
 `strip.html?v=A|B|C` is clickable. Tap a card to open that scene, tap + for a new one, and tap the map button to hide or
 show the strip. Each card shows who changed the scene last, Kevin (yellow) or an agent (aqua); a pulsing badge means an
-agent is editing it right now. The four scenes are built from the same SmallScaleInt sprites. On short landscape screens
+agent is editing it right now. Without `game`, four sample scenes are built from the same SmallScaleInt sprites. On short landscape screens
 the tools move to a column on the right.
 
 | | A: Big cards | B: Chips | C: One per swipe |
@@ -78,6 +78,13 @@ the tools move to a column on the right.
 | Picture | 150x96 | 76x64, badge on the picture | full width |
 | Switch | tap | tap | swipe; dots show the position |
 
+**On the real game:** serve a Dusk Helm build and pass it as `game`, for example
+`strip.html?v=A&game=http://localhost:8731/index.html`. The cards then open Dusk Helm's own scenes (Graveyard, Fields,
+Goblin cave, Arena), each one running live under the strip. The card pictures are screenshots of those scenes, saved
+in `real/` (gitignored).
+
 ```sh
-node strip-capture.mjs <out-dir>   # A/B/C at 390x844, 844x390, 820x1180 and 1180x820, plus a phone clip of each
+(cd <open-games>/games/dusk-helm/dist && python3 -m http.server 8731) &
+node strip-capture.mjs <out-dir> http://localhost:8731/index.html   # takes the card pictures, then A/B/C at 390x844, 844x390, 820x1180 and 1180x820, plus a phone clip of each
+node strip-capture.mjs <out-dir>                                    # the same on the sprite-built sample scenes
 ```

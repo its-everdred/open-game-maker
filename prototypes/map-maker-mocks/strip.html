@@ -65,7 +65,14 @@ const BUILD = {
   blank: (L, ox, oy, s) => grass(L, ox, oy, s),
 };
 // who: person = Kevin changed it last, bot = an agent; live = an agent is editing it right now.
-const scenes = [
+// ?game=<url of a Dusk Helm build>: the cards open the game's real scenes, running live; pictures come from real/.
+const GAME = new URLSearchParams(location.search).get('game');
+const scenes = GAME ? [
+  { scenario: 'graveyard-landmark', name: 'Graveyard', who: 'person' },
+  { scenario: 'lush-fields', name: 'Fields', who: 'bot' },
+  { scenario: 'goblin-cave', name: 'Goblin cave', who: 'bot', live: true },
+  { scenario: 'miniboss-arena', name: 'Arena', who: 'bot' },
+] : [
   { id: 'graveyard', name: 'Graveyard', who: 'person' },
   { id: 'village', name: 'Village', who: 'bot' },
   { id: 'crypt', name: 'Crypt', who: 'bot', live: true, look: 'brightness(.62) saturate(.8)' },
@@ -101,19 +108,25 @@ const strip = document.getElementById('strip'), W = document.getElementById('w')
 function renderStrip() {
   const add = `<button class="btn add" id="add" aria-label="new scene">${ic('plus')}</button>`;
   strip.innerHTML = (V === 'C' ? '' : add) + scenes.map(card).join('') + (V === 'C' ? add : '');
-  strip.querySelectorAll('.sthumb').forEach((t, i) => { const [w, h] = CARD; draw(t, scenes[i], w / 2, h / 2, w, h, V === 'B' ? 1.25 : 1.1); });
+  strip.querySelectorAll('.sthumb').forEach((t, i) => { const [w, h] = CARD; if (scenes[i].scenario) t.innerHTML = `<img src="real/${scenes[i].scenario}.png" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`; else draw(t, scenes[i], w / 2, h / 2, w, h, V === 'B' ? 1.25 : 1.1); });
   const dots = document.getElementById('dots');
   if (dots) { const r = strip.getBoundingClientRect(); dots.style.cssText += `;left:${r.left + r.width / 2}px;top:${r.bottom + 8}px`; dots.innerHTML = scenes.map((_, i) => `<i class="${i === cur ? 'on' : ''}"></i>`).join(''); }
 }
 function renderMap() {
   W.innerHTML = '';
   const open = !strip.classList.contains('hide'), top = open ? stripTop + stripH + (V === 'C' ? 20 : 0) : 70;
-  const side = LOW ? 84 : 0;
-  draw(W, scenes[cur], (VW - side) / 2, (top + VH - trayH) / 2, VW - 24 - side, VH - trayH - top - 10);
+  const side = LOW ? 84 : 0, sc = scenes[cur];
+  for (const f of document.querySelectorAll('iframe')) f.hidden = f.dataset.s !== sc.scenario;
+  if (!sc.scenario) return draw(W, sc, (VW - side) / 2, (top + VH - trayH) / 2, VW - 24 - side, VH - trayH - top - 10);
+  /* a live game per scene, kept once opened so switching back is instant */
+  let f = document.querySelector(`iframe[data-s="${sc.scenario}"]`);
+  if (!f) { f = document.createElement('iframe'); f.dataset.s = sc.scenario; f.src = `${GAME}?scenario=${sc.scenario}`; f.title = sc.name; W.parentNode.appendChild(f); }
+  f.style.cssText = 'position:absolute;border:0;inset:0;width:100%;height:100%;z-index:1;background:#16131f'; /* behind the glass, like the approved mock */
 }
 function go(i) {
   if (i === cur) return;
   cur = i; W.classList.add('out');
+  if (GAME) renderMap();
   setTimeout(() => { renderMap(); W.classList.remove('out'); }, 200);
   renderStrip();
   strip.querySelector(`[data-i="${i}"]`)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
@@ -130,6 +143,14 @@ document.getElementById('tog').addEventListener('click', (e) => {
   strip.classList.toggle('hide'); e.currentTarget.classList.toggle('on');
   document.getElementById('dots')?.classList.toggle('hide'); document.getElementById('dots') && (document.getElementById('dots').style.visibility = strip.classList.contains('hide') ? 'hidden' : '');
   renderMap();
+});
+/* Host the framed game the way the app shell does: answer its hello with a port so it starts playing. */
+addEventListener('message', (e) => {
+  if (!GAME || ![...document.querySelectorAll('iframe')].some((f) => f.contentWindow === e.source)) return;
+  let m; try { m = JSON.parse(e.data); } catch { return; }
+  if (m?.t !== 'hello') return;
+  const ch = new MessageChannel(); ch.port1.onmessage = () => {}; ch.port1.start();
+  e.source.postMessage(JSON.stringify({ v: 1, id: `strip-${m.id}`, t: 'hello', payload: { protocol: 1, capabilities: [], mode: 'play', build: 'published', playerIndex: 0 } }), e.origin, [ch.port2]);
 });
 renderStrip(); renderMap();
 </script></body></html>

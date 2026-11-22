@@ -1,0 +1,217 @@
+/* Scene chips over the top of the game, under the edit bar (approved card strip B, ticket 1191). */
+.game-stage-area:has(> .scene-strip-layer) {
+  position: relative;
+}
+
+.scene-strip-layer {
+  display: contents;
+}
+
+.scene-strip-toggle {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--safe-t) + 12px);
+  left: 100px;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--editor-card);
+  color: var(--ink);
+}
+
+.scene-strip-toggle[aria-pressed='true'] {
+  background: var(--action-primary);
+  color: var(--action-primary-text);
+}
+
+.scene-strip-toggle .icon,
+.scene-strip-add .icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+}
+
+.scene-strip {
+  --chip-w: 76px;
+  --chip-h: 64px;
+  /* Dark glass over the game, as in the approved strip; the edit page's light theme remaps --ink and --paper-2. */
+  --ink: var(--cream);
+  --ink-2: var(--scene-chip-ink);
+  --paper-2: var(--scene-chip-fill);
+  --rule: var(--scene-chip-rule);
+  color: var(--ink);
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--edit-bar) + 6px);
+  left: 12px;
+  right: 12px;
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 0 auto;
+  gap: 10px;
+  padding: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  border: 1px solid var(--rule);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--night) 82%, transparent);
+  box-shadow: var(--pop);
+  -webkit-backdrop-filter: var(--glass);
+  backdrop-filter: var(--glass);
+  transition:
+    transform 0.25s,
+    opacity 0.25s;
+}
+
+.scene-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.scene-strip.is-hidden {
+  transform: translateY(-12px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scene-strip > * {
+  flex: none;
+  scroll-snap-align: start;
+}
+
+.scene-strip-add:disabled {
+  opacity: 0.4;
+}
+
+.scene-strip-add {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--paper-2);
+  color: var(--ink);
+}
+
+.scene-chip {
+  width: var(--chip-w);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: center;
+  cursor: pointer;
+}
+
+.scene-chip-picture {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: var(--chip-h);
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--scene-chip-picture);
+  isolation: isolate;
+}
+
+.scene-chip[aria-pressed='true'] .scene-chip-picture {
+  outline: 3px solid var(--yellow-b);
+  outline-offset: -3px;
+}
+
+.scene-chip-picture img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene-chip-letter {
+  font: 700 28px var(--display);
+  color: var(--ink-2);
+}
+
+.scene-chip-who {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--yellow-b);
+  color: var(--dark);
+}
+
+.scene-chip-who.is-agent {
+  background: var(--aqua-b);
+}
+
+.scene-chip-who.is-live {
+  animation: scene-chip-live 1.4s infinite;
+}
+
+@keyframes scene-chip-live {
+  50% {
+    box-shadow: 0 0 0 6px var(--scene-chip-live);
+  }
+}
+
+.scene-chip-who .icon {
+  display: grid;
+  width: 13px;
+  height: 13px;
+}
+
+.scene-chip-name {
+  display: block;
+  padding-top: 4px;
+  overflow: hidden;
+  font: 700 12px var(--body);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Stay inside the game frame: the same widths game-prototype.css gives `.game-stage` for each frame orientation. */
+.game-stage-area[data-frame-orientation='wide'] .scene-strip {
+  max-width: calc(min(100cqw, (100cqh - var(--edit-bar)) * 16 / 9) - 24px);
+}
+
+.game-stage-area[data-frame-orientation='vertical'] .scene-strip {
+  max-width: calc(min(100cqw, (100cqh - var(--edit-bar)) * 9 / 16) - 24px);
+}
+
+/* Side by side, the frame sits at the start of its column (edit-workspace.css), so the strip does too. */
+@media (orientation: landscape) {
+  .edit-workspace .scene-strip {
+    margin-left: 0;
+  }
+}
+
+@media (max-height: 500px) {
+  .scene-strip {
+    --chip-w: 64px;
+    --chip-h: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-strip,
+  .scene-chip-who.is-live {
+    transition: none;
+    animation: none;
+  }
+}
+
+.scene-strip-toggle .icon svg,
+.scene-strip-add .icon svg,
+.scene-chip-who .icon svg {
+  width: 100%;
+  height: 100%;
+}

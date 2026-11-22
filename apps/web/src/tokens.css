@@ -153,6 +153,12 @@
   --glass-edge: rgb(242 234 214 / 0.32);
   --glass-shine: rgb(255 255 255 / 0.14);
   --button-sheen: linear-gradient(to bottom, rgb(255 255 255 / 0.18), transparent 55%);
+  /* Scene chips over the game on the edit page. */
+  --scene-chip-ink: rgb(245 231 200 / 0.82);
+  --scene-chip-fill: rgb(255 255 255 / 0.08);
+  --scene-chip-rule: rgb(245 231 200 / 0.18);
+  --scene-chip-picture: #1c1528;
+  --scene-chip-live: rgb(111 214 180 / 0.25);
 }
 
 * {
