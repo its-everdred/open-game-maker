@@ -2,9 +2,10 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 import { occupiedShare } from '../../src/scene-check/framing.js';
+import { readTiledScene } from '../../src/scene-check/read.js';
 import { checkScene, type CheckOptions } from '../../src/scene-check/report.js';
 import type { Scene } from '../../src/scene-check/model.js';
-import { camera, scene, without, yard, type Fixture } from './fixture.js';
+import { camera, pack, scene, tiled, without, yard, type Fixture } from './fixture.js';
 
 const options: CheckOptions = { camera, minDensity: 1, allow: [] };
 const ids = (s: Scene, extra: Partial<CheckOptions> = {}) =>
@@ -187,5 +188,44 @@ describe('ranking and known limitations', () => {
     expect(report.pass).toBe(false);
     const allowed = checkScene('yard', scene(broken), { ...options, allow: ['connected-runs'] });
     expect(allowed.pass).toBe(true);
+  });
+});
+
+describe('reading scenes as maps lay them out', () => {
+  it('treats ground on any layer as ground: #40 put its grass on the wall layer and left the floor empty', () => {
+    const fixture = yard();
+    fixture.pieces = fixture.pieces.map((p) => (p.layer === 'floor' ? { ...p, layer: 'wall9' } : p));
+    expect(ids(scene(fixture))).not.toContain('natural-placement/over-void');
+  });
+
+  it('fails a map drawn at a tile size the pack does not use: its pieces cannot join', () => {
+    const json = tiled(yard()) as { tilewidth: number; tileheight: number };
+    json.tilewidth = 256;
+    json.tileheight = 128;
+    const report = checkScene('yard', readTiledScene([{ json }], pack, {}), options);
+    expect(report.findings.map((f) => f.id)).toContain('facts/tile-size');
+    expect(report.pass).toBe(false);
+  });
+
+  it('judges density on the scene alone: a bare surround drawn beneath only closes the frame', () => {
+    const grass = tiled({
+      width: 40,
+      height: 40,
+      pieces: Array.from({ length: 1600 }, (_, i) => ({
+        layer: 'floor',
+        x: i % 40,
+        y: Math.floor(i / 40),
+        asset: 'pack:grass',
+      })),
+      spawns: [],
+    });
+    const withSurround = readTiledScene(
+      [{ json: tiled(yard()) }, { json: grass, offset: { x: -14, y: -14 }, prefix: 'under/', under: true }],
+      pack,
+      {},
+    );
+    expect(checkScene('yard', withSurround, options).findings.map((f) => f.id)).not.toContain(
+      'natural-placement/sparse',
+    );
   });
 });
