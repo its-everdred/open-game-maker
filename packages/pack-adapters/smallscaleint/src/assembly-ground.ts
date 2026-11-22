@@ -19,6 +19,11 @@ export function pavingPath(from: Cell, to: Cell, style: PavingStyle): AssemblyPl
   }));
 }
 
+/** Transparent stepping stones placed above an existing ground layer. */
+export function steppingStonePath(from: Cell, to: Cell, style: PavingStyle): AssemblyPlacement[] {
+  return pavingPath(from, to, style).map((piece) => ({ ...piece, layer: 'decor' }));
+}
+
 export interface DressingStyle {
   asset: string;
   facing: TileFacing;

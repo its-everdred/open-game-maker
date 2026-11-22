@@ -23,7 +23,7 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   edges with the `GameInstance.validatePlacement` result shape.
 - `conventions`: the pack facts, each with how it was verified (sheet row order E, SE, S, SW, W, NW, N, NE, measured
   pixel by pixel against the angle-named frame files), and `layerForCategory` for tileset pieces.
-- `structuralImageBounds`: inclusive alpha bounds for thirteen measured structural or paving assets, keyed by asset card id.
+- `structuralImageBounds`: inclusive alpha bounds for fourteen measured structural or paving assets, keyed by asset card id.
   Bounds do not establish an anchor or connection socket. `fenceB1Edges` and `wallF1Edges` record the measured fence and stone wall facings.
   `structuralCardFacts(id)` returns the known card fields without fabricating unmeasured facts.
 - `vocabulary`: canonical roles to this set's action names, and the loop set.

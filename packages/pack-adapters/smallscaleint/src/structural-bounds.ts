@@ -62,6 +62,10 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
       size: [256, 256],
       facings: { E: [51, 139, 203, 239], N: [52, 139, 204, 239], S: [52, 140, 204, 239], W: [51, 140, 203, 239] },
     },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/ground-h8@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [96, 181, 159, 229], N: [75, 192, 170, 224], S: [85, 192, 180, 224], W: [96, 187, 159, 235] },
+    },
     't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/ground-h1@2026-11-01': {
       size: [256, 256],
       facings: { E: [64, 176, 191, 240], N: [64, 176, 191, 240], S: [64, 176, 191, 240], W: [64, 176, 191, 240] },

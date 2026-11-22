@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import { naturalScatter, pavingPath } from '../src/assembly-ground.js';
+import { naturalScatter, pavingPath, steppingStonePath } from '../src/assembly-ground.js';
 import { assemblyMap } from '../src/assembly-map.js';
 import { IsoMap } from '../src/map.js';
 
@@ -33,4 +33,23 @@ it('builds a connected path and reserved-cell-safe dressing consumable by IsoMap
   expect(map.pieces('decor').length).toBeGreaterThan(0);
   expect(map.pieces('decor').every(({ x, y }) => !reserved.some((cell) => cell.x === x && cell.y === y))).toBe(true);
   expect(map.pieces('floor').every(({ solid }) => !solid)).toBe(true);
+});
+
+it('keeps underlying ground when stepping-stone images are transparent', () => {
+  const cells = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+  ];
+  const ground = cells.map((cell) => ({
+    cell,
+    layer: 'floor' as const,
+    asset: 'grass',
+    facing: 'E' as const,
+    solid: false,
+  }));
+  const stones = steppingStonePath(cells[0]!, cells[1]!, { asset: 'stones', facing: 'E', walkable: cells });
+  const map = new IsoMap(assemblyMap(2, 1, [...ground, ...stones]));
+  expect(map.pieces('floor').map(({ asset }) => asset)).toEqual(['grass', 'grass']);
+  expect(map.pieces('decor').map(({ asset }) => asset)).toEqual(['stones', 'stones']);
+  expect(map.collisionGrid()).toEqual([[false, false]]);
 });
