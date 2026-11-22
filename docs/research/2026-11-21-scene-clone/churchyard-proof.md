@@ -103,3 +103,16 @@ The top three were `wall-d1`/`wall-a16`/`wall-a7` for the grave,
 match for the pictured object. The tighter crops still include background and,
 for the pillar and tree, nearby fence details. Narrowing the boxes alone has not
 made these rankings reliable; missing assets remain unproven.
+
+A further diagnostic restricted the historical results by manually selected
+filename families: `stone`, `ground`, `wall`, `misc` and `tree`, respectively.
+The inspected sheet is `assets-local/review/1154/churchyard-family-historical-top3.png`.
+The results were `stone-a3`/`stone-a10`/`stone-a11` for the grave,
+`ground-a20`/`ground-a5`/`ground-c5` for the stepping stone,
+`wall-a16`/`wall-d1`/`wall-a15` for the pillar,
+`misc-b41`/`misc-b42`/`misc-b47` for the lantern, and
+`tree-e1`/`tree-c1`/`tree-e4` for the tree. The first four groups still do not
+show clean matches. `tree-e1` is a plausible bare-tree candidate by inspection
+and is already locked by the game, but its fit and scale are unverified. These
+are manually imposed family filters, not automatic classification, and may
+exclude suitable cards; they cannot establish a kit gap.
