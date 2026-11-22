@@ -231,3 +231,31 @@ the mock's approximate screen position. Both real-engine stills were inspected:
 cuts the chapel out entirely. This verifies the framing tradeoff for this
 experiment, not an exact character-height match, production change, registered
 comparison or gameplay test. The game workspace itself was not modified.
+
+## Visual pack audit
+
+All 467 eligible east-facing sprites in the fantasy-isometric pack were rendered
+into six local lineup pages under
+`assets-local/review/1154/churchyard-pack-lineup/` and inspected. A separate
+mock-crop comparison of manually selected candidates is
+`assets-local/review/1154/churchyard-curated-candidates.png`. These are visual
+candidates, not the embedding top-three results or validated placements:
+
+- The chapel entrance could use `door-a1`, `wall-f6` and `wall-a12` as starting
+  pieces for a door, arch and steps. They are separate sprites; the facade,
+  roof, joins, facing and proportions still require a validated assembly.
+- `stone-a4` is the closest of the three inspected grave markers to the tall
+  plain mock stone, but its silhouette and base differ. `stone-a13` and
+  `stone-a5` are a rounded marker and a cross, not the same shape.
+- `ground-h3`, `ground-h6` and `ground-h8` are scattered square paving pieces;
+  they are not exact matches for the mock's irregular stepping stones.
+- `roof-g1`, `misc-c7` and `wall-a6` are column-like pieces, but none exactly
+  matches the mock's square, pointed gate pillar. `tree-e1` and `tree-e3` are
+  bare-tree candidates, though their silhouettes and scale need comparison in
+  the game.
+
+No single complete chapel or exact hanging lantern was identified in this
+one-facing, one-pack audit. This is a bounded coverage gap, not a declaration
+that no suitable asset exists in other packs or facings. A variant or assembly
+may be needed after those sources are checked. Character sprites and the rural
+fence pack were not part of this particular lineup.
