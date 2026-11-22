@@ -1,0 +1,177 @@
+# Environmental variety: SmallScaleInt set-piece inventory, gaps and pilot (#1201)
+
+Kevin's voice review (2026-11-22) found the town, field, forest, cave and graveyard scenes sparse and repetitive. This
+page records what the installed packs already offer, what each biome is missing, how each gap should be filled, what
+a local pilot produced, and the fal estimate for the items only a new mesh can supply. Pack files, variants and
+review media stay under `assets-local/` and are never committed.
+
+## Inventory
+
+`scripts/assets/env_variety_inventory.py` reads the three isometric environment packs (read only), groups every file
+into items (one name in all its facings), measures each one and assigns a scene-dressing kind. The kind table is a
+judgement made from the #486 contact sheets and is checked in with the script. Output:
+`assets-local/sets/env-variety/inventory/` (`inventory.json`, `INVENTORY.md`, one contact sheet per kind).
+
+| Kind | Fantasy | Desert | Rural (HD, reference only) | All four facings | Median visible height (px) |
+|---|---|---|---|---|---|
+| market stall | 10 | 10 | 0 | 20/20 | 137 |
+| building (walls, roofs, doors) | 154 | 255 | 190 | 599/599 | 153 |
+| palisade | 6 | 6 | 0 | 12/12 | 175 |
+| fence | 9 | 9 | 11 | 29/29 | 119 |
+| path | 41 | 41 | 0 | 82/82 | 68 |
+| ground | 21 | 39 | 64 | 124/124 | 81 |
+| rock | 11 | 24 | 0 | 35/35 | 98 |
+| grime (whole dirt tiles) | 6 | 6 | 0 | 12/12 | 80 |
+| scatter (pebbles, stumps, logs) | 14 | 14 | 0 | 28/28 | 65 |
+| clutter | 38 | 38 | 44 | 120/120 | 110 |
+| town prop | 59 | 67 | 0 | 126/126 | 106 |
+| graveyard | 5 | 5 | 0 | 10/10 | 99 |
+| cave | 14 | 14 | 10 | 38/38 | 193 |
+| vegetation (grass, tufts) | 32 | 44 | 101 | 177/177 | 73 |
+| tree | 9 | 10 | 18 | 37/37 | 216 |
+| foliage (bushes, hedges, ivy) | 25 | 25 | 0 | 50/50 | 144 |
+| helper (shadows) | 13 | 13 | 0 | 26/26 | 64 |
+| unclassified | 1 (`Torch2`) | 1 | 21 (boats, bridge, cars, shadow tiles) | 16/23 | 512 |
+
+1,548 items in all. An item is one name; it ships as up to four facing files.
+
+What the numbers mean for variety:
+
+- **Every fantasy and desert set piece already ships N, E, S and W** on the pack's 256×256 canvas with the ground
+  anchor at (128, 208). No existing item needs a new viewing angle; the fal route is only for objects no pack has.
+- **The desert tileset is a warm-palette twin of the fantasy tileset.** Its same-named sprites keep the geometry
+  (`Stone A1` differs by 4 alpha pixels, `Wall D1` by none) and recolour it to sand and ochre; a few are swapped
+  outright (oak → palm, pine → cactus, green shrub → orange scrub). It also adds sandstone architecture
+  (`Wall H`–`K`), sandstone pillars and a dune (`Stone B`), agave (`Flora C`), thorny bramble roots
+  (`Misc B62`–`B66`), animal bones and a horned skull (`Misc D6`–`D8`) and a dead tree (`Tree E6`). Several of these
+  fit green biomes directly (brambles, bones, dead tree) and the orange scrub reads as autumn growth. Both packs carry
+  the same vendor licence (`LicenseRef-smallscaleint-itch`).
+- **The HD rural tileset does not mix.** It reuses family names with other meanings (its `Wall B` is a house wall),
+  uses other canvases (128-wide ground, 256×512 trees) and a modern, higher-detail style. The inventory classifies it
+  by family only; treat it as reference, not as scene material for the fantasy biomes.
+- **Fauna** comes from the animals mega pack: 55 species in 8 directions with Idle, Walk, Run, Attack, Die and
+  TakeDamage (deer, boar, bear, wolf, sheep, cow, pig, chicken, horses, cats, dogs and others). It has no small
+  ambient creatures (birds, crows, rabbits, rats, butterflies).
+- Earlier generated variants already in the library: `sets/smallscaleint-generated` (market stall B17 v102, a weapons
+  merchant and a rounded Stone A12) and the #1028 vegetation work.
+
+## Gap list per biome
+
+| Biome | Has | Missing for a natural, composed scene |
+|---|---|---|
+| Town | 154 wall, roof and door pieces (409 with the desert twins), 10 market stalls and awnings, wells, carts, signs, benches, banners, crates, pots, barrels, hay | Grime: no alpha decals for dirt, mud, straw or worn cobbles (`Ground C`/`I` are whole tiles). Clutter: every crate stack, pot group and barrel is a single repeated sprite. Stall variety: three full stalls (`Misc B17`–`B19`). Fences: picket and rail runs have no broken, weathered or gate pieces. No lamp posts (only a wall torch). |
+| Field | Grass and dry-grass tiles and patches, grass tufts, bushes, hay, rail fences, a training dummy, pebbles | Crops and tilled plots (none at all). Wildflowers (tufts are green only). Fence and hay variety. Grime and worn-path decals between route and grass. Rock clusters. Small fauna (crows, rabbits). |
+| Forest | Three leafy trees, one amber, three pines, two bare trees, stumps, three log pieces, bushes and hedges | Tree variety is the biggest gap (8 tall trees repeat at once). Undergrowth: ferns, mushrooms, leaf litter and twig decals. Mossy rocks and boulder clusters. More fallen-log shapes. |
+| Cave | Cliff walls and corners (`Ground G12`–`G22`), rock stairs, crystals, rubble rocks, pebbles | A cave mouth (#486 had to build a provisional one). Stalagmites. Wet floor and puddle decals. Bones. Mine props (beams exist in `Wall E`, no cart or rails). |
+| Graveyard | Five gravestones and monuments (`Stone A4`, `A5`, `A13`–`A15`), a sarcophagus, cages, gallows, bare trees, dirt mounds (`Ground A14`–`A17`) | Gravestone variety (five shapes repeat): mossy, cracked, tilted. An iron fence run (only `Door C6`, one short railing). Open graves. Bones and skulls. Grave lanterns. A crypt entrance. |
+
+## Variant plan
+
+Route order follows the ticket: clone-based 2D variants first (recolour, recombine, scatter, cut, moss, decal; free,
+local, pack pixels only), then local renders, then TRELLIS on fal for objects no pack has. Local renders are not
+planned on this host: it runs at load average 60–90 on 12 cores and has no `gpu-run`.
+
+| Gap | Items | Route | Source |
+|---|---|---|---|
+| Fences and palisades | broken, weathered, low-weathered palisade; picket run with a gap; weathered picket; rail-fence gate | 2D cut and recolour (piloted) | `Wall B1`, `B3`, `E16`, `B7`–`B11`, donor `Wall G1` |
+| Iron graveyard fence | straight run, corner, broken run | 2D recombine and cut | `Door C6`, `Door C2` |
+| Rocks | mossy boulders, rock clusters with pebbles and tufts | 2D moss and compose (piloted) | `Stone A1`, `A2`, `A12`, `Ground E11`/`E12`, `Flora A1`, donor `Ground A2` |
+| Grime decals | dirt, mud, worn path, straw scatter, leaf litter | 2D decal (piloted for dirt, mud, worn path) | shapes `Ground A6`/`A7`/`A10`/`J9`; textures `Ground C2`/`C3`/`C5`/`I1`/`I6`, `Misc E` straw |
+| Scattered clutter | pots and crates, farmyard, woodpile, market produce piles | 2D compose (piloted) | `Misc A`, `B1`/`B2`/`B8`, `E1`/`E9`, `Tree A4`/`E2` |
+| Gravestones | mossy, cracked top, sunken | 2D moss and cut | `Stone A4`, `A5`, `A13`–`A15` |
+| Stalagmites | grey stone pillars | 2D recolour | desert `Stone B1`/`B3` onto `Stone A` greys |
+| Wildflowers | flowering tufts | 2D recolour of tufts onto pack flower and cloth colours | `Flora A1`–`A7`, donor `Misc B19` |
+| Market stalls | awning and goods colourways | 2D recolour and recombine | `Misc B17`–`B19`, `B37`–`B40` |
+| Autumn and dry growth | scrub, dry bushes | already in the desert pack | desert `Flora B`, `Ground J` |
+| Bones, brambles, dead tree | as-is | already in the desert pack | desert `Misc D6`–`D8`, `B62`–`B66`, `Tree E6` |
+| New trees | four new tree shapes | fal TRELLIS 2 → sprite forge finish (#1195) | Codex turnaround with a pack tree attached |
+| New props | fern clump, mushroom cluster, cave mouth, mine cart, lamp post, wheat plot, cabbage plot, scarecrow, crypt entrance, grave lantern | fal Rodin 2.5 fast → finish pass | Codex turnaround with the nearest pack prop attached |
+| Small fauna | crow, rabbit | fal TRELLIS v1 multi-view (characters) → static 8-direction sprite first, animation only after approval | Codex turnaround with an animals-pack sprite attached |
+
+## Pilot
+
+`scripts/assets/env_variety_pilot.py` rebuilds 17 variants for four gaps (palisades and fences, rocks, grime decals,
+scattered clutter) from the fantasy pack, deterministically, into `assets-local/sets/env-variety/pilot-1/<id>/`
+(`N/E/S/W.png` and `recipe.json` with sources, operation, model none, cost 0, `ai_generated: false` and the inherited
+rights). No model, network or paid call is involved.
+
+`scripts/assets/env_variety_validate.py` checks every facing against its sources: canvas and anchor (perspective),
+colours drawn only from the named sources (pixel density and palette), ground contact against the primary source,
+visible scale and canvas clipping; it also records `score.py --gates prop` against the primary source. The prop
+gates measure a rebuild's fidelity, so a deliberate variant is expected to fail silhouette and pixel similarity; the
+style numbers to read are palette distance and the luminance histogram.
+
+| Variant | Op | Facings passing | Contact px | Anchor dx | Scale (w, h) | Foreign colours | Palette dist. | Lum. hist. |
+|---|---|---|---|---|---|---|---|---|
+| clutter-farmyard | compose | NESW | 20, -1, 9, 2 | -9.7, 24.3, -12.5, 9.0 | [1.01, 1.42] | 0 | 0.77 | 0.33 |
+| clutter-pots-crates | compose | NESW | 3, 19, 13, 0 | 8.9, -25.7, 0.0, -24.5 | [1.26, 1.1] | 0 | 2.01 | 0.40 |
+| clutter-woodpile | compose | NESW | 2, 2, 6, 3 | -29.8, 5.4, 0.5, -5.6 | [1.08, 1.04] | 0 | 0.55 | 0.04 |
+| fence-picket-gap | cut | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 0.00 | 0.00 |
+| fence-picket-weathered | recolour | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 13.27 | 0.51 |
+| grime-dirt-patch-a | decal | NESW | 0, 0, 0, 0 | -0.4, 0.1, 0.5, 0.4 | [1.0, 1.0] | 0 | 34.86 | 1.47 |
+| grime-dirt-patch-b | decal | NESW | -1, -1, -2, -1 | 0.3, 0.8, -0.7, 0.8 | [0.97, 0.88] | 0 | 31.26 | 0.49 |
+| grime-mud-patch | decal | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 0.95] | 0 | 40.59 | 2.00 |
+| grime-worn-path | decal | NESW | -2, -1, -2, -1 | 0.2, -0.8, -0.1, -0.1 | [0.98, 0.88] | 0 | 28.87 | 2.00 |
+| palisade-broken-a | cut | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 0.00 | 0.02 |
+| palisade-broken-b | cut | NESW | -4, 0, -5, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 0.97] | 0 | 0.01 | 0.02 |
+| palisade-low-weathered | recolour | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 19.82 | 0.51 |
+| palisade-weathered | recolour | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 20.52 | 0.39 |
+| rock-cluster-a | compose | NESW | 13, 12, 8, -3 | 16.0, -16.9, 4.7, 3.5 | [1.26, 1.54] | 0 | 0.73 | 0.50 |
+| rock-cluster-b | compose | NESW | -2, 7, 7, 4 | 5.1, -20.8, 20.1, 2.6 | [1.24, 1.02] | 0 | 0.08 | 0.18 |
+| rock-mossy-a1 | moss | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 6.37 | 0.61 |
+| rock-mossy-a2 | moss | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 4.22 | 0.37 |
+
+Contact and anchor dx: variant minus primary source (lowest visible row; ground-contact x), per facing N E S W. Scale and score columns are the S facing against its primary source.
+
+All 17 variants pass every gate in all four facings. Recolour and decal variants differ in palette distance by design (a new wood or dirt tone, still drawn only from pack sprites); cut, moss and cluster variants stay close to their sources.
+
+Review in engine: `scripts/assets/env-variety/lineup.mjs` renders Dusk Helm's merged fields map
+(`src/features/fields/map.ts`, 9×9, Dusk Helm's camera and dry-grass jitter) through the real `IsoMap` adapter in
+Phaser on the GPU, and places the extra pieces with the adapter's own projection and depth rule
+(`scripts/assets/env-variety/fields-plan.json`). Shots, phone (390×844 @2x) and desktop (1440×900):
+`before` (pack originals, repeated), `after` (the same spots with variants mixed in, plus decals and clutter) and
+`pairs-*` (each original on the left of its variant, one screen row per pair). Dusk Helm's dry-grass blob is not on
+this host; the lineup rebuilds it from its recorded sources (`Ground J1` through the `Ground A7` mask). Media:
+`assets-local/review/1201/round-1/`.
+
+What looking found and fixed before review, worst first: mossy rocks read as grey and green static at play zoom (a
+full rank map carried the rock's fine tone noise into the greens; now three greens in soft clumps); removing a
+palisade stake cut the dirt mound and left a bare edge (now a broken stump stays); slivers survived in fence gaps (now
+dropped); the mud decal closed into a flat rhombus; decals picked up the tile's side faces; a log ran off the
+composition canvas; the pots pile included skeleton bones. Validation then found that compositions alpha-blended
+cast shadows over other parts into colours no pack sprite has; they now copy pixels without blending.
+
+Known limits: shortened (not removed) stakes split neighbouring tips, so that operation was dropped; removed stakes
+leave small shadow gaps; the worn-path decal keeps its source's straight diamond edges; composition facings rotate
+the layout and each part's facing together, which reads correctly in the shots but has not been checked against a
+character walking around the cluster.
+
+## fal estimate (no calls made)
+
+Prices are fal's listed prices recorded in the sprite-forge GPU guide (2026-11-21) and the routing is the creator's
+verdict there: TRELLIS 2 for trees, Rodin 2.5 fast for props and foliage, TRELLIS v1 multi-view for characters.
+Reference images come from the free Codex route with the pack original attached; fal never receives a pack file.
+
+| Items | Endpoint | Each (USD) | Count | Subtotal (USD) |
+|---|---|---|---|---|
+| New tree shapes | `fal-ai/trellis-2` (512) | 0.25 | 4 | 1.00 |
+| Fern clump, mushroom cluster, cave mouth, mine cart, lamp post, wheat plot, cabbage plot, scarecrow, crypt entrance, grave lantern | `fal-ai/hyper3d/rodin/v2.5/fast` | 0.10 | 10 | 1.00 |
+| Crow, rabbit | `fal-ai/trellis/multi` | 0.02 | 2 | 0.04 |
+| **Total, one mesh each** | | | 16 | **2.04** |
+| With one retry for half of the items | | | | about 3.10 |
+
+The ticket text says TRELLIS 2 is "about $0.02 per mesh"; the guide lists TRELLIS 2 at 0.25 and TRELLIS v1 at about
+0.02. If Kevin prefers TRELLIS v1 for every item, the same 16 meshes cost about 0.32 USD, at the quality he judged
+for characters rather than the one he picked for trees. The 9 USD host cap and ledger (`scripts/fal3d.py`) apply
+either way; the calls run on the NUC after approval.
+
+## Approved spend (2026-11-22)
+
+Kevin approved about 2 USD for the 16 objects ("Approve just this $2", about 05:00Z). The ledger stop
+(`assets-local/experiments/sprite-pipeline/fal-arm-e/costs.json`, 7.485 USD spent) is raised to 9.60 USD; any further
+spend needs a new approval. `scripts/fal3d.py` reads `OGM_FAL_STOP_USD`, not the ledger's `stop_usd`, so run it with
+`OGM_FAL_LEDGER=<that file> OGM_FAL_STOP_USD=9.60`.
+
+Route: a few minutes earlier he marked the TRELLIS v1-only option (about 0.32 USD) "Like". The 2 USD budget covers the
+mixed route in the table above; the production ticket (#1206) should confirm with him which route to run before the
+first call. This ticket made no calls.

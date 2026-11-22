@@ -39,7 +39,11 @@ export const SLOT_IDS = [
 export type SlotId = (typeof SLOT_IDS)[number];
 
 type DisplayBox = { width: number; height: number };
-type ImageSlot = { viewports: readonly ViewportId[]; display: Record<ViewportId, DisplayBox> };
+type ImageSlot = {
+  viewports: readonly ViewportId[];
+  display: Record<ViewportId, DisplayBox>;
+  fit?: 'contain';
+};
 
 const allViewports = VIEWPORT_IDS;
 const displayBoxes = (width: number, height: number): Record<ViewportId, DisplayBox> =>
@@ -58,9 +62,10 @@ export const IMAGE_SLOTS: Record<SlotId, ImageSlot> = {
       desktop: { width: 240, height: 135 },
     },
   },
-  // gamesCache.ts preloads logos at 55vw on phones and 320px otherwise; logos are square image boxes.
+  // Logos keep their source aspect ratio and fit inside these boxes with object-fit: contain.
   logo: {
     viewports: allViewports,
+    fit: 'contain',
     display: {
       'phone-portrait': { width: 214.5, height: 214.5 },
       'phone-landscape': { width: 320, height: 320 },

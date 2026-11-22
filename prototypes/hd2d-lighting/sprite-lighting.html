@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HD-2D lighting proof — sprite normal map</title>
+<style>
+  :root { color-scheme: dark; font: 15px/1.45 system-ui, sans-serif; background: #111925; color: #e9e5ce; }
+  body { margin: 0; padding: 24px; }
+  h1 { margin: 0 0 6px; font-size: 20px; }
+  canvas { display: block; width: min(100%, 960px); height: auto; image-rendering: pixelated; border: 1px solid #54635e; background: #172b2e; }
+</style>
+<h1>Point light on a pixel sprite</h1>
+<canvas id="scene" width="320" height="176" aria-label="Unlit and dynamically lit pixel sprite comparison"></canvas>
+<script>
+const canvas = document.querySelector('#scene');
+const ctx = canvas.getContext('2d', { alpha: false });
+const W = canvas.width, H = canvas.height;
+const hero = document.createElement('canvas'); hero.width = 32; hero.height = 40;
+const h = hero.getContext('2d');
+const rect = (x,y,w,hh,c) => { h.fillStyle=c; h.fillRect(x,y,w,hh); };
+// Tiny pixel-art adventurer; all source pixels are generated here.
+rect(10,1,12,3,'#d8b57a'); rect(8,4,16,8,'#b97843'); rect(10,5,3,2,'#261f2b'); rect(19,5,3,2,'#261f2b');
+rect(9,12,14,11,'#d4b37c'); rect(7,22,18,12,'#497b62'); rect(8,34,7,5,'#483850'); rect(18,34,7,5,'#483850');
+rect(4,24,4,10,'#d4b37c'); rect(24,23,4,11,'#d4b37c'); rect(13,17,6,2,'#7c4e42');
+rect(2,38,12,2,'#262a38'); rect(18,38,12,2,'#262a38');
+const image = h.getImageData(0,0,32,40), normals = new Float32Array(32*40*3);
+for(let y=0;y<40;y++) for(let x=0;x<32;x++) {
+  const i=(y*32+x)*4, n=(y*32+x)*3;
+  const l=(x>0?image.data[i-4+3]/255:0), r=(x<31?image.data[i+4+3]/255:0);
+  const u=(y>0?image.data[i-128+3]/255:0), d=(y<39?image.data[i+128+3]/255:0);
+  const nx=(l-r)*0.8, ny=(u-d)*0.8, nz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny)), length=Math.hypot(nx,ny,nz);
+  normals[n]=nx/length; normals[n+1]=ny/length; normals[n+2]=nz/length;
+}
+const litSprite=document.createElement('canvas');litSprite.width=32;litSprite.height=40;
+const litCtx=litSprite.getContext('2d'), litPixels=litCtx.createImageData(32,40);
+let pointer={x:200,y:76};
+canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect();pointer={x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height};});
+function draw(seconds=0) {
+  ctx.fillStyle='#203b3c'; ctx.fillRect(0,0,W,H);
+  // Pixel-grid ground and small isometric chips.
+  for(let y=104;y<H;y+=8) for(let x=0;x<W;x+=16){ctx.fillStyle=((x/16+y/8)%2)?'#294a43':'#315449';ctx.fillRect(x,y,16,8);}
+  ctx.fillStyle='#17252a';ctx.fillRect(0,0,W,14);ctx.fillStyle='#d9dbcb';ctx.font='7px monospace';ctx.fillText('UNLIT',26,10);ctx.fillText('NORMAL-MAPPED LIGHT',176,10);
+  ctx.fillStyle='#a2ad9d';ctx.fillRect(73,20,1,139);
+  const drawHero=(ox,lit)=>{
+    const lx=lit?(pointer.x-ox)/2:16, ly=lit?(pointer.y-54)/2:16;
+    for(let y=0;y<40;y++)for(let x=0;x<32;x++){
+      const i=(y*32+x)*4,n=(y*32+x)*3;
+      let red=1,green=1,blue=1;
+      if(lit){const dx=lx-x,dy=ly-y,dz=18,dist=Math.sqrt(dx*dx+dy*dy+dz*dz),dot=Math.max(0,(normals[n]*dx+normals[n+1]*dy+normals[n+2]*dz)/dist),diffuse=dot*Math.max(0,1-dist/62);red=.34+diffuse*1.25;green=.34+diffuse*1.05;blue=.34+diffuse*.68;}
+      litPixels.data[i]=Math.min(255,image.data[i]*red);
+      litPixels.data[i+1]=Math.min(255,image.data[i+1]*green);
+      litPixels.data[i+2]=Math.min(255,image.data[i+2]*blue);
+      litPixels.data[i+3]=image.data[i+3];
+    }
+    litCtx.putImageData(litPixels,0,0);
+    ctx.imageSmoothingEnabled=false;ctx.drawImage(litSprite,ox,54,64,80);
+    ctx.fillStyle='rgba(11,17,24,.38)';ctx.fillRect(ox+7,135,50,4);
+  };
+  drawHero(24,false);drawHero(164,true);
+  const glow=ctx.createRadialGradient(pointer.x,pointer.y,1,pointer.x,pointer.y,24);glow.addColorStop(0,'rgba(255,225,145,.3)');glow.addColorStop(1,'rgba(255,190,90,0)');ctx.fillStyle=glow;ctx.fillRect(pointer.x-24,pointer.y-24,48,48);
+}
+canvas.addEventListener('pointerdown',e=>canvas.setPointerCapture(e.pointerId));
+window.__frame = t => {pointer={x:200+15*Math.sin(t*.85),y:76+10*Math.sin(t*1.4)};draw(t);};
+if(location.search.includes('capture')) window.__frame(0); else {draw();requestAnimationFrame(function loop(ms){if(!location.search.includes('capture'))draw(ms/1000);requestAnimationFrame(loop);});}
+</script>
+</html>

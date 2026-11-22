@@ -62,13 +62,20 @@ describe('creator-visible image slots', () => {
     expect((await checkImageSlots(root)).some((error) => error.includes('is 1920:1200'))).toBe(true);
   });
 
-  it('allows exactly one percent aspect variance and rejects values beyond it', async () => {
+  it('allows varying logo aspect ratios', async () => {
     const root = tempDir();
     await image(root, 'media/logo.png', 101, 100);
     manifest(root, { logo: 'media/logo.png' });
     expect(await checkImageSlots(root)).toEqual([]);
     await image(root, 'media/logo.png', 102, 100);
-    expect((await checkImageSlots(root)).some((error) => error.includes('logo desktop is 102:100'))).toBe(true);
+    expect(await checkImageSlots(root)).toEqual([]);
+  });
+
+  it('accepts portrait logos that fit inside the logo display box', async () => {
+    const root = tempDir();
+    await image(root, 'media/logo.png', 458, 649);
+    manifest(root, { logo: 'media/logo.png' });
+    expect(await checkImageSlots(root)).toEqual([]);
   });
 
   it('rejects a layered anchor outside the safe area using center and source dimensions', async () => {

@@ -38,8 +38,11 @@ printf 'exit=%s qa-%s\n' "$rc" "$2"
 exit "$rc"
 GM
 printf '#!/usr/bin/env bash\necho session >> "$OGM_TEST_CALLS"\n' > "$scratch/session"
-chmod +x "$scratch/gm" "$scratch/session"
+# The fake game boot check (#1197) records its call and passes unless OGM_TEST_RC_BOOT says otherwise.
+printf '#!/usr/bin/env bash\necho game-boot >> "$OGM_TEST_CALLS"\nexit "${OGM_TEST_RC_BOOT:-0}"\n' > "$scratch/boot"
+chmod +x "$scratch/gm" "$scratch/session" "$scratch/boot"
 export OGM_QA_GM=$scratch/gm OGM_QA_SESSION_CMD=$scratch/session OGM_TEST_CALLS=$scratch/calls
+export OGM_QA_GAME_BOOT=$scratch/boot
 attention=$scratch/attention
 
 # Bad usage.
@@ -72,6 +75,18 @@ assert_grep 'qa games-cache --game blobs --json' "$scratch/calls"
 assert_grep 'exit=0 qa-games-cache' "$scratch/out"
 short=$(git -C "$stack" rev-parse --short=12 "$to")
 assert_grep 'exit=0 qa-games-cache' "$OGM_QA_ROOT/games-cache/$short.log"
+assert_grep 'game-boot' "$scratch/calls"
+# A games-serving deploy after which a published game's entry script 404s fails and wakes the Executor (#1197).
+from=$to
+to=$(commit services/api/src/builds/cache-plan.ts)
+: > "$attention"
+set +e
+OGM_TEST_RC=0 OGM_TEST_RC_BOOT=1 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a game that no longer boots fails the deploy hook'
+assert_grep 'qa-game-boot failed on' "$attention"
+assert_grep 'exit=0 qa-games-cache' "$scratch/out"
 from=$to
 to=$(commit services/api/src/builds/publish.ts)
 : > "$scratch/calls"
@@ -95,6 +110,19 @@ rc=$?
 set -e
 assert_eq 1 "$rc" 'a failing daily smoke fails'
 assert_grep 'qa-new-game-e2e failed on' "$attention"
+rm -f "$attention"
+: > "$scratch/calls"
+
+# Every game publish also checks that all published games still boot, and a broken one wakes the Executor.
+: > "$scratch/calls"
+OGM_TEST_RC=0 "$hook" --game-publish blobs build_1 --repo "$stack" --attention "$attention" > "$scratch/out"
+assert_grep 'exit=0 qa-game-boot' "$scratch/out"
+set +e
+OGM_TEST_RC=0 OGM_TEST_RC_BOOT=1 "$hook" --game-publish blobs build_1 --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a publish that leaves a game unbootable fails'
+assert_grep 'qa-game-boot failed after publishing blobs' "$attention"
 rm -f "$attention"
 : > "$scratch/calls"
 

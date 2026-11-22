@@ -249,14 +249,25 @@ async function codeFiles(
         const relativeTarget = relative(dirname(join(root, relativePath)), join(root, target))
           .split(sep)
           .join('/');
-        const references = [...new Set([relativeTarget, `./${relativeTarget}`, `/${target}`])].filter(
-          (reference) => reference && text.includes(reference),
-        );
+        // Bundles also name files from the build root (`new URL('assets/x.json', document.baseURI)`), so the
+        // root-relative forms count too, wherever the referring file sits.
+        const forms = [relativeTarget, `./${relativeTarget}`, target, `./${target}`, `/${target}`];
+        const references = [...new Set(forms)].filter((reference) => reference && text.includes(reference));
         if (!references.length) continue;
         let address: string;
         if (visiting.has(target)) address = `/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${target}`;
         else address = (await visit(target)).url;
-        for (const reference of references) text = text.replaceAll(reference, address);
+        // One pass, longest form first: replacing `x.js` before `./x.js` left `.//a/<hash>.js` (#1197). A form
+        // only matches where a path starts, so `manifest.json` never matches inside `assets/manifest.json`, which
+        // left `assets//a/<hash>.json` in every bundle.
+        const pattern = new RegExp(
+          `(?<![\\w./-])(?:${[...references]
+            .sort((a, b) => b.length - a.length)
+            .map((reference) => reference.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'))
+            .join('|')})`,
+          'gu',
+        );
+        text = text.replace(pattern, () => address);
       }
       bytes = Buffer.from(text);
       visiting.delete(relativePath);

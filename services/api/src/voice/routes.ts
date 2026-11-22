@@ -13,6 +13,7 @@ import {
 import { authorize } from '@ogm/policy';
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
@@ -34,17 +35,32 @@ import { gameDrafts } from '../new-game/drafts.js';
 export const prefix = '/';
 
 const DICTATION_TOKENS_PER_MINUTE = 10;
-const dictationLimiters = new WeakMap<AppDeps, ReturnType<typeof createRateLimiter>>();
+const CLIENT_ERRORS_PER_MINUTE = 20;
+type Limiters = { dictation: ReturnType<typeof createRateLimiter>; clientError: ReturnType<typeof createRateLimiter> };
+const limiters = new WeakMap<AppDeps, Limiters>();
 
 export function setup(deps: AppDeps): void {
-  dictationLimiters.set(deps, createRateLimiter(DICTATION_TOKENS_PER_MINUTE, 60_000));
+  limiters.set(deps, {
+    dictation: createRateLimiter(DICTATION_TOKENS_PER_MINUTE, 60_000),
+    clientError: createRateLimiter(CLIENT_ERRORS_PER_MINUTE, 60_000),
+  });
 }
 
-function dictationLimiter(c: Context<ApiBindings>): ReturnType<typeof createRateLimiter> {
-  const limiter = dictationLimiters.get(c.get('deps'));
-  if (!limiter) throw new Error('voice context used before setup');
-  return limiter;
+function limiter(c: Context<ApiBindings>, name: keyof Limiters): ReturnType<typeof createRateLimiter> {
+  const found = limiters.get(c.get('deps'));
+  if (!found) throw new Error('voice context used before setup');
+  return found[name];
 }
+
+// What the composer reports when send, upload, dictation or voice fails in the browser; never audio or tokens.
+const VoiceClientErrorReport = z
+  .object({
+    action: z.enum(['send', 'upload', 'dictation', 'voice']),
+    code: z.string().min(1).max(64),
+    message: z.string().max(500),
+    target_kind: z.string().max(32).optional(),
+  })
+  .strict();
 
 function internalSecret(given: string | undefined, expected: string | undefined): boolean {
   if (!expected) return false;
@@ -124,11 +140,25 @@ const routes = new Hono<ApiBindings>().post('/api/v1/voice/token', async (c) => 
 
 routes.post('/api/v1/voice/dictation-token', async (c) => {
   const { principal, target } = await authorizedTarget(c);
-  if (!dictationLimiter(c)(principal.userId)) throw new HttpError(429, 'rate_limited');
+  if (!limiter(c, 'dictation')(principal.userId)) throw new HttpError(429, 'rate_limited');
   const body = tokenResponse(c.get('deps'), principal.userId, target, VOICE_DICTATION_TOKEN_SCOPE);
   const url = new URL(body.url);
   url.searchParams.set('mode', 'dictate');
   return c.json({ ...body, url: url.toString() });
+});
+
+// POST /api/v1/voice/client-error: one structured log line per composer failure, so a phone failure is readable.
+routes.post('/api/v1/voice/client-error', async (c) => {
+  const principal = requirePrincipal(c, ['user']);
+  const report = await parseBody(c, VoiceClientErrorReport);
+  if (!limiter(c, 'clientError')(principal.userId)) throw new HttpError(429, 'rate_limited');
+  c.get('deps').log({
+    event: 'voice_client_error',
+    user_id: principal.userId,
+    ...report,
+    user_agent: (c.req.header('user-agent') ?? '').slice(0, 512),
+  });
+  return c.body(null, 204);
 });
 
 routes.post('/internal/voice/instruct', async (c) => {

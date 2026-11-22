@@ -26,7 +26,7 @@ python skills/gm-sprite-forge/scripts/compare.py still --pairs north.png:north-r
 
 Each row shows original, rebuild, difference heatmap, and the prop gate thresholds and verdicts. Green means identical pixels; red indicates differences.
 
-For a character sheet, rows are directions and columns are frames. Choose the gate that matches the asset class:
+For a character sheet (an animation, so only after the static sprite is approved; see SKILL.md), rows are directions and columns are frames. Choose the gate that matches the asset class:
 
 ```sh
 python skills/gm-sprite-forge/scripts/compare.py sheet original.png rebuild.png --cell 64 --gates character-64 --out review --fps 12
@@ -54,11 +54,11 @@ If a verdict includes a note, wait until the first round that changes the part i
 
 When choosing a direction, put up to three candidates (A/B/C) with their media into one Command. Do not raise a separate Command for each candidate.
 
-On “Matches”, record the identified verdict in `calibration.jsonl` as below, apply U9 gate calibration, stop raising Commands for that asset, and finish the PR. Do not continue generating review rounds after acceptance.
+On a character's stills round, “Matches” approves the static sprite and opens the animation round. On any other “Matches”, record the identified verdict in `calibration.jsonl` as below, apply U9 gate calibration, stop raising Commands for that asset, and finish the PR. Do not continue generating review rounds after acceptance.
 
 ## Review and calibration
 
-At each checkpoint above, post one non-blocking Command on the rebuild ticket. Ask separately whether image gen matches and whether the 3D pipeline matches. The Command schema has one question and at most three suggested responses, so put both questions in that field and use the three outcomes below; when one needs changes, identify that track in the note. Ask for a note on each track needing changes. Include the round sheet, eight-direction still, an automatically looping GIF of the animation, plus the score JSON and gates in force. An MP4 may accompany the GIF but does not replace it. In the Command text list each point from Kevin’s last note and what changed for it, one line per point. Inspect the media first and verify that the GIF loops indefinitely. Attach the same media to every option:
+At each checkpoint above, post one non-blocking Command on the rebuild ticket. Ask separately whether image gen matches and whether the 3D pipeline matches. The Command schema has one question and at most three suggested responses, so put both questions in that field and use the three outcomes below; when one needs changes, identify that track in the note. Ask for a note on each track needing changes. Include the round sheet, eight-direction still, plus the score JSON and gates in force. Animation waits behind the static sprite: send an automatically looping GIF of the animation only once the creator has approved that character's static eight-direction sprite (creator, 2026-11-21: "we're not ready for animation yet"); until then, render and review stills only. An MP4 may accompany the GIF but does not replace it. In the Command text list each point from Kevin’s last note and what changed for it, one line per point. Inspect the media first and verify that any GIF loops indefinitely. Attach the same media to every option:
 
 ```json
 {

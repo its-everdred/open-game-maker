@@ -273,7 +273,7 @@ describe('BuildChatDock', () => {
 
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
     await send('Make the door glow');
-    expect(await screen.findByText('Message or voice could not be started.')).toBeInTheDocument();
+    expect(await screen.findByText('Message not sent. (send: TypeError)')).toBeInTheDocument();
     await send('Make the door glow');
 
     await waitFor(() => expect(chatListeners.has('j_new')).toBe(true));

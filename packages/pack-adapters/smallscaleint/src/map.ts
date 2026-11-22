@@ -71,6 +71,8 @@ export interface IsoPiece {
   asset: string;
   facing: TileFacing;
   depth: number;
+  /** Height above the tile in 64-pixel grid units. */
+  elevation?: number;
   solid: boolean;
   visible: boolean;
 }
@@ -123,7 +125,7 @@ function facingOf(value: unknown, gid: number): TileFacing {
   return facing;
 }
 
-function keyOf(layer: Layer, x: number, y: number): string {
+function keyOf(layer: string, x: number, y: number): string {
   return `${layer}:${x},${y}`;
 }
 
@@ -203,13 +205,14 @@ export class IsoMap {
         continue;
       }
 
-      if (!(LAYERS as readonly string[]).includes(layer.name)) {
-        throw new Error(`tile layer "${layer.name}" is not one of ${LAYERS.join(', ')}`);
+      const extraLayer = /^(wall|decor|roof)#[1-9]\d*$/.exec(layer.name);
+      if (!(LAYERS as readonly string[]).includes(layer.name) && !extraLayer) {
+        throw new Error(`tile layer "${layer.name}" is not one of ${LAYERS.join(', ')} or a numbered sprite layer`);
       }
       if (layer.width !== map.width || layer.height !== map.height || layer.data.length !== map.width * map.height) {
         throw new Error(`tile layer "${layer.name}" does not cover the ${map.width}x${map.height} map`);
       }
-      const name = layer.name as Layer;
+      const name = (extraLayer?.[1] ?? layer.name) as Layer;
       layer.data.forEach((storedGid, index) => {
         if (storedGid === 0) return;
         if (storedGid > GID_MASK) throw new Error(`tile layer "${name}" uses unsupported Tiled transform flags`);
@@ -223,11 +226,21 @@ export class IsoMap {
         if (explicitSolid !== undefined && typeof explicitSolid !== 'boolean') {
           throw new Error(`tile gid ${storedGid} solid must be a boolean`);
         }
+        const elevation = property(tile.properties, 'elevation');
+        if (
+          elevation !== undefined &&
+          (typeof elevation !== 'number' || !Number.isFinite(elevation) || elevation < 0)
+        ) {
+          throw new Error(`tile gid ${storedGid} elevation must be a non-negative finite number`);
+        }
+        if (name === 'floor' && elevation !== undefined && elevation !== 0) {
+          throw new Error('floor tiles cannot have elevation');
+        }
         const x = index % map.width;
         const y = Math.floor(index / map.width);
         const solid = typeof explicitSolid === 'boolean' ? explicitSolid : name === 'wall';
         pieces.push({
-          key: keyOf(name, x, y),
+          key: keyOf(layer.name, x, y),
           layer: name,
           x,
           y,
@@ -235,6 +248,7 @@ export class IsoMap {
           asset,
           facing: facingOf(property(tile.properties, 'rotation'), storedGid),
           depth: this.depthOf(x, y, name),
+          ...(typeof elevation === 'number' ? { elevation } : {}),
           solid,
           visible: true,
         });
@@ -406,7 +420,11 @@ export class IsoMap {
       .map((piece) => {
         const point = isoToWorld(piece.x, piece.y);
         const object = scene.add
-          .image(this.height * (TILE_WIDTH / 2) + point.x, TILE_HEIGHT + point.y, `${piece.asset}:${piece.facing}`)
+          .image(
+            this.height * (TILE_WIDTH / 2) + point.x,
+            TILE_HEIGHT + point.y - (piece.elevation ?? 0) * TILE_HEIGHT,
+            `${piece.asset}:${piece.facing}`,
+          )
           .setOrigin(0.5, 208 / scene.textures.get(`${piece.asset}:${piece.facing}`).getSourceImage().height)
           .setDepth(piece.depth)
           .setVisible(piece.visible);

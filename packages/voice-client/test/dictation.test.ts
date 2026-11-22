@@ -156,6 +156,25 @@ describe('Dictation', () => {
     expect(FakeWebSocket.instances[0]?.close).toHaveBeenCalledOnce();
   });
 
+  it('names the token and capture causes without their messages', async () => {
+    audio.startCapture.mockRejectedValueOnce(new DOMException('no device', 'NotFoundError'));
+    const tokenError = Object.assign(new Error('wss://voice?token=secret'), { name: 'ApiError', status: 403 });
+    const errors: Array<{ code: string; message: string }> = [];
+    const capture = new Dictation({ connection: async () => ({ token: 't', url: 'ws://127.0.0.1/ws' }) });
+    capture.on('error', (error) => errors.push(error));
+    capture.pressStart();
+    await vi.waitFor(() => expect(errors).toHaveLength(1));
+    const token = new Dictation({ connection: () => Promise.reject(tokenError) });
+    token.on('error', (error) => errors.push(error));
+    token.pressStart();
+    await vi.waitFor(() => expect(errors).toHaveLength(2));
+
+    expect(errors).toEqual([
+      { code: 'capture_error', message: 'Microphone capture failed (NotFoundError).' },
+      { code: 'token_error', message: 'Dictation could not be authorized (ApiError 403).' },
+    ]);
+  });
+
   it('stops the provider and closes capture when the page is hidden', async () => {
     const dictation = new Dictation({
       connection: async () => ({ token: 'token', url: 'ws://127.0.0.1/ws/voice?mode=dictate' }),

@@ -121,6 +121,43 @@
     }
   ],
   "$defs": {
+    "structuralFacing": {
+      "type": "object", "minProperties": 1,
+      "properties": {
+        "alpha_bounds": {
+          "type": "object", "required": ["value", "verified"],
+          "properties": {
+            "value": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "minItems": 4, "maxItems": 4, "description": "Inclusive left, top, right, bottom pixel bounds." },
+            "verified": { "type": "string", "minLength": 1 }
+          }, "additionalProperties": false
+        },
+        "anchor": {
+          "type": "object", "required": ["value", "verified"],
+          "properties": {
+            "value": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Source-image pixel coordinates." },
+            "verified": { "type": "string", "minLength": 1 }
+          }, "additionalProperties": false
+        },
+        "edges": {
+          "type": "object", "required": ["value", "verified"],
+          "properties": {
+            "value": { "type": "array", "items": { "enum": ["xMin", "xMax", "yMin", "yMax"] }, "uniqueItems": true },
+            "verified": { "type": "string", "minLength": 1 }
+          }, "additionalProperties": false
+        },
+        "sockets": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["kind", "position", "verified"],
+            "properties": {
+              "kind": { "enum": ["end", "corner", "t", "gate-opening"] },
+              "position": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Source-image pixel coordinates." },
+              "verified": { "type": "string", "minLength": 1 }
+            }, "additionalProperties": false
+          }
+        }
+      }, "additionalProperties": false
+    },
     "assetId": { "type": "string", "pattern": "^t[123]:[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9/._-]*@[A-Za-z0-9._-]+$", "description": "B11 id: <tier>:<collection>/<path>@<version>. Path is lowercase kebab, no file extension, no vendor format folder (\"GLB format\")." },
     "collectionId": { "type": "string", "pattern": "^t[123]:[a-z0-9][a-z0-9-]*@[A-Za-z0-9._-]+$" },
     "layoutSpecId": { "type": "string", "pattern": "^layout:[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9/._-]*@[A-Za-z0-9._-]+#[0-9]+$" },
@@ -707,6 +744,15 @@
           }
         },
         "facings": { "type": "object", "minProperties": 1, "properties": { "E": { "$ref": "#/$defs/assetPath" }, "N": { "$ref": "#/$defs/assetPath" }, "NE": { "$ref": "#/$defs/assetPath" }, "NW": { "$ref": "#/$defs/assetPath" }, "S": { "$ref": "#/$defs/assetPath" }, "SE": { "$ref": "#/$defs/assetPath" }, "SW": { "$ref": "#/$defs/assetPath" }, "W": { "$ref": "#/$defs/assetPath" } }, "additionalProperties": false },
+        "structural_facings": {
+          "type": "object", "minProperties": 1,
+          "description": "Measured structural facts per source facing. Coordinates are in source-image pixels; grid edges refer to the unrotated map cell.",
+          "properties": {
+            "E": { "$ref": "#/$defs/structuralFacing" }, "N": { "$ref": "#/$defs/structuralFacing" },
+            "S": { "$ref": "#/$defs/structuralFacing" }, "W": { "$ref": "#/$defs/structuralFacing" }
+          },
+          "additionalProperties": false
+        },
         "tile": {
           "type": "object",
           "properties": {

@@ -264,6 +264,25 @@ provisional scope exists, omitting `--phase` fails closed and asks for the curre
 folder, as a regular file (a symlink does not count). A worker's `assets-local/` and `shots/` are deleted after merge, so
 evidence goes in `review/<ticket>/` in the game folder. URLs are not checked.
 
+`gm verify scene <game> <scene>` checks that a map is structurally coherent and prints a ranked list to fix from the
+top. `<scene>` is a Tiled-style isometric map file or a name under `<game>/maps/`. Pack facts (measured edges and alpha
+bounds) come from the adapter of the set in `gm.lock.json`; a derived asset uses the facts of its `derived_from` source.
+A fence or wall piece with no measured edge is reported as `facts/unmeasured-edge` (high): an unchecked run never passes.
+Checks, each with a stable id: `connected-runs` (fence and wall runs end at a post, corner, building or tagged gate),
+`coherent-buildings` (closed shell, roof over the footprint, a door), `no-overlap` (shared cells, sprites overlapping in
+one depth band, characters inside solids), `facing` (shipped facings, edge pieces along their run, doors onto walkable
+cells), `traversable` (the spawn reaches every character, door and gate; paths connect two places),
+`natural-placement` (density, regular grids unless tagged `formal`, pieces over the void, void inside the frame) and,
+with `--mock`, `framing`. Tiles may carry `role`, `tags` (`ruin`, `formal`, `gate`, `exit`) and `elevation`. A failing
+high finding exits 1 unless `--allow` lists its id or check as a known limitation. `--out <base>` writes `<base>.json`
+and `<base>.md`; `--overlay` writes a numbered diagnostic map.
+
+```text
+gm verify scene <game> <scene> [--under <map.json>@dx,dy] [--view WxH] [--zoom <n>] [--center x,y]
+  [--mock <png> [--mock-character <px> --character-height <px>]] [--min-density <n>] [--allow <id>]
+  [--out <base>] [--overlay <png>] [--json]
+```
+
 ## Refresh the skill pack
 
 ```text

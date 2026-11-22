@@ -168,7 +168,8 @@ test('attaches files with the button and by pasting an image, then sends them wi
     await json(
       route,
       {
-        id: `a_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e${uploads.length.toString().padStart(2, '0')}`,
+        // Keyed by file, not arrival: the composer uploads all attachments at once, so they can land in any order.
+        id: `a_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e${name === 'pasted-door.png' ? '02' : '01'}`,
         kind: image ? 'image' : 'text',
         name,
         mime: image ? 'image/webp' : 'text/markdown',
@@ -212,10 +213,13 @@ test('attaches files with the button and by pasting an image, then sends them wi
         attachments: ['a_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01', 'a_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e02'],
       },
     ]);
-  expect(uploads).toEqual([
-    { type: 'text/markdown', name: 'door-notes.md' },
-    { type: 'image/png', name: 'pasted-door.png' },
-  ]);
+  expect(uploads).toHaveLength(2);
+  expect(uploads).toEqual(
+    expect.arrayContaining([
+      { type: 'text/markdown', name: 'door-notes.md' },
+      { type: 'image/png', name: 'pasted-door.png' },
+    ]),
+  );
 });
 
 test('a broken picker leaves the chat dock mounted', async ({ page }) => {
@@ -308,6 +312,37 @@ test('asking for a change with no build running starts an edit job and streams i
   // Asking for a change enters edit mode, where the studio menu opens directly.
   await page.getByRole('button', { name: 'Jobs: 0%' }).click();
   await expect(page.getByText('Waiting for a free slot')).toBeVisible({ timeout: 2_000 });
+});
+
+// #1223: each composer failure names its cause on the phone and reaches the API log.
+test('names a blocked microphone and a refused voice token at 390x844', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('denied', 'NotAllowedError'));
+  });
+  await installAuthRoutes(page, { signedIn: true });
+  await installBuildRoutes(page);
+  const reports: unknown[] = [];
+  await page.route('**/api/v1/voice/token', (route) => json(route, { error: 'forbidden' }, 403));
+  await page.route('**/api/v1/voice/dictation-token', (route) => json(route, { error: 'forbidden' }, 403));
+  await page.route('**/api/v1/voice/client-error', async (route) => {
+    reports.push(route.request().postDataJSON());
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto('/all?test');
+  await openBuildChat(page);
+
+  const composer = page.locator('#chat-dock-slot aiur-composer');
+  const alert = page.locator('.build-chat-panel [role="alert"]');
+  await composer.getByRole('button', { name: 'Hold to dictate' }).press(' ');
+  await expect(alert).toHaveText(/^Microphone blocked\..*Safari.*\(dictation: mic_denied\)$/);
+  await page.screenshot({ path: testInfo.outputPath('mic-denied.png') });
+  await expect.poll(() => reports).toContainEqual(expect.objectContaining({ action: 'dictation', code: 'mic_denied' }));
+
+  await composer.getByRole('button', { name: 'Start voice conversation' }).click();
+  await expect(alert).toHaveText('Voice unavailable. (voice: api_403)');
+  await page.screenshot({ path: testInfo.outputPath('token-403.png') });
+  await expect.poll(() => reports).toContainEqual(expect.objectContaining({ action: 'voice', code: 'api_403' }));
 });
 
 async function installBuildRoutes(page: Page, options: { brokenPicker?: boolean; posts?: unknown[] } = {}) {

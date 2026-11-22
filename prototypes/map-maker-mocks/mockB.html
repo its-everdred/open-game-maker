@@ -1,0 +1,67 @@
+<html><head><link rel="stylesheet" href="ui.css"><style>
+.bar{position:absolute;z-index:900000;display:flex;gap:6px;padding:6px;border-radius:999px}
+.panel{position:absolute;z-index:900000;border-radius:22px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.packs{display:flex;gap:6px}
+.packs .tile{width:52px;height:44px;flex:none}
+.items{display:grid;gap:6px}
+.layer{display:flex;align-items:center;gap:6px;padding:4px;border-radius:16px;background:var(--paper-2)}
+.layer.on{outline:3px solid var(--yellow-b)}
+.layer .btn{width:40px;height:40px}
+.layer .dim{opacity:.45}
+.search{display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border-radius:999px;background:var(--paper-2);color:var(--muted)}
+.search svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.2}
+.tabs{display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--paper-2)}
+.tabs .btn{width:40px;height:40px}
+.wrap{flex-wrap:wrap}
+.stab{display:flex;align-items:center;gap:8px;height:48px;padding:0 8px 0 16px;border-radius:999px;font:700 15px Nunito,sans-serif;background:var(--paper-2)}
+.stab.on{background:var(--yellow-b);color:var(--dark)}
+.stab.on .who{background:var(--dark);color:var(--yellow-b)}
+.crumb{display:flex;align-items:center;gap:6px;font:800 15px Nunito,sans-serif}
+.crumb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2}
+</style></head><body><div class="stage"><div class="world" id="w"></div></div>
+<script src="iso.js"></script><script src="scene.js"></script><script src="icons.js"></script><script src="panels.js"></script><script>
+const Q=new URLSearchParams(location.search), P=(Q.get('v')||'phone')==='phone', st=Q.get('s')||'edit';
+const VW=innerWidth, VH=innerHeight, s=P?0.3:0.74, ox=P?VW/2:650, oy=P?(st==='browse'?150:260):150;
+const L=document.getElementById('w');
+const H=(h)=>document.body.insertAdjacentHTML('beforeend',h);
+buildScene(L,ox,oy,s);
+if(st!=='look') gridLines(L,8,7,ox,oy,s);
+if(st==='edit'||st==='scenes'){
+  mark(L,5,5,ox,oy,s,'background:rgba(148,215,66,.4);outline:2px solid #94d742');
+  Iso.rural(L,'fence_b6_n',5,5,ox,oy,s,40,'opacity:.75;filter:drop-shadow(0 0 4px #94d742)');
+}
+if(st==='look') applyLook(L,ox,oy,s,VW,VH);
+const packs=[{ground:'ground_a2_e'},{fence:'a1'},{char:'warrior_idle'}];
+const items=[{fence:'b1'},{fence:'b3'},{fence:'b6'},{fence:'a1'},{fence:'a3'},{fence:'a6'},{wall:'wall_f1_s'},{wall:'wall_f6_s'},{prop:'stone_a4_e'},{prop:'stone_a13_e'},{prop:'stone_a5_e'},{prop:'tree_b4_e'}];
+const layers=[['roof',0,1],['tree',0,0],['fence',1,0],['ground',0,0],['person',0,0]];
+const layerRows=layers.map(([n,on,hid])=>`<div class="layer ${on?'on':''}">${btn(n,'',n+' layer')}<span style="flex:1"></span>${btn(hid?'eyeoff':'eye',hid?'dim':'')}${btn('lock','dim')}</div>`).join('');
+const tools=`${btn('select')}${btn('brush','','paint')}${btn('fence','on','place')}${btn('erase')}${btn('rotate')}${btn('flip')}${btn('magnet','on','snap to grid')}`;
+const rightTabs=`<div class="tabs">${btn('layers',st==='look'?'':'on','layers')}${btn('sun',st==='look'?'on':'','light and mood')}</div>`;
+const browser=(cols,h,n)=>`<div class="search">${ic('search')}<span style="flex:1"></span><span class="count">${LIB.total}</span></div>
+  <div class="crumb">${ic('tree')}Nature<span class="count">›</span>Trees</div>
+  <div class="packs wrap">${LIB.tags.map((t,i)=>`<span class="chip ${i===0?'on':''}">${t}</span>`).join('')}</div>
+  <div class="items" style="grid-template-columns:repeat(${cols},1fr)">${LIB.items.slice(0,n).map((k,i)=>labelled(k,i===1,h)).join('')}</div>`;
+const sceneTabs=SCENES.map(([n,who,on])=>`<div class="stab ${on?'on':''}">${n}<span class="who ${who}">${ic(who)}</span></div>`).join('');
+if(!P){
+  const left=st==='browse'?browser(3,78,12):`<div class="search">${ic('search')}</div><div class="packs">${packs.map((k,i)=>mini(k,i===1,44)).join('')}</div><div class="items" style="grid-template-columns:repeat(3,1fr)">${items.map((k,i)=>mini(k,i===2,84)).join('')}</div>`;
+  H(`<div class="bar glass" style="left:12px;top:12px">${btn('close')}${st==='scenes'?sceneTabs+btn('plus','','new scene'):''}</div>
+  <div class="bar glass" style="${st==='scenes'?'left:560px':'left:50%;transform:translateX(-50%)'};top:12px">${tools}</div>
+  <div class="bar glass" style="right:12px;top:12px">${btn('undo')}${btn('redo')}${btn('play','','test play')}${btn('check','go','save')}</div>
+  <div class="panel glass" style="left:12px;top:84px;width:300px">${left}</div>
+  <div class="panel glass" style="right:12px;top:84px;width:${st==='look'?260:190}px">${rightTabs}${st==='look'?lookControls(true):layerRows}</div>`);
+  if(st==='browse'){const [gx,gy]=at(2.5,4.5,ox,oy,s);mark(L,2,4,ox,oy,s,'background:rgba(148,215,66,.45);outline:2px solid #94d742');H(dragGhost(gx,gy,{prop:'tree_a3_e'}));}
+} else {
+  H(`<div class="bar glass" style="left:10px;top:10px">${btn('close')}${btn('map',st==='scenes'?'on':'','scenes')}</div>
+  <div class="bar glass" style="right:10px;top:10px">${btn('undo')}${btn('redo')}${btn('check','go','save')}</div>
+  <div class="bar glass" style="left:10px;top:84px;flex-direction:column;border-radius:30px">${tools}</div>
+  <div class="bar glass" style="right:10px;top:84px;flex-direction:column;border-radius:30px">${btn('sun',st==='look'?'on':'','light and mood')}${layers.map(([n,on,hid])=>btn(n,on&&st!=='look'?'on':'',n+' layer').replace('class="btn','style="'+(hid?'opacity:.4':'')+'" class="btn')).join('')}</div>`);
+  if(st==='edit') H(`<div class="panel glass" style="left:0;right:0;bottom:0;border-radius:24px 24px 0 0;padding-bottom:16px">
+   <div class="packs">${packs.map((k,i)=>mini(k,i===1,44)).join('')}<div class="search" style="flex:1">${ic('search')}</div></div>
+   <div class="items" style="grid-template-columns:repeat(4,1fr)">${items.slice(0,8).map((k,i)=>mini(k,i===2,78)).join('')}</div></div>`);
+  if(st==='browse'){const [gx,gy]=at(2.5,4.5,ox,oy,s);mark(L,2,4,ox,oy,s,'background:rgba(148,215,66,.45);outline:2px solid #94d742');
+    H(`<div class="panel glass" style="left:0;right:0;bottom:0;height:58%;border-radius:24px 24px 0 0">${browser(4,72,12)}</div>`+dragGhost(gx,gy,{prop:'tree_a3_e'}));}
+  if(st==='scenes') H(`<div class="panel glass" style="left:0;top:0;bottom:0;width:78%;border-radius:0 24px 24px 0;padding:16px 14px;z-index:900005">
+   <div class="crumb">${ic('map')}<span style="flex:1"></span>${btn('plus','','new scene')}</div>${SCENES.map((c,i)=>sceneCard(c,P?274:240,130,i)).join('')}</div>`);
+  if(st==='look') H(`<div class="panel glass" style="left:0;right:0;bottom:0;border-radius:24px 24px 0 0;padding-bottom:16px">${lookControls(false)}</div>`);
+}
+</script></body></html>

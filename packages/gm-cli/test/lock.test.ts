@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { AssetsLockSchema } from '@ogm/contracts';
+
 import { readLock, upsertLock, writeLock } from '../src/lock.js';
 import { tempDir } from './helpers.js';
 
@@ -31,22 +33,27 @@ describe('asset lock I/O', () => {
     expect((await readLock(cwd))?.assets.map((entry) => entry.id)).toEqual([first.id, ENTRY.id]);
   });
 
+  it('sorts numeric suffixes in the codepoint order required by the lock schema', async () => {
+    const cwd = tempDir();
+    const ids = ['t1:stone/stone-a2@1', 't1:stone/stone-a13@1', 't1:stone/stone-a1@1'];
+    const entries = ids.map((id) => ({ ...ENTRY, id }));
+
+    await writeLock(cwd, { version: 1, family: 'chunky-low-poly', pov: 'iso', assets: entries });
+
+    const lock = JSON.parse(readFileSync(join(cwd, 'assets.lock.json'), 'utf8')) as unknown;
+    expect(AssetsLockSchema.safeParse(lock).success).toBe(true);
+    expect((lock as { assets: Array<{ id: string }> }).assets.map(({ id }) => id)).toEqual([
+      't1:stone/stone-a13@1',
+      't1:stone/stone-a1@1',
+      't1:stone/stone-a2@1',
+    ]);
+  });
+
   it('upserts an entry by id without mutating the original lock', () => {
     const lock = { version: 1 as const, family: 'chunky-low-poly' as const, pov: 'iso' as const, assets: [ENTRY] };
     const changed = upsertLock(lock, { ...ENTRY, sha256: '1'.repeat(64) });
     expect(changed.assets[0]?.sha256).toBe('1'.repeat(64));
     expect(lock.assets[0]?.sha256).toBe('0'.repeat(64));
-  });
-
-  it('orders versioned asset IDs exactly as the lock schema requires', async () => {
-    const cwd = tempDir();
-    const short = { ...ENTRY, id: 't1:pack/tiles/misc-b1@2026-11-01' };
-    const longer = { ...ENTRY, id: 't1:pack/tiles/misc-b13@2026-11-01' };
-    const lock = { version: 1 as const, family: 'chunky-low-poly' as const, pov: 'iso' as const, assets: [short] };
-    const changed = upsertLock(lock, longer);
-    expect(changed.assets.map((entry) => entry.id)).toEqual([longer.id, short.id]);
-    await writeLock(cwd, changed);
-    expect((await readLock(cwd))?.assets.map((entry) => entry.id)).toEqual([longer.id, short.id]);
   });
 
   it('names an invalid lockfile instead of returning unvalidated data', async () => {

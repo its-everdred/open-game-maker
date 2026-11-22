@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../../app/query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CreatorCommand } from '@ogm/contracts';
 import { CommandReviewCard } from './CommandReviewCard';
@@ -29,6 +29,7 @@ const command: CreatorCommand = {
     { id: 'b', label: 'Second', media: { url: '/b.png', width: 100, height: 100 } },
   ],
 };
+const sendButton = () => screen.getByText('Send', { selector: 'button' });
 it('sends a pick through the creator answer route and shows it was saved', async () => {
   const answered = vi.fn();
   render(
@@ -37,11 +38,8 @@ it('sends a pick through the creator answer route and shows it was saved', async
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'View option B' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Pick B: Second' }));
-  expect(api).not.toHaveBeenCalled();
-  fireEvent.click(
-    within(screen.getByRole('dialog', { name: 'Pick B: Second' })).getByRole('button', { name: 'Send choice' }),
-  );
+  fireEvent.click(screen.getByRole('button', { name: '👍' }));
+  fireEvent.click(sendButton());
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', {
       method: 'POST',
@@ -60,34 +58,40 @@ it('records the displayed option as disliked for a change request', async () => 
   );
   fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'More contrast' } });
   fireEvent.click(screen.getByRole('button', { name: 'View option B' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Send changes' }));
+  fireEvent.click(screen.getByRole('button', { name: '👎' }));
+  fireEvent.change(screen.getByLabelText('Note for B (optional)'), { target: { value: 'Too dark' } });
+  fireEvent.click(sendButton());
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', {
       method: 'POST',
       json: {
-        option_id: 'b',
+        option_id: 'a',
         version: 2,
-        change_request: true,
-        review: { likes: [], dislikes: [{ option_id: 'b' }], notes: 'More contrast' },
+        review: { likes: [], dislikes: [{ option_id: 'b', reason: 'Too dark' }], notes: 'More contrast' },
       },
     }),
   );
 });
 
-it('includes an optional note when picking an option', async () => {
+it('likes multiple options and includes per-option like notes', async () => {
   render(
     <QueryClientProvider client={queryClient}>
       <CommandReviewCard command={command} onAnswered={() => {}} />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Pick A: First' }));
-  const sheet = within(screen.getByRole('dialog', { name: 'Pick A: First' }));
-  fireEvent.change(sheet.getByLabelText('Note (optional)'), { target: { value: '  Keep the blue  ' } });
-  fireEvent.click(sheet.getByRole('button', { name: 'Send choice' }));
+  fireEvent.click(screen.getByRole('button', { name: '👍' }));
+  fireEvent.change(screen.getByLabelText('Note for A (optional)'), { target: { value: 'Keep blue' } });
+  fireEvent.click(screen.getByRole('button', { name: 'View option B' }));
+  fireEvent.click(screen.getByRole('button', { name: '👍' }));
+  fireEvent.click(sendButton());
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', {
       method: 'POST',
-      json: { option_id: 'a', version: 2, review: { likes: ['a'], dislikes: [], notes: 'Keep the blue' } },
+      json: {
+        option_id: 'a',
+        version: 2,
+        review: { likes: ['a', 'b'], dislikes: [], liked_notes: [{ option_id: 'a', reason: 'Keep blue' }] },
+      },
     }),
   );
 });
@@ -105,14 +109,10 @@ it('keeps the displayed option fixed while its answer is sending', async () => {
       <CommandReviewCard command={command} onAnswered={() => {}} />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Pick A: First' }));
-  fireEvent.click(
-    within(screen.getByRole('dialog', { name: 'Pick A: First' })).getByRole('button', { name: 'Send choice' }),
-  );
+  fireEvent.click(screen.getByRole('button', { name: '👍' }));
+  fireEvent.click(sendButton());
   expect(screen.getByRole('button', { name: 'View option B' })).toBeDisabled();
-  expect(
-    within(screen.getByRole('dialog', { name: 'Pick A: First' })).getByLabelText('Note (optional)'),
-  ).toBeDisabled();
+  expect(screen.getByLabelText('Note (optional)')).toBeDisabled();
   finish({ status: 'answered' });
   await screen.findByText(/Saved/);
 });
@@ -150,7 +150,7 @@ it('enlarges an option image without selecting it', () => {
   expect(screen.queryByRole('dialog', { name: 'Review image' })).toBeNull();
 });
 
-it('answers a core review without treating it as a game', async () => {
+it('answers a core review with the multi-vote payload', async () => {
   const { game_id: gameId, game_title: gameTitle, ...core } = command;
   expect([gameId, gameTitle]).toEqual(['g', 'Game']);
   render(
@@ -158,27 +158,55 @@ it('answers a core review without treating it as a game', async () => {
       <CommandReviewCard command={{ ...core, source: 'core' }} onAnswered={() => {}} />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Pick A: First' }));
-  fireEvent.click(
-    within(screen.getByRole('dialog', { name: 'Pick A: First' })).getByRole('button', { name: 'Send choice' }),
-  );
+  fireEvent.click(screen.getByRole('button', { name: '👎' }));
+  fireEvent.change(screen.getByLabelText('Note for A (optional)'), { target: { value: 'Too loud' } });
+  fireEvent.click(sendButton());
   await waitFor(() =>
-    expect(api).toHaveBeenCalledWith('/core/commands/d/answer', expect.objectContaining({ method: 'POST' })),
+    expect(api).toHaveBeenCalledWith('/core/commands/d/answer', {
+      method: 'POST',
+      json: { option_id: 'a', version: 2, review: { likes: [], dislikes: [{ option_id: 'a', reason: 'Too loud' }] } },
+    }),
   );
 });
 
-it('does not send when a creator cancels the choice note', () => {
+it('sends None of these as dislikes for every option', async () => {
   render(
     <QueryClientProvider client={queryClient}>
       <CommandReviewCard command={command} onAnswered={() => {}} />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Pick A: First' }));
-  fireEvent.click(
-    within(screen.getByRole('dialog', { name: 'Pick A: First' })).getByRole('button', { name: 'Cancel' }),
+  fireEvent.click(screen.getByRole('button', { name: 'None of these' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', {
+      method: 'POST',
+      json: { option_id: 'a', version: 2, review: { likes: [], dislikes: [{ option_id: 'a' }, { option_id: 'b' }] } },
+    }),
   );
-  expect(api).not.toHaveBeenCalled();
-  expect(screen.queryByRole('dialog', { name: 'Pick A: First' })).toBeNull();
+});
+
+it('sends a note-only answer and shows the recommendation only when set', async () => {
+  const { rerender } = render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={command} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByText(/Recommended:/)).toBeNull();
+  fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'A little brighter' } });
+  fireEvent.click(sendButton());
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      '/games/g/commands/d/answer',
+      expect.objectContaining({
+        json: { option_id: 'a', version: 2, review: { likes: [], dislikes: [], notes: 'A little brighter' } },
+      }),
+    ),
+  );
+  rerender(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={{ ...command, version: 3, recommend: 'b' }} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('Recommended: B: Second')).toBeVisible();
 });
 
 it('keeps the chosen option and note available when sending fails', async () => {
@@ -188,19 +216,26 @@ it('keeps the chosen option and note available when sending fails', async () => 
       <CommandReviewCard command={command} onAnswered={() => {}} />
     </QueryClientProvider>,
   );
+  fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Keep blue' } });
   fireEvent.click(screen.getByRole('button', { name: 'View option B' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Pick B: Second' }));
-  const sheet = within(screen.getByRole('dialog', { name: 'Pick B: Second' }));
-  fireEvent.change(sheet.getByLabelText('Note (optional)'), { target: { value: 'Keep blue' } });
-  fireEvent.click(sheet.getByRole('button', { name: 'Send choice' }));
-  expect(await sheet.findByRole('alert')).toHaveTextContent('That answer did not send');
-  expect(sheet.getByLabelText('Note (optional)')).toHaveValue('Keep blue');
-  fireEvent.click(sheet.getByRole('button', { name: 'Send choice' }));
+  fireEvent.click(screen.getByRole('button', { name: '👎' }));
+  fireEvent.change(screen.getByLabelText('Note for B (optional)'), { target: { value: 'Too dark' } });
+  fireEvent.click(sendButton());
+  expect(await screen.findByRole('alert')).toHaveTextContent('That answer did not send');
+  expect(screen.getByLabelText('Note (optional)')).toHaveValue('Keep blue');
+  fireEvent.click(sendButton());
   await waitFor(() => expect(api).toHaveBeenCalledTimes(2));
   expect(api).toHaveBeenLastCalledWith(
     '/games/g/commands/d/answer',
     expect.objectContaining({
-      json: expect.objectContaining({ option_id: 'b', review: expect.objectContaining({ notes: 'Keep blue' }) }),
+      json: expect.objectContaining({
+        option_id: 'a',
+        review: expect.objectContaining({
+          likes: [],
+          dislikes: [{ option_id: 'b', reason: 'Too dark' }],
+          notes: 'Keep blue',
+        }),
+      }),
     }),
   );
 });

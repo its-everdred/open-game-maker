@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HD-2D depth focus: three.js experiment</title>
+  <style>
+    :root{color-scheme:dark;font:14px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;background:#10151c;color:#e5e8df}*{box-sizing:border-box}body{margin:0;padding:20px}header,main{max-width:1120px;margin:auto}header{display:flex;justify-content:space-between;gap:16px;align-items:baseline;margin-bottom:14px}h1{font:600 17px/1.2 system-ui,sans-serif;margin:0}#status{color:#9fb4c6}canvas{display:block;width:100%;height:min(66vh,600px);min-height:370px;background:#293845;image-rendering:pixelated}.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}button{border:1px solid #62727a;background:#202b33;color:inherit;padding:7px 10px;font:inherit;cursor:pointer}button[aria-pressed=true]{border-color:#d7a968;color:#ffd799}#note{margin-left:auto;color:#aeb9b9}@media(max-width:600px){body{padding:10px}header{align-items:flex-start;flex-direction:column;gap:4px}canvas{height:60vh;min-height:330px}#note{width:100%;margin:4px 0}}
+  </style>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>
+</head>
+<body>
+  <header><h1>Depth focus · three.js</h1><span id="status">Procedural blocks · orthographic camera · focus follows the center marker</span></header>
+  <main>
+    <canvas id="scene" aria-label="Procedural pixel art depth scene"></canvas>
+    <nav class="controls" aria-label="Depth processing modes">
+      <button data-mode="off" aria-pressed="true">No blur</button><button data-mode="bokeh">BokehPass</button><button data-mode="tilt">Tilt-shift</button><button data-mode="haze">Depth haze</button><button data-mode="focus">Move focus</button><span id="note">Full-resolution post-processing costs extra scene and depth buffers.</span>
+    </nav>
+  </main>
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/postprocessing/RenderPass.js';
+    import { BokehPass } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/postprocessing/BokehPass.js';
+    import { ShaderPass } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/postprocessing/ShaderPass.js';
+    const canvas=document.querySelector('#scene'), status=document.querySelector('#status'), buttons=[...document.querySelectorAll('[data-mode]')];
+    const renderer=new THREE.WebGLRenderer({canvas,antialias:false,powerPreference:'low-power'});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(canvas.clientWidth,canvas.clientHeight,false); renderer.setClearColor(0x293845);
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x405761); scene.fog=new THREE.Fog(0x869589,9,28);
+    const camera=new THREE.OrthographicCamera(-8,8,5,-5,.1,60); camera.position.set(0,7,20); camera.lookAt(0,0,0);
+    scene.add(new THREE.HemisphereLight(0xe4d8b9,0x344044,2));
+    const sun=new THREE.DirectionalLight(0xffd59b,3); sun.position.set(-5,10,8); scene.add(sun);
+    const mat=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:1,flatShading:true,...extra});
+    const floor=new THREE.Mesh(new THREE.BoxGeometry(23,.5,22),mat(0x52604b)); floor.position.set(0,-2,-3); scene.add(floor);
+    for(let i=0;i<16;i++) { const x=(i%4-1.5)*4.5,z=-11+Math.floor(i/4)*4; const block=new THREE.Mesh(new THREE.BoxGeometry(3,.25,3),mat(i%2?0x68705b:0x586b60)); block.position.set(x,-1.62,z); scene.add(block); }
+    function tree(x,z,s=1){const trunk=new THREE.Mesh(new THREE.BoxGeometry(.45,2.2*s,.5),mat(0x79583d));trunk.position.set(x,-.9*s,z);scene.add(trunk);for(let i=0;i<3;i++){const crown=new THREE.Mesh(new THREE.BoxGeometry((2.5-i*.5)*s,1.2*s,1.6*s),mat([0x2d4943,0x385b4c,0x496550][i]));crown.position.set(x,(.2+i*.82)*s,z);scene.add(crown)}}
+    tree(-6,-10,1.3);tree(6,-9,1.1);tree(-6,3,1.2);tree(6,3,1.3);
+    for(const [x,z] of [[-3,-8],[3,-7],[-4,1],[4,2]]){const m=new THREE.Mesh(new THREE.BoxGeometry(.65,1.25,.55),mat(0xc17c50));m.position.set(x,-.95,z);scene.add(m);const head=new THREE.Mesh(new THREE.BoxGeometry(.6,.55,.55),mat(0xe2b580));head.position.set(x,-.05,z);scene.add(head)}
+    const hero=new THREE.Group(); const body=new THREE.Mesh(new THREE.BoxGeometry(.72,1.25,.6),mat(0xc25448));body.position.y=-.62;hero.add(body);const head=new THREE.Mesh(new THREE.BoxGeometry(.68,.62,.62),mat(0xe5bb83));head.position.y=.25;hero.add(head);hero.position.set(0,-.1,0);scene.add(hero);
+    const composer=new EffectComposer(renderer); composer.addPass(new RenderPass(scene,camera));
+    const bokeh=new BokehPass(scene,camera,{focus:18,aperture:.00012,maxblur:.003}); bokeh.enabled=false; composer.addPass(bokeh);
+    const hazePass=new ShaderPass({uniforms:{tDiffuse:{value:null},amount:{value:0.38},color:{value:new THREE.Color(0xa7b4a2)}},vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`uniform sampler2D tDiffuse;uniform float amount;uniform vec3 color;varying vec2 vUv;void main(){vec4 c=texture2D(tDiffuse,vUv);float d=smoothstep(.25,.95,1.-vUv.y);c.rgb=mix(c.rgb,color,d*amount);gl_FragColor=c;}`}); hazePass.enabled=false;
+    let mode='off',focus=18,t=0;
+    function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;renderer.setSize(w,h,false);composer.setSize(w,h);camera.left=-8;camera.right=8;camera.top=8*h/w/2;camera.bottom=-camera.top;camera.updateProjectionMatrix()}
+    new ResizeObserver(resize).observe(canvas); resize();
+    composer.addPass(hazePass);
+    buttons.forEach(b=>b.addEventListener('click',()=>{mode=b.dataset.mode;buttons.forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.mode===mode)));bokeh.enabled=mode==='bokeh'||mode==='tilt';hazePass.enabled=mode==='haze';if(mode==='tilt'){bokeh.materialBokeh.uniforms['focus'].value=focus;bokeh.materialBokeh.uniforms['aperture'].value=.00028}else{bokeh.materialBokeh.uniforms['aperture'].value=.00012}status.textContent=`${mode} · BokehPass samples the scene depth buffer; haze is a screen-space height gradient (not metric distance).`;}));
+    document.querySelector('[data-mode="focus"]').addEventListener('click',()=>{focus=focus===18?10:18;bokeh.materialBokeh.uniforms['focus'].value=focus;hero.position.x=focus===18?0:2;status.textContent=`Focus distance ${focus}; marker shifts to demonstrate focus pumping and subject lock.`});
+    function frame(){t+=.012;hero.position.y=-.1+Math.sin(t)*.08;hero.rotation.y=Math.sin(t*.4)*.12;if(mode==='bokeh'||mode==='tilt')bokeh.materialBokeh.uniforms['focus'].value=focus;composer.render();requestAnimationFrame(frame)} frame();
+  </script>
+</body>
+</html>
