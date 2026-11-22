@@ -29,6 +29,7 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
    ticket), one non-blocking Command each, and record answers back: `../gm-core/references/decision-inventory.md`.
 2. **Start from the last approved output.** That is the approved round's sha and media, not your own last trial
    and not a model-made mock. Score against the creator's real target (his concept crop or the approved media).
+   For a scene mock, use `gm-scene-clone` to identify assets, preserve structure intent and compare the real render.
 3. **Fold in every note.** An approval that carries a note ("looks good, but add X") is a change request first:
    do X as the next round on this rung. Carry earlier notes forward. Never close one while it's still unmet.
 4. **Show, don't tell.** Each option gets its own media, a one-line caption saying what it decides, and readable
