@@ -1,4 +1,10 @@
-import { SceneDocSchema, type SceneDoc, type SceneLayer, type SceneObject, type SceneTile } from '@ogm/contracts';
+import {
+  SceneDocSchema,
+  type SceneDoc,
+  type SceneLayer,
+  type SceneObject,
+  type SceneTile,
+} from '@ogm/contracts/browser';
 
 import { IsoMap, type TileFacing, type TiledIsoMap } from './map.js';
 
