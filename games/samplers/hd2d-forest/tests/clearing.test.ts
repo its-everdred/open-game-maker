@@ -5,12 +5,17 @@ import { FOCUS } from '../src/presets.js';
 import { blurForDepth } from '../../../../packages/sdk/src/hd2d/focus/index.js';
 
 const pieces = clearingPieces();
+/** Flat grass drawn over the dirt: decoration the hero can stand on, not a prop. */
+const GRASS_OVERLAYS = new Set(['ground-a6', 'ground-a8']);
 const row = (cell: readonly [number, number]) => cell[0] + cell[1] - HERO[0] - HERO[1];
 
 describe('forest clearing layout', () => {
   it('keeps the hero cell and its neighbours open, with the campfire beside the hero as in the mock', () => {
     const near = pieces.filter(
-      (piece) => !piece.ground && Math.hypot(piece.cell[0] - HERO[0], piece.cell[1] - HERO[1]) < 2.5,
+      (piece) =>
+        !piece.ground &&
+        !GRASS_OVERLAYS.has(piece.key) &&
+        Math.hypot(piece.cell[0] - HERO[0], piece.cell[1] - HERO[1]) < 2.5,
     );
     expect(near.map((piece) => piece.key)).toEqual(['fireplace']);
     expect(cellPoint(FIRE).x).toBeGreaterThan(cellPoint(HERO).x);
@@ -23,6 +28,23 @@ describe('forest clearing layout', () => {
     expect(trees.some(({ y }) => y < -200)).toBe(true);
     expect(trees.some(({ y }) => y > 200)).toBe(true);
     expect(trees.every(({ x, y }) => Math.hypot(x, y * 2) > 300)).toBe(true);
+  });
+
+  // The clearing's edge must not be a straight tile line: grass overlays break up every dirt cell that borders grass.
+  it('softens the dirt edge with grass overlays', () => {
+    const dirt = new Set(pieces.filter((p) => p.key === 'ground-a1').map((p) => p.cell.join()));
+    const covered = new Set(pieces.filter((p) => GRASS_OVERLAYS.has(p.key)).map((p) => p.cell.join()));
+    const edge = [...dirt].filter((key) => {
+      const [x, y] = key.split(',').map(Number);
+      return [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ].some(([dx, dy]) => !dirt.has(`${x! + dx!},${y! + dy!}`));
+    });
+    expect(edge.length).toBeGreaterThan(8);
+    for (const key of edge) expect(covered.has(key)).toBe(true);
   });
 });
 

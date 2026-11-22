@@ -4,6 +4,8 @@ import type { PieceKey } from './clearing.js';
 export const TEXTURES: ReadonlyArray<PieceKey | 'hero-idle'> = [
   'ground-a1',
   'ground-a2',
+  'ground-a6',
+  'ground-a8',
   'tree-a1',
   'tree-a2',
   'tree-a3',
@@ -55,6 +57,7 @@ export function fallbackTexture(key: (typeof TEXTURES)[number]): HTMLCanvasEleme
       }
   } else if (key === 'ground-a1') diamond('#7a5a35');
   else if (key === 'ground-a2') diamond('#4f7a32');
+  else if (key === 'ground-a6' || key === 'ground-a8') blob(128, 176, 40, 16, '#4f7a32');
   else if (key.startsWith('tree-a')) {
     ctx.fillStyle = '#5a3d22';
     ctx.fillRect(120, 140, 16, 66);

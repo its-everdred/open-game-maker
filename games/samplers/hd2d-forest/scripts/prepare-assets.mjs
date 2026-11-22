@@ -22,7 +22,9 @@ function contained(root, path) {
 }
 
 async function digest(path) {
-  return `sha256:${createHash('sha256').update(await readFile(path)).digest('hex')}`;
+  return `sha256:${createHash('sha256')
+    .update(await readFile(path))
+    .digest('hex')}`;
 }
 
 const ISO = 'smallscaleint-fantasy-tileset-2d-isometric';
@@ -37,6 +39,8 @@ const tile = (slug, file) => [
 const carded = [
   tile('ground-a1', 'Ground A1_E.png'),
   tile('ground-a2', 'Ground A2_E.png'),
+  tile('ground-a6', 'Ground A6_E.png'),
+  tile('ground-a8', 'Ground A8_E.png'),
   tile('tree-a1', 'Tree A1_E.png'),
   tile('tree-a2', 'Tree A2_E.png'),
   tile('tree-a3', 'Tree A3_E.png'),

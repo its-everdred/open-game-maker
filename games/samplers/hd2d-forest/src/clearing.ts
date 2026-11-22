@@ -14,6 +14,8 @@ export const FIRE: Cell = [CENTRE + 1, CENTRE - 1];
 export type PieceKey =
   | 'ground-a1'
   | 'ground-a2'
+  | 'ground-a6'
+  | 'ground-a8'
   | 'tree-a1'
   | 'tree-a2'
   | 'tree-a3'
@@ -52,6 +54,8 @@ function inView([cx, cy]: Cell): boolean {
   return Math.abs(cx - cy) <= 10 && Math.abs(cx + cy - 2 * CENTRE) <= 16;
 }
 
+const isDirt = (cx: number, cy: number) => Math.hypot(cx - CENTRE, cy - CENTRE) < 3 + (hash(cx, cy) % 7) * 0.22;
+
 export function clearingPieces(): Piece[] {
   const pieces: Piece[] = [];
   for (let cy = 0; cy < SIZE; cy += 1)
@@ -60,8 +64,26 @@ export function clearingPieces(): Piece[] {
       if (!inView(cell)) continue;
       const h = hash(cx, cy);
       const d = Math.hypot(cx - CENTRE, cy - CENTRE);
-      const dirt = d < 3 + (h % 7) * 0.22;
+      const dirt = isDirt(cx, cy);
       pieces.push({ key: dirt ? 'ground-a1' : 'ground-a2', cell, ground: true, scale: 1, flip: false });
+      // Grass creeps over the dirt at the clearing's edge and in a few patches inside, so the edge is not a tile line.
+      const edge =
+        dirt &&
+        [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ].some(([dx, dy]) => !isDirt(cx + dx!, cy + dy!));
+      const onAnchor = (cx === FIRE[0] && cy === FIRE[1]) || (cx === HERO[0] && cy === HERO[1]);
+      if (!onAnchor && (edge || (dirt && h % 9 === 0)))
+        pieces.push({
+          key: edge && h % 2 ? 'ground-a6' : 'ground-a8',
+          cell,
+          ground: false,
+          scale: 1,
+          flip: h % 3 === 0,
+        });
       if (cx === FIRE[0] && cy === FIRE[1]) {
         pieces.push({ key: 'fireplace', cell, ground: false, scale: 1, flip: false });
         continue;

@@ -132,10 +132,7 @@ export class Forest extends Phaser.Scene {
     this.lighting.setNormalMap(hero, normalCanvas(heroSheet));
     for (const image of images) this.lighting.setNormalMap(image, 'flat');
 
-    this.focus = createFocus(
-      { phaser: { scene: this, hero } },
-      { ...FOCUS, quality: this.options.focus ? quality : 'off' },
-    );
+    this.focus = createFocus({ phaser: { scene: this, hero } }, { ...FOCUS, quality: this.focusQuality() });
 
     const fit = () => {
       const { width, height } = this.scale;
@@ -204,8 +201,13 @@ export class Forest extends Phaser.Scene {
     this.lighting?.setQuality(on ? this.options.quality : 'off');
   }
 
+  /** The low tier drops focus blur entirely: blurring the bands costs about as much on low as on high. */
+  private focusQuality(): 'high' | 'off' {
+    return this.options.focus && this.options.quality === 'high' ? 'high' : 'off';
+  }
+
   setFocus(on: boolean): void {
     this.options.focus = on;
-    this.focus?.setQuality(on ? this.options.quality : 'off');
+    this.focus?.setQuality(this.focusQuality());
   }
 }
