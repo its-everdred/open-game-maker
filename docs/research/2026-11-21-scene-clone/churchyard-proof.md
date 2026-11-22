@@ -169,7 +169,7 @@ copied to `assets-local/review/1154/churchyard-round3-comparison.png`. The
 previous ranked list and manual observation JSON describe `47e9544e`, not
 this newer capture.
 
-In the newer image a roof, continuous paved strip, connected fence, pillars,
+In the newer image a roof, continuous paved strip, joined visible fence segments, pillars,
 torches, surrounding grass and additional vegetation are visible. Do not
 repeat the old findings that these are all absent or that the path is three
 separate blocks. The main remaining visual differences, in approximate order,
@@ -177,7 +177,10 @@ are:
 
 1. The chapel and doorway are cropped at the right edge, while the mock centres
    the whole entrance; the knight remains much smaller and the foreground yard
-   occupies a different part of the frame. The camera still needs matching.
+   occupies a different part of the frame. The camera still needs matching. The
+   game source notes that its current character-to-tile scale cannot show both
+   the mock-sized knight and the whole yard at once; this needs a scene or asset
+   scale change, not a claim that a camera crop alone solved it.
 2. The visible building has a long orange roof and wall; the mock has a gabled
    stone facade, central arched door, steps, cross, side windows and overgrowth.
    The screenshot does not prove whether a closed shell exists outside the view.
