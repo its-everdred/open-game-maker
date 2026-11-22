@@ -10,6 +10,7 @@
     { "path": "../aiur-client" },
     { "path": "../sdk" },
     { "path": "../contracts" },
+    { "path": "../design-log" },
     { "path": "../asset-cards" },
     { "path": "../asset-measure" },
     { "path": "../asset-previews" },

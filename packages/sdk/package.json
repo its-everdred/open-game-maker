@@ -40,6 +40,10 @@
       "types": "./dist/fx/index.d.ts",
       "import": "./dist/fx/index.js"
     },
+    "./hd2d/schemas": {
+      "types": "./dist/hd2d/schemas.d.ts",
+      "import": "./dist/hd2d/schemas.js"
+    },
     "./input": {
       "types": "./dist/input/index.d.ts",
       "import": "./dist/input/index.js"

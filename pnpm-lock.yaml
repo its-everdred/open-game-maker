@@ -404,6 +404,9 @@ importers:
       '@ogm/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@ogm/design-log':
+        specifier: workspace:*
+        version: link:../design-log
       '@ogm/game-repo-template':
         specifier: workspace:*
         version: link:../game-repo-template

@@ -9,3 +9,5 @@ export * from './replay.js';
 export * from './types.js';
 export * from './validate.js';
 export * from './version.js';
+export * from './scene.js';
+export * from './scene-migrate.js';

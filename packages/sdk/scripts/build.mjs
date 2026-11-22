@@ -16,6 +16,7 @@ await build({
     'camera/index': 'src/camera/index.ts',
     'core/index': 'src/core/index.ts',
     'fx/index': 'src/fx/index.ts',
+    'hd2d/schemas': 'src/hd2d/schemas.ts',
     'input/index': 'src/input/index.ts',
     'nav/index': 'src/nav/index.ts',
     'phaser/index': 'src/phaser/index.ts',
