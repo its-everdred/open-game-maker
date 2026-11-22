@@ -1,28 +1,37 @@
 import {
-  createParticlePool,
   createWindField,
   FOREST_DEFAULT_PRESETS,
-  PARTICLE_PRESETS,
   type ParticleHandle,
-  type ParticlePool,
+  type Particles,
+  type ParticlesOptions,
   type WindField,
   type WindSettings,
 } from '../../../../packages/sdk/src/hd2d/particles/index.js';
 import { sampleShaftIntensity, type LightingPreset } from '../../../../packages/sdk/src/hd2d/lighting/index.js';
 
 /**
- * The clearing's particle data: Kevin's pick of both pixel leaves and soft motes, from the core particle presets. One
- * particle unit is one isometric cell: x and z run along the cell axes from the hero's cell, y is height. Drawing waits
- * on the core particle backends (#1178); this module only simulates.
+ * The clearing's particles: Kevin's pick of both pixel leaves and soft motes, plus campfire embers, all from the core
+ * particle presets and drawn by its backends. Pool units are screen axes (y up), `SCALE` world pixels each, as the
+ * core's Phaser backend expects.
  */
 
-/** One breeze for the falling leaves and the canopy sway, blowing toward screen right. */
+/** World pixels per pool unit: the presets' 12-unit boxes span the clearing. */
+export const SCALE = 64;
+
+/** One breeze for the canopy sway, in cell axes (x, height, z): toward screen right. */
 export const WIND: WindSettings = { direction: [0.7, 0, -0.7], strength: 0.6, seed: 5 };
+/** The same breeze for the particles, in their screen axes. */
+export const PARTICLE_WIND: WindSettings = { direction: [1, 0, 0], strength: 0.6, seed: 5 };
 
 const [LEAVES, MOTES] = FOREST_DEFAULT_PRESETS;
-/** How often the motes follow the drifting shafts. */
+const EMBERS = 'campfire-embers';
+/** How often the motes check that they still hang in the brightest shaft. */
 export const MOTE_RETARGET_MS = 3000;
+/** The motes move only when the brightest shaft has moved further than this (pool units). */
+const RETARGET_DISTANCE = 1.5;
 const FIRST_AIM_MS = 250;
+/** Leaves start this far above the hero, at canopy height. */
+const CANOPY = 250;
 /** Canopy rotation per unit of wind, in radians. */
 const SWAY = 0.035;
 
@@ -33,22 +42,33 @@ export interface ViewRect {
   height: number;
 }
 
+/** World pixels (y down) to pool units (y up); the core's Phaser backend flips y back. */
+export function toPool(x: number, y: number): [number, number, number] {
+  return [x / SCALE, -y / SCALE, 0];
+}
+
 /** World pixels of the pack projection to particle cells, relative to the hero's cell. */
 export function worldToCell(x: number, y: number): [x: number, z: number] {
   return [(x / 64 + y / 32) / 2, (y / 32 - x / 64) / 2];
 }
 
-/** The ground cell under the brightest light shaft on screen right now, so the motes hang in the light. */
-export function shaftCell(preset: LightingPreset, timeMs: number, view: ViewRect, steps = 24): [x: number, z: number] {
+/** The world point under the brightest light shaft on screen right now (a beam's ground pool), for the motes. */
+export function shaftPoint(
+  preset: LightingPreset,
+  timeMs: number,
+  view: ViewRect,
+  steps = 32,
+): { x: number; y: number } {
+  const aspect = view.width / view.height;
   let best = { value: -1, x: 0.5, y: 0.5 };
   for (let j = 1; j < steps; j += 1)
     for (let i = 1; i < steps; i += 1) {
       const x = i / steps;
       const y = j / steps;
-      const value = sampleShaftIntensity(preset, x, y, timeMs);
+      const value = sampleShaftIntensity(preset, x, y, timeMs, aspect);
       if (value > best.value) best = { value, x, y };
     }
-  return worldToCell(view.x + best.x * view.width, view.y + best.y * view.height);
+  return { x: view.x + best.x * view.width, y: view.y + best.y * view.height };
 }
 
 /** How far a tree at a cell leans in the wind: the wind's screen-right component (+x, -z cells), in radians. */
@@ -57,32 +77,45 @@ export function swayAt(wind: WindField, x: number, z: number, timeMs: number): n
   return (wx - wz) * Math.SQRT1_2 * SWAY;
 }
 
-export interface ForestParticles {
-  readonly wind: WindField;
-  readonly pool: ParticlePool;
-  /** Advances the simulation and keeps the motes in the shafts. */
-  step(dtMs: number, timeMs: number, preset: LightingPreset, view: ViewRect): void;
+/** Driver options for the clearing; `lighting` is read live, so `setPreset` swaps it in place. */
+export function particleOptions(
+  quality: 'off' | 'low' | 'high',
+  lighting: LightingPreset,
+  focus: ParticlesOptions['focus'],
+): ParticlesOptions {
+  return { wind: PARTICLE_WIND, quality, seed: 7, lighting, focus };
 }
 
-export function createForestParticles(): ForestParticles {
+export interface ForestParticles {
+  /** The canopy's wind, in cell axes. */
+  readonly wind: WindField;
+  readonly particles: Particles;
+  /** Draws the particles and keeps the motes in the brightest shaft. */
+  update(timeMs: number, preset: LightingPreset, view: ViewRect): void;
+}
+
+/** Starts the leaves over the clearing and the embers on the fire; the motes follow the light. */
+export function createForestParticles(particles: Particles, fire: { x: number; y: number }): ForestParticles {
   const wind = createWindField(WIND);
-  const pool = createParticlePool(PARTICLE_PRESETS, wind);
-  // Leaves fall across the whole clearing, from canopy height.
-  pool.emit(LEAVES, { at: [0, 5, 0] });
-  let motes: ParticleHandle | undefined;
+  particles.emit(LEAVES, { at: toPool(0, -CANOPY) });
+  particles.emit(EMBERS, { at: toPool(fire.x, fire.y - 8) });
+  let motes: { handle: ParticleHandle; at: [number, number, number] } | undefined;
   // The camera's view is only final after its first render, so the first aim waits a moment.
   let retargetAt = FIRST_AIM_MS;
   return {
     wind,
-    pool,
-    step(dtMs, timeMs, preset, view) {
+    particles,
+    update(timeMs, preset, view) {
       if (timeMs >= retargetAt) {
         retargetAt = timeMs + MOTE_RETARGET_MS;
-        motes?.stop();
-        const [x, z] = shaftCell(preset, timeMs, view);
-        motes = pool.emit(MOTES, { at: [x, 1, z] });
+        const point = shaftPoint(preset, timeMs, view);
+        const at = toPool(point.x, point.y);
+        if (!motes || Math.hypot(at[0] - motes.at[0], at[1] - motes.at[1]) > RETARGET_DISTANCE) {
+          motes?.handle.stop();
+          motes = { handle: particles.emit(MOTES, { at }), at };
+        }
       }
-      pool.step(dtMs);
+      particles.update(timeMs);
     },
   };
 }

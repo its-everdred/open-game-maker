@@ -48,6 +48,10 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     const blur = await page.evaluate(() => window.__forest.bandBlur());
     if (!blur.some((value) => value > 0)) throw new Error(`${preset} ${name}: no depth band is blurred`);
     report.bandBlur = { ...report.bandBlur, [`${preset}-${name}`]: blur };
+    // Kevin wants lighting and particles together: every look must draw particles.
+    const drawn = await page.evaluate(() => window.__forest.particles());
+    if (!drawn) throw new Error(`${preset} ${name}: no particles drawn`);
+    report.particles = { ...report.particles, [`${preset}-${name}`]: drawn };
     report.stills.push(file);
     report.errors.push(...errors);
     await context.close();
@@ -57,6 +61,7 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     ['lighting', 'focus=0'],
     ['focus', 'lighting=0'],
     ['low', 'quality=low'],
+    ['particles-off', 'particles=0'],
   ]) {
     const { context, page, errors } = await open(viewport, query);
     const file = join(out, `amber-${label}-${name}.png`);
@@ -97,13 +102,15 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
   }
 }
 
-// The toggle clip, phone portrait: all off, lighting, focus on the default (Amber), then the other two presets.
-{
-  const { context, page, errors, created } = await open(VIEWPORTS.phone, 'lighting=0&focus=0', true);
+// The toggle clips, phone portrait and desktop: all off, lighting, focus, particles on the default (Amber), then the
+// other two presets.
+for (const [name, viewport] of Object.entries(VIEWPORTS)) {
+  const { context, page, errors, created } = await open(viewport, 'lighting=0&focus=0&particles=0', true);
   const steps = [
     [2000, () => {}],
     [2500, () => window.__forest.setLighting(true)],
     [2500, () => window.__forest.setFocus(true)],
+    [2500, () => window.__forest.setParticles(true)],
     [2500, () => window.__forest.setPreset('daylight')],
     [2500, () => window.__forest.setPreset('golden')],
   ];
@@ -116,8 +123,8 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
   report.errors.push(...errors);
   const video = page.video();
   await context.close();
-  await rename(await video.path(), join(out, 'toggles-phone.webm'));
-  report.clipMarks = marks;
+  await rename(await video.path(), join(out, `toggles-${name}.webm`));
+  report.clipMarks = { ...report.clipMarks, [name]: marks };
 }
 
 await browser.close();

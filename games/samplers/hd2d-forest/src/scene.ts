@@ -5,7 +5,15 @@ import { createLighting, type Lighting, type LightingLight } from '../../../../p
 import { fallbackTexture, HERO_FRAME, TEXTURES } from './art.js';
 import { cellPoint, clearingPieces, depthBands, FIRE, HERO, HERO_DEPTH } from './clearing.js';
 import { normalCanvas } from './normals.js';
-import { createForestParticles, swayAt, worldToCell, type ForestParticles } from './particles.js';
+import { createParticles, type ParticlesOptions } from '../../../../packages/sdk/src/hd2d/particles/index.js';
+import {
+  createForestParticles,
+  particleOptions,
+  SCALE,
+  swayAt,
+  worldToCell,
+  type ForestParticles,
+} from './particles.js';
 import { FOCUS, focusQuality, PRESETS, type PresetId } from './presets.js';
 
 declare const __GM_PRIVATE_ASSETS__: boolean;
@@ -16,8 +24,12 @@ export interface ForestOptions {
   preset: PresetId;
   lighting: boolean;
   focus: boolean;
+  particles: boolean;
   quality: Quality;
 }
+
+/** The hero's screen row (0 top .. 1 bottom): the camera centres a little above it. The motes stay sharp here. */
+const HERO_ROW_ON_SCREEN = 0.53;
 
 /** The pack's tile anchor: row 208 of a 256 px tile image is the bottom corner of its 128x64 diamond. */
 const TILE_ANCHOR = 208 / 256;
@@ -52,13 +64,13 @@ const campfire = (x: number, y: number): LightingLight => ({
 });
 
 /**
- * The forest clearing in Phaser 4. Lighting, focus and the particle simulation come only from the core HD-2D modules;
- * particles are simulated but not drawn until the core particle backends (#1178) merge.
+ * The forest clearing in Phaser 4. Lighting, focus and particles come only from the core HD-2D modules.
  */
 export class Forest extends Phaser.Scene {
   lighting?: Lighting;
   focus?: Focus;
-  readonly particles: ForestParticles = createForestParticles();
+  particles?: ForestParticles;
+  private particleOptions?: ParticlesOptions;
   private fire?: LightingLight;
   /** Trees and the cell each stands on, swayed by the same wind as the leaves. */
   private trees: { image: Phaser.GameObjects.Image; x: number; z: number }[] = [];
@@ -148,6 +160,16 @@ export class Forest extends Phaser.Scene {
 
     this.focus = createFocus({ phaser: { scene: this, hero } }, { ...FOCUS, quality: this.focusQuality() });
 
+    this.particleOptions = particleOptions(
+      this.particleQuality(),
+      this.preset(this.options.preset),
+      this.particleFocus(),
+    );
+    this.particles = createForestParticles(
+      createParticles({ phaser: { scene: this, scale: SCALE } }, this.particleOptions),
+      fireAt,
+    );
+
     const fit = () => {
       const { width, height } = this.scale;
       this.cameras.main.setZoom(Math.max(width / 1000, height / 900)).centerOn(heroAt.x, heroAt.y - 30);
@@ -157,9 +179,11 @@ export class Forest extends Phaser.Scene {
     this.markReady();
   }
 
-  update(time: number, delta: number): void {
-    for (const tree of this.trees) tree.image.rotation = swayAt(this.particles.wind, tree.x, tree.z, time);
-    this.particles.step(delta, time, PRESETS[this.options.preset], this.cameras.main.worldView);
+  update(time: number): void {
+    if (this.particles) {
+      for (const tree of this.trees) tree.image.rotation = swayAt(this.particles.wind, tree.x, tree.z, time);
+      this.particles.update(time, PRESETS[this.options.preset], this.cameras.main.worldView);
+    }
     this.lighting?.update(time);
     this.focus?.update(time);
   }
@@ -220,6 +244,8 @@ export class Forest extends Phaser.Scene {
   setPreset(id: PresetId): void {
     this.options.preset = id;
     this.lighting?.apply(this.preset(id));
+    // The motes read their light from this preset every frame.
+    if (this.particleOptions) this.particleOptions.lighting = this.preset(id);
   }
 
   setLighting(on: boolean): void {
@@ -235,5 +261,21 @@ export class Forest extends Phaser.Scene {
   setFocus(on: boolean): void {
     this.options.focus = on;
     this.focus?.setQuality(this.focusQuality());
+    if (this.particleOptions) this.particleOptions.focus = this.particleFocus();
+  }
+
+  private particleQuality(): Quality | 'off' {
+    return this.options.particles ? this.options.quality : 'off';
+  }
+
+  /** Motes off the hero's row soften with the same focus the bands use. */
+  private particleFocus(): ParticlesOptions['focus'] {
+    const quality = this.focusQuality();
+    return quality === 'off' ? undefined : { config: { ...FOCUS, quality }, depth: HERO_ROW_ON_SCREEN };
+  }
+
+  setParticles(on: boolean): void {
+    this.options.particles = on;
+    this.particles?.particles.setQuality(this.particleQuality());
   }
 }

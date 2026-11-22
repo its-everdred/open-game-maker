@@ -8,7 +8,11 @@ const BEAM_TOP = -0.05;
 /** Ground pools are flattened ellipses: the ground recedes, as in isometric and tilted views. */
 const POOL_SQUASH = 0.5;
 /** A pool is this many beam widths across. */
-const POOL_WIDTHS = 2.6;
+const POOL_WIDTHS = 3.2;
+/** A beam's own opacity at its core: shafts read as light in the air, not solid bars. */
+const BEAM_CORE = 0.55;
+/** How far each beam's angle strays from `direction` (radians, either way), so they are not ruled parallel. */
+const BEAM_SPREAD = 0.08;
 
 /** A stable 0..1 value per beam index and salt, so beams keep their place from frame to frame. */
 function unit(index: number, salt: number): number {
@@ -30,17 +34,17 @@ export function sampleShaftBeams(shafts: Shafts, x: number, y: number, timeMs: n
   const reach = shafts.reach ?? 0.45;
   const width = shafts.width ?? 0.035;
   const pool = shafts.pool ?? 0.8;
-  const dx = Math.cos(shafts.direction);
-  // Shafts always fall: a near-horizontal direction is steepened so a beam cannot run along the top edge forever.
-  const dy = Math.max(0.3, Math.sin(shafts.direction));
-  const norm = Math.hypot(dx, dy);
-  const ux = dx / norm;
-  const uy = dy / norm;
   const px = x * aspect;
   // Narrow (portrait) views have less room across, so their beams thin out instead of merging.
   const narrow = Math.min(1, Math.sqrt(aspect / (16 / 9)));
   let total = 0;
   for (let i = 0; i < count; i += 1) {
+    const angle = shafts.direction + (unit(i, 4) * 2 - 1) * BEAM_SPREAD;
+    // Shafts always fall: a near-horizontal direction is steepened so a beam cannot run along the top edge forever.
+    const dy = Math.max(0.3, Math.sin(angle));
+    const norm = Math.hypot(Math.cos(angle), dy);
+    const ux = Math.cos(angle) / norm;
+    const uy = dy / norm;
     // Ends spread across the view with some jitter, each at its own depth no lower than `reach`.
     const endX = (0.08 + (0.84 * (i + 0.3 + 0.4 * unit(i, 1))) / count) * aspect;
     const endY = reach * (0.65 + 0.35 * unit(i, 2));
@@ -55,8 +59,9 @@ export function sampleShaftBeams(shafts: Shafts, x: number, y: number, timeMs: n
     const w = width * narrow * (0.6 + 0.8 * unit(i, 3)) * (0.7 + 0.5 * t);
     const shimmer = 0.8 + 0.2 * Math.sin(Math.max(0, timeMs) * 0.0007 + i * 2.39);
     if (t > -0.05 && t < 1.05 && Math.abs(across) < 2 * w) {
-      const core = Math.exp(-3 * (across / w) ** 2);
-      const fade = smoothstep(0, 0.25, t) * (1 - 0.45 * t) * (1 - smoothstep(0.9, 1.04, t));
+      const core = BEAM_CORE * Math.exp(-3 * (across / w) ** 2);
+      // Brightest where the beam breaks through the canopy, thinning as it falls into its pool.
+      const fade = smoothstep(0, 0.2, t) * (1 - 0.7 * t) * (1 - smoothstep(0.85, 1.02, t));
       total += core * fade * shimmer;
     }
     if (pool > 0) {
@@ -64,7 +69,9 @@ export function sampleShaftBeams(shafts: Shafts, x: number, y: number, timeMs: n
       const ex = (px - endX) / radius;
       const ey = (y - endY) / (radius * POOL_SQUASH);
       const r2 = ex * ex + ey * ey;
-      if (r2 < 1) total += pool * (1 - r2) ** 2 * shimmer;
+      // Leaf gaps break the patch up, so it reads as sunlit ground rather than a round spotlight.
+      const breakup = 0.45 + 0.55 * valueNoise(ex * 2.5 + i * 7, ey * 2.5, i);
+      if (r2 < 1) total += pool * 0.7 * (1 - r2) ** 1.5 * breakup * shimmer;
     }
   }
   return Math.min(1, total) * shafts.intensity;
