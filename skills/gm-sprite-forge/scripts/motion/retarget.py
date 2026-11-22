@@ -348,6 +348,14 @@ STANCES = {  # additive pose layers (world-axis degrees, chained parent -> child
     'ssi-barbarian': {'crouch': 0.05, 'rot': {'spine': (14, 0, 0), 'spine.002': (12, 0, 0), 'spine.004': (-12, 0, 0),
                                                'upper_arm.L': (-14, 0, 0), 'upper_arm.R': (-14, 0, 0),
                                                'forearm.L': (-12, 0, 0), 'forearm.R': (-12, 0, 0)}},
+    # SmallScaleInt HD 3Wizard and 5BarbArcher Idles: a sideways fighting stance, torso turned off the facing,
+    # knees bent, arms held out from the body with the elbows bent (matched by eye on the base bodies, #1202)
+    'ssi-wizard': {'crouch': 0.2, 'rot': {'spine': (18, 0, -35), 'spine.004': (-12, 0, 14),
+                                           'upper_arm.L': (-10, -12, 0), 'upper_arm.R': (-10, 12, 0),
+                                           'forearm.L': (-35, 0, 0), 'forearm.R': (-35, 0, 0)}},
+    'ssi-ranger': {'crouch': 0.15, 'rot': {'spine': (12, 0, -35), 'spine.004': (-8, 0, 14),
+                                           'upper_arm.L': (-8, -12, 0), 'upper_arm.R': (-8, 12, 0),
+                                           'forearm.L': (-25, 0, 0), 'forearm.R': (-25, 0, 0)}},
 }
 
 

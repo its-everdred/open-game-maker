@@ -52,8 +52,9 @@ Blender at a time on the NUC.
    heel-to-toe roll, hip sway and turn, arms against the legs) and two attacks: `chop`, and `combo` on the pack Attack1
    beat.
 4. **Stance.** Kevin (2026-11-22): stance changes belong to the rigging step, not the modeling step.
-   `retarget.STANCES` holds additive pose layers; `ssi-barbarian` (the only one so far) hunches the chest, pushes the
-   head out, hangs the arms in front and crouches 5% of a leg. Every motion source in a batch gets the same layer.
+   `retarget.STANCES` holds additive pose layers: `ssi-barbarian` hunches the chest, pushes the head out, hangs the
+   arms in front and crouches 5% of a leg; `ssi-wizard` and `ssi-ranger` turn the torso 35 degrees off the facing,
+   bend the knees and hold the arms out, as in those packs' Idles. Every motion source in a batch gets the same layer.
 5. **Feet.** The foot lock keeps each planted ankle on one ground speed (a loop) or in place (an attack). A two-bone IK
    pass then solves thigh and shin to it and lowers the hips when a leg cannot reach.
 6. **Render.** S and SE (sheet rows 2 and 1) through the pack camera, with the same projection and scale rule as
@@ -171,7 +172,14 @@ base bodies, not on those meshes:
 - One `cells.json` per approved body (Warrior, Wizard and Ranger, each male and female:
   `hero-base/<class>-<m|f>/gen/model_mesh.glb`) as `mesh`, scored against that class's pack sheets (6Barbarian,
   3Wizard, 5BarbArcher): a walk and one attack, with phone clips.
-- One stance layer per class in `retarget.STANCES`, matched to that class's pack Idle. Only `ssi-barbarian` exists;
-  the Wizard and Ranger need their own. Fix stance here, not by asking for a new mesh.
+- One stance layer per class in `retarget.STANCES`, matched to that class's pack Idle (`ssi-barbarian`,
+  `ssi-wizard`, `ssi-ranger`). Fix stance here, not by asking for a new mesh. An Idle stance does not fit every
+  clip: on the base-body dry run it raised the Ranger's hand-keyed walk from 0.43 to 0.53 but lowered the Wizard's
+  from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer.
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
   weapon cut-off does nothing.
+
+Dry run (2026-11-22, unapproved base bodies, workbench, debug only): the fit lands knees, elbows, wrists and ankles on
+the joints of all six bodies (`landmarks.png`), with no tearing at sprite scale. Hand-keyed walks score 0.32-0.58 with
+0.15-0.38 px foot slide; KayKit `Walking_C` scores 0.29-0.66 with about 1 px slide and reads as a lunging high-knee
+gait on every body.
