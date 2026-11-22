@@ -134,6 +134,7 @@ export function createThreeParticles(target: {
       // Pixels per pool unit at this point: project one unit along the camera's up axis.
       up.set(0, 1, 0).applyQuaternion(cameraRotation).multiplyScalar(unit).add(position).project(camera);
       out[2] = (Math.hypot(up.x - ndc.x, up.y - ndc.y) * buffer.y) / 2;
+      out[3] = buffer.x / buffer.y;
     },
     draw(family: Family, slot, x, y, z, rot, size, alpha, hex) {
       const mesh = meshes[family]!;

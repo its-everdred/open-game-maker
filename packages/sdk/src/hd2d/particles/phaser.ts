@@ -54,6 +54,7 @@ export function createPhaserParticles({ scene, scale = 1 }: { scene: Phaser.Scen
       out[0] = (x * scale - view.x) / view.width;
       out[1] = (-y * scale - view.y) / view.height;
       out[2] = scale * camera.zoom;
+      out[3] = view.width / view.height;
     },
     draw(family, slot, x, y, _z, rot, size, alpha, color) {
       const image = sprite(family, slot).setVisible(true).setAlpha(alpha).setTint(color).setRotation(rot);

@@ -9,7 +9,9 @@ const options: ForestOptions = {
   preset: PRESET_IDS.includes(preset as PresetId) ? (preset as PresetId) : 'amber',
   lighting: params.get('lighting') !== '0',
   focus: params.get('focus') !== '0',
+  particles: params.get('particles') !== '0',
   quality: (params.get('quality') === 'low' ? 'low' : 'high') satisfies Quality,
+  weather: params.get('weather') ?? 'clear',
 };
 
 const scene = new Forest(options);
@@ -71,9 +73,10 @@ const focusButton = button('Focus', ICON.focus, options.focus, (element) => {
   scene.setFocus(!options.focus);
   element.setAttribute('aria-pressed', String(options.focus));
 });
-// Leaves and motes are simulated (see particles.ts); the button turns on when the core backends (#1178) draw them.
-const particles = button('Particles', ICON.particles, false, () => {});
-particles.disabled = true;
+const particlesButton = button('Particles', ICON.particles, options.particles, (element) => {
+  scene.setParticles(!options.particles);
+  element.setAttribute('aria-pressed', String(options.particles));
+});
 
 declare global {
   interface Window {
@@ -82,10 +85,13 @@ declare global {
       options: ForestOptions;
       fps(): number;
       particles(): number;
+      litSprites(): number;
       bandBlur(): number[];
       setPreset(id: PresetId): void;
       setLighting(on: boolean): void;
       setFocus(on: boolean): void;
+      setParticles(on: boolean): void;
+      setWeather(weather: string): void;
     };
   }
 }
@@ -95,7 +101,8 @@ void scene.ready.then(() => {
     ready: true,
     options,
     fps: () => game.loop.actualFps,
-    particles: () => scene.particles.pool.views.count,
+    particles: () => scene.particles?.particles.drawn ?? 0,
+    litSprites: () => scene.litSprites(),
     bandBlur: () => scene.bandBlur(),
     setPreset: (id) => swatches[PRESET_IDS.indexOf(id)]!.click(),
     setLighting: (on) => {
@@ -103,6 +110,10 @@ void scene.ready.then(() => {
     },
     setFocus: (on) => {
       if (on !== options.focus) focusButton.click();
+    },
+    setWeather: (weather) => scene.setWeather(weather),
+    setParticles: (on) => {
+      if (on !== options.particles) particlesButton.click();
     },
   };
 });

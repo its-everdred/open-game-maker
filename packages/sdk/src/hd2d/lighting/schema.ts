@@ -20,6 +20,44 @@ export const LightingPresetSchema = z.object({
       color: ColorSchema,
       intensity: z.number().min(0).max(1),
       mask: z.string().optional(),
+      /** Set to draw this many short beams instead of one wide wash. */
+      count: z.number().int().min(1).max(12).optional(),
+      /** How far down the view the beams reach, as a share of its height (default 0.45). */
+      reach: z.number().min(0.05).max(1).optional(),
+      /** Beam width in view heights (default 0.035). */
+      width: z.number().positive().max(0.5).optional(),
+      /** Brightness of the lit patch each beam leaves on the ground (default 0.8). */
+      pool: z.number().min(0).max(1).optional(),
+      /**
+       * Set to make beams come and go: each of the `count` slots shows a beam for about this many seconds at a random
+       * place, length and brightness, then fades and returns elsewhere. Only some reach the ground and light a patch.
+       */
+      cycle: z.number().positive().optional(),
+      /** Share of cycles in which a slot shows a beam at all (default 1). */
+      chance: z.number().min(0).max(1).optional(),
+      /** Shafts only appear in these biomes and weathers (see `Lighting.setConditions`); unset means always. */
+      when: z
+        .object({
+          biomes: z.array(z.string().min(1)).optional(),
+          weather: z.array(z.string().min(1)).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  /** Drifting cloud shadows over the ground, with sunny patches between them. */
+  clouds: z
+    .object({
+      coverage: z.number().min(0).max(1),
+      /** Cloud size in view heights. */
+      scale: z.number().positive(),
+      /** Drift in view heights per second. */
+      speed: z.number().min(0),
+      /** Drift direction in radians (default 0.3). */
+      direction: z.number().optional(),
+      /** How dark the ground is under a cloud. */
+      shadow: z.number().min(0).max(1),
+      /** How much light the sunny patches add. */
+      sun: z.number().min(0).max(1),
     })
     .optional(),
   dapple: z

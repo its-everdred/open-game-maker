@@ -48,6 +48,10 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     const blur = await page.evaluate(() => window.__forest.bandBlur());
     if (!blur.some((value) => value > 0)) throw new Error(`${preset} ${name}: no depth band is blurred`);
     report.bandBlur = { ...report.bandBlur, [`${preset}-${name}`]: blur };
+    // Kevin wants lighting and particles together: every look must draw particles.
+    const drawn = await page.evaluate(() => window.__forest.particles());
+    if (!drawn) throw new Error(`${preset} ${name}: no particles drawn`);
+    report.particles = { ...report.particles, [`${preset}-${name}`]: drawn };
     report.stills.push(file);
     report.errors.push(...errors);
     await context.close();
@@ -56,10 +60,20 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     ['off', 'lighting=0&focus=0'],
     ['lighting', 'focus=0'],
     ['focus', 'lighting=0'],
+    ['low', 'quality=low'],
+    ['particles-off', 'particles=0'],
+    ['rain', 'weather=rain'],
   ]) {
     const { context, page, errors } = await open(viewport, query);
     const file = join(out, `amber-${label}-${name}.png`);
     await page.screenshot({ path: file });
+    if (label === 'low') {
+      // Kevin keeps the blur on the low tier and saves by lighting fewer sprites instead.
+      const blur = await page.evaluate(() => window.__forest.bandBlur());
+      if (!blur.some((value) => value > 0)) throw new Error(`low ${name}: no depth band is blurred`);
+      report.bandBlur = { ...report.bandBlur, [`low-${name}`]: blur };
+      report.litSprites = { ...report.litSprites, [name]: await page.evaluate(() => window.__forest.litSprites()) };
+    }
     report.stills.push(file);
     report.errors.push(...errors);
     await context.close();
@@ -89,15 +103,20 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
   }
 }
 
-// The toggle clip, phone portrait: all off, lighting, focus on the default (Amber), then the other two presets.
-{
-  const { context, page, errors, created } = await open(VIEWPORTS.phone, 'lighting=0&focus=0', true);
+// The toggle clips, phone portrait and desktop: all off, lighting, focus, particles on the default (Amber), the other
+// two presets, then rain and back to clear.
+for (const [name, viewport] of Object.entries(VIEWPORTS)) {
+  const { context, page, errors, created } = await open(viewport, 'lighting=0&focus=0&particles=0', true);
   const steps = [
     [2000, () => {}],
     [2500, () => window.__forest.setLighting(true)],
     [2500, () => window.__forest.setFocus(true)],
+    [2500, () => window.__forest.setParticles(true)],
     [2500, () => window.__forest.setPreset('daylight')],
     [2500, () => window.__forest.setPreset('golden')],
+    // Shafts show only in clear or partly cloudy weather: rain clears them, then they return.
+    [3000, () => window.__forest.setWeather('rain')],
+    [5000, () => window.__forest.setWeather('clear')],
   ];
   const marks = [];
   for (const [wait, step] of steps) {
@@ -108,8 +127,8 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
   report.errors.push(...errors);
   const video = page.video();
   await context.close();
-  await rename(await video.path(), join(out, 'toggles-phone.webm'));
-  report.clipMarks = marks;
+  await rename(await video.path(), join(out, `toggles-${name}.webm`));
+  report.clipMarks = { ...report.clipMarks, [name]: marks };
 }
 
 await browser.close();

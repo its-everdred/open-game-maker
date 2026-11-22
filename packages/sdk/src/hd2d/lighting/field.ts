@@ -2,6 +2,7 @@ import type { Camera, Mesh, Scene, WebGLRenderer } from 'three';
 import type Phaser from 'phaser';
 import { DAPPLE_DEPTH, renderDappleMask, sampleShaftIntensity } from './dapple.js';
 import type { LightingPreset, LightingQuality } from './schema.js';
+import { sampleCloudCover, type SkyConditions } from './sky.js';
 
 type PresetLight = NonNullable<LightingPreset['lights']>[number];
 export type LightingLight = PresetLight;
@@ -21,6 +22,8 @@ export interface Lighting {
   removeLight(id: string): void;
   setQuality(quality: LightingQuality): void;
   setNormalMap(sprite: LightingSprite, normal: NormalSource): void;
+  /** The scene's biome and weather; shafts with a `when` appear only where they match. */
+  setConditions(conditions: SkyConditions): void;
   update(timeMs: number): void;
   dispose(): void;
 }
@@ -45,7 +48,8 @@ export function hexToRgb01(hex: string): [number, number, number] {
 
 /**
  * Renders the shared low-resolution light field into `out` (RGBA bytes): rgb is light to add, alpha is how much of
- * the scene colour to keep (255 = untouched). Both backends composite it as `scene * keep + light`.
+ * the scene colour to keep (255 = untouched). Both backends composite it as `scene * keep + light`. `aspect` is the
+ * view's width / height (the field is stretched over it), so shafts, clouds and lights keep their shape on any screen.
  */
 export function renderLightField(
   out: Uint8ClampedArray,
@@ -55,24 +59,31 @@ export function renderLightField(
   timeMs: number,
   seed: number,
   lights: readonly ScreenLight[],
+  aspect = width / height,
 ): void {
   const dapple = preset.dapple;
   const mask = dapple ? renderDappleMask(dapple, { width, height, timeMs, seed }) : undefined;
   const dappleBase = dapple ? 1 - Math.min(1, Math.max(0, dapple.intensity)) * DAPPLE_DEPTH : 1;
   const sun = hexToRgb01(preset.shafts?.color ?? '#ffffff');
-  const aspect = width / height;
+  const clouds = preset.clouds;
+  const cloudGrid = clouds ? cloudCoverGrid(clouds, width, height, timeMs, aspect, seed) : undefined;
   for (let py = 0; py < height; py += 1) {
     const ny = (py + 0.5) / height;
     for (let px = 0; px < width; px += 1) {
       const nx = (px + 0.5) / width;
       const index = py * width + px;
-      const shaft = sampleShaftIntensity(preset, nx, ny, timeMs);
+      const shaft = sampleShaftIntensity(preset, nx, ny, timeMs, aspect);
       let shade = 0;
       let sunAmount = shaft;
       if (mask && dapple) {
         const m = mask[index]! / 255;
         shade = (1 - m) * 0.6 * (1 - shaft);
         if (m > dappleBase) sunAmount += ((m - dappleBase) / (1 - dappleBase)) * dapple.intensity * 0.5;
+      }
+      if (clouds) {
+        const cover = cloudGrid!.at(px, py);
+        shade = 1 - (1 - shade) * (1 - cover * clouds.shadow * (1 - shaft));
+        sunAmount += (1 - cover) * clouds.sun * 0.5;
       }
       let r = sun[0] * sunAmount;
       let g = sun[1] * sunAmount;
@@ -96,6 +107,47 @@ export function renderLightField(
       out[o + 3] = (1 - shade) * 255;
     }
   }
+}
+
+/** Field pixels per cloud sample: clouds are large and smooth, so a coarse grid, interpolated, looks the same. */
+const CLOUD_STEP = 4;
+
+/** Cloud cover sampled every `CLOUD_STEP` field pixels, read back with bilinear interpolation. */
+function cloudCoverGrid(
+  clouds: NonNullable<LightingPreset['clouds']>,
+  width: number,
+  height: number,
+  timeMs: number,
+  aspect: number,
+  seed: number,
+): { at(px: number, py: number): number } {
+  const columns = Math.ceil(width / CLOUD_STEP) + 1;
+  const rows = Math.ceil(height / CLOUD_STEP) + 1;
+  const grid = new Float32Array(columns * rows);
+  for (let gy = 0; gy < rows; gy += 1)
+    for (let gx = 0; gx < columns; gx += 1)
+      grid[gy * columns + gx] = sampleCloudCover(
+        clouds,
+        (gx * CLOUD_STEP + 0.5) / width,
+        (gy * CLOUD_STEP + 0.5) / height,
+        timeMs,
+        aspect,
+        seed,
+      );
+  return {
+    at(px, py) {
+      const gx = px / CLOUD_STEP;
+      const gy = py / CLOUD_STEP;
+      const x0 = Math.floor(gx);
+      const y0 = Math.floor(gy);
+      const fx = gx - x0;
+      const fy = gy - y0;
+      const i = y0 * columns + x0;
+      const top = grid[i]! * (1 - fx) + grid[i + 1]! * fx;
+      const bottom = grid[i + columns]! * (1 - fx) + grid[i + columns + 1]! * fx;
+      return top * (1 - fy) + bottom * fy;
+    },
+  };
 }
 
 /**

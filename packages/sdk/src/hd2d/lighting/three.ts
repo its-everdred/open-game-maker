@@ -22,6 +22,7 @@ import {
 } from 'three';
 import { flickerAt } from './flicker.js';
 import { FIELD_SIZE, gradeMatrix, hexToRgb01, renderLightField } from './field.js';
+import { presetUnder, type SkyConditions } from './sky.js';
 import type { Lighting, LightingLight, LightingOptions, NormalSource, ScreenLight } from './field.js';
 import { maxLightsFor, type LightingPreset, type LightingQuality } from './schema.js';
 
@@ -55,6 +56,7 @@ export function createThreeLighting(
 ): Lighting {
   const { renderer, scene, camera } = target;
   let preset = initial;
+  let conditions: SkyConditions = {};
   let quality = startQuality;
   let lights: LightingLight[] = [...(initial.lights ?? [])];
   let screenLights: ScreenLight[] = [];
@@ -161,7 +163,17 @@ export function createThreeLighting(
         falloff: light.falloff ?? 2,
       });
     });
-    renderLightField(fieldData, field.image.width, field.image.height, preset, timeMs, seed, screenLights);
+    renderLightField(
+      fieldData,
+      field.image.width,
+      field.image.height,
+      presetUnder(preset, conditions),
+      timeMs,
+      seed,
+      screenLights,
+      // The last drawn frame's size; before the first render the field's own shape stands in.
+      size.y > 0 ? size.x / size.y : undefined,
+    );
     field.needsUpdate = true;
   }
 
@@ -205,6 +217,9 @@ export function createThreeLighting(
     },
     setQuality,
     setNormalMap,
+    setConditions(next) {
+      conditions = { ...next };
+    },
     update,
     dispose() {
       setQuality('off');
