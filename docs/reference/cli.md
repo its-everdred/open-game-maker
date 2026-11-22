@@ -213,6 +213,9 @@ image mismatch using four supplied corresponding points. The JSON has `anchors` 
 points and regions by eye: a ground-plane warp does not align elevated objects, detect missing assets, verify
 camera framing, or explain a mismatch. Regions without complete render coverage are rejected. Output records
 the hashes of both images and the registration file.
+Add `--out <new-sheet.png>` for reference, warped render and 50% overlay side by side; uncovered pixels are
+magenta in the render panel. The command refuses to overwrite an existing file. The sheet is a ground-plane
+diagnostic, so elevated objects may not align.
 
 `gm look score <target.png> <candidate.png>` compares images locally and prints JSON. It writes `look-score.png` (or
 `--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The crop applied to both inputs

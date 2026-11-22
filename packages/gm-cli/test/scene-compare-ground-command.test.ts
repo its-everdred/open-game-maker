@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -29,8 +29,16 @@ it('ranks registered ground regions and rejects out-of-image anchors', async () 
     const lines: string[] = [];
     const args = ['reference.png', 'render.png', 'registration.json'];
     const ctx = { cwd: dir, out: (line: string) => lines.push(line) } as GmContext;
-    expect(await command.run(ctx, args, {})).toBe(0);
+    expect(await command.run(ctx, args, { out: 'sheet.png' })).toBe(0);
     expect(JSON.parse(lines.join('\n')).regions.map((r: { id: string }) => r.id)).toEqual(['different', 'same']);
+    const sheet = await sharp(await readFile(join(dir, 'sheet.png')))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect([sheet.info.width, sheet.info.height]).toEqual([6, 2]);
+    expect([...sheet.data.subarray(3, 6)]).toEqual([255, 255, 255]);
+    expect([...sheet.data.subarray(9, 12)]).toEqual([0, 0, 0]);
+    expect([...sheet.data.subarray(15, 18)]).toEqual([128, 128, 128]);
+    await expect(command.run(ctx, args, { out: 'reference.png' })).rejects.toMatchObject({ code: 'EEXIST' });
     await writeFile(
       join(dir, 'registration.json'),
       JSON.stringify({

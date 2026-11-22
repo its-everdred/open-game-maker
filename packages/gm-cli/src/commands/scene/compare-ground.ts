@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import sharp from 'sharp';
 import { z } from 'zod';
@@ -31,9 +31,9 @@ const input = z
 export const command: GmCommand = {
   name: 'scene compare-ground',
   summary: 'rank registered ground-plane image differences',
-  usage: '<reference.png> <render.png> <registration.json>',
-  flags: {},
-  async run(ctx, args) {
+  usage: '<reference.png> <render.png> <registration.json> [--out sheet.png]',
+  flags: { out: { type: 'string', help: 'write a new comparison sheet without overwriting files' } },
+  async run(ctx, args, flags) {
     if (args.length !== 3)
       throw new UsageError('provide reference, render and registration files', 'gm help scene compare-ground');
     const [referenceBytes, renderBytes, registrationBytes] = await Promise.all(
@@ -71,12 +71,38 @@ export const command: GmCommand = {
     );
     const regions = rankRegisteredRegions(reference, warped, registration.regions);
     const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+    let sheet: { path: string; sha256: string } | null = null;
+    if (typeof flags.out === 'string') {
+      const pixels = Buffer.alloc(reference.width * reference.height * 9);
+      for (let y = 0; y < reference.height; y++) {
+        for (let x = 0; x < reference.width; x++) {
+          const index = y * reference.width + x;
+          const source = index * 3;
+          const render = index * 4;
+          const row = y * reference.width * 9;
+          for (let channel = 0; channel < 3; channel++) {
+            const a = reference.pixels[source + channel]!;
+            const b = warped.pixels[render + 3] === 255 ? warped.pixels[render + channel]! : channel === 1 ? 0 : 255;
+            pixels[row + x * 3 + channel] = a;
+            pixels[row + (reference.width + x) * 3 + channel] = b;
+            pixels[row + (2 * reference.width + x) * 3 + channel] = Math.round((a + b) / 2);
+          }
+        }
+      }
+      const png = await sharp(pixels, { raw: { width: reference.width * 3, height: reference.height, channels: 3 } })
+        .png()
+        .toBuffer();
+      const path = resolve(ctx.cwd, flags.out);
+      await writeFile(path, png, { flag: 'wx' });
+      sheet = { path, sha256: hash(png) };
+    }
     ctx.out(
       JSON.stringify(
         {
           referenceSha256: hash(referenceBytes!),
           renderSha256: hash(renderBytes!),
           registrationSha256: hash(registrationBytes!),
+          sheet,
           regions,
         },
         null,
