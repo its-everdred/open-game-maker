@@ -29,13 +29,15 @@ export function edgeRun(shape: readonly Cell[] | EdgePolyline, kind: EdgeKind, o
   const edges = Array.isArray(shape) ? boundary(shape) : polylineEdges(shape as EdgePolyline);
   const postVertices = verticesForOpenings(edges, openings);
   const omitted = new Set(openings.map(({ cell, edge }) => `${cell.x},${cell.y}:${edge}`));
+  // Collision is per cell, so any remaining edge on an opening's cell must not block the way through.
+  const openCells = new Set(openings.map(({ cell }) => `${cell.x},${cell.y}`));
   const placements: AssemblyPlacement[] = edges
     .filter(({ cell, edge }) => !omitted.has(`${cell.x},${cell.y}:${edge}`))
     .map(({ cell, edge }) => {
       const facing = (Object.entries(style.edges.value) as [TileFacing, CellEdge][]).find(
         ([, value]) => value === edge,
       )![0];
-      return { cell, layer: 'wall', asset: style.asset, facing, solid: true };
+      return { cell, layer: 'wall', asset: style.asset, facing, solid: !openCells.has(`${cell.x},${cell.y}`) };
     });
   return { placements, postVertices };
 }

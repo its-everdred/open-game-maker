@@ -23,12 +23,23 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   edges with the `GameInstance.validatePlacement` result shape.
 - `conventions`: the pack facts, each with how it was verified (sheet row order E, SE, S, SW, W, NW, N, NE, measured
   pixel by pixel against the angle-named frame files), and `layerForCategory` for tileset pieces.
-- Assemblers: `edgeRun(cells | polyline, 'fence' | 'stone' | 'timber', openings)` places measured facings on every
-  boundary edge and returns the gate post vertices; `building(footprint, 'stone', door, walkable)` makes a shell, a gable
-  over the footprint and a door onto a walkable entry; `path(from, to, style)` lays seeded stepping stones between
-  entries; `scatter(region, palette, density, rules)` adds clustered dressing that never covers reserved cells.
-  `assemblyMap(width, height, placements)` writes their output as the Tiled subset `IsoMap` reads. Gate posts, steps
-  and other building styles are not bound yet.
+- Assemblers (cells are `{ x, y }` grid cells; an opening or door is `{ cell, edge: 'xMin' | 'xMax' | 'yMin' | 'yMax' }`):
+  - `edgeRun(cells | { vertices, interior: 'left' | 'right' }, 'fence' | 'stone' | 'timber', openings)` returns
+    `{ placements, postVertices }`: measured facings on every boundary edge, a walkable gap at each opening, and the
+    grid vertices where gate posts belong.
+  - `building(footprint, 'stone', door, walkable)` returns `{ placements, entry }`: a closed shell, a gable over a
+    two-row footprint, and a door on a `yMax` edge opening onto the walkable `entry` cell. Provisional until checked
+    in a game render.
+  - `path(from, to, { walkable, palette: [{ asset, facing }], seed })` returns stepping stones on the `decor` layer
+    over the scene's own ground.
+  - `scatter(region, [{ asset, facing, solid, footprint }], density, { seed, avoid, boundaries, boundaryDensity })`
+    returns clustered dressing, denser near `boundaries`; pass the path, door entry and building cells in `avoid`.
+    Solid items go on the `wall` layer so they block movement at their origin cell.
+  - Concatenate the placements with the scene's floor and pass them to `assemblyMap(width, height, placements)`, the
+    Tiled subset `IsoMap` reads. The structural asset ids are pinned card ids; record them in the game's asset list.
+  - Not bound yet: gate posts, steps and non-stone buildings.
+- `scripts/stage-structural-cards.mjs <library> <empty-dir>` (after `pnpm build`) writes validated card copies carrying
+  the structural facts and a source-hash plan, for a host operator to apply to the shared library.
 - `structuralImageBounds`: inclusive alpha bounds for twenty-one measured structural or paving assets, keyed by asset card id.
   Bounds do not establish an anchor or connection socket. `fenceB1Edges`, `wallF1Edges`, and `wallC1Edges` record measured fence, stone and timber wall facings.
   `structuralCardFacts(id)` returns the known card fields without fabricating unmeasured facts.

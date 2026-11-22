@@ -20,14 +20,14 @@ await mkdir(candidate, { recursive: true });
 const output = await realpath(candidate);
 if (insideLibrary(output)) throw new Error('output must be outside the asset library');
 if ((await readdir(output)).length) throw new Error('output directory must be empty');
-const plan = [];
+// Prepare and validate every card first, so a bad card leaves the output directory empty and retryable.
+const prepared = [];
 for (const id of Object.keys(structuralImageBounds.value)) {
   const match = /^t1:([a-z0-9-]+)\/tiles\/([a-z0-9-]+)\/([a-z0-9-]+)@\d{4}-\d{2}-\d{2}$/.exec(id);
   if (!match) throw new Error(`unexpected measured card id: ${id}`);
   const [, pack, group, slug] = match;
   const relative = `packs/${pack}/cards/tiles/${group}/${slug}.card.json`;
-  const source = path.join(library, relative);
-  const original = await readFile(source);
+  const original = await readFile(path.join(library, relative));
   const card = JSON.parse(original.toString('utf8'));
   if (card.id !== id || !card.sprite || card.sprite.structural_facings) throw new Error(`card changed or already has facts: ${id}`);
   card.sprite.structural_facings = structuralCardFacts(id);
@@ -38,8 +38,12 @@ for (const id of Object.keys(structuralImageBounds.value)) {
   const result = validateCard(card);
   if (!result.ok) throw new Error(`${id}: ${result.errors.join('; ')}`);
   const staged = `${pack}--${slug}.card.json`;
-  await writeFile(path.join(output, staged), `${JSON.stringify(card, null, 2)}\n`, { flag: 'wx' });
-  plan.push({ id, source: relative, sha256: createHash('sha256').update(original).digest('hex'), staged });
+  if (prepared.some((entry) => entry.staged === staged)) throw new Error(`duplicate staged name: ${staged}`);
+  prepared.push({ card, entry: { id, source: relative, sha256: createHash('sha256').update(original).digest('hex'), staged } });
 }
+for (const { card, entry } of prepared) {
+  await writeFile(path.join(output, entry.staged), `${JSON.stringify(card, null, 2)}\n`, { flag: 'wx' });
+}
+const plan = prepared.map(({ entry }) => entry);
 await writeFile(path.join(output, 'plan.json'), `${JSON.stringify(plan, null, 2)}\n`, { flag: 'wx' });
 console.log(`Staged ${plan.length} validated cards. Verify each source hash before applying.`);

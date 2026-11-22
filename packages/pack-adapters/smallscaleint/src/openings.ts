@@ -1,13 +1,8 @@
-import { boundary, type BoundaryEdge } from './boundary.js';
+import type { BoundaryEdge } from './boundary.js';
 import type { Cell } from './placement.js';
 
 const sameEdge = (a: BoundaryEdge, b: BoundaryEdge) =>
   a.cell.x === b.cell.x && a.cell.y === b.cell.y && a.edge === b.edge;
-
-/** Grid vertices at the two ends of each exterior opening, suitable for later post placement. */
-export function openingVertices(cells: readonly Cell[], openings: readonly BoundaryEdge[]): Cell[] {
-  return verticesForOpenings(boundary(cells), openings);
-}
 
 /** Endpoints of openings selected from an explicit set of edges. */
 export function verticesForOpenings(exterior: readonly BoundaryEdge[], openings: readonly BoundaryEdge[]): Cell[] {

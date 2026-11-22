@@ -70,3 +70,13 @@ it('assembles an open polyline and leaves its selected opening', () => {
     ),
   ).toThrow('exterior');
 });
+
+it('keeps a gate walkable when its cell also carries a corner edge', () => {
+  const cells = Array.from({ length: 9 }, (_, i) => ({ x: i % 3, y: Math.floor(i / 3) }));
+  // The south-west corner cell carries both the xMin and yMax fence edges; the gate opens its yMax edge.
+  const run = edgeRun(cells, 'fence', [{ cell: { x: 0, y: 2 }, edge: 'yMax' }]);
+  const grid = new IsoMap(assemblyMap(3, 3, run.placements)).collisionGrid();
+  expect(run.placements.some(({ cell }) => cell.x === 0 && cell.y === 2)).toBe(true);
+  expect(grid[2]![0]).toBe(false);
+  expect(grid[2]![1]).toBe(true);
+});

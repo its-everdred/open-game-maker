@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,6 +43,14 @@ it('stages validated card copies without changing the library and refuses unsafe
     ).toThrow();
     expect(existsSync(join(library, 'unsafe'))).toBe(false);
     expect(() => execFileSync(process.execPath, [script, library, output], { stdio: 'pipe' })).toThrow();
+    // A card that already carries facts fails before anything is written, so the run can be retried.
+    const last = plan.at(-1)!;
+    const changed = JSON.parse(readFileSync(join(library, last.source), 'utf8'));
+    changed.sprite.structural_facings = {};
+    writeFileSync(join(library, last.source), JSON.stringify(changed));
+    const retry = join(temp, 'retry');
+    expect(() => execFileSync(process.execPath, [script, library, retry], { stdio: 'pipe' })).toThrow();
+    expect(readdirSync(retry)).toEqual([]);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
