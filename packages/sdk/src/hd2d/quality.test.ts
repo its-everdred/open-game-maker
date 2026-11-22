@@ -37,6 +37,13 @@ describe('createFrameGovernor', () => {
     expect(quality).toBe('high');
   });
 
+  it('counts a game stuck at a few frames per second as slow', () => {
+    const governor = createFrameGovernor(budget);
+    let quality: 'off' | 'low' | 'high' = 'high';
+    for (let frame = 0; frame < 5; frame += 1) quality = governor.sample(400, quality);
+    expect(quality).toBe('low');
+  });
+
   it('treats a long gap as a pause, not a slow frame', () => {
     const governor = createFrameGovernor(budget);
     let quality: 'off' | 'low' | 'high' = 'high';

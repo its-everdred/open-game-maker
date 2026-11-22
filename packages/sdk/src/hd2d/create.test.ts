@@ -111,10 +111,65 @@ describe('createHd2d', () => {
     expect(created('focus')).toHaveLength(2);
   });
 
+  it('configures focus in place for a same-hero edit, and rebuilds at the tier the game is running', () => {
+    const hd2d = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS, { quality: 'high' });
+    hd2d.setQuality('low');
+    calls.log.length = 0;
+    const focus = { ...HD2D_FOREST_DEFAULTS.focus, strength: 0.2 };
+    const atmosphere = { haze: { color: '#9ba99a', distance: 60 } };
+    hd2d.applyScene({ ...HD2D_FOREST_DEFAULTS, focus, atmosphere });
+    expect(logged('focus.')).toEqual([
+      `focus.configure(${JSON.stringify({ ...focus, quality: 'low' })})`,
+      `focus.setAtmosphere(${JSON.stringify(atmosphere)})`,
+    ]);
+    expect(created('focus')).toHaveLength(1);
+
+    hd2d.applyScene({ ...HD2D_FOREST_DEFAULTS, particles: { ...HD2D_FOREST_DEFAULTS.particles, emitters: [] } });
+    expect(created('particles')[1]!.args[1]).toMatchObject({ quality: 'low' });
+  });
+
+  it('binds a hero spawned after boot when the same scene is applied again', () => {
+    const { target } = threeTarget();
+    const config = { ...HD2D_FOREST_DEFAULTS, focus: { ...HD2D_FOREST_DEFAULTS.focus, hero: 'late' } };
+    const hd2d = createHd2d(target, config);
+    expect((created('focus')[0]!.args[0] as { three: { hero: unknown } }).three.hero).toBeUndefined();
+    hd2d.applyScene(config);
+    expect(created('focus')).toHaveLength(1);
+    const late = new Object3D();
+    late.name = 'late';
+    target.three.scene.add(late);
+    hd2d.applyScene(config);
+    expect(created('focus')).toHaveLength(2);
+    expect((created('focus')[1]!.args[0] as { three: { hero: unknown } }).three.hero).toBe(late);
+  });
+
+  it('sends wind to the particles and keeps it in the scene, so re-applying the old wind restores it', () => {
+    const hd2d = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS);
+    hd2d.setWind({ strength: 2 });
+    expect(logged('particles.setWind')).toEqual(['particles.setWind({"strength":2})']);
+    hd2d.applyScene(HD2D_FOREST_DEFAULTS);
+    expect(created('particles')).toHaveLength(2);
+    expect(created('particles')[1]!.args[1]).toMatchObject({ wind: HD2D_FOREST_DEFAULTS.particles.wind });
+  });
+
+  it('restarts the slow-frame count when the game sets the tier itself', () => {
+    const budget = { frameMs: 33, slowFrames: 3 };
+    const hd2d = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS, { quality: 'high', budget });
+    let time = 0;
+    for (let frame = 0; frame < 3; frame += 1) hd2d.update((time += 50));
+    hd2d.setQuality('high');
+    hd2d.update(time + 50);
+    expect(hd2d.quality).toBe('high');
+    expect(logged('lighting.setQuality')).toEqual([]);
+  });
+
   it('rejects an invalid scene with the field path and keeps running the old one', () => {
     const hd2d = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS);
     const broken = { ...HD2D_FOREST_DEFAULTS, focus: { ...HD2D_FOREST_DEFAULTS.focus, range: 5 } };
     expect(() => hd2d.applyScene(broken)).toThrow(/focus\.range/);
     expect(logged('lighting.apply')).toEqual([]);
+    expect(logged('focus.')).toEqual([]);
+    expect(created('focus')).toHaveLength(1);
+    expect(created('particles')).toHaveLength(1);
   });
 });

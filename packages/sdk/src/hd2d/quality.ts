@@ -31,8 +31,8 @@ export interface FrameBudget {
  */
 export const DEFAULT_FRAME_BUDGET: FrameBudget = { frameMs: 1000 / 30, slowFrames: 60 };
 
-/** A gap this long is a pause (a hidden tab, a debugger, a stepped clock), not a slow frame. */
-const PAUSE_MS = 250;
+/** A gap this long is a pause (a hidden tab, a debugger, a stepped clock), not a slow frame; 1 fps still counts. */
+const PAUSE_MS = 1000;
 
 const STEP_DOWN: Record<Hd2dQuality, Hd2dQuality> = { high: 'low', low: 'off', off: 'off' };
 

@@ -74,6 +74,12 @@ describe('scene document round trip', () => {
       'particles.emitters.0.density',
     ]);
     expect(issuesOf({ ...json, version: 2 })).toEqual(['version']);
+    // Wind the particle core can integrate: unit direction components and a bounded strength, never an overflow.
+    const wind = { direction: [1e308, 0, 0], strength: 1e308, seed: 1 };
+    expect(issuesOf({ ...json, particles: { ...json.particles, wind } })).toEqual([
+      'particles.wind.direction.0',
+      'particles.wind.strength',
+    ]);
     expect(issuesOf('{not json')).toEqual(['(root)']);
   });
 

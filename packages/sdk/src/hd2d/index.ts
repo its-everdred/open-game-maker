@@ -8,7 +8,6 @@ export {
   type Hd2dQuality,
 } from './quality.js';
 export {
-  emitterEffect,
   HD2D_FOREST_DEFAULTS,
   HD2D_SCENE_VERSION,
   Hd2dSceneError,

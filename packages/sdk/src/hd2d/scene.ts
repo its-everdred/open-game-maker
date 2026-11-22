@@ -10,6 +10,7 @@ export const HD2D_SCENE_VERSION = 1;
 
 const finite = z.number().finite();
 const vec3 = z.tuple([finite, finite, finite]);
+const unit = finite.min(-1).max(1);
 const presetNames = Object.keys(PARTICLE_PRESETS) as [string, ...string[]];
 
 const emitterSchema = z.strictObject({
@@ -37,7 +38,11 @@ export const hd2dSceneSchema = z.strictObject({
   atmosphere: sceneAtmosphereSchema,
   particles: z.strictObject({
     emitters: z.array(emitterSchema).max(PARTICLE_LIMITS.emitters),
-    wind: z.strictObject({ direction: vec3, strength: finite.min(0), seed: z.number().int().safe() }),
+    wind: z.strictObject({
+      direction: z.tuple([unit, unit, unit]),
+      strength: finite.min(0).max(4),
+      seed: z.number().int().safe(),
+    }),
     /** The depth (0 far .. 1 near) soft motes stay sharp at; they blur away from it like the scene's layers. */
     focusDepth: finite.min(0).max(1).optional(),
   }),

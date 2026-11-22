@@ -1,7 +1,7 @@
-type Quality = 'off' | 'low' | 'high';
+import type { Hd2dQuality } from '../quality.js';
 
 /** Mean and p95 wall-clock ms of the fixture's `frame()` calls, per quality tier. */
-export type FrameStats = Partial<Record<Quality, { mean: number; p95: number; frames: number }>>;
+export type FrameStats = Partial<Record<Hd2dQuality, { mean: number; p95: number; frames: number }>>;
 
 declare global {
   interface Window {

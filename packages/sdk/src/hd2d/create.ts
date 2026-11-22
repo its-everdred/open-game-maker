@@ -63,8 +63,10 @@ export function createHd2d(target: Hd2dTarget, config: Hd2dSceneConfig, options:
     const { mode, target: focusTarget, smoothing, strength, range } = scene.focus;
     return { mode, target: focusTarget, smoothing, strength, range, quality };
   };
+  let boundHero: object | undefined;
   const makeFocus = (): Focus => {
     const hero = findHero(scene.focus.hero);
+    boundHero = hero;
     const focusTarget: FocusTarget =
       'three' in target
         ? { three: { ...target.three, hero: hero as Object3D | undefined } }
@@ -143,7 +145,8 @@ export function createHd2d(target: Hd2dTarget, config: Hd2dSceneConfig, options:
       const previous = scene;
       scene = parseHd2dScene(next);
       lighting.apply(scene.lighting);
-      if (scene.focus.hero !== previous.focus.hero) {
+      // A renamed, late-spawned or respawned hero rebinds focus; the same document re-applied repairs a stale one.
+      if (findHero(scene.focus.hero) !== boundHero) {
         focus.dispose();
         focus = makeFocus();
       } else {
