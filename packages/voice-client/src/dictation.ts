@@ -140,9 +140,9 @@ export class Dictation {
           this.fail({ code: 'socket_error', message: 'Dictation connection closed before transcription finished.' });
         }
       });
-    } catch {
+    } catch (error) {
       if (generation === this.generation && !this.finished) {
-        this.fail({ code: 'token_error', message: 'Dictation could not be authorized.' });
+        this.fail({ code: 'token_error', message: `Dictation could not be authorized (${causeName(error)}).` });
       }
     }
   }
@@ -242,12 +242,19 @@ export class Dictation {
     if (error instanceof DOMException && error.name === 'NotAllowedError') {
       return { code: 'mic_denied', message: 'Microphone permission denied.' };
     }
-    return { code: 'capture_error', message: 'Microphone capture failed.' };
+    return { code: 'capture_error', message: `Microphone capture failed (${causeName(error)}).` };
   }
 
   private emit<K extends keyof DictationEventMap>(event: K, value: DictationEventMap[K]) {
     for (const listener of this.listeners.get(event) ?? []) listener(value as never);
   }
+}
+
+/** The error's name and any HTTP status, never its message: a WebSocket URL error can carry the token. */
+function causeName(error: unknown): string {
+  const status = (error as { status?: unknown } | null)?.status;
+  const name = error instanceof Error ? error.name : typeof error;
+  return typeof status === 'number' ? `${name} ${status}` : name;
 }
 
 function isTranscript(frame: unknown): frame is { v: 1; type: 'transcript'; kind: 'partial' | 'final'; text: string } {

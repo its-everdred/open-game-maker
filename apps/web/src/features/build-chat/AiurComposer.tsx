@@ -2,10 +2,11 @@ import { createElement, useEffect, useRef, useState, type ComponentProps } from 
 import { Dictation, VoiceClient } from '@ogm/voice-client';
 import type { VoiceTarget } from '@ogm/contracts';
 import { MAX_CHAT_ATTACHMENTS } from '@ogm/contracts/browser';
-import { defineComposer, type AiurComposer as ComposerElement } from '@aiur/conversation';
+import { defineComposer, type AiurComposer as ComposerElement, type ComposerErrorDetail } from '@aiur/conversation';
 import { attachmentType, isLargeTextPaste, uploadChatAttachment, type UploadAttachment } from './attachments';
 import type { Composer } from './Composer';
-import { connectDictation, probeVoice, type VoiceAvailability } from './voice';
+import { codedError, describeComposerError, reportComposerError } from './composer-errors';
+import { connectDictation, probeVoice, voiceProbeFailure, type VoiceAvailability } from './voice';
 import type { StreamedChatMessage } from './stream';
 
 type Props = Pick<ComponentProps<typeof Composer>, 'jobId' | 'voiceTarget' | 'postText' | 'startJob' | 'onPosted'> & {
@@ -65,14 +66,17 @@ export function AiurComposer({
       lastVoiceSession.current = voiceTarget.session_id;
       lastAdmittedJob.current = undefined;
     }
-    voiceAvailability.current = { available: false };
+    voiceAvailability.current = { available: false, code: 'starting' };
     const refresh = () => {
       if (voiceTarget)
         void probeVoice(voiceTarget)
           .then((value) => {
             if (active) voiceAvailability.current = value;
           })
-          .catch(() => {});
+          .catch((error: unknown) => {
+            /* A failed refresh keeps a token that still works. */
+            if (active && !voiceAvailability.current.available) voiceAvailability.current = voiceProbeFailure(error);
+          });
     };
     refresh();
     const timer = window.setInterval(refresh, 240_000);
@@ -162,7 +166,7 @@ export function AiurComposer({
                   const offError = dictation.on('error', (value) => {
                     offTranscript();
                     offError();
-                    reject(new Error(value.message));
+                    reject(codedError(value.code, value.message));
                   });
                 });
                 // The microphone or token can fail before the user releases the button.
@@ -188,16 +192,18 @@ export function AiurComposer({
         ? {
             voice: {
               start: async ({ onEnd }) => {
-                if (voiceStarting.current || voiceRef.current) throw new Error('Voice is already starting');
+                if (voiceStarting.current || voiceRef.current)
+                  throw codedError('starting', 'Voice is already starting');
                 if (
                   admissionInFlight.current ||
                   (lastAdmittedJob.current &&
                     voiceTarget.kind === 'edit' &&
                     voiceTarget.job_id !== lastAdmittedJob.current)
                 )
-                  throw new Error('The conversation is starting');
+                  throw codedError('starting', 'The conversation is starting');
                 const available = voiceAvailability.current;
-                if (!available.available) throw new Error('Voice is unavailable');
+                if (!available.available)
+                  throw codedError(available.code ?? 'voice_unavailable', 'Voice is unavailable');
                 const voice = new VoiceClient({ url: available.url, token: available.token, target: voiceTarget });
                 voiceStarting.current = true;
                 voiceRef.current = voice;
@@ -259,7 +265,7 @@ export function AiurComposer({
           }
         }
       }
-      if (!target) throw new Error('Message not sent');
+      if (!target) throw codedError('not_sent', 'Message not sent');
       if (startJob) pendingAdmission.current = { text: instruction, jobId: target };
       const uploaded = await Promise.all(
         attachments.map(async (attachment) => {
@@ -294,7 +300,16 @@ export function AiurComposer({
       pendingAdmission.current = undefined;
       setError('');
     };
-    const onError = () => setError('Message or voice could not be started.');
+    const onError = (event: Event) => {
+      const detail = (event as CustomEvent<ComposerErrorDetail>).detail;
+      const failure = describeComposerError(detail);
+      setError(failure.text);
+      reportComposerError(
+        detail.action,
+        failure,
+        (detail.action === 'dictation' ? transcriptionTarget : voiceTarget)?.kind,
+      );
+    };
     element.addEventListener('aiur-composer-error', onError);
     return () => {
       element.removeEventListener('aiur-composer-error', onError);

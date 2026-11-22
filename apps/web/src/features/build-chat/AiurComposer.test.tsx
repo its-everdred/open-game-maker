@@ -39,6 +39,7 @@ vi.mock('@ogm/voice-client', () => ({
 }));
 vi.mock('./voice', () => ({
   connectDictation: vi.fn(),
+  voiceProbeFailure: (error: unknown) => ({ available: false, code: String(error) }),
   probeVoice: vi.fn().mockResolvedValue({ available: true, url: 'wss://example.test', token: 'token' }),
 }));
 
@@ -219,4 +220,66 @@ it('rejects a second voice start and allows a new start after a remote end', asy
   await first;
   fake.listeners.get('voice:ended')!({});
   await expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).resolves.toBeDefined();
+});
+
+function reports(fetch: ReturnType<typeof vi.fn>) {
+  return fetch.mock.calls
+    .filter(([url]) => url === '/api/v1/voice/client-error')
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string));
+}
+
+it('shows a blocked microphone with the cause and reports it', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetch);
+  const { container, findByRole } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const mic = composer.shadowRoot!.querySelector<HTMLButtonElement>('.mic')!;
+  mic.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+  await waitFor(() => expect(fake.listeners.get('error')).toBeDefined());
+  fake.listeners.get('error')!({ code: 'mic_denied', message: 'Microphone permission denied.' });
+  mic.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' }));
+  expect((await findByRole('alert')).textContent).toMatch(/^Microphone blocked\..*\(dictation: mic_denied\)$/);
+  await waitFor(() =>
+    expect(reports(fetch)).toEqual([
+      { action: 'dictation', code: 'mic_denied', message: 'Microphone permission denied.', target_kind: 'edit' },
+    ]),
+  );
+  vi.unstubAllGlobals();
+});
+
+it('names a voice start that has no token and reports it', async () => {
+  const { probeVoice } = await import('./voice');
+  vi.mocked(probeVoice).mockRejectedValueOnce('api_403');
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetch);
+  const { container, findByRole } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.voice).toBeDefined());
+  await waitFor(() => expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).rejects.toThrow('unavailable'));
+  composer.shadowRoot!.querySelector<HTMLButtonElement>('.voice')!.click();
+  expect((await findByRole('alert')).textContent).toBe('Voice unavailable. (voice: api_403)');
+  await waitFor(() =>
+    expect(reports(fetch)).toEqual([
+      { action: 'voice', code: 'api_403', message: 'Voice is unavailable', target_kind: 'edit' },
+    ]),
+  );
+  vi.unstubAllGlobals();
+});
+
+it('says a message was not sent when admission fails', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetch);
+  const { container, findByRole } = render(
+    <AiurComposer jobId="draft" startJob={vi.fn().mockResolvedValue(undefined)} postText={vi.fn()} />,
+  );
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
+  composer.value = 'Add a bridge';
+  await composer.send();
+  expect((await findByRole('alert')).textContent).toBe('Message not sent. (send: not_sent)');
+  await waitFor(() =>
+    expect(reports(fetch)).toEqual([{ action: 'send', code: 'not_sent', message: 'Message not sent' }]),
+  );
+  vi.unstubAllGlobals();
 });

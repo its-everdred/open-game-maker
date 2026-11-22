@@ -38,7 +38,7 @@ describe('probeVoice', () => {
 
   it('treats a 503 token probe as unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 503 })));
-    await expect(probeVoice(target)).resolves.toEqual({ available: false });
+    await expect(probeVoice(target)).resolves.toEqual({ available: false, code: 'api_503' });
   });
 });
 
