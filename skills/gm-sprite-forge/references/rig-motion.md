@@ -7,6 +7,13 @@ locally on the CPU, costs nothing and sends nothing to a cloud service.
 tooling may be built and debugged on an existing mesh as a test subject, with no creator review of the result. Only an
 approved mesh goes into review media. `run_cells.py` does not check this; you do.
 
+**Modeling and rigging** (creator, 2026-11-22). A hero mesh is a base body: the pack sprite's face, hair, build,
+proportions, palette and scale, plain white undergarments, no armour or weapons, in a neutral A-pose. Its review judges
+only those. Stance and pose belong here: a stance or pose that differs from the pack's Idle is a stance layer (step 4)
+or motion, never a re-generated mesh. Gear (armour, weapons, helmets, robes) is a separate mesh on a hand or body bone
+rendered through the same camera so it can be swapped at runtime. `weapon` in `cells.json` attaches a rigid one;
+worn gear that bends with the body is not built yet.
+
 ## What runs where
 
 | Script | Runs in | Role |
@@ -44,9 +51,9 @@ Blender at a time on the NUC.
    target's hips and the loop seam is spread over the cycle. `handkey.py` keys a walk (contact, down, passing, up,
    heel-to-toe roll, hip sway and turn, arms against the legs) and two attacks: `chop`, and `combo` on the pack Attack1
    beat.
-4. **Stance.** Kevin (#1120): stance changes belong to the rigging step. `retarget.STANCES` holds additive pose layers;
-   `ssi-barbarian` (the only one so far) hunches the chest, pushes the head out, hangs the arms in front and crouches 5%
-   of a leg. Every motion source in a batch gets the same layer.
+4. **Stance.** Kevin (2026-11-22): stance changes belong to the rigging step, not the modeling step.
+   `retarget.STANCES` holds additive pose layers; `ssi-barbarian` (the only one so far) hunches the chest, pushes the
+   head out, hangs the arms in front and crouches 5% of a leg. Every motion source in a batch gets the same layer.
 5. **Feet.** The foot lock keeps each planted ankle on one ground speed (a loop) or in place (an attack). A two-bone IK
    pass then solves thigh and shin to it and lowers the hips when a leg cannot reach.
 6. **Render.** S and SE (sheet rows 2 and 1) through the pack camera, with the same projection and scale rule as
