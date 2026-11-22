@@ -181,7 +181,7 @@ async function readElevenLabs(
   key: string | null,
   getJson: (url: string, headers: Record<string, string>) => Promise<unknown>,
 ): Promise<ProviderReading> {
-  const base = { id: 'elevenlabs', label: 'Voice', provider: 'elevenlabs', kind: 'subscription' as const };
+  const base = { id: 'elevenlabs', label: 'ElevenLabs', provider: 'elevenlabs', kind: 'subscription' as const };
   if (key === null) return { ...unknownReading(base), service: 'voice' };
   const observedAt = new Date().toISOString();
   return getJson('https://api.elevenlabs.io/v1/user/subscription', { 'xi-api-key': key }).then(
@@ -191,7 +191,7 @@ async function readElevenLabs(
 }
 
 export function elevenLabsReading(body: unknown, observedAt: string): ProviderReading {
-  const base = { id: 'elevenlabs', label: 'Voice', provider: 'elevenlabs', kind: 'subscription' as const };
+  const base = { id: 'elevenlabs', label: 'ElevenLabs', provider: 'elevenlabs', kind: 'subscription' as const };
   if (!isObject(body)) return unknownReading(base);
   const { character_count: used, character_limit: limit, next_character_count_reset_unix: reset } = body;
   if (typeof used !== 'number' || typeof limit !== 'number' || limit <= 0 || used < 0) return unknownReading(base);
