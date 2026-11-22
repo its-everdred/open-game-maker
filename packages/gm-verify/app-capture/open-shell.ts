@@ -36,6 +36,16 @@ export interface OpenShell {
   errors: string[];
 }
 
+const GAMES_ORIGIN = 'http://127.0.0.1:10000';
+const SHARED_FILE = /^\/a\/[0-9a-f]{64}\.[a-z0-9]{1,12}$/u;
+
+/** The build's own files and the shared files a cache-plan build loads from the games origin. */
+function isGameFile(url: string): boolean {
+  if (!url.startsWith(`${GAMES_ORIGIN}/`)) return false;
+  const path = new URL(url).pathname;
+  return path.includes(`/${buildId}/`) || SHARED_FILE.test(path);
+}
+
 /** Opens the shell at one viewport and waits for the game bridge; the caller closes `context`. */
 export async function openShell(browser: Browser, options: ShellOptions): Promise<OpenShell> {
   const { width, height } = options;
@@ -55,19 +65,24 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
     page.on('pageerror', (error) => errors.push(error.message));
     if (options.gameConsole)
       page.on('console', (message) => {
-        if (message.type() === 'error' && message.location().url.includes(`/${buildId}/`))
+        if (message.type() === 'error' && isGameFile(message.location().url))
           errors.push(`console: ${message.text().slice(0, 200)}`);
       });
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page, options.design, options.title);
     // The real web build expects this games origin; intercept it without opening a listener.
-    await page.route('http://127.0.0.1:10000/**', async (route) => {
-      const path = new URL(route.request().url()).pathname;
+    await page.route(`${GAMES_ORIGIN}/**`, async (route) => {
+      const request = new URL(route.request().url());
+      const path = request.pathname;
       const suffix = path.includes(`/${buildId}/`) ? path.split(`/${buildId}/`)[1]! : path.slice(1);
       const headers = gameHeaders(new URL(options.server.url).origin);
       if ('url' in options.game) {
-        const target = new URL(suffix || 'index.html', options.game.url);
-        if (!target.href.startsWith(options.game.url)) return route.abort();
+        // A cache-plan build names its files by shared address at the games origin's root, not under the build.
+        const shared = SHARED_FILE.test(path);
+        const target = new URL(shared ? path : suffix || 'index.html', options.game.url);
+        // The host asks for `?frameObserver=2`; without it the games host redirects index.html away from the observer.
+        target.search = request.search;
+        if (!shared && !target.href.startsWith(options.game.url)) return route.abort();
         const response = await route.fetch({ url: target.href }).catch(() => null);
         if (!response?.ok()) {
           errors.push(`game resource missing: ${path}`);

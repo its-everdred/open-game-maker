@@ -3091,8 +3091,16 @@
                       }
                     },
                     "logo": {
-                      "type": "string",
-                      "pattern": "^media\\/[a-zA-Z0-9_-]+\\.(png|webp|svg)$"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^media\\/[a-zA-Z0-9_-]+\\.(png|webp|svg)$"
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^\\/a\\/[0-9a-f]{64}\\.(png|webp|svg)$"
+                        }
+                      ]
                     },
                     "menus": {
                       "type": "object",
@@ -3122,12 +3130,28 @@
                       "type": "object",
                       "properties": {
                         "portrait": {
-                          "type": "string",
-                          "pattern": "^media\\/[a-zA-Z0-9_-]+\\.png$"
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^media\\/[a-zA-Z0-9_-]+\\.png$"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^\\/a\\/[0-9a-f]{64}\\.(png)$"
+                            }
+                          ]
                         },
                         "landscape": {
-                          "type": "string",
-                          "pattern": "^media\\/[a-zA-Z0-9_-]+\\.png$"
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^media\\/[a-zA-Z0-9_-]+\\.png$"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^\\/a\\/[0-9a-f]{64}\\.(png)$"
+                            }
+                          ]
                         }
                       },
                       "required": [

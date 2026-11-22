@@ -1,5 +1,8 @@
 import { execFile } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,7 +42,39 @@ document.getElementById('bad').onclick = () => {
 };
 `;
 
-async function playFixture(via: 'dist' | 'url') {
+/*
+ * The games host's view of a build published with a cache plan (#1250): index.html without `frameObserver` redirects
+ * away from the observer, and the build's scripts live at the origin's `/a/`, never under the build path.
+ */
+async function cachePlanHost(game: string): Promise<{ url: string; close(): Promise<void> }> {
+  const files = await serveStatic(game);
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+    if (/^\/g\/[^/]+\/[^/]+\/(index\.html)?$/u.test(url.pathname) && !url.searchParams.has('frameObserver')) {
+      res.writeHead(308, { location: '/a/unobserved.html' }).end();
+      return;
+    }
+    if (/^\/g\/[^/]+\/[^/]+\/a\//u.test(url.pathname)) {
+      res.writeHead(404).end();
+      return;
+    }
+    void fetch(new URL(url.pathname, files.url)).then(async (upstream) => {
+      res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? '' });
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}/g/game/build_1/`,
+    close: async () => {
+      await new Promise((resolve) => server.close(resolve));
+      await files.close();
+    },
+  };
+}
+
+async function playFixture(via: 'dist' | 'url' | 'cache-plan') {
   expect(existsSync(runner)).toBe(true);
   const root = mkdtempSync(join(tmpdir(), 'gm-playtest-test-'));
   const game = join(root, 'game');
@@ -56,7 +91,13 @@ async function playFixture(via: 'dist' | 'url') {
     if (!script.includes(ready)) throw new Error('bridge fixture ready message changed');
     // The shell keeps its loading layer over a game until it reports a first frame and the end of loading.
     const loaded = `${ready} send('load.frame', {}); send('load.done', { ms: 0, fetchedBytes: 0, cachedBytes: 0, fetchedFiles: 0, cachedFiles: 0, persisted: null });`;
-    writeFileSync(join(game, 'fixture.js'), `${script.replace(ready, loaded)}\n${modes}`);
+    const code = `${script.replace(ready, loaded)}\n${modes}`;
+    let src = 'fixture.js';
+    if (via === 'cache-plan') {
+      src = `/a/${createHash('sha256').update(code).digest('hex')}.js`;
+      mkdirSync(join(game, 'a'));
+    }
+    writeFileSync(join(game, src), code);
     writeFileSync(
       html,
       source
@@ -64,9 +105,10 @@ async function playFixture(via: 'dist' | 'url') {
           '<style>',
           '<style>html:not(.bad), html:not(.bad) body { user-select: none; -webkit-touch-callout: none; }\n',
         )
-        .replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
+        .replace(/<script type="module">[\s\S]*?<\/script>/, `<script type="module" src="${src}"></script>`),
     );
     if (via === 'url') server = await serveStatic(game);
+    if (via === 'cache-plan') server = await cachePlanHost(game);
     const plan = {
       game: server ? { url: server.url } : { dist: game },
       modes: [
@@ -115,5 +157,12 @@ it('fails only the broken mode, naming each defect, and leaves a still per mode'
 /* The post-publish run plays the hosted build (ogm-qa passes --url), not a local dist. */
 it('plays a hosted build through --url with the same verdicts', async () => {
   const { runs } = await playFixture('url');
+  expectVerdicts(runs);
+}, 220_000);
+
+/* Hosted builds since the cache plan (#1213) load scripts from `/a/` and need the host's query; the post-publish
+ * capture failed on every one and Kevin's reviews carried stills instead of the gameplay clip (#1250). */
+it('plays a hosted cache-plan build, reporting console errors from its shared scripts', async () => {
+  const { runs } = await playFixture('cache-plan');
   expectVerdicts(runs);
 }, 220_000);

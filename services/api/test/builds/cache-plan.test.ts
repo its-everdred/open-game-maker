@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { cachePlanSchema, type CachePlan, type CachePlanEntry } from '@ogm/contracts';
+import { cachePlanSchema, gameToHostSchema, type CachePlan, type CachePlanEntry } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { blobPath } from '@ogm/games-host/layout';
 import { eq } from 'drizzle-orm';
@@ -127,6 +127,33 @@ describe('published cache plans', () => {
     const html = readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'index.html'), 'utf8');
     expect(html).not.toMatch(/\/\/a\//u);
     expect(html.match(new RegExp(`"/a/${mainHash}\\.js"`, 'gu'))).toHaveLength(3);
+  });
+
+  /* The SDK's Vite plugin inlines the manifest, so its media paths become shared addresses; the game must still boot. */
+  it('publishes a bundle with an inlined logo and loading screen whose ready handshake passes (#1250)', async () => {
+    const { deps } = world();
+    completeRun(deps);
+    const dir = cachedBuild([]);
+    const inlined = {
+      ...(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>),
+      logo: 'media/logo.png',
+      loading: { portrait: 'media/loading-portrait.png', landscape: 'media/loading-landscape.png' },
+    };
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(inlined));
+    mkdirSync(join(dir, 'media'));
+    for (const name of ['logo', 'loading-portrait', 'loading-landscape'])
+      writeFileSync(join(dir, 'media', `${name}.png`), `${name} bytes`);
+    const prefix = 'globalThis.manifest=';
+    writeFileSync(join(dir, 'assets', 'main.js'), `${prefix}${JSON.stringify(inlined)};\n`);
+    const buildId = await publishFixture(deps, ids.job, dir, SHA);
+    const main = readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'assets', 'main.js'), 'utf8');
+    const published = JSON.parse(main.slice(prefix.length, -2)) as Record<string, unknown>;
+    expect(published).toMatchObject({
+      logo: `/a/${digest(Buffer.from('logo bytes'))}.png`,
+      loading: { portrait: `/a/${digest(Buffer.from('loading-portrait bytes'))}.png` },
+    });
+    const ready = { v: 1, id: 'ready-1', t: 'ready', payload: { protocol: 1, manifest: published, marks: [] } };
+    expect(gameToHostSchema.safeParse(ready).error?.issues).toBeUndefined();
   });
 
   it('rewrites root-relative names inside bundles and never part of a longer path (#1197)', async () => {
