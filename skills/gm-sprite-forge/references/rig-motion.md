@@ -7,6 +7,13 @@ locally on the CPU, costs nothing and sends nothing to a cloud service.
 tooling may be built and debugged on an existing mesh as a test subject, with no creator review of the result. Only an
 approved mesh goes into review media. `run_cells.py` does not check this; you do.
 
+**Modeling and rigging** (creator, 2026-11-22). A hero mesh is a base body: the pack sprite's face, hair, build,
+proportions, palette and scale, plain white undergarments, no armour or weapons, in a neutral A-pose. Its review judges
+only those. Stance and pose belong here: a stance or pose that differs from the pack's Idle is a stance layer (step 4)
+or motion, never a re-generated mesh. Gear (armour, weapons, helmets, robes) is a separate mesh on a hand or body bone
+rendered through the same camera so it can be swapped at runtime. `weapon` in `cells.json` attaches a rigid one;
+worn gear that bends with the body is not built yet.
+
 ## What runs where
 
 | Script | Runs in | Role |
@@ -44,9 +51,9 @@ Blender at a time on the NUC.
    target's hips and the loop seam is spread over the cycle. `handkey.py` keys a walk (contact, down, passing, up,
    heel-to-toe roll, hip sway and turn, arms against the legs) and two attacks: `chop`, and `combo` on the pack Attack1
    beat.
-4. **Stance.** Kevin (#1120): stance changes belong to the rigging step. `retarget.STANCES` holds additive pose layers;
-   `ssi-barbarian` (the only one so far) hunches the chest, pushes the head out, hangs the arms in front and crouches 5%
-   of a leg. Every motion source in a batch gets the same layer.
+4. **Stance.** Kevin (2026-11-22): stance changes belong to the rigging step, not the modeling step.
+   `retarget.STANCES` holds additive pose layers; `ssi-barbarian` (the only one so far) hunches the chest, pushes the
+   head out, hangs the arms in front and crouches 5% of a leg. Every motion source in a batch gets the same layer.
 5. **Feet.** The foot lock keeps each planted ankle on one ground speed (a loop) or in place (an attack). A two-bone IK
    pass then solves thigh and shin to it and lowers the hips when a leg cannot reach.
 6. **Render.** S and SE (sheet rows 2 and 1) through the pack camera, with the same projection and scale rule as
@@ -154,3 +161,17 @@ LaFAN1; before the loop-seam fix) put every one between 0.23 and 0.52.
   0.2-0.5 px. Rokoko's free retarget add-on was not tried in this spike.
 - **Not run:** arm B (UniRig needs a CUDA GPU with 8 GB or more; the NUC has none and the PC is off-limits) and arm C
   (`fal-ai/meshy/rigging` is listed at 0.80 USD per call, not the planned 0.32; skipped without spend).
+
+## Next rung: the creator round on base bodies
+
+Kevin's Stage 1 verdicts (2026-11-22) carry into this round: Wizard and Ranger matched the pack as models, the Warrior
+was close, and its weapon is to be rendered separately so the player can carry many. The round runs on the approved
+base bodies, not on those meshes:
+
+- One `cells.json` per approved body (Warrior, Wizard and Ranger, each male and female:
+  `hero-base/<class>-<m|f>/gen/model_mesh.glb`) as `mesh`, scored against that class's pack sheets (6Barbarian,
+  3Wizard, 5BarbArcher): a walk and one attack, with phone clips.
+- One stance layer per class in `retarget.STANCES`, matched to that class's pack Idle. Only `ssi-barbarian` exists;
+  the Wizard and Ranger need their own. Fix stance here, not by asking for a new mesh.
+- The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
+  weapon cut-off does nothing.
