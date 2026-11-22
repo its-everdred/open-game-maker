@@ -162,14 +162,3 @@ for (const renderer of ['phaser', 'three'] as const)
     expect(gain[0]!).toBeLessThan(gain[1]! + 8);
     expect(gain[3]!).toBeGreaterThan(gain[2]! + 10);
   });
-
-declare global {
-  interface Window {
-    __hd2d?: {
-      ready: boolean;
-      frame(ms: number): Promise<void>;
-      hash(): string;
-      info(): { renderer: 'phaser' | 'three'; mounted: string[] };
-    };
-  }
-}

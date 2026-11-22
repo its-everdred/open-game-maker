@@ -86,8 +86,8 @@ export function createThreeLighting(
     previousAfterRender.apply(scene, args);
     // Another hook may have chained on top of ours; once detached, stay a pass-through.
     if (!attached()) return;
-    // Grade only what reaches the canvas. Focus renders the scene into half-float targets first; copying those into
-    // this RGBA8 texture is a GL error that keeps last frame's pixels; focus's hero pass grades the composite.
+    // Light the canvas only: a render into a target (focus's offscreen pass) cannot be copied into the 8-bit frame,
+    // and a failed copy would composite the previous frame's pixels.
     if (renderer.getRenderTarget() !== null) return;
     renderer.getDrawingBufferSize(size);
     if (!frame || frame.image.width !== size.x || frame.image.height !== size.y) {

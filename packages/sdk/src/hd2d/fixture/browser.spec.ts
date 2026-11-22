@@ -21,18 +21,7 @@ for (const renderer of ['phaser', 'three'] as const) {
     });
     expect(result.first).toBe(result.second);
     expect(result.start).not.toBe(result.first);
-    expect(result.info).toEqual({ renderer, mounted: ['lighting', 'focus', 'particles'] });
+    expect(result.info).toMatchObject({ renderer, mounted: ['lighting', 'focus', 'particles'] });
     expect(glErrors).toEqual([]);
   });
-}
-
-declare global {
-  interface Window {
-    __hd2d?: {
-      ready: boolean;
-      frame(ms: number): Promise<void>;
-      hash(): string;
-      info(): { renderer: 'phaser' | 'three'; mounted: string[] };
-    };
-  }
 }

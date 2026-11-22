@@ -32,12 +32,6 @@ for (const renderer of ['phaser', 'three'] as const)
 
 declare global {
   interface Window {
-    __hd2d?: {
-      ready: boolean;
-      frame(ms: number): Promise<void>;
-      hash(): string;
-      info(): { renderer: 'phaser' | 'three'; mounted: string[] };
-    };
     __hd2dParticles?: { count(): number };
   }
 }

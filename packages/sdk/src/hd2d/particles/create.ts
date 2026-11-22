@@ -70,7 +70,7 @@ export interface ParticleBackend {
   dispose(): void;
 }
 
-const DEFAULT_WIND: WindSettings = { direction: [1, -0.15, 0.2], strength: 0.35, seed: 1 };
+export const DEFAULT_WIND: WindSettings = { direction: [1, -0.15, 0.2], strength: 0.35, seed: 1 };
 /** Alpha a mote keeps outside every shaft: it reads as floating dust only where light catches it. */
 export const MOTE_SHADE = 0.3;
 /**
