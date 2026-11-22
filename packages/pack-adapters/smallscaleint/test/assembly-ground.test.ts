@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import { naturalScatter, pavingPath, steppingStonePath } from '../src/assembly-ground.js';
+import { naturalScatter, pavingPath, steppingStonePath, variedSteppingStonePath } from '../src/assembly-ground.js';
 import { assemblyMap } from '../src/assembly-map.js';
 import { IsoMap } from '../src/map.js';
 
@@ -52,4 +52,24 @@ it('keeps underlying ground when stepping-stone images are transparent', () => {
   expect(map.pieces('floor').map(({ asset }) => asset)).toEqual(['grass', 'grass']);
   expect(map.pieces('decor').map(({ asset }) => asset)).toEqual(['stones', 'stones']);
   expect(map.collisionGrid()).toEqual([[false, false]]);
+});
+
+it('varies stepping stones reproducibly while retaining every route cell', () => {
+  const route = Array.from({ length: 12 }, (_, x) => ({ x, y: 0 }));
+  const style = {
+    walkable: route,
+    palette: [
+      { asset: 'stones', facing: 'E' as const },
+      { asset: 'stones', facing: 'N' as const },
+      { asset: 'stones', facing: 'S' as const },
+      { asset: 'stones', facing: 'W' as const },
+    ],
+    seed: 31,
+  };
+  const stones = variedSteppingStonePath(route[0]!, route.at(-1)!, style);
+  expect(stones).toHaveLength(route.length);
+  expect(stones.map(({ cell }) => cell)).toEqual(route);
+  expect(new Set(stones.map(({ facing }) => facing)).size).toBeGreaterThan(1);
+  expect(variedSteppingStonePath(route[0]!, route.at(-1)!, style)).toEqual(stones);
+  expect(stones.every(({ solid, layer }) => !solid && layer === 'decor')).toBe(true);
 });

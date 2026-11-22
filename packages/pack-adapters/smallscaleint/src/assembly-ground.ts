@@ -45,3 +45,17 @@ export function naturalScatter(
     solid: item.solid,
   }));
 }
+
+export interface SteppingStyle {
+  walkable: readonly Cell[];
+  palette: readonly { asset: string; facing: TileFacing }[];
+  seed: number;
+}
+
+/** Connected stepping-stone route with deterministic per-cell variation over existing ground. */
+export function variedSteppingStonePath(from: Cell, to: Cell, style: SteppingStyle): AssemblyPlacement[] {
+  const route = path(from, to, style.walkable);
+  return scatter(route, style.palette, 1, { seed: style.seed, avoid: [], boundaries: route, boundaryDensity: 1 }).map(
+    ({ cell, item }) => ({ cell, layer: 'decor', asset: item.asset, facing: item.facing, solid: false }),
+  );
+}
