@@ -87,14 +87,3 @@ for (const renderer of ['phaser', 'three'] as const)
       const laterGain = later.luma[0]! - unlitLater.luma[0]!;
       expect(laterGain - startGain).toBeGreaterThan(20);
     });
-
-declare global {
-  interface Window {
-    __hd2d?: {
-      ready: boolean;
-      frame(ms: number): Promise<void>;
-      hash(): string;
-      info(): { renderer: 'phaser' | 'three'; mounted: string[] };
-    };
-  }
-}

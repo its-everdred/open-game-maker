@@ -36,6 +36,10 @@
       "types": "./dist/camera/index.d.ts",
       "import": "./dist/camera/index.js"
     },
+    "./hd2d": {
+      "types": "./dist/hd2d/index.d.ts",
+      "import": "./dist/hd2d/index.js"
+    },
     "./fx": {
       "types": "./dist/fx/index.d.ts",
       "import": "./dist/fx/index.js"
