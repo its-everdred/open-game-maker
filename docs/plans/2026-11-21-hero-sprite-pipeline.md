@@ -1,6 +1,6 @@
 ---
 title: "Hero sprite pipeline: 3D -> 2D class sprites for Dusk Helm"
-status: Stage 1 Wizard + Ranger approved; base bodies (3 classes x male/female, white undergarments) in review (Kevin 2026-11-22); Stage 2 tooling merged (#1233), round waits on the base bodies; Stages 3-4 held
+status: 6 base bodies approved (Kevin 2026-11-22); Stage 2 rig/motion round running on them (#1202); Stages 3-4 held
 date: 2026-11-21
 origin: Kevin 2026-11-21 ~21:45Z; follows core #1120 (TRELLIS multi-view at $0.02 won the model bake-off)
 ---
@@ -71,6 +71,14 @@ Kevin, 2026-11-22 ~13:10Z (supersedes 8 for now):
     sexes, rendered at the pack camera and scale and swapped at runtime. This applies to Stage 3 (#1203), the Dusk
     Helm sprite sets (og #890) and the Stage 4 comparison (og #891).
 11. **Stage 2 (#1202) rigs and animates the base bodies** once Kevin approves them.
+
+Kevin, 2026-11-22 ~22:00Z onward (base-body reviews):
+
+12. **All three female bodies approved.** The males are redone **shirtless, boxers only**: the Warrior large and muscular,
+    the Wizard skinny and scrawny, the Ranger lean, somewhat muscular but skinny. Wizard and Ranger males: "Male matches".
+13. **Warrior (both sexes): grey pixel artifacts and missing underwear at some angles.** The cause was the base-body
+    colour pass (a per-pixel skin/cloth split), not the meshes. The v2 pass (a chroma-weighted hue shift, no classes) fixed it
+    with no new spend. Warrior: "Both match". **All 6 base bodies are approved**, and Stage 2 runs on them.
 
 ---
 
