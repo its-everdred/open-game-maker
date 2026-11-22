@@ -193,6 +193,31 @@ def seeded_grid(seed, size=14):
     return grid
 
 
+# A pixel 3 px in from each corner tile vertex: the corner weights alone decide it (the noise is tapered to ~0 there).
+TIP = {'top': (64, 2), 'right': (125, 32), 'left': (2, 32), 'bottom': (64, 61)}
+TIP_BIT = {'top': TOP, 'right': RIGHT, 'left': LEFT, 'bottom': BOTTOM}
+
+
+def check_frames(sheets):
+    """Every frame shows its terrain at a corner tip exactly when the case sets that corner.
+
+    Catches a blank, missing, swapped or mirrored transition frame, which the hole check cannot see wherever a lower
+    terrain is opaque underneath.
+    """
+    problems = []
+    for layer, px in enumerate(sheets):
+        for variant in range(VARIANTS):
+            for case in range(1, CASES):
+                for quarter in QUARTERS:
+                    corner = OPPOSITE[quarter]
+                    bx, by = QUARTER_BOX[corner]
+                    tx, ty = TIP[corner]
+                    opaque = frame(px, case, variant, quarter)[ty - by, tx - bx, 3] == 255
+                    if opaque != bool(case & TIP_BIT[corner]):
+                        problems.append(f'layer {layer} case {case} variant {variant} {quarter}: {corner} tip wrong')
+    return problems
+
+
 def check_holes(sheets, seeds=(1, 7, 42, 1204, 90001)):
     problems = []
     for seed in seeds:
@@ -246,10 +271,10 @@ def main(env, out):
         }
         (out / f'terrain-{terrain}.json').write_text(json.dumps(meta, indent=2) + '\n')
         entries.append(meta)
-    problems = check_edges() + check_holes(sheets)
+    problems = check_edges() + check_frames(sheets) + check_holes(sheets)
     (out / 'manifest.json').write_text(json.dumps({
         'set': 'terrain-dualgrid16', 'made': date.today().isoformat(), 'sheets': [e['file'] for e in entries],
-        'checks': {'edges': 'pass' if not problems else 'fail', 'problems': problems},
+        'checks': {'status': 'pass' if not problems else 'fail', 'problems': problems},
     }, indent=2) + '\n')
     for problem in problems:
         print(problem, file=sys.stderr)

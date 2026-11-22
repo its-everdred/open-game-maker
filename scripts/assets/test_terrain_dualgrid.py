@@ -58,12 +58,26 @@ class Sheets(unittest.TestCase):
         self.assertIs(meta['provenance']['ai_generated'], False)
         self.assertIs(meta['provenance']['experiment'], False)
         manifest = json.loads((self.out / 'manifest.json').read_text())
-        self.assertEqual(manifest['checks'], {'edges': 'pass', 'problems': []})
+        self.assertEqual(manifest['checks'], {'status': 'pass', 'problems': []})
 
     def test_hole_check_catches_a_missing_case(self):
         broken = [s.copy() for s in self.sheets]
         broken[0][:, 15 * t.QW:16 * t.QW] = 0  # drop the base terrain's full piece
         self.assertTrue(t.check_holes(broken, seeds=(1,)))
+
+    def test_frame_check_catches_a_blank_overlay_the_hole_check_cannot_see(self):
+        # Dirt under the grass is opaque, so blank grass transitions leave no hole; they would show dirt instead.
+        blank = [s.copy() for s in self.sheets]
+        blank[2][:, t.QW:15 * t.QW] = 0
+        self.assertEqual(t.check_holes(blank, seeds=(1,)), [])
+        self.assertTrue(t.check_frames(blank))
+
+    def test_frame_check_catches_swapped_quarters(self):
+        swapped = [s.copy() for s in self.sheets]
+        top, bottom = swapped[3][0:t.QH].copy(), swapped[3][3 * t.QH:4 * t.QH].copy()
+        swapped[3][0:t.QH], swapped[3][3 * t.QH:4 * t.QH] = bottom, top
+        self.assertTrue(t.check_frames(swapped))
+        self.assertEqual(t.check_frames(self.sheets), [])
 
     def test_edge_check_catches_noise_on_the_border(self):
         original = t.TAPER.copy()

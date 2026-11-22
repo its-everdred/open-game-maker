@@ -66,6 +66,31 @@ async function holes(page: Page, width: number, height: number) {
   );
 }
 
+/** RGB at many world points from one canvas copy. */
+async function pixelsAt(page: Page, points: [number, number][]) {
+  return page.locator('canvas').evaluate((source, points) => {
+    const canvas = source as HTMLCanvasElement;
+    const copy = document.createElement('canvas');
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    const context = copy.getContext('2d')!;
+    context.drawImage(canvas, 0, 0);
+    const view = (window as unknown as { terrain: { view: { x: number; y: number } } }).terrain.view;
+    return points.map(([x, y]) =>
+      Array.from(context.getImageData(Math.round(x - view.x), Math.round(y - view.y), 1, 1).data.slice(0, 3)),
+    );
+  }, points);
+}
+
+const RGB = [
+  [0x8a, 0x5a, 0x2b],
+  [0xc8, 0xb0, 0x40],
+  [0x40, 0xa0, 0x40],
+  [0x1c, 0x5c, 0x24],
+  [0x90, 0x90, 0x90],
+  [0xd0, 0xd0, 0xd0],
+];
+
 async function pixelAt(page: Page, x: number, y: number) {
   return page.locator('canvas').evaluate(
     (source, [x, y]) => {
@@ -106,6 +131,27 @@ for (const canvas of [false, true]) {
     const found = await holes(page, 6, 6);
     expect(found.inside).toBeGreaterThan(100_000);
     expect(found.count).toBe(0);
+
+    // Each quarter of a cell, just off its centre, shows the cell's own terrain: the pieces sit in the right
+    // quarter and face the right way (a swapped or mirrored quarter shows a neighbour's terrain there).
+    const points: [number, number][] = [];
+    const expected: number[][] = [];
+    for (let y = 0; y < 6; y++) {
+      for (let x = 0; x < 6; x++) {
+        const cx = 6 * 64 + (x - y) * 64;
+        const cy = 64 + (x + y) * 32;
+        for (const [dx, dy] of [
+          [0, -7],
+          [14, 0],
+          [-14, 0],
+          [0, 7],
+        ] as const) {
+          points.push([cx + dx, cy + dy]);
+          expected.push(RGB[MIXED[y * 6 + x]!]!);
+        }
+      }
+    }
+    expect(await pixelsAt(page, points)).toEqual(expected);
 
     // Cell (1,1) is dry grass; its centre sits at world (6*64 + 0, 64 + 2*32).
     const centre: [number, number] = [6 * 64, 64 + 64];

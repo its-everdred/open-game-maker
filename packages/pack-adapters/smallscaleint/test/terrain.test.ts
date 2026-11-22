@@ -40,6 +40,12 @@ function generate(seed: number, width = 24, height = 24): number[] {
   return cells;
 }
 
+const byRowThenColumn = (a: string, b: string) => {
+  const [ax, ay] = a.split(',').map(Number);
+  const [bx, by] = b.split(',').map(Number);
+  return ay! - by! || ax! - bx!;
+};
+
 const SEEDS = [1, 7, 42, 1204, 90_001, 2_026_112];
 
 function mapOf(seed: number, width = 24, height = 24) {
@@ -156,13 +162,28 @@ describe.each(SEEDS)('seeded map %i', (seed) => {
   });
 
   it('keeps collision per cell: walkability follows the cell terrain, never the transition art', () => {
-    const grid = map.collisionGrid();
-    for (let y = 0; y < map.height; y++) {
-      for (let x = 0; x < map.width; x++) expect(grid[y]![x]).toBe(map.at(x, y) === 5);
-    }
+    const solidCells = (grid: boolean[][]) =>
+      grid.flatMap((row, y) => row.flatMap((solid, x) => (solid ? [`${x},${y}`] : [])));
+    const paved = map
+      .cells()
+      .flatMap((terrain, i) => (terrain === 5 ? [`${i % map.width},${Math.floor(i / map.width)}`] : []));
+    // Paving cells reach into their neighbours' art, but only the paving cells themselves block.
+    expect(solidCells(map.collisionGrid())).toEqual(paved);
+    // The seed picks edge art only; it never moves collision.
+    const other = new TerrainMap({ width: 24, height: 24, terrains: TERRAINS, cells: map.cells(), seed: seed + 1 });
+    expect(other.collisionGrid()).toEqual(map.collisionGrid());
+    // Painting a solid cell blocks exactly that cell, and undo walks it back.
+    const brushed = mapOf(seed);
+    const free = brushed.cells().findIndex((terrain) => terrain !== 5);
+    const cell = { x: free % brushed.width, y: Math.floor(free / brushed.width) };
+    brushed.paint([cell], 5);
+    expect(solidCells(brushed.collisionGrid())).toEqual([...paved, `${cell.x},${cell.y}`].sort(byRowThenColumn));
+    brushed.undo();
+    expect(solidCells(brushed.collisionGrid())).toEqual(paved);
   });
 
   it('only scatters decals deep inside their terrain', () => {
+    expect(map.decals().length).toBeGreaterThan(0);
     for (const decal of map.decals()) {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) expect(map.at(decal.x + dx, decal.y + dy)).toBe(2);
@@ -238,6 +259,32 @@ describe('brush', () => {
     expect(map.canRedo()).toBe(true);
     map.paint([{ x: 5, y: 5 }], 1);
     expect(map.canRedo()).toBe(false);
+  });
+
+  it('never puts a decal on a cell beside another terrain', () => {
+    // Every grass cell takes a decal at chance 1, except the ones touching the dirt column (x = 1 and 3); off-map
+    // neighbours read as the edge cell, so the x = 0 column still counts as deep grass.
+    const cells = Array.from({ length: 36 }, (_, i) => (i % 6 === 2 ? 0 : 2));
+    const map = new TerrainMap({
+      width: 6,
+      height: 6,
+      terrains: TERRAINS.map((t) => (t.id === 'grass' ? { ...t, decalChance: 1 } : t)),
+      cells,
+      seed: 4,
+    });
+    expect(
+      map
+        .decals()
+        .map((decal) => decal.x)
+        .sort(),
+    ).toEqual([...Array(6).fill(0), ...Array(6).fill(4), ...Array(6).fill(5)]);
+  });
+
+  it('rejects a decal chance outside 0-1', () => {
+    const terrains = TERRAINS.map((t) => (t.id === 'grass' ? { ...t, decalChance: 1.5 } : t));
+    expect(() => new TerrainMap({ width: 1, height: 1, terrains, cells: [0], seed: 1 })).toThrow(
+      /decalChance must be 0-1/,
+    );
   });
 
   it('rejects an unknown terrain', () => {

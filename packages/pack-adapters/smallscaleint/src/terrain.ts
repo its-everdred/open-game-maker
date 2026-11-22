@@ -136,6 +136,12 @@ export class TerrainMap {
     if (new Set(terrains.map((terrain) => terrain.id)).size !== terrains.length) {
       throw new Error('terrain ids must be unique');
     }
+    for (const terrain of terrains) {
+      const chance = terrain.decalChance ?? 0;
+      if (!Number.isFinite(chance) || chance < 0 || chance > 1) {
+        throw new Error(`terrain ${terrain.id} decalChance must be 0-1`);
+      }
+    }
     if (cells.length !== width * height) throw new Error(`terrain cells do not cover the ${width}x${height} map`);
     if (!Number.isSafeInteger(seed)) throw new Error('terrain seed must be a safe integer');
     this.width = width;
@@ -326,10 +332,14 @@ export interface RenderedTerrain {
   destroy(): void;
 }
 
-/** Ground sits below every IsoMap piece: just above the IsoMap floor layer (depth -1), decals above the pieces. */
+/**
+ * Ground sits below every IsoMap piece (depth >= 0): just above the IsoMap floor layer (depth -1). Decals sit above
+ * the pieces and sort among themselves by row, between -0.5 and -0.1, so a redraw never puts a farther decal in front.
+ */
 const TERRAIN_DEPTH = -0.9;
 const LAYER_STEP = 0.001;
 const DECAL_DEPTH = -0.5;
+const DECAL_SPAN = 0.4;
 
 function basename(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
@@ -352,7 +362,10 @@ export async function renderTerrain(
     });
     keys.add(key);
   });
-  const decalAssets = new Set(map.terrains.flatMap((terrain) => terrain.decals ?? []));
+  // Only decals that can be drawn are loaded: a list kept with its chance at 0 must not stop the ground rendering.
+  const decalAssets = new Set(
+    map.terrains.flatMap((terrain) => ((terrain.decalChance ?? 0) > 0 ? (terrain.decals ?? []) : [])),
+  );
   for (const asset of decalAssets) {
     const resolved = loader.resolve(asset);
     for (const facing of FACINGS) {
@@ -389,7 +402,7 @@ export async function renderTerrain(
         scene.add
           .image(centre.x, centre.y, texture)
           .setOrigin(0.5, 208 / scene.textures.get(texture).getSourceImage().height)
-          .setDepth(DECAL_DEPTH),
+          .setDepth(DECAL_DEPTH + (DECAL_SPAN * (x + y)) / (map.width + map.height)),
       );
     }
     cellObjects.set(index, objects);
