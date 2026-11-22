@@ -122,3 +122,12 @@ grave sources ranked 150th and 162nd of the historical 467 candidates for the
 tight grave crop; the game's `tree-e1` ranked sixth for the tree crop. These
 are not verified identities of the mock's objects, but they show why an
 unqualified top-three cutoff would miss plausible game assets.
+
+For one further local diagnostic, a person drew a rough mask around the grave
+and composited it over the worker's brown background
+(`assets-local/review/1154/churchyard-grave-manual-mask.png`). Against the
+same historical vectors, `wall-a2`, `roof-g1` and `wall-a7` ranked first,
+second and third. The game-used `stone-a4` moved from 150th to 64th and
+`stone-a13` moved from 162nd to 184th. This mask is hand-drawn and imperfect;
+it is not evidence of automatic segmentation or a reliable match. Background
+removal alone did not solve this example.
