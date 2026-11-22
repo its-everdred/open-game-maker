@@ -1,12 +1,19 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import { buildPackIndex } from '@ogm/asset-cards';
 import type { BlobStore } from '@ogm/blob-store';
-import { AssetsLockSchema, parseScenery, type AssetsLock, type Scenery } from '@ogm/contracts';
+import {
+  AssetsLockSchema,
+  parseScenery,
+  SceneIdSchema,
+  SceneRevisionSchema,
+  type AssetsLock,
+  type Scenery,
+} from '@ogm/contracts';
 
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const runFile = promisify(execFile);
@@ -131,6 +138,42 @@ export async function readScenerySource(
     };
   }
   return { root, lock, scene: parseScenery(data, lock.assets), ...(updatedAt ? { updatedAt } : {}) };
+}
+
+export type SceneSummary = { id: string; rev: number; author: string; updatedAt: string };
+
+/**
+ * The game's scene documents (`scenes/<scene>.scene.json` heads, #1207), each with who wrote its head revision. A head
+ * is the commit point, so its author is log line `rev`; a scene whose head or log can't be read is left out.
+ */
+export async function listSceneDocs(checkout: string, gamePath: string): Promise<SceneSummary[]> {
+  const root = await contained(checkout, gamePath);
+  let dir: string;
+  let names: string[];
+  try {
+    dir = await contained(root, 'scenes');
+    names = await readdir(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const scenes: SceneSummary[] = [];
+  for (const name of names.sort()) {
+    const id = name.endsWith('.scene.json') ? name.slice(0, -'.scene.json'.length) : '';
+    if (!SceneIdSchema.safeParse(id).success) continue;
+    try {
+      const head = JSON.parse(await readFile(await contained(dir, name), 'utf8')) as { rev?: unknown };
+      const rev = head.rev;
+      if (typeof rev !== 'number' || !Number.isInteger(rev) || rev < 1) continue;
+      const line = (await readFile(await contained(dir, `${id}.revs.jsonl`), 'utf8')).split('\n')[rev - 1];
+      const revision = SceneRevisionSchema.safeParse(JSON.parse(line ?? ''));
+      if (!revision.success || revision.data.rev !== rev) continue;
+      scenes.push({ id, rev, author: revision.data.author, updatedAt: revision.data.createdAt });
+    } catch {
+      continue;
+    }
+  }
+  return scenes;
 }
 
 /** Resolve a lock-owned file, enforcing the recorded hash and directory boundary. */

@@ -1,7 +1,8 @@
+import { getEditorScenes } from '../api';
+
 /**
- * Where the editor's scene strip gets its scenes. This is the one file that changes when the strip reads real scene
- * documents (#1207: `scenes/<scene>.scene.json` heads and their revision logs); until then a review link
- * (`?mode=edit&scenes=fixture`) shows Dusk Helm's real scenarios as sample scenes.
+ * Where the editor's scene strip gets its scenes: the game's scene documents (#1207: `scenes/<scene>.scene.json` heads
+ * and their revision logs). A review link (`?mode=edit&scenes=fixture`) shows Dusk Helm's scenarios as sample scenes.
  */
 
 /** One card in the strip, read from a scene head and its last revision. */
@@ -31,16 +32,22 @@ const FIXTURES: Record<string, readonly Omit<SceneCard, 'title'>[]> = {
 
 /** `source` is the page's `?scenes=` value. */
 export async function loadScenes(gameId: string, source: string | null): Promise<SceneCard[]> {
-  if (source !== 'fixture') return [];
-  return (FIXTURES[gameId] ?? []).map((scene) => ({ ...scene, title: sceneTitle(scene.id) }));
+  if (source === 'fixture') return (FIXTURES[gameId] ?? []).map((scene) => ({ ...scene, title: sceneTitle(scene.id) }));
+  try {
+    const { scenes } = await getEditorScenes(gameId);
+    return scenes.map(({ id, rev, author }) => ({ id, title: sceneTitle(id), rev, author }));
+  } catch {
+    /* A game with no checkout to read has no scenes to list; the strip stays out of the way. */
+    return [];
+  }
 }
 
 /**
- * Whether + can make a scene. Sample scenes can't: a blank scene needs a scene document the game can load (#1207), so
- * the game would keep showing the last scenario under a chip that says otherwise.
+ * Whether + can make a scene. Not yet: the editor can't write a scene document, and the game can't load one, so a new
+ * chip would vanish on reload while the game kept showing the last scenario.
  */
-export function canCreateScene(source: string | null): boolean {
-  return source !== 'fixture';
+export function canCreateScene(): boolean {
+  return false;
 }
 
 /** A new, empty scene owned by the creator. */

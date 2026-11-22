@@ -18,7 +18,7 @@ import { getChatRow, listCommands } from '../build-chat/store.js';
 import { findGameForFamily } from '../games/games.js';
 import { authorizedGame } from '../games/authorize.js';
 import { listEditorPreviews } from '../previews/store.js';
-import { readGameLock, readSceneryFile, readScenerySource } from './source.js';
+import { listSceneDocs, readGameLock, readSceneryFile, readScenerySource } from './source.js';
 import { scopePaletteItems } from './scope-palette.js';
 import { selectStageMedia } from './stage.js';
 import { latestSceneryEdit } from './edit-time.js';
@@ -218,6 +218,15 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       }
       c.header('Cache-Control', 'private, no-store');
       return c.json(palette);
+    })
+    .get('/games/:gameId/editor/scenes', async (c) => {
+      const target = checkout(c);
+      c.header('Cache-Control', 'private, no-store');
+      try {
+        return c.json({ scenes: await listSceneDocs(target.checkout, target.path) });
+      } catch {
+        throw new HttpError(404, 'scenery_source_unavailable');
+      }
     })
     .get('/games/:gameId/scenery/source', async (c) => {
       const buildId = c.req.query('build');

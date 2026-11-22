@@ -7,7 +7,7 @@ import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BlobHash, BlobStore } from '@ogm/blob-store';
 import { schema } from '@ogm/db';
-import { readSceneryFile, readScenerySource } from '../src/scenery/source.js';
+import { listSceneDocs, readSceneryFile, readScenerySource } from '../src/scenery/source.js';
 import { insertChatRow } from '../src/build-chat/store.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 
@@ -44,6 +44,44 @@ function fixture() {
   const blobStore = { open: async () => null } as unknown as BlobStore;
   return { root, game, id, blobStore };
 }
+
+function revision(rev: number, author: string) {
+  return JSON.stringify({
+    rev,
+    parentRev: rev - 1,
+    baseRev: rev - 1,
+    author,
+    source: author === 'kevin' ? 'editor' : 'cli',
+    label: `rev ${rev}`,
+    createdAt: `2026-11-0${rev}T00:00:00.000Z`,
+    changes: [],
+    docHash: 'a'.repeat(64),
+  });
+}
+
+function writeScene(game: string, id: string, rev: number, log: string[]) {
+  mkdirSync(join(game, 'scenes'), { recursive: true });
+  writeFileSync(join(game, 'scenes', `${id}.scene.json`), JSON.stringify({ rev, doc: {} }));
+  writeFileSync(join(game, 'scenes', `${id}.revs.jsonl`), log.map((line) => `${line}\n`).join(''));
+}
+
+describe('scene documents for the editor scene strip', () => {
+  it('lists each scene with the author of its committed head, not of a write that never committed', async () => {
+    const { root, game } = fixture();
+    expect(await listSceneDocs(root, 'games/fixture')).toEqual([]);
+    /* The head is the commit point: an agent line logged after rev 2 never committed, so Kevin still owns the head. */
+    writeScene(game, 'graveyard', 2, [revision(1, 'agent:1208'), revision(2, 'kevin'), revision(3, 'agent:1208')]);
+    writeScene(game, 'cave', 1, [revision(1, 'agent:1208')]);
+    /* Unreadable scenes drop out rather than hide every other chip. */
+    writeScene(game, 'torn', 2, [revision(1, 'kevin'), '{"rev":2,']);
+    writeScene(game, 'Bad Name', 1, [revision(1, 'kevin')]);
+    writeFileSync(join(game, 'scenes', 'cave.lock'), '');
+    expect(await listSceneDocs(root, 'games/fixture')).toEqual([
+      { id: 'cave', rev: 1, author: 'agent:1208', updatedAt: '2026-11-01T00:00:00.000Z' },
+      { id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-02T00:00:00.000Z' },
+    ]);
+  });
+});
 
 describe('no-build scenery source', () => {
   it('reads the selected branch lock and vendored bytes without using the checkout', async () => {
@@ -174,6 +212,15 @@ describe('no-build scenery source', () => {
       })
       .run();
     const { app } = await makeApp(deps);
+    writeScene(game, 'graveyard', 1, [revision(1, 'kevin')]);
+    const scenesUrl = `/api/v1/games/${ids.game}/editor/scenes`;
+    expect((await app.request(scenesUrl)).status).toBe(401);
+    expect((await app.request(scenesUrl, { headers: asUser(ids.other) })).status).toBe(403);
+    const scenes = await app.request(scenesUrl, { headers: asUser(ids.creator) });
+    expect(scenes.status).toBe(200);
+    expect(await scenes.json()).toEqual({
+      scenes: [{ id: 'graveyard', rev: 1, author: 'kevin', updatedAt: '2026-11-01T00:00:00.000Z' }],
+    });
     const url = `/api/v1/games/${ids.game}/scenery/source`;
     expect((await app.request(url)).status).toBe(401);
     expect((await app.request(url, { headers: asUser(ids.other) })).status).toBe(403);

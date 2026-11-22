@@ -1,11 +1,18 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router';
+
+const getEditorScenes = vi.hoisted(() => vi.fn());
+vi.mock('../api', () => ({ getEditorScenes }));
 
 import { canCreateScene, loadScenes, newScene } from './scene-source';
 import { SceneStrip } from './SceneStrip';
 
 afterEach(cleanup);
+beforeEach(() => {
+  getEditorScenes.mockReset();
+  getEditorScenes.mockRejectedValue(new Error('scenery_source_unavailable'));
+});
 
 let search = '';
 function Probe() {
@@ -24,8 +31,25 @@ async function renderStrip(entry: string, gameId = 'dusk-helm') {
 }
 
 describe('scene source', () => {
-  it('shows sample scenes only on a review link, so a live editor never lists made-up scenes', async () => {
+  it("lists the game's scene documents with who wrote each head", async () => {
+    getEditorScenes.mockResolvedValue({
+      scenes: [
+        { id: 'goblin-cave', rev: 4, author: 'agent:1208', updatedAt: '2026-11-21T00:00:00.000Z' },
+        { id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-20T00:00:00.000Z' },
+      ],
+    });
+    expect(await loadScenes('dusk-helm', null)).toEqual([
+      { id: 'goblin-cave', title: 'Goblin cave', rev: 4, author: 'agent:1208' },
+      { id: 'graveyard', title: 'Graveyard', rev: 2, author: 'kevin' },
+    ]);
+    expect(getEditorScenes).toHaveBeenCalledWith('dusk-helm');
+  });
+
+  it("lists nothing when the game's scenes cannot be read, so the strip stays out of the way", async () => {
     expect(await loadScenes('dusk-helm', null)).toEqual([]);
+  });
+
+  it('shows sample scenes only on a review link, so a live editor never lists made-up scenes', async () => {
     expect(await loadScenes('blobs', 'fixture')).toEqual([]);
     const scenes = await loadScenes('dusk-helm', 'fixture');
     expect(scenes.map((scene) => [scene.title, scene.scenario])).toEqual([
@@ -36,9 +60,8 @@ describe('scene source', () => {
     ]);
   });
 
-  it('lets + make scenes only where a scene can be written', () => {
-    expect(canCreateScene('fixture')).toBe(false);
-    expect(canCreateScene(null)).toBe(true);
+  it('keeps + off until the editor can write a scene, so a new chip never vanishes on reload', () => {
+    expect(canCreateScene()).toBe(false);
   });
 
   it('makes a new scene the creator owns, without reusing an id', () => {
@@ -56,6 +79,15 @@ describe('SceneStrip', () => {
     await renderStrip('/g/dusk-helm?mode=edit');
     expect(screen.queryByRole('group', { name: 'Scenes' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Scenes' })).not.toBeInTheDocument();
+  });
+
+  it('shows real scenes without a review link and marks the opened one', async () => {
+    getEditorScenes.mockResolvedValue({
+      scenes: [{ id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-20T00:00:00.000Z' }],
+    });
+    await renderStrip('/g/dusk-helm?mode=edit&scene=graveyard');
+    expect(screen.getByRole('button', { name: 'Graveyard, changed by you' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'New scene' })).toBeDisabled();
   });
 
   it('says who changed each scene last and marks the one the game is showing', async () => {
