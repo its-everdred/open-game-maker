@@ -97,6 +97,16 @@ export function createForestParticles(particles: Particles, fire: { x: number; y
   particles.emit(LEAVES, { at: toPool(0, -CANOPY) });
   particles.emit(EMBERS, { at: toPool(fire.x, fire.y - 8) });
   let motes: { handle: ParticleHandle; at: [number, number, number] } | undefined;
+  let fading: ParticleHandle | undefined;
+  // A stopped emitter holds its slot until its last mote dies (up to 9 s of simulation, slower than real time when
+  // frames are slow), so only the newest stopped set keeps fading: retargets can never fill the emitter limit.
+  const release = () => {
+    if (!motes) return;
+    fading?.dispose();
+    fading = motes.handle;
+    fading.stop();
+    motes = undefined;
+  };
   // The camera's view is only final after its first render, so the first aim waits a moment.
   let retargetAt = FIRST_AIM_MS;
   return {
@@ -107,8 +117,10 @@ export function createForestParticles(particles: Particles, fire: { x: number; y
         retargetAt = timeMs + MOTE_RETARGET_MS;
         const point = shaftPoint(preset, timeMs, view);
         const at = point && toPool(point.x, point.y);
-        if (at && (!motes || Math.hypot(at[0] - motes.at[0], at[1] - motes.at[1]) > RETARGET_DISTANCE)) {
-          motes?.handle.stop();
+        // No shaft showing (rain, or between beams): the motes stop where they are and fade.
+        if (!at) release();
+        else if (!motes || Math.hypot(at[0] - motes.at[0], at[1] - motes.at[1]) > RETARGET_DISTANCE) {
+          release();
           motes = { handle: particles.emit(MOTES, { at }), at };
         }
       }

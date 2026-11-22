@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { beamsAt } from '../../../../packages/sdk/src/hd2d/lighting/index.js';
+import { beamsAt, presetUnder } from '../../../../packages/sdk/src/hd2d/lighting/index.js';
 import { createParticleDriver, type ParticleBackend } from '../../../../packages/sdk/src/hd2d/particles/create.js';
 import { cellPoint, FIRE, HERO } from '../src/clearing.js';
 import {
@@ -11,7 +11,7 @@ import {
   worldToCell,
   type ViewRect,
 } from '../src/particles.js';
-import { PRESETS } from '../src/presets.js';
+import { BIOME, PRESETS } from '../src/presets.js';
 
 const view: ViewRect = { x: -500, y: -311, width: 1000, height: 562 };
 
@@ -74,6 +74,49 @@ describe('forest particles', () => {
     for (let t = 0; t < 6000; t += 50) forest.update(t, PRESETS.golden, view);
     expect(new Set(drawn.map((particle) => particle.family))).toEqual(new Set([0, 1]));
     expect(emitted).toEqual(expect.arrayContaining(['forest-leaves', 'forest-motes', 'campfire-embers']));
+  });
+
+  // Each retarget stops the old motes, which hold their emitter until the last one dies. On a slow phone the simulation
+  // runs slower than the clock, so stopped sets used to pile up until the driver's emitter limit threw mid-frame.
+  it('keeps retargeting the motes on slow frames without running out of emitters', () => {
+    const particles = createParticleDriver(recorder().backend, particleOptions('high', PRESETS.golden, undefined));
+    const forest = createForestParticles(particles, cellPoint(FIRE));
+    const stopped: string[] = [];
+    const emit = particles.emit.bind(particles);
+    particles.emit = (name, options) => {
+      const handle = emit(name, options);
+      const stop = handle.stop.bind(handle);
+      handle.stop = () => (stopped.push(name), stop());
+      return handle;
+    };
+    expect(() => {
+      for (let t = 0; t < 180_000; t += 250) forest.update(t, PRESETS.golden, view);
+    }).not.toThrow();
+    expect(stopped.length).toBeGreaterThan(8);
+  });
+
+  // Rain takes the shafts away, so the motes that hang in them must stop rather than keep spawning in the dark.
+  it('stops the motes when the weather hides the shafts', () => {
+    const particles = createParticleDriver(recorder().backend, particleOptions('high', PRESETS.golden, undefined));
+    const forest = createForestParticles(particles, cellPoint(FIRE));
+    const live = new Set<string>();
+    const emit = particles.emit.bind(particles);
+    let next = 0;
+    particles.emit = (name, options) => {
+      const handle = emit(name, options);
+      const id = `${name}#${next++}`;
+      live.add(id);
+      const stop = handle.stop.bind(handle);
+      handle.stop = () => (live.delete(id), stop());
+      return handle;
+    };
+    let time = 0;
+    for (; time < 20_000 && ![...live].some((id) => id.startsWith('forest-motes')); time += 100)
+      forest.update(time, PRESETS.golden, view);
+    expect([...live].some((id) => id.startsWith('forest-motes'))).toBe(true);
+    const rain = presetUnder(PRESETS.golden, { biome: BIOME, weather: 'rain' });
+    for (const end = time + 4000; time < end; time += 100) forest.update(time, rain, view);
+    expect([...live].filter((id) => id.startsWith('forest-motes'))).toEqual([]);
   });
 
   it('sways trees with the same wind the leaves ride, a few degrees at most', () => {
