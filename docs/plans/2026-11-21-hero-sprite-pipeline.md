@@ -1,6 +1,6 @@
 ---
 title: "Hero sprite pipeline: 3D -> 2D class sprites for Dusk Helm"
-status: Stage 1 approved and running (Kevin 2026-11-21 ~22:45Z); Stages 2-4 not started
+status: Stage 1 Wizard + Ranger approved; base bodies (3 classes x male/female, white undergarments) in review (Kevin 2026-11-22); Stage 2 tooling merged (#1233), round waits on the base bodies; Stages 3-4 held
 date: 2026-11-21
 origin: Kevin 2026-11-21 ~21:45Z; follows core #1120 (TRELLIS multi-view at $0.02 won the model bake-off)
 ---
@@ -51,6 +51,27 @@ Kevin, 2026-11-21 ~22:45Z:
 4. **CC BY-NC mocap (100STYLE and the like): fine** (Stage 2).
 5. **Kevin's own reference video:** not asked yet; do not plan on it.
 
+Kevin, 2026-11-22 00:14Z (Stage 1 review, cards on #1120):
+
+6. **Wizard: "Matches the pack". Ranger: "Matches the pack"** ("this looks good for modeling step").
+7. **Stance changes happen in the rigging step, not the modeling step.** The modeling step only has to match the
+   pack's body, face, palette and scale in a neutral A-pose; any pose or stance difference from the pack Idle is fixed
+   by the rig and motion (Stage 2), never by re-generating the mesh.
+8. **Warrior: "Close, fix details".** "Let's render weapons separately so player can carry many different" (step 3).
+
+Kevin, 2026-11-22 ~13:10Z (supersedes 8 for now):
+
+9. **Equipment is upgradeable, so the heroes start as base bodies.** Warrior, Wizard and Ranger, each **male and
+   female** (6 bodies), "still based off original sprites": the same face, hair, build, proportions, palette and pixel
+   scale as the pack sprite, with all gear removed and only plain white undergarments (male: white shirt + boxers;
+   female: white bra + underwear). No armour, no weapons. The pack has no female version of these classes, so each
+   female body is drawn from the same class sprite. One TRELLIS multi-view call each ($0.12 for 6, Kevin asked for these
+   runs; cap raised to $9.75 for them only). The Warrior weapon-split round is paused.
+10. **All gear is attachable layers on the base bodies:** armour, weapons, helmets and robes, for every class and both
+    sexes, rendered at the pack camera and scale and swapped at runtime. This applies to Stage 3 (#1203), the Dusk
+    Helm sprite sets (og #890) and the Stage 4 comparison (og #891).
+11. **Stage 2 (#1202) rigs and animates the base bodies** once Kevin approves them.
+
 ---
 
 ## Stage 1: exact re-render of the three class sprites
@@ -76,7 +97,8 @@ Kevin, 2026-11-21 ~22:45Z:
 **Cost:** $0.06, at most $0.12 with retries. CPU render about 20 min per class.
 
 **Gate:** you approve each class ("matches") or name what is off. A class you approve becomes the base mesh for every
-later stage.
+later stage. Judge the modeling step on body, face, palette and scale only: stance and pose differences from the pack
+Idle are fixed in the rigging step (Stage 2), never by re-generating the mesh.
 
 ---
 
