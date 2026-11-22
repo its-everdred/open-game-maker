@@ -59,7 +59,6 @@ strongest model and effort. `balanced` is in between. When Energy is `limited` o
 `gm energy` fails, work as `balanced`.
 
 ## Activity markers
-
 Wrap long work in the Agent Workpad with these exact markers:
 
 ```text
