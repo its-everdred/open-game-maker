@@ -20,7 +20,8 @@ import urllib.request
 from urllib.parse import urljoin
 
 # A rewritten address glued onto a path (`assets//a/<hash>.json`, `.//a/<hash>.js`) inside a script.
-BROKEN = re.compile(r'[^"\'`\s(]*//a/[0-9a-f]{64}\.\w+')
+# Linear: a leading `[^"']*` made this quadratic on multi-MB bundles (a check ran 9+ minutes, 2026-11-22).
+BROKEN = re.compile(r'//a/[0-9a-f]{64}\.\w+')
 REF = re.compile(r'<(?:script[^>]*\ssrc|link[^>]*rel="modulepreload"[^>]*\shref)="([^"]+)"', re.I)
 
 
@@ -60,9 +61,13 @@ def check(origin, game_id, slug, build_id):
         status, _, script = get(urljoin(final, ref))
         if status != 200:
             return f'{slug} {build_id}: {ref} {status}'
-        broken = BROKEN.search(script.decode('utf8', 'replace'))
+        text = script.decode('utf8', 'replace')
+        broken = BROKEN.search(text)
         if broken:
-            return f'{slug} {build_id}: {ref} holds broken reference {broken.group(0)}'
+            start = broken.start()
+            while start > 0 and broken.start() - start < 200 and text[start - 1] not in '"\'` (':
+                start -= 1
+            return f'{slug} {build_id}: {ref} holds broken reference {text[start:broken.end()]}'
     return None
 
 
