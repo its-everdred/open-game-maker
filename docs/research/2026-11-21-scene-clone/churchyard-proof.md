@@ -141,3 +141,11 @@ decoys, the order was `roof-g1`, `wall-a7`, `stone-a4`, `wall-a2`, `stone-a5`,
 it is a hand-selected six-item comparison against one imperfect mask. It does
 not establish full-catalog recall, and the matcher has not been changed on this
 basis.
+
+A structured comparison of human observations is saved locally as
+`assets-local/review/1154/churchyard-manual-observations.json`. With its explicit
+category-priority order, it ranks the absent roofed chapel shell first and the
+broken approach second. It preserves the already-connected fence and marks the
+gate pillars, torches, grave arrangement and growth as unobserved. The inputs
+were manually reviewed from the unregistered screenshot; this is not automatic
+image inference, a matched-framing result, or a kit-gap finding.
