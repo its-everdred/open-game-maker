@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 import { inventoryPath, markdownSection, readInventory, ticketDecisionIds } from './decision-inventory.js';
+import { waivesPrototypeReview } from './prototype-review.js';
 
 export function checkPrReview(cwd: string, bodyFile: string, base: string): string[] {
   let body: string;
@@ -49,7 +50,7 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
   );
   const reviewSection = markdownSection(body, 'Prototype review') ?? '';
   const hasReview = reviewSection.trim() !== '';
-  const waivesReview = /^Prototype review:\s*none\s*$/im.test(body);
+  const waivesReview = waivesPrototypeReview(body);
   if (visiblePaths.length > 0 && !hasReview && !waivesReview)
     problems.push('creator-visible changes need a ## Prototype review section or Prototype review: none');
   if (hasReview) {

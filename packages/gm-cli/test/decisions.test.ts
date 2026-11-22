@@ -327,6 +327,10 @@ describe('gm decisions', () => {
     const missing = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd: root });
     expect(missing.code).toBe(1);
     expect(missing.err.join('\n')).toContain('Prototype review');
+    /* The waiver with a reason must pass here too, or publish accepts a body the PR gate rejects (#1250). */
+    writeFileSync(body, 'Closes #71\n\nPrototype review: none (mock images only; no playable change)\n');
+    const waived = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
+    expect(JSON.parse(waived.out[0]!).prototypeReview.problems).toEqual([]);
     writeFileSync(
       body,
       'Closes #71\n\n## Creator decisions\n- enemy-style\n\n## Prototype review\nPlay: https://example.test\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n',
