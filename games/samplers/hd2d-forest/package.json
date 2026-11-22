@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite --mode draft --host 127.0.0.1",
     "build": "vite build --mode published",
-    "pretypecheck": "pnpm --filter @ogm/contracts build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "lint": "eslint src tests vite.config.ts",

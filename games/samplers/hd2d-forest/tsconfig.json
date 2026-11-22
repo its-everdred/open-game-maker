@@ -6,7 +6,9 @@
     "declarationMap": false,
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    // The SDK sources this sampler imports by path read @ogm/contracts; check against its source, not a built dist.
+    "paths": { "@ogm/contracts": ["../../../packages/contracts/src/index.ts"] }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "*.ts", "../../../packages/sdk/src/proc/fastnoise-lite.d.ts"]
 }
