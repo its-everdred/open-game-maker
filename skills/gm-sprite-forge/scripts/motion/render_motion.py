@@ -126,22 +126,23 @@ def motion(rig, mo):
         return {}
     if kind == 'handkey':
         import handkey
-        return handkey.build(rig, mo)
+        return handkey.build(rig, mo, N)
     src = retarget.import_source('bvh' if kind == 'bvh' else 'gltf', mo['path'], mo.get('action'))
     if kind == 'bvh':
         bpy.context.scene.render.fps = 30
     fr = mo.get('frames', 'auto')
+    loop = mo.get('loop', mo.get('clip', 'walk') == 'walk')  # an attack is a one-shot unless a spec says otherwise
     m = retarget.bone_map(src)
     if fr == 'auto' or not fr:
         a = src.animation_data.action
         f0, f1 = a.frame_range
-        if mo.get('loop', True) and kind == 'bvh':
+        if loop and kind == 'bvh':
             f0, f1 = retarget.pick_cycle(src, m, f0, f1)
         elif kind == 'bvh':
             f0, f1 = retarget.pick_strike(src, m, f0, f1, mo.get('seconds', 1.1), mo.get('fps', 30.0))
     else:
         f0, f1 = fr
-    rep = retarget.retarget(src, rig, f0, f1, n=N, loop=mo.get('loop', True), foot_ik=mo.get('foot_ik', True), mapping=m,
+    rep = retarget.retarget(src, rig, f0, f1, n=N, loop=loop, foot_ik=mo.get('foot_ik', True), mapping=m,
                           stance=mo.get('stance'))
     bpy.data.objects.remove(src)
     return rep
@@ -159,7 +160,10 @@ def foot_points(rig):
 def fitted(spec):
     """Fit once per mesh: the fitted mesh, rig and weights are cached beside the mesh's cells and appended after."""
     cache = spec.get('rig_cache')
-    if cache and os.path.exists(cache) and os.path.exists(cache + '.json'):
+    key = {'mesh': os.path.abspath(spec['mesh']), 'mtime': os.path.getmtime(spec['mesh']), 'rotz': spec.get('rotz', 0),
+           'fit_rig': os.path.getmtime(fit_rig.__file__)}  # a new mesh, turn or fitter refits
+    if cache and os.path.exists(cache) and os.path.exists(cache + '.json') and \
+            json.load(open(cache + '.json')).get('key') == key:
         with bpy.data.libraries.load(cache) as (src, dst):
             dst.objects = ['fit_mesh', 'rig']
         for o in dst.objects:
@@ -172,7 +176,8 @@ def fitted(spec):
         ob.name, rig.name = 'fit_mesh', 'rig'
         bpy.ops.file.pack_all()
         bpy.data.libraries.write(cache, {ob, rig}, fake_user=True)
-        json.dump({'landmarks': {k: (v.tolist() if hasattr(v, 'tolist') else v) for k, v in lm.items()}, 'skin': rep},
+        json.dump({'key': key, 'landmarks': {k: (v.tolist() if hasattr(v, 'tolist') else v) for k, v in lm.items()},
+                   'skin': rep},
                   open(cache + '.json', 'w'))
     return ob, rig, lm, rep
 

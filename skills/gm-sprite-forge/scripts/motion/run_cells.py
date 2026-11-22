@@ -20,6 +20,11 @@ LICENCE = (('kaykit', 'CC0 (KayKit Character Animations, owned)'), ('/cmu/', 'CM
            ('handkey', 'own work (hand-keyed script)'))
 
 
+def fmt(x):
+    """Two decimals, or n/a for a metric score.py could not define (no motion, no contact frames)."""
+    return 'n/a' if x is None else f'{x:.2f}'
+
+
 def write_recipe(d, spec, c, scores):
     """recipe.json beside the cell: what the review page prints under it (kind, model, cost, skill, arm, motion)."""
     mo = c['motion']
@@ -75,8 +80,8 @@ def main():
             continue
         sj = json.loads((d / 'scores.json').read_text())
         write_recipe(d, spec, c, sj)
-        line = (f"{c['name']:28} corr {sj['motion_corr']:.2f} (rows {', '.join(f'{x:.2f}' for x in sj['motion_corr_rows'])};"
-                f" shift {sj['phase_shift']}) iou {sj['silhouette_iou']:.2f} slide {sj['foot_slide']['mean_px']} px"
+        line = (f"{c['name']:28} corr {fmt(sj['motion_corr'])} (rows {', '.join(fmt(x) for x in sj['motion_corr_rows'])};"
+                f" shift {sj['phase_shift']}) iou {fmt(sj['silhouette_iou'])} slide {fmt(sj['foot_slide']['mean_px'])} px"
                 f" render {sj['render_minutes']} min")
         rows.append((c['name'], line))
         print(line, flush=True)

@@ -146,5 +146,70 @@ class FitTest(unittest.TestCase):
                     self.assertLess(np.linalg.norm(np.array(got[side]) * [sgn, 1, 1] - wrist), 2 * px, (side, got))
 
 
+SEAM = '''
+import sys, json, math
+sys.path.insert(0, sys.argv[-2])
+from mathutils import Matrix, Vector
+import retarget
+n = 15
+def walk(i, jitter):
+    # a drifting loop: the take does not end where it began, so its seam needs spreading
+    feet = {}
+    for sd, off in (('L', 0), ('R', 7)):
+        ph = (i + off) % n
+        down = ph < 9
+        y = 0.1 * ph if down else 0.9 - 0.9 * (ph - 9) / (n - 9)
+        feet[sd] = Vector((0.1 if sd == 'L' else -0.1, y + (jitter * (-1) ** i if down else 0), 0.0 if down else 0.1))
+    return {'root': Vector((0, 0, math.sin(2 * math.pi * i / n) + 0.1 * i)), 'rot': {'spine': Matrix.Identity(3)},
+            'ankle': feet}
+seam = [walk(i, 0) for i in range(n)]
+retarget._close_loop(seam)
+loop = [walk(i, 0.02) for i in range(n)]
+flags, v = retarget.plant_feet(loop, loop=True)
+shot = [walk(i, 0.02) for i in range(n)]
+flags1, v1 = retarget.plant_feet(shot, loop=False)
+out = {'root_z': [s['root'].z for s in seam],
+       'loop_y': [s['ankle']['L'].y for s in loop], 'loop_contact': flags['L'], 'v': v,
+       'shot_y': [s['ankle']['L'].y for s in shot], 'shot_contact': flags1['L']}
+open(sys.argv[-1], 'w').write(json.dumps(out))
+'''
+
+
+@unittest.skipUnless(shutil.which('blender'), 'needs Blender 4.3')
+class SeamAndFootLockTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with tempfile.TemporaryDirectory() as t:
+            script, out = Path(t) / 'seam.py', Path(t) / 'out.json'
+            script.write_text(SEAM)
+            subprocess.run(['blender', '-b', '--factory-startup', '--python-use-system-env', '--python-exit-code', '1',
+                            '--python', str(script), '--', str(ROOT / 'scripts/motion'), str(out)],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           env=os.environ | {'PYTHONPATH': os.environ.get('OGM_FORGE_SITE', '')})
+            cls.r = json.loads(out.read_text())
+
+    def test_loop_seam_is_spread_not_piled_on_the_last_frame(self):
+        # every step of the closed loop, including last -> first, stays a step of the underlying sine (< 0.45)
+        z = self.r['root_z']
+        steps = [abs(z[(i + 1) % len(z)] - z[i]) for i in range(len(z))]
+        self.assertLess(max(steps), 0.45, steps)
+
+    def test_planted_foot_keeps_one_ground_speed_in_a_loop(self):
+        # jittered contact frames are re-laid on the clip's ground speed: no step differs from it
+        y, c, v = self.r['loop_y'], self.r['loop_contact'], self.r['v'][1]
+        n = len(y)
+        steps = [y[(i + 1) % n] - y[i] for i in range(n) if c[i] and c[(i + 1) % n]]
+        self.assertGreater(len(steps), 4)
+        for s in steps:
+            self.assertAlmostEqual(s, v, places=6)
+
+    def test_planted_foot_stays_put_in_a_one_shot(self):
+        # an attack has no ground speed: a planted foot does not move until it lifts
+        y, c = self.r['shot_y'], self.r['shot_contact']
+        run = [y[i] for i in range(len(y)) if c[i] and (i == 0 or c[i - 1]) and all(c[: i + 1])]
+        self.assertGreater(len(run), 4)
+        self.assertEqual(len(set(round(x, 9) for x in run)), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

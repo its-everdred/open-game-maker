@@ -36,11 +36,13 @@ def frames(sheet, row, shift=0, cell=128):
 def label_lines(rec, sc):
     if rec is None:
         return ['Pack original', 'SmallScaleInt sheet', '']
-    slide = sc['foot_slide']['mean_px']
+    def fmt(x):
+        return 'n/a' if x is None else f'{x:.2f}'
     return [rec['name'],
             f"{rec['kind']} · {rec['model']} · ${rec['cost_usd']:.2f}",
             f"{rec['skill']} · {rec['motion_licence']}",
-            f"corr {sc['motion_corr']:.2f} · IoU {sc['silhouette_iou']:.2f} · slide {slide:.2f} px · {sc['render_minutes']:.0f} min"]
+            f"corr {fmt(sc['motion_corr'])} · IoU {fmt(sc['silhouette_iou'])} · slide {fmt(sc['foot_slide']['mean_px'])} px"
+            f" · {sc['render_minutes']:.0f} min"]
 
 
 def compose(cols, labels, zoom, crop):

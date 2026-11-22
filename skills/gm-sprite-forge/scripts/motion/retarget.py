@@ -48,8 +48,6 @@ def bone_map(src):
         for role, stems in ROLE_NAMES.items():
             if stem in stems and f'{role}.{side}' not in m:
                 m[f'{role}.{side}'] = b
-    if 'shoulder.L' in m and m.get('upper_arm.L') == m['shoulder.L']:  # Synty: Shoulder_* is the upper arm
-        m.pop('shoulder.L'), m.pop('shoulder.R', None)
     hips = next(b for b in src.data.bones if b.name.lower() in ('hips', 'pelvis', 'hip'))
     head = next(b for b in src.data.bones if b.name.lower() == 'head')
     chain = []
@@ -262,23 +260,23 @@ def _src_world_at(src, name, f):
 
 
 def _close_loop(samples):
-    """Spread the seam between the last sample and the first across the cycle (rotations, root and ankles)."""
+    """Spread the seam between the last sample and the first across the cycle (rotations, root and ankles).
+    The seam is measured once, from the untouched samples, before any of them is corrected."""
     n = len(samples)
-    a, b = samples[0], samples[-1]
-    # the next sample after the last one is the first; extrapolate the would-be sample n from the last step
+    a, b, c = samples[0], samples[-1], samples[-2] if n > 2 else samples[-1]
+    rot_delta = {}
+    for name in a['rot']:
+        q_end = b['rot'][name].to_quaternion()
+        q_next = q_end @ (c['rot'][name].to_quaternion().inverted() @ q_end)  # the would-be sample n
+        rot_delta[name] = a['rot'][name].to_quaternion() @ q_next.inverted()
+    root_delta = a['root'] - (2 * b['root'] - c['root'])
+    ankle_delta = {sd: a['ankle'][sd] - (2 * b['ankle'][sd] - c['ankle'][sd]) for sd in 'LR'}
     for i, s in enumerate(samples):
         t = i / n
-        for name, R in s['rot'].items():
-            q_end = b['rot'][name].to_quaternion()
-            q_n = q_end @ (samples[-2]['rot'][name].to_quaternion().inverted() @ q_end) if n > 2 else q_end
-            delta = a['rot'][name].to_quaternion() @ q_n.inverted()
-            s['rot'][name] = (Quaternion().slerp(delta, t) @ R.to_quaternion()).to_matrix()
-        for key in ('root',):
-            nxt = 2 * b[key] - samples[-2][key]
-            s[key] = s[key] + (a[key] - nxt) * t
-        for side in 'LR':
-            nxt = 2 * b['ankle'][side] - samples[-2]['ankle'][side]
-            s['ankle'][side] = s['ankle'][side] + (a['ankle'][side] - nxt) * t
+        s['rot'] = {name: (Quaternion().slerp(rot_delta[name], t) @ R.to_quaternion()).to_matrix()
+                    for name, R in s['rot'].items()}
+        s['root'] = s['root'] + root_delta * t
+        s['ankle'] = {sd: s['ankle'][sd] + ankle_delta[sd] * t for sd in 'LR'}
 
 
 def plant_feet(samples, loop=True, low=0.25):
@@ -391,7 +389,7 @@ def apply_samples(rig, samples, loop=True, foot_ik=True, stance=None):
             b.matrix_basis = Matrix()
         bpy.context.view_layer.update()
         root = s['root'].copy()
-        for _ in range(2):  # lower the hips until both ankles are in reach
+        for tries in range(4):  # pose, then lower the hips and pose again until both ankles are in reach
             set_rot(rig, 'spine', s['rot'].get('spine', Matrix()), root)
             for name in order:
                 if name != 'spine' and name in s['rot']:
@@ -399,7 +397,7 @@ def apply_samples(rig, samples, loop=True, foot_ik=True, stance=None):
             if not foot_ik:
                 break
             over = max((s['ankle'][sd] - bones[f'thigh.{sd}'].head).length - 0.998 * (a_len[sd] + b_len[sd]) for sd in 'LR')
-            if over <= 0:
+            if over <= 0 or tries == 3:
                 break
             root.z -= over
         if foot_ik:

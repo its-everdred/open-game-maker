@@ -152,6 +152,6 @@ def attack(rig, n=15, step=0.16, stance=None, keys='chop'):
     return {'kind': 'handkey', 'clip': 'attack', 'keys': keys, 'times': [k[0] for k in table], 'step': step, 'stance': stance}
 
 
-def build(rig, mo):
-    p = mo.get('params', {}) | ({'stance': mo['stance']} if mo.get('stance') else {})
+def build(rig, mo, n=15):
+    p = {'n': n} | mo.get('params', {}) | ({'stance': mo['stance']} if mo.get('stance') else {})
     return walk(rig, **p) if mo.get('clip', 'walk') == 'walk' else attack(rig, **p)
