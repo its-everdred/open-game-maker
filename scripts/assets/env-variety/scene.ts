@@ -29,7 +29,12 @@ class Lineup extends Phaser.Scene {
   constructor() {
     super('lineup');
   }
-  async create() {
+  create() {
+    this.setup().catch((error: unknown) => {
+      (window as unknown as { failed: string }).failed = String(error);
+    });
+  }
+  async setup() {
     const loader = { resolve: (id: string) => spec.assets[id] } as unknown as AssetLoader;
     const map = new IsoMap(spec.map);
     const rendered = await map.render(this, loader);
@@ -52,11 +57,15 @@ class Lineup extends Phaser.Scene {
       this.load.image(key, new URL(resolved.meta.sprite.facings[extra.facing]!, resolved.url).toString());
       keys.add(key);
     }
+    const failed: string[] = [];
+    this.load.on('loaderror', (file: { key: string }) => failed.push(file.key));
     await new Promise<void>((resolve) => {
       this.load.once('complete', () => resolve());
       this.load.start();
       if (keys.size === 0) resolve();
     });
+    // Phaser draws a placeholder for a texture that failed to load; a screenshot of it would look like a result.
+    if (failed.length > 0) throw new Error(`could not load ${failed.join(', ')}`);
     for (const extra of spec.extras) {
       const key = `${extra.asset}:${extra.facing}`;
       const point = isoToWorld(extra.x, extra.y);

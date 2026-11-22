@@ -206,13 +206,22 @@ def rotate(offset: tuple[float, float], turns: int) -> tuple[float, float]:
 
 
 def compose(parts: list[tuple[np.ndarray, tuple[float, float]]]) -> np.ndarray:
-    """Place sprites (anchor at ANCHOR) at tile-unit offsets, back to front by projected depth."""
-    canvas = Image.new("RGBA", (3 * CANVAS, 3 * CANVAS), (0, 0, 0, 0))
+    """Place sprites (anchor at ANCHOR) at tile-unit offsets, back to front by projected depth.
+
+    Pixels are copied, never blended: a part's opaque pixels overwrite what is behind them, and its partial-alpha
+    pixels (cast shadows) only fill empty canvas. Alpha blending a shadow over another part makes colours that no
+    pack sprite has.
+    """
+    pad = CANVAS
+    canvas = np.zeros((3 * CANVAS, 3 * CANVAS, 4), dtype=np.uint8)
     for rgba, (dx, dy) in sorted(parts, key=lambda part: part[1][0] + part[1][1]):
         px, py = int(round(64 * (dx - dy))), int(round(32 * (dx + dy)))
-        canvas.alpha_composite(Image.fromarray(rgba), (CANVAS + px, CANVAS + py))
-    canvas = canvas.crop((CANVAS, CANVAS, 2 * CANVAS, 2 * CANVAS))
-    return np.asarray(canvas).copy()
+        region = canvas[pad + py : pad + py + CANVAS, pad + px : pad + px + CANVAS]
+        alpha = rgba[..., 3]
+        opaque = alpha == 255
+        partial = (alpha > 0) & ~opaque & (region[..., 3] == 0)
+        region[opaque | partial] = rgba[opaque | partial]
+    return canvas[pad : pad + CANVAS, pad : pad + CANVAS].copy()
 
 
 # --- recipes -----------------------------------------------------------------------------------------------------
@@ -287,6 +296,9 @@ def main(argv: list[str] | None = None) -> int:
     env, out = args.env.resolve(), args.out.resolve()
     if "packs" in out.parts:
         parser.error("refusing to write variants inside a pack directory")
+    unknown = sorted(set(args.only or []) - {recipe["id"] for recipe in RECIPES})
+    if unknown:
+        parser.error(f"unknown variant ids: {', '.join(unknown)}")
     pack_root = env
     while pack_root.parent != pack_root and pack_root.parent.name != "packs":
         pack_root = pack_root.parent

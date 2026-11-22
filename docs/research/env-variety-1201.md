@@ -12,7 +12,28 @@ into items (one name in all its facings), measures each one and assigns a scene-
 judgement made from the #486 contact sheets and is checked in with the script. Output:
 `assets-local/sets/env-variety/inventory/` (`inventory.json`, `INVENTORY.md`, one contact sheet per kind).
 
-INVENTORY_TABLE
+| Kind | Fantasy | Desert | Rural (HD, reference only) | All four facings | Median visible height (px) |
+|---|---|---|---|---|---|
+| market stall | 10 | 10 | 0 | 20/20 | 137 |
+| building (walls, roofs, doors) | 154 | 255 | 190 | 599/599 | 153 |
+| palisade | 6 | 6 | 0 | 12/12 | 175 |
+| fence | 9 | 9 | 11 | 29/29 | 119 |
+| path | 41 | 41 | 0 | 82/82 | 68 |
+| ground | 21 | 39 | 64 | 124/124 | 81 |
+| rock | 11 | 24 | 0 | 35/35 | 98 |
+| grime (whole dirt tiles) | 6 | 6 | 0 | 12/12 | 80 |
+| scatter (pebbles, stumps, logs) | 14 | 14 | 0 | 28/28 | 65 |
+| clutter | 38 | 38 | 44 | 120/120 | 110 |
+| town prop | 59 | 67 | 0 | 126/126 | 106 |
+| graveyard | 5 | 5 | 0 | 10/10 | 99 |
+| cave | 14 | 14 | 10 | 38/38 | 193 |
+| vegetation (grass, tufts) | 32 | 44 | 101 | 177/177 | 73 |
+| tree | 9 | 10 | 18 | 37/37 | 216 |
+| foliage (bushes, hedges, ivy) | 25 | 25 | 0 | 50/50 | 144 |
+| helper (shadows) | 13 | 13 | 0 | 26/26 | 64 |
+| unclassified | 1 (`Torch2`) | 1 | 21 (boats, bridge, cars, shadow tiles) | 16/23 | 512 |
+
+1,548 items in all. An item is one name; it ships as up to four facing files.
 
 What the numbers mean for variety:
 
@@ -38,7 +59,7 @@ What the numbers mean for variety:
 
 | Biome | Has | Missing for a natural, composed scene |
 |---|---|---|
-| Town | 570 wall/roof/door pieces, 10 market stalls and awnings, wells, carts, signs, benches, banners, crates, pots, barrels, hay | Grime: no alpha decals for dirt, mud, straw or worn cobbles (`Ground C`/`I` are whole tiles). Clutter: every crate stack, pot group and barrel is a single repeated sprite. Stall variety: three full stalls (`Misc B17`–`B19`). Fences: picket and rail runs have no broken, weathered or gate pieces. No lamp posts (only a wall torch). |
+| Town | 154 wall, roof and door pieces (409 with the desert twins), 10 market stalls and awnings, wells, carts, signs, benches, banners, crates, pots, barrels, hay | Grime: no alpha decals for dirt, mud, straw or worn cobbles (`Ground C`/`I` are whole tiles). Clutter: every crate stack, pot group and barrel is a single repeated sprite. Stall variety: three full stalls (`Misc B17`–`B19`). Fences: picket and rail runs have no broken, weathered or gate pieces. No lamp posts (only a wall torch). |
 | Field | Grass and dry-grass tiles and patches, grass tufts, bushes, hay, rail fences, a training dummy, pebbles | Crops and tilled plots (none at all). Wildflowers (tufts are green only). Fence and hay variety. Grime and worn-path decals between route and grass. Rock clusters. Small fauna (crows, rabbits). |
 | Forest | Three leafy trees, one amber, three pines, two bare trees, stumps, three log pieces, bushes and hedges | Tree variety is the biggest gap (8 tall trees repeat at once). Undergrowth: ferns, mushrooms, leaf litter and twig decals. Mossy rocks and boulder clusters. More fallen-log shapes. |
 | Cave | Cliff walls and corners (`Ground G12`–`G22`), rock stairs, crystals, rubble rocks, pebbles | A cave mouth (#486 had to build a provisional one). Stalagmites. Wet floor and puddle decals. Bones. Mine props (beams exist in `Wall E`, no cart or rails). |

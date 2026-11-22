@@ -94,7 +94,8 @@ try {
     const spec = { map: fieldsMap(), assets, extras, jitterRoof: true, camera: entry.camera ?? defaultCamera };
     for (const [size, viewport] of Object.entries(sizes)) {
       const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, ...viewport });
-      page.on('pageerror', (error) => console.error(shot, size, error.message));
+      const errors = [];
+      page.on('pageerror', (error) => errors.push(error.message));
       await page.route(`${ORIGIN}/**`, async (route) => {
         const path = decodeURIComponent(new URL(route.request().url()).pathname);
         if (path === '/') {
@@ -114,7 +115,9 @@ try {
         }
       });
       await page.goto(`${ORIGIN}/`);
-      await page.waitForFunction(() => window.ready === true, null, { timeout: 120_000 });
+      await page.waitForFunction(() => window.ready === true || 'failed' in window, null, { timeout: 120_000 });
+      const failed = await page.evaluate(() => window.failed);
+      if (failed || errors.length > 0) throw new Error(`${shot} ${size}: ${failed ?? errors.join('; ')}`);
       await page.waitForTimeout(300);
       await page.screenshot({ path: join(outDir, `${shot}.${size}.png`) });
       await page.close();

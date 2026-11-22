@@ -14,8 +14,9 @@ sys.path.insert(0, str(HERE))
 import env_variety_inventory as inv  # noqa: E402
 
 try:
+    import numpy  # noqa: F401  (measure() needs it as well as Pillow)
     from PIL import Image
-except ImportError:  # pragma: no cover - the forge Python has Pillow
+except ImportError:  # pragma: no cover - the forge Python has both
     Image = None
 
 
@@ -54,8 +55,16 @@ class KindTest(unittest.TestCase):
         self.assertEqual(inv.kind_of("Wall", "B", 2, "rural"), "building")
         self.assertEqual(inv.kind_of("Fence", "A", 1, "rural"), "fence")
 
+    def test_summary_counts_items_per_kind_and_pack(self):
+        rows = [
+            {"pack": "a", "item": "Wall B1", "kind": "palisade", "facings": list("ENSW"), "visible": [10, 80]},
+            {"pack": "b", "item": "Wall B1", "kind": "palisade", "facings": ["E"], "visible": [10, 60]},
+        ]
+        text = inv.summary(rows)
+        self.assertIn("| palisade | 1 | 1 | 1/2 | 80 |", text)
 
-@unittest.skipIf(Image is None, "needs Pillow (run with the forge Python)")
+
+@unittest.skipIf(Image is None, "needs Pillow and NumPy (run with the forge Python)")
 class InventoryTest(unittest.TestCase):
     def test_facings_group_into_one_measured_item(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -79,13 +88,6 @@ class InventoryTest(unittest.TestCase):
         self.assertEqual(rows["Wall B8"]["facings"], ["E"])
         self.assertEqual(rows["Wall B8"]["kind"], "fence")
 
-    def test_summary_counts_items_per_kind_and_pack(self):
-        rows = [
-            {"pack": "a", "item": "Wall B1", "kind": "palisade", "facings": list("ENSW"), "visible": [10, 80]},
-            {"pack": "b", "item": "Wall B1", "kind": "palisade", "facings": ["E"], "visible": [10, 60]},
-        ]
-        text = inv.summary(rows)
-        self.assertIn("| palisade | 1 | 1 | 1/2 | 80 |", text)
 
 
 if __name__ == "__main__":

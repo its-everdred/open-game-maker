@@ -5,9 +5,13 @@ Checks (all must hold for a facing to pass):
              perspective are unchanged
   density    every visible colour already exists in a named source sprite: nothing was scaled,
              filtered or blended, so pixel density and palette are the pack's
-  contact    the lowest visible row is within 6 px of the primary source's (ground contact; decals and
-             compositions may sit up to 24 px higher, since they cover part of a cell)
-  scale      visible width and height stay within 0.5x-1.6x of the primary source's
+  contact    the lowest visible row is within 6 px of the primary source's (ground contact); decals and
+             compositions cover part of a cell and may sit up to 24 px higher or lower, inside the cell's
+             32 px half-height
+  anchor     where the object meets the ground (mean x of its lowest opaque rows) is within 8 px of the
+             primary source's, 48 px for decals and compositions: a sideways shift would put it off its tile
+  scale      visible width and height stay within 0.5x-1.6x of the primary source's (2.5x for decals and
+             compositions, which are measured against their first part)
   clip       no visible pixel touches the canvas edge (a cut-off composition)
 
 ``score.py`` (gm-sprite-forge) is also run against the primary source with the prop gates and its numbers are
@@ -16,7 +20,8 @@ similarity; the style numbers (palette distance, luminance histogram) are the on
 
     gm py -- scripts/assets/env_variety_validate.py <pack Environment dir> <variants dir>
 
-Writes ``<variant>/validation.json`` and ``VALIDATION.md`` in the variants dir; exits 1 if any facing fails.
+Writes ``<variant>/validation.json`` and ``VALIDATION.md`` in the variants dir; exits 1 if any facing fails or any
+recipe in the pilot has no generated variant (a partial or empty directory is not a pass).
 """
 
 from __future__ import annotations
@@ -41,6 +46,15 @@ def bounds(rgba: np.ndarray) -> tuple[int, int, int, int] | None:
     return (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1) if len(xs) else None
 
 
+def base_x(rgba: np.ndarray, rows: int = 8) -> float | None:
+    """Mean x of the opaque pixels in the lowest ``rows`` rows: where the object meets the ground."""
+    ys, xs = np.nonzero(rgba[..., 3] == 255)
+    if not len(ys):
+        return None
+    low = ys >= ys.max() - rows + 1
+    return float(xs[low].mean())
+
+
 def palette(rgba: np.ndarray) -> set[tuple[int, int, int]]:
     return set(map(tuple, rgba[rgba[..., 3] > 0][:, :3].tolist()))
 
@@ -50,7 +64,10 @@ def check(variant: np.ndarray, primary: np.ndarray, sources: list[np.ndarray], o
     allowed = set().union(*(palette(source) for source in sources))
     foreign = palette(variant) - allowed
     contact = (vb[3] - pb[3]) if vb and pb else None
-    tolerance = 24 if op in LOOSE_CONTACT else 6
+    loose = op in LOOSE_CONTACT
+    tolerance = 24 if loose else 6
+    vx, px = base_x(variant), base_x(primary)
+    anchor_dx = round(vx - px, 1) if vx is not None and px is not None else None
     ratio = (
         [round((vb[2] - vb[0]) / (pb[2] - pb[0]), 2), round((vb[3] - vb[1]) / (pb[3] - pb[1]), 2)]
         if vb and pb
@@ -61,12 +78,14 @@ def check(variant: np.ndarray, primary: np.ndarray, sources: list[np.ndarray], o
         "density": not foreign,
         "foreign_colours": len(foreign),
         "contact_px": contact,
-        "contact": contact is not None and -tolerance <= contact <= 6,
+        "contact": contact is not None and -tolerance <= contact <= (tolerance if loose else 6),
+        "anchor_dx": anchor_dx,
+        "anchor": anchor_dx is not None and abs(anchor_dx) <= (48 if loose else 8),
         "scale_ratio": ratio,
-        "scale": ratio is not None and all(0.5 <= r <= 1.6 for r in ratio),
+        "scale": ratio is not None and all(0.5 <= r <= (2.5 if loose else 1.6) for r in ratio),
         "clip": vb is not None and vb[0] > 0 and vb[1] > 0 and vb[2] < pilot.CANVAS and vb[3] < pilot.CANVAS,
     }
-    result["pass"] = all(result[key] for key in ("canvas", "density", "contact", "scale", "clip"))
+    result["pass"] = all(result[key] for key in ("canvas", "density", "contact", "anchor", "scale", "clip"))
     return result
 
 
@@ -103,10 +122,13 @@ def main(argv: list[str] | None = None) -> int:
     lines = [
         "# Pilot validation",
         "",
-        "| Variant | Op | Facings passing | Contact px | Scale (w, h) | Foreign colours | Palette dist. | Lum. hist. |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Variant | Op | Facings passing | Contact px | Anchor dx | Scale (w, h) | Foreign colours | Palette dist. | Lum. hist. |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
-    failed = False
+    expected = {recipe["id"] for recipe in pilot.RECIPES}
+    found = {path.parent.name for path in root.glob("*/recipe.json")}
+    missing = sorted(expected - found)
+    failed = bool(missing)
     for recipe_path in sorted(root.glob("*/recipe.json")):
         recipe = json.loads(recipe_path.read_text())
         op, primary = recipe["op"], primary_of(recipe)
@@ -127,13 +149,17 @@ def main(argv: list[str] | None = None) -> int:
         south = facings["S"]
         lines.append(
             f"| {recipe['id']} | {op} | {''.join(passing) or '-'} | "
-            f"{', '.join(str(facings[f]['contact_px']) for f in pilot.FACINGS)} | {south['scale_ratio']} | "
+            f"{', '.join(str(facings[f]['contact_px']) for f in pilot.FACINGS)} | "
+            f"{', '.join(str(facings[f]['anchor_dx']) for f in pilot.FACINGS)} | {south['scale_ratio']} | "
             f"{max(r['foreign_colours'] for r in facings.values())} | "
             f"{number(south['score'].get('palette_distance'))} | {number(south['score'].get('lum_hist_l1'))} |"
         )
+    if missing:
+        lines += ["", f"**Missing variants (not generated): {', '.join(missing)}**"]
     lines += [
         "",
-        "Contact: variant minus primary source lowest visible row, per facing N E S W. Scale and score columns are "
+        "Contact and anchor dx: variant minus primary source (lowest visible row; ground-contact x), per facing "
+        "N E S W. Scale and score columns are "
         "the S facing against its primary source.",
     ]
     (root / "VALIDATION.md").write_text("\n".join(lines) + "\n")

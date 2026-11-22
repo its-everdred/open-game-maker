@@ -296,8 +296,6 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"{spec}: expected name[:rural]=<existing directory>")
         packs[name], schemes[name] = Path(directory), scheme or "fantasy"
     rows = inventory(packs, schemes)
-    for row in rows:
-        row["canvas"] = list(row["canvas"]) if isinstance(row["canvas"], tuple) else row["canvas"]
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "inventory.json").write_text(json.dumps(rows, indent=1) + "\n")
     (args.out / "INVENTORY.md").write_text(summary(rows))

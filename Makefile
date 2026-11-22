@@ -12,6 +12,7 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/assets/test_set_critic.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/assets/test_smallscaleint_ui_audit.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/assets/test_env_variety_inventory.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/assets/test_env_variety_validate.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/audio/test_labels.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/audio/test_style_montages.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-trailer/scripts/test_trailer.py
