@@ -18,6 +18,12 @@ export const DICTATED = /\b(sky|blue)\b/iu;
 const MEDIA_DIR = new URL('../qa/voice-e2e/', import.meta.url);
 const VIEWPORT = { width: 390, height: 844 };
 const TITLE = 'QA voice';
+/** The vendored aiur composer's button names (apps/web/vendor/aiur-conversation); a renamed button blinds this check. */
+export const LABELS = {
+  dictate: 'Hold to dictate',
+  startVoice: 'Start voice conversation',
+  endVoice: 'End voice conversation',
+} as const;
 
 export type VoiceE2eConfig = {
   origin: string;
@@ -288,7 +294,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
 
     try {
       await openChat(page, config.origin);
-      const mic = dialog.getByRole('button', { name: 'Hold to talk' });
+      const mic = dialog.getByRole('button', { name: LABELS.dictate });
       await mic.waitFor({ timeout: 20_000 });
       const box = (await mic.boundingBox())!;
       const textbox = dialog.locator('textarea').first();
@@ -321,7 +327,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       if (!(await dialog.isVisible())) await openChat(page, config.origin);
       frames.length = 0;
       callStarted = Date.now();
-      await dialog.getByRole('button', { name: 'Start voice chat' }).click({ timeout: 20_000 });
+      await dialog.getByRole('button', { name: LABELS.startVoice }).click({ timeout: 20_000 });
       const listening = await until(() => tallyFrames(frames).states.includes('listening'), wait);
       if (!listening)
         throw new StepFailed(
@@ -336,7 +342,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       const playedSeconds = await played();
       await still('voice');
       // Hang up as soon as the reply is in: the call is billed by the minute.
-      const end = dialog.getByRole('button', { name: 'Type instead' });
+      const end = dialog.getByRole('button', { name: LABELS.endVoice });
       if (await end.isVisible().catch(() => false)) await end.click();
       cost.callSeconds = (Date.now() - callStarted) / 1000;
       callStarted = undefined;
