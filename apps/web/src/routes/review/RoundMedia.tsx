@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
+import { MediaMeta } from '../../features/worker-builds/MediaMeta';
 import type { Round } from './RoundReviews';
 import './round-media.css';
 
 type Item = Round['media'][number];
 
 function MediaItem({ item }: { item: Item }) {
-  return (
+  const media = (
     <div className="review-deck-playable worker-review-media">
       {item.kind === 'still' ? (
         <img className="review-deck-media" src={item.url} alt={item.role === 'target' ? 'Concept target' : 'Review'} />
@@ -24,6 +25,13 @@ function MediaItem({ item }: { item: Item }) {
         />
       )}
     </div>
+  );
+  if (!item.meta || item.kind === 'audio') return media;
+  return (
+    <figure className="worker-review-figure">
+      {media}
+      <MediaMeta meta={item.meta} />
+    </figure>
   );
 }
 
