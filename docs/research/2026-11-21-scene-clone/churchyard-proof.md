@@ -310,3 +310,12 @@ roof. Their detail, fit, colour and facing in a fantasy scene remain to be
 verified; recolours or assemblies must preserve the pack's rights. The audit
 covers only this pack's eligible east-facing sprites, not other facings or its
 animation sequences.
+
+A manually reviewed semantic draft in
+`assets-local/review/1154/churchyard-intent-draft.json` records an edge run with
+one gate, a building with one door, and an approach between them. The draft has
+no grid, cells or facings because the mock has not been registered to the game.
+The new internal validator checks references and, where cells are supplied,
+checks their bounds and path continuity. It does not place pack sprites, infer
+those facts automatically, or yet serialize an editor-compatible map; the scene
+document and assembly interfaces are separate work.
