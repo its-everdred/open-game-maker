@@ -23,6 +23,7 @@ import {
   type DesignSnapshot,
 } from '../../features/editor/api';
 import { EditorChrome } from '../../features/editor/EditorChrome';
+import { SceneStrip } from '../../features/editor/scenes/SceneStrip';
 import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
@@ -693,6 +694,7 @@ export function GameScreen() {
   const gameStage = (
     <div className="game-stage-area" data-frame-orientation={mode === 'edit' ? frameOrientation : undefined}>
       {mode === 'edit' && <EditFrameOrientation orientation={frameOrientation} onChange={setFrameOrientation} />}
+      {mode === 'edit' && <SceneStrip gameId={gameId} />}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
         {mode === 'play' && frameController !== undefined ? (
