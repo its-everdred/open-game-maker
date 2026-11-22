@@ -245,6 +245,7 @@ evidence goes in `review/<ticket>/` in the game folder. URLs are not checked.
 `gm verify scene <game> <scene>` checks that a map is structurally coherent and prints a ranked list to fix from the
 top. `<scene>` is a Tiled-style isometric map file or a name under `<game>/maps/`. Pack facts (measured edges and alpha
 bounds) come from the adapter of the set in `gm.lock.json`; a derived asset uses the facts of its `derived_from` source.
+A fence or wall piece with no measured edge is reported as `facts/unmeasured-edge` (high): an unchecked run never passes.
 Checks, each with a stable id: `connected-runs` (fence and wall runs end at a post, corner, building or tagged gate),
 `coherent-buildings` (closed shell, roof over the footprint, a door), `no-overlap` (shared cells, sprites overlapping in
 one depth band, characters inside solids), `facing` (shipped facings, edge pieces along their run, doors onto walkable
