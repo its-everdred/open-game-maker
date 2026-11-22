@@ -7,7 +7,7 @@ import {
   type WindField,
   type WindSettings,
 } from '../../../../packages/sdk/src/hd2d/particles/index.js';
-import { sampleShaftIntensity, type LightingPreset } from '../../../../packages/sdk/src/hd2d/lighting/index.js';
+import { beamsAt, type LightingPreset } from '../../../../packages/sdk/src/hd2d/lighting/index.js';
 
 /**
  * The clearing's particles: Kevin's pick of both pixel leaves and soft motes, plus campfire embers, all from the core
@@ -52,22 +52,19 @@ export function worldToCell(x: number, y: number): [x: number, z: number] {
   return [(x / 64 + y / 32) / 2, (y / 32 - x / 64) / 2];
 }
 
-/** The world point under the brightest light shaft on screen right now (a beam's ground pool), for the motes. */
+/**
+ * The world point where the brightest shaft showing right now ends (its ground patch, or where it fades in the air), so
+ * the motes hang in the light; undefined while no shaft shows (wrong weather, or between beams).
+ */
 export function shaftPoint(
   preset: LightingPreset,
   timeMs: number,
   view: ViewRect,
-  steps = 32,
-): { x: number; y: number } {
-  const aspect = view.width / view.height;
-  let best = { value: -1, x: 0.5, y: 0.5 };
-  for (let j = 1; j < steps; j += 1)
-    for (let i = 1; i < steps; i += 1) {
-      const x = i / steps;
-      const y = j / steps;
-      const value = sampleShaftIntensity(preset, x, y, timeMs, aspect);
-      if (value > best.value) best = { value, x, y };
-    }
+): { x: number; y: number } | undefined {
+  if (!preset.shafts?.count) return undefined;
+  const shown = beamsAt(preset.shafts, timeMs, view.width / view.height);
+  if (!shown.length) return undefined;
+  const best = shown.reduce((a, b) => (b.brightness * b.fade > a.brightness * a.fade ? b : a));
   return { x: view.x + best.x * view.width, y: view.y + best.y * view.height };
 }
 
@@ -109,8 +106,8 @@ export function createForestParticles(particles: Particles, fire: { x: number; y
       if (timeMs >= retargetAt) {
         retargetAt = timeMs + MOTE_RETARGET_MS;
         const point = shaftPoint(preset, timeMs, view);
-        const at = toPool(point.x, point.y);
-        if (!motes || Math.hypot(at[0] - motes.at[0], at[1] - motes.at[1]) > RETARGET_DISTANCE) {
+        const at = point && toPool(point.x, point.y);
+        if (at && (!motes || Math.hypot(at[0] - motes.at[0], at[1] - motes.at[1]) > RETARGET_DISTANCE)) {
           motes?.handle.stop();
           motes = { handle: particles.emit(MOTES, { at }), at };
         }

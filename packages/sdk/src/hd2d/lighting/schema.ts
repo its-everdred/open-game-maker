@@ -28,6 +28,20 @@ export const LightingPresetSchema = z.object({
       width: z.number().positive().max(0.5).optional(),
       /** Brightness of the lit patch each beam leaves on the ground (default 0.8). */
       pool: z.number().min(0).max(1).optional(),
+      /**
+       * Set to make beams come and go: each of the `count` slots shows a beam for about this many seconds at a random
+       * place, length and brightness, then fades and returns elsewhere. Only some reach the ground and light a patch.
+       */
+      cycle: z.number().positive().optional(),
+      /** Share of cycles in which a slot shows a beam at all (default 1). */
+      chance: z.number().min(0).max(1).optional(),
+      /** Shafts only appear in these biomes and weathers (see `Lighting.setConditions`); unset means always. */
+      when: z
+        .object({
+          biomes: z.array(z.string().min(1)).optional(),
+          weather: z.array(z.string().min(1)).optional(),
+        })
+        .optional(),
     })
     .optional(),
   /** Drifting cloud shadows over the ground, with sunny patches between them. */

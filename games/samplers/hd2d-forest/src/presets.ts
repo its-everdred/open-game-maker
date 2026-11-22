@@ -7,8 +7,23 @@ export type PresetId = (typeof PRESET_IDS)[number];
 
 /** Shafts fall from the top left, as in the mocks. */
 const SUN = 1.1;
-/** Kevin (round 3 brief): several small shafts in the top half or less, each lighting a patch of ground. */
-const BEAMS = { direction: SUN, count: 4, reach: 0.45, width: 0.05, pool: 1 };
+/** The sampler's biome, and the weathers that let sun shafts through its canopy. */
+export const BIOME = 'forest';
+export const SHAFT_WEATHER = ['clear', 'partly-cloudy'];
+/**
+ * Kevin (round 3): small shafts in the top half or less. Kevin (round 3 review): they come at random, in certain biomes
+ * and weather, at random places, lengths and brightness, and need not touch the ground.
+ */
+const BEAMS = {
+  direction: SUN,
+  count: 5,
+  reach: 0.45,
+  width: 0.05,
+  pool: 1,
+  cycle: 8,
+  chance: 0.8,
+  when: { biomes: [BIOME], weather: SHAFT_WEATHER },
+};
 /** Kevin: drifting cloud cover that shades the ground, with sunny spots between. */
 const CLOUDS = { coverage: 0.45, scale: 0.55, speed: 0.015, direction: 0.3 };
 

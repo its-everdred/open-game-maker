@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { sampleShaftIntensity } from '../../../../packages/sdk/src/hd2d/lighting/index.js';
+import { beamsAt } from '../../../../packages/sdk/src/hd2d/lighting/index.js';
 import { createParticleDriver, type ParticleBackend } from '../../../../packages/sdk/src/hd2d/particles/create.js';
 import { cellPoint, FIRE, HERO } from '../src/clearing.js';
 import {
@@ -42,20 +42,27 @@ describe('forest particles', () => {
   });
 
   // Kevin's look puts the dust motes in the sun shafts, and the shafts stay in the top half of the screen.
-  it('aims the motes at the brightest shaft on screen, in the upper half', () => {
+  it('aims the motes at the brightest shaft showing, in the upper half, and nowhere when none shows', () => {
     const preset = PRESETS.golden;
     const aspect = view.width / view.height;
-    for (const time of [0, 4000, 9000]) {
+    let aimed = 0;
+    for (let time = 0; time < 40_000; time += 1000) {
       const point = shaftPoint(preset, time, view);
+      const shown = beamsAt(preset.shafts!, time, aspect);
+      if (!point) {
+        expect(shown).toEqual([]);
+        continue;
+      }
+      aimed += 1;
       const nx = (point.x - view.x) / view.width;
       const ny = (point.y - view.y) / view.height;
-      let brightest = 0;
-      for (let y = 0; y <= 1; y += 0.01)
-        for (let x = 0; x <= 1; x += 0.01)
-          brightest = Math.max(brightest, sampleShaftIntensity(preset, x, y, time, aspect));
-      expect(sampleShaftIntensity(preset, nx, ny, time, aspect)).toBeGreaterThan(brightest * 0.85);
+      const best = Math.max(...shown.map((beam) => beam.brightness * beam.fade));
+      const target = shown.find((beam) => Math.abs(beam.x - nx) < 1e-9 && Math.abs(beam.y - ny) < 1e-9)!;
+      expect(target.brightness * target.fade).toBe(best);
       expect(ny).toBeLessThan(0.55);
     }
+    expect(aimed).toBeGreaterThan(20);
+    expect(shaftPoint({ ambient: preset.ambient }, 0, view)).toBeUndefined();
   });
 
   it('draws pixel leaves, soft motes and campfire embers (Kevin: both, plus the fire)', () => {

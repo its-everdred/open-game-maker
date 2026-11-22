@@ -62,6 +62,7 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     ['focus', 'lighting=0'],
     ['low', 'quality=low'],
     ['particles-off', 'particles=0'],
+    ['rain', 'weather=rain'],
   ]) {
     const { context, page, errors } = await open(viewport, query);
     const file = join(out, `amber-${label}-${name}.png`);
@@ -102,8 +103,8 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
   }
 }
 
-// The toggle clips, phone portrait and desktop: all off, lighting, focus, particles on the default (Amber), then the
-// other two presets.
+// The toggle clips, phone portrait and desktop: all off, lighting, focus, particles on the default (Amber), the other
+// two presets, then rain and back to clear.
 for (const [name, viewport] of Object.entries(VIEWPORTS)) {
   const { context, page, errors, created } = await open(viewport, 'lighting=0&focus=0&particles=0', true);
   const steps = [
@@ -113,6 +114,9 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     [2500, () => window.__forest.setParticles(true)],
     [2500, () => window.__forest.setPreset('daylight')],
     [2500, () => window.__forest.setPreset('golden')],
+    // Shafts show only in clear or partly cloudy weather: rain clears them, then they return.
+    [3000, () => window.__forest.setWeather('rain')],
+    [5000, () => window.__forest.setWeather('clear')],
   ];
   const marks = [];
   for (const [wait, step] of steps) {

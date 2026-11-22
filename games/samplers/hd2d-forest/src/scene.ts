@@ -1,7 +1,13 @@
 import Phaser from 'phaser';
 
 import { createFocus, type Focus } from '../../../../packages/sdk/src/hd2d/focus/index.js';
-import { createLighting, type Lighting, type LightingLight } from '../../../../packages/sdk/src/hd2d/lighting/index.js';
+import {
+  createLighting,
+  presetUnder,
+  type Lighting,
+  type LightingLight,
+  type LightingPreset,
+} from '../../../../packages/sdk/src/hd2d/lighting/index.js';
 import { fallbackTexture, HERO_FRAME, TEXTURES } from './art.js';
 import { cellPoint, clearingPieces, depthBands, FIRE, HERO, HERO_DEPTH } from './clearing.js';
 import { normalCanvas } from './normals.js';
@@ -14,7 +20,7 @@ import {
   worldToCell,
   type ForestParticles,
 } from './particles.js';
-import { FOCUS, focusQuality, PRESETS, type PresetId } from './presets.js';
+import { BIOME, FOCUS, focusQuality, PRESETS, type PresetId } from './presets.js';
 
 declare const __GM_PRIVATE_ASSETS__: boolean;
 
@@ -26,6 +32,8 @@ export interface ForestOptions {
   focus: boolean;
   particles: boolean;
   quality: Quality;
+  /** Sun shafts show only in some weathers (see `SHAFT_WEATHER`). */
+  weather: string;
 }
 
 /** The hero's screen row (0 top .. 1 bottom): the camera centres a little above it. The motes stay sharp here. */
@@ -146,6 +154,7 @@ export class Forest extends Phaser.Scene {
       quality: this.options.lighting ? quality : 'off',
       seed: 7,
     });
+    this.lighting.setConditions(this.conditions());
     const heroSheet = this.textures.get('hero-idle').getSourceImage() as HTMLImageElement | HTMLCanvasElement;
     this.lighting.setNormalMap(hero, normalCanvas(heroSheet));
     // The campfire is the only per-sprite light (shafts and dapple are screen overlays), and it adds nothing past its
@@ -160,11 +169,7 @@ export class Forest extends Phaser.Scene {
 
     this.focus = createFocus({ phaser: { scene: this, hero } }, { ...FOCUS, quality: this.focusQuality() });
 
-    this.particleOptions = particleOptions(
-      this.particleQuality(),
-      this.preset(this.options.preset),
-      this.particleFocus(),
-    );
+    this.particleOptions = particleOptions(this.particleQuality(), this.sky(), this.particleFocus());
     this.particles = createForestParticles(
       createParticles({ phaser: { scene: this, scale: SCALE } }, this.particleOptions),
       fireAt,
@@ -182,7 +187,7 @@ export class Forest extends Phaser.Scene {
   update(time: number): void {
     if (this.particles) {
       for (const tree of this.trees) tree.image.rotation = swayAt(this.particles.wind, tree.x, tree.z, time);
-      this.particles.update(time, PRESETS[this.options.preset], this.cameras.main.worldView);
+      this.particles.update(time, this.particleOptions!.lighting!, this.cameras.main.worldView);
     }
     this.lighting?.update(time);
     this.focus?.update(time);
@@ -221,6 +226,21 @@ export class Forest extends Phaser.Scene {
     return { ...PRESETS[id], lights: this.fire ? [this.fire] : [] };
   }
 
+  private conditions() {
+    return { biome: BIOME, weather: this.options.weather };
+  }
+
+  /** The preset as the weather allows it: the motes take their light from this, so they leave with the shafts. */
+  private sky(): LightingPreset {
+    return presetUnder(this.preset(this.options.preset), this.conditions());
+  }
+
+  setWeather(weather: string): void {
+    this.options.weather = weather;
+    this.lighting?.setConditions(this.conditions());
+    if (this.particleOptions) this.particleOptions.lighting = this.sky();
+  }
+
   /** Sprites lit through the light shader, the hero included. */
   litSprites(): number {
     return this.litCount;
@@ -245,7 +265,7 @@ export class Forest extends Phaser.Scene {
     this.options.preset = id;
     this.lighting?.apply(this.preset(id));
     // The motes read their light from this preset every frame.
-    if (this.particleOptions) this.particleOptions.lighting = this.preset(id);
+    if (this.particleOptions) this.particleOptions.lighting = this.sky();
   }
 
   setLighting(on: boolean): void {

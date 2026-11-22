@@ -2,7 +2,7 @@ import type { Camera, Mesh, Scene, WebGLRenderer } from 'three';
 import type Phaser from 'phaser';
 import { DAPPLE_DEPTH, renderDappleMask, sampleShaftIntensity } from './dapple.js';
 import type { LightingPreset, LightingQuality } from './schema.js';
-import { sampleCloudCover } from './sky.js';
+import { sampleCloudCover, type SkyConditions } from './sky.js';
 
 type PresetLight = NonNullable<LightingPreset['lights']>[number];
 export type LightingLight = PresetLight;
@@ -22,6 +22,8 @@ export interface Lighting {
   removeLight(id: string): void;
   setQuality(quality: LightingQuality): void;
   setNormalMap(sprite: LightingSprite, normal: NormalSource): void;
+  /** The scene's biome and weather; shafts with a `when` appear only where they match. */
+  setConditions(conditions: SkyConditions): void;
   update(timeMs: number): void;
   dispose(): void;
 }

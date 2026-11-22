@@ -4,6 +4,16 @@ import { DEFAULT_FOREST_LIGHTING, type LightingPreset } from '../lighting/index.
 export const FIXTURE_SKY: LightingPreset = {
   ambient: DEFAULT_FOREST_LIGHTING.ambient,
   grade: DEFAULT_FOREST_LIGHTING.grade,
-  shafts: { direction: 1.2, color: '#ffe7a1', intensity: 0.7, count: 4, reach: 0.5, width: 0.04, pool: 0.9 },
+  shafts: {
+    direction: 1.2,
+    color: '#ffe7a1',
+    intensity: 0.7,
+    count: 4,
+    reach: 0.5,
+    width: 0.04,
+    pool: 0.9,
+    // The fixture is a forest; `weather=rain` in the URL clears the shafts.
+    when: { biomes: ['forest'], weather: ['clear'] },
+  },
   clouds: { coverage: 0.45, scale: 0.45, speed: 0.02, shadow: 0.6, sun: 0.3 },
 };

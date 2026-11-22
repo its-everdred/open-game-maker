@@ -11,6 +11,7 @@ const options: ForestOptions = {
   focus: params.get('focus') !== '0',
   particles: params.get('particles') !== '0',
   quality: (params.get('quality') === 'low' ? 'low' : 'high') satisfies Quality,
+  weather: params.get('weather') ?? 'clear',
 };
 
 const scene = new Forest(options);
@@ -90,6 +91,7 @@ declare global {
       setLighting(on: boolean): void;
       setFocus(on: boolean): void;
       setParticles(on: boolean): void;
+      setWeather(weather: string): void;
     };
   }
 }
@@ -109,6 +111,7 @@ void scene.ready.then(() => {
     setFocus: (on) => {
       if (on !== options.focus) focusButton.click();
     },
+    setWeather: (weather) => scene.setWeather(weather),
     setParticles: (on) => {
       if (on !== options.particles) particlesButton.click();
     },

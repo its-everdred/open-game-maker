@@ -9,7 +9,8 @@ const mountLighting: Mount = (ctx) => {
   const three = ctx.three;
   // Lights are in world units: Phaser is y-down screen pixels, the three.js fixture is y-up.
   const lantern = { id: 'lantern', x: 470, y: three ? 360 - 285 : 285, radius: 80, color: '#ffb35c', intensity: 0.9 };
-  const sky = new URLSearchParams(location.search).get('sky') === '1';
+  const params = new URLSearchParams(location.search);
+  const sky = params.get('sky') === '1';
   const preset = {
     ...(sky ? FIXTURE_SKY : DEFAULT_FOREST_LIGHTING),
     // Seed 2 swings from dim at 0 ms to bright at 500 ms, which the browser spec checks.
@@ -28,6 +29,7 @@ const mountLighting: Mount = (ctx) => {
     );
   if (!hero) throw new Error('fixture hero sprite not found');
   lighting.setNormalMap(hero, ctx.art.heroNormal);
+  lighting.setConditions({ biome: 'forest', weather: params.get('weather') ?? 'clear' });
   return lighting;
 };
 export default mountLighting;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sampleShaftIntensity } from './dapple.js';
 import { renderLightField } from './field.js';
 import { LightingPresetSchema, type LightingPreset } from './schema.js';
-import { sampleCloudCover, sampleShaftBeams } from './sky.js';
+import { beamsAt, presetUnder, sampleCloudCover, sampleShaftBeams, shaftsActive } from './sky.js';
 
 const SHAFTS = { direction: 1.2, color: '#ffd77a', intensity: 0.6, count: 4, reach: 0.45, width: 0.035, pool: 0.8 };
 const CLOUDS = { coverage: 0.45, scale: 0.5, speed: 0.02, shadow: 0.5, sun: 0.4 };
@@ -103,5 +103,72 @@ describe('sky preset fields', () => {
     expect(LightingPresetSchema.safeParse({ ...base, shafts: SHAFTS, clouds: CLOUDS }).success).toBe(true);
     expect(LightingPresetSchema.safeParse({ ...base, shafts: { ...SHAFTS, count: 0 } }).success).toBe(false);
     expect(LightingPresetSchema.safeParse({ ...base, clouds: { ...CLOUDS, coverage: 2 } }).success).toBe(false);
+  });
+});
+
+describe('random shafts (Kevin: random place, length, brightness; need not touch the ground)', () => {
+  const RANDOM = { ...SHAFTS, count: 3, cycle: 6, chance: 0.8 };
+  const seen = Array.from({ length: 120 }, (_, i) => beamsAt(RANDOM, i * 1000, 16 / 9)).flat();
+
+  it('moves beams to new places, lengths and brightness over time', () => {
+    // Across the screen and down it, independently: a beam does not just slide along a fixed line.
+    expect(new Set(seen.map((beam) => beam.x.toFixed(2))).size).toBeGreaterThan(RANDOM.count * 6);
+    expect(new Set(seen.map((beam) => beam.y.toFixed(2))).size).toBeGreaterThan(RANDOM.count * 6);
+    expect(new Set(seen.map((beam) => beam.brightness.toFixed(2))).size).toBeGreaterThan(5);
+    // Lengths vary, all within reach: the shafts still stay in the top half.
+    const ends = seen.map((beam) => beam.y);
+    expect(Math.max(...ends) - Math.min(...ends)).toBeGreaterThan(RANDOM.reach * 0.4);
+    expect(Math.max(...ends)).toBeLessThanOrEqual(RANDOM.reach);
+  });
+
+  it('lights a ground patch only under the beams that reach the ground', () => {
+    const grounded = seen.filter((beam) => beam.grounded);
+    expect(grounded.length).toBeGreaterThan(0);
+    expect(grounded.length).toBeLessThan(seen.length);
+    const at = (time: number) => beamsAt(RANDOM, time, 16 / 9);
+    // At a moment with one fully shown beam of each kind, only the grounded one has a patch where it ends.
+    for (let time = 0; time < 120_000; time += 250) {
+      const shown = at(time).filter((beam) => beam.fade > 0.99);
+      const air = shown.find((beam) => !beam.grounded);
+      const ground = shown.find((beam) => beam.grounded);
+      if (!air || !ground) continue;
+      const withPool = (beam: { x: number; y: number }) => sampleShaftBeams(RANDOM, beam.x, beam.y, time, 16 / 9);
+      const noPool = (beam: { x: number; y: number }) =>
+        sampleShaftBeams({ ...RANDOM, pool: 0 }, beam.x, beam.y, time, 16 / 9);
+      expect(withPool(ground)).toBeGreaterThan(noPool(ground) + 0.05);
+      expect(withPool(air)).toBeCloseTo(noPool(air), 6);
+      return;
+    }
+    throw new Error('no moment showed a grounded and an airborne beam together');
+  });
+
+  it('fades beams in and out, and shows none at chance 0', () => {
+    const fades = seen.map((beam) => beam.fade);
+    expect(Math.min(...fades)).toBeLessThan(0.2);
+    expect(Math.max(...fades)).toBeCloseTo(1, 2);
+    expect(Array.from({ length: 60 }, (_, i) => beamsAt({ ...RANDOM, chance: 0 }, i * 1000, 16 / 9)).flat()).toEqual(
+      [],
+    );
+  });
+});
+
+describe('shafts by biome and weather', () => {
+  const when = { ...SHAFTS, when: { biomes: ['forest'], weather: ['clear', 'partly-cloudy'] } };
+
+  it('shows shafts only where the biome and the weather both match', () => {
+    expect(shaftsActive(when, { biome: 'forest', weather: 'clear' })).toBe(true);
+    expect(shaftsActive(when, { biome: 'forest', weather: 'rain' })).toBe(false);
+    expect(shaftsActive(when, { biome: 'desert', weather: 'clear' })).toBe(false);
+    expect(shaftsActive(when, {})).toBe(false);
+    expect(shaftsActive(SHAFTS, {})).toBe(true);
+  });
+
+  it('drops the shafts from the rendered preset, keeping the same copy each frame', () => {
+    const preset: LightingPreset = { ambient: { color: '#ffffff', intensity: 1 }, shafts: when, clouds: CLOUDS };
+    const rain = presetUnder(preset, { biome: 'forest', weather: 'rain' });
+    expect(rain.shafts).toBeUndefined();
+    expect(rain.clouds).toBe(CLOUDS);
+    expect(presetUnder(preset, { biome: 'forest', weather: 'rain' })).toBe(rain);
+    expect(presetUnder(preset, { biome: 'forest', weather: 'clear' })).toBe(preset);
   });
 });

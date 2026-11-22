@@ -1,5 +1,11 @@
 import type { LightingPreset } from './schema.js';
 
+/** Where a scene is and what the sky is doing; games name their own biomes and weathers. */
+export interface SkyConditions {
+  biome?: string;
+  weather?: string;
+}
+
 type Shafts = NonNullable<LightingPreset['shafts']>;
 type Clouds = NonNullable<LightingPreset['clouds']>;
 
@@ -25,6 +31,30 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/** Whether the preset's shafts may appear under these conditions: each listed `when` set must name the condition. */
+export function shaftsActive(shafts: Shafts | undefined, conditions: SkyConditions): boolean {
+  if (!shafts) return false;
+  const when = shafts.when;
+  if (!when) return true;
+  const fits = (allowed: string[] | undefined, value: string | undefined) =>
+    !allowed || (value !== undefined && allowed.includes(value));
+  return fits(when.biomes, conditions.biome) && fits(when.weather, conditions.weather);
+}
+
+const withoutShafts = new WeakMap<LightingPreset, LightingPreset>();
+
+/** The preset as the sky allows it right now: the same object, or (stable per preset) a copy without its shafts. */
+export function presetUnder(preset: LightingPreset, conditions: SkyConditions): LightingPreset {
+  if (!preset.shafts || shaftsActive(preset.shafts, conditions)) return preset;
+  let stripped = withoutShafts.get(preset);
+  if (!stripped) {
+    stripped = { ...preset };
+    delete stripped.shafts;
+    withoutShafts.set(preset, stripped);
+  }
+  return stripped;
+}
+
 interface Beam {
   startX: number;
   startY: number;
@@ -36,59 +66,153 @@ interface Beam {
   endX: number;
   endY: number;
   poolRadius: number;
+  /** 0..1 brightness of this beam. */
+  brightness: number;
+  /** Whether it reaches the ground and lights a patch there. */
+  grounded: boolean;
 }
 
-/** Beam geometry depends only on the preset's shafts and the view shape, so it is built once per pair, not per pixel. */
-const beamCache = new WeakMap<Shafts, { aspect: number; beams: Beam[] }>();
-
-function beamsFor(shafts: Shafts, aspect: number): Beam[] {
-  const cached = beamCache.get(shafts);
-  if (cached && cached.aspect === aspect) return cached.beams;
-  const count = shafts.count ?? 1;
-  const reach = shafts.reach ?? 0.45;
+/** One beam from its end point, angle salt and width salt (salts keep fixed and cycling beams on the same hash). */
+function makeBeam(
+  shafts: Shafts,
+  aspect: number,
+  end: { x: number; y: number },
+  angleSalt: number,
+  widthSalt: number,
+  brightness: number,
+  grounded: boolean,
+): Beam {
   // Narrow (portrait) views have less room across, so their beams thin out instead of merging.
   const narrow = Math.min(1, Math.sqrt(aspect / (16 / 9)));
-  const beams: Beam[] = [];
+  const angle = shafts.direction + (angleSalt * 2 - 1) * BEAM_SPREAD;
+  // Shafts always fall: a near-horizontal direction is steepened so a beam cannot run along the top edge forever.
+  const dy = Math.max(0.3, Math.sin(angle));
+  const norm = Math.hypot(Math.cos(angle), dy);
+  const ux = Math.cos(angle) / norm;
+  const uy = dy / norm;
+  const length = (end.y - BEAM_TOP) / uy;
+  const width = (shafts.width ?? 0.035) * narrow * (0.6 + 0.8 * widthSalt);
+  return {
+    startX: end.x - ux * length,
+    startY: end.y - uy * length,
+    ux,
+    uy,
+    length,
+    width,
+    endX: end.x,
+    endY: end.y,
+    // The beam's width where it lands (it widens to 1.2x), times the pool's spread.
+    poolRadius: width * 1.2 * POOL_WIDTHS,
+    brightness,
+    grounded,
+  };
+}
+
+interface BeamCache {
+  aspect: number;
+  /** Fixed beams (no `cycle`). */
+  beams: Beam[];
+  /** Cycling beams: each slot's current generation and its beam (undefined when that generation shows none). */
+  slots: Array<{ generation: number; beam: Beam | undefined }>;
+}
+
+/** Beam geometry depends only on the preset's shafts, the view shape and (cycling) the generation: built once each. */
+const beamCache = new WeakMap<Shafts, BeamCache>();
+
+function cacheFor(shafts: Shafts, aspect: number): BeamCache {
+  const cached = beamCache.get(shafts);
+  if (cached && cached.aspect === aspect) return cached;
+  const fresh: BeamCache = { aspect, beams: [], slots: [] };
+  beamCache.set(shafts, fresh);
+  return fresh;
+}
+
+function fixedBeams(shafts: Shafts, aspect: number): Beam[] {
+  const cache = cacheFor(shafts, aspect);
+  if (cache.beams.length) return cache.beams;
+  const count = shafts.count ?? 1;
+  const reach = shafts.reach ?? 0.45;
   for (let i = 0; i < count; i += 1) {
-    const angle = shafts.direction + (unit(i, 4) * 2 - 1) * BEAM_SPREAD;
-    // Shafts always fall: a near-horizontal direction is steepened so a beam cannot run along the top edge forever.
-    const dy = Math.max(0.3, Math.sin(angle));
-    const norm = Math.hypot(Math.cos(angle), dy);
-    const ux = Math.cos(angle) / norm;
-    const uy = dy / norm;
     // Ends spread across the view with some jitter, each at its own depth no lower than `reach`.
-    const endX = (0.08 + (0.84 * (i + 0.3 + 0.4 * unit(i, 1))) / count) * aspect;
-    const endY = reach * (0.65 + 0.35 * unit(i, 2));
-    const length = (endY - BEAM_TOP) / uy;
-    const width = (shafts.width ?? 0.035) * narrow * (0.6 + 0.8 * unit(i, 3));
-    beams.push({
-      startX: endX - ux * length,
-      startY: endY - uy * length,
-      ux,
-      uy,
-      length,
-      width,
-      endX,
-      endY,
-      // The beam's width where it lands (it widens to 1.2x), times the pool's spread.
-      poolRadius: width * 1.2 * POOL_WIDTHS,
-    });
+    const end = {
+      x: (0.08 + (0.84 * (i + 0.3 + 0.4 * unit(i, 1))) / count) * aspect,
+      y: reach * (0.65 + 0.35 * unit(i, 2)),
+    };
+    cache.beams.push(makeBeam(shafts, aspect, end, unit(i, 4), unit(i, 3), 1, true));
   }
-  beamCache.set(shafts, { aspect, beams });
-  return beams;
+  return cache.beams;
 }
 
 /**
- * Several short sun shafts, each ending in a lit patch on the ground: `shafts.count` beams fall along `direction` and
- * stop at `reach` of the screen height or above. `x` and `y` are 0..1 of the view; `aspect` is its width / height.
+ * Kevin: rays come at random, at random places, lengths and brightness, and need not touch the ground. Each slot's
+ * generation draws a fresh beam (or none, by `chance`); only grounded beams light a patch.
+ */
+function cyclingBeam(shafts: Shafts, aspect: number, slot: number, generation: number): Beam | undefined {
+  const cache = cacheFor(shafts, aspect);
+  const held = cache.slots[slot];
+  if (held && held.generation === generation) return held.beam;
+  const key = slot * 1009 + generation;
+  let beam: Beam | undefined;
+  if (unit(key, 15) < (shafts.chance ?? 1)) {
+    const reach = shafts.reach ?? 0.45;
+    const end = { x: (0.05 + 0.9 * unit(key, 11)) * aspect, y: reach * (0.3 + 0.7 * unit(key, 12)) };
+    beam = makeBeam(shafts, aspect, end, unit(key, 4), unit(key, 3), 0.45 + 0.55 * unit(key, 13), unit(key, 14) < 0.5);
+  }
+  cache.slots[slot] = { generation, beam };
+  return beam;
+}
+
+/** A cycling slot's generation and its 0..1 fade at `timeMs`. Slots are out of step, so beams come and go one at a time. */
+function slotGeneration(cycle: number, slot: number, timeMs: number): number {
+  return Math.floor(Math.max(0, timeMs) / 1000 / cycle + unit(slot, 5));
+}
+
+function slotEnvelope(cycle: number, slot: number, timeMs: number): number {
+  const phase = Math.max(0, timeMs) / 1000 / cycle + unit(slot, 5);
+  const life = phase - Math.floor(phase);
+  return smoothstep(0, 0.25, life) * (1 - smoothstep(0.7, 1, life));
+}
+
+/** The beams showing at `timeMs`: where each ends (0..1 of the view), how bright, whether it lights the ground. */
+export function beamsAt(
+  shafts: Shafts,
+  timeMs: number,
+  aspect: number,
+): Array<{ x: number; y: number; brightness: number; grounded: boolean; fade: number }> {
+  const shown = [];
+  for (let i = 0; i < (shafts.count ?? 1); i += 1) {
+    const beam =
+      shafts.cycle === undefined
+        ? fixedBeams(shafts, aspect)[i]
+        : cyclingBeam(shafts, aspect, i, slotGeneration(shafts.cycle, i, timeMs));
+    const fade = shafts.cycle === undefined ? 1 : slotEnvelope(shafts.cycle, i, timeMs);
+    if (beam && fade > 0)
+      shown.push({ x: beam.endX / aspect, y: beam.endY, brightness: beam.brightness, grounded: beam.grounded, fade });
+  }
+  return shown;
+}
+
+/**
+ * Several short sun shafts falling along `direction` and stopping at `reach` of the screen height or above; grounded
+ * ones end in a lit patch. With `cycle` they come and go at random. `x` and `y` are 0..1 of the view; `aspect` is its
+ * width / height.
  */
 export function sampleShaftBeams(shafts: Shafts, x: number, y: number, timeMs: number, aspect: number): number {
   const pool = shafts.pool ?? 0.8;
   const px = x * aspect;
-  const beams = beamsFor(shafts, aspect);
+  const count = shafts.count ?? 1;
+  const cycle = shafts.cycle;
+  const fixed = cycle === undefined ? fixedBeams(shafts, aspect) : undefined;
   let total = 0;
-  for (let i = 0; i < beams.length; i += 1) {
-    const beam = beams[i]!;
+  for (let i = 0; i < count; i += 1) {
+    let beam: Beam | undefined;
+    let envelope = 1;
+    if (fixed) beam = fixed[i];
+    else {
+      beam = cyclingBeam(shafts, aspect, i, slotGeneration(cycle!, i, timeMs));
+      envelope = slotEnvelope(cycle!, i, timeMs);
+    }
+    if (!beam || envelope <= 0) continue;
     const rx = px - beam.startX;
     const ry = y - beam.startY;
     const t = (rx * beam.ux + ry * beam.uy) / beam.length;
@@ -98,9 +222,9 @@ export function sampleShaftBeams(shafts: Shafts, x: number, y: number, timeMs: n
     const ey = (y - beam.endY) / (beam.poolRadius * POOL_SQUASH);
     const r2 = ex * ex + ey * ey;
     const inBeam = t > -0.05 && t < 1.05 && Math.abs(across) < 2 * w;
-    const inPool = pool > 0 && r2 < 1;
+    const inPool = beam.grounded && pool > 0 && r2 < 1;
     if (!inBeam && !inPool) continue;
-    const shimmer = 0.8 + 0.2 * Math.sin(Math.max(0, timeMs) * 0.0007 + i * 2.39);
+    const shimmer = (0.8 + 0.2 * Math.sin(Math.max(0, timeMs) * 0.0007 + i * 2.39)) * envelope * beam.brightness;
     if (inBeam) {
       const core = BEAM_CORE * Math.exp(-3 * (across / w) ** 2);
       // Brightest where the beam breaks through the canopy, thinning as it falls into its pool.

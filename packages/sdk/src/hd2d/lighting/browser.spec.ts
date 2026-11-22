@@ -29,8 +29,17 @@ function shaftBoxes(timeMs: number): { shaft: Box; shadow: Box } {
   return { shaft: boxes[0]!, shadow: boxes.at(-1)! };
 }
 
-async function open(page: Page, renderer: string, quality: string, lighting: 0 | 1, sky = 0): Promise<void> {
-  await page.goto(`/hd2d/?renderer=${renderer}&quality=${quality}&lighting=${lighting}&seed=1&sky=${sky}`);
+async function open(
+  page: Page,
+  renderer: string,
+  quality: string,
+  lighting: 0 | 1,
+  sky = 0,
+  weather = 'clear',
+): Promise<void> {
+  await page.goto(
+    `/hd2d/?renderer=${renderer}&quality=${quality}&lighting=${lighting}&seed=1&sky=${sky}&weather=${weather}`,
+  );
   await expect.poll(() => page.evaluate(() => window.__hd2d?.ready)).toBe(true);
 }
 
@@ -138,6 +147,21 @@ for (const renderer of ['phaser', 'three'] as const)
       const later = await sample(page, 6000, boxes);
       expect(later.hash).not.toBe(lit.hash);
     });
+
+// Kevin: shafts happen only in certain biomes under certain weather. The fixture's forest allows them in clear weather.
+for (const renderer of ['phaser', 'three'] as const)
+  test(`${renderer} sky drops the shafts in rain but keeps the clouds`, async ({ page }) => {
+    const { pool, dim, cloud, sun } = skyBoxes(1000);
+    const boxes = [pool, dim, cloud, sun];
+    await open(page, renderer, 'high', 0, 1, 'rain');
+    const unlit = await sample(page, 1000, boxes);
+    await open(page, renderer, 'high', 1, 1, 'rain');
+    const lit = await sample(page, 1000, boxes);
+    const gain = lit.luma.map((value, index) => value - unlit.luma[index]!);
+    // No beam, no pool: the pool box gains no more than the dim box beside it (allowing for cloud differences).
+    expect(gain[0]!).toBeLessThan(gain[1]! + 8);
+    expect(gain[3]!).toBeGreaterThan(gain[2]! + 10);
+  });
 
 declare global {
   interface Window {
