@@ -22,7 +22,7 @@ hero.setName('hero');
 const hd2d = createHd2d(
   { phaser: { scene: this, scale: 64 } }, // 64 screen pixels per particle unit
   { ...HD2D_FOREST_DEFAULTS, focus: { ...HD2D_FOREST_DEFAULTS.focus, hero: 'hero' } },
-  { quality: pickQuality({ dpr: devicePixelRatio, isMobile, webgl: true }) },
+  { quality: pickQuality({ dpr: devicePixelRatio, isMobile: matchMedia('(pointer: coarse)').matches, webgl: true }) },
 );
 this.events.on('update', (time: number) => hd2d.update(time));
 this.events.once('shutdown', () => hd2d.dispose());
@@ -40,7 +40,7 @@ heroMesh.name = 'hero';
 const hd2d = createHd2d(
   { three: { renderer, scene, camera, parent: motes } },
   { ...HD2D_FOREST_DEFAULTS, focus: { ...HD2D_FOREST_DEFAULTS.focus, hero: 'hero' } },
-  { quality: pickQuality({ dpr: devicePixelRatio, isMobile, webgl: true }) },
+  { quality: pickQuality({ dpr: devicePixelRatio, isMobile: matchMedia('(pointer: coarse)').matches, webgl: true }) },
 );
 renderer.setAnimationLoop((time) => {
   hd2d.update(time);
@@ -55,13 +55,16 @@ clouds, lights with flicker), `focus` (mode, target, smoothing, strength, range,
 pixelArt) and `particles` (emitters by preset name, wind, focusDepth). Store it in the game's scene data and read it
 with `parseHd2dScene`: a bad field throws `Hd2dSceneError` with its path. Save it with `serializeHd2dScene`.
 The map maker (#1191) edits the same document. Pass each edit to `hd2d.applyScene(doc)`. It changes the running
-scene without a rebuild, and only the parts that changed restart. Quality is not in the document: it belongs to the
+scene without a rebuild. Lighting and focus update in place; any change under `particles` restarts every emitter from
+its seed, so use `hd2d.setWind` for live gusts. Quality is not in the document: it belongs to the
 device.
 
 ## Presets and creator controls
 
 Start from `HD2D_FOREST_DEFAULTS`, which holds Kevin's #1149 picks: soft shafts and dapple, depth bands with the
-hero crisp, and pixel leaves plus soft motes on one wind. Then change only the fields the creator asks for:
+hero crisp, and pixel leaves plus soft motes on one wind. Its emitters sit at `[0, 0, 0]` and it has no lanterns: set
+`particles.emitters[].at` and `lighting.lights[]` in the target's scene coordinates (particle units for emitters).
+Then change only the fields the creator asks for:
 
 | Creator says | Set |
 |---|---|
@@ -79,15 +82,15 @@ before and after through `gm-verify`.
 
 Tiers are `off`, `low` and `high`. `pickQuality` picks the starting tier. A device without WebGL gets `off`. Phones and
 screens above 2× pixel ratio get `low`. Everything else gets `high`. `low` caps the lights at 4 instead of 8 and
-renders the light field and the blur at half resolution. It also halves the particle counts, and it never uses true
+renders the light field and the blur at half resolution. It also cuts the particles to about 40% of `high`, and it never uses true
 depth of field. Per Kevin's phone-budget pick, keep the blur on at `low` and save the cost elsewhere: normal-map only
 the hero and the nearest sprites. The default `budget` drops one tier after about 2 s below 30 fps, and it never
 raises the tier again. Pass `budget: false` for deterministic captures (a stepped clock looks like slow frames).
 
 ## Normal maps
 
-Sprites are flat unless you call `hd2d.lighting.setNormalMap(sprite, normal)`. `normal` is a canvas or an image, or
-`'flat'` to go back to unlit. In Phaser the map belongs to the texture, so every sprite that shares the texture also
+Sprites take no normal map until you call `hd2d.lighting.setNormalMap(sprite, normal)`. `normal` is a canvas or an
+image, or `'flat'` to drop the map (the sprite stays lit, as a flat surface). In Phaser the map belongs to the texture, so every sprite that shares the texture also
 shares the map. Before you call it, check that the normal map has exactly the same size as the diffuse texture: the
 SDK does not check this, and a size mismatch lights the wrong pixels.
 
@@ -95,5 +98,5 @@ SDK does not check this, and a size mismatch lights the wrong pixels.
 
 - No cast shadows: lights brighten and grade, and nothing blocks them.
 - Phone fps has not been measured yet. After every deploy, read the fps on a QA phone at `low` before you call it done.
-- Phaser's Canvas renderer gets no focus effects; use `Phaser.WEBGL`.
-- Clips of the procedural test scene at both tiers are in `docs/research/2026-11-21-hd2d/engine/`.
+- Phaser runs it only on `Phaser.WEBGL`; the Canvas renderer is untested.
+- Clips of the procedural test scene, both renderers at both tiers, are in `docs/research/2026-11-21-hd2d/engine/`.
