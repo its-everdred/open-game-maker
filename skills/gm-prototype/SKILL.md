@@ -40,7 +40,9 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
    (390x844, 844x390, 820x1180 and 1180x820). Every in-game still must show the board filling the screen. For
    motion or sound, a `gm run` scenario clip. Never post estimates, fixture tests or a still that stopped short of
    the screen. From `phase:prototype` on (not `phase:mock`), `gm qa playtest <game> --all-modes` must pass before you
-   post (gm-verify step 8): the ticket's mode is not the only one the creator plays (#866).
+   post (gm-verify step 8): the ticket's mode is not the only one the creator plays (#866). A scene prototype also
+   passes `gm verify scene` (gm-verify step 9) before it raises a review: no failing high finding, and any high
+   finding left for a later round listed with `--allow` and named in the round's known limitations.
 6. **Post one round and one question per screen, then end the turn** in human-review. Raise picks non-blocking,
    with media on every option (one Command per screen, or one Command with a question per screen), and build your recommendation meanwhile. Never re-polish and re-ask before his verdict, and
    never ask the same question twice.

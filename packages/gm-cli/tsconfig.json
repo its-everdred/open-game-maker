@@ -15,6 +15,7 @@
     { "path": "../asset-previews" },
     { "path": "../blob-store" },
     { "path": "../game-repo-template" },
-    { "path": "../gm-verify" }
+    { "path": "../gm-verify" },
+    { "path": "../pack-adapters/smallscaleint" }
   ]
 }
