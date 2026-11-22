@@ -22,7 +22,7 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
 - `conventions`: the pack facts, each with how it was verified (sheet row order E, SE, S, SW, W, NW, N, NE, measured
   pixel by pixel against the angle-named frame files), and `layerForCategory` for tileset pieces.
 - `structuralImageBounds`: inclusive alpha bounds for twelve measured structural or paving assets, keyed by asset card id.
-  Bounds do not establish an anchor or connection socket.
+  Bounds do not establish an anchor or connection socket. `fenceB1Edges` records the measured rural fence facings.
 - `vocabulary`: canonical roles to this set's action names, and the loop set.
 
 ## Leaves to the game

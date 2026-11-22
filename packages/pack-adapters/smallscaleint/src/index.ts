@@ -21,4 +21,9 @@ export {
   type PalettePrefab,
   type PlacementKind,
 } from './palette.js';
-export { structuralImageBounds, type AlphaBounds, type StructuralImageBounds } from './structural-bounds.js';
+export {
+  fenceB1Edges,
+  structuralImageBounds,
+  type AlphaBounds,
+  type StructuralImageBounds,
+} from './structural-bounds.js';

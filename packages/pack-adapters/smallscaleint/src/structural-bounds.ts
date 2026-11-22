@@ -66,3 +66,12 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
   verified:
     'Decoded each named source PNG with sharp and scanned every nonzero alpha pixel; bounds are inclusive (2026-11-21).',
 };
+
+/** Grid edge occupied by the rural Fence B1 sprite for each facing. */
+export const fenceB1Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yMin' | 'yMax'>>> = {
+  value: { E: 'yMax', N: 'xMax', S: 'xMin', W: 'yMin' },
+  verified:
+    'Dusk Helm #24 edge placement, checked against all four source PNG alpha masks on 2026-11-21: ' +
+    'at the 128x64 tile displacement, E/W overlap 627/623 pixels along x versus 232/239 along y; ' +
+    'N/S overlap 565/562 along y versus 197/218 along x. Facing positions distinguish each pair.',
+};
