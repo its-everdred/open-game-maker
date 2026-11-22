@@ -259,3 +259,10 @@ one-facing, one-pack audit. This is a bounded coverage gap, not a declaration
 that no suitable asset exists in other packs or facings. A variant or assembly
 may be needed after those sources are checked. Character sprites and the rural
 fence pack were not part of this particular lineup.
+
+The fantasy pack also has an animated `animations-props-torch-1` card that the
+static east-facing sprite lineup did not include. Its first source frame was
+inspected locally: it supplies flame rather than the mock's hanging lantern
+fixture. The current game uses a torch effect. This confirms that the lineup is
+not a complete audit of the pack's animation sequences and reinforces the need
+to search other asset kinds as well as other packs before calling a gap.
