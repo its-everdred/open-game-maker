@@ -157,3 +157,40 @@ layer and visible occlusion hints; cardinal facings and unmeasured or clipped
 footpoints are explicitly null. The ratios are screen-space estimates, not
 registered tile positions or physical scale. This is a partial manual reference
 for evaluating future inference, not a complete scene document.
+
+## Newer game capture
+
+The game worker subsequently committed a newer round-three capture at
+`2c0461dce3cdbe653d828df800b59bdc4ba9e50f`: the logical 390 × 844 image is
+780 × 1688 pixels, SHA-256
+`82cbfacef338d1e831fab1b144ab4396f527320b3cad27a4723bec046b09e61b`.
+The game worker's mock | older render | newer render sheet was inspected and
+copied to `assets-local/review/1154/churchyard-round3-comparison.png`. The
+previous ranked list and manual observation JSON describe `47e9544e`, not
+this newer capture.
+
+In the newer image a roof, continuous paved strip, connected fence, pillars,
+torches, surrounding grass and additional vegetation are visible. Do not
+repeat the old findings that these are all absent or that the path is three
+separate blocks. The main remaining visual differences, in approximate order,
+are:
+
+1. The chapel and doorway are cropped at the right edge, while the mock centres
+   the whole entrance; the knight remains much smaller and the foreground yard
+   occupies a different part of the frame. The camera still needs matching.
+2. The visible building has a long orange roof and wall; the mock has a gabled
+   stone facade, central arched door, steps, cross, side windows and overgrowth.
+   The screenshot does not prove whether a closed shell exists outside the view.
+3. The new approach is a continuous wide rectangular pavement, while the mock
+   shows separate stepping stones leading toward the entrance. The gate and its
+   full connection are outside or at the edge of this capture, so their route
+   cannot be assessed visually here.
+4. Grave placement, vegetation and lighting remain substantially different:
+   the mock has denser grave rows and dark purple growth, bare framing trees and
+   warm light pools; the render has more open grass, repeated small trees and
+   bright green shrubs.
+5. Pillars and lights are now present at visible fence points, but their shape,
+   location and glow differ from the mock; the off-screen gate cannot be checked.
+
+This is a human visual comparison of a committed capture, not a registered pixel
+score, an automatic discrepancy list, or proof of gameplay and collision.
