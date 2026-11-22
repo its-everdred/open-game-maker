@@ -78,4 +78,17 @@ it('does not turn partial or unreviewed scoped searches into a kit gap', () => {
       searches: [{ result: east, review: { kind: 'no-match', reason: ' ' } }],
     }),
   ).toThrow('requires a reason');
+  const duplicateCandidates = {
+    ...east,
+    candidates: [east.candidates[0]!, east.candidates[0]!],
+    examined: 2,
+    eligible: 2,
+  };
+  expect(() =>
+    assessMatchCoverage({
+      ...base,
+      required: [east.scope],
+      searches: [{ result: duplicateCandidates, review: noMatch }],
+    }),
+  ).toThrow('invalid visual candidate');
 });

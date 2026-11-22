@@ -1,4 +1,5 @@
 import { parseSceneBatchMatch } from './parse-worker-result.js';
+import { rankVisualMatches } from './match.js';
 import type { SceneBatchMatchResult } from './worker-result.js';
 
 type SearchScope = SceneBatchMatchResult['scope'];
@@ -26,8 +27,10 @@ export function assessMatchCoverage(input: {
     const result = parseSceneBatchMatch(item.result);
     const review = item.review;
     if (result.mock_sha256 !== mockSha256) throw new Error('search belongs to a different mock');
-    if (result.regions.filter((region) => region.crop.every((value, index) => value === crop[index])).length !== 1)
-      throw new Error('search does not contain the reviewed crop exactly once');
+    const regions = result.regions.filter((region) => region.crop.every((value, index) => value === crop[index]));
+    if (regions.length !== 1) throw new Error('search does not contain the reviewed crop exactly once');
+    // Completeness counts are meaningful only when candidate identities and embeddings are valid.
+    rankVisualMatches(regions[0]!.query, result.candidates);
     const scope = key(result.scope);
     if (!scopes.has(scope) || byScope.has(scope)) throw new Error('unexpected or duplicate search scope');
     if (!['pending', 'no-match', 'match'].includes(review.kind)) throw new Error('invalid match review');
