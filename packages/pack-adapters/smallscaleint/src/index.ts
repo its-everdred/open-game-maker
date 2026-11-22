@@ -24,6 +24,7 @@ export {
 export {
   fenceB1Edges,
   wallF1Edges,
+  wallC1Edges,
   structuralImageBounds,
   type AlphaBounds,
   type StructuralImageBounds,

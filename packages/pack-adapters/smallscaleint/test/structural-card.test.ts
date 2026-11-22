@@ -22,6 +22,15 @@ it('supplies measured card metadata without inventing anchors or sockets', () =>
     ['yMax'],
     ['xMin'],
   ]);
+  const timber = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-c1@2026-11-01',
+  )!;
+  expect([timber.E?.edges?.value, timber.N?.edges?.value, timber.S?.edges?.value, timber.W?.edges?.value]).toEqual([
+    ['xMax'],
+    ['yMin'],
+    ['yMax'],
+    ['xMin'],
+  ]);
   expect(structuralCardFacts('unknown')).toBeUndefined();
   expect(structuralCardFacts('toString')).toBeUndefined();
 });

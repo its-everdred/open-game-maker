@@ -42,6 +42,34 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
       size: [256, 256],
       facings: { E: [71, 110, 127, 229], N: [128, 111, 184, 229], S: [81, 87, 139, 206], W: [116, 87, 174, 205] },
     },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-f2@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [56, 72, 199, 245], N: [103, 49, 203, 243], S: [51, 47, 152, 243], W: [56, 48, 199, 219] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-f3@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [103, 72, 199, 243], N: [103, 49, 199, 219], S: [56, 72, 152, 243], W: [56, 47, 152, 219] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-f4@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [103, 70, 199, 243], N: [103, 47, 199, 219], S: [56, 70, 152, 243], W: [56, 47, 152, 219] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-c1@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [112, 73, 194, 239], N: [110, 51, 192, 215], S: [63, 75, 145, 240], W: [61, 51, 144, 215] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-c2@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [63, 73, 194, 240], N: [110, 51, 194, 239], S: [61, 51, 145, 240], W: [61, 51, 192, 215] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-c3@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [116, 74, 188, 237], N: [113, 51, 186, 212], S: [68, 76, 142, 238], W: [67, 53, 139, 213] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-c4@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [112, 73, 194, 239], N: [110, 51, 192, 215], S: [63, 75, 145, 240], W: [61, 51, 144, 215] },
+    },
     't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-b8@2026-11-01': {
       size: [256, 256],
       facings: { E: [102, 151, 193, 245], N: [102, 128, 197, 220], S: [52, 151, 143, 243], W: [56, 129, 143, 220] },
@@ -92,4 +120,14 @@ export const wallF1Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yM
     'N/S overlap 2436/2428 pixels along x versus 1530/1544 along y, ' +
     'E/W overlap 2395/2396 along y versus 1525/1534 along x. ' +
     'Facing positions and a local 3x2 wall-loop diagnostic distinguish each side.',
+};
+
+/** Grid edge occupied by the fantasy timber Wall C1 sprite for each facing. */
+export const wallC1Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yMin' | 'yMax'>>> = {
+  value: { E: 'xMax', N: 'yMin', S: 'yMax', W: 'xMin' },
+  verified:
+    'Source PNG alpha-mask overlap at a 128x64 tile displacement on 2026-11-21: ' +
+    'N/S overlap 1688/1679 pixels along x versus 874/986 along y, ' +
+    'E/W overlap 1535/1522 along y versus 878/818 along x. ' +
+    'Facing positions and a local 3x2 timber wall-loop diagnostic distinguish each side.',
 };

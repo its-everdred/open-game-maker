@@ -1,9 +1,7 @@
-import type { AssemblyPlacement } from './assembly-map.js';
+import { edgeRun } from './assembly-edge.js';
 import { buildingLayout } from './building-layout.js';
-import type { BoundaryEdge, CellEdge } from './boundary.js';
-import type { TileFacing } from './map.js';
+import type { BoundaryEdge } from './boundary.js';
 import type { Cell } from './placement.js';
-import { wallF1Edges } from './structural-bounds.js';
 
 const PACK = 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment';
 const asset = (slug: string) => `${PACK}/${slug}@2026-11-01`;
@@ -15,15 +13,7 @@ export function stoneShell(footprint: readonly Cell[], door: BoundaryEdge, walka
   if (layout.walls.some(({ cell }) => cell.x === door.cell.x && cell.y === door.cell.y)) {
     throw new Error('door cell must not carry another wall edge');
   }
-  const facingFor = (edge: CellEdge): TileFacing =>
-    (Object.entries(wallF1Edges.value) as [TileFacing, CellEdge][]).find(([, value]) => value === edge)![0];
-  const placements: AssemblyPlacement[] = layout.walls.map(({ cell, edge }) => ({
-    cell,
-    layer: 'wall',
-    asset: asset('wall-f1'),
-    facing: facingFor(edge),
-    solid: true,
-  }));
+  const { placements } = edgeRun(footprint, 'stone', [door]);
   for (const slug of ['wall-f6', 'door-a1']) {
     placements.push({ cell: door.cell, layer: 'wall', asset: asset(slug), facing: 'S', solid: false });
   }
