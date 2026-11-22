@@ -12,7 +12,7 @@ import { overlaySvg } from '../../scene-check/overlay.js';
 import { readTiledScene, type MapSource } from '../../scene-check/read.js';
 import { checkScene, reportMarkdown } from '../../scene-check/report.js';
 
-const USAGE = 'gm verify scene games/dusk-helm graveyard --under maps/graveyard-surround.json@-8,-8 --overlay out.png';
+const USAGE = 'gm verify scene games/<game> <scene> --under maps/<surround>.json@-8,-8 --overlay out.png';
 
 /** Pack facts per asset set; a set without an adapter provider cannot be checked yet. */
 const PACKS: Record<string, () => Promise<PackFacts>> = {
@@ -117,6 +117,7 @@ export const command: GmCommand = {
       );
     }
     const [width, height] = pair(String(flags.view), 'x', 'view');
+    if (!(width > 0 && height > 0)) throw new UsageError('--view needs a positive width and height', USAGE);
     const center = flags.center === undefined ? undefined : pair(String(flags.center), ',', 'center');
     const camera = {
       width,

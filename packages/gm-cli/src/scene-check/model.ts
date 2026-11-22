@@ -149,5 +149,13 @@ export function corners({ x, y }: Cell): Cell[] {
 
 /** Pieces that are the ground itself, on whatever layer a map put them. */
 export const GROUND: ReadonlySet<Role> = new Set(['ground', 'path']);
-export const STRUCTURE: ReadonlySet<Role> = new Set(['fence', 'wall', 'door', 'opening', 'roof', 'post']);
+/** Pieces that draw a grid edge and join into runs. */
+export const RUN: ReadonlySet<Role> = new Set(['fence', 'wall', 'door', 'opening']);
 export const DRESSING: ReadonlySet<Role> = new Set(['prop', 'seat', 'unknown']);
+
+const START = /^(player|spawn|start|entry)$/i;
+
+/** The player's spawn: a `player` prefab, else a spawn named player/spawn/start/entry, else the first spawn. */
+export function spawnOf(actors: readonly Actor[]): Actor | undefined {
+  return actors.find((a) => a.prefab === 'player') ?? actors.find((a) => START.test(a.name)) ?? actors[0];
+}

@@ -1,12 +1,5 @@
 import type { Grid } from './grid.js';
-import { NEIGHBORS, across, cellKey, type Actor, type Cell, type Finding } from './model.js';
-
-const START = /^(player|spawn|start|entry)$/i;
-
-/** The player's spawn: a `player` prefab, else a spawn named player/spawn/start/entry, else the first spawn. */
-export function spawnOf(actors: readonly Actor[]): Actor | undefined {
-  return actors.find((a) => a.prefab === 'player') ?? actors.find((a) => START.test(a.name)) ?? actors[0];
-}
+import { NEIGHBORS, across, cellKey, spawnOf, type Cell, type Finding } from './model.js';
 
 interface Target {
   label: string;

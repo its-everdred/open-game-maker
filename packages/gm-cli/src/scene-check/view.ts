@@ -1,5 +1,4 @@
-import type { Camera, Cell, Scene } from './model.js';
-import { spawnOf } from './traverse.js';
+import { spawnOf, type Camera, type Cell, type Scene } from './model.js';
 
 /** Where the camera looks: its own centre, else the player spawn, else the middle of the map. */
 export function frameCenter(scene: Scene, camera: Camera): Cell {

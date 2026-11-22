@@ -1,14 +1,15 @@
 import { components, pieceCells, segments, terminals, vertexIndex, type Grid } from './grid.js';
-import { cellKey, type Cell, type Finding, type Role } from './model.js';
-
-const RUN: ReadonlySet<Role> = new Set(['fence', 'wall', 'door', 'opening']);
+import { RUN, cellKey, type Cell, type Finding } from './model.js';
 
 const parse = (key: string): Cell => {
   const [x, y] = key.split(',').map(Number);
   return { x: x!, y: y! };
 };
 
-/** Structural edge pieces without a measured edge cannot be checked; say so per asset instead of passing them. */
+/**
+ * Structural edge pieces without a measured edge cannot be checked. They fail closed: a run nobody could check
+ * is not a passing run, so the worker fixes the facts or lists the gap as a known limitation with --allow.
+ */
 export function unmeasured(grid: Grid): Finding[] {
   const missing = new Map<string, Cell[]>();
   for (const piece of grid.scene.pieces) {
@@ -20,7 +21,7 @@ export function unmeasured(grid: Grid): Finding[] {
   return [...missing].map(([asset, cells]) => ({
     check: 'facts',
     id: 'facts/unmeasured-edge',
-    severity: 'info',
+    severity: 'high',
     message: `${cells.length} ${asset} piece(s) have no measured edge for their facing; runs and shells through them are unchecked`,
     cells,
     objects: [asset],

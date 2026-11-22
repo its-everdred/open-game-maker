@@ -32,13 +32,14 @@ describe('gm verify scene', () => {
       cwd: dir,
     });
     expect(failed.code).toBe(1);
-    // The fixture ids carry no measured SmallScaleInt edges: the report says the runs went unchecked, never passes them.
-    expect(failed.out.join('\n')).toContain('facts/unmeasured-edge');
+    // The fixture ids carry no measured SmallScaleInt edges: the runs went unchecked, which fails closed until the
+    // worker lists it as a known limitation, so an unmeasured fence can never pass silently.
+    expect(failed.out.join('\n')).toMatch(/high \| `facts\/unmeasured-edge`/);
     expect(existsSync(join(dir, 'o.png'))).toBe(true);
     const report = JSON.parse(readFileSync(`${out}.json`, 'utf8')) as { findings: { id: string; rank: number }[] };
     expect(report.findings[0]).toMatchObject({ id: 'no-overlap/actor-in-solid', rank: 1 });
     expect(readFileSync(`${out}.md`, 'utf8')).toContain('### Scene structure: yard — FAIL');
-    const allow = ['--allow', 'no-overlap/actor-in-solid', '--allow', 'facing'];
+    const allow = ['--allow', 'no-overlap/actor-in-solid', '--allow', 'facing', '--allow', 'facts/unmeasured-edge'];
     const known = await gm(['verify', 'scene', dir, 'yard', ...frame, ...allow], {
       cwd: dir,
     });
@@ -81,4 +82,12 @@ describe('SmallScaleInt facts', () => {
     const lock = { 't3:game/fence-copy': { derived_from: [FENCE] } };
     expect(assetFacts(pack, lock, 't3:game/fence-copy')?.edges?.E).toBe('yMax');
   });
+});
+
+describe('gm verify scene frame', () => {
+  it('refuses an empty frame, which would hide every void past the map edge', async () => {
+    const dir = game(false);
+    const { code } = await gm(['verify', 'scene', dir, 'yard', '--view', '0x844'], { cwd: dir });
+    expect(code).toBe(2);
+  }, 60_000);
 });

@@ -21,6 +21,7 @@ const TAGS = ['ruin', 'formal', 'gate', 'exit'] as const;
 
 const property = z.object({ name: z.string(), value: z.unknown() });
 const tiledMap = z.object({
+  orientation: z.literal('isometric'),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   tilewidth: z.number().optional(),
@@ -82,6 +83,7 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
   const pieces: Piece[] = [];
   const actors: Actor[] = [];
   const notes: Finding[] = [];
+  const flipped = new Set<string>();
   const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   for (const source of sources) {
     const map = tiledMap.parse(source.json);
@@ -107,6 +109,8 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
     for (const set of map.tilesets) for (const tile of set.tiles) tiles.set(set.firstgid + tile.id, tile.properties);
     for (const layer of map.layers) {
       if (layer.type === 'objectgroup') {
+        // A surround's spawns belong to its own scene, never this one.
+        if (source.under) continue;
         for (const object of layer.objects) {
           const prefab = prop(object.properties, 'prefab');
           actors.push({
@@ -122,6 +126,7 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
       layer.data.forEach((stored, index) => {
         if (stored === 0) return;
         const gid = stored & GID_MASK;
+        if (gid !== stored) flipped.add(`${prefix}${layer.name}`);
         const properties = tiles.get(gid);
         const asset = prop(properties, 'asset');
         if (typeof asset !== 'string') throw new Error(`tile gid ${gid} has no asset`);
@@ -156,6 +161,16 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
         });
       });
     }
+  }
+  if (flipped.size) {
+    notes.push({
+      check: 'facts',
+      id: 'facts/tile-flip',
+      severity: 'high',
+      message: `layers ${[...flipped].join(', ')} use Tiled flip flags, which the pack adapter refuses; use a facing instead`,
+      cells: [],
+      objects: [...flipped],
+    });
   }
   return {
     bounds,

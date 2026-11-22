@@ -35,6 +35,21 @@ function enclosed(group: readonly Segment[], sealed: ReadonlySet<string>): Cell[
   return cells;
 }
 
+/** The closed part of a run: drop segments with a loose end (not at a door standing in the gap) until none remain. */
+function shell(run: readonly Segment[], doorCorners: ReadonlySet<string>): Segment[] {
+  let kept = [...run];
+  for (;;) {
+    const index = vertexIndex(kept);
+    const loose = (end: Cell) => {
+      const key = cellKey(end);
+      return !doorCorners.has(key) && new Set(index.get(key)!.map((part) => part.key)).size === 1;
+    };
+    const next = kept.filter((part) => !loose(part.a) && !loose(part.b));
+    if (next.length === kept.length) return kept;
+    kept = next;
+  }
+}
+
 /**
  * A building is a closed shell with a roof over its footprint and a door. A wall run carrying a door or roof
  * that does not close is a facade (the #24 crypt), unless a piece in it is tagged `ruin`.
@@ -47,31 +62,37 @@ export function coherentBuildings(grid: Grid): Finding[] {
   );
   const claimed = new Set<Piece>();
   const findings: Finding[] = [];
-  for (const group of components(parts)) {
-    const vertices = vertexIndex(group);
+  for (const run of components(parts)) {
+    const vertices = vertexIndex(run);
     const touches = (piece: Piece) => corners(piece).some((v) => vertices.has(cellKey(v)));
     const near = loose.filter(touches);
-    const footprint = enclosed(group, new Set(near.filter((piece) => piece.role !== 'roof').map(cellKey)));
+    const doorCorners = new Set(
+      near.filter((piece) => piece.role !== 'roof').flatMap((door) => corners(door).map(cellKey)),
+    );
+    // A wall that runs on from the shell (a garden wall to a post) is a boundary run, not part of the building.
+    const group = shell(run, doorCorners);
+    const footprint = group.length
+      ? enclosed(group, new Set(near.filter((piece) => piece.role !== 'roof').map(cellKey)))
+      : [];
     const inFootprint = new Set(footprint.map(cellKey));
     const attached = loose.filter((piece) => inFootprint.has(cellKey(piece)) || touches(piece));
-    const doors = [...group.map((part) => part.piece), ...attached].filter(
+    const doors = [...run.map((part) => part.piece), ...attached].filter(
       (piece) => piece.role === 'door' || piece.role === 'opening',
     );
     const roofs = attached.filter((piece) => piece.role === 'roof');
-    if (!doors.length && !roofs.length) continue; // a boundary wall: connected-runs judges it
+    // A roofless enclosure with only a gate or arch is a yard; connected-runs judges it.
+    if (!roofs.length && !doors.some((piece) => piece.role === 'door')) continue;
     for (const piece of attached) claimed.add(piece);
-    const objects = [...group.map((part) => part.piece.key), ...attached.map((piece) => piece.key)];
-    const cells = [...pieceCells(group), ...pieceCells(attached.map((piece) => ({ piece })))];
-    const doorCorners = new Set(doors.filter((door) => !door.edge).flatMap((door) => corners(door).map(cellKey)));
-    const open = [...vertices].filter(([key, at]) => new Set(at.map((p) => p.key)).size === 1 && !doorCorners.has(key));
-    const ruin = [...group.map((part) => part.piece), ...attached].some((piece) => piece.tags.has('ruin'));
+    const objects = [...run.map((part) => part.piece.key), ...attached.map((piece) => piece.key)];
+    const cells = [...pieceCells(run), ...pieceCells(attached.map((piece) => ({ piece })))];
+    const ruin = [...run.map((part) => part.piece), ...attached].some((piece) => piece.tags.has('ruin'));
     if (ruin) continue; // a ruin may stand open and roofless
-    if (open.length) {
+    if (!group.length) {
       findings.push({
         check: 'coherent-buildings',
         id: 'coherent-buildings/open-shell',
         severity: 'high',
-        message: `building walls do not close a shell (${open.length} open wall end(s)); it reads as a free-standing facade. Close it, or tag it ruin`,
+        message: 'building walls do not close a shell; it reads as a free-standing facade. Close it, or tag it ruin',
         cells,
         objects,
       });
@@ -114,7 +135,7 @@ export function coherentBuildings(grid: Grid): Finding[] {
     }
   }
   const measured = !pieces.some((piece) => piece.role === 'wall' && !piece.edge);
-  const orphans = loose.filter((piece) => !claimed.has(piece));
+  const orphans = loose.filter((piece) => piece.role !== 'opening' && !claimed.has(piece));
   if (measured && orphans.length) {
     findings.push({
       check: 'coherent-buildings',

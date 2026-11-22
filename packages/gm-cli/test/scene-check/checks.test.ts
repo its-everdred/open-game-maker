@@ -20,7 +20,8 @@ function turn(fixture: Fixture, x: number, y: number, layer: string, facing: 'E'
 describe('the clean yard', () => {
   it('passes every check, so each failure below is caused only by the defect it adds', () => {
     const report = checkScene('yard', scene(yard()), options);
-    expect(report.findings).toEqual([]);
+    // Only the honest note that the flowers' on-screen overlap went unmeasured.
+    expect(report.findings.map((f) => f.id)).toEqual(['facts/unmeasured-alpha']);
     expect(report.pass).toBe(true);
   });
 });
@@ -227,5 +228,77 @@ describe('reading scenes as maps lay them out', () => {
     expect(checkScene('yard', withSurround, options).findings.map((f) => f.id)).not.toContain(
       'natural-placement/sparse',
     );
+  });
+});
+
+describe('review follow-ups', () => {
+  it('fails a scene with no spawn or a blocked spawn: nothing can be proven reachable from it', () => {
+    expect(ids(scene({ ...yard(), spawns: [] }))).toContain('traversable/no-spawn');
+    const walled = yard();
+    walled.spawns[0] = { name: 'player', x: 3, y: 3, prefab: 'player' };
+    expect(ids(scene(walled))).toContain('traversable/spawn-blocked');
+  });
+
+  it('fails a closed house without a door, and a roof standing with no walls at all', () => {
+    const doorless = yard();
+    doorless.pieces = doorless.pieces.map((p) =>
+      p.asset === 'pack:door' ? { ...p, asset: 'pack:wall', solid: true } : p,
+    );
+    expect(ids(scene(doorless))).toContain('coherent-buildings/no-door');
+    expect(ids(scene(without(yard(), (p) => p.asset === 'pack:wall' || p.asset === 'pack:door')))).toContain(
+      'coherent-buildings/no-shell',
+    );
+  });
+
+  it('keeps a garden wall that runs on from a closed house out of the shell check', () => {
+    const fixture = yard();
+    fixture.pieces.push(
+      { layer: 'wall', x: 5, y: 3, asset: 'pack:wall', facing: 'N', solid: true },
+      { layer: 'wall', x: 6, y: 3, asset: 'pack:wall', facing: 'N', solid: true },
+      { layer: 'decor2', x: 7, y: 3, asset: 'pack:post', solid: true },
+    );
+    expect(ids(scene(fixture)).filter((id) => !id.startsWith('facts'))).toEqual([]);
+  });
+
+  it('treats a roofless walled yard with only a gate as a boundary, not a roofless building', () => {
+    const fixture = without(yard(), (p) => p.layer === 'roof');
+    fixture.pieces = fixture.pieces.map((p) => (p.asset === 'pack:door' ? { ...p, asset: 'pack:gate' } : p));
+    expect(ids(scene(fixture)).filter((id) => id.startsWith('coherent-buildings'))).toEqual([]);
+  });
+
+  it('fails a prop lifted off the ground and two pieces drawing one edge', () => {
+    const fixture = yard();
+    fixture.pieces = fixture.pieces.map((p) =>
+      p.asset === 'pack:flower' && p.x === 2 && p.y === 2 ? { ...p, elevation: 1 } : p,
+    );
+    fixture.pieces.push({ layer: 'decor2', x: 3, y: 1, asset: 'pack:fence', facing: 'W', solid: true });
+    expect(ids(scene(fixture))).toEqual(
+      expect.arrayContaining(['natural-placement/floating', 'connected-runs/stacked']),
+    );
+  });
+
+  it('fails tiles with Tiled flip flags, which the adapter refuses to draw', () => {
+    const json = tiled(yard()) as { layers: { name: string; data?: number[] }[] };
+    const decor = json.layers.find((l) => l.name === 'decor')!.data!;
+    const i = decor.findIndex(Boolean);
+    decor[i] = (decor[i]! | 0x80000000) >>> 0;
+    expect(checkScene('yard', readTiledScene([{ json }], pack, {}), options).findings.map((f) => f.id)).toContain(
+      'facts/tile-flip',
+    );
+  });
+
+  it("ignores a surround's spawns: they belong to another scene", () => {
+    const surround = tiled({
+      width: 4,
+      height: 4,
+      pieces: [],
+      spawns: [{ name: 'player', x: 0, y: 0, prefab: 'player' }],
+    });
+    const merged = readTiledScene(
+      [{ json: tiled(yard()) }, { json: surround, offset: { x: 20, y: 20 }, under: true }],
+      pack,
+      {},
+    );
+    expect(merged.actors.map((a) => a.name)).toEqual(['player', 'guard']);
   });
 });

@@ -1,8 +1,7 @@
 import type { Grid } from './grid.js';
-import { DRESSING, cellKey, type Finding, type Piece, type Role, type Scene } from './model.js';
+import { DRESSING, RUN, cellKey, type Finding, type Piece, type Role, type Scene } from './model.js';
 
 const FLAT: ReadonlySet<Role> = new Set(['ground', 'path', 'roof']);
-const RUN: ReadonlySet<Role> = new Set(['fence', 'wall', 'door', 'opening']);
 /** Share of the smaller sprite's measured alpha box that may overlap a neighbour in the same depth band. */
 export const OVERLAP_LIMIT = 0.25;
 
@@ -32,10 +31,21 @@ export function noOverlap(grid: Grid): Finding[] {
       objects: props.map((piece) => piece.key),
     });
   }
-  const boxed = grid.scene.pieces
-    .filter((piece) => !FLAT.has(piece.role))
+  const standing = grid.scene.pieces.filter((piece) => !FLAT.has(piece.role));
+  const boxed = standing
     .map((piece) => ({ piece, box: screenBox(grid.scene, piece) }))
     .filter((entry): entry is { piece: Piece; box: [number, number, number, number] } => !!entry.box);
+  const unboxed = [...new Set(standing.filter((piece) => !piece.alpha || !piece.size).map((piece) => piece.asset))];
+  if (unboxed.length) {
+    findings.push({
+      check: 'facts',
+      id: 'facts/unmeasured-alpha',
+      severity: 'info',
+      message: `${unboxed.length} asset(s) have no measured alpha bounds, so their on-screen overlap is unchecked`,
+      cells: [],
+      objects: unboxed,
+    });
+  }
   for (let i = 0; i < boxed.length; i++) {
     for (let j = i + 1; j < boxed.length; j++) {
       const a = boxed[i]!;

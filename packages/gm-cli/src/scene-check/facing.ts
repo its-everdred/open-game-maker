@@ -1,6 +1,7 @@
 import { segments, terminals, vertexIndex, type Grid } from './grid.js';
 import {
   NEIGHBORS,
+  RUN,
   across,
   cellKey,
   segment,
@@ -8,10 +9,7 @@ import {
   type Facing,
   type Finding,
   type Piece,
-  type Role,
 } from './model.js';
-
-const RUN: ReadonlySet<Role> = new Set(['fence', 'wall', 'door', 'opening']);
 
 /**
  * Every facing is one the asset ships; an edge piece faces along its run (a fence turned across its run draws
