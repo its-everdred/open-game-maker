@@ -194,3 +194,16 @@ are:
 
 This is a human visual comparison of a committed capture, not a registered pixel
 score, an automatic discrepancy list, or proof of gameplay and collision.
+
+The subsequent fresh alpha-bounds run encoded all 467 currently eligible
+ east-facing fantasy-pack previews for that same hand-masked grave. It records
+the mask hash, model signature and each preview hash locally in
+`assets-local/review/1154/churchyard-grave-trim-results.json`. Its top three
+were `roof-g1`, `wall-a7` and `wall-a15`; game-used `stone-a4` was fifth and
+`stone-a13` was 89th. The top-five image sheet was inspected at
+`assets-local/review/1154/churchyard-grave-trim-top5.png`: the first four are
+stone structural pieces and the fifth is a plausible grave candidate. The old
+untrimmed historical set ranked these game-used candidates 64th and 184th for
+the same mask, but that old set lacks per-preview hashes. This supports further
+controlled testing of alpha bounds, not a proven improvement across objects,
+facings or packs, and not a safe automatic top-three selection.
