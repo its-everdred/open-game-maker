@@ -157,6 +157,12 @@ importers:
 
   games/samplers/hd2d-forest:
     dependencies:
+      '@gm/sdk':
+        specifier: workspace:*
+        version: link:../../../packages/sdk
+      '@ogm/contracts':
+        specifier: workspace:*
+        version: link:../../../packages/contracts
       phaser:
         specifier: 4.2.1
         version: 4.2.1

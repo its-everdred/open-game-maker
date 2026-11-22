@@ -6,7 +6,7 @@ import { Forest, type ForestOptions, type Quality } from './scene.js';
 const params = new URLSearchParams(location.search);
 const preset = params.get('preset');
 const options: ForestOptions = {
-  preset: PRESET_IDS.includes(preset as PresetId) ? (preset as PresetId) : 'golden',
+  preset: PRESET_IDS.includes(preset as PresetId) ? (preset as PresetId) : 'amber',
   lighting: params.get('lighting') !== '0',
   focus: params.get('focus') !== '0',
   quality: (params.get('quality') === 'low' ? 'low' : 'high') satisfies Quality,

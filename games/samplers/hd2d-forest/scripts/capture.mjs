@@ -58,7 +58,7 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     ['focus', 'lighting=0'],
   ]) {
     const { context, page, errors } = await open(viewport, query);
-    const file = join(out, `golden-${label}-${name}.png`);
+    const file = join(out, `amber-${label}-${name}.png`);
     await page.screenshot({ path: file });
     report.stills.push(file);
     report.errors.push(...errors);
@@ -89,7 +89,7 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
   }
 }
 
-// The toggle clip, phone portrait: all off, lighting, focus, then the other two presets.
+// The toggle clip, phone portrait: all off, lighting, focus on the default (Amber), then the other two presets.
 {
   const { context, page, errors, created } = await open(VIEWPORTS.phone, 'lighting=0&focus=0', true);
   const steps = [
@@ -97,7 +97,7 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     [2500, () => window.__forest.setLighting(true)],
     [2500, () => window.__forest.setFocus(true)],
     [2500, () => window.__forest.setPreset('daylight')],
-    [2500, () => window.__forest.setPreset('amber')],
+    [2500, () => window.__forest.setPreset('golden')],
   ];
   const marks = [];
   for (const [wait, step] of steps) {
