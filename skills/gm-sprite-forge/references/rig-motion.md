@@ -122,22 +122,24 @@ Keep mocap under `assets-local/experiments/sprite-pipeline/hero-s2/mocap/` in fo
 
 ## Findings (#1202, Stage 1 Warrior mesh as test subject)
 
-Walk, scored on workbench silhouettes against the 6Barbarian Walk (S and SE), `ssi-barbarian` stance, foot lock and
-IK unless noted:
+Round-1 review cells (Cycles, S and SE, `ssi-barbarian` stance, foot lock and IK unless noted), scored against the
+6Barbarian Walk and Attack1. Motion correlation is the mean of the rows, SE then S:
 
-| Cell | Motion corr (SE, S) | Silhouette IoU | Foot slide px |
-|---|---|---|---|
-| Hand-keyed, best of a 10-setting search | 0.61 (0.79, 0.44) | 0.44 | 0.37 |
-| CMU 07_01 | 0.52 (0.70, 0.33) | 0.45 | 0.45 |
-| KayKit Walking_C | 0.47 | 0.35 | 0.24 |
-| CMU 08_01 | 0.45 | 0.42 | 1.44 |
-| KayKit Walking_A, rotations copied, no lock or IK | 0.42 | 0.37 | 2.52 |
-| Bandai giant / masculinity / proud / normal | 0.41 / 0.32 / 0.25 / 0.23 | 0.37-0.45 | 0.17-0.76 |
-| LaFAN1 walk1 | 0.30 | 0.43 | 0.80 |
-| KayKit Walking_A / Walking_B | 0.28 / 0.35 | 0.36-0.37 | 0.19-0.20 |
+| Cell | Motion corr (SE, S) | Silhouette IoU | Foot slide px | Render min |
+|---|---|---|---|---|
+| Walk: hand-keyed, best of a 10-setting search | 0.61 (0.78, 0.44) | 0.45 | 0.40 | 1.5 |
+| Walk: Bandai giant | 0.40 (0.53, 0.26) | 0.35 | 0.42 | 0.9 |
+| Walk: KayKit Walking_C | 0.38 (0.42, 0.34) | 0.35 | 0.69 | 0.6 |
+| Walk: KayKit Walking_A, rotations copied, no lock or IK | 0.38 (0.43, 0.33) | 0.37 | 2.54 | 1.0 |
+| Walk: CMU 07_01 | 0.33 (0.26, 0.40) | 0.41 | 0.69 | 0.5 |
+| Walk: LaFAN1 walk1 | 0.33 (0.27, 0.40) | 0.41 | 0.77 | 1.7 |
+| Attack: hand-keyed `chop` | 0.62 (0.63, 0.62) | 0.28 | 0.35 | 1.0 |
+| Attack: hand-keyed `combo` (closest by eye) | 0.51 (0.52, 0.50) | 0.30 | 0.62 | 0.9 |
+| Attack: Bandai slash | 0.45 (0.42, 0.48) | 0.24 | 0.21 | 1.8 |
+| Attack: KayKit `Melee_1H_Attack_Chop` | -0.16 (-0.19, -0.14) | 0.23 | 0.07 | 0.8 |
 
-Attack against the 6Barbarian Attack1: hand-keyed `chop` 0.63, `combo` 0.52 (closest by eye), Bandai slash 0.46,
-KayKit 1H chop -0.18, 2H chop -0.24.
+An earlier silhouette pass over all 11 retargeted walks (KayKit A/B/C, CMU 02_01/07_01/08_01, four Bandai styles,
+LaFAN1; before the loop-seam fix) put every one between 0.23 and 0.52.
 
 - **Calibration.** Pack walks scored against the 6Barbarian Walk: reskins of the same animation (3Nomad, 4Berserker)
   0.97; every other SmallScaleInt character's walk 0.0-0.6. Motion correlation of 0.7 or more therefore means "the
