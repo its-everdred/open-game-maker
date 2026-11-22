@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { blurForDepth, DEFAULT_FOCUS } from '../focus/index.js';
+import { FIXTURE_SKY } from '../fixture/sky-preset.js';
 import { DEFAULT_FOREST_LIGHTING, sampleShaftIntensity } from '../lighting/index.js';
 import { createParticleDriver, moteLook, MOTE_SHADE, type ParticleBackend } from './create.js';
 import { PARTICLE_PRESETS } from './presets.js';
@@ -36,6 +37,42 @@ describe('moteLook', () => {
     expect(Math.max(...samples.map((s) => s.light))).toBeGreaterThan(0.3);
     expect(Math.min(...samples.map((s) => s.light))).toBe(0);
     for (const { light, alpha } of samples) expect(alpha).toBeCloseTo(MOTE_SHADE + (1 - MOTE_SHADE) * light, 6);
+  });
+
+  // Short beams are laid out across the real screen: on a portrait phone a mote must brighten where the beam is drawn.
+  it('takes its light from the beams at the screen shape the backend reports', () => {
+    const portrait = 390 / 844;
+    let differs = false;
+    for (let x = 0; x <= 1; x += 0.02) {
+      const light = sampleShaftIntensity(FIXTURE_SKY, x, 0.2, 1000, portrait);
+      moteLook({ lighting: FIXTURE_SKY }, x, 0.2, 1000, 10, 1, look, portrait);
+      expect(look[1]).toBeCloseTo(MOTE_SHADE + (1 - MOTE_SHADE) * light, 6);
+      if (Math.abs(light - sampleShaftIntensity(FIXTURE_SKY, x, 0.2, 1000)) > 0.05) differs = true;
+    }
+    expect(differs).toBe(true);
+
+    // The driver passes the backend's screen shape on: the same motes, drawn portrait and with no shape reported.
+    const run = (aspect?: number) => {
+      const { backend, drawn } = recorder();
+      const screen = backend.screen.bind(backend);
+      if (aspect) backend.screen = (x, y, z, out) => (screen(x, y, z, out), (out[3] = aspect));
+      const particles = createParticleDriver(backend, { lighting: FIXTURE_SKY, quality: 'high' });
+      particles.emit('forest-motes', { at: [3, 2, 0] });
+      particles.update(1000);
+      return drawn.filter((particle) => particle.family === 1);
+    };
+    const tall = run(portrait);
+    const wide = run();
+    expect(tall.length).toBeGreaterThan(0);
+    const shade = (x: number, y: number, aspect?: number) =>
+      MOTE_SHADE + (1 - MOTE_SHADE) * sampleShaftIntensity(FIXTURE_SKY, x / 10, y / 10, 1000, aspect);
+    let changed = false;
+    tall.forEach((mote, index) => {
+      const other = wide[index]!;
+      expect(mote.alpha / shade(mote.x, mote.y, portrait)).toBeCloseTo(other.alpha / shade(other.x, other.y), 6);
+      if (Math.abs(mote.alpha - other.alpha) > 1e-6) changed = true;
+    });
+    expect(changed).toBe(true);
   });
 
   it('grows and fades an out-of-focus mote by the focus core blur, and leaves the focal one alone', () => {

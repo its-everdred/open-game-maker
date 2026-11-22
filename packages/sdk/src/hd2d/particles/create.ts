@@ -49,7 +49,10 @@ export type Family = 0 | 1;
 export interface ParticleBackend {
   /** Called once per frame before any `screen` or `draw`. */
   begin(): void;
-  /** Writes the pool position's screen position (0..1, y down) and pixels per pool unit into `out`. */
+  /**
+   * Writes the pool position's screen position (0..1, y down) and pixels per pool unit into `out`, and may write the
+   * view's width / height into `out[3]` so motes take their light from the same short beams the lighting draws.
+   */
   screen(x: number, y: number, z: number, out: Float64Array): void;
   draw(
     family: Family,
@@ -92,8 +95,9 @@ export function moteLook(
   sizePx: number,
   alpha: number,
   out: Float64Array,
+  aspect?: number,
 ): void {
-  const light = options.lighting ? sampleShaftIntensity(options.lighting, screenX, screenY, timeMs) : 1;
+  const light = options.lighting ? sampleShaftIntensity(options.lighting, screenX, screenY, timeMs, aspect) : 1;
   // HD-2D convention: lower on screen is nearer, like the Phaser depth the focus core reads.
   const blur = options.focus ? blurForDepth(options.focus.config, screenY, options.focus.depth) : 0;
   const grown = sizePx + 2 * blur;
@@ -210,7 +214,7 @@ export function createParticleDriver(backend: ParticleBackend, options: Particle
   let ordinals = 0;
   let lastTime: number | undefined;
   let drawn = 0;
-  const point = new Float64Array(3);
+  const point = new Float64Array(4);
   const look = new Float64Array(2);
 
   /** One pool per emit, prewarmed through a full lifetime so ambient effects start already in the air. */
@@ -303,7 +307,16 @@ export function createParticleDriver(backend: ParticleBackend, options: Particle
           const life = Math.min(1, alpha[index]! * 4, (1 - alpha[index]!) * 6);
           backend.screen(x[index]!, y[index]!, z[index]!, point);
           if (isSoft) {
-            moteLook(options, point[0]!, point[1]!, timeMs, size[index]! * point[2]!, life, look);
+            moteLook(
+              options,
+              point[0]!,
+              point[1]!,
+              timeMs,
+              size[index]! * point[2]!,
+              life,
+              look,
+              point[3]! || undefined,
+            );
             backend.draw(1, soft++, x[index]!, y[index]!, z[index]!, 0, look[0]! / point[2]!, look[1]!, colors[index]!);
           } else {
             const turn = Math.round(rot[index]! / LEAF_TURN) * LEAF_TURN;

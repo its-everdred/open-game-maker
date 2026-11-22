@@ -375,6 +375,22 @@ describe('scene revisions', () => {
     expect(at.head.doc.packAdapter).toBe('kaykit');
   });
 
+  it('keeps a grid size an agent sets and can rebuild the scene from before it', () => {
+    // Bounds ride in the `meta` unit; if they were not a unit the push would silently drop the map size.
+    const at = store();
+    const result = push(at, {
+      author: 'agent:1208',
+      baseRev: 0,
+      doc: edit(at, 0, (doc) => {
+        doc.bounds = { width: 10, height: 8 };
+      }),
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(at.head.doc.bounds).toEqual({ width: 10, height: 8 });
+    expect(sceneAt(at.head, at.log, 0).bounds).toBeUndefined();
+  });
+
   it('refuses a document that breaks the schema after rebasing', () => {
     const at = store();
     push(at, {

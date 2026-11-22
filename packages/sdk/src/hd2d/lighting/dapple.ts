@@ -1,5 +1,6 @@
 import { SeededRng } from '../../core/rng.js';
 import type { LightingPreset } from './schema.js';
+import { sampleShaftBeams } from './sky.js';
 
 /** How far the canopy darkens the clearing at full dapple intensity. */
 export const DAPPLE_DEPTH = 0.62;
@@ -67,10 +68,20 @@ export function renderDappleMask(
   return output;
 }
 
-/** Returns the soft shaft contribution at normalized scene coordinates. */
-export function sampleShaftIntensity(preset: LightingPreset, x: number, y: number, timeMs: number): number {
+/**
+ * Returns the soft shaft contribution at normalized scene coordinates. `aspect` (view width / height) keeps short beams
+ * (`shafts.count`) the same shape on any screen; the single wide wash ignores it.
+ */
+export function sampleShaftIntensity(
+  preset: LightingPreset,
+  x: number,
+  y: number,
+  timeMs: number,
+  aspect = 16 / 9,
+): number {
   const shafts = preset.shafts;
   if (!shafts || shafts.intensity <= 0) return 0;
+  if (shafts.count !== undefined) return sampleShaftBeams(shafts, x, y, timeMs, aspect);
   const dx = Math.cos(shafts.direction);
   const dy = Math.sin(shafts.direction);
   const projection = x * dx + y * dy;

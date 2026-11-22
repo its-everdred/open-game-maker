@@ -4,6 +4,7 @@ import { FIELD_SIZE, gradeMatrix, hexToRgb01, renderLightField } from './field.j
 import type { Lighting, LightingLight, LightingOptions, NormalSource, ScreenLight } from './field.js';
 import { maxLightsFor, type LightingPreset, type LightingQuality } from './schema.js';
 import { screenOverlays } from '../overlays.js';
+import { presetUnder, type SkyConditions } from './sky.js';
 
 // Phaser enum values, inlined so this module needs only Phaser's types (BlendModes.ADD / MULTIPLY, FilterMode.LINEAR).
 const ADD = 1;
@@ -34,6 +35,7 @@ export function createPhaserLighting(
   const camera = scene.cameras.main;
   const id = (instances += 1);
   let preset = initial;
+  let conditions: SkyConditions = {};
   let quality = startQuality;
   let lights: LightingLight[] = [...(initial.lights ?? [])];
   const native: Phaser.GameObjects.Light[] = [];
@@ -116,7 +118,8 @@ export function createPhaserLighting(
     });
     const { keep, light } = overlays;
     const { width, height } = keep.pixels;
-    renderLightField(field, width, height, preset, timeMs, seed, screen);
+    const sky = presetUnder(preset, conditions);
+    renderLightField(field, width, height, sky, timeMs, seed, screen, view.width / view.height);
     const shade = keep.pixels.data;
     const glow = light.pixels.data;
     for (let i = 0; i < field.length; i += 4) {
@@ -162,6 +165,9 @@ export function createPhaserLighting(
     },
     setQuality,
     setNormalMap,
+    setConditions(next) {
+      conditions = { ...next };
+    },
     update,
     dispose() {
       detach();

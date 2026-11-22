@@ -16,6 +16,8 @@ export const SceneTileSchema = z.strictObject({
   facing: z.string().min(1).optional(),
   flip: z.boolean().optional(),
   elevation: z.number().finite().optional(),
+  /** Pack-specific per-cell values the adapter reads (SmallScaleInt: `solid` when it differs from the layer default). */
+  props: z.record(z.string(), z.unknown()).optional(),
   lockedBy: SceneLockSchema.optional(),
 });
 export type SceneTile = z.infer<typeof SceneTileSchema>;
@@ -64,6 +66,8 @@ export const SceneDocSchema = z
     game: SceneIdSchema,
     scene: SceneIdSchema,
     packAdapter: z.string().min(1),
+    /** Grid size in cells, for packs whose maps are finite grids; cells run from 0 to size - 1. */
+    bounds: z.strictObject({ width: z.number().int().positive(), height: z.number().int().positive() }).optional(),
     layers: z.record(SceneIdSchema, SceneLayerSchema),
     objects: z.record(SceneIdSchema, SceneObjectSchema),
     hd2d: z.partialRecord(z.enum(SCENE_HD2D_SECTIONS), SceneHd2dEntrySchema),
@@ -92,7 +96,7 @@ export const SceneSourceSchema = z.enum(['editor', 'cli', 'migration']);
 export type SceneAuthor = z.infer<typeof SceneAuthorSchema>;
 export type SceneSource = z.infer<typeof SceneSourceSchema>;
 
-/** A unit is the smallest thing that merges or locks: `meta`, `layer:<id>`, `tile:<layer>:<x,y>`, `object:<id>`, `hd2d:<section>`. */
+/** A unit is the smallest thing that merges or locks: `meta` (pack adapter and bounds), `layer:<id>`, `tile:<layer>:<x,y>`, `object:<id>`, `hd2d:<section>`. */
 export const SceneUnitSchema = z
   .string()
   .regex(/^(?:meta|layer:[^:]+|tile:[^:]+:-?\d+,-?\d+|object:[^:]+|hd2d:[a-z]+)$/);
