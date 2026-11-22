@@ -101,7 +101,29 @@ visible scale and canvas clipping; it also records `score.py --gates prop` again
 gates measure a rebuild's fidelity, so a deliberate variant is expected to fail silhouette and pixel similarity; the
 style numbers to read are palette distance and the luminance histogram.
 
-VALIDATION_TABLE
+| Variant | Op | Facings passing | Contact px | Anchor dx | Scale (w, h) | Foreign colours | Palette dist. | Lum. hist. |
+|---|---|---|---|---|---|---|---|---|
+| clutter-farmyard | compose | NESW | 20, -1, 9, 2 | -9.7, 24.3, -12.5, 9.0 | [1.01, 1.42] | 0 | 0.77 | 0.33 |
+| clutter-pots-crates | compose | NESW | 3, 19, 13, 0 | 8.9, -25.7, 0.0, -24.5 | [1.26, 1.1] | 0 | 2.01 | 0.40 |
+| clutter-woodpile | compose | NESW | 2, 2, 6, 3 | -29.8, 5.4, 0.5, -5.6 | [1.08, 1.04] | 0 | 0.55 | 0.04 |
+| fence-picket-gap | cut | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 0.00 | 0.00 |
+| fence-picket-weathered | recolour | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 13.27 | 0.51 |
+| grime-dirt-patch-a | decal | NESW | 0, 0, 0, 0 | -0.4, 0.1, 0.5, 0.4 | [1.0, 1.0] | 0 | 34.86 | 1.47 |
+| grime-dirt-patch-b | decal | NESW | -1, -1, -2, -1 | 0.3, 0.8, -0.7, 0.8 | [0.97, 0.88] | 0 | 31.26 | 0.49 |
+| grime-mud-patch | decal | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 0.95] | 0 | 40.59 | 2.00 |
+| grime-worn-path | decal | NESW | -2, -1, -2, -1 | 0.2, -0.8, -0.1, -0.1 | [0.98, 0.88] | 0 | 28.87 | 2.00 |
+| palisade-broken-a | cut | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 0.00 | 0.02 |
+| palisade-broken-b | cut | NESW | -4, 0, -5, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 0.97] | 0 | 0.01 | 0.02 |
+| palisade-low-weathered | recolour | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 19.82 | 0.51 |
+| palisade-weathered | recolour | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 20.52 | 0.39 |
+| rock-cluster-a | compose | NESW | 13, 12, 8, -3 | 16.0, -16.9, 4.7, 3.5 | [1.26, 1.54] | 0 | 0.73 | 0.50 |
+| rock-cluster-b | compose | NESW | -2, 7, 7, 4 | 5.1, -20.8, 20.1, 2.6 | [1.24, 1.02] | 0 | 0.08 | 0.18 |
+| rock-mossy-a1 | moss | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 6.37 | 0.61 |
+| rock-mossy-a2 | moss | NESW | 0, 0, 0, 0 | 0.0, 0.0, 0.0, 0.0 | [1.0, 1.0] | 0 | 4.22 | 0.37 |
+
+Contact and anchor dx: variant minus primary source (lowest visible row; ground-contact x), per facing N E S W. Scale and score columns are the S facing against its primary source.
+
+All 17 variants pass every gate in all four facings. Recolour and decal variants differ in palette distance by design (a new wood or dirt tone, still drawn only from pack sprites); cut, moss and cluster variants stay close to their sources.
 
 Review in engine: `scripts/assets/env-variety/lineup.mjs` renders Dusk Helm's merged fields map
 (`src/features/fields/map.ts`, 9×9, Dusk Helm's camera and dry-grass jitter) through the real `IsoMap` adapter in
@@ -116,7 +138,8 @@ What looking found and fixed before review, worst first: mossy rocks read as gre
 full rank map carried the rock's fine tone noise into the greens; now three greens in soft clumps); removing a
 palisade stake cut the dirt mound and left a bare edge (now a broken stump stays); slivers survived in fence gaps (now
 dropped); the mud decal closed into a flat rhombus; decals picked up the tile's side faces; a log ran off the
-composition canvas; the pots pile included skeleton bones.
+composition canvas; the pots pile included skeleton bones. Validation then found that compositions alpha-blended
+cast shadows over other parts into colours no pack sprite has; they now copy pixels without blending.
 
 Known limits: shortened (not removed) stakes split neighbouring tips, so that operation was dropped; removed stakes
 leave small shadow gaps; the worn-path decal keeps its source's straight diamond edges; composition facings rotate
