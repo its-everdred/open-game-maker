@@ -207,6 +207,13 @@ brief region from a local scene-matcher result. It checks the mock hash and crop
 searched pack, facing and completeness. Candidate selection and kit-gap decisions still require review; the
 command does not validate the provenance or usage rights of a supplied match file.
 
+`gm scene compare-ground <reference.png> <render.png> <registration.json>` ranks ground-plane regions by
+image mismatch using four supplied corresponding points. The JSON has `anchors` entries with `reference` and
+`render` pixel points, and `regions` entries with an `id` and `{x,y,w,h}` bounds in reference pixels. Confirm the
+points and regions by eye: a ground-plane warp does not align elevated objects, detect missing assets, verify
+camera framing, or explain a mismatch. Regions without complete render coverage are rejected. Output records
+the hashes of both images and the registration file.
+
 `gm look score <target.png> <candidate.png>` compares images locally and prints JSON. It writes `look-score.png` (or
 `--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The crop applied to both inputs
 `--crop x,y,w,h` and repeatable `--region name=x,y,w,h` use pixel coordinates; regions refer to the cropped target. When none are named, a 3-by-3 grid supplies the worst five regions.
