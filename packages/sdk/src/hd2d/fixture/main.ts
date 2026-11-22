@@ -3,10 +3,13 @@ import { WebGLRenderer } from 'three';
 import { createPhaserScene, type ClearingScene } from './phaser-scene.js';
 import { createThreeScene } from './three-scene.js';
 import { createTestArt } from './testart.js';
+import { parseHd2dScene } from '../scene.js';
+import type { FrameStats } from './hooks.js';
 import type { MountContext, Mounted } from './mount.js';
 import mountLighting from './mount-lighting.js';
 import mountFocus from './mount-focus.js';
 import mountParticles from './mount-particles.js';
+import mountFacade, { type FacadeHooks } from './mount-facade.js';
 
 type RendererName = 'phaser' | 'three';
 type Quality = 'off' | 'low' | 'high';
@@ -22,6 +25,9 @@ const seed = Number(params.get('seed') ?? 1) || 1;
 const qualityValue = params.get('quality');
 const quality: Quality = qualityValue === 'low' || qualityValue === 'high' ? qualityValue : 'off';
 const enabled = capabilities.filter(([name]) => params.get(name) === '1');
+const facade = params.get('facade') === '1';
+if (facade && enabled.length !== capabilities.length)
+  throw new Error('?facade=1 composes all three modules: add lighting=1&focus=1&particles=1');
 const art = createTestArt(seed);
 const found = document.querySelector<HTMLCanvasElement>('#game');
 if (!found) throw new Error('HD-2D fixture canvas is missing');
@@ -31,6 +37,24 @@ const mounts: Mounted[] = [];
 let threeRenderer: WebGLRenderer | undefined;
 let threeScene: ReturnType<typeof createThreeScene> | undefined;
 let phaserScene: ClearingScene | undefined;
+let facadeHooks: FacadeHooks | undefined;
+/** Wall-clock ms of each `frame()` call, by the quality tier it ran at. */
+const frameTimes: Record<Quality, number[]> = { off: [], low: [], high: [] };
+
+function frameStats(): FrameStats {
+  const stats: FrameStats = {};
+  for (const [tier, times] of Object.entries(frameTimes) as [Quality, number[]][]) {
+    if (!times.length) continue;
+    const sorted = [...times].sort((a, b) => a - b);
+    const mean = times.reduce((sum, time) => sum + time, 0) / times.length;
+    stats[tier] = {
+      mean,
+      p95: sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)]!,
+      frames: times.length,
+    };
+  }
+  return stats;
+}
 
 function hash(): string {
   const gl = threeRenderer?.getContext() ?? canvas.getContext('webgl2') ?? canvas.getContext('webgl');
@@ -47,23 +71,15 @@ function hash(): string {
 }
 
 async function frame(ms: number): Promise<void> {
+  const started = performance.now();
+  const tier = facadeHooks?.hd2d.quality ?? quality;
   phaserScene?.step(ms);
   threeScene?.step(ms);
   for (const mounted of mounts) mounted.update(ms);
   if (threeRenderer && threeScene) threeRenderer.render(threeScene.scene, threeScene.camera);
   // Phaser draws on its own loop; two animation frames guarantee one render after the step.
   else await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-}
-
-declare global {
-  interface Window {
-    __hd2d?: {
-      ready: boolean;
-      frame(ms: number): Promise<void>;
-      hash(): string;
-      info(): { renderer: RendererName; mounted: string[] };
-    };
-  }
+  frameTimes[tier].push(performance.now() - started);
 }
 
 async function start(): Promise<void> {
@@ -95,13 +111,24 @@ async function start(): Promise<void> {
       seed,
     };
   }
-  for (const [, factory] of enabled) mounts.push(factory(context));
+  if (facade) {
+    facadeHooks = mountFacade(context, params.get('boot') === 'alt');
+    mounts.push(facadeHooks.hd2d);
+  } else for (const [, factory] of enabled) mounts.push(factory(context));
   await frame(0);
+  // The probe times stepped frames only, not the boot frame's shader compiles.
+  for (const times of Object.values(frameTimes)) times.length = 0;
   window.__hd2d = {
     ready: true,
     frame,
     hash,
-    info: () => ({ renderer: rendererName, mounted: enabled.map(([name]) => name) }),
+    info: () => ({
+      renderer: rendererName,
+      mounted: enabled.map(([name]) => name),
+      frameMs: frameStats(),
+      scene: facadeHooks?.scene(),
+    }),
+    applyScene: facadeHooks && ((json) => facadeHooks!.hd2d.applyScene(parseHd2dScene(json))),
   };
 }
 
