@@ -43,13 +43,15 @@ export function shaftsActive(shafts: Shafts | undefined, conditions: SkyConditio
 
 const withoutShafts = new WeakMap<LightingPreset, LightingPreset>();
 
-/** The preset as the sky allows it right now: the same object, or (stable per preset) a copy without its shafts. */
+/**
+ * The preset as the sky allows it right now: the same object, or (stable per preset) a copy whose shafts are dark.
+ * The shafts keep their colour, which also tints the dapple and the sunny gaps between clouds.
+ */
 export function presetUnder(preset: LightingPreset, conditions: SkyConditions): LightingPreset {
   if (!preset.shafts || shaftsActive(preset.shafts, conditions)) return preset;
   let stripped = withoutShafts.get(preset);
   if (!stripped) {
-    stripped = { ...preset };
-    delete stripped.shafts;
+    stripped = { ...preset, shafts: { ...preset.shafts, intensity: 0 } };
     withoutShafts.set(preset, stripped);
   }
   return stripped;
@@ -173,21 +175,35 @@ function slotEnvelope(cycle: number, slot: number, timeMs: number): number {
   return smoothstep(0, 0.25, life) * (1 - smoothstep(0.7, 1, life));
 }
 
+/** Slot `slot`'s beam at `timeMs` and its 0..1 fade (always 1 for fixed beams); undefined while it shows none. */
+function slotBeam(
+  shafts: Shafts,
+  aspect: number,
+  slot: number,
+  timeMs: number,
+): { beam: Beam; fade: number } | undefined {
+  const cycle = shafts.cycle;
+  const beam =
+    cycle === undefined
+      ? fixedBeams(shafts, aspect)[slot]
+      : cyclingBeam(shafts, aspect, slot, slotGeneration(cycle, slot, timeMs));
+  const fade = cycle === undefined ? 1 : slotEnvelope(cycle, slot, timeMs);
+  return beam && fade > 0 ? { beam, fade } : undefined;
+}
+
 /** The beams showing at `timeMs`: where each ends (0..1 of the view), how bright, whether it lights the ground. */
 export function beamsAt(
   shafts: Shafts,
   timeMs: number,
   aspect: number,
 ): Array<{ x: number; y: number; brightness: number; grounded: boolean; fade: number }> {
-  const shown = [];
+  const shown: Array<{ x: number; y: number; brightness: number; grounded: boolean; fade: number }> = [];
+  if (shafts.intensity <= 0) return shown;
   for (let i = 0; i < (shafts.count ?? 1); i += 1) {
-    const beam =
-      shafts.cycle === undefined
-        ? fixedBeams(shafts, aspect)[i]
-        : cyclingBeam(shafts, aspect, i, slotGeneration(shafts.cycle, i, timeMs));
-    const fade = shafts.cycle === undefined ? 1 : slotEnvelope(shafts.cycle, i, timeMs);
-    if (beam && fade > 0)
-      shown.push({ x: beam.endX / aspect, y: beam.endY, brightness: beam.brightness, grounded: beam.grounded, fade });
+    const slot = slotBeam(shafts, aspect, i, timeMs);
+    if (!slot) continue;
+    const { beam, fade } = slot;
+    shown.push({ x: beam.endX / aspect, y: beam.endY, brightness: beam.brightness, grounded: beam.grounded, fade });
   }
   return shown;
 }
@@ -201,18 +217,11 @@ export function sampleShaftBeams(shafts: Shafts, x: number, y: number, timeMs: n
   const pool = shafts.pool ?? 0.8;
   const px = x * aspect;
   const count = shafts.count ?? 1;
-  const cycle = shafts.cycle;
-  const fixed = cycle === undefined ? fixedBeams(shafts, aspect) : undefined;
   let total = 0;
   for (let i = 0; i < count; i += 1) {
-    let beam: Beam | undefined;
-    let envelope = 1;
-    if (fixed) beam = fixed[i];
-    else {
-      beam = cyclingBeam(shafts, aspect, i, slotGeneration(cycle!, i, timeMs));
-      envelope = slotEnvelope(cycle!, i, timeMs);
-    }
-    if (!beam || envelope <= 0) continue;
+    const slot = slotBeam(shafts, aspect, i, timeMs);
+    if (!slot) continue;
+    const { beam, fade: envelope } = slot;
     const rx = px - beam.startX;
     const ry = y - beam.startY;
     const t = (rx * beam.ux + ry * beam.uy) / beam.length;

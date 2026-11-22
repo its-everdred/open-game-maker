@@ -163,10 +163,13 @@ describe('shafts by biome and weather', () => {
     expect(shaftsActive(SHAFTS, {})).toBe(true);
   });
 
-  it('drops the shafts from the rendered preset, keeping the same copy each frame', () => {
+  it('darkens the shafts in the rendered preset, keeping the same copy each frame', () => {
     const preset: LightingPreset = { ambient: { color: '#ffffff', intensity: 1 }, shafts: when, clouds: CLOUDS };
     const rain = presetUnder(preset, { biome: 'forest', weather: 'rain' });
-    expect(rain.shafts).toBeUndefined();
+    expect(beamsAt(rain.shafts!, 0, 16 / 9)).toEqual([]);
+    expect(sampleShaftBeams(rain.shafts!, 0.5, 0.2, 0, 16 / 9)).toBe(0);
+    // The sun keeps its colour: it also tints the dapple and the sunny gaps between clouds.
+    expect(rain.shafts!.color).toBe(when.color);
     expect(rain.clouds).toBe(CLOUDS);
     expect(presetUnder(preset, { biome: 'forest', weather: 'rain' })).toBe(rain);
     expect(presetUnder(preset, { biome: 'forest', weather: 'clear' })).toBe(preset);
