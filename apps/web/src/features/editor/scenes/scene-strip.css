@@ -178,6 +178,22 @@
   text-overflow: ellipsis;
 }
 
+/* Stay inside the game frame: the same widths game-prototype.css gives `.game-stage` for each frame orientation. */
+.game-stage-area[data-frame-orientation='wide'] .scene-strip {
+  max-width: calc(min(100cqw, (100cqh - var(--edit-bar)) * 16 / 9) - 24px);
+}
+
+.game-stage-area[data-frame-orientation='vertical'] .scene-strip {
+  max-width: calc(min(100cqw, (100cqh - var(--edit-bar)) * 9 / 16) - 24px);
+}
+
+/* Side by side, the frame sits at the start of its column (edit-workspace.css), so the strip does too. */
+@media (orientation: landscape) {
+  .edit-workspace .scene-strip {
+    margin-left: 0;
+  }
+}
+
 @media (max-height: 500px) {
   .scene-strip {
     --chip-w: 64px;
