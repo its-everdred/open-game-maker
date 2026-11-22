@@ -319,3 +319,13 @@ The new internal validator checks references and, where cells are supplied,
 checks their bounds and path continuity. It does not place pack sprites, infer
 those facts automatically, or yet serialize an editor-compatible map; the scene
 document and assembly interfaces are separate work.
+
+The ranked manual comparison and bounded asset audit were posted to
+[open-games #24](https://github.com/its-everdred/open-games/issues/24#issuecomment-7074332846).
+It compares the approved mock against the round-three phone capture from game
+commit `2c0461dce3cdbe653d828df800b59bdc4ba9e50f`. The checkout was at
+`996bfe942bd0bd599277f6ce16aa5657576cbd2a`, with no later change to that
+capture. Framing, facade, path, dressing, and perimeter differences are ranked;
+o connectivity or registered similarity score is asserted for off-screen or
+unregistered content. The manual comparison does not complete the automatic
+scene-reading and comparison work.
