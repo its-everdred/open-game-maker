@@ -251,6 +251,25 @@ describe('scene round trip between Kevin and agents', () => {
     expect(at.head.doc.layers.floor).toBeUndefined();
   });
 
+  it("brings a layer back for Kevin's stale editor save that moves an object an agent's newer push deleted with it", () => {
+    const at = store();
+    const kevinDoc = edit(at, 0, (doc) => {
+      doc.objects['tree-1']!.pose = { x: 9, y: 9 };
+    });
+    push(at, {
+      author: 'agent:1207',
+      baseRev: 0,
+      doc: edit(at, 0, (doc) => {
+        delete doc.layers.decor;
+        doc.objects = {};
+      }),
+    });
+
+    expect(push(at, { author: 'kevin', baseRev: 0, doc: kevinDoc })).toMatchObject({ ok: true });
+    expect(at.head.doc.objects['tree-1']).toMatchObject({ pose: { x: 9, y: 9 }, lockedBy: 'creator' });
+    expect(at.head.doc.layers.decor).toMatchObject({ kind: 'objects', lockedBy: 'creator' });
+  });
+
   it('refuses an agent painting into or placing on a layer Kevin deleted, rather than failing', () => {
     const at = store();
     const agentDoc = edit(at, 0, (doc) => {

@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { SceneDoc, SceneHead } from '@ogm/contracts';
-import { commitScene } from '@ogm/design-log';
-import { describe, expect, it } from 'vitest';
+import { commitScene, SCENE_MIGRATIONS, type SceneMigrations } from '@ogm/design-log';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { readStore, sceneRef, writeRevision } from '../src/scene/store.js';
 import { gm, tempDir } from './helpers.js';
@@ -82,6 +82,46 @@ describe('gm scene pull / push', () => {
     expect(revs).toEqual([1, 2]);
   });
 
+  // The log is appended before the head is replaced, so a crash can leave half a line after the last committed one.
+  it('drops a half-written log line past the head instead of refusing every later push', async () => {
+    const cwd = repo();
+    await startScene(cwd);
+    const logPath = join(cwd, 'games/dusk-helm/scenes/graveyard.revs.jsonl');
+    writeFileSync(logPath, `${readFileSync(logPath, 'utf8')}{"rev":2,"paren`);
+
+    editCopy(cwd, (doc) => {
+      doc.objects['tree-1']!.pose = { x: 4, y: 4 };
+    });
+    expect((await gm(['scene', 'push', 'dusk-helm', 'graveyard'], { cwd, env: agent })).code).toBe(0);
+
+    const revs = readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => (JSON.parse(line) as { rev: number }).rev);
+    expect(revs).toEqual([1, 2]);
+  });
+
+  // A first push that logged rev 1 but never wrote the head committed nothing; its line must not block the scene.
+  it('starts over from a first write that stopped before the head', async () => {
+    const cwd = repo();
+    await startScene(cwd);
+    const scenes = join(cwd, 'games/dusk-helm/scenes');
+    const [firstLine] = readFileSync(join(scenes, 'graveyard.revs.jsonl'), 'utf8').trim().split('\n');
+    execFileSync('rm', [join(scenes, 'graveyard.scene.json')]);
+    writeFileSync(
+      join(scenes, 'graveyard.revs.jsonl'),
+      `${JSON.stringify({ ...JSON.parse(firstLine!), label: 'lost' })}\n`,
+    );
+
+    await startScene(cwd);
+    editCopy(cwd, (doc) => {
+      doc.objects['tree-1']!.pose = { x: 4, y: 4 };
+    });
+    expect((await gm(['scene', 'push', 'dusk-helm', 'graveyard'], { cwd, env: agent })).code).toBe(0);
+    const log = readFileSync(join(scenes, 'graveyard.revs.jsonl'), 'utf8').trim().split('\n');
+    expect(log.map((line) => (JSON.parse(line) as { label: string }).label)).toEqual(['first trees', '']);
+  });
+
   it('starts a scene in the game folder and records the agent as author', async () => {
     const cwd = repo();
     await startScene(cwd);
@@ -147,5 +187,39 @@ describe('gm scene pull / push', () => {
     const result = await gm(['scene', 'pull', 'dusk-helm', 'graveyard', '--pack', 'smallscaleint'], { cwd });
     expect(result.code).not.toBe(0);
     expect(result.err.join('\n')).toContain('ticket');
+  });
+});
+
+describe('gm scene after a schema upgrade', () => {
+  const migrations = SCENE_MIGRATIONS as Record<number, SceneMigrations[number]>;
+  afterEach(() => {
+    delete migrations[0];
+  });
+
+  // An upgrade is a revision of its own: a copy pulled before it cannot be rebased across it, so it must be pulled again.
+  it('records the upgrade on pull, keeps the scene, and refuses a copy pulled before it', async () => {
+    const cwd = repo();
+    await startScene(cwd);
+    const stale = readFileSync(copyPath(cwd), 'utf8');
+    const headPath = join(cwd, 'games/dusk-helm/scenes/graveyard.scene.json');
+    const head = JSON.parse(readFileSync(headPath, 'utf8')) as SceneHead;
+    const { packAdapter, ...rest } = head.doc;
+    writeFileSync(headPath, JSON.stringify({ rev: 1, doc: { ...rest, schemaVersion: 0, pack: packAdapter } }));
+    migrations[0] = ({ pack, ...doc }) => ({ ...doc, packAdapter: pack });
+
+    expect((await gm(['scene', 'pull', 'dusk-helm', 'graveyard'], { cwd, env: agent })).code).toBe(0);
+    const upgraded = JSON.parse(readFileSync(headPath, 'utf8')) as SceneHead;
+    expect(upgraded).toEqual({ rev: 2, doc: head.doc });
+    const log = readFileSync(join(cwd, 'games/dusk-helm/scenes/graveyard.revs.jsonl'), 'utf8').trim().split('\n');
+    expect(JSON.parse(log[1]!)).toMatchObject({ rev: 2, source: 'migration', changes: [] });
+
+    writeFileSync(copyPath(cwd), stale);
+    editCopy(cwd, (doc) => {
+      doc.objects['tree-1']!.pose = { x: 4, y: 4 };
+    });
+    const result = await gm(['scene', 'push', 'dusk-helm', 'graveyard'], { cwd, env: agent });
+    expect(result.code).not.toBe(0);
+    expect(result.err.join('\n')).toContain('pull it again');
+    expect(JSON.parse(readFileSync(headPath, 'utf8'))).toEqual(upgraded);
   });
 });

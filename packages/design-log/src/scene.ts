@@ -211,12 +211,14 @@ export function commitScene(input: CommitSceneInput): CommitSceneResult {
     else next.set(unit, unlocked(value));
   }
   // A tile or object whose layer is gone (one writer deleted the layer while another added to it): a creator's delete
-  // takes its contents with it; an agent's add into, or delete of, a layer it no longer shares is refused.
+  // takes its contents with it, and a creator's edit inside a layer an agent deleted brings the layer back; an agent's
+  // add into, or delete of, a layer it no longer shares is refused.
   for (const [unit, value] of [...next]) {
     const [layer] = containers(unit, value);
     if (layer === undefined || next.has(layer)) continue;
     if (!agent) {
-      next.delete(unit);
+      if (mine.has(layer)) next.set(layer, locked(mine.get(layer), true));
+      else next.delete(unit);
       continue;
     }
     // Either the agent added `unit` to a layer someone else deleted, or deleted a layer someone else added `unit` to.

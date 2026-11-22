@@ -85,6 +85,8 @@ async function readJson(path: string): Promise<unknown> {
 export async function readStore(ref: SceneRef, packAdapter?: string): Promise<SceneStore & { from: number }> {
   const file = paths(ref);
   if (!existsSync(file.head)) {
+    // A log with no head is a first write that stopped before its commit point: nothing in it was committed.
+    await rm(file.log, { force: true });
     if (packAdapter === undefined) {
       throw new CommandError(`no scene ${ref.game}/${ref.scene} yet; pass --pack <adapter> to start one`);
     }
@@ -108,7 +110,10 @@ export async function readStore(ref: SceneRef, packAdapter?: string): Promise<Sc
   const lines = existsSync(file.log)
     ? (await readFile(file.log, 'utf8')).split('\n').filter((line) => line.trim())
     : [];
-  for (const [index, line] of lines.entries()) {
+  // The head is the commit point: lines logged after its revision were never committed (a write stopped between the
+  // two, possibly mid-line), so only the first `rev` lines are read.
+  const rev = record.rev;
+  for (const [index, line] of lines.slice(0, rev).entries()) {
     let parsed;
     try {
       parsed = SceneRevisionSchema.safeParse(JSON.parse(line));
@@ -118,16 +123,15 @@ export async function readStore(ref: SceneRef, packAdapter?: string): Promise<Sc
     if (!parsed?.success) throw new CommandError(`${file.log}:${index + 1} is not a scene revision`);
     log.push(parsed.data);
   }
-  // The head is the commit point: a revision logged after it was never committed (a write stopped between the two).
-  const rev = record.rev;
-  const committed = log.filter((revision) => revision.rev <= rev);
-  if (committed.some((revision, index) => revision.rev !== index + 1) || committed.length !== rev) {
+  if (log.some((revision, index) => revision.rev !== index + 1) || log.length !== rev) {
     throw new CommandError(`${file.log} does not hold revisions 1..${rev} in order`);
   }
-  if (committed.length < log.length) {
-    await writeFile(file.log, committed.map((revision) => `${JSON.stringify(revision)}\n`).join(''));
+  if (lines.length > rev) {
+    const temp = `${file.log}.${process.pid}.tmp`;
+    await writeFile(temp, log.map((revision) => `${JSON.stringify(revision)}\n`).join(''));
+    await rename(temp, file.log);
   }
-  return { head: { rev, doc: migrated.doc }, log: committed, exists: true, from: migrated.from };
+  return { head: { rev, doc: migrated.doc }, log, exists: true, from: migrated.from };
 }
 
 /** Hold the scene's lock file while `work` runs, so two writers cannot interleave. */

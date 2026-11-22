@@ -1,8 +1,8 @@
 # Scene model for the map maker (#1207)
 
 Part of the map maker epic (#1191). This note picks how a scene is stored, revised and handed between Kevin and the
-agents. The code ships with it: `packages/contracts/src/scene.ts` (schema), `packages/design-log/src/scene/` (revisions,
-rebase, conflicts, migrations) and `gm scene pull` / `gm scene push` (`packages/gm-cli/src/commands/scene/`).
+agents. The code ships with it: `packages/contracts/src/scene.ts` (schema), `packages/design-log/src/scene.ts` and
+`scene-migrate.ts` (revisions, rebase, conflicts, migrations) and `gm scene pull` / `gm scene push` (`packages/gm-cli/src/commands/scene/`).
 
 ## What exists today
 
@@ -52,8 +52,8 @@ settings, each tile cell, each object, and each HD-2D section. A unit is the sma
 the writer started from), `author` (`kevin` or `agent:<ticket>`), `source` (`editor`, `cli`, `migration`), a label, a
 timestamp, the unit changes with their before and after values, and the hash of the resulting document. The before
 values let the store rebuild any earlier revision from the head. A write appends to the log, then replaces the head;
-the head is the commit point, so a revision logged past it (a write that stopped between the two) is dropped on the
-next read.
+the head is the commit point, so a revision logged past it (a write that stopped between the two, even mid-line) is
+dropped on the next read, and a log with no head at all is discarded.
 
 **Ownership.** When a creator revision changes a unit, the unit gets `lockedBy: "creator"` (objects, tile cells, layers
 and HD-2D sections carry the field; a locked layer covers its tiles and objects). Agents can never set or clear it.
@@ -65,7 +65,8 @@ unit, then applies the changes on the current head:
   agent's base;
 - a unit someone else changed after the base, to a different value, refuses the change (stale);
 - a tile or object left in a layer that is gone (one writer deleted the layer while another added to it) goes with the
-  layer when Kevin deleted it, and refuses the agent's change otherwise;
+  layer when Kevin deleted it, brings the layer back (locked) when an agent deleted it and Kevin's stale save edits
+  inside it, and refuses the agent's change otherwise;
 - anything else applies, and a stale base rebases silently.
 
 If any change is refused, the whole push is refused with a list of conflicts naming each unit, why, and Kevin's value.
