@@ -4,8 +4,8 @@ walk: a contact / down / passing / up cycle in place. Each foot spends 60% of th
 ground speed (so it stays planted when the sprite moves), rolls heel -> toe, and swings forward on an arc. The hips
 drop after each contact and rise at passing, sway over the planted foot and turn with the forward leg; the chest turns
 against them and the arms swing against the legs with more elbow bend going forward.
-attack: an overhead chop as key poses (ready -> anticipation -> strike -> follow-through -> recover) with eased timing:
-slow wind-up, a two-frame strike, settle. Feet stay locked by IK; the hips drop into the strike.
+attack: key poses with eased timing. "chop": one overhead chop (ready -> anticipation -> strike -> follow-through ->
+recover). "combo": two swings on the pack Attack1 beat (wind-up, overhead, diagonal strike, backhand, second strike). Feet stay locked by IK; the hips drop into the strike.
 Rotations are world-axis deltas from the rest pose, chained parent -> child, so arms ride the chest's turn.
 """
 import math
@@ -103,17 +103,43 @@ ATTACK_KEYS = [  # (time 0..1, root drop as a fraction of leg length, local delt
 ]
 
 
-def attack(rig, n=15, step=0.16, stance=None):
+COMBO_KEYS = [  # two swings on the pack Attack1 beat (15 frames): wind-up, overhead, diagonal strike, follow-through,
+    # backhand wind-up, second strike, recover. Right arm holds the weapon; X lifts back, Y lifts sideways, Z turns.
+    (0.00, 0.03, {'spine': (8, 0, 0), 'upper_arm.R': (-20, 0, 0), 'forearm.R': (-40, 0, 0), 'upper_arm.L': (-10, 0, 0),
+                  'forearm.L': (-30, 0, 0)}),
+    (0.07, 0.02, {'spine': (4, 0, -15), 'upper_arm.R': (0, 80, 0), 'forearm.R': (-20, 0, 0), 'upper_arm.L': (-30, 0, -20)}),
+    (0.14, 0.01, {'spine': (-4, 0, -25), 'upper_arm.R': (150, 20, 0), 'forearm.R': (60, 0, 0), 'upper_arm.L': (-40, -30, 0),
+                  'forearm.L': (-30, 0, 0)}),
+    (0.21, 0.01, {'spine': (-8, 0, -20), 'upper_arm.R': (175, 0, 0), 'forearm.R': (20, 0, 0), 'upper_arm.L': (-40, -40, 0)}),
+    (0.29, 0.07, {'spine': (20, 0, 30), 'spine.002': (8, 0, 10), 'upper_arm.R': (-70, 0, 40), 'forearm.R': (-5, 0, 0),
+                  'upper_arm.L': (30, -30, 0), 'forearm.L': (-50, 0, 0)}),
+    (0.36, 0.09, {'spine': (28, 0, 35), 'spine.002': (10, 0, 12), 'upper_arm.R': (-40, 0, 60), 'forearm.R': (-10, 0, 0),
+                  'upper_arm.L': (40, -30, 0), 'forearm.L': (-50, 0, 0)}),
+    (0.43, 0.06, {'spine': (15, 0, -10), 'upper_arm.R': (0, 80, -20), 'forearm.R': (-10, 0, 0), 'upper_arm.L': (-20, -20, 0)}),
+    (0.50, 0.09, {'spine': (25, 0, 15), 'upper_arm.R': (-60, 0, 30), 'forearm.R': (-30, 0, 0), 'upper_arm.L': (10, -20, 0)}),
+    (0.57, 0.04, {'spine': (5, 0, -20), 'upper_arm.R': (120, 40, 0), 'forearm.R': (40, 0, 0), 'upper_arm.L': (-30, -30, 0)}),
+    (0.64, 0.03, {'spine': (-5, 0, -25), 'upper_arm.R': (150, 40, 0), 'forearm.R': (20, 0, 0), 'upper_arm.L': (-40, -30, 0)}),
+    (0.71, 0.09, {'spine': (25, 0, 10), 'spine.002': (8, 0, 5), 'upper_arm.R': (-80, 0, 10), 'forearm.R': (-5, 0, 0),
+                  'upper_arm.L': (30, -20, 0), 'forearm.L': (-50, 0, 0)}),
+    (0.86, 0.05, {'spine': (12, 0, 0), 'upper_arm.R': (-30, 0, 0), 'forearm.R': (-40, 0, 0), 'upper_arm.L': (-10, 0, 0),
+                  'forearm.L': (-30, 0, 0)}),
+    (1.00, 0.03, {'spine': (8, 0, 0), 'upper_arm.R': (-20, 0, 0), 'forearm.R': (-40, 0, 0), 'upper_arm.L': (-10, 0, 0),
+                  'forearm.L': (-30, 0, 0)}),
+]
+
+
+def attack(rig, n=15, step=0.16, stance=None, keys='chop'):
     R = _rest(rig)
     leg = (R['shin.L'][1] - R['thigh.L'][1]).length + (R['foot.L'][1] - R['shin.L'][1]).length
     ankles = {'L': R['foot.L'][1] + Vector((0.03 * leg, -step * leg, 0)),  # left foot forward, right back
               'R': R['foot.R'][1] + Vector((-0.03 * leg, step * leg * 0.6, 0))}
+    table = COMBO_KEYS if keys == 'combo' else ATTACK_KEYS
     samples = []
     for i in range(n):
         t = i / (n - 1)
-        k = max(j for j, key in enumerate(ATTACK_KEYS) if key[0] <= t + 1e-9)
-        k = min(k, len(ATTACK_KEYS) - 2)
-        (t0, d0, p0), (t1, d1, p1) = ATTACK_KEYS[k], ATTACK_KEYS[k + 1]
+        k = max(j for j, key in enumerate(table) if key[0] <= t + 1e-9)
+        k = min(k, len(table) - 2)
+        (t0, d0, p0), (t1, d1, p1) = table[k], table[k + 1]
         u = _ease((t - t0) / (t1 - t0))
         loc = {}
         for b in set(p0) | set(p1):
@@ -123,7 +149,7 @@ def attack(rig, n=15, step=0.16, stance=None):
         root.z -= (d0 + (d1 - d0) * u) * leg
         samples.append({'root': root, 'rot': _chain(R, loc), 'ankle': dict(ankles)})
     retarget.apply_samples(rig, samples, loop=False, foot_ik=True, stance=stance)
-    return {'kind': 'handkey', 'clip': 'attack', 'keys': [k[0] for k in ATTACK_KEYS], 'step': step, 'stance': stance}
+    return {'kind': 'handkey', 'clip': 'attack', 'keys': keys, 'times': [k[0] for k in table], 'step': step, 'stance': stance}
 
 
 def build(rig, mo):
