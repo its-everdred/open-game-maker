@@ -54,7 +54,9 @@ Blender at a time on the NUC.
 4. **Stance.** Kevin (2026-11-22): stance changes belong to the rigging step, not the modeling step.
    `retarget.STANCES` holds additive pose layers: `ssi-barbarian` hunches the chest, pushes the head out, hangs the
    arms in front and crouches 5% of a leg; `ssi-wizard` and `ssi-ranger` turn the torso 35 degrees off the facing,
-   bend the knees and hold the arms out, as in those packs' Idles. Every motion source in a batch gets the same layer.
+   bend the knees and hold the arms out, as in those packs' Idles; `ssi-wizard-walk` raises the casting hand ahead
+   at face height, as the pack Wizard walks. Every motion source in a batch gets the same layer unless a cell names
+   its own.
 5. **Feet.** The foot lock keeps each planted ankle on one ground speed (a loop) or in place (an attack). A two-bone IK
    pass then solves thigh and shin to it and lowers the hips when a leg cannot reach.
 6. **Render.** S and SE (sheet rows 2 and 1) through the pack camera, with the same projection and scale rule as
@@ -82,6 +84,10 @@ loop, none for an attack, in pixels at the pack cell.
 ```
 
 - `pack` needs only the clips used. `model`, `cost_usd` and a cell's `arm` go into `recipe.json`.
+- `finish`: `"base"` for a base body (white undergarments). The pack colour match paints the pack character's dark
+  trousers onto bare legs, so `finish_base.py` matches only the skin, to `pack.idle` (the class's Idle sheet: attack
+  sheets carry light, warm effect pixels), and keeps the undergarments off-white. The sheet before that pass is kept
+  as `out/sheet_finish.png`. Without `finish`, the whole sheet is matched to the clip's pack sheet.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
   `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`. Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
@@ -89,7 +95,9 @@ loop, none for an attack, in pixels at the pack cell.
   `foot_ik` defaults to true (false copies rotations only). `frames: [f0, f1]` overrides the automatic cut. For an
   attack BVH, `seconds` (1.1) and `fps` (30; CMU is 120) size the window.
 - Hand-keyed `params`: walk `stride`, `lift`, `bob`, `sway` (fractions of leg length), `yaw`, `lean`, `arm` (degrees),
-  `elbow` ([min, max] degrees); attack `keys` (`chop` or `combo`) and `step`.
+  `elbow` ([min, max] degrees); attack `keys` (`chop`, `combo`, `cast` for the pack Wizard CastSpell, `bow` for the
+  pack Archer QuickShot) and `step`.
+- `stance` (top level, or in a cell's `motion` to override it for that cell): a name in `retarget.STANCES`.
 - `weapon` (per cell or top level): `{"path": glb, "bone": "hand.R", "length": 0.3, "grip": 0.25, "spin": 0}` puts a
   separate weapon mesh on a hand bone.
 

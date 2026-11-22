@@ -1,8 +1,10 @@
 """Score one rendered rig/motion cell against the pack sheet: score.py metrics on the rendered rows, the loop phase that
 best matches the pack, and foot slide (#1202 rig spike).
 
-Usage: score_cell.py <cell_dir> <pack_sheet.png> [--rows 1,2] [--loop] [--finish]
+Usage: score_cell.py <cell_dir> <pack_sheet.png> [--rows 1,2] [--loop] [--finish] [--skin-ref <pack Idle sheet>]
 --finish runs gpu_bake_finish.py on <cell_dir>/raw_*.png first (colour pass against the pack sheet) -> <cell_dir>/out.
+With --skin-ref (a base body) the pack colour match is skipped and finish_base.py matches only the skin to that sheet;
+the sheet before that pass is kept as out/sheet_finish.png.
 A walk is a loop with an arbitrary first frame, so with --loop every cyclic shift of the frames is scored and the best
 motion correlation is kept (its shift is reported); an attack is scored as rendered.
 Foot slide: a foot is in contact on frames where its sole is within 1 px of its lowest height; each contact step
@@ -98,12 +100,19 @@ def main():
     ap.add_argument('--rows', default='1,2')
     ap.add_argument('--loop', action='store_true')
     ap.add_argument('--finish', action='store_true')
+    ap.add_argument('--skin-ref')
     a = ap.parse_args()
     rows = [int(r) for r in a.rows.split(',')]
     out = a.cell_dir / 'out'
     if a.finish:
+        ref = [] if a.skin_ref else ['--colour-ref', a.pack_sheet]
         subprocess.run([sys.executable, str(HERE.parent / 'gpu_bake_finish.py'), str(a.cell_dir), str(out),
-                        '--cell', '128', '--colour-ref', a.pack_sheet], check=True, stdout=subprocess.DEVNULL)
+                        '--cell', '128', *ref], check=True, stdout=subprocess.DEVNULL)
+        if a.skin_ref:
+            import finish_base
+            (out / 'sheet.png').replace(out / 'sheet_finish.png')
+            sheet, _ = finish_base.base_pass(finish_base.sm.load(out / 'sheet_finish.png'), finish_base.sm.load(a.skin_ref))
+            Image.fromarray(sheet).save(out / 'sheet.png')
     tmp = a.cell_dir / '_score'
     tmp.mkdir(exist_ok=True)
     Image.fromarray(rows_sheet(a.pack_sheet, rows)).save(tmp / 'pack.png')

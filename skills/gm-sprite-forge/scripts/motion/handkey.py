@@ -5,7 +5,9 @@ ground speed (so it stays planted when the sprite moves), rolls heel -> toe, and
 drop after each contact and rise at passing, sway over the planted foot and turn with the forward leg; the chest turns
 against them and the arms swing against the legs with more elbow bend going forward.
 attack: key poses with eased timing. "chop": one overhead chop (ready -> anticipation -> strike -> follow-through ->
-recover). "combo": two swings on the pack Attack1 beat (wind-up, overhead, diagonal strike, backhand, second strike). Feet stay locked by IK; the hips drop into the strike.
+recover). "combo": two swings on the pack Attack1 beat (wind-up, overhead, diagonal strike, backhand, second strike).
+"cast": the pack Wizard CastSpell (hand thrust overhead, slam down into a crouch). "bow": the pack Archer QuickShot
+(side-on, draw to the chin, release). Feet stay locked by IK; the hips drop into the strike.
 Rotations are world-axis deltas from the rest pose, chained parent -> child, so arms ride the chest's turn.
 """
 import math
@@ -128,12 +130,53 @@ COMBO_KEYS = [  # two swings on the pack Attack1 beat (15 frames): wind-up, over
 ]
 
 
+CAST_KEYS = [  # pack 3Wizard CastSpell: gather at the chest, right hand thrust overhead, slam both hands down in a deep
+    # crouch (the burst), hold, rise back to the stance. Hand-keyed for #1202.
+    (0.00, 0.00, {'upper_arm.R': (-15, 10, 0), 'forearm.R': (-30, 0, 0), 'upper_arm.L': (-15, -10, 0), 'forearm.L': (-30, 0, 0)}),
+    (0.14, 0.04, {'spine': (10, 0, 10), 'upper_arm.R': (-40, 0, -20), 'forearm.R': (-90, 0, 0), 'upper_arm.L': (-40, 0, 20),
+                  'forearm.L': (-90, 0, 0)}),
+    (0.30, -0.02, {'spine': (-12, 0, 0), 'spine.004': (-10, 0, 0), 'upper_arm.R': (-165, 15, 0), 'forearm.R': (-10, 0, 0),
+                   'upper_arm.L': (-10, -35, 0), 'forearm.L': (-20, 0, 0)}),
+    (0.40, -0.03, {'spine': (-14, 0, 0), 'spine.004': (-12, 0, 0), 'upper_arm.R': (-175, 10, 0), 'forearm.R': (-5, 0, 0),
+                   'upper_arm.L': (-10, -40, 0), 'forearm.L': (-20, 0, 0)}),
+    (0.50, 0.20, {'spine': (38, 0, 0), 'spine.004': (10, 0, 0), 'upper_arm.R': (-45, 20, 0), 'forearm.R': (-5, 0, 0),
+                  'upper_arm.L': (-45, -20, 0), 'forearm.L': (-5, 0, 0)}),
+    (0.64, 0.20, {'spine': (40, 0, 0), 'spine.004': (10, 0, 0), 'upper_arm.R': (-40, 25, 0), 'forearm.R': (-5, 0, 0),
+                  'upper_arm.L': (-40, -25, 0), 'forearm.L': (-5, 0, 0)}),
+    (0.80, 0.08, {'spine': (15, 0, 0), 'upper_arm.R': (-30, 15, 0), 'forearm.R': (-30, 0, 0), 'upper_arm.L': (-30, -15, 0),
+                  'forearm.L': (-30, 0, 0)}),
+    (1.00, 0.00, {'upper_arm.R': (-15, 10, 0), 'forearm.R': (-30, 0, 0), 'upper_arm.L': (-15, -10, 0), 'forearm.L': (-30, 0, 0)}),
+]
+
+
+BOW_KEYS = [  # pack 5BarbArcher QuickShot: side-on, bow arm (left) up to the target, right hand draws to the chin,
+    # release (the drawing hand flies back), recover. Hand-keyed for #1202.
+    (0.00, 0.00, {'spine': (0, 0, -20), 'upper_arm.L': (-45, 0, 20), 'forearm.L': (-20, 0, 0), 'upper_arm.R': (-45, 0, 20),
+                  'forearm.R': (-60, 0, 0)}),
+    (0.20, 0.02, {'spine': (0, 0, -45), 'spine.004': (0, 0, 40), 'upper_arm.L': (-85, 0, 45), 'forearm.L': (-5, 0, 0),
+                  'upper_arm.R': (-80, 0, 40), 'forearm.R': (-40, 0, 0)}),
+    (0.45, 0.03, {'spine': (-4, 0, -55), 'spine.004': (0, 0, 50), 'upper_arm.L': (-88, 0, 55), 'forearm.L': (-3, 0, 0),
+                  'upper_arm.R': (-85, 0, -30), 'forearm.R': (-140, 0, 0)}),
+    (0.55, 0.03, {'spine': (-4, 0, -55), 'spine.004': (0, 0, 50), 'upper_arm.L': (-88, 0, 55), 'forearm.L': (-3, 0, 0),
+                  'upper_arm.R': (-85, 0, -30), 'forearm.R': (-140, 0, 0)}),
+    (0.62, 0.04, {'spine': (-6, 0, -58), 'spine.004': (0, 0, 52), 'upper_arm.L': (-85, 0, 55), 'forearm.L': (-3, 0, 0),
+                  'upper_arm.R': (-60, 0, -70), 'forearm.R': (-30, 0, 0)}),
+    (0.80, 0.02, {'spine': (0, 0, -40), 'spine.004': (0, 0, 30), 'upper_arm.L': (-70, 0, 40), 'forearm.L': (-10, 0, 0),
+                  'upper_arm.R': (-45, 0, -10), 'forearm.R': (-40, 0, 0)}),
+    (1.00, 0.00, {'spine': (0, 0, -20), 'upper_arm.L': (-45, 0, 20), 'forearm.L': (-20, 0, 0), 'upper_arm.R': (-45, 0, 20),
+                  'forearm.R': (-60, 0, 0)}),
+]
+
+
+ATTACKS = {'chop': ATTACK_KEYS, 'combo': COMBO_KEYS, 'cast': CAST_KEYS, 'bow': BOW_KEYS}
+
+
 def attack(rig, n=15, step=0.16, stance=None, keys='chop'):
     R = _rest(rig)
     leg = (R['shin.L'][1] - R['thigh.L'][1]).length + (R['foot.L'][1] - R['shin.L'][1]).length
     ankles = {'L': R['foot.L'][1] + Vector((0.03 * leg, -step * leg, 0)),  # left foot forward, right back
               'R': R['foot.R'][1] + Vector((-0.03 * leg, step * leg * 0.6, 0))}
-    table = COMBO_KEYS if keys == 'combo' else ATTACK_KEYS
+    table = ATTACKS[keys]
     samples = []
     for i in range(n):
         t = i / (n - 1)

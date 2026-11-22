@@ -1,7 +1,8 @@
 """Render and score a list of rig/motion cells one Blender at a time (#1202 rig spike).
 
 Usage: run_cells.py <cells.json> <out_root> [--engine workbench|cycles] [--only name,...]
-cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": sheet.png}, "blender": wrapper,
+cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": sheet.png, "idle": sheet.png}, "blender": wrapper,
+             "finish": "base" (a base body: skin-only colour pass against pack.idle; default: pack colour match),
              "render": {key: value, ...}, "cells": [{"name", "clip": "walk"|"attack", "motion": {...}, "weapon": {...}}]}
 Each cell gets <out_root>/<name>/ with raw frames, out/sheet.png and scores.json; a summary table is printed.
 """
@@ -38,7 +39,7 @@ def write_recipe(d, spec, c, scores):
            'skill': 'gm-sprite-forge (motion/)', 'arm': c.get('arm', 'A: Rigify metarig fit + bone heat'),
            'motion': {k: v for k, v in mo.items() if k != 'path'} | ({'source': Path(mo['path']).name} if 'path' in mo else {}),
            'motion_licence': lic, 'mesh': Path(spec['mesh']).name, 'skin': fit['skin'], 'retarget': fit['motion'],
-           'blender': render['blender'], 'engine': render['engine'], 'render_minutes': render['render_minutes'],
+           'finish': spec.get('finish', 'pack'), 'blender': render['blender'], 'engine': render['engine'], 'render_minutes': render['render_minutes'],
            'scores': {k: v for k, v in scores.items() if k != 'foot_slide'} | {'foot_slide_px': scores['foot_slide']['mean_px']}}
     (d / 'recipe.json').write_text(json.dumps(rec, indent=1, default=str))
 
@@ -77,6 +78,8 @@ def main():
             continue
         loop = ['--loop'] if c['clip'] == 'walk' and c['motion'].get('loop', True) else []
         loop += ['--rows', str(spec.get('render', {}).get('rows', '1,2'))]  # score the rows that were rendered
+        if spec.get('finish') == 'base':  # a base body: match the skin to the pack Idle, keep the undergarments white
+            loop += ['--skin-ref', spec['pack']['idle']]
         s = subprocess.run([sys.executable, '-I', str(HERE / 'score_cell.py'), str(d), spec['pack'][c['clip']], '--finish', *loop],
                            capture_output=True, text=True)
         if s.returncode:

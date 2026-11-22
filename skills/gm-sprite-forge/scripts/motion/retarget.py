@@ -353,6 +353,10 @@ STANCES = {  # additive pose layers (world-axis degrees, chained parent -> child
     'ssi-wizard': {'crouch': 0.2, 'rot': {'spine': (18, 0, -35), 'spine.004': (-12, 0, 14),
                                            'upper_arm.L': (-10, -12, 0), 'upper_arm.R': (-10, 12, 0),
                                            'forearm.L': (-35, 0, 0), 'forearm.R': (-35, 0, 0)}},
+    # SmallScaleInt HD 3Wizard Walk: less turned than its Idle, the casting hand raised ahead at face height
+    'ssi-wizard-walk': {'crouch': 0.1, 'rot': {'spine': (12, 0, -15), 'spine.004': (-10, 0, 8),
+                                                'upper_arm.R': (-75, 10, 0), 'forearm.R': (-70, 0, 0),
+                                                'upper_arm.L': (-10, -12, 0), 'forearm.L': (-30, 0, 0)}},
     'ssi-ranger': {'crouch': 0.15, 'rot': {'spine': (12, 0, -35), 'spine.004': (-8, 0, 14),
                                            'upper_arm.L': (-8, -12, 0), 'upper_arm.R': (-8, 12, 0),
                                            'forearm.L': (-25, 0, 0), 'forearm.R': (-25, 0, 0)}},
