@@ -30,3 +30,15 @@ it('creates a Tiled map that IsoMap reads with distinct facing and collision dat
   );
   expect(() => assemblyMap(2, 2, [{ ...placements[0]!, cell: { x: 2, y: 0 } }])).toThrow('outside');
 });
+
+it('retains multiple wall pieces in a corner using distinct Tiled layers', () => {
+  const cell = { x: 0, y: 0 };
+  const map = new IsoMap(
+    assemblyMap(1, 1, [
+      { cell, layer: 'wall', asset: 'fence', facing: 'W', solid: true },
+      { cell, layer: 'wall', asset: 'fence', facing: 'S', solid: true },
+    ]),
+  );
+  expect(map.pieces('wall').map(({ facing }) => facing)).toEqual(['W', 'S']);
+  expect(new Set(map.pieces('wall').map(({ key }) => key)).size).toBe(2);
+});

@@ -33,7 +33,7 @@ for (const id of Object.keys(structuralImageBounds.value)) {
   card.sprite.structural_facings = structuralCardFacts(id);
   card.provenance['sprite.structural_facings'] = {
     by: 'code', tool: 'smallscaleint-structural-measure@0.1', at: new Date().toISOString(),
-    input: 'Source PNG alpha scans and measured fence-grid overlap',
+    input: 'Source PNG alpha scans and measured fence and wall grid overlaps',
   };
   const result = validateCard(card);
   if (!result.ok) throw new Error(`${id}: ${result.errors.join('; ')}`);

@@ -23,6 +23,7 @@ export {
 } from './palette.js';
 export {
   fenceB1Edges,
+  wallF1Edges,
   structuralImageBounds,
   type AlphaBounds,
   type StructuralImageBounds,

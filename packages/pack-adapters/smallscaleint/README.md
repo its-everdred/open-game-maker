@@ -12,6 +12,8 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   generated sheet there (`gm build assets` publishes every sheet a card lists), so the same lookup serves a built game.
 - `facing8(vx, vy, hold?)`: the nearest of 8 facings for a screen velocity, with hysteresis on sector edges.
 - `IsoMap(json)`: the finite Tiled isometric subset (128×64 tiles; `floor`, `wall`, `decor`, `roof`, and `spawns`).
+  Numbered sprite layers such as `wall#1` retain multiple pieces on one cell; floor remains a single layer.
+  An optional tile property `elevation` moves a sprite upward in 64-pixel grid units.
   `render(scene, loader)` anchors 128×256 and 256×256 ground images on the 128×64 cell and draws taller pieces as
   depth-sorted facing sprites. `sync()` accepts game-owned `solid` and `visible` overrides; `collisionGrid()` and
   `roofTilesAbove()` expose simulation and cutaway inputs without implementing either policy.
@@ -21,8 +23,8 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   edges with the `GameInstance.validatePlacement` result shape.
 - `conventions`: the pack facts, each with how it was verified (sheet row order E, SE, S, SW, W, NW, N, NE, measured
   pixel by pixel against the angle-named frame files), and `layerForCategory` for tileset pieces.
-- `structuralImageBounds`: inclusive alpha bounds for twelve measured structural or paving assets, keyed by asset card id.
-  Bounds do not establish an anchor or connection socket. `fenceB1Edges` records the measured rural fence facings.
+- `structuralImageBounds`: inclusive alpha bounds for thirteen measured structural or paving assets, keyed by asset card id.
+  Bounds do not establish an anchor or connection socket. `fenceB1Edges` and `wallF1Edges` record the measured fence and stone wall facings.
   `structuralCardFacts(id)` returns the known card fields without fabricating unmeasured facts.
 - `vocabulary`: canonical roles to this set's action names, and the loop set.
 

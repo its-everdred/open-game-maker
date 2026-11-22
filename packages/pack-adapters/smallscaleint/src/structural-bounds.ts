@@ -30,6 +30,10 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
       size: [256, 256],
       facings: { E: [63, 112, 193, 240], N: [63, 135, 193, 239], S: [62, 112, 193, 240], W: [63, 135, 193, 240] },
     },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-d1@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [62, 92, 203, 239], N: [62, 124, 204, 207], S: [52, 93, 193, 239], W: [51, 124, 193, 207] },
+    },
     't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-d5@2026-11-01': {
       size: [256, 256],
       facings: { E: [51, 139, 203, 239], N: [52, 139, 204, 239], S: [52, 140, 204, 239], W: [51, 140, 203, 239] },
@@ -74,4 +78,14 @@ export const fenceB1Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'y
     'Dusk Helm #24 edge placement, checked against all four source PNG alpha masks on 2026-11-21: ' +
     'at the 128x64 tile displacement, E/W overlap 627/623 pixels along x versus 232/239 along y; ' +
     'N/S overlap 565/562 along y versus 197/218 along x. Facing positions distinguish each pair.',
+};
+
+/** Grid edge occupied by the fantasy Wall F1 sprite for each facing. */
+export const wallF1Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yMin' | 'yMax'>>> = {
+  value: { E: 'xMax', N: 'yMin', S: 'yMax', W: 'xMin' },
+  verified:
+    'Source PNG alpha-mask overlap at a 128x64 tile displacement on 2026-11-21: ' +
+    'N/S overlap 2436/2428 pixels along x versus 1530/1544 along y, ' +
+    'E/W overlap 2395/2396 along y versus 1525/1534 along x. ' +
+    'Facing positions and a local 3x2 wall-loop diagnostic distinguish each side.',
 };
