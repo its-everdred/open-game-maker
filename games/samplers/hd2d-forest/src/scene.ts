@@ -6,7 +6,7 @@ import { fallbackTexture, HERO_FRAME, TEXTURES } from './art.js';
 import { cellPoint, clearingPieces, depthBands, FIRE, HERO, HERO_DEPTH } from './clearing.js';
 import { normalCanvas } from './normals.js';
 import { createForestParticles, swayAt, worldToCell, type ForestParticles } from './particles.js';
-import { FOCUS, PRESETS, type PresetId } from './presets.js';
+import { FOCUS, focusQuality, PRESETS, type PresetId } from './presets.js';
 
 declare const __GM_PRIVATE_ASSETS__: boolean;
 
@@ -228,9 +228,8 @@ export class Forest extends Phaser.Scene {
     this.tintFlat();
   }
 
-  /** Kevin keeps the blur on the low tier (round 2); low saves its cost by lighting fewer sprites instead. */
   private focusQuality(): Quality | 'off' {
-    return this.options.focus ? this.options.quality : 'off';
+    return focusQuality(this.options.focus, this.options.quality);
   }
 
   setFocus(on: boolean): void {

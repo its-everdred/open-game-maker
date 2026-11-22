@@ -32,3 +32,8 @@ export const PRESETS: Record<PresetId, LightingPreset> = {
 
 /** Kevin's blur pick: depth bands with the hero crisp. Haze is for 3D scenes only. */
 export const FOCUS: FocusConfig = { ...DEFAULT_FOCUS };
+
+/** Kevin keeps the blur on the low tier (round 2); low saves its cost by lighting fewer sprites instead. */
+export function focusQuality(focus: boolean, quality: 'low' | 'high'): 'low' | 'high' | 'off' {
+  return focus ? quality : 'off';
+}
