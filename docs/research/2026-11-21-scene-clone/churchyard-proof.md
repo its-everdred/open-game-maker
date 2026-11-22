@@ -266,3 +266,16 @@ inspected locally: it supplies flame rather than the mock's hanging lantern
 fixture. The current game uses a torch effect. This confirms that the lineup is
 not a complete audit of the pack's animation sequences and reinforces the need
 to search other asset kinds as well as other packs before calling a gap.
+
+A separate silhouette experiment normalized the hand-drawn grave mask and each
+eligible preview's alpha silhouette before measuring intersection over union.
+Among 467 east-facing fantasy sprites, `stone-a4` ranked second, but a generic
+`shadow8` shape ranked first and wall or cliff pieces also ranked highly. The
+inspected sheet is `assets-local/review/1154/churchyard-grave-silhouette-top5.png`.
+An exploratory equal-weight blend of that silhouette score and the fresh
+alpha-trimmed SigLIP score ranked `stone-a4` first, `wall-a7` second and
+`ground-g12` third; the data and preview hashes are in
+`assets-local/review/1154/churchyard-grave-blend-results.json`. The weight was
+chosen for this probe, the query mask was drawn by hand, and this is one
+object in one pack/facing. It suggests a comparison to test on more objects,
+not a validated matcher or an automatic gap decision.
