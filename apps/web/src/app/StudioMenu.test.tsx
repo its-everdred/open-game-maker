@@ -594,6 +594,7 @@ describe('StudioMenu', () => {
           { service: 'voice', usedPercent: null },
           { service: 'images', usedPercent: null },
         ],
+        sources: [],
       },
     };
 
@@ -607,6 +608,44 @@ describe('StudioMenu', () => {
     const detail = screen.getByRole('link', { name: 'Energy settings' });
     expect(detail).toHaveAttribute('href', '/settings/energy');
     expect(detail).toHaveTextContent(/Today.*60% left.*This week.*20% left.*This month.*Unknown/);
+  });
+
+  it('rings a provider reading when it is tighter than every window, and ignores an unknown one', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    const source = (id: string, usedPercent: number | null) => ({
+      id,
+      label: id,
+      usedPercent,
+      resetsAt: null,
+      basis: usedPercent === null ? ('unknown' as const) : ('reported' as const),
+      observedAt: null,
+      stale: false,
+    });
+    state.energy = {
+      data: {
+        level: 'limited',
+        preference: 'balanced',
+        windows: [
+          { window: 'day', usedPercent: 40, resetsAt: '2026-11-09T08:00:00.000Z' },
+          { window: 'week', usedPercent: null, resetsAt: '2026-11-09T08:00:00.000Z' },
+          { window: 'month', usedPercent: null, resetsAt: '2026-12-01T08:00:00.000Z' },
+        ],
+        services: [
+          { service: 'voice', usedPercent: null },
+          { service: 'images', usedPercent: null },
+        ],
+        sources: [source('Codex', null), source('Claude', 90)],
+      },
+    };
+
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    const energy = screen.getByRole('button', { name: 'Energy: Limited' });
+    expect(energy.querySelector('circle:last-child')).toHaveAttribute('stroke-dasharray', '10 100');
+    fireEvent.click(energy);
+    expect(screen.getByRole('link', { name: 'Energy settings' })).toHaveTextContent(
+      /Codex\s*Unknown.*Claude\s*10% left/,
+    );
   });
 
   it('moves build progress to the menu and announces each start and end once', () => {

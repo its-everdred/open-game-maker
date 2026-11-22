@@ -2,12 +2,59 @@
   "level": "limited",
   "preference": "balanced",
   "windows": [
-    { "window": "day", "usedPercent": 80, "resetsAt": "2026-11-09T00:00:00Z" },
-    { "window": "week", "usedPercent": 40, "resetsAt": "2026-11-09T00:00:00Z" },
-    { "window": "month", "usedPercent": null, "resetsAt": "2026-12-01T00:00:00Z" }
+    {
+      "window": "day",
+      "usedPercent": 80,
+      "resetsAt": "2026-11-09T00:00:00Z"
+    },
+    {
+      "window": "week",
+      "usedPercent": 40,
+      "resetsAt": "2026-11-09T00:00:00Z"
+    },
+    {
+      "window": "month",
+      "usedPercent": null,
+      "resetsAt": "2026-12-01T00:00:00Z"
+    }
   ],
   "services": [
-    { "service": "voice", "usedPercent": null },
-    { "service": "images", "usedPercent": null }
+    {
+      "service": "voice",
+      "usedPercent": null
+    },
+    {
+      "service": "images",
+      "usedPercent": null
+    }
+  ],
+  "sources": [
+    {
+      "id": "claude:seven_day",
+      "label": "Claude",
+      "usedPercent": 53,
+      "resetsAt": "2026-11-27T09:00:00.000Z",
+      "basis": "reported",
+      "observedAt": "2026-11-22T22:07:20.000Z",
+      "stale": false
+    },
+    {
+      "id": "codex:codex:primary",
+      "label": "Codex",
+      "usedPercent": null,
+      "resetsAt": "2026-11-25T16:28:48.000Z",
+      "basis": "unknown",
+      "observedAt": "2026-11-22T05:07:24.131Z",
+      "stale": true
+    },
+    {
+      "id": "fal",
+      "label": "fal",
+      "usedPercent": 0,
+      "resetsAt": null,
+      "basis": "estimate",
+      "observedAt": "2026-11-22T22:10:00.000Z",
+      "stale": false
+    }
   ]
 }

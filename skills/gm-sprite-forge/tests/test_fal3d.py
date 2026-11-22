@@ -40,10 +40,9 @@ class Fal3dLedgerTests(unittest.TestCase):
         json.dump({'calls': [{'usd': 3.04}, {'usd': 0.5}]}, open(self.ledger, 'w'))
         self.assertEqual(self.fal.total(self.fal.ledger()), 3.54)
 
-    def test_has_no_default_ledger_so_spend_never_splits_across_files(self):
+    def test_defaults_to_the_one_ledger_the_api_reads_so_spend_never_splits_across_files(self):
         os.environ.pop('OGM_FAL_LEDGER')
-        with self.assertRaises(SystemExit):
-            self.fal.ledger()
+        self.assertEqual(self.fal.ledger_path(), os.path.expanduser('~/.local/share/ogm/fal-ledger.json'))
 
 
 if __name__ == '__main__':

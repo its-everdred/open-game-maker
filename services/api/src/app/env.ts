@@ -45,6 +45,10 @@ export const apiEnvSpec = {
   OGM_INTAKE_BOT_LOGIN: { kind: 'string' },
   OGM_INTAKE_SWEEP_SECONDS: { kind: 'int', default: '60' },
   OGM_VAPID_KEY_FILE: { kind: 'path', default: join(homedir(), '.config', 'ogm', 'env', 'ogm-api.vapid.json') },
+  // The host-wide fal ledger that skills/gm-sprite-forge/scripts/fal3d.py books every call in (#1217).
+  OGM_FAL_LEDGER: { kind: 'path', default: join(homedir(), '.local', 'share', 'ogm', 'fal-ledger.json') },
+  // The voice host's env file; Energy reads its ElevenLabs key to show the character quota.
+  OGM_VOICE_ENV_FILE: { kind: 'path', default: join(homedir(), '.config', 'ogm', 'env', 'voice-host.env') },
   OGM_VAPID_SUBJECT: { kind: 'string' },
   OGM_VOICE_TOKEN_SECRET: { kind: 'secret', required: false },
   OGM_VOICE_WS_URL: { kind: 'string', required: false },

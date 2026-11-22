@@ -4,6 +4,7 @@ import { and, gte, lte } from 'drizzle-orm';
 
 import { netCharges } from '../budget/allowance.js';
 import { dayKey, nextReset } from '../budget/reset.js';
+import type { ProviderReading } from './providers.js';
 import { readLimits } from './store.js';
 
 // What a resource-policy source knows at one instant. Usage is in micro-dollars; null means unknown, never zero.
@@ -12,6 +13,8 @@ export type EnergySnapshot = {
   usage: Record<EnergyWindowName, number> & { voice: number | null; images: number | null };
   resetsAt: Record<EnergyWindowName, string>;
   resources: EnergyResource[];
+  // Provider readings (#1217): subscription windows, the fal ledger and ElevenLabs.
+  readings: ProviderReading[];
 };
 
 // Where Energy comes from. The local source below is the first implementation; Aiur's resource-policy view
@@ -20,9 +23,9 @@ export interface ResourcePolicySource {
   snapshot(now: Date): EnergySnapshot;
 }
 
-// What Game Maker already knows: its own build ledger and the limits an admin entered. It does not meter voice or
-// images and cannot see provider capacity, so those stay unknown.
-export function localSource(deps: { db: Db; zone: string }): ResourcePolicySource {
+// What Game Maker already knows: its own build ledger and the limits an admin entered, plus the provider readings
+// fetched ahead of the snapshot. It does not meter voice or images in dollars, so those stay unknown.
+export function localSource(deps: EnergySourceDeps): ResourcePolicySource {
   return {
     snapshot(now) {
       const today = dayKey(now, deps.zone);
@@ -43,8 +46,28 @@ export function localSource(deps: { db: Db; zone: string }): ResourcePolicySourc
             spentMicroUsd: usage.month,
             remainingMicroUsd: null,
             resetsAt: null,
+            basis: 'estimate',
+            usedPercent: null,
+            observedAt: null,
+            stale: false,
           },
+          ...(deps.readings ?? []).map((reading): EnergyResource => ({
+            label: reading.label,
+            provider: reading.provider,
+            kind: reading.kind,
+            spentMicroUsd: reading.spentMicroUsd,
+            remainingMicroUsd:
+              reading.capMicroUsd === null || reading.spentMicroUsd === null
+                ? null
+                : Math.max(0, reading.capMicroUsd - reading.spentMicroUsd),
+            resetsAt: reading.resetsAt,
+            basis: reading.basis,
+            usedPercent: reading.usedPercent,
+            observedAt: reading.observedAt,
+            stale: reading.stale,
+          })),
         ],
+        readings: deps.readings ?? [],
       };
     },
   };
@@ -91,8 +114,10 @@ function ledgerUsage(db: Db, now: Date, zone: string): Record<EnergyWindowName, 
   };
 }
 
+export type EnergySourceDeps = { db: Db; zone: string; readings?: ProviderReading[] };
+
 // The single place the routes and admission get their source; swap it for Aiur's view here.
-export function energySource(deps: { db: Db; zone: string }): ResourcePolicySource {
+export function energySource(deps: EnergySourceDeps): ResourcePolicySource {
   return localSource(deps);
 }
 

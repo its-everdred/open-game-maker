@@ -106,8 +106,10 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           .from(schema.jobs)
           .where(eq(schema.jobs.id, job.jobId))
           .get()?.creatorId;
+        const energyAt = new Date();
+        const readings = (await deps.registry.energyReadings?.read(energyAt)) ?? [];
         const energy = playerView(
-          energySource({ db: deps.db, zone: deps.config.resetZoneDefault }).snapshot(new Date()),
+          energySource({ db: deps.db, zone: deps.config.resetZoneDefault, readings }).snapshot(energyAt),
           creatorId === undefined ? 'balanced' : readPreference(deps.db, creatorId),
         );
         const scopeSessionId = job.kind === 'scope' ? scopeSessions.getByJob(deps.db, job.jobId)?.id : undefined;

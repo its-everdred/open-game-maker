@@ -39,6 +39,12 @@ export const command: GmCommand = {
       ctx.out(`${window}  ${percent(usedPercent)}  resets ${resetsAt}`);
     }
     for (const { service, usedPercent } of energy.services) ctx.out(`${service}  ${percent(usedPercent)}`);
+    // Provider readings: a stale one is unknown, with the time it was last measured.
+    for (const { label, usedPercent, resetsAt, basis, observedAt, stale } of energy.sources) {
+      const reset = resetsAt === null ? '' : `  resets ${resetsAt}`;
+      const age = stale && observedAt !== null ? `  stale since ${observedAt}` : '';
+      ctx.out(`${label}  ${percent(usedPercent)}${reset}  ${basis}${age}`);
+    }
     return EXIT.ok;
   },
 };
