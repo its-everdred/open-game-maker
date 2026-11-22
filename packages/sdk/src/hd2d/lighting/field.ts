@@ -64,6 +64,7 @@ export function renderLightField(
   const dappleBase = dapple ? 1 - Math.min(1, Math.max(0, dapple.intensity)) * DAPPLE_DEPTH : 1;
   const sun = hexToRgb01(preset.shafts?.color ?? '#ffffff');
   const clouds = preset.clouds;
+  const cloudGrid = clouds ? cloudCoverGrid(clouds, width, height, timeMs, aspect, seed) : undefined;
   for (let py = 0; py < height; py += 1) {
     const ny = (py + 0.5) / height;
     for (let px = 0; px < width; px += 1) {
@@ -78,7 +79,7 @@ export function renderLightField(
         if (m > dappleBase) sunAmount += ((m - dappleBase) / (1 - dappleBase)) * dapple.intensity * 0.5;
       }
       if (clouds) {
-        const cover = sampleCloudCover(clouds, nx, ny, timeMs, aspect, seed);
+        const cover = cloudGrid!.at(px, py);
         shade = 1 - (1 - shade) * (1 - cover * clouds.shadow * (1 - shaft));
         sunAmount += (1 - cover) * clouds.sun * 0.5;
       }
@@ -104,6 +105,47 @@ export function renderLightField(
       out[o + 3] = (1 - shade) * 255;
     }
   }
+}
+
+/** Field pixels per cloud sample: clouds are large and smooth, so a coarse grid, interpolated, looks the same. */
+const CLOUD_STEP = 4;
+
+/** Cloud cover sampled every `CLOUD_STEP` field pixels, read back with bilinear interpolation. */
+function cloudCoverGrid(
+  clouds: NonNullable<LightingPreset['clouds']>,
+  width: number,
+  height: number,
+  timeMs: number,
+  aspect: number,
+  seed: number,
+): { at(px: number, py: number): number } {
+  const columns = Math.ceil(width / CLOUD_STEP) + 1;
+  const rows = Math.ceil(height / CLOUD_STEP) + 1;
+  const grid = new Float32Array(columns * rows);
+  for (let gy = 0; gy < rows; gy += 1)
+    for (let gx = 0; gx < columns; gx += 1)
+      grid[gy * columns + gx] = sampleCloudCover(
+        clouds,
+        (gx * CLOUD_STEP + 0.5) / width,
+        (gy * CLOUD_STEP + 0.5) / height,
+        timeMs,
+        aspect,
+        seed,
+      );
+  return {
+    at(px, py) {
+      const gx = px / CLOUD_STEP;
+      const gy = py / CLOUD_STEP;
+      const x0 = Math.floor(gx);
+      const y0 = Math.floor(gy);
+      const fx = gx - x0;
+      const fy = gy - y0;
+      const i = y0 * columns + x0;
+      const top = grid[i]! * (1 - fx) + grid[i + 1]! * fx;
+      const bottom = grid[i + columns]! * (1 - fx) + grid[i + columns + 1]! * fx;
+      return top * (1 - fy) + bottom * fy;
+    },
+  };
 }
 
 /**
