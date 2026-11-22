@@ -167,7 +167,11 @@ either way; the calls run on the NUC after approval.
 
 ## Approved spend (2026-11-22)
 
-Kevin's verdict on the review page: "TRELLIS v1 only, 0.32 USD: Like." All 16 items go through TRELLIS v1
-(`fal-ai/trellis`, or `fal-ai/trellis/multi` for crow and rabbit), about 0.02 USD each, about 0.32 USD in total. No
-TRELLIS 2 or Rodin calls. The calls belong to the production ticket (#1206) and run under the 9 USD cap and ledger
-(`scripts/fal3d.py`); this ticket made none.
+Kevin approved about 2 USD for the 16 objects ("Approve just this $2", about 05:00Z). The ledger stop
+(`assets-local/experiments/sprite-pipeline/fal-arm-e/costs.json`, 7.485 USD spent) is raised to 9.60 USD; any further
+spend needs a new approval. `scripts/fal3d.py` reads `OGM_FAL_STOP_USD`, not the ledger's `stop_usd`, so run it with
+`OGM_FAL_LEDGER=<that file> OGM_FAL_STOP_USD=9.60`.
+
+Route: a few minutes earlier he marked the TRELLIS v1-only option (about 0.32 USD) "Like". The 2 USD budget covers the
+mixed route in the table above; the production ticket (#1206) should confirm with him which route to run before the
+first call. This ticket made no calls.
