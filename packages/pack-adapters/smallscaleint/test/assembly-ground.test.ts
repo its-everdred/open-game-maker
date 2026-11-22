@@ -8,16 +8,22 @@ it('builds a connected path and reserved-cell-safe dressing consumable by IsoMap
   const region = Array.from({ length: 25 }, (_, index) => ({ x: index % 5, y: Math.floor(index / 5) }));
   const path = pavingPath({ x: 0, y: 2 }, { x: 4, y: 2 }, { asset: 'paving', facing: 'E', walkable: region });
   const reserved = path.map(({ cell }) => cell);
-  const decor = naturalScatter(region, [{ asset: 'grass', facing: 'N', solid: false }], 1, {
-    seed: 5,
-    avoid: reserved,
-    boundaries: [],
-    boundaryDensity: 0,
-  });
+  const decor = naturalScatter(
+    region,
+    [{ asset: 'grass', facing: 'N', solid: false, footprint: [{ x: 0, y: 0 }] }],
+    1,
+    {
+      seed: 5,
+      avoid: reserved,
+      boundaries: [],
+      boundaryDensity: 0,
+    },
+  );
   const styleWithExtraFields = {
     asset: 'grass',
     facing: 'E' as const,
     solid: false,
+    footprint: [{ x: 0, y: 0 }],
     cell: { x: 0, y: 2 },
     layer: 'wall',
   };
@@ -72,4 +78,31 @@ it('varies stepping stones reproducibly while retaining every route cell', () =>
   expect(new Set(stones.map(({ facing }) => facing)).size).toBeGreaterThan(1);
   expect(variedSteppingStonePath(route[0]!, route.at(-1)!, style)).toEqual(stones);
   expect(stones.every(({ solid, layer }) => !solid && layer === 'decor')).toBe(true);
+});
+
+it('keeps every cell of a large prop clear of reserved cells and other props', () => {
+  const tree = {
+    asset: 'tree',
+    facing: 'E' as const,
+    solid: true,
+    footprint: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ],
+  };
+  const cells = [
+    { x: 0, y: 0 },
+    { x: 2, y: 0 },
+  ];
+  const rules = { seed: 1, avoid: [{ x: 1, y: 0 }], boundaries: cells, boundaryDensity: 1 };
+  const result = naturalScatter(cells, [tree], 1, rules);
+  expect(result.map(({ cell }) => cell)).toEqual([{ x: 2, y: 0 }]);
+  const neighbors = [
+    { x: 2, y: 0 },
+    { x: 3, y: 0 },
+  ];
+  expect(
+    naturalScatter(neighbors, [tree], 1, { ...rules, avoid: [], boundaries: neighbors }).map(({ cell }) => cell),
+  ).toEqual([{ x: 2, y: 0 }]);
+  expect(() => naturalScatter(cells, [{ ...tree, footprint: [] }], 1, rules)).toThrow('footprint');
 });
