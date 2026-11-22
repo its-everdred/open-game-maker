@@ -38,11 +38,22 @@ def label_lines(rec, sc):
         return ['Pack original', 'SmallScaleInt sheet', '']
     def fmt(x):
         return 'n/a' if x is None else f'{x:.2f}'
-    return [rec['name'],
-            f"{rec['kind']} · {rec['model']} · ${rec['cost_usd']:.2f}",
-            f"{rec['skill']} · {rec['motion_licence']}",
-            f"corr {fmt(sc['motion_corr'])} · IoU {fmt(sc['silhouette_iou'])} · slide {fmt(sc['foot_slide']['mean_px'])} px"
-            f" · {sc['render_minutes']:.0f} min"]
+    return [rec['name'], rec['kind'], f"{rec['model']}, ${rec['cost_usd']:.2f}", rec['skill'], rec['motion_licence'],
+            f"corr {fmt(sc['motion_corr'])}, IoU {fmt(sc['silhouette_iou'])}, slide {fmt(sc['foot_slide']['mean_px'])} px,"
+            f" {sc['render_minutes']:.0f} min"]
+
+
+def wrap(draw, text, f, width):
+    """Split one label line into lines that fit the column."""
+    out, cur = [], ''
+    for word in text.split(' '):
+        nxt = (cur + ' ' + word).strip()
+        if cur and draw.textlength(nxt, font=f) > width:
+            out.append(cur)
+            cur = word
+        else:
+            cur = nxt
+    return out + [cur]
 
 
 def compose(cols, labels, zoom, crop):
@@ -51,14 +62,16 @@ def compose(cols, labels, zoom, crop):
     h = (crop[3] - crop[1]) * zoom
     fs = 13 if zoom > 1 else 10
     f = font(fs)
+    probe = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+    labels = [[(k, part) for k, line in enumerate(lab) for part in wrap(probe, line, f, w - 12)] for lab in labels]
     head = (fs + 4) * max(len(x) for x in labels) + 6
     out = []
     for i in range(len(cols[0])):
         canvas = Image.new('RGBA', (w * len(cols), h + head), BG)
         d = ImageDraw.Draw(canvas)
         for c, (col, lab) in enumerate(zip(cols, labels)):
-            for k, line in enumerate(lab):
-                d.text((c * w + 6, 4 + k * (fs + 4)), line, font=f, fill=FG if k == 0 else DIM)
+            for row, (k, line) in enumerate(lab):
+                d.text((c * w + 6, 4 + row * (fs + 4)), line, font=f, fill=FG if k == 0 else DIM)
             cell = col[i % len(col)].crop(crop)
             cell = cell.resize((cell.width * zoom, cell.height * zoom), Image.NEAREST)
             canvas.alpha_composite(cell, (c * w + (w - cell.width) // 2, head))
