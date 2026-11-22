@@ -144,8 +144,10 @@ LaFAN1; before the loop-seam fix) put every one between 0.23 and 0.52.
 - **Calibration.** Pack walks scored against the 6Barbarian Walk: reskins of the same animation (3Nomad, 4Berserker)
   0.97; every other SmallScaleInt character's walk 0.0-0.6. Motion correlation of 0.7 or more therefore means "the
   pack's own animation", not "a good walk". Retargeted libraries score where the pack's other walks do.
-- **Rig fit.** On rigged ground-truth characters in A-pose (Kenney, Synty), knees and elbows land within about 1-2 px
-  at a 43 px sprite. Knees are placed by proportion, so a mesh with unusual legs moves them.
+- **Rig fit** (`fit_accuracy.py`, 43 px sprite). On seven realistic rigged bodies in A-pose (Kenney, Synty), knees
+  land within 1 px on 4 of 7 (worst 2.05 px, a kilted Synty warrior: knees are placed by proportion) and elbows within
+  1 px on 5 of 7 (Kenney Medium fails at 10.7 px). In T-pose the shoulders drift 4-13 px; KayKit's big-headed bodies
+  fail at the arms. Within 1 px is likely, not guaranteed: look at `landmarks.png` for every new mesh.
 - **Bone heat** fails on every vertex of raw TRELLIS meshes; the voxel proxy fixes it, and a raised arm or a swung
   leg deforms cleanly with a fused weapon following the hand.
 - **Feet.** Copying rotations (Blender's built-in route) slides 2.5 px per contact frame; the lock and IK pass keeps
