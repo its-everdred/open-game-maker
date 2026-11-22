@@ -65,3 +65,28 @@ and `5archer`. These are identities of assets in the current game, not verified
 matches for the generated mock. The current map records the wall, door and arch
 at 270 degrees; the mock's equivalent cardinal orientation has not yet been
 measured against the game's projection.
+
+## Retrieval diagnostic
+
+Five mixed crops were compared using SigLIP and the east-facing fantasy pack.
+The fresh run processed 25 of 467 eligible sprites, so its own search is
+truncated. A historical full 467-sprite embedding set used the same model file
+and processor; the 25 freshly encoded candidate vectors match it exactly.
+That historical set did not record source hashes or a versioned preprocessing
+signature, so the following is diagnostic rather than a fresh complete catalog
+search. The five crops and candidate images were inspected in
+`assets-local/review/1154/churchyard-historical-top3.png`.
+
+| Mock crop | Historical top three | Visual finding |
+| --- | --- | --- |
+| Chapel entrance, steps and lights | `wall-d16`, `wall-d7`, `wall-f16` | Window wall pieces, not the entrance or a complete building. |
+| Gravestone and ground | `wall-d1`, `wall-a16`, `wall-a7` | Wall pieces, not gravestones. |
+| Fence, pillar and ground | `wall-d1`, `wall-d7`, `wall-f2` | Wall pieces, not the fence and pillar arrangement. |
+| Path with knight and skeleton | `misc-d1`, `misc-d3`, `misc-d4` | Banners, not the path or characters. |
+| Tree, fence and torch pillar | `wall-d16`, `wall-d7`, `wall-a4` | Window wall pieces, not the tree or fence. |
+
+This is a retrieval failure on the inspected mixed regions. A scene reader
+needs tighter individual-object crops or masks, appropriate asset families and
+facings, and explicit review of proposed matches. These results do not establish
+that the target objects are absent from the kit, and no automatic orientation,
+scale, occlusion or registered comparison is claimed.
