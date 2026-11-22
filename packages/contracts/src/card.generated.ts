@@ -649,6 +649,26 @@ export const assetCardMetaDefs: Record<string, object> = {
         },
         "additionalProperties": false
       },
+      "structural_facings": {
+        "type": "object",
+        "minProperties": 1,
+        "description": "Measured structural facts per source facing. Coordinates are in source-image pixels; grid edges refer to the unrotated map cell.",
+        "properties": {
+          "E": {
+            "$ref": "#/$defs/structuralFacing"
+          },
+          "N": {
+            "$ref": "#/$defs/structuralFacing"
+          },
+          "S": {
+            "$ref": "#/$defs/structuralFacing"
+          },
+          "W": {
+            "$ref": "#/$defs/structuralFacing"
+          }
+        },
+        "additionalProperties": false
+      },
       "tile": {
         "type": "object",
         "properties": {
@@ -684,6 +704,121 @@ export const assetCardMetaDefs: Record<string, object> = {
         "minItems": 4,
         "maxItems": 4,
         "description": "UI panels: left, top, right, bottom insets in px."
+      }
+    },
+    "additionalProperties": false
+  },
+  "structuralFacing": {
+    "type": "object",
+    "minProperties": 1,
+    "properties": {
+      "alpha_bounds": {
+        "type": "object",
+        "required": [
+          "value",
+          "verified"
+        ],
+        "properties": {
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "Inclusive left, top, right, bottom pixel bounds."
+          },
+          "verified": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "anchor": {
+        "type": "object",
+        "required": [
+          "value",
+          "verified"
+        ],
+        "properties": {
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Source-image pixel coordinates."
+          },
+          "verified": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "edges": {
+        "type": "object",
+        "required": [
+          "value",
+          "verified"
+        ],
+        "properties": {
+          "value": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "xMin",
+                "xMax",
+                "yMin",
+                "yMax"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "verified": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "sockets": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "kind",
+            "position",
+            "verified"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "end",
+                "corner",
+                "t",
+                "gate-opening"
+              ]
+            },
+            "position": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "Source-image pixel coordinates."
+            },
+            "verified": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
       }
     },
     "additionalProperties": false
@@ -3855,6 +3990,15 @@ export interface Sprite {
     SW?: AssetPath;
     W?: AssetPath;
   };
+  /**
+   * Measured structural facts per source facing. Coordinates are in source-image pixels; grid edges refer to the unrotated map cell.
+   */
+  structural_facings?: {
+    E?: StructuralFacing;
+    N?: StructuralFacing;
+    S?: StructuralFacing;
+    W?: StructuralFacing;
+  };
   tile?: {
     layer?: "ground" | "wall" | "decor" | "overlay" | "entity";
     autotile?: "none" | "blob-47" | "wang-16" | "edge-9";
@@ -3867,6 +4011,43 @@ export interface Sprite {
    * @maxItems 4
    */
   nine_slice?: [number, number, number, number];
+}
+export interface StructuralFacing {
+  alpha_bounds?: {
+    /**
+     * Inclusive left, top, right, bottom pixel bounds.
+     *
+     * @minItems 4
+     * @maxItems 4
+     */
+    value: [number, number, number, number];
+    verified: string;
+  };
+  anchor?: {
+    /**
+     * Source-image pixel coordinates.
+     *
+     * @minItems 2
+     * @maxItems 2
+     */
+    value: [number, number];
+    verified: string;
+  };
+  edges?: {
+    value: ("xMin" | "xMax" | "yMin" | "yMax")[];
+    verified: string;
+  };
+  sockets?: {
+    kind: "end" | "corner" | "t" | "gate-opening";
+    /**
+     * Source-image pixel coordinates.
+     *
+     * @minItems 2
+     * @maxItems 2
+     */
+    position: [number, number];
+    verified: string;
+  }[];
 }
 export interface Texture {
   maps: ("albedo" | "normal" | "roughness" | "metallic" | "ao" | "height" | "emissive" | "opacity" | "orm")[];

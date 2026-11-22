@@ -75,6 +75,14 @@ read as copy-paste): vary seed, size, options and start, or clone a variant. Run
 
 When a game needs a pack asset at angles or rotations the pack doesn't ship (free rotation, smooth turning, vehicles or props seen from any direction) and the pack has four orthographic views (top, side, front, back), use `vendor/sprite-stacking` to build a spinnable stacked sprite, and keep the pack's pixel style. It makes stacked-slice fake 3D (a strip of flat layers drawn with a lift per layer), not a real mesh, so it does not replace the 3D→2D pipeline in `gm-sprite-forge`. Isometric N/E/S/W pack views are not orthographic and have no top view: a stack built from them is an approximation, and thin parts (branches, posts) carve into solid masses. Render the stack at every angle and compare it with the pack original before using it.
 
+## Structures are assembled, not placed
+
+Fences, walls, buildings, paths and dressing in a SmallScaleInt scene come from the adapter's assemblers
+(`edgeRun`, `building`, `path`, `scatter`, written out with `assemblyMap`; `@gm/pack-smallscaleint` README). Never place
+structural pieces one sprite at a time or hard-code a facing-to-edge table in a game: a missing kind or style goes into
+the adapter as a measured fact with a test, so every game gets it. Gate posts, steps and non-stone buildings are not
+bound yet: leave that gap visible in the round and file the adapter work rather than hand-placing sprites.
+
 ## Sound
 
 Scenes get sound from our packs (`grep -l audio` in the catalog: Kenney Sci-Fi, Impact, Retro, Foley, RPG Audio are

@@ -21,3 +21,28 @@ export {
   type PalettePrefab,
   type PlacementKind,
 } from './palette.js';
+export {
+  fenceB1Edges,
+  wallF1Edges,
+  wallC1Edges,
+  structuralImageBounds,
+  type AlphaBounds,
+  type StructuralImageBounds,
+} from './structural-bounds.js';
+export { structuralCardFacts } from './structural-card.js';
+export {
+  assemblyMap,
+  building,
+  edgeRun,
+  path,
+  scatter,
+  type AssemblyPlacement,
+  type BoundaryEdge,
+  type Cell,
+  type CellEdge,
+  type DressingStyle,
+  type EdgeKind,
+  type EdgePolyline,
+  type ScatterRules,
+  type SteppingStyle,
+} from './assemblers.js';
