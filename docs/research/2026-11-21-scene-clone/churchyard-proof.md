@@ -131,3 +131,13 @@ second and third. The game-used `stone-a4` moved from 150th to 64th and
 `stone-a13` moved from 162nd to 184th. This mask is hand-drawn and imperfect;
 it is not evidence of automatic segmentation or a reliable match. Background
 removal alone did not solve this example.
+
+A six-candidate local probe then cropped each transparent sprite preview to its
+alpha bounds before encoding it against the same manual grave mask. The
+inspected `stone-a4` preview's 256 × 256 canvas contained an alpha bounding box
+of 59 × 81 pixels. Among three game grave candidates and three earlier wall/roof
+decoys, the order was `roof-g1`, `wall-a7`, `stone-a4`, `wall-a2`, `stone-a5`,
+`stone-a13`. This suggests transparent padding deserves a controlled test, but
+it is a hand-selected six-item comparison against one imperfect mask. It does
+not establish full-catalog recall, and the matcher has not been changed on this
+basis.
