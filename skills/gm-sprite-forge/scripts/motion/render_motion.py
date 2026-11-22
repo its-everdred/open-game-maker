@@ -8,7 +8,7 @@ keys: rows=1,2 (sheet rows E=0 SE=1 S=2 ...)  frames=15  cell=128  height_px=43 
       samples=32 supersample=1 threads=6
 Camera, light and scale match gpu_bake_rig.py: orthographic, 60 deg from vertical, yaw 45; the rig's rest pose in the
 S view is scaled to height_px. Writes raw_<row>_<col>.png, feet.json (screen px of each foot's heel and ball per
-frame, for foot_slide.py), fit.json (landmarks, skinning report, retarget report) and render.json.
+frame, scored by score_cell.py), fit.json (landmarks, skinning report, retarget report) and render.json.
 """
 import json
 import math
@@ -222,12 +222,23 @@ def main():
                                    for k, w in d.items()} for sd, d in fp.items()})
             sc.render.filepath = f'{OUT}/raw_{row}_{col}.png'
             bpy.ops.render.render(write_still=True)
-    for row in feet:  # camera-view [0, 1] coordinates -> cell pixels (x right, y down); keep world height for contact
+    def px(w):  # camera-view [0, 1] coordinates -> cell pixels (x right, y down)
+        x, y = world_to_camera_view(sc, sc.camera, w)[:2]
+        return [x * CELL, (1 - y) * CELL]
+    for row in feet:  # keep world height for contact
         for fr in feet[row]:
             for d in fr.values():
                 for k, (x, y, z) in d.items():
                     d[k] = [x * CELL, (1 - y) * CELL, z]
-    json.dump({'cell': CELL, 'scale': s, 'feet': feet}, open(f'{OUT}/feet.json', 'w'))
+    forward = {}
+    for row in rows:  # the screen direction the character faces in each row: the ground moves against it
+        root.rotation_euler = (0, 0, math.radians(135 - 45 * row))
+        bpy.context.view_layer.update()
+        o = root.matrix_world.translation
+        a, b = px(o), px(o + root.matrix_world.to_3x3().normalized() @ Vector((0, -1, 0)))
+        forward[row] = [b[0] - a[0], b[1] - a[1]]
+    json.dump({'cell': CELL, 'scale': s, 'unit_px': UNIT_PX, 'forward': forward, 'feet': feet},
+              open(f'{OUT}/feet.json', 'w'))
     json.dump({'landmarks': {k: (v.tolist() if hasattr(v, 'tolist') else v) for k, v in lm.items()},
                'skin': rep, 'motion': {k: v for k, v in mrep.items() if k != 'map'}, 'map': mrep.get('map')},
               open(f'{OUT}/fit.json', 'w'), indent=1, default=str)

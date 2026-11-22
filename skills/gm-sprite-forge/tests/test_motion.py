@@ -19,11 +19,11 @@ CELL = 128
 PX_PER_UNIT = CELL / (2 * 2 ** 0.5)
 
 
-def feet_doc(tracks):
-    """tracks: {side: [(x_px, y_px, z_world), ...]} -> feet.json shape with heel == ball."""
+def feet_doc(tracks, forward=(0, -1)):
+    """tracks: {side: [(x_px, y_px, z_world), ...]} -> feet.json shape with heel == ball; the walker faces up-screen."""
     n = len(next(iter(tracks.values())))
     frames = [{s: {'heel': list(t[i]), 'ball': list(t[i])} for s, t in tracks.items()} for i in range(n)]
-    return {'cell': CELL, 'feet': {'2': frames}}
+    return {'cell': CELL, 'unit_px': PX_PER_UNIT, 'forward': {'2': list(forward)}, 'feet': {'2': frames}}
 
 
 def treadmill(n=15, speed=2.0, jitter=0.0, seed=0):
@@ -55,6 +55,16 @@ class FootSlideTest(unittest.TestCase):
         slid = foot_slide(feet_doc(treadmill(jitter=1.5)), [2], loop=True)['mean_px']
         self.assertGreater(slid, 1.0)
         self.assertGreater(slid, clean + 1.0)
+
+    def test_sideways_skating_is_slide_even_when_steady(self):
+        # the ground only moves against the facing; a planted foot drifting sideways at a steady rate is skating
+        skate = {}
+        for side, offset in (('L', 0), ('R', 7)):  # 1 px/frame sideways while planted, back again in the swing
+            track = treadmill()[side]
+            skate[side] = [(64 + min((i + offset) % 15, 8) * (1 if (i + offset) % 15 < 9 else 0), y, z)
+                           for i, (_, y, z) in enumerate(track)]
+        res = foot_slide(feet_doc(skate), [2], loop=True)
+        self.assertAlmostEqual(res['mean_px'], 1.0, places=2)
 
     def test_attack_feet_must_stay_put(self):
         # no locomotion in an attack: any contact movement is slide, even a steady one

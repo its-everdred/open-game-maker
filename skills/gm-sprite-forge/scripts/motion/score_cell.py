@@ -7,8 +7,8 @@ A walk is a loop with an arbitrary first frame, so with --loop every cyclic shif
 motion correlation is kept (its shift is reported); an attack is scored as rendered.
 Foot slide: a foot is in contact on frames where its sole is within 1 px of its lowest height; each contact step
 follows the point that touches the ground (heel or ball, whichever is lower), so a heel-to-toe roll is not slide. For an in-place walk
-the ground moves under the body at one speed, so slide is how far a contact foot strays from that speed (the median
-contact velocity); for an attack the ground does not move, so slide is the contact foot's own movement. Both are
+the ground moves under the body at one speed along the facing direction, so slide is how far a contact foot strays from
+that (the median contact speed along the facing; any sideways movement counts); for an attack the ground does not move, so slide is the contact foot's own movement. Both are
 screen px per contact frame at the pack's cell size, averaged over contact frames and rows.
 Writes <cell_dir>/scores.json.
 """
@@ -25,7 +25,6 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import score as sc  # noqa: E402
 
-UNIT_PX_PER_CELL = 1 / (2 * 2 ** 0.5)  # world units -> px: cell / (2 sqrt 2) px per unit (gpu_bake_rig camera)
 
 
 def rows_sheet(path, rows, cell=128, shift=0):
@@ -57,14 +56,14 @@ def best_shift(pack, ours, rows, cell=128):
 
 
 def foot_slide(feet, rows, loop):
-    cell = feet['cell']
+    unit_px = feet['unit_px']  # world units -> screen px, written by render_motion.py from its camera
     per_row = []
     for r in rows:
         fr = feet['feet'][str(r)]
         steps = []
         for side in 'LR':
             pts = {k: np.array([f[side][k][:2] for f in fr]) for k in ('heel', 'ball')}
-            zs = {k: np.array([f[side][k][2] for f in fr]) * cell * UNIT_PX_PER_CELL for k in ('heel', 'ball')}
+            zs = {k: np.array([f[side][k][2] for f in fr]) * unit_px for k in ('heel', 'ball')}
             z = np.minimum(zs['heel'], zs['ball'])
             contact = z - z.min() < 1.0
             n = len(fr)
@@ -77,7 +76,14 @@ def foot_slide(feet, rows, loop):
             per_row.append({'contact_steps': 0, 'mean_px': None, 'max_px': None})
             continue
         steps = np.array(steps)
-        ground = np.median(steps, 0) if loop else np.zeros(2)
+        if not loop:
+            ground = np.zeros(2)
+        elif str(r) in feet.get('forward', {}):  # the ground only moves along the facing: sideways drift is slide
+            u = np.array(feet['forward'][str(r)], float)
+            u /= np.linalg.norm(u)
+            ground = u * np.median(steps @ u)
+        else:
+            ground = np.median(steps, 0)
         err = np.linalg.norm(steps - ground, axis=1)
         per_row.append({'contact_steps': len(steps), 'ground_px_per_frame': np.round(ground, 2).tolist(),
                         'mean_px': round(float(err.mean()), 2), 'max_px': round(float(err.max()), 2)})

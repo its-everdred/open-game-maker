@@ -111,6 +111,8 @@ def main():
                          'knee_elbow_max_px': max(px[k] for k in px if k.split('.')[0] in ('knee', 'elbow'))})
             print('FITACC', json.dumps(rows[-1]))
     json.dump({'height_px': hpx, 'rows': rows}, open(out, 'w'), indent=1)
+    if not rows or any('error' in r for r in rows):
+        sys.exit(1)  # a case that could not be fitted is a failed check, not a quiet row
 
 
 main()

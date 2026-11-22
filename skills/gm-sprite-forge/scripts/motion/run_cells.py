@@ -7,6 +7,7 @@ Each cell gets <out_root>/<name>/ with raw frames, out/sheet.png and scores.json
 """
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -57,6 +58,9 @@ def main():
             continue
         d = a.out / c['name']
         d.mkdir(parents=True, exist_ok=True)
+        for stale in ('out', 'scores.json', 'recipe.json', 'feet.json', 'fit.json', 'render.json'):
+            p = d / stale  # a failed rerun must not leave the previous run's results looking current
+            shutil.rmtree(p) if p.is_dir() else p.unlink(missing_ok=True)
         cell = {'mesh': spec['mesh'], 'rotz': spec.get('rotz', 0),
                 'motion': {'stance': spec.get('stance')} | c['motion'] | {'clip': c['clip']},
                 'weapon': c.get('weapon', spec.get('weapon')), 'rig_cache': str(a.out / 'rig_cache.blend')}
@@ -72,6 +76,7 @@ def main():
             print(c['name'], 'render failed', flush=True)
             continue
         loop = ['--loop'] if c['clip'] == 'walk' and c['motion'].get('loop', True) else []
+        loop += ['--rows', str(spec.get('render', {}).get('rows', '1,2'))]  # score the rows that were rendered
         s = subprocess.run([sys.executable, '-I', str(HERE / 'score_cell.py'), str(d), spec['pack'][c['clip']], '--finish', *loop],
                            capture_output=True, text=True)
         if s.returncode:
@@ -86,6 +91,8 @@ def main():
         rows.append((c['name'], line))
         print(line, flush=True)
     (a.out / 'summary.txt').write_text('\n'.join(r[1] for r in rows) + '\n')
+    if any('failed' in r[1] for r in rows):
+        sys.exit(1)
 
 
 main()
