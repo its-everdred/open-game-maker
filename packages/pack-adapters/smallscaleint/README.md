@@ -23,6 +23,7 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   pixel by pixel against the angle-named frame files), and `layerForCategory` for tileset pieces.
 - `structuralImageBounds`: inclusive alpha bounds for twelve measured structural or paving assets, keyed by asset card id.
   Bounds do not establish an anchor or connection socket. `fenceB1Edges` records the measured rural fence facings.
+  `structuralCardFacts(id)` returns the known card fields without fabricating unmeasured facts.
 - `vocabulary`: canonical roles to this set's action names, and the loop set.
 
 ## Leaves to the game

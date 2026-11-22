@@ -477,6 +477,486 @@
                     },
                     "additionalProperties": false
                   },
+                  "structural_facings": {
+                    "minProperties": 1,
+                    "description": "Measured structural facts per source facing. Coordinates are in source-image pixels; grid edges refer to the unrotated map cell.",
+                    "type": "object",
+                    "properties": {
+                      "E": {
+                        "minProperties": 1,
+                        "type": "object",
+                        "properties": {
+                          "alpha_bounds": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "minItems": 4,
+                                "maxItems": 4,
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "description": "Inclusive left, top, right, bottom pixel bounds."
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "anchor": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "description": "Source-image pixel coordinates."
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "edges": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "uniqueItems": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "xMin",
+                                    "xMax",
+                                    "yMin",
+                                    "yMax"
+                                  ]
+                                }
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "sockets": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "end",
+                                    "corner",
+                                    "t",
+                                    "gate-opening"
+                                  ]
+                                },
+                                "position": {
+                                  "minItems": 2,
+                                  "maxItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "description": "Source-image pixel coordinates."
+                                },
+                                "verified": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "position",
+                                "verified"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "N": {
+                        "minProperties": 1,
+                        "type": "object",
+                        "properties": {
+                          "alpha_bounds": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "minItems": 4,
+                                "maxItems": 4,
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "description": "Inclusive left, top, right, bottom pixel bounds."
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "anchor": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "description": "Source-image pixel coordinates."
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "edges": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "uniqueItems": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "xMin",
+                                    "xMax",
+                                    "yMin",
+                                    "yMax"
+                                  ]
+                                }
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "sockets": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "end",
+                                    "corner",
+                                    "t",
+                                    "gate-opening"
+                                  ]
+                                },
+                                "position": {
+                                  "minItems": 2,
+                                  "maxItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "description": "Source-image pixel coordinates."
+                                },
+                                "verified": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "position",
+                                "verified"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "S": {
+                        "minProperties": 1,
+                        "type": "object",
+                        "properties": {
+                          "alpha_bounds": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "minItems": 4,
+                                "maxItems": 4,
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "description": "Inclusive left, top, right, bottom pixel bounds."
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "anchor": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "description": "Source-image pixel coordinates."
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "edges": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "uniqueItems": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "xMin",
+                                    "xMax",
+                                    "yMin",
+                                    "yMax"
+                                  ]
+                                }
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "sockets": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "end",
+                                    "corner",
+                                    "t",
+                                    "gate-opening"
+                                  ]
+                                },
+                                "position": {
+                                  "minItems": 2,
+                                  "maxItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "description": "Source-image pixel coordinates."
+                                },
+                                "verified": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "position",
+                                "verified"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "W": {
+                        "minProperties": 1,
+                        "type": "object",
+                        "properties": {
+                          "alpha_bounds": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "minItems": 4,
+                                "maxItems": 4,
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "description": "Inclusive left, top, right, bottom pixel bounds."
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "anchor": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "description": "Source-image pixel coordinates."
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "edges": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "uniqueItems": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "xMin",
+                                    "xMax",
+                                    "yMin",
+                                    "yMax"
+                                  ]
+                                }
+                              },
+                              "verified": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "verified"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "sockets": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "end",
+                                    "corner",
+                                    "t",
+                                    "gate-opening"
+                                  ]
+                                },
+                                "position": {
+                                  "minItems": 2,
+                                  "maxItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "description": "Source-image pixel coordinates."
+                                },
+                                "verified": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "position",
+                                "verified"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "tile": {
                     "type": "object",
                     "properties": {

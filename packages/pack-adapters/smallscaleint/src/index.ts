@@ -27,3 +27,4 @@ export {
   type AlphaBounds,
   type StructuralImageBounds,
 } from './structural-bounds.js';
+export { structuralCardFacts } from './structural-card.js';
