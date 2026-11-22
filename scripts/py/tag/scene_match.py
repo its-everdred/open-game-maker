@@ -25,6 +25,7 @@ ENCODERS = {
 MAX_PIXELS = 25_000_000
 MAX_TOTAL_PIXELS = 50_000_000
 MAX_MOCK_BYTES = 64 * 1024 * 1024
+MAX_SOURCE_BYTES = 64 * 1024 * 1024
 
 
 def encoder_signature(encoder, transformers_version, pillow_version):
@@ -67,6 +68,21 @@ def flatten(image):
     background = Image.new("RGBA", rgba.size, (74, 62, 45, 255))
     background.alpha_composite(rgba)
     return background.convert("RGB")
+
+
+def read_facing_source(row, facing):
+    card = row["card"]
+    selected = card.get("sprite", {}).get("facings", {}).get(facing)
+    files = card.get("source", {}).get("files", [])
+    source = next((item for item in files if item.get("path") == selected), {})
+    with row["preview"].open("rb") as stream:
+        data = stream.read(MAX_SOURCE_BYTES + 1)
+    if len(data) > MAX_SOURCE_BYTES:
+        raise ValueError("candidate source exceeds file size limit")
+    digest = hashlib.sha256(data).hexdigest()
+    if not selected or source.get("sha256") != "sha256:" + digest:
+        raise ValueError("candidate source changed after validation")
+    return data, digest
 
 
 def eligible(assets_root, pack_id, limit, facing):
@@ -160,8 +176,11 @@ def main():
     mock_bytes = read_mock_bytes(args.mock)
     images = crop_mock_bytes(mock_bytes, bounds_list)
     total_pixels = sum(image.width * image.height for image in images)
+    source_hashes = []
     for row in rows:
-        with Image.open(row["preview"]) as image:
+        source_bytes, source_hash = read_facing_source(row, args.facing)
+        source_hashes.append(source_hash)
+        with Image.open(io.BytesIO(source_bytes)) as image:
             total_pixels += image.width * image.height
             if image.width * image.height > MAX_PIXELS or total_pixels > MAX_TOTAL_PIXELS:
                 raise ValueError("previews exceed image size limit")
@@ -173,12 +192,16 @@ def main():
         raise ValueError("encoder returned an unexpected number of embeddings")
     candidates = vectors[query_count:]
     results = [rank(ids, [query, *candidates]) for query in vectors[:query_count]]
+    source_by_id = dict(zip(ids, source_hashes))
+    for matches in results:
+        for match in matches:
+            match["source_sha256"] = source_by_id[match["id"]]
     output = {"model": signature, "mock_sha256": hashlib.sha256(mock_bytes).hexdigest(), "scope": {"pack": args.pack, "kind": "sprite", "facing": args.facing}, "matches": results[0], "examined": len(rows), "eligible": total,
               "truncated": len(rows) < total, "preview": f"source facing {args.facing}; camera match not verified"}
     if args.include_vectors:
         output["query"] = {"model": signature, "vector": np.asarray(vectors[0]).tolist()}
-        output["candidates"] = [{"id": name, "model": signature, "vector": np.asarray(vector).tolist()}
-                                for name, vector in zip(ids, candidates)]
+        output["candidates"] = [{"id": name, "model": signature, "vector": np.asarray(vector).tolist(), "source_sha256": source_hash}
+                                for name, vector, source_hash in zip(ids, candidates, source_hashes)]
     output["regions"] = [
         {"crop": list(bounds), "matches": matches, **({"query": {"model": signature, "vector": np.asarray(vector).tolist()}} if args.include_vectors else {})}
         for bounds, matches, vector in zip(bounds_list, results, vectors[:query_count])

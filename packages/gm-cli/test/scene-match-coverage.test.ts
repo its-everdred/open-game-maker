@@ -9,7 +9,7 @@ it('does not turn partial or unreviewed scoped searches into a kit gap', () => {
     mock_sha256: 'a'.repeat(64),
     query,
     regions: [{ crop: [0, 0, 1, 1], query }],
-    candidates: [{ id: 'grave', ...query }],
+    candidates: [{ id: 'grave', ...query, source_sha256: 'b'.repeat(64) }],
     examined: 1,
     eligible: 1,
     truncated: false,

@@ -1,4 +1,5 @@
 import sys
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,12 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
 import scene_match as scene
+
+
+def sprite_row(name, path):
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {"card": {"id": name, "sprite": {"facings": {"E": path.name}},
+                     "source": {"files": [{"path": path.name, "sha256": "sha256:" + digest}]}}, "preview": path}
 
 
 def test_encoder_signature_pins_model_and_preprocessing_versions():
@@ -65,7 +72,7 @@ def test_worker_outputs_vectors_for_placement_and_marks_truncation(tmp_path, mon
     sprite = tmp_path / "sprite.png"
     Image.new("RGBA", (4, 4), (10, 20, 30, 255)).save(mock)
     Image.new("RGBA", (2, 2), (30, 20, 10, 255)).save(sprite)
-    monkeypatch.setattr(scene, "eligible", lambda *args: ([{"card": {"id": "asset"}, "preview": sprite}], 2))
+    monkeypatch.setattr(scene, "eligible", lambda *args: ([sprite_row("asset", sprite)], 2))
     signature = "clip@revision:rgb-brown-v1:transformers-test:pillow-test"
     monkeypatch.setattr(scene, "embed", lambda images, encoder: ([[1, 0], [2, 1]], signature))
     monkeypatch.setattr(sys, "argv", ["scene_match.py", "--assets-root", str(tmp_path), "--pack", "pack", "--mock", str(mock), "--crop", "0,0,4,4", "--facing", "E", "--include-vectors"])
@@ -74,8 +81,9 @@ def test_worker_outputs_vectors_for_placement_and_marks_truncation(tmp_path, mon
     assert output["truncated"] is True
     assert output["scope"] == {"pack": "pack", "kind": "sprite", "facing": "E"}
     assert output["query"] == {"model": signature, "vector": [1, 0]}
-    assert output["candidates"][0] == {"id": "asset", "model": signature, "vector": [2, 1]}
+    assert output["candidates"][0] == {"id": "asset", "model": signature, "vector": [2, 1], "source_sha256": hashlib.sha256(sprite.read_bytes()).hexdigest()}
     assert output["matches"][0]["id"] == "asset"
+    assert output["matches"][0]["source_sha256"] == hashlib.sha256(sprite.read_bytes()).hexdigest()
     assert output["regions"] == [{"crop": [0, 0, 4, 4], "matches": output["matches"], "query": output["query"]}]
 
 
@@ -86,7 +94,7 @@ def test_worker_identifies_the_requested_local_encoder(tmp_path, monkeypatch, ca
     sprite = tmp_path / "sprite.png"
     Image.new("RGB", (2, 2), (10, 20, 30)).save(mock)
     Image.new("RGB", (2, 2), (30, 20, 10)).save(sprite)
-    monkeypatch.setattr(scene, "eligible", lambda *args: ([{"card": {"id": "asset"}, "preview": sprite}], 1))
+    monkeypatch.setattr(scene, "eligible", lambda *args: ([sprite_row("asset", sprite)], 1))
     seen = []
     def fake_embed(images, encoder):
         seen.append(encoder)
@@ -98,6 +106,29 @@ def test_worker_identifies_the_requested_local_encoder(tmp_path, monkeypatch, ca
     assert seen == ["siglip"]
     assert output["model"] == "siglip@revision:rgb-brown-v1:transformers-test:pillow-test"
     assert output["query"]["model"] == output["candidates"][0]["model"] == output["model"]
+
+
+def test_worker_refuses_a_source_changed_after_eligibility_check(tmp_path, monkeypatch):
+    mock = tmp_path / "mock.png"
+    sprite = tmp_path / "sprite.png"
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(mock)
+    Image.new("RGB", (2, 2), (30, 20, 10)).save(sprite)
+    row = sprite_row("asset", sprite)
+    Image.new("RGB", (2, 2), (90, 80, 70)).save(sprite)
+    monkeypatch.setattr(scene, "eligible", lambda *args: ([row], 1))
+    monkeypatch.setattr(scene, "embed", lambda images, encoder: ([[1, 0], [1, 0]], "test-model"))
+    monkeypatch.setattr(sys, "argv", ["scene_match.py", "--assets-root", str(tmp_path), "--pack", "pack", "--mock", str(mock), "--crop", "0,0,2,2", "--facing", "E"])
+    with pytest.raises(ValueError, match="changed after validation"):
+        scene.main()
+
+
+def test_candidate_source_is_bounded_before_decode(tmp_path, monkeypatch):
+    sprite = tmp_path / "sprite.png"
+    Image.new("RGB", (2, 2), (30, 20, 10)).save(sprite)
+    row = sprite_row("asset", sprite)
+    monkeypatch.setattr(scene, "MAX_SOURCE_BYTES", 4)
+    with pytest.raises(ValueError, match="file size"):
+        scene.read_facing_source(row, "E")
 
 
 def test_worker_hashes_the_same_bytes_used_for_crops(tmp_path, monkeypatch, capsys):
@@ -115,7 +146,7 @@ def test_worker_hashes_the_same_bytes_used_for_crops(tmp_path, monkeypatch, caps
         Image.new("RGB", (2, 2), (90, 80, 70)).save(path)
         return data
     monkeypatch.setattr(scene, "read_mock_bytes", read_then_replace)
-    monkeypatch.setattr(scene, "eligible", lambda *args: ([{"card": {"id": "asset"}, "preview": sprite}], 1))
+    monkeypatch.setattr(scene, "eligible", lambda *args: ([sprite_row("asset", sprite)], 1))
     def fake_embed(images, encoder):
         assert images[0].getpixel((0, 0)) == (10, 20, 30)
         return [[1, 0], [1, 0]], "test-model"
@@ -135,7 +166,7 @@ def test_multiple_crops_share_candidates_but_keep_separate_rankings(tmp_path, mo
     sprite = tmp_path / "sprite.png"
     Image.new("RGB", (4, 2), (10, 20, 30)).save(mock)
     Image.new("RGB", (2, 2), (30, 20, 10)).save(sprite)
-    rows = [{"card": {"id": "first"}, "preview": sprite}, {"card": {"id": "second"}, "preview": sprite}]
+    rows = [sprite_row("first", sprite), sprite_row("second", sprite)]
     monkeypatch.setattr(scene, "eligible", lambda *args: (rows, 2))
     calls = []
     def fake_embed(images, encoder):

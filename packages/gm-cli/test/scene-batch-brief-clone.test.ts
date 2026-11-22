@@ -56,8 +56,8 @@ function input() {
       mock_sha256: 'a'.repeat(64),
       scope: { pack: 'pack', kind: 'sprite' as const, facing: 'E' as const },
       candidates: [
-        { id: 'cart', ...query },
-        { id: 'stall', ...stallQuery },
+        { id: 'cart', ...query, source_sha256: 'b'.repeat(64) },
+        { id: 'stall', ...stallQuery, source_sha256: 'c'.repeat(64) },
       ],
       examined: 2,
       eligible: 2,

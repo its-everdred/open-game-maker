@@ -20,7 +20,9 @@ const result = z.object({
     facing: z.enum(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']),
   }),
   query: embedding,
-  candidates: z.array(embedding.extend({ id: z.string().min(1) })).max(1000),
+  candidates: z
+    .array(embedding.extend({ id: z.string().min(1), source_sha256: z.string().regex(/^[a-f0-9]{64}$/) }))
+    .max(1000),
   examined: z.number().int().nonnegative().max(1000),
   eligible: z.number().int().nonnegative(),
   truncated: z.boolean(),

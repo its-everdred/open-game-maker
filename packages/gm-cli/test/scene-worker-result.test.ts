@@ -30,6 +30,7 @@ describe('local scene match result', () => {
   it('binds each reviewed object to its own crop while sharing candidates', () => {
     const batch = {
       ...result,
+      candidates: result.candidates.map((candidate) => ({ ...candidate, source_sha256: 'b'.repeat(64) })),
       mock_sha256: 'a'.repeat(64),
       scope: { pack: 'pack', kind: 'sprite' as const, facing: 'E' as const },
       regions: [
