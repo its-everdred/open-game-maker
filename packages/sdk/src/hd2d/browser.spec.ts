@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
+import { env } from 'node:process';
 
 const ALL_ON = 'facade=1&lighting=1&focus=1&particles=1&seed=7';
 /** Frames the probe times per tier. */
-const PROBE_FRAMES = 20;
+const PROBE_FRAMES = 10;
 
 // Software GL (CI) takes seconds per all-on Phaser frame, and each test boots the clearing several times.
 test.setTimeout(240_000);
@@ -47,6 +48,8 @@ for (const renderer of ['phaser', 'three'] as const) {
   });
 
   test(`${renderer} facade frame-time probe per tier (a record, not a gate)`, async ({ page }, testInfo) => {
+    // SwiftShader times the CPU rasterizer, not the device: the record is only taken on real GPU Chromium.
+    test.skip(env.GM_VERIFY_SOFTWARE_GL === '1', 'frame times under software GL are not a device record');
     for (const quality of ['off', 'low', 'high'] as const) {
       await page.goto(`/hd2d/?${ALL_ON}&renderer=${renderer}&quality=${quality}`);
       await expect.poll(() => page.evaluate(() => window.__hd2d?.ready)).toBe(true);
