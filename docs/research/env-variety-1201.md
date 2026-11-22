@@ -164,3 +164,10 @@ The ticket text says TRELLIS 2 is "about $0.02 per mesh"; the guide lists TRELLI
 0.02. If Kevin prefers TRELLIS v1 for every item, the same 16 meshes cost about 0.32 USD, at the quality he judged
 for characters rather than the one he picked for trees. The 9 USD host cap and ledger (`scripts/fal3d.py`) apply
 either way; the calls run on the NUC after approval.
+
+## Approved spend (2026-11-22)
+
+Kevin's verdict on the review page: "TRELLIS v1 only, 0.32 USD: Like." All 16 items go through TRELLIS v1
+(`fal-ai/trellis`, or `fal-ai/trellis/multi` for crow and rabbit), about 0.02 USD each, about 0.32 USD in total. No
+TRELLIS 2 or Rodin calls. The calls belong to the production ticket (#1206) and run under the 9 USD cap and ledger
+(`scripts/fal3d.py`); this ticket made none.
