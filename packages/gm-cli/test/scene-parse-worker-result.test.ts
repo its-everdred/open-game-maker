@@ -5,6 +5,7 @@ it('accepts worker metadata and rejects malformed placement evidence', () => {
   const query = { model: 'local', vector: [1, 0] };
   const value = {
     mock_sha256: 'a'.repeat(64),
+    scope: { pack: 'pack', kind: 'sprite', facing: 'E' },
     query,
     candidates: [{ id: 'cart', ...query }],
     examined: 1,
@@ -15,6 +16,7 @@ it('accepts worker metadata and rejects malformed placement evidence', () => {
   };
   expect(parseSceneBatchMatch(value).regions[0]?.crop).toEqual([0, 1, 2, 3]);
   expect(() => parseSceneBatchMatch({ ...value, mock_sha256: 'wrong' })).toThrow();
+  expect(() => parseSceneBatchMatch({ ...value, scope: { pack: '../pack', kind: 'sprite', facing: 'E' } })).toThrow();
   expect(() => parseSceneBatchMatch({ ...value, regions: [{ crop: [0, 0, 0, 1], query }] })).toThrow();
   expect(() =>
     parseSceneBatchMatch({ ...value, candidates: [{ id: 'cart', model: 'local', vector: [NaN] }] }),

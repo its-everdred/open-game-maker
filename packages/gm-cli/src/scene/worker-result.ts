@@ -12,6 +12,7 @@ export type SceneMatchResult = {
 
 export type SceneBatchMatchResult = SceneMatchResult & {
   mock_sha256: string;
+  scope: { pack: string; kind: 'sprite'; facing: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' };
   regions: readonly { crop: readonly [number, number, number, number]; query: Embedding }[];
 };
 

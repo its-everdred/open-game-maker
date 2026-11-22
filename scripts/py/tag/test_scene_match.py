@@ -72,6 +72,7 @@ def test_worker_outputs_vectors_for_placement_and_marks_truncation(tmp_path, mon
     scene.main()
     output = json.loads(capsys.readouterr().out)
     assert output["truncated"] is True
+    assert output["scope"] == {"pack": "pack", "kind": "sprite", "facing": "E"}
     assert output["query"] == {"model": signature, "vector": [1, 0]}
     assert output["candidates"][0] == {"id": "asset", "model": signature, "vector": [2, 1]}
     assert output["matches"][0]["id"] == "asset"

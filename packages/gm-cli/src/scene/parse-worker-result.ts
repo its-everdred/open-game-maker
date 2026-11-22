@@ -11,6 +11,14 @@ const crop = z.tuple([
 ]);
 const result = z.object({
   mock_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  scope: z.object({
+    pack: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+      .refine((value) => !value.includes('..')),
+    kind: z.literal('sprite'),
+    facing: z.enum(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']),
+  }),
   query: embedding,
   candidates: z.array(embedding.extend({ id: z.string().min(1) })).max(1000),
   examined: z.number().int().nonnegative().max(1000),

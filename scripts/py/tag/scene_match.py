@@ -173,7 +173,7 @@ def main():
         raise ValueError("encoder returned an unexpected number of embeddings")
     candidates = vectors[query_count:]
     results = [rank(ids, [query, *candidates]) for query in vectors[:query_count]]
-    output = {"model": signature, "mock_sha256": hashlib.sha256(mock_bytes).hexdigest(), "matches": results[0], "examined": len(rows), "eligible": total,
+    output = {"model": signature, "mock_sha256": hashlib.sha256(mock_bytes).hexdigest(), "scope": {"pack": args.pack, "kind": "sprite", "facing": args.facing}, "matches": results[0], "examined": len(rows), "eligible": total,
               "truncated": len(rows) < total, "preview": f"source facing {args.facing}; camera match not verified"}
     if args.include_vectors:
         output["query"] = {"model": signature, "vector": np.asarray(vectors[0]).tolist()}

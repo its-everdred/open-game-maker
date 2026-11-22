@@ -31,6 +31,7 @@ describe('local scene match result', () => {
     const batch = {
       ...result,
       mock_sha256: 'a'.repeat(64),
+      scope: { pack: 'pack', kind: 'sprite' as const, facing: 'E' as const },
       regions: [
         { crop: [0, 0, 2, 2] as const, query: result.query },
         { crop: [2, 0, 2, 2] as const, query: { model: 'local', vector: [0, 1] } },

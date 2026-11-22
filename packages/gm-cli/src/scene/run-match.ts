@@ -48,6 +48,8 @@ export async function runSceneMatch(input: {
   args.push('--facing', input.facing, '--encoder', input.encoder, '--limit', String(limit), '--include-vectors');
   const { stdout } = await execute(input.python, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const result = parseSceneBatchMatch(JSON.parse(stdout) as unknown);
+  if (result.scope.pack !== input.pack || result.scope.facing !== input.facing)
+    throw new Error('scene matcher returned a different search scope');
   if (result.mock_sha256 !== (await mockHash(input.mock)))
     throw new Error('scene match was computed from a different mock');
   if (

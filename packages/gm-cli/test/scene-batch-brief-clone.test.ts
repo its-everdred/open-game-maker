@@ -54,6 +54,7 @@ function input() {
     match: {
       query,
       mock_sha256: 'a'.repeat(64),
+      scope: { pack: 'pack', kind: 'sprite' as const, facing: 'E' as const },
       candidates: [
         { id: 'cart', ...query },
         { id: 'stall', ...stallQuery },
