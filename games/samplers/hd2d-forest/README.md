@@ -6,6 +6,8 @@ modules on real pack art. Lighting and focus come only from `packages/sdk/src/hd
 
 - Presets: Golden shafts, Soft daylight and Amber canopy: soft shafts and dapple, plus a flickering campfire light.
 - Hero: lit through a normal map generated from its alpha; every other sprite uses the flat default.
+- Low tier (`quality=low`): keeps the focus blur and lights only the hero and the sprites the campfire reaches; the rest
+  are drawn flat at the same ambient.
 - Focus: depth bands with the hero crisp. The scene is grouped into six bands by isometric row so far rows blur while
   draw order stays correct.
 - Particles: the button is disabled until the core particle backends (#1174, #1178) land.

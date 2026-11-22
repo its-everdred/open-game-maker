@@ -56,10 +56,18 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     ['off', 'lighting=0&focus=0'],
     ['lighting', 'focus=0'],
     ['focus', 'lighting=0'],
+    ['low', 'quality=low'],
   ]) {
     const { context, page, errors } = await open(viewport, query);
     const file = join(out, `amber-${label}-${name}.png`);
     await page.screenshot({ path: file });
+    if (label === 'low') {
+      // Kevin keeps the blur on the low tier and saves by lighting fewer sprites instead.
+      const blur = await page.evaluate(() => window.__forest.bandBlur());
+      if (!blur.some((value) => value > 0)) throw new Error(`low ${name}: no depth band is blurred`);
+      report.bandBlur = { ...report.bandBlur, [`low-${name}`]: blur };
+      report.litSprites = { ...report.litSprites, [name]: await page.evaluate(() => window.__forest.litSprites()) };
+    }
     report.stills.push(file);
     report.errors.push(...errors);
     await context.close();

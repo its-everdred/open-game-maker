@@ -37,6 +37,9 @@ const cellOf = (x: number, y: number) => {
   return { x: cx, z: cz };
 };
 
+/** Sway can tip a tree's crown past its resting bounds; this keeps such sprites counted as in the fire's reach. */
+const SWAY_MARGIN = 16;
+
 const campfire = (x: number, y: number): LightingLight => ({
   id: 'campfire',
   x,
@@ -60,6 +63,9 @@ export class Forest extends Phaser.Scene {
   /** Trees and the cell each stands on, swayed by the same wind as the leaves. */
   private trees: { image: Phaser.GameObjects.Image; x: number; z: number }[] = [];
   private bands: Phaser.GameObjects.Container[] = [];
+  /** Sprites drawn without the light shader on the low tier, tinted to match the lit sprites' ambient. */
+  private flat: Phaser.GameObjects.Image[] = [];
+  private litCount = 0;
   readonly ready: Promise<void>;
   private markReady!: () => void;
 
@@ -130,7 +136,15 @@ export class Forest extends Phaser.Scene {
     });
     const heroSheet = this.textures.get('hero-idle').getSourceImage() as HTMLImageElement | HTMLCanvasElement;
     this.lighting.setNormalMap(hero, normalCanvas(heroSheet));
-    for (const image of images) this.lighting.setNormalMap(image, 'flat');
+    // The campfire is the only per-sprite light (shafts and dapple are screen overlays), and it adds nothing past its
+    // radius. So the low tier lights only the sprites it reaches and draws the rest flat, which looks the same.
+    const reach = new Phaser.Geom.Circle(this.fire.x, this.fire.y, this.fire.radius + SWAY_MARGIN);
+    for (const image of images)
+      if (quality === 'high' || Phaser.Geom.Intersects.CircleToRectangle(reach, image.getBounds()))
+        this.lighting.setNormalMap(image, 'flat');
+      else this.flat.push(image);
+    this.litCount = images.length - this.flat.length + 1;
+    this.tintFlat();
 
     this.focus = createFocus({ phaser: { scene: this, hero } }, { ...FOCUS, quality: this.focusQuality() });
 
@@ -183,6 +197,18 @@ export class Forest extends Phaser.Scene {
     return { ...PRESETS[id], lights: this.fire ? [this.fire] : [] };
   }
 
+  /** Sprites lit through the light shader, the hero included. */
+  litSprites(): number {
+    return this.litCount;
+  }
+
+  /** Flat sprites take the lit sprites' ambient while lighting is on, so the edge of the fire's reach shows no seam. */
+  private tintFlat(): void {
+    const { active, ambientColor: a } = this.lights;
+    const tint = active ? Phaser.Display.Color.GetColor(a.r * 255, a.g * 255, a.b * 255) : 0xffffff;
+    for (const image of this.flat) image.setTint(tint);
+  }
+
   /** The blur radius scale the focus module set on each band, back to front (0 when unblurred). */
   bandBlur(): number[] {
     return this.bands.map((band) => {
@@ -199,11 +225,12 @@ export class Forest extends Phaser.Scene {
   setLighting(on: boolean): void {
     this.options.lighting = on;
     this.lighting?.setQuality(on ? this.options.quality : 'off');
+    this.tintFlat();
   }
 
-  /** The low tier drops focus blur entirely: blurring the bands costs about as much on low as on high. */
-  private focusQuality(): 'high' | 'off' {
-    return this.options.focus && this.options.quality === 'high' ? 'high' : 'off';
+  /** Kevin keeps the blur on the low tier (round 2); low saves its cost by lighting fewer sprites instead. */
+  private focusQuality(): Quality | 'off' {
+    return this.options.focus ? this.options.quality : 'off';
   }
 
   setFocus(on: boolean): void {
