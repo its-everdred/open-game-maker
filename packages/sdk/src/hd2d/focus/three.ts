@@ -162,12 +162,12 @@ export function createThreeFocus(deps: ThreeFocusDeps, state: FocusState): Focus
     return target;
   }
 
-  /** Runs `draw` with only the hero (and lights) visible, the hero alone keeping its own pixels. */
-  function withOnlyHero(hero: Object3D, draw: () => void): void {
+  /** Runs `draw` with only the hero (and lights) visible, the hero alone keeping its own pixels; no hero, nothing. */
+  function withOnlyHero(hero: Object3D | undefined, draw: () => void): void {
     const hidden: Object3D[] = [];
     const related = new Set<Object3D>();
-    hero.traverse((object) => related.add(object));
-    for (let parent: Object3D | null = hero; parent; parent = parent.parent) related.add(parent);
+    hero?.traverse((object) => related.add(object));
+    for (let parent: Object3D | null = hero ?? null; parent; parent = parent.parent) related.add(parent);
     scene.traverse((object) => {
       if (!related.has(object) && object.visible && isRenderable(object)) {
         object.visible = false;
@@ -252,13 +252,13 @@ export function createThreeFocus(deps: ThreeFocusDeps, state: FocusState): Focus
       renderer.autoClear = !plan.bokeh;
       try {
         original.call(renderer, quad, quadCamera);
-        if (hero && heroVisible) {
-          hero.visible = true;
-          renderer.autoClear = false;
-          scene.fog = null;
-          scene.background = null;
-          withOnlyHero(hero, () => original.call(renderer, scene, camera));
-        }
+        // One last canvas render of the scene, even with no hero to draw, so scene hooks (lighting's composite) run
+        // once on the finished frame rather than on the offscreen pass.
+        if (hero && heroVisible) hero.visible = true;
+        renderer.autoClear = false;
+        scene.fog = null;
+        scene.background = null;
+        withOnlyHero(heroVisible ? hero : undefined, () => original.call(renderer, scene, camera));
       } finally {
         material.colorWrite = true;
         renderer.autoClear = autoClear;

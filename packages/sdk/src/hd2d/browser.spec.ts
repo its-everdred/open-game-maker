@@ -47,6 +47,17 @@ for (const renderer of ['phaser', 'three'] as const) {
     expect(applied.first).toBe(booted.first);
   });
 
+  test(`${renderer} facade lights the scene when focus has no hero to keep crisp`, async ({ page }) => {
+    const { info } = await render(page, `${ALL_ON}&renderer=${renderer}&quality=high`);
+    const scene = JSON.parse(info.scene!) as { focus: Record<string, unknown>; lighting: Record<string, unknown> };
+    delete scene.focus.hero;
+    const dim = { ...scene, lighting: { ...scene.lighting, ambient: { color: '#203060', intensity: 0.1 } } };
+    const lit = await render(page, `${ALL_ON}&renderer=${renderer}&quality=high`, JSON.stringify(scene));
+    expect(lit.second).toBe(lit.first);
+    const dimmed = await render(page, `${ALL_ON}&renderer=${renderer}&quality=high`, JSON.stringify(dim));
+    expect(dimmed.first).not.toBe(lit.first);
+  });
+
   test(`${renderer} facade frame-time probe per tier (a record, not a gate)`, async ({ page }, testInfo) => {
     // SwiftShader times the CPU rasterizer, not the device: the record is only taken on real GPU Chromium.
     test.skip(env.GM_VERIFY_SOFTWARE_GL === '1', 'frame times under software GL are not a device record');
