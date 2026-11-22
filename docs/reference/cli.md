@@ -202,6 +202,11 @@ stylesheets, at 390x844, 844x390, 820x1180 and 1180x820 with touch on (`--viewpo
 default `~/.config/ogm/qa/storage.json`, minted on the host by `ops/bin/ogm-qa-signin`) and answers the app's requests
 for the game build from `./dist`. `--frame bare` captures the game page alone, as before.
 
+`gm scene identify <mock.png> <brief.json> <match.json>` ranks up to three sprite candidates per reviewed
+brief region from a local scene-matcher result. It checks the mock hash and crop coordinates, and reports the
+searched pack, facing and completeness. Candidate selection and kit-gap decisions still require review; the
+command does not validate the provenance or usage rights of a supplied match file.
+
 `gm look score <target.png> <candidate.png>` compares images locally and prints JSON. It writes `look-score.png` (or
 `--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The crop applied to both inputs
 `--crop x,y,w,h` and repeatable `--region name=x,y,w,h` use pixel coordinates; regions refer to the cropped target. When none are named, a 3-by-3 grid supplies the worst five regions.

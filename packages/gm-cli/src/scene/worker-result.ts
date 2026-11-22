@@ -10,7 +10,7 @@ export type SceneMatchResult = {
   truncated: boolean;
 };
 
-export type SceneBatchMatchResult = SceneMatchResult & {
+export type SceneBatchMatchResult = Omit<SceneMatchResult, 'candidates'> & {
   mock_sha256: string;
   candidates: readonly (EmbeddedAsset & { source_sha256: string })[];
   scope: { pack: string; kind: 'sprite'; facing: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' };
