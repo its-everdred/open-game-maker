@@ -3,7 +3,8 @@
 
 For each game with a tested build (QA games excluded), GET <games origin>/g/<id>/<build>/ (following redirects), then
 GET every <script src> and <link rel=modulepreload href> in that page, resolved against the page's final URL. Any
-non-200, or a reference that still holds `//a/` (the c85b055b8 rewrite that 404ed every game), fails the check.
+non-200, or a reference that still holds `//a/` in the page or in a script it loads (the c85b055b8 rewrite that 404ed
+every game), fails the check.
 
 usage: ogm-qa-game-boot [--db <ogm.sqlite3>] [--origin <games origin>]
   defaults: $OGM_DATA_DIR/ogm.sqlite3 and OGM_GAMES_ORIGIN, read from $OGM_ENV_DIR/api.env (~/.config/ogm/env)
@@ -18,6 +19,8 @@ import urllib.error
 import urllib.request
 from urllib.parse import urljoin
 
+# A rewritten address glued onto a path (`assets//a/<hash>.json`, `.//a/<hash>.js`) inside a script.
+BROKEN = re.compile(r'[^"\'`\s(]*//a/[0-9a-f]{64}\.\w+')
 REF = re.compile(r'<(?:script[^>]*\ssrc|link[^>]*rel="modulepreload"[^>]*\shref)="([^"]+)"', re.I)
 
 
@@ -54,9 +57,12 @@ def check(origin, game_id, slug, build_id):
     for ref in refs:
         if '//a/' in ref:
             return f'{slug} {build_id}: broken reference {ref}'
-        status, _, _ = get(urljoin(final, ref))
+        status, _, script = get(urljoin(final, ref))
         if status != 200:
             return f'{slug} {build_id}: {ref} {status}'
+        broken = BROKEN.search(script.decode('utf8', 'replace'))
+        if broken:
+            return f'{slug} {build_id}: {ref} holds broken reference {broken.group(0)}'
     return None
 
 

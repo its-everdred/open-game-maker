@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ogm-qa-game-boot against a local games host: a build whose entry script loads passes; a build carrying the
-# c85b055b8 `.//a/` rewrite, or whose script 404s, fails (#1197: every prod game stuck on its loading layer for a day).
+# c85b055b8 `.//a/` rewrite (in the page or a script), or whose script 404s, fails (#1197: every prod game stuck on its loading layer for a day).
 
 set -euo pipefail
 
@@ -65,5 +65,16 @@ rc=$?
 set -e
 assert_eq 1 "$rc" 'a missing entry fails'
 assert_grep 'bad build_bad: ./missing.js 404' "$scratch/out"
+
+# A script that loads but names its data as `assets//a/<hash>.json` (the second half of the rewrite bug) fails.
+hash=$(printf 'x%.0s' {1..64} | tr x 0)
+printf 'fetch(new URL("assets//a/%s.json", document.baseURI))\n' "$hash" > "$root/a/glued.js"
+page g_bad build_bad /a/glued.js
+set +e
+"$check" --db "$db" --origin "$origin" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a script with a glued address fails'
+assert_grep "bad build_bad: /a/glued.js holds broken reference assets//a/$hash.json" "$scratch/out"
 
 echo 'qa-game-boot: ok'
