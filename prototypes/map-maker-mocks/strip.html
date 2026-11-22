@@ -1,0 +1,135 @@
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="ui.css"><style>
+.top{position:absolute;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;z-index:900000}
+.pill{display:flex;gap:6px;padding:6px;border-radius:999px}
+.strip{position:absolute;top:76px;z-index:900000;display:flex;gap:10px;padding:10px;border-radius:24px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;transition:transform .25s,opacity .25s}
+.strip::-webkit-scrollbar{display:none}
+.strip.hide{transform:translateY(-12px);opacity:0;pointer-events:none}
+.strip>*{scroll-snap-align:start}
+.scard{cursor:pointer;transition:outline-color .15s}
+.sthumb{isolation:isolate}
+.scard .who{flex:none}
+.add{flex:none;align-self:center}
+/* B: small square chips, name under the picture */
+.v-B .scard{background:none;text-align:center}
+.v-B .sthumb{border-radius:16px}
+.v-B .scard.on{outline:0}.v-B .scard.on .sthumb{outline:3px solid var(--yellow-b)}
+.v-B .sname{justify-content:center;gap:4px;padding:4px 0 0;font-size:12px}
+.v-B .who{position:absolute;right:4px;top:4px;width:22px;height:22px}
+.v-B .who svg{width:13px;height:13px}
+/* C: one wide card per swipe, page dots below */
+.v-C .scard{scroll-snap-align:center}
+.dots{position:absolute;z-index:900000;display:flex;gap:6px;transform:translateX(-50%)}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--rule)}.dots i.on{background:var(--yellow-b)}
+.tray{position:absolute;z-index:900000;border-radius:26px 26px 0 0;padding:10px 12px 18px;display:flex;flex-direction:column;gap:10px}
+.tray.low .btn{width:40px;height:40px}
+.tools{display:flex;gap:6px;padding:6px;border-radius:999px;width:max-content;margin:0 auto}
+.v-B.strip .sname span:first-child{white-space:nowrap}
+.kinds{display:grid;gap:8px}
+#w{transition:opacity .2s,transform .2s}#w.out{opacity:0;transform:translateX(-24px)}
+.agentnow{animation:pulse 1.4s infinite}@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(111,214,180,.25)}}
+</style></head><body><div class="stage"><div class="world" id="w"></div></div>
+<script src="iso.js"></script><script src="scene.js"></script><script src="icons.js"></script><script src="panels.js"></script><script>
+// Clickable card strip, three variations: A big cards (the approved mock), B small chips, C one card per swipe.
+const V = new URLSearchParams(location.search).get('v') || 'A';
+const VW = innerWidth, VH = innerHeight, LAND = VW > VH, LOW = VH < 500;
+const N = 8, M = 7;
+const tile = (L, f, x, y, ox, oy, s, k = 'f') => Iso.img(L, `sprites/${f}.png`, x, y, ox, oy, s, k);
+const grass = (L, ox, oy, s, path = () => false, a = 'ground_a2_e', b = 'ground_h1_e') => {
+  for (let x = 0; x < N; x++) for (let y = 0; y < M; y++) tile(L, path(x, y) ? b : a, x, y, ox, oy, s, 'g');
+};
+const BUILD = {
+  graveyard: (L, ox, oy, s) => buildScene(L, ox, oy, s),
+  village(L, ox, oy, s) {
+    grass(L, ox, oy, s, (x, y) => y === 3 || x === 5);
+    for (let i = 0; i < N; i++) if (i !== 5) Iso.fence(L, 'a1', i, M - 1, 'yMax', ox, oy, s);
+    for (let i = 0; i < M; i++) if (i !== 3) Iso.fence(L, 'a1', N - 1, i, 'xMax', ox, oy, s);
+    [[0, 0], [1, 0], [2, 0], [0, 1]].forEach(([x, y]) => tile(L, 'wall_f1_s', x, y, ox, oy, s));
+    tile(L, 'door_a1_e', 1, 1, ox, oy, s); tile(L, 'roof_a1_e', 0, 0, ox, oy, s);
+    [['misc_a1_e', 3, 1], ['misc_a5_e', 3, 0], ['chest_a1_e', 6, 1], ['misc_b1_e', 2, 5], ['tree_a3_e', 7, 0], ['tree_b1_e', 0, 5], ['flora_a2_e', 6, 5], ['misc_c1_e', 4, 4]]
+      .forEach(([f, x, y]) => tile(L, f, x, y, ox, oy, s));
+    tile(L, 'warrior_idle', 4.4, 2.6, ox, oy, s, 'c');
+  },
+  crypt(L, ox, oy, s) {
+    grass(L, ox, oy, s, (x, y) => x > 0 && y > 0, 'ground_a2_e', 'ground_h1_e');
+    for (let i = 0; i < N; i++) tile(L, 'wall_f1_s', i, 0, ox, oy, s);
+    for (let i = 1; i < M; i++) tile(L, 'wall_f1_s', 0, i, ox, oy, s);
+    [['torch2', 3, 1], ['torch2', 1, 4], ['stone_a5_e', 3, 3], ['stone_a5_e', 5, 3], ['stone_a4_e', 4, 5], ['chest_b1_e', 6, 5], ['wallflora_a1_e', 6, 1]]
+      .forEach(([f, x, y]) => tile(L, f, x, y, ox, oy, s));
+    tile(L, 'knight_idle', 4.5, 4, ox, oy, s, 'c');
+  },
+  woods(L, ox, oy, s) {
+    grass(L, ox, oy, s, (x, y) => x === y || x === y + 1);
+    [['tree_a1_e', 0, 2], ['tree_b1_e', 1, 0], ['tree_a3_e', 3, 0], ['tree_b4_e', 6, 1], ['tree_a1_e', 7, 3], ['tree_b1_e', 2, 5], ['tree_a3_e', 5, 6], ['tree_b1_e', 0, 6],
+     ['flora_a5_e', 4, 1], ['flora_b1_e', 6, 4], ['flora_a2_e', 1, 3], ['stone_a13_e', 5, 3]].forEach(([f, x, y]) => tile(L, f, x, y, ox, oy, s));
+  },
+  blank: (L, ox, oy, s) => grass(L, ox, oy, s),
+};
+// who: person = Kevin changed it last, bot = an agent; live = an agent is editing it right now.
+const scenes = [
+  { id: 'graveyard', name: 'Graveyard', who: 'person' },
+  { id: 'village', name: 'Village', who: 'bot' },
+  { id: 'crypt', name: 'Crypt', who: 'bot', live: true, look: 'brightness(.62) saturate(.8)' },
+  { id: 'woods', name: 'Woods', who: 'bot' },
+];
+let cur = 0;
+// Draw a scene centred in a box: the 8x7 diamond plus room above for tall sprites.
+function draw(L, sc, cx, cy, w, h, scale = 1) {
+  const s = Math.min(w / 980, h / 640) * scale;
+  const ox = cx - (N - M) / 2 * 64 * s, oy = cy + 70 * s - (N + M) / 2 * 32 * s;
+  BUILD[sc.id](L, ox, oy, s);
+  L.style.filter = sc.look || '';
+}
+const H = (h) => document.body.insertAdjacentHTML('beforeend', h);
+const CARD = { A: [LOW ? 126 : 150, LOW ? 52 : 96], B: [LOW ? 64 : 76, LOW ? 44 : 64], C: [VW < 600 ? VW - 60 : LOW ? 300 : 360, LOW ? 52 : 150] }[V];
+const stripTop = 76, stripH = CARD[1] + (V === 'B' ? 42 : 50) + (V === 'C' ? 14 : 0);
+const trayH = LOW ? 0 : 166; /* short screens: tools become a column on the right */
+function card(sc, i) {
+  const [w, h] = CARD;
+  return `<div class="scard ${i === cur ? 'on' : ''}" data-i="${i}" style="width:${w}px;position:relative" role="button" aria-label="${sc.name}">
+   <div class="sthumb" style="height:${h}px"></div>
+   <div class="sname"><span>${sc.name}</span><span class="who ${sc.who} ${sc.live ? 'agentnow' : ''}">${ic(sc.who)}</span></div></div>`;
+}
+const stripPos = VW < 600 ? 'left:12px;right:12px' : LOW ? 'left:12px;right:84px' : `left:50%;max-width:${Math.min(VW - 24, 900)}px;transform:translateX(-50%)`;
+H(`<div class="top"><div class="pill glass">${btn('close')}<button class="btn on" id="tog" aria-label="scenes">${ic('map')}</button></div>
+  <div class="pill glass">${btn('undo')}${btn('redo')}</div><div class="pill glass">${btn('play', '', 'test play')}${btn('check', 'go', 'save')}</div></div>
+  <div class="strip glass v-${V}" id="strip" style="${stripPos}"></div>${V === 'C' ? '<div class="dots" id="dots"></div>' : ''}`);
+const kinds = [{ ground: 'ground_a2_e' }, { fence: 'b1' }, { wall: 'wall_f1_s' }, { prop: 'stone_a13_e' }, { prop: 'tree_a1_e' }, { char: 'knight_idle' }];
+H(`<div class="tray ${LOW ? 'low' : 'glass'}" style="${LOW ? 'right:12px;top:84px;padding:0' : VW < 600 ? 'left:0;right:0;bottom:0' : 'left:50%;width:640px;transform:translateX(-50%);bottom:0'}">
+  <div class="tools glass" style="${LOW ? 'flex-direction:column;border-radius:32px' : ''}">${btn('select', 'on')}${btn('brush', '', 'paint ground')}${btn('fence', '', 'draw fences and walls')}${btn('erase')}${btn('layers')}${btn('sun', '', 'light and mood')}</div>
+  ${LOW ? '' : `<div class="kinds" style="grid-template-columns:repeat(6,1fr)">${kinds.map((k) => mini(k, false, 46)).join('')}</div>`}</div>`);
+const strip = document.getElementById('strip'), W = document.getElementById('w');
+function renderStrip() {
+  const add = `<button class="btn add" id="add" aria-label="new scene">${ic('plus')}</button>`;
+  strip.innerHTML = (V === 'C' ? '' : add) + scenes.map(card).join('') + (V === 'C' ? add : '');
+  strip.querySelectorAll('.sthumb').forEach((t, i) => { const [w, h] = CARD; draw(t, scenes[i], w / 2, h / 2, w, h, V === 'B' ? 1.25 : 1.1); });
+  const dots = document.getElementById('dots');
+  if (dots) { const r = strip.getBoundingClientRect(); dots.style.cssText += `;left:${r.left + r.width / 2}px;top:${r.bottom + 8}px`; dots.innerHTML = scenes.map((_, i) => `<i class="${i === cur ? 'on' : ''}"></i>`).join(''); }
+}
+function renderMap() {
+  W.innerHTML = '';
+  const open = !strip.classList.contains('hide'), top = open ? stripTop + stripH + (V === 'C' ? 20 : 0) : 70;
+  const side = LOW ? 84 : 0;
+  draw(W, scenes[cur], (VW - side) / 2, (top + VH - trayH) / 2, VW - 24 - side, VH - trayH - top - 10);
+}
+function go(i) {
+  if (i === cur) return;
+  cur = i; W.classList.add('out');
+  setTimeout(() => { renderMap(); W.classList.remove('out'); }, 200);
+  renderStrip();
+  strip.querySelector(`[data-i="${i}"]`)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
+strip.addEventListener('click', (e) => {
+  if (e.target.closest('#add')) { scenes.push({ id: 'blank', name: `Scene ${scenes.length + 1}`, who: 'person' }); return go(scenes.length - 1); }
+  const c = e.target.closest('.scard'); if (c) go(+c.dataset.i);
+});
+if (V === 'C') strip.addEventListener('scroll', () => {
+  clearTimeout(strip.t);
+  strip.t = setTimeout(() => { const i = Math.round(strip.scrollLeft / (CARD[0] + 10)); if (i !== cur && scenes[i]) go(i); }, 180);
+});
+document.getElementById('tog').addEventListener('click', (e) => {
+  strip.classList.toggle('hide'); e.currentTarget.classList.toggle('on');
+  document.getElementById('dots')?.classList.toggle('hide'); document.getElementById('dots') && (document.getElementById('dots').style.visibility = strip.classList.contains('hide') ? 'hidden' : '');
+  renderMap();
+});
+renderStrip(); renderMap();
+</script></body></html>
