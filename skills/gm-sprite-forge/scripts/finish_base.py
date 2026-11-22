@@ -33,10 +33,14 @@ def base_pass(sheet, ref):
     a = sheet.copy()
     rl = rgb2lab(ref[sm.mask(ref)][:, :3][None] / 255)[0]
     rs = rl[pack_skin(rl)]
+    if not len(rs):
+        raise ValueError('the pack reference has no skin pixels (light and warm): use the class Idle sheet')
     obj = sm.mask(a)
     al = rgb2lab(a[obj][:, :3][None] / 255)[0]
     w = np.clip((np.hypot(al[:, 1], al[:, 2]) - 3) / 6, 0, 1)  # 0 for neutral cloth, 1 for clearly warm skin
     warm = w > 0.8
+    if not warm.any():
+        raise ValueError('the sheet has no clearly warm (skin) pixels to match')
     ratio = float(np.clip(np.median(rs[:, 0]) / max(1e-3, np.median(al[warm, 0])), 0.85, 1.25))
     out = al.copy()
     out[:, 0] = np.clip(al[:, 0] * ratio, 0, 100)

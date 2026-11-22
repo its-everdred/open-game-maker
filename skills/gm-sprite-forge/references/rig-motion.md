@@ -88,7 +88,9 @@ loop, none for an attack, in pixels at the pack cell.
   trousers onto bare legs, so `finish_base.py` matches only the skin, to `pack.idle` (the class's Idle sheet: attack
   sheets carry light, warm effect pixels): each pixel's hue moves toward the pack skin in proportion to its own chroma,
   with one lightness scale, so white undergarments stay white. Never split skin from cloth per pixel: that greyed pale
-  skin and erased underwear (Kevin, 2026-11-22). The sheet before that pass is kept as `out/sheet_finish.png`. Without `finish`, the whole sheet is matched to the clip's pack sheet.
+  skin and erased underwear (Kevin, 2026-11-22). `pack.idle` is required: `run_cells.py` refuses to start without
+  it, and the pass fails if either sheet has no skin pixels. The sheet before that pass is kept as
+  `out/sheet_finish.png`. Without `finish`, the whole sheet is matched to the clip's pack sheet.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
   `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`. Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
@@ -184,7 +186,10 @@ base bodies, not on those meshes:
 - One stance layer per class in `retarget.STANCES`, matched to that class's pack Idle (`ssi-barbarian`,
   `ssi-wizard`, `ssi-ranger`). Fix stance here, not by asking for a new mesh. An Idle stance does not fit every
   clip: on the base-body dry run it raised the Ranger's hand-keyed walk from 0.43 to 0.53 but lowered the Wizard's
-  from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer.
+  from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer
+  in the cell's `motion` (`"stance": "ssi-wizard-walk"`).
+- Base bodies set `"finish": "base"` with `pack.idle`. The attack is scored against the class's own clip: Warrior
+  Attack1 (`chop`), Wizard CastSpell (`cast`), Ranger QuickShot (`bow`).
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
   weapon cut-off does nothing.
 

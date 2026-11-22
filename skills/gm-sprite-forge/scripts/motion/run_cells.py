@@ -53,6 +53,8 @@ def main():
     a = ap.parse_args()
     spec = json.loads(a.cells.read_text())
     only = set(a.only.split(',')) if a.only else None
+    if spec.get('finish') == 'base' and not Path(spec['pack'].get('idle', '')).is_file():
+        ap.error('"finish": "base" needs pack.idle, the class Idle sheet (skin reference)')
     rows = []
     for c in spec['cells']:
         if only and c['name'] not in only:

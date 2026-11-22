@@ -2,6 +2,7 @@
 full-palette match turned bare legs into the pack character's dark trousers, and a per-pixel skin/cloth split turned
 pale skin grey and some underwear into skin (#1202)."""
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
@@ -62,6 +63,20 @@ class BasePassTest(unittest.TestCase):
             chroma = np.hypot(*lab_of(out, x)[:, 1:].T)
             self.assertGreater(chroma.min(), 8, x)
         self.assertLess(np.median(np.hypot(*lab_of(out, 98)[:, 1:].T)), 8)
+
+    def test_nothing_to_match_fails_loudly(self):
+        # empty medians would turn the whole sprite into NaN colours (black) and still score
+        with self.assertRaises(ValueError):
+            base_pass(blob([GARMENT, GARMENT]), self.ref)
+        with self.assertRaises(ValueError):
+            base_pass(self.ours, blob([TROUSERS]))
+
+    def test_skin_ref_without_finish_is_refused(self):
+        # scoring an old sheet.png while the skin pass silently never ran would report a base-body result
+        r = subprocess.run([sys.executable, str(ROOT / 'scripts/motion/score_cell.py'), 'cell', 'pack.png',
+                            '--skin-ref', 'idle.png'], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn('--finish', r.stderr)
 
     def test_transparent_pixels_are_untouched(self):
         np.testing.assert_array_equal(self.out[self.ours[..., 3] == 0], self.ours[self.ours[..., 3] == 0])

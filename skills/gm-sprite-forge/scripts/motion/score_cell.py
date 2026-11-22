@@ -102,6 +102,8 @@ def main():
     ap.add_argument('--finish', action='store_true')
     ap.add_argument('--skin-ref')
     a = ap.parse_args()
+    if a.skin_ref and not a.finish:
+        ap.error('--skin-ref is part of the finish pass: add --finish')
     rows = [int(r) for r in a.rows.split(',')]
     out = a.cell_dir / 'out'
     if a.finish:
