@@ -1,4 +1,5 @@
-import { copyFile, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -11,22 +12,30 @@ const { values } = parseArgs({
   options: {
     renderer: { type: 'string', default: 'three' },
     toggles: { type: 'string', default: '' },
+    quality: { type: 'string', default: 'high' },
+    facade: { type: 'boolean', default: false },
     seconds: { type: 'string', default: '6' },
     out: { type: 'string', default: 'artifacts/hd2d' },
   },
 });
 const renderer = values.renderer;
 if (renderer !== 'three' && renderer !== 'phaser') throw new Error('--renderer must be three or phaser');
+const quality = values.quality;
+if (quality !== 'high' && quality !== 'low') throw new Error('--quality must be high or low');
 const seconds = Number(values.seconds);
 if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('--seconds must be positive');
 const toggles = values.toggles.split(',').filter(Boolean);
+if (values.facade && toggles.length !== capabilities.length)
+  throw new Error('--facade composes all three: add --toggles lighting,focus,particles');
 const unknown = toggles.filter((name) => !capabilities.includes(name));
 if (unknown.length) throw new Error(`unknown --toggles ${unknown.join(',')}; use ${capabilities.join(',')}`);
 const output = resolve(values.out);
 const frames = Math.round(seconds * 60);
 const port = env.SDK_AUDIO_TEST_PORT ?? '4182';
 const origin = `http://127.0.0.1:${port}`;
-const url = `${origin}/hd2d/?renderer=${renderer}&quality=high&seed=1${toggles.map((name) => `&${name}=1`).join('')}`;
+const url = `${origin}/hd2d/?renderer=${renderer}&quality=${quality}&seed=1${toggles.map((name) => `&${name}=1`).join('')}${
+  values.facade ? '&facade=1' : ''
+}`;
 let browser: Browser | undefined;
 
 await import('./build.js'); // capture what the source says now, never a stale bundle
@@ -122,7 +131,12 @@ try {
   ) {
     throw new Error(`capture validation failed: ${JSON.stringify(stream)}`);
   }
-  console.log(`Wrote ${video} (${stream.nb_frames} frames, ${stream.duration}s) and ${still}`);
+  const firstFrame = createHash('sha256')
+    .update(await readFile(still))
+    .digest('hex');
+  console.log(
+    `Wrote ${video} (${stream.nb_frames} frames, ${stream.duration}s) and ${still}; first frame sha256 ${firstFrame}`,
+  );
 } finally {
   await browser?.close();
   server.kill();
