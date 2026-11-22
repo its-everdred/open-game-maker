@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BlobHash, BlobStore } from '@ogm/blob-store';
 import { schema } from '@ogm/db';
+import { emptyScene } from '@ogm/design-log';
 import { listSceneDocs, readSceneryFile, readScenerySource } from '../src/scenery/source.js';
 import { insertChatRow } from '../src/build-chat/store.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
@@ -59,9 +60,15 @@ function revision(rev: number, author: string) {
   });
 }
 
-function writeScene(game: string, id: string, rev: number, log: string[]) {
+function writeScene(
+  game: string,
+  id: string,
+  rev: number,
+  log: string[],
+  doc: unknown = emptyScene('fixture', id, 'iso'),
+) {
   mkdirSync(join(game, 'scenes'), { recursive: true });
-  writeFileSync(join(game, 'scenes', `${id}.scene.json`), JSON.stringify({ rev, doc: {} }));
+  writeFileSync(join(game, 'scenes', `${id}.scene.json`), JSON.stringify({ rev, doc }));
   writeFileSync(join(game, 'scenes', `${id}.revs.jsonl`), log.map((line) => `${line}\n`).join(''));
 }
 
@@ -76,9 +83,19 @@ describe('scene documents for the editor scene strip', () => {
     writeScene(game, 'torn', 2, [revision(1, 'kevin'), '{"rev":2,']);
     writeScene(game, 'Bad Name', 1, [revision(1, 'kevin')]);
     writeFileSync(join(game, 'scenes', 'cave.lock'), '');
+    /* Scenes `gm scene pull` would refuse never become chips: a head holding another scene or no document, a log
+       missing a revision, and a head with no log. */
+    writeScene(game, 'copied', 1, [revision(1, 'kevin')], emptyScene('fixture', 'cave', 'iso'));
+    writeScene(game, 'blank', 1, [revision(1, 'kevin')], {});
+    writeScene(game, 'gap', 2, [revision(2, 'kevin')]);
+    writeScene(game, 'lost', 1, []);
+    rmSync(join(game, 'scenes', 'lost.revs.jsonl'));
+    /* The writer skips blank lines, so a blank line before the head revision doesn't move the head's author. */
+    writeScene(game, 'spaced', 2, [revision(1, 'agent:1208'), '', revision(2, 'kevin')]);
     expect(await listSceneDocs(root, 'games/fixture')).toEqual([
       { id: 'cave', rev: 1, author: 'agent:1208', updatedAt: '2026-11-01T00:00:00.000Z' },
       { id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-02T00:00:00.000Z' },
+      { id: 'spaced', rev: 2, author: 'kevin', updatedAt: '2026-11-02T00:00:00.000Z' },
     ]);
   });
 });

@@ -14,6 +14,7 @@ import {
   type AssetsLock,
   type Scenery,
 } from '@ogm/contracts';
+import { migrateScene } from '@ogm/design-log';
 
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const runFile = promisify(execFile);
@@ -143,8 +144,9 @@ export async function readScenerySource(
 export type SceneSummary = { id: string; rev: number; author: string; updatedAt: string };
 
 /**
- * The game's scene documents (`scenes/<scene>.scene.json` heads, #1207), each with who wrote its head revision. A head
- * is the commit point, so its author is log line `rev`; a scene whose head or log can't be read is left out.
+ * The game's scene documents (`scenes/<scene>.scene.json` heads, #1207), each with who wrote its head revision. Each is
+ * read the way `gm scene pull` reads it: the head holds a valid document for that scene, and its log holds revisions
+ * 1..rev in order (lines after `rev` never committed). A scene that `gm scene pull` would refuse is left out.
  */
 export async function listSceneDocs(checkout: string, gamePath: string): Promise<SceneSummary[]> {
   const root = await contained(checkout, gamePath);
@@ -162,13 +164,18 @@ export async function listSceneDocs(checkout: string, gamePath: string): Promise
     const id = name.endsWith('.scene.json') ? name.slice(0, -'.scene.json'.length) : '';
     if (!SceneIdSchema.safeParse(id).success) continue;
     try {
-      const head = JSON.parse(await readFile(await contained(dir, name), 'utf8')) as { rev?: unknown };
+      const head = JSON.parse(await readFile(await contained(dir, name), 'utf8')) as { rev?: unknown; doc?: unknown };
       const rev = head.rev;
       if (typeof rev !== 'number' || !Number.isInteger(rev) || rev < 1) continue;
-      const line = (await readFile(await contained(dir, `${id}.revs.jsonl`), 'utf8')).split('\n')[rev - 1];
-      const revision = SceneRevisionSchema.safeParse(JSON.parse(line ?? ''));
-      if (!revision.success || revision.data.rev !== rev) continue;
-      scenes.push({ id, rev, author: revision.data.author, updatedAt: revision.data.createdAt });
+      if (migrateScene(head.doc).doc.scene !== id) continue;
+      const lines = (await readFile(await contained(dir, `${id}.revs.jsonl`), 'utf8'))
+        .split('\n')
+        .filter((line) => line.trim())
+        .slice(0, rev);
+      const log = lines.map((line) => SceneRevisionSchema.parse(JSON.parse(line)));
+      if (log.length !== rev || log.some((revision, index) => revision.rev !== index + 1)) continue;
+      const last = log[rev - 1]!;
+      scenes.push({ id, rev, author: last.author, updatedAt: last.createdAt });
     } catch {
       continue;
     }
