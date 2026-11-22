@@ -116,3 +116,9 @@ show clean matches. `tree-e1` is a plausible bare-tree candidate by inspection
 and is already locked by the game, but its fit and scale are unverified. These
 are manually imposed family filters, not automatic classification, and may
 exclude suitable cards; they cannot establish a kit gap.
+
+As a diagnostic recall check, the game's current `stone-a4` and `stone-a13`
+grave sources ranked 150th and 162nd of the historical 467 candidates for the
+tight grave crop; the game's `tree-e1` ranked sixth for the tree crop. These
+are not verified identities of the mock's objects, but they show why an
+unqualified top-three cutoff would miss plausible game assets.
