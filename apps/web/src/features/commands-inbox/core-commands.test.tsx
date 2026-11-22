@@ -40,3 +40,32 @@ describe('core review Commands', () => {
     expect(REVIEW_POLL_MS).toBeLessThanOrEqual(60_000);
   });
 });
+
+describe('PC-daemon Commands', () => {
+  // The NUC and the PC number their decisions independently, so the same id can be open on both at once.
+  it('keys a PC Command apart from a NUC Command with the same id and routes it to the PC', async () => {
+    const { commandPath, commandSource, ticketStatePath } = await import('../worker-builds/review-command');
+    const nuc = {
+      source: 'core' as const,
+      job_id: null,
+      ticket: '7',
+      title: 'Pick',
+      command_id: 'd',
+      decision_id: 'd',
+      version: 1,
+      question: 'Which?',
+      blocking: false,
+      opened_at: '2026-01-01T00:00:00Z',
+      options: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    };
+    const pc = { ...nuc, daemon: 'pc' as const };
+    expect(commandSource(nuc)).toBe('core');
+    expect(commandSource(pc)).toBe('core:pc');
+    expect(commandPath(nuc, '/d/answer')).toBe('/core/commands/d/answer');
+    expect(commandPath(pc, '/d/answer')).toBe('/core/commands/d/answer?daemon=pc');
+    expect(ticketStatePath({ ...pc, ticket: '7' })).toBe('/core/tickets/7/state?daemon=pc');
+  });
+});

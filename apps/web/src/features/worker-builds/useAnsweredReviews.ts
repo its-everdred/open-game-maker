@@ -19,7 +19,9 @@ export function useAnsweredReviews(_reviews: readonly WorkerReview[], commands: 
     new Set([
       ...knownGameIds,
       ...visibleGameIds,
-      ...sessionAnsweredCommands.map(({ command }) => commandSource(command)).filter((source) => source !== 'core'),
+      ...sessionAnsweredCommands
+        .filter(({ command }) => !('source' in command))
+        .map(({ command }) => commandSource(command)),
     ]),
   );
   useEffect(() => {

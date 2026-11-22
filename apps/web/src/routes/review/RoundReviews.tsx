@@ -5,6 +5,7 @@ import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
 import { SwipeVerdict } from '../../features/worker-builds/SwipeVerdict';
 import { RoundMedia } from './RoundMedia';
+import type { MediaMeta as MediaMetaValue } from '@ogm/contracts';
 
 export type Round = {
   category?: 'art' | 'gameplay' | 'sound';
@@ -19,7 +20,7 @@ export type Round = {
   id: string;
   ticket: string;
   question: string | null;
-  media: { kind: 'still' | 'clip' | 'audio'; url: string; role?: 'target' }[];
+  media: { kind: 'still' | 'clip' | 'audio'; url: string; role?: 'target'; meta?: MediaMetaValue }[];
 };
 const key = (gameId: string) => ['game-review-rounds', gameId] as const;
 

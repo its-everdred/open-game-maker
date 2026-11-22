@@ -1,11 +1,21 @@
 import type { CreatorCommand, GameCommand } from '@ogm/contracts';
-export type CoreReviewCommand = GameCommand & { source: 'core' };
+// `daemon: 'pc'` marks a Command held by the PC's core daemon rather than the NUC's.
+export type CoreReviewCommand = GameCommand & { source: 'core'; daemon?: 'pc' };
 export type ReviewCommand = CreatorCommand | CoreReviewCommand;
 export function commandSource(command: ReviewCommand): string {
-  return 'source' in command ? 'core' : command.game_id;
+  if (!('source' in command)) return command.game_id;
+  return command.daemon === 'pc' ? 'core:pc' : 'core';
 }
-export function commandPath(command: ReviewCommand): string {
-  return 'source' in command ? '/core/commands' : `/games/${encodeURIComponent(command.game_id)}/commands`;
+function daemonQuery(command: ReviewCommand): string {
+  return 'source' in command && command.daemon === 'pc' ? '?daemon=pc' : '';
+}
+export function commandPath(command: ReviewCommand, suffix = ''): string {
+  return 'source' in command
+    ? `/core/commands${suffix}${daemonQuery(command)}`
+    : `/games/${encodeURIComponent(command.game_id)}/commands${suffix}`;
+}
+export function ticketStatePath(command: CoreReviewCommand & { ticket: string }): string {
+  return `/core/tickets/${encodeURIComponent(command.ticket)}/state${daemonQuery(command)}`;
 }
 export function commandTitle(command: ReviewCommand): string {
   return 'source' in command ? 'Core' : command.game_title;

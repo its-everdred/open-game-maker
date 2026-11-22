@@ -1,16 +1,24 @@
+.review-matrix,
 .review-matrix-row {
-  overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .review-matrix-cells {
   display: flex;
   gap: 0.75rem;
-  min-width: max-content;
+  overflow-x: auto;
 }
 
 .review-matrix-cell {
-  flex: 0 0 96px;
+  display: flex;
+  flex: 0 0 132px;
+  flex-direction: column;
   min-width: 96px;
+}
+
+.review-matrix-cell > p {
+  margin: 6px 0 0;
 }
 
 .review-matrix-media {
@@ -33,9 +41,59 @@
   display: flex;
   justify-content: center;
   gap: 0.25rem;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.review-matrix-cell .review-matrix-actions button {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
 }
 
 .review-matrix-dialog-media {
   display: grid;
   place-items: center;
+}
+
+.review-matrix-compare {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  place-items: start stretch;
+}
+
+.review-matrix-compare figure {
+  min-width: 0;
+}
+
+.review-matrix-dialog-media figure {
+  margin: 0;
+}
+
+.review-matrix-actions button[aria-pressed='true'] {
+  outline: 2px solid var(--green-b);
+  outline-offset: 2px;
+}
+
+.review-matrix-dialog .review-matrix-dialog-media {
+  width: 100%;
+}
+
+.review-matrix-compare img,
+.review-matrix-compare video {
+  width: 100%;
+  height: auto;
+  max-height: 50vh;
+}
+
+.review-matrix-dialog label {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.review-matrix-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 64px;
 }

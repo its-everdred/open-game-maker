@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import type { MediaMeta as MediaMetaValue } from '@ogm/contracts';
 import { Dialog } from '../../components/Dialog';
+import { MediaMeta } from './MediaMeta';
 import './review-matrix.css';
 
 type MatrixCell = {
@@ -7,6 +9,7 @@ type MatrixCell = {
   label: string;
   media: { url: string; kind?: 'image' | 'video' | 'audio'; poster?: string };
   original?: boolean;
+  meta?: MediaMetaValue;
 };
 type MatrixRow = { id: string; label: string; cells: MatrixCell[] };
 type Vote = { verdict?: 'like' | 'dislike'; note?: string };
@@ -88,6 +91,7 @@ export function ReviewMatrix({ rows, votes, onVote, disabled = false }: ReviewMa
                   {media(cell)}
                 </button>
                 <p>{cell.original ? 'Original' : cell.label}</p>
+                {cell.meta && <MediaMeta meta={cell.meta} />}
                 {!cell.original && actions(cell)}
               </article>
             ))}
@@ -97,11 +101,33 @@ export function ReviewMatrix({ rows, votes, onVote, disabled = false }: ReviewMa
       {active && (
         <Dialog
           title={active.label}
-          className="review-matrix-dialog"
-          backdropClassName="review-matrix-backdrop"
+          className="review-deck-fullscreen review-matrix-dialog"
+          backdropClassName="review-deck-fullscreen-backdrop worker-review-sheet-backdrop review-matrix-backdrop"
           onClose={() => setActive(undefined)}
         >
-          <div className="review-matrix-dialog-media">{media(active)}</div>
+          {(() => {
+            const original = active.original
+              ? undefined
+              : rows
+                  .find((row) => row.cells.some((cell) => cell.optionId === active.optionId))
+                  ?.cells.find((cell) => cell.original);
+            return (
+              <div
+                className={original ? 'review-matrix-dialog-media review-matrix-compare' : 'review-matrix-dialog-media'}
+              >
+                {original && (
+                  <figure>
+                    {media(original)}
+                    {original.meta && <MediaMeta meta={original.meta} />}
+                  </figure>
+                )}
+                <figure>
+                  {media(active)}
+                  {active.meta && <MediaMeta meta={active.meta} />}
+                </figure>
+              </div>
+            );
+          })()}
           {!active.original && actions(active, { ...votes[active.optionId], note }, true)}
           {!active.original && (
             <label>
@@ -117,6 +143,9 @@ export function ReviewMatrix({ rows, votes, onVote, disabled = false }: ReviewMa
               />
             </label>
           )}
+          <button type="button" onClick={() => setActive(undefined)}>
+            Close
+          </button>
         </Dialog>
       )}
     </div>

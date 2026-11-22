@@ -1,4 +1,5 @@
 import type { MediaMeta as MediaMetaValue } from '@ogm/contracts';
+import './media-meta.css';
 
 export function MediaMeta({ meta }: { meta: MediaMetaValue }) {
   const parts = [
@@ -12,5 +13,5 @@ export function MediaMeta({ meta }: { meta: MediaMetaValue }) {
   if (created && !Number.isNaN(created.getTime()))
     parts.push(`${String(created.getUTCHours()).padStart(2, '0')}:${String(created.getUTCMinutes()).padStart(2, '0')}`);
   if (meta.ai_generated) parts.push('AI');
-  return <span>{parts.filter(Boolean).join(' · ')}</span>;
+  return <span className="media-meta">{parts.filter(Boolean).join(' · ')}</span>;
 }

@@ -118,7 +118,7 @@ export function ReviewInbox({
     ...pendingCommands.flatMap((item) =>
       item.options.every(({ media, audio, audioClips, playable }) => media || audio || audioClips?.length || playable)
         ? []
-        : [`${commandPath(item)}/${encodeURIComponent(item.decision_id)}/missing-media`],
+        : [commandPath(item, `/${encodeURIComponent(item.decision_id)}/missing-media`)],
     ),
     ...pendingTargets.map(targetPath),
   ];
@@ -356,7 +356,7 @@ export function ReviewInbox({
             New round
           </p>
         ) : null}
-        {missingStatus(`${commandPath(command)}/${encodeURIComponent(command.decision_id)}/missing-media`)}
+        {missingStatus(commandPath(command, `/${encodeURIComponent(command.decision_id)}/missing-media`))}
       </Dialog>
     );
   }
