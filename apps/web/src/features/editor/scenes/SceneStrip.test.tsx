@@ -126,16 +126,19 @@ describe('SceneStrip', () => {
     expect(screen.getByRole('group', { name: 'Scenes' }).parentElement).toHaveClass('scene-strip-layer');
   });
 
-  it('hides and shows the chips', async () => {
+  it('starts with the chips hidden behind the map button, as Kevin picked', async () => {
     await renderStrip('/g/dusk-helm?mode=edit&scenes=fixture');
     const toggle = screen.getByRole('button', { name: 'Scenes' });
     const strip = screen.getByRole('group', { name: 'Scenes' });
-    fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(strip).toHaveClass('is-hidden');
     expect(strip).toHaveAttribute('inert');
     fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(strip).not.toHaveClass('is-hidden');
+    expect(strip).not.toHaveAttribute('inert');
+    fireEvent.click(toggle);
+    expect(strip).toHaveClass('is-hidden');
   });
 });
 
